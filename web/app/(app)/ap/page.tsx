@@ -85,7 +85,7 @@ export default async function AP({
     billId
       ? Promise.all([
           db.execute(sql`select id, display_name from parties where custom->>'nsKind' = 'vendor' and is_active order by display_name limit 2000`) as any,
-          db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs','asset_fixed','asset_current_other') and is_active and not is_summary order by number nulls last`) as any,
+          db.execute(sql`select id, number, name from accounts where is_active and not is_summary order by number nulls last`) as any,
           db.execute(sql`
             select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
               from tax_codes tc

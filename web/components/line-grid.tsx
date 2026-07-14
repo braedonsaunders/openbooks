@@ -316,12 +316,19 @@ function RowCells<Row extends Record<string, unknown>>({
       {columns.map((c, colIndex) => {
         const value = row[c.key]
         if (readOnly || c.type === 'readonly') {
+          // Resolve select/search-select values to their human label — never
+          // render a raw id/uuid in a read-only cell.
+          let display: React.ReactNode
+          if (c.render) display = c.render(row, i)
+          else if ((c.type === 'select' || c.type === 'search-select') && value)
+            display = c.options?.find((o) => o.value === value)?.label ?? ''
+          else display = (value as string) ?? ''
           return (
             <div
               key={c.key}
               className={cn(cellBase, 'px-2.5 text-sm', c.align === 'right' && 'justify-end tabular-nums')}
             >
-              {c.render ? c.render(row, i) : ((value as string) ?? '')}
+              {display}
             </div>
           )
         }
