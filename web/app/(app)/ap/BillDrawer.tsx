@@ -25,6 +25,8 @@ interface LineRow extends Record<string, unknown> {
   projectId: string
   taxCodeId: string
   amount: string
+  taxOverridden: boolean
+  taxAmount: string
 }
 interface BillPayload {
   doc: Record<string, any>
@@ -46,6 +48,8 @@ const emptyLine = (): LineRow => ({
   projectId: '',
   taxCodeId: '',
   amount: '',
+  taxOverridden: false,
+  taxAmount: '',
 })
 
 function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRow {
@@ -56,6 +60,8 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRo
     projectId: l.project_id ?? '',
     taxCodeId: l.tax_code_id ?? '',
     amount: l.amount != null ? Number(l.amount).toFixed(2) : '',
+    taxOverridden: l.tax_overridden === true,
+    taxAmount: l.tax_amount != null ? Number(l.tax_amount).toFixed(2) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   return row
@@ -126,6 +132,8 @@ export function BillDrawer({
           description: r.description,
           amount: r.amount,
           taxCodeId: r.taxCodeId || null,
+          taxOverridden: r.taxOverridden,
+          taxAmount: r.taxOverridden ? r.taxAmount : null,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
           custom: Object.fromEntries(
@@ -216,15 +224,18 @@ export function BillDrawer({
       ...customFieldColumns<LineRow>(lineDefs),
       { key: 'amount', label: 'Amount', width: '120px', type: 'amount', align: 'right', required: true },
       {
-        key: '_tax',
+        key: 'taxAmount',
         label: 'Tax amt',
-        width: '100px',
-        type: 'readonly',
+        width: '120px',
+        type: 'tax',
         align: 'right',
-        render: (row) => {
-          const t = lineTax(row)
-          return t ? money(t) : ''
-        },
+        computeTax: lineTax,
+        onTaxChange: (index, next) =>
+          setRows((prev) =>
+            prev.map((r, j) =>
+              j === index ? { ...r, taxOverridden: next.overridden, taxAmount: next.taxAmount } : r,
+            ),
+          ),
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
