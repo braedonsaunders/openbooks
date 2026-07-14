@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -11,6 +10,10 @@ import { SortTh } from '../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../lib/list-params'
 import { money } from '../../../lib/format'
 import { BillActions } from './BillActions'
+import { BillDrawer } from './BillDrawer'
+import { NewBillButton } from './NewBillButton'
+import { loadBill } from '../../../lib/bills'
+import { currentUser } from '../../../lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +39,7 @@ export default async function AP({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
+  const billId = typeof sp.bill === 'string' ? sp.bill : undefined
   const params = parseListParams(sp, {
     sort: 'date',
     dir: 'desc',
@@ -74,6 +78,18 @@ export default async function AP({
          where ${where}`)) as any).rows[0].n)
     : total
 
+  const [openBill, pickers, user] = await Promise.all([
+    billId ? loadBill(billId) : null,
+    billId
+      ? Promise.all([
+          db.execute(sql`select id, display_name from parties where custom->>'nsKind' = 'vendor' and is_active order by display_name limit 2000`) as any,
+          db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs','asset_fixed','asset_current_other') and is_active and not is_summary order by number nulls last`) as any,
+          db.execute(sql`select id, code, name from tax_codes where is_active order by code`) as any,
+        ])
+      : null,
+    currentUser(),
+  ])
+
   const statusOptions = counts.rows.map((r: any) => ({
     value: r.status,
     label: String(r.status).replace('_', ' '),
@@ -87,13 +103,7 @@ export default async function AP({
           <PageHeader
             title="Accounts Payable"
             description="Vendor bills entered in openbooks — draft → approval → posted through the kernel."
-            actions={
-              <Button asChild>
-                <Link href="/ap/new">
-                  <Plus size={15} /> New bill
-                </Link>
-              </Button>
-            }
+            actions={<NewBillButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder="Search bills, vendors, refs…" />
@@ -106,11 +116,7 @@ export default async function AP({
         <EmptyState
           title="No bills yet"
           description="Enter the first vendor bill to start the AP workflow."
-          action={
-            <Button asChild>
-              <Link href="/ap/new">New bill</Link>
-            </Button>
-          }
+          action={<NewBillButton />}
         />
       ) : (
         <>
@@ -130,13 +136,9 @@ export default async function AP({
               {bills.rows.map((b: any) => (
                 <TableRow key={b.id}>
                   <TableCell className="font-mono text-[13px] font-semibold">
-                    {b.entry_id ? (
-                      <Link href={`/journal/${b.entry_id}`} className="text-teal-700 hover:underline dark:text-teal-300">
-                        {b.document_number}
-                      </Link>
-                    ) : (
-                      b.document_number
-                    )}
+                    <Link href={`/ap?bill=${b.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                      {b.document_number}
+                    </Link>
                   </TableCell>
                   <TableCell>{b.vendor}</TableCell>
                   <TableCell>{b.document_date}</TableCell>
@@ -159,6 +161,15 @@ export default async function AP({
           </div>
         </>
       )}
+      {openBill && pickers ? (
+        <BillDrawer
+          bill={openBill as any}
+          vendors={pickers[0].rows}
+          accounts={pickers[1].rows}
+          taxCodes={pickers[2].rows}
+          canApprove={['admin', 'controller'].includes(user?.role ?? '')}
+        />
+      ) : null}
     </ListPageLayout>
   )
 }
