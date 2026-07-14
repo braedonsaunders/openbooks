@@ -45,6 +45,38 @@ export interface PostingDeps {
 
 type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
 
+/**
+ * Card charge / refund. A charge DRs its expense lines and CRs the card's
+ * liability control account; a refund is the arithmetic reverse and rides the
+ * same rule with negative line amounts (its detail is stored already signed).
+ * The liability account is the doc's `controlAccountId` override (the per-card
+ * employee sub-account NetSuite used) else the resolved card liability.
+ */
+const cardRule: RuleFn = (doc, lines, deps) => {
+  const expense: KernelLine[] = lines.map((l) => ({
+    accountId: l.accountId!,
+    amount: l.amount,
+    memo: l.description,
+    partyId: doc.partyId,
+    paymentCardId: doc.paymentCardId,
+    ...dims(doc, l),
+  }));
+  const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1);
+  const total = sum([...expense, ...tax].map((l) => l.amount));
+  const cardLiability = controlOverride(doc) ?? deps.cardLiabilityAccountId;
+  if (!cardLiability) throw new PostingError("card_charge requires a payment card");
+  return [
+    ...expense,
+    ...tax,
+    {
+      accountId: cardLiability,
+      amount: neg(total),
+      paymentCardId: doc.paymentCardId,
+      ...dims(doc),
+    },
+  ];
+};
+
 const dims = (d: Doc, l?: DocLine) => ({
   departmentId: l?.departmentId ?? d.departmentId,
   projectId: l?.projectId ?? d.projectId,
@@ -53,6 +85,18 @@ const dims = (d: Doc, l?: DocLine) => ({
 });
 
 const lineTotal = (l: DocLine) => add(l.amount, l.taxAmount ?? "0");
+
+/**
+ * The payable/receivable/card-liability control account a document should post
+ * to. NetSuite lets a transaction choose its own AP/AR/financing account on the
+ * header (usually the org default, but sometimes a financing sub-account like
+ * "Ford Credit" or a per-card employee liability). We surface that choice as
+ * `doc.custom.controlAccountId`; when present it wins over the org default.
+ */
+const controlOverride = (doc: Doc): string | undefined => {
+  const c = (doc.custom as Record<string, unknown> | null)?.controlAccountId;
+  return typeof c === "string" && c ? c : undefined;
+};
 
 /** Group line tax by tax code → one kernel line per code. */
 function taxLines(doc: Doc, lines: DocLine[], accountId: string, sign: 1 | -1): KernelLine[] {
@@ -84,7 +128,7 @@ export const RULES: Record<string, RuleFn> = {
       ...expense,
       ...tax,
       {
-        accountId: deps.control.ap,
+        accountId: controlOverride(doc) ?? deps.control.ap,
         amount: neg(total), // credit AP
         partyId: doc.partyId,
         dueDate: doc.dueDate,
@@ -106,7 +150,7 @@ export const RULES: Record<string, RuleFn> = {
     const total = sum([...income, ...tax].map((l) => l.amount));
     return [
       {
-        accountId: deps.control.ar,
+        accountId: controlOverride(doc) ?? deps.control.ar,
         amount: neg(total), // debit AR (total is negative)
         partyId: doc.partyId,
         dueDate: doc.dueDate,
@@ -148,7 +192,7 @@ export const RULES: Record<string, RuleFn> = {
       ...expense,
       ...tax,
       {
-        accountId: deps.control.employeePayable ?? deps.control.ap,
+        accountId: controlOverride(doc) ?? deps.control.employeePayable ?? deps.control.ap,
         amount: neg(total),
         partyId: doc.partyId,
         isOpenItem: true,
@@ -157,30 +201,9 @@ export const RULES: Record<string, RuleFn> = {
     ];
   },
 
-  card_charge: (doc, lines, deps) => {
-    const expense: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
-      amount: l.amount,
-      memo: l.description,
-      partyId: doc.partyId,
-      paymentCardId: doc.paymentCardId,
-      ...dims(doc, l),
-    }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1);
-    const total = sum([...expense, ...tax].map((l) => l.amount));
-    if (!deps.cardLiabilityAccountId) throw new PostingError("card_charge requires a payment card");
-    // credit the card's liability control account; per-card detail = card dim
-    return [
-      ...expense,
-      ...tax,
-      {
-        accountId: deps.cardLiabilityAccountId,
-        amount: neg(total),
-        paymentCardId: doc.paymentCardId,
-        ...dims(doc),
-      },
-    ];
-  },
+  card_charge: cardRule,
+  /** Card refund: the arithmetic reverse of a charge, same posting rule. */
+  card_refund: cardRule,
 
   /** Manual journal: lines carry signed amounts + accounts directly. */
   journal: (doc, lines) =>
@@ -240,7 +263,7 @@ export const RULES: Record<string, RuleFn> = {
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       {
-        accountId: deps.control.ap,
+        accountId: controlOverride(doc) ?? deps.control.ap,
         amount: neg(total), // debit AP (total is negative)
         partyId: doc.partyId,
         dueDate: doc.dueDate,
@@ -265,7 +288,7 @@ export const RULES: Record<string, RuleFn> = {
     const total = sum([...income, ...tax].map((l) => l.amount));
     return [
       {
-        accountId: deps.control.ar,
+        accountId: controlOverride(doc) ?? deps.control.ar,
         amount: neg(total), // credit AR (total is positive)
         partyId: doc.partyId,
         dueDate: doc.dueDate,

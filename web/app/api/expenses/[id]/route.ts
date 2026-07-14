@@ -107,7 +107,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Pre-validate + prepare lines (read-only) before touching the DB, so a bad
   // line returns 422 without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
-  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxAmount: string; departmentId: string | null; projectId: string | null; custom: Record<string, unknown> }[] | null = null
+  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
     const computed = computeBillTotals(valid, await taxRateMap())
@@ -132,6 +132,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         amount: l.amount,
         taxCodeId: l.taxCodeId ?? null,
         taxAmount: l.taxAmount,
+        taxOverridden: l.taxOverridden === true,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
         custom: lv.cleaned,
@@ -152,10 +153,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const l = preparedLines[i]!
           await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                        quantity, unit_price, amount, tax_code_id, tax_amount,
+                                        quantity, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
                                         department_id, project_id, custom)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
-                    '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxAmount},
+                    '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
                     ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.custom)})
           `)
         }

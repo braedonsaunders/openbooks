@@ -17,6 +17,13 @@ function loadEnv(): Record<string, string> {
 }
 
 export const env = loadEnv();
-export const pool = new pg.Pool({ connectionString: env.OPENBOOKS_DB_URL, max: 10 });
+export const pool = new pg.Pool({ connectionString: env.OPENBOOKS_DB_URL, max: 10, keepAlive: true });
+// A transient network blackout (e.g. the WG path to the DB VIP dropping) makes
+// an idle pool client emit 'error'; with no listener, Node crashes the whole
+// process — fatal for long-running jobs. Swallow it: the pool reconnects on the
+// next query, and per-query failures still reject normally (callers catch them).
+pool.on("error", (err) => {
+  console.error("[pg pool] transient client error (ignored, will reconnect):", (err as Error).message);
+});
 export const db = drizzle(pool, { schema });
 export { schema };

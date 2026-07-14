@@ -12,3 +12,5 @@ web/.next/
 extraction/transactions/
 extraction/transactions_dump.log
 extraction/reconciliation-report.json
+
+engine/*.log

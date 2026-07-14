@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { Button, Popover, SearchSelect, Select, cn } from '@openbooks/ui'
 
 export interface LineGridOption {
@@ -30,13 +30,26 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
   label: string
   /** CSS grid track, e.g. 'minmax(180px,2fr)' or '110px'. */
   width: string
-  type: 'text' | 'amount' | 'select' | 'search-select' | 'readonly'
+  type: 'text' | 'amount' | 'select' | 'search-select' | 'readonly' | 'tax'
   align?: 'left' | 'right'
   options?: LineGridOption[]
   placeholder?: string
   required?: boolean
   /** Renderer for readonly columns (computed cells, e.g. line tax). */
   render?: (row: Row, index: number) => React.ReactNode
+  /**
+   * For `type: 'tax'` columns: the tax the engine computes from the code's
+   * rate. When the user edits the cell to anything other than this value, the
+   * line is flagged overridden; a reset affordance clears the override and
+   * falls back to this computed value.
+   */
+  computeTax?: (row: Row) => number
+  /**
+   * For `type: 'tax'` columns: apply a manual override to a line — set the
+   * explicit tax amount and the overridden flag. `overridden: false` clears the
+   * override (reset to computed).
+   */
+  onTaxChange?: (index: number, next: { taxAmount: string; overridden: boolean }) => void
 }
 
 function normalizeAmount(v: string): string {
@@ -226,6 +239,88 @@ export function LineGrid<Row extends Record<string, unknown>>({
   )
 }
 
+/**
+ * Editable per-line tax cell. Displays the engine-computed tax from the code's
+ * rate until the user types a different value — then the line is flagged
+ * overridden and the typed value is kept verbatim. An amber dot + a reset button
+ * make the override transparent; reset clears the flag and recomputes.
+ */
+function TaxCell<Row extends Record<string, unknown>>({
+  row,
+  column,
+  index,
+  inputBase,
+}: {
+  row: Row
+  column: LineGridColumn<Row>
+  index: number
+  inputBase: string
+}) {
+  const overridden = row.taxOverridden === true
+  const computed = column.computeTax?.(row) ?? 0
+  // While overridden, show the explicit amount; otherwise mirror the computed
+  // value so the cell always reflects what will post.
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown =
+    draft != null ? draft : overridden ? String(row.taxAmount ?? '') : computed ? computed.toFixed(2) : ''
+
+  const commit = (raw: string) => {
+    setDraft(null)
+    const n = Number(raw)
+    if (raw.trim() === '' || Number.isNaN(n)) {
+      // Empty / invalid → treat as "reset to computed".
+      column.onTaxChange?.(index, { taxAmount: computed.toFixed(2), overridden: false })
+      return
+    }
+    const rounded = n.toFixed(2)
+    // Only an actual divergence from the computed value flags an override.
+    const isOverride = Math.abs(n - computed) > 0.005
+    column.onTaxChange?.(index, { taxAmount: rounded, overridden: isOverride })
+  }
+
+  return (
+    <div className="flex w-full items-center gap-1">
+      {overridden ? (
+        <span
+          aria-label="Tax overridden"
+          title="Tax manually overridden — differs from the computed rate"
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+        />
+      ) : null}
+      <input
+        inputMode="decimal"
+        value={shown}
+        placeholder="0.00"
+        aria-invalid={shown !== '' && Number.isNaN(Number(shown)) ? true : undefined}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        title={overridden ? `Computed ${computed.toFixed(2)} · overridden` : undefined}
+        className={cn(
+          inputBase,
+          'text-right tabular-nums',
+          overridden && 'font-medium text-amber-700 dark:text-amber-400',
+          shown !== '' && Number.isNaN(Number(shown)) &&
+            'text-red-600 focus:ring-red-500/60 dark:text-red-400',
+        )}
+      />
+      {overridden ? (
+        <button
+          type="button"
+          aria-label="Reset tax to computed"
+          title={`Reset to computed ${computed.toFixed(2)}`}
+          onClick={() => {
+            setDraft(null)
+            column.onTaxChange?.(index, { taxAmount: computed.toFixed(2), overridden: false })
+          }}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+        >
+          <RotateCcw size={12} />
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function RowCells<Row extends Record<string, unknown>>({
   row,
   index: i,
@@ -319,7 +414,22 @@ function RowCells<Row extends Record<string, unknown>>({
           // Resolve select/search-select values to their human label — never
           // render a raw id/uuid in a read-only cell.
           let display: React.ReactNode
-          if (c.render) display = c.render(row, i)
+          if (c.type === 'tax') {
+            const overridden = row.taxOverridden === true
+            const shown = overridden ? Number(row.taxAmount ?? 0) : (c.computeTax?.(row) ?? 0)
+            display = (
+              <span className="inline-flex items-center gap-1.5">
+                {overridden ? (
+                  <span
+                    aria-label="Tax overridden"
+                    title="Tax manually overridden"
+                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                  />
+                ) : null}
+                {shown ? shown.toFixed(2) : ''}
+              </span>
+            )
+          } else if (c.render) display = c.render(row, i)
           else if ((c.type === 'select' || c.type === 'search-select') && value)
             display = c.options?.find((o) => o.value === value)?.label ?? ''
           else display = (value as string) ?? ''
@@ -376,6 +486,13 @@ function RowCells<Row extends Record<string, unknown>>({
                   value !== '' && value != null && Number.isNaN(Number(value)) &&
                     'text-red-600 focus:ring-red-500/60 dark:text-red-400',
                 )}
+              />
+            ) : c.type === 'tax' ? (
+              <TaxCell
+                row={row}
+                column={c}
+                index={i}
+                inputBase={inputBase}
               />
             ) : (
               <input
