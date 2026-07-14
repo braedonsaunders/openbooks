@@ -436,7 +436,7 @@ export async function postPaymentWithApplications(
         select distinct je.source_document_id as doc_id
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id
-         where jl.id = any(${lineIds}::uuid[]) and je.source_document_id is not null
+         where jl.id in ${lineIds} and je.source_document_id is not null
       `)) as unknown as { rows: { doc_id: string }[] };
       if (targets.rows.length > 0) {
         await tx.insert(schema.documentLinks).values(
@@ -667,7 +667,7 @@ export async function createPaymentRun(opts: {
         select sum(a.amount) as applied from applications a
          where a.to_line_id = jl.id and a.unapplied_at is null
       ) ap on true
-     where d.id = any(${opts.billDocumentIds}::uuid[])
+     where d.id in ${opts.billDocumentIds}
        and d.org_id = ${opts.orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
   `)) as unknown as {
     rows: { document_id: string; document_number: string; party_id: string; vendor: string; open_line_id: string; open: string }[];
