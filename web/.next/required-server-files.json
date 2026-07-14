@@ -292,6 +292,10 @@
       "@openbooks/engine",
       "@openbooks/schema"
     ],
+    "serverExternalPackages": [
+      "quickjs-emscripten",
+      "pg"
+    ],
     "turbopack": {
       "root": "/Users/braedonsaunders/Documents/openbooks"
     }

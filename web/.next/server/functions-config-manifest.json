@@ -4,8 +4,10 @@
     "/api/login": {},
     "/api/query": {},
     "/api/saved-reports": {},
+    "/api/bills": {},
     "/api/sync": {
       "maxDuration": 300
-    }
+    },
+    "/api/bills/actions": {}
   }
 }

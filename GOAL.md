@@ -48,8 +48,13 @@ accounts match NetSuite exactly**.
       revenue, matching the owner analysis) *(2026-07-14)*
 
 ### M2 — AP goes live: the first workflow leaves NetSuite
-- [ ] Vendor bill entry (line editor, tax codes, dimensions, files)
-- [ ] Approval engine live (policies → worklists; the Kara/Kevin/Melissa flows)
+- [x] Vendor bill entry: line editor, GST/HST tax codes with dated rates,
+      auto-numbering, draft lifecycle *(2026-07-14 — dimensions + file
+      attachments on lines still to add)*
+- [x] Approval engine live: policies → requests/steps, amount-threshold
+      routing, role worklists, approve/reject with notes; full lifecycle
+      verified draft → submit → approve → post (correct AP + ITC entry)
+      *(2026-07-14 — per-person assignees + email nudges still to add)*
 - [ ] Payment runs → Canadian EFT (CPA-005) file export + remittance emails
 - [ ] Expense reports (mobile-friendly entry, receipt capture)
 - [ ] Vendor statements / open-item views (payment application UI)

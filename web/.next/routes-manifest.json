@@ -56,6 +56,24 @@
       "namedRegex": "^/accounts(?:/)?$"
     },
     {
+      "page": "/ap",
+      "regex": "^/ap(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/ap(?:/)?$"
+    },
+    {
+      "page": "/ap/new",
+      "regex": "^/ap/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/ap/new(?:/)?$"
+    },
+    {
+      "page": "/approvals",
+      "regex": "^/approvals(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/approvals(?:/)?$"
+    },
+    {
       "page": "/journal",
       "regex": "^/journal(?:/)?$",
       "routeKeys": {},
