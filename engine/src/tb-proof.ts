@@ -15,11 +15,24 @@ import { fromUnits, toUnits } from "./money.ts";
 const dumpDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "extraction", "gl-dump");
 
 async function main() {
+  // reference 1: NetSuite's own server-side aggregate (SUM per account)
   const ns = JSON.parse(readFileSync(join(dumpDir, "tb-netsuite.json"), "utf8")) as {
-    acct: string; d: string; c: string;
+    acct?: string; d: string; c: string;
   }[];
   const nsTb = new Map<string, bigint>();
-  for (const r of ns) nsTb.set(String(r.acct), toUnits(r.d) - toUnits(r.c));
+  for (const r of ns) {
+    if (!r.acct) continue; // the null-account ItemShip group
+    nsTb.set(String(r.acct), toUnits(r.d) - toUnits(r.c));
+  }
+
+  // reference 2: ground truth summed row-by-row from the raw dump
+  const gt = JSON.parse(readFileSync(join(dumpDir, "tb-ground-truth.json"), "utf8")) as Record<string, string>;
+  let gtAgree = 0, gtDisagree = 0;
+  for (const [acct, bal] of Object.entries(gt)) {
+    if ((nsTb.get(acct) ?? 0n) === toUnits(bal)) gtAgree++;
+    else gtDisagree++;
+  }
+  console.log(`reference cross-check (dump vs NetSuite aggregate): ${gtAgree} agree, ${gtDisagree} disagree`);
 
   const ours = await db.execute(sql`
     select a.custom->>'nsId' as ns, a.number, a.name, sum(l.amount) as balance
