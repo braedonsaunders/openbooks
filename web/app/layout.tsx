@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Toaster } from 'sonner'
 import { AppLinkProvider } from '../components/app-link-provider'
 import { SplashScreen } from '../components/brand-splash'
+import { ConfirmRoot } from '../lib/confirm'
 
 export const metadata: Metadata = {
   title: { default: 'openbooks', template: '%s · openbooks' },
@@ -33,6 +34,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AppLinkProvider>{children}</AppLinkProvider>
         <SplashScreen />
         <Toaster richColors position="top-right" />
+        {/* confirmDialog()'s host — without it every confirm-gated action hangs. */}
+        <ConfirmRoot />
       </body>
     </html>
   )
