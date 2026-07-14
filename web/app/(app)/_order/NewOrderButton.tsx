@@ -1,0 +1,47 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@openbooks/ui'
+
+/**
+ * Instant-into-draft: creates the draft order server-side, opens its flyout.
+ * `apiPath` = /api/estimates|sales-orders|purchase-orders, `base`/`param` build
+ * the list route deep-link (e.g. /estimates?estimate=<id>).
+ */
+export function NewOrderButton({
+  apiPath,
+  base,
+  param,
+  label,
+}: {
+  apiPath: string
+  base: string
+  param: string
+  label: string
+}) {
+  const [busy, setBusy] = useState(false)
+  const router = useRouter()
+
+  async function create() {
+    setBusy(true)
+    const res = await fetch(`${apiPath}/draft`, { method: 'POST' })
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error ?? `Could not create a draft ${label.toLowerCase()}`)
+      setBusy(false)
+      return
+    }
+    router.push(`${base}?${param}=${data.id}`)
+    router.refresh()
+    setBusy(false)
+  }
+
+  return (
+    <Button onClick={create} disabled={busy}>
+      <Plus size={15} /> {busy ? 'Creating…' : `New ${label.toLowerCase()}`}
+    </Button>
+  )
+}

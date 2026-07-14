@@ -20,10 +20,13 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'approvals', href: '/approvals', label: 'Approvals', iconKey: 'check', group: 'Overview', requiredPermission: 'ap.approve' },
   { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'sparkles', group: 'Overview', requiredPermission: 'insights.read' },
 
+  { key: 'purchase-orders', href: '/purchase-orders', label: 'Purchase Orders', iconKey: 'clipboard', group: 'Money out', requiredPermission: 'ap.read' },
   { key: 'ap', href: '/ap', label: 'Payables', iconKey: 'clipboard', group: 'Money out', requiredPermission: 'ap.read' },
   { key: 'payments', href: '/payments', label: 'Payments', iconKey: 'check', group: 'Money out', requiredPermission: 'ap.pay' },
   { key: 'expenses', href: '/expenses', label: 'Expenses', iconKey: 'scroll', group: 'Money out', requiredPermission: 'expenses.read' },
 
+  { key: 'estimates', href: '/estimates', label: 'Estimates', iconKey: 'file', group: 'Money in', requiredPermission: 'ar.read' },
+  { key: 'sales-orders', href: '/sales-orders', label: 'Sales Orders', iconKey: 'clipboard-check', group: 'Money in', requiredPermission: 'ar.read' },
   { key: 'ar', href: '/ar', label: 'Receivables', iconKey: 'clipboard-check', group: 'Money in', requiredPermission: 'ar.read' },
   { key: 'receipts', href: '/receipts', label: 'Receipts', iconKey: 'check', group: 'Money in', requiredPermission: 'ar.pay' },
 

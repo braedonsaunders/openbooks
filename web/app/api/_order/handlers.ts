@@ -1,0 +1,170 @@
+import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import { guardPermission } from '../../../lib/authz'
+import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
+import { computeOrderTotals, loadOrder, orderTaxRateMap, type OrderLineInput } from './lib'
+
+/**
+ * Shared GET / PATCH / convert handlers for the three order-cycle modules.
+ * Each module's route just binds its `kind` + read/create permission keys.
+ *
+ *   quote          → ar.read / ar.create
+ *   sales_order    → ar.read / ar.create
+ *   purchase_order → ap.read / ap.create
+ */
+export interface OrderHandlerConfig {
+  kind: OrderKind
+  readPerm: string
+  createPerm: string
+}
+
+/** GET: full order payload (header + lines + links) scoped to the org. */
+export function makeGET(cfg: OrderHandlerConfig) {
+  return async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const gate = await guardPermission(cfg.readPerm)
+    if (gate instanceof NextResponse) return gate
+    const { id } = await params
+    const order = await loadOrder(id, gate.user.orgId, cfg.kind)
+    if (!order) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return NextResponse.json(order)
+  }
+}
+
+interface OrderPatchBody {
+  partyId?: string | null
+  documentDate?: string
+  dueDate?: string | null
+  memo?: string | null
+  departmentId?: string | null
+  projectId?: string | null
+  lines?: OrderLineInput[]
+  status?: 'approved' | 'voided'
+}
+
+/**
+ * PATCH: draft autosave (header + full line replacement, totals recomputed) and
+ * the draft→approved / →voided status transitions. Only draft orders are
+ * editable; issuing requires a party + ≥1 line with a positive amount.
+ */
+export function makePATCH(cfg: OrderHandlerConfig) {
+  return async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const gate = await guardPermission(cfg.createPerm)
+    if (gate instanceof NextResponse) return gate
+    const { user } = gate
+    const { id } = await params
+
+    const existing = (await db.execute(
+      sql`select status from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    )) as unknown as { rows: { status: string }[] }
+    if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const status = existing.rows[0].status
+
+    const body = (await req.json()) as OrderPatchBody
+
+    // --- status transitions ------------------------------------------------
+    if (body.status) {
+      if (body.status === 'approved') {
+        if (status !== 'draft') {
+          return NextResponse.json({ error: 'only a draft can be issued' }, { status: 422 })
+        }
+        const doc = (await db.execute(
+          sql`select party_id, total from documents where id = ${id}`,
+        )) as unknown as { rows: { party_id: string | null; total: string }[] }
+        const d = doc.rows[0]!
+        if (!d.party_id || Number(d.total) <= 0) {
+          return NextResponse.json(
+            { error: 'Add a party and at least one line before issuing' },
+            { status: 422 },
+          )
+        }
+        await db.execute(
+          sql`update documents set status = 'approved', updated_at = now(), updated_by = ${user.id} where id = ${id}`,
+        )
+      } else if (body.status === 'voided') {
+        if (status === 'voided') {
+          return NextResponse.json({ error: 'already voided' }, { status: 422 })
+        }
+        await db.execute(
+          sql`update documents set status = 'voided', voided_at = now(), updated_at = now(), updated_by = ${user.id} where id = ${id}`,
+        )
+      }
+      const order = await loadOrder(id, user.orgId, cfg.kind)
+      return NextResponse.json(order)
+    }
+
+    // --- draft autosave ----------------------------------------------------
+    if (status !== 'draft') {
+      return NextResponse.json({ error: 'only draft orders can be edited' }, { status: 422 })
+    }
+
+    let totals: { subtotal: string; taxTotal: string; total: string } | null = null
+    if (body.lines) {
+      const valid = body.lines.filter(
+        (l) => (l.itemId || l.accountId) && Number(l.quantity) > 0 && Number(l.unitPrice) >= 0,
+      )
+      const computed = computeOrderTotals(valid, await orderTaxRateMap())
+      totals = { subtotal: computed.subtotal, taxTotal: computed.taxTotal, total: computed.total }
+
+      await db.execute(sql`delete from document_lines where document_id = ${id}`)
+      for (let i = 0; i < computed.lines.length; i++) {
+        const l = computed.lines[i]!
+        await db.execute(sql`
+          insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
+                                      quantity, unit, unit_price, amount, tax_code_id, tax_amount,
+                                      department_id, project_id)
+          values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
+                  ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
+                  ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxAmount},
+                  ${l.departmentId ?? null}, ${l.projectId ?? null})
+        `)
+      }
+    }
+
+    await db.execute(sql`
+      update documents set
+        party_id = ${body.partyId !== undefined ? body.partyId : sql`party_id`},
+        document_date = coalesce(${body.documentDate ?? null}, document_date),
+        due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
+        memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+        department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},
+        project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
+        subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
+        tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
+        total = coalesce(${totals?.total ?? null}, total),
+        updated_at = now(), updated_by = ${user.id}
+      where id = ${id}
+    `)
+
+    const order = await loadOrder(id, user.orgId, cfg.kind)
+    return NextResponse.json(order)
+  }
+}
+
+/** POST convert: pull the order forward into `targetKind` via convertOrder(). */
+export function makeConvertPOST(cfg: OrderHandlerConfig) {
+  return async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const gate = await guardPermission(cfg.createPerm)
+    if (gate instanceof NextResponse) return gate
+    const { user } = gate
+    const { id } = await params
+    const body = (await req.json()) as { targetKind?: string }
+    if (!body.targetKind) return NextResponse.json({ error: 'targetKind required' }, { status: 400 })
+
+    // Scope check: the source must be this kind, in the caller's org.
+    const owns = (await db.execute(
+      sql`select 1 from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    )) as unknown as { rows: unknown[] }
+    if (owns.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+    try {
+      const res = await convertOrder(user.orgId, user.id, id, body.targetKind)
+      return NextResponse.json(res)
+    } catch (e) {
+      if (e instanceof ConversionError) {
+        return NextResponse.json({ error: e.message }, { status: 422 })
+      }
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    }
+  }
+}
