@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "schema",
-    "engine"
+    "engine",
+    "web"
   ],
   "devDependencies": {
     "drizzle-kit": "^0.31.10",

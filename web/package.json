@@ -1,0 +1,24 @@
+{
+  "name": "@openbooks/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 4780",
+    "build": "next build",
+    "start": "next start -p 4780"
+  },
+  "dependencies": {
+    "@openbooks/engine": "*",
+    "@openbooks/schema": "*",
+    "next": "^15",
+    "react": "^19",
+    "react-dom": "^19",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3"
+  }
+}

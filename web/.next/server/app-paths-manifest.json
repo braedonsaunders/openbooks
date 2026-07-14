@@ -1,0 +1,11 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/sync/route": "app/api/sync/route.js",
+  "/api/query/route": "app/api/query/route.js",
+  "/query/page": "app/query/page.js",
+  "/journal/page": "app/journal/page.js",
+  "/accounts/page": "app/accounts/page.js",
+  "/journal/[id]/page": "app/journal/[id]/page.js",
+  "/sync/page": "app/sync/page.js",
+  "/page": "app/page.js"
+}
