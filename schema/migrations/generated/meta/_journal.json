@@ -64,6 +64,13 @@
       "when": 1784045823377,
       "tag": "0008_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784070831737,
+      "tag": "0009_user-locale",
+      "breakpoints": true
     }
   ]
 }

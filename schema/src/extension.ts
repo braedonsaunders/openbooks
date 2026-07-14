@@ -105,6 +105,9 @@ export const users = pgTable(
       .notNull()
       .default("viewer"),
     partyId: uuid("party_id"),
+    /** UI language (BCP 47, e.g. "en", "fr"). Null = inherit the org default
+     *  (orgs.settings.defaultLocale). Shipped locales: web/i18n/config.ts. */
+    locale: text("locale"),
     isActive: boolean("is_active").notNull().default(true),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     ...auditColumns,

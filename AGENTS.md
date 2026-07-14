@@ -89,6 +89,18 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
 
 ## Web App Conventions
 
+- NON-NEGOTIABLE — internationalization stays complete. Every user-facing
+  string (JSX copy, placeholders, aria-labels, toasts, confirms, empty
+  states, metadata titles) goes through next-intl — `useTranslations` in
+  client components, `getTranslations` in server components. Never hardcode
+  UI copy; never concatenate translated fragments (use ICU interpolation/
+  plurals). New keys land in `web/messages/en/<namespace>.json` AND every
+  other shipped locale (`fr`, `es`) — translated, not copied — in the same
+  change. New module = new namespace file in every locale + every locale's
+  `index.ts`. The tenant default language lives in
+  `orgs.settings.defaultLocale` (Admin → Company & Accounting); per-user
+  choice in `users.locale` (account menu). Full conventions incl. what NOT
+  to translate: `web/i18n/README.md`.
 - Compose pages from the shells in `web/components/page-layout.tsx`
   (`PageContainer`, `ListPageLayout`, `DetailPageLayout`, `WizardLayout`) and
   `@openbooks/ui` primitives. lucide-react icons. Tailwind v4 with

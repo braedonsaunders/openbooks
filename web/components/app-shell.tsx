@@ -2,6 +2,7 @@
 // (mobile toggle, org name, account menu) + scrolling main + mobile tab bar.
 
 import { type SidebarNavGroup } from './sidebar-nav'
+import type { Locale } from '../i18n/config'
 import { AppSidebar } from './app-sidebar'
 import { AccountMenu } from './account-menu'
 import { MobileNavProvider } from './mobile-nav'
@@ -15,7 +16,7 @@ export function AppShell({
   defaultCollapsed = false,
   children,
 }: {
-  account: { name: string; email: string; role: string }
+  account: { name: string; email: string; role: string; localePreference: Locale | null }
   orgName: string
   groups: SidebarNavGroup[]
   defaultCollapsed?: boolean
@@ -33,7 +34,12 @@ export function AppShell({
               {orgName}
             </span>
             <div className="flex-1" />
-            <AccountMenu name={account.name} email={account.email} role={account.role} />
+            <AccountMenu
+              name={account.name}
+              email={account.email}
+              role={account.role}
+              localePreference={account.localePreference}
+            />
           </header>
 
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">

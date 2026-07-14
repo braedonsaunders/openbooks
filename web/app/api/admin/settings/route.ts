@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { clearFiscalCache } from "../../../../lib/fiscal";
 import { isUuid } from "../../../../lib/list-params";
+import { DEFAULT_LOCALE, isLocale } from "../../../../i18n/config";
 
 export const runtime = "nodejs";
 
@@ -75,6 +76,7 @@ export async function GET() {
       country: row.country as string,
       fiscalYearStartMonth:
         typeof settings.fiscalYearStartMonth === "number" ? settings.fiscalYearStartMonth : 1,
+      defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
       controlAccounts: Object.fromEntries(
         CONTROL_ACCOUNT_KEYS.map((k) => [k, control[k] ?? ""]),
       ) as Record<ControlAccountKey, string>,
@@ -126,6 +128,7 @@ export async function PUT(req: Request) {
     baseCurrency?: unknown;
     fiscalYearStartMonth?: unknown;
     controlAccounts?: unknown;
+    defaultLocale?: unknown;
   };
 
   const existing = (await db.execute(sql`
@@ -235,6 +238,15 @@ export async function PUT(req: Request) {
     nextControl = collected;
   }
 
+  // --- tenant default language (users without a personal locale inherit it) ---
+  let nextDefaultLocale: string | undefined;
+  if (body.defaultLocale !== undefined) {
+    if (!isLocale(body.defaultLocale)) {
+      return NextResponse.json({ error: "unsupported locale" }, { status: 400 });
+    }
+    nextDefaultLocale = body.defaultLocale;
+  }
+
   // --- fiscal year start month ---
   let nextStartMonth: number | undefined;
   if (body.fiscalYearStartMonth !== undefined) {
@@ -267,6 +279,14 @@ export async function PUT(req: Request) {
       changes.controlAccounts = [curControl, nextControl];
       settingsChanged = true;
     }
+  }
+  const curDefaultLocale = isLocale(settings.defaultLocale)
+    ? settings.defaultLocale
+    : DEFAULT_LOCALE;
+  if (nextDefaultLocale !== undefined && nextDefaultLocale !== curDefaultLocale) {
+    nextSettings.defaultLocale = nextDefaultLocale;
+    changes.defaultLocale = [curDefaultLocale, nextDefaultLocale];
+    settingsChanged = true;
   }
   if (settingsChanged) {
     sets.push(sql`settings = ${JSON.stringify(nextSettings)}::jsonb`);

@@ -9,13 +9,19 @@
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css"
   },
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.24.0",
+    "next-intl": "^4.13.2",
     "tailwind-merge": "^3.6.0"
   },
-  "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
 }

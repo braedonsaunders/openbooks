@@ -25,6 +25,7 @@ import {
   TableRow,
   type SelectOption,
 } from '@openbooks/ui'
+import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
 
 export type AccountOption = { id: string; label: string; type: string }
 
@@ -43,6 +44,7 @@ type Initial = {
   country: string
   baseCurrency: string
   fiscalYearStartMonth: number
+  defaultLocale: Locale
   controlAccounts: ControlAccounts
 }
 
@@ -172,6 +174,28 @@ export function SettingsForm({
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Two-letter ISO code (e.g. CA, US, GB).
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="defaultLocale">Default language</Label>
+            <Select
+              id="defaultLocale"
+              value={form.defaultLocale}
+              onChange={(e) =>
+                setForm((f) =>
+                  isLocale(e.target.value) ? { ...f, defaultLocale: e.target.value } : f,
+                )
+              }
+            >
+              {LOCALES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              The language the app renders in for everyone who hasn&apos;t picked their own in the
+              account menu.
             </p>
           </div>
           <div className="space-y-1.5">
