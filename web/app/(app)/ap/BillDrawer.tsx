@@ -8,6 +8,7 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
+import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -159,7 +160,7 @@ export function BillDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, isDraft])
 
-  async function act(action: 'submit' | 'post') {
+  async function act(action: 'submit' | 'post' | 'reopen') {
     setBusy(true)
     const res = await fetch('/api/bills/actions', {
       method: 'POST',
@@ -168,9 +169,29 @@ export function BillDrawer({
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
+    else
+      toast.success(
+        action === 'submit'
+          ? 'Submitted for approval'
+          : action === 'reopen'
+            ? 'Reopened as a draft — the GL posting was reversed'
+            : 'Posted to the ledger',
+      )
     setBusy(false)
     router.refresh()
+  }
+
+  async function edit() {
+    if (
+      !(await confirmDialog({
+        title: 'Edit this bill?',
+        message: 'Editing reverses the current GL posting and reopens this as a draft. Continue?',
+        confirmLabel: 'Edit',
+        tone: 'danger',
+      }))
+    )
+      return
+    await act('reopen')
   }
 
   // -- grid columns ----------------------------------------------------------
@@ -273,6 +294,11 @@ export function BillDrawer({
           {doc.status === 'approved' ? (
             <Button disabled={busy} onClick={() => act('post')}>
               Post
+            </Button>
+          ) : null}
+          {doc.status === 'posted' || doc.status === 'approved' ? (
+            <Button variant="outline" disabled={busy} onClick={edit}>
+              Edit
             </Button>
           ) : null}
           {doc.entry_id ? (

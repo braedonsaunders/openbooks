@@ -5,6 +5,7 @@ import { ListPageLayout } from '../../../components/page-layout'
 import { FilterChips } from '../../../components/filter-bar'
 import { pickString } from '../../../lib/list-params'
 import { requirePermission } from '../../../lib/authz'
+import { currentFiscalYear } from '../../../lib/fiscal'
 import { money } from '../../../lib/format'
 import { CloseButtons } from './CloseButtons'
 
@@ -19,7 +20,9 @@ export default async function PeriodClose({
 }) {
   await requirePermission('gl.close')
   const sp = await searchParams
-  const currentFy = new Date().getUTCMonth() >= 3 ? new Date().getUTCFullYear() + 1 : new Date().getUTCFullYear()
+  // Fiscal year derives from the org's configured start month (fiscal.ts),
+  // not a hardcoded April boundary.
+  const currentFy = await currentFiscalYear()
   const fy = Number(pickString(sp.fy) ?? currentFy)
 
   const [periods, fys] = await Promise.all([

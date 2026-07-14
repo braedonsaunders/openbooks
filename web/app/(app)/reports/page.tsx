@@ -15,8 +15,8 @@ async function savedViews() {
 
 export default async function Reports() {
   const saved = await savedViews()
-  const fy = currentFiscalYearEnd()
-  const cur = fiscalYearRange(fy)
+  const fy = await currentFiscalYearEnd()
+  const cur = await fiscalYearRange(fy)
   const today = new Date().toISOString().slice(0, 10)
 
   const reports = [

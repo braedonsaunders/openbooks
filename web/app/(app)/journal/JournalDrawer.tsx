@@ -8,6 +8,7 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
+import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -185,6 +186,29 @@ export function JournalDrawer({
     router.refresh()
   }
 
+  async function edit() {
+    if (
+      !(await confirmDialog({
+        title: 'Edit this journal?',
+        message: 'Editing reverses the current GL posting and reopens this as a draft. Continue?',
+        confirmLabel: 'Edit',
+        tone: 'danger',
+      }))
+    )
+      return
+    setBusy(true)
+    const res = await fetch('/api/journals/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reopen', documentId: doc.id }),
+    })
+    const data = await res.json()
+    if (!res.ok) toast.error(data.error ?? 'Action failed')
+    else toast.success('Reopened as a draft — the GL posting was reversed')
+    setBusy(false)
+    router.refresh()
+  }
+
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => [
@@ -273,6 +297,11 @@ export function JournalDrawer({
           {isDraft ? (
             <Button disabled={busy || !balanced || saveState !== 'saved'} onClick={post}>
               Post
+            </Button>
+          ) : null}
+          {doc.status === 'posted' ? (
+            <Button variant="outline" disabled={busy} onClick={edit}>
+              Edit
             </Button>
           ) : null}
           {doc.entry_id ? (
