@@ -362,3 +362,12 @@
 .dark .ff-surface.field-mode label {
   color: rgb(241 245 249);
 }
+
+/* Wordmark fade+rise, timed to land as the mark finishes drawing. */
+@keyframes brand-word-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.brand-word-in {
+  animation: brand-word-in 0.5s ease-out 0.55s backwards;
+}

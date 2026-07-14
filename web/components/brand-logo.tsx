@@ -10,7 +10,7 @@
 //   <BrandSplash /> full-screen draw-in for document/route loading
 //   <LogoLoader />  centered animated mark for heavy in-shell loads
 
-import type { CSSProperties, ReactNode, SVGProps } from 'react'
+import type { CSSProperties, SVGProps } from 'react'
 import { cn } from '@openbooks/ui'
 
 const BRAND_TEAL = '#0f766e'
@@ -85,68 +85,25 @@ function MarkArt({ mode }: { mode: Mode }) {
 }
 
 /* ----------------------------- The wordmark ------------------------------ */
-// Monoline lowercase "openbooks" on a 26-unit advance; baseline y=40,
-// x-height 18, ascenders from y=7, descender to 52.
-
-function letterPaths(letter: string, x: number): string[] {
-  const circle = (cx: number) => `M ${cx - 10.5} 29 a 10.5 10.5 0 1 0 21 0 a 10.5 10.5 0 1 0 -21 0`
-  switch (letter) {
-    case 'o':
-      return [circle(x + 10.5)]
-    case 'p':
-      return [`M ${x} 19 V 52`, `M ${x} 22.5 a 10.5 10.5 0 1 1 0 13`]
-    case 'e':
-      return [
-        `M ${x + 0.6} 26.5 L ${x + 20.4} 26.5`,
-        `M ${x + 20.4} 26.5 a 10.5 10.5 0 1 0 -2.2 9.8`,
-      ]
-    case 'n':
-      return [`M ${x} 40 V 19`, `M ${x} 25 c 3.5 -5.5 9.5 -7.5 13.5 -5 c 4 2.5 6.5 5.5 6.5 10.5 V 40`]
-    case 'b':
-      return [`M ${x} 7 V 40`, `M ${x} 22.5 a 10.5 10.5 0 1 1 0 13`]
-    case 'k':
-      return [`M ${x} 7 V 40`, `M ${x + 15.5} 19.5 L ${x + 0.8} 30.5`, `M ${x + 5.8} 26.8 L ${x + 16.5} 40`]
-    case 's':
-      return [
-        `M ${x + 16.8} 21.8 c -2.2 -3.4 -12.6 -4.2 -14.6 0.6 c -2.2 6 14.4 4.4 13.4 10.8 c -1 5.4 -12.8 4.8 -15.6 0.8`,
-      ]
-    default:
-      return []
-  }
-}
-
-const WORD = 'openbooks'
-const WORD_X = 62
-const ADVANCE: Record<string, number> = { o: 27, p: 27, e: 27, n: 26.5, b: 27, k: 22.5, s: 23 }
-
-function WordmarkArt({ mode }: { mode: Mode }) {
-  const draw = mode === 'draw'
-  const animated = mode !== 'static'
-  const strokeCls = draw ? 'brand-stroke-draw' : animated ? 'brand-stroke-loop' : undefined
-  let x = WORD_X
-  let pathIndex = 0
-  const rendered: ReactNode[] = []
-  for (let i = 0; i < WORD.length; i++) {
-    const ch = WORD[i]!
-    const teal = i >= 4 // "books" carries the brand teal
-    for (const d of letterPaths(ch, x)) {
-      rendered.push(
-        <path
-          key={`${i}-${d}`}
-          d={d}
-          stroke="currentColor"
-          className={cn(strokeCls, teal && 'text-[#0f766e] dark:text-[#2dd4bf]') || undefined}
-          {...(strokeCls ? { pathLength: 1, style: delay(0.35 + pathIndex * 0.07) } : {})}
-        />,
-      )
-      pathIndex++
-    }
-    x += ADVANCE[ch] ?? 27
-  }
+// The wordmark is set type, not hand-drawn strokes — geometric and legible.
+// It fades/rises in after the mark draws (mode 'draw'); otherwise it's static.
+function WordmarkText({ mode }: { mode: Mode }) {
+  const fadeCls = mode === 'draw' ? 'brand-word-in' : undefined
   return (
-    <g fill="none" strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round">
-      {rendered}
-    </g>
+    <text
+      x={64}
+      y={38}
+      fontSize={34}
+      fontWeight={700}
+      letterSpacing={-1.2}
+      fontFamily="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+      className={fadeCls}
+    >
+      <tspan fill="currentColor">open</tspan>
+      <tspan className="text-[#0f766e] dark:text-[#2dd4bf]" fill="currentColor">
+        books
+      </tspan>
+    </text>
   )
 }
 
@@ -173,8 +130,12 @@ export function Logo({ animated, draw, className, ...rest }: LogoProps) {
       className={cn('h-8 w-auto', INK_CLASS, className)}
       {...rest}
     >
-      <MarkArt mode={mode} />
-      <WordmarkArt mode={mode} />
+      {/* nudge the book down a few units so its optical center lines up with
+          the wordmark's x-height instead of sitting high */}
+      <g transform="translate(0,5)">
+        <MarkArt mode={mode} />
+      </g>
+      <WordmarkText mode={mode} />
     </svg>
   )
 }
