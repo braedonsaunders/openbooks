@@ -9,6 +9,7 @@ import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../lib/list-params'
 import { money } from '../../../lib/format'
+import { requirePermission } from '../../../lib/authz'
 import { BillActions } from './BillActions'
 import { BillDrawer } from './BillDrawer'
 import { NewBillButton } from './NewBillButton'
@@ -38,6 +39,7 @@ export default async function AP({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  await requirePermission('ap.read')
   const sp = await searchParams
   const billId = typeof sp.bill === 'string' ? sp.bill : undefined
   const params = parseListParams(sp, {
