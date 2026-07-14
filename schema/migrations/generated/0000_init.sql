@@ -673,6 +673,36 @@ CREATE TABLE "custom_field_defs" (
 	"updated_by" uuid
 );
 --> statement-breakpoint
+CREATE TABLE "script_runs" (
+	"id" uuid PRIMARY KEY DEFAULT uuid_generate_v7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"script_id" uuid NOT NULL,
+	"target_kind" text,
+	"target_id" uuid,
+	"status" text NOT NULL,
+	"logs" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"error_message" text,
+	"duration_ms" integer,
+	"at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "user_scripts" (
+	"id" uuid PRIMARY KEY DEFAULT uuid_generate_v7() NOT NULL,
+	"org_id" uuid NOT NULL,
+	"name" text NOT NULL,
+	"trigger_point" text NOT NULL,
+	"document_kind" text,
+	"source" text NOT NULL,
+	"cron" text,
+	"timeout_ms" integer DEFAULT 2000 NOT NULL,
+	"sort_order" integer DEFAULT 100 NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_by" uuid,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_by" uuid
+);
+--> statement-breakpoint
 CREATE TABLE "bom_components" (
 	"id" uuid PRIMARY KEY DEFAULT uuid_generate_v7() NOT NULL,
 	"org_id" uuid NOT NULL,
@@ -1297,6 +1327,8 @@ CREATE INDEX "approval_steps_request" ON "approval_steps" USING btree ("request_
 CREATE INDEX "audit_log_row" ON "audit_log" USING btree ("table_name","row_id");--> statement-breakpoint
 CREATE INDEX "audit_log_org_at" ON "audit_log" USING btree ("org_id","at");--> statement-breakpoint
 CREATE INDEX "custom_field_defs_target" ON "custom_field_defs" USING btree ("org_id","target_table","target_kind");--> statement-breakpoint
+CREATE INDEX "script_runs_script" ON "script_runs" USING btree ("script_id","at");--> statement-breakpoint
+CREATE INDEX "user_scripts_trigger" ON "user_scripts" USING btree ("org_id","trigger_point","document_kind","is_active");--> statement-breakpoint
 CREATE UNIQUE INDEX "bom_assembly_component" ON "bom_components" USING btree ("assembly_item_id","component_item_id");--> statement-breakpoint
 CREATE INDEX "layer_consumptions_layer" ON "cost_layer_consumptions" USING btree ("cost_layer_id");--> statement-breakpoint
 CREATE INDEX "layer_consumptions_movement" ON "cost_layer_consumptions" USING btree ("issue_movement_id");--> statement-breakpoint

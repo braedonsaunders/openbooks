@@ -42,6 +42,53 @@ export const customFieldDefs = pgTable(
 );
 
 /**
+ * User scripts — real JavaScript, sandboxed (QuickJS), attached to trigger
+ * points. The SuiteScript idea with a modern runtime: scripts receive a
+ * context (document + lines + org), can mutate whitelisted fields, veto the
+ * operation with ob.abort(), and log. Execution order = sortOrder.
+ */
+export const userScripts = pgTable(
+  "user_scripts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(),
+    triggerPoint: text("trigger_point", {
+      enum: ["before_submit", "before_post", "after_post", "before_void", "scheduled"],
+    }).notNull(),
+    /** Narrow to a document kind; null = all kinds at this trigger. */
+    documentKind: text("document_kind"),
+    /** ES2023 JavaScript source. Entry point: export default function(ctx). */
+    source: text("source").notNull(),
+    /** For scheduled scripts. */
+    cron: text("cron"),
+    timeoutMs: integer("timeout_ms").notNull().default(2000),
+    sortOrder: integer("sort_order").notNull().default(100),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [index("user_scripts_trigger").on(t.orgId, t.triggerPoint, t.documentKind, t.isActive)],
+);
+
+/** Every script run is logged — success or failure, with console output. */
+export const scriptRuns = pgTable(
+  "script_runs",
+  {
+    id: id(),
+    orgId: orgRef(),
+    scriptId: uuid("script_id").notNull(),
+    targetKind: text("target_kind"),
+    targetId: uuid("target_id"),
+    status: text("status", { enum: ["ok", "aborted", "error", "timeout"] }).notNull(),
+    logs: jsonb("logs").notNull().default([]),
+    errorMessage: text("error_message"),
+    durationMs: integer("duration_ms"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("script_runs_script").on(t.scriptId, t.at)],
+);
+
+/**
  * Field-level audit trail for the business layer (the ledger needs none —
  * it's append-only). Written by the API layer inside the same transaction.
  */

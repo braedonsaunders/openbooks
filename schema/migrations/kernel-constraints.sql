@@ -99,7 +99,11 @@ begin
   if v_summary then
     raise exception 'account % is a summary account and cannot be posted to', new.account_id;
   end if;
-  if not v_active then
+  -- Historical migration replays may post to accounts that are inactive
+  -- TODAY but were active at the time. 'set local openbooks.migration = on'
+  -- (transaction-scoped, requires direct DB access) relaxes ONLY this check;
+  -- balance, immutability and summary-account rules always hold.
+  if not v_active and coalesce(current_setting('openbooks.migration', true), 'off') <> 'on' then
     raise exception 'account % is inactive', new.account_id;
   end if;
   if v_ccy is not null and new.currency <> v_ccy then

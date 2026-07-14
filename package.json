@@ -1,0 +1,12 @@
+{
+  "name": "openbooks",
+  "private": true,
+  "workspaces": [
+    "schema",
+    "engine"
+  ],
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^7.0.2"
+  }
+}

@@ -265,3 +265,6 @@ end $$;
 
 create trigger inv_move_guard before update or delete on inventory_movements
   for each row execute function inv_move_guard();
+
+-- scripting
+alter table script_runs add foreign key (script_id) references user_scripts(id);
