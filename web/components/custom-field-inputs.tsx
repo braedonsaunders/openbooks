@@ -8,7 +8,15 @@ export interface CustomFieldDefClient {
   key: string
   label: string
   fieldType: 'text' | 'long_text' | 'number' | 'currency' | 'date' | 'boolean' | 'select' | 'multi_select'
-  config: { options?: string[] }
+  config: {
+    options?: string[]
+    helpText?: string
+    placeholder?: string
+    defaultValue?: unknown
+    min?: number
+    max?: number
+    showInList?: boolean
+  }
   isRequired: boolean
 }
 
@@ -54,7 +62,7 @@ export function CustomFieldInputs({
               {def.isRequired ? <span className="text-red-500"> *</span> : null}
             </Label>
             {def.fieldType === 'long_text' ? (
-              <Textarea value={(v as string) ?? ''} onChange={(e) => set(def.key, e.target.value)} rows={2} />
+              <Textarea value={(v as string) ?? ''} placeholder={def.config.placeholder} onChange={(e) => set(def.key, e.target.value)} rows={2} />
             ) : def.fieldType === 'boolean' ? (
               <Select value={v === true || v === 'true' ? 'true' : v === false || v === 'false' ? 'false' : ''} onChange={(e) => set(def.key, e.target.value === 'true')}>
                 <option value="">—</option>
@@ -75,10 +83,14 @@ export function CustomFieldInputs({
                 type={def.fieldType === 'date' ? 'date' : 'text'}
                 inputMode={def.fieldType === 'number' || def.fieldType === 'currency' ? 'decimal' : undefined}
                 className={def.fieldType === 'number' || def.fieldType === 'currency' ? 'text-right tabular-nums' : undefined}
+                placeholder={def.config.placeholder}
                 value={(v as string) ?? ''}
                 onChange={(e) => set(def.key, e.target.value)}
               />
             )}
+            {def.config.helpText ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">{def.config.helpText}</p>
+            ) : null}
           </div>
         )
       })}

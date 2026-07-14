@@ -37,16 +37,18 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'custom-reports', href: '/reports/custom', label: 'Custom Reports', iconKey: 'scroll', group: 'Insight', requiredPermission: 'reports.read' },
   { key: 'sql', href: '/query', label: 'SQL', iconKey: 'database', group: 'Insight', requiredPermission: 'sql.execute' },
 
+  // Build — the customization/authoring tools
   { key: 'apps', href: '/apps', label: 'Apps', iconKey: 'grid', group: 'Build', requiredPermission: 'forms.read' },
   { key: 'records', href: '/records/types', label: 'Record Types', iconKey: 'grid', group: 'Build', requiredPermission: 'records.manage_types' },
+  { key: 'admin-custom-fields', href: '/admin/custom-fields', label: 'Custom Fields', iconKey: 'tag', group: 'Build', requiredPermission: 'admin.custom_fields.manage' },
+  { key: 'admin-scripts', href: '/admin/scripts', label: 'Scripts', iconKey: 'workflow', group: 'Build', requiredPermission: 'scripts.manage' },
 
-  { key: 'sync', href: '/sync', label: 'Sync', iconKey: 'link', group: 'System', requiredPermission: 'sync.run' },
-  { key: 'admin-users', href: '/admin/users', label: 'Users', iconKey: 'users', group: 'System', requiredPermission: 'admin.users.manage' },
-  { key: 'admin-roles', href: '/admin/roles', label: 'Roles', iconKey: 'shield', group: 'System', requiredPermission: 'admin.roles.manage' },
-  { key: 'admin-nav', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'System', requiredPermission: 'admin.nav.manage' },
-  { key: 'admin-custom-fields', href: '/admin/custom-fields', label: 'Custom Fields', iconKey: 'tag', group: 'System', requiredPermission: 'admin.custom_fields.manage' },
-  { key: 'admin-scripts', href: '/admin/scripts', label: 'Scripts', iconKey: 'workflow', group: 'System', requiredPermission: 'scripts.manage' },
-  { key: 'admin-audit', href: '/admin/audit', label: 'Audit Log', iconKey: 'scroll', group: 'System', requiredPermission: 'admin.audit.read' },
+  // Administration — org configuration + system
+  { key: 'admin-users', href: '/admin/users', label: 'Users', iconKey: 'users', group: 'Administration', requiredPermission: 'admin.users.manage' },
+  { key: 'admin-roles', href: '/admin/roles', label: 'Roles', iconKey: 'shield', group: 'Administration', requiredPermission: 'admin.roles.manage' },
+  { key: 'admin-nav', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'Administration', requiredPermission: 'admin.nav.manage' },
+  { key: 'admin-audit', href: '/admin/audit', label: 'Audit Log', iconKey: 'scroll', group: 'Administration', requiredPermission: 'admin.audit.read' },
+  { key: 'sync', href: '/sync', label: 'Sync', iconKey: 'link', group: 'Administration', requiredPermission: 'sync.run' },
 ]
 
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))

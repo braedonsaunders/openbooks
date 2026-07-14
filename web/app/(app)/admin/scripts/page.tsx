@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -91,9 +92,9 @@ export default async function Scripts({
           {scripts.rows.map((s: any) => (
             <TableRow key={s.id}>
               <TableCell>
-                <a href={`/admin/scripts?script=${s.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={`/admin/scripts?script=${s.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {s.name}
-                </a>
+                </Link>
               </TableCell>
               <TableCell>
                 <Badge variant="secondary">{String(s.trigger_point).replace('_', ' ')}</Badge>
