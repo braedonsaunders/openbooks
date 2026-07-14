@@ -30,3 +30,20 @@ Standing rule: beaconhs is the boilerplate — copy, then adapt vendor-neutrally
 Integration steps after agents land: add schema exports → drizzle generate 0004
 → apply to cluster (+ grants to openbooks_read) → npm install → wire nav items +
 permission gates → build → verify in preview → commit.
+
+## Wave 2 — module buildout (concurrent)
+| Module | Owner | Routes (exclusive) | Status |
+|---|---|---|---|
+| AR (customer invoices) | agent | web/app/(app)/ar, web/app/api/invoices | started |
+| Payments + application + EFT | agent | web/app/(app)/payments, /receipts, web/app/api/payments, engine/src/payments.ts | started |
+| Journal entry module | agent | web/app/(app)/journal (JournalDrawer + new-entry only; list page shared — coordinate via ?entry= param), web/app/api/journals | started |
+| Parties directory | agent | web/app/(app)/parties, web/app/api/parties | started |
+| Bank reconciliation | agent | web/app/(app)/banking, web/app/api/banking | started |
+| Expenses | agent | web/app/(app)/expenses, web/app/api/expenses | started |
+| Period close | integrator | web/app/(app)/close, web/app/api/close | started |
+| Scripts + audit admin | integrator | web/app/(app)/admin/scripts, /admin/audit | pending |
+
+Shared files are PRE-STAGED by the integrator (nav registry entries + permission
+keys already exist for every module above). Agents: do NOT edit registry.ts,
+permissions.ts, schema/src/index.ts, package.json, next.config, or another
+module's routes. New engine helpers go in your own engine/src/<module>.ts.
