@@ -62,6 +62,12 @@
       "namedRegex": "^/journal(?:/)?$"
     },
     {
+      "page": "/login",
+      "regex": "^/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/login(?:/)?$"
+    },
+    {
       "page": "/query",
       "regex": "^/query(?:/)?$",
       "routeKeys": {},

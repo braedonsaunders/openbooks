@@ -32,14 +32,17 @@ API; web shell; manual sync bridge; **full 8-year GL replayed, 262/262
 accounts match NetSuite exactly**.
 
 ### M1 — Read parity: "never open NetSuite just to LOOK at something"
-- [ ] Financial statements: trial balance, P&L (period ranges, comparatives),
-      balance sheet (as-of, computed retained earnings)
-- [ ] AR/AP position by party
+- [x] Financial statements: trial balance, P&L (period ranges, FY presets),
+      balance sheet (as-of, computed retained earnings) *(2026-07-14)*
+- [x] AR/AP position by party *(2026-07-14)*
 - [ ] Statement layouts as data (custom P&L groupings — the 25 NS layouts)
-- [ ] Dimension filters (department/project) on every report
-- [ ] Account register drill-down (account → entries → document)
-- [ ] Auth (single-org, sessions, roles seeded from the 23 NS roles)
-- [ ] Saved reports + scheduled email delivery
+- [x] Dimension filters (department/project) on P&L + trial balance *(2026-07-14)*
+- [x] Account register drill-down (account → entries → document) *(2026-07-14)*
+- [x] Auth: users, scrypt, signed-cookie sessions, middleware gate, login,
+      roles enum *(2026-07-14 — role-based permissions still to enforce)*
+- [x] Saved report views *(2026-07-14)*
+- [ ] Scheduled report email delivery
+- [ ] P&L comparatives (period vs period columns)
 
 ### M2 — AP goes live: the first workflow leaves NetSuite
 - [ ] Vendor bill entry (line editor, tax codes, dimensions, files)

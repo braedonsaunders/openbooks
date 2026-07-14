@@ -1,13 +1,21 @@
 import Link from "next/link";
-import { trialBalance } from "../../../lib/reports";
+import { dimensionOptions, trialBalance } from "../../../lib/reports";
 import { money } from "../../../lib/format";
+import { DimensionFilter } from "../DimensionFilter";
+import { SaveViewButton } from "../SaveViewButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function TrialBalance({ searchParams }: { searchParams: Promise<{ asof?: string }> }) {
-  const { asof } = await searchParams;
+export default async function TrialBalance({
+  searchParams,
+}: {
+  searchParams: Promise<{ asof?: string; dept?: string; project?: string }>;
+}) {
+  const sp = await searchParams;
+  const { asof } = sp;
   const date = asof ?? new Date().toISOString().slice(0, 10);
-  const rows = await trialBalance(date);
+  const dims = { departmentId: sp.dept || undefined, projectId: sp.project || undefined };
+  const [rows, opts] = await Promise.all([trialBalance(date, dims), dimensionOptions()]);
   const totalDebits = rows.reduce((a, r) => a + Number(r.debits), 0);
   const totalCredits = rows.reduce((a, r) => a + Number(r.credits), 0);
 
@@ -15,6 +23,14 @@ export default async function TrialBalance({ searchParams }: { searchParams: Pro
     <>
       <h1>Trial Balance</h1>
       <p className="sub">as of {date} · {rows.length} accounts with activity</p>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <DimensionFilter
+          departments={opts.departments} projects={opts.projects}
+          current={{ dept: sp.dept, project: sp.project }}
+          extraParams={{ asof: date }}
+        />
+        <SaveViewButton />
+      </div>
       <table className="data">
         <thead>
           <tr><th>Account</th><th className="num">Debits</th><th className="num">Credits</th><th className="num">Balance</th></tr>

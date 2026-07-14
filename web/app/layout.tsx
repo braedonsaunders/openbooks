@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SignOut } from "./SignOut";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,6 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 {n.label}
               </Link>
             ))}
+            <div style={{ marginTop: "auto" }}>
+              <SignOut />
+            </div>
           </aside>
           <main className="main">{children}</main>
         </div>
