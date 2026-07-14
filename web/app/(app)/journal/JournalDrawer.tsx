@@ -264,6 +264,25 @@ export function JournalDrawer({
           ? 'Draft — changes save automatically. Debits and credits must balance to post.'
           : (doc.party_name ?? undefined)
       }
+      headerActions={
+        <>
+          {isDraft ? (
+            <Button disabled={busy || !balanced || saveState !== 'saved'} onClick={post}>
+              Post
+            </Button>
+          ) : null}
+          {doc.status === 'posted' ? (
+            <Button variant="outline" disabled={busy} onClick={edit}>
+              Edit
+            </Button>
+          ) : null}
+          {doc.entry_id ? (
+            <Button variant="outline" asChild>
+              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+            </Button>
+          ) : null}
+        </>
+      }
       footer={
         <div className="flex w-full items-center gap-3">
           <span
@@ -293,21 +312,6 @@ export function JournalDrawer({
             ) : debits > 0 ? (
               <Badge variant="success">Balanced</Badge>
             ) : null
-          ) : null}
-          {isDraft ? (
-            <Button disabled={busy || !balanced || saveState !== 'saved'} onClick={post}>
-              Post
-            </Button>
-          ) : null}
-          {doc.status === 'posted' ? (
-            <Button variant="outline" disabled={busy} onClick={edit}>
-              Edit
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
-            </Button>
           ) : null}
         </div>
       }

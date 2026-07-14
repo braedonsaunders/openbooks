@@ -218,6 +218,16 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         size="lg"
         title="Import bank statement"
         description="Paste OFX or CSV text, or pick a file — it is read in your browser and imported as parsed lines."
+        headerActions={
+          <>
+            <Button variant="outline" disabled={busy || !text.trim() || !csvReady} onClick={runPreview}>
+              Preview
+            </Button>
+            <Button disabled={busy || !preview || preview.imported === 0} onClick={runImport}>
+              <Upload size={15} /> Import {preview && preview.imported > 0 ? `${preview.imported} lines` : ''}
+            </Button>
+          </>
+        }
         footer={
           <div className="flex w-full items-center gap-3">
             {preview ? (
@@ -227,12 +237,6 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               </span>
             ) : null}
             <span className="flex-1" />
-            <Button variant="outline" disabled={busy || !text.trim() || !csvReady} onClick={runPreview}>
-              Preview
-            </Button>
-            <Button disabled={busy || !preview || preview.imported === 0} onClick={runImport}>
-              <Upload size={15} /> Import {preview && preview.imported > 0 ? `${preview.imported} lines` : ''}
-            </Button>
           </div>
         }
       >

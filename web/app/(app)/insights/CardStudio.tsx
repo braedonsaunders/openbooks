@@ -233,24 +233,8 @@ export function CardStudio({
         </span>
       }
       description={canCreate ? 'Changes save automatically. Preview updates live.' : undefined}
-      footer={
-        <div className="flex w-full items-center gap-3">
-          <span
-            className={
-              'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
-            }
-          >
-            {canCreate
-              ? saveState === 'saved'
-                ? 'All changes saved'
-                : saveState === 'saving'
-                  ? 'Saving…'
-                  : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
-              : null}
-          </span>
-          <span className="flex-1" />
+      headerActions={
+        <>
           {canCreate ? (
             <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
               <Trash2 size={14} /> Delete
@@ -272,6 +256,25 @@ export function CardStudio({
               </>
             )
           ) : null}
+        </>
+      }
+      footer={
+        <div className="flex w-full items-center gap-3">
+          <span
+            className={
+              'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+            }
+          >
+            {canCreate
+              ? saveState === 'saved'
+                ? 'All changes saved'
+                : saveState === 'saving'
+                  ? 'Saving…'
+                  : saveState === 'error'
+                    ? 'Save failed — fix and retry'
+                    : 'Unsaved changes…'
+              : null}
+          </span>
         </div>
       }
     >

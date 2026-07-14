@@ -65,15 +65,15 @@ export function StartReconciliationButton({
         size="sm"
         title="Start reconciliation"
         description="Enter the bank statement's cutoff date and its closing balance — the workspace matches everything up to that date."
-        footer={
-          <div className="flex w-full items-center justify-end gap-2">
+        headerActions={
+          <>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button disabled={busy || !throughDate || statementBalance.trim() === '' || Number.isNaN(Number(statementBalance))} onClick={start}>
               {busy ? 'Starting…' : 'Start'}
             </Button>
-          </div>
+          </>
         }
       >
         <div className="space-y-4">

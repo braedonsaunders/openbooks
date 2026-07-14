@@ -41,6 +41,7 @@ export function Drawer({
   side = 'right',
   children,
   footer,
+  headerActions,
   bodyClassName,
 }: {
   open: boolean
@@ -51,6 +52,9 @@ export function Drawer({
   side?: DrawerSide
   children: React.ReactNode
   footer?: React.ReactNode
+  /** Primary action buttons, pinned to the top of the drawer (in the header,
+   *  before the close button) so they're always reachable without scrolling. */
+  headerActions?: React.ReactNode
   /** Override the body wrapper's classes (default: scroll + px-6 py-5 padding).
    *  Pass e.g. "overflow-hidden" for a child that manages its own layout/scroll. */
   bodyClassName?: string
@@ -163,8 +167,8 @@ export function Drawer({
               SIZE_CLASS[size],
             )}
           >
-            {title || description ? (
-              <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+            {title || description || headerActions ? (
+              <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
                 <div className="min-w-0 space-y-0.5">
                   {title ? (
                     <h2 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -175,26 +179,31 @@ export function Drawer({
                     <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                  aria-label="Close"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                <div className="flex shrink-0 items-center gap-2">
+                  {headerActions ? (
+                    <div className="flex flex-wrap items-center justify-end gap-2">{headerActions}</div>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    aria-label="Close"
                   >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
               </header>
             ) : null}
             <div
@@ -241,6 +250,8 @@ export function UrlDrawer({
   size,
   children,
   footer,
+  headerActions,
+  bodyClassName,
 }: {
   open: boolean
   closeHref: string
@@ -249,6 +260,8 @@ export function UrlDrawer({
   size?: DrawerSize
   children: React.ReactNode
   footer?: React.ReactNode
+  headerActions?: React.ReactNode
+  bodyClassName?: string
 }) {
   const navigate = React.useContext(DrawerNavigateContext)
   function close() {
@@ -264,6 +277,8 @@ export function UrlDrawer({
       description={description}
       size={size}
       footer={footer}
+      headerActions={headerActions}
+      bodyClassName={bodyClassName}
     >
       {children}
     </Drawer>

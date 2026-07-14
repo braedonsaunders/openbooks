@@ -227,6 +227,20 @@ export function PaymentDrawer({
         </span>
       }
       description={isDraft ? 'Draft — changes save automatically.' : (doc.party_name ?? undefined)}
+      headerActions={
+        <>
+          {isDraft ? (
+            <Button disabled={!canPost} onClick={post}>
+              {busy ? 'Posting…' : L.post}
+            </Button>
+          ) : null}
+          {doc.entry_id ? (
+            <Button variant="outline" asChild>
+              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+            </Button>
+          ) : null}
+        </>
+      }
       footer={
         <div className="flex w-full items-center gap-3">
           <span
@@ -256,16 +270,6 @@ export function PaymentDrawer({
               <strong className="text-slate-900 dark:text-slate-100">Total {money(doc.total)}</strong>
             )}
           </span>
-          {isDraft ? (
-            <Button disabled={!canPost} onClick={post}>
-              {busy ? 'Posting…' : L.post}
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
-            </Button>
-          ) : null}
         </div>
       }
     >
