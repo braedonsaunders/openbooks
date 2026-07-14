@@ -134,6 +134,13 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
       size="lg"
       title={creating ? 'New custom field' : `Edit “${def!.label}”`}
       description={creating ? 'Extend a record type with your own field.' : undefined}
+      headerActions={
+        <>
+          <Button disabled={busy || !label || (needsOptions && options.length === 0)} onClick={save}>
+            {busy ? 'Saving…' : creating ? 'Create field' : 'Save changes'}
+          </Button>
+        </>
+      }
       footer={
         <div className="flex w-full items-center justify-between gap-2">
           {!creating ? (
@@ -149,9 +156,6 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
           ) : (
             <span />
           )}
-          <Button disabled={busy || !label || (needsOptions && options.length === 0)} onClick={save}>
-            {busy ? 'Saving…' : creating ? 'Create field' : 'Save changes'}
-          </Button>
         </div>
       }
     >

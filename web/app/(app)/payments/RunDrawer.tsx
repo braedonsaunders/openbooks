@@ -109,13 +109,8 @@ export function RunDrawer({
         </span>
       }
       description={`EFT from ${`${run.bank_number ?? ''} ${run.bank_name ?? ''}`.trim() || 'bank account'}${run.scheduled_for ? ` · funds ${run.scheduled_for}` : ''}`}
-      footer={
-        <div className="flex w-full flex-wrap items-center gap-3">
-          <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {live.length} payment{live.length === 1 ? '' : 's'} ·{' '}
-            <strong className="text-slate-900 dark:text-slate-100">Total {money(total)}</strong>
-          </span>
-          <span className="flex-1" />
+      headerActions={
+        <>
           {canCancel ? (
             <Button variant="outline" disabled={busy} onClick={cancelRun}>
               Cancel run
@@ -143,6 +138,14 @@ export function RunDrawer({
               {busy ? 'Posting…' : 'Post payments'}
             </Button>
           ) : null}
+        </>
+      }
+      footer={
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
+            {live.length} payment{live.length === 1 ? '' : 's'} ·{' '}
+            <strong className="text-slate-900 dark:text-slate-100">Total {money(total)}</strong>
+          </span>
         </div>
       }
     >

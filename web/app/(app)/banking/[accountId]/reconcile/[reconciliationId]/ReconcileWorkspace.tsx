@@ -449,15 +449,15 @@ export function ReconcileWorkspace({
         size="sm"
         title="Adjust reconciliation"
         description="Change the cutoff date or the bank statement balance for this session."
-        footer={
-          <div className="flex w-full items-center justify-end gap-2">
+        headerActions={
+          <>
             <Button variant="outline" onClick={() => setAdjustOpen(false)}>
               Cancel
             </Button>
             <Button disabled={busy || !throughDate || statementBalance.trim() === '' || Number.isNaN(Number(statementBalance))} onClick={saveAdjust}>
               Save
             </Button>
-          </div>
+          </>
         }
       >
         <div className="space-y-4">

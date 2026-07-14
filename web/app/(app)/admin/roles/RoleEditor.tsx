@@ -175,7 +175,7 @@ function RoleDrawer({ role, onClose }: { role: RoleRow | null; onClose: () => vo
             ? 'Built-in role: the name and key are fixed, but you can adjust its permissions.'
             : 'Name the role, then pick the permissions it grants.'
       }
-      footer={
+      headerActions={
         <>
           {isEdit && !role.isBuiltIn ? (
             <Button variant="destructive" disabled={busy} onClick={remove} className="mr-auto">

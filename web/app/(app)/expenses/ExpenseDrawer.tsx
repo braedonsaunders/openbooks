@@ -265,6 +265,30 @@ export function ExpenseDrawer({
         </span>
       }
       description={editable ? 'Draft — changes save automatically.' : (doc.employee_name ?? undefined)}
+      headerActions={
+        <>
+          {isDraft && canSubmit ? (
+            <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
+              Submit for approval
+            </Button>
+          ) : null}
+          {doc.status === 'approved' && canPost ? (
+            <Button disabled={busy} onClick={() => act('post')}>
+              Post
+            </Button>
+          ) : null}
+          {(doc.status === 'posted' || doc.status === 'approved') && canSubmit ? (
+            <Button variant="outline" disabled={busy} onClick={edit}>
+              Edit
+            </Button>
+          ) : null}
+          {doc.entry_id ? (
+            <Button variant="outline" asChild>
+              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+            </Button>
+          ) : null}
+        </>
+      }
       footer={
         <div className="flex w-full items-center gap-3">
           <span
@@ -288,26 +312,6 @@ export function ExpenseDrawer({
             Subtotal {money(totals.subtotal)} · Tax {money(totals.taxTotal)} ·{' '}
             <strong className="text-slate-900 dark:text-slate-100">Total {money(totals.total)}</strong>
           </span>
-          {isDraft && canSubmit ? (
-            <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
-              Submit for approval
-            </Button>
-          ) : null}
-          {doc.status === 'approved' && canPost ? (
-            <Button disabled={busy} onClick={() => act('post')}>
-              Post
-            </Button>
-          ) : null}
-          {(doc.status === 'posted' || doc.status === 'approved') && canSubmit ? (
-            <Button variant="outline" disabled={busy} onClick={edit}>
-              Edit
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
-            </Button>
-          ) : null}
         </div>
       }
     >

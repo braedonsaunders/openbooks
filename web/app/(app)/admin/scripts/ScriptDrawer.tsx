@@ -77,6 +77,13 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
       size="xl"
       title={creating ? 'New script' : script!.name}
       description="Sandboxed JavaScript (QuickJS) — no filesystem, network, or database access."
+      headerActions={
+        <>
+          <Button disabled={busy || !name || !source.includes('function main')} onClick={save}>
+            {busy ? 'Saving…' : creating ? 'Create script' : 'Save script'}
+          </Button>
+        </>
+      }
       footer={
         <div className="flex w-full items-center justify-between">
           <label className="flex items-center gap-2 text-sm">
@@ -88,9 +95,6 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
             />
             Active
           </label>
-          <Button disabled={busy || !name || !source.includes('function main')} onClick={save}>
-            {busy ? 'Saving…' : creating ? 'Create script' : 'Save script'}
-          </Button>
         </div>
       }
     >

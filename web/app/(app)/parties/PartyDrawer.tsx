@@ -237,6 +237,26 @@ export function PartyDrawer({
         </span>
       }
       description={canManage ? 'Changes save automatically.' : undefined}
+      headerActions={
+        <>
+          {canManage ? (
+            isActive ? (
+              <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
+                Deactivate
+              </Button>
+            ) : (
+              <>
+                {!nameValid ? (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Name the party to activate it</span>
+                ) : null}
+                <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
+                  Activate
+                </Button>
+              </>
+            )
+          ) : null}
+        </>
+      }
       footer={
         <div className="flex w-full items-center gap-3">
           <span
@@ -255,23 +275,6 @@ export function PartyDrawer({
                     : 'Unsaved changes…'
               : null}
           </span>
-          <span className="flex-1" />
-          {canManage ? (
-            isActive ? (
-              <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                Deactivate
-              </Button>
-            ) : (
-              <>
-                {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Name the party to activate it</span>
-                ) : null}
-                <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                  Activate
-                </Button>
-              </>
-            )
-          ) : null}
         </div>
       }
     >

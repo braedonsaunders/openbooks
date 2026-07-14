@@ -267,6 +267,25 @@ export function InvoiceDrawer({
         </span>
       }
       description={isDraft ? 'Draft — changes save automatically.' : (doc.customer_name ?? undefined)}
+      headerActions={
+        <>
+          {isDraft ? (
+            <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
+              Submit for approval
+            </Button>
+          ) : null}
+          {doc.status === 'approved' ? (
+            <Button disabled={busy} onClick={() => act('post')}>
+              Post
+            </Button>
+          ) : null}
+          {doc.entry_id ? (
+            <Button variant="outline" asChild>
+              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+            </Button>
+          ) : null}
+        </>
+      }
       footer={
         <div className="flex w-full items-center gap-3">
           <span
@@ -299,21 +318,6 @@ export function InvoiceDrawer({
               </>
             ) : null}
           </span>
-          {isDraft ? (
-            <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
-              Submit for approval
-            </Button>
-          ) : null}
-          {doc.status === 'approved' ? (
-            <Button disabled={busy} onClick={() => act('post')}>
-              Post
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
-            </Button>
-          ) : null}
         </div>
       }
     >

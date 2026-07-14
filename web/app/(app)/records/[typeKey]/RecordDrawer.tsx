@@ -157,18 +157,8 @@ export function RecordDrawer({
               ? 'Active — still editable; changes save automatically.'
               : 'Inactive — read-only until reactivated.'
       }
-      footer={
-        <div className="flex w-full items-center gap-3">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {editable
-              ? saveState === 'saved'
-                ? 'All changes saved'
-                : saveState === 'saving'
-                  ? 'Saving…'
-                  : 'Unsaved changes…'
-              : null}
-          </span>
-          <span className="flex-1" />
+      headerActions={
+        <>
           {canEdit && status === 'draft' ? (
             <>
               <Button variant="ghost" disabled={busy} onClick={destroy}>
@@ -189,6 +179,19 @@ export function RecordDrawer({
               Reactivate
             </Button>
           ) : null}
+        </>
+      }
+      footer={
+        <div className="flex w-full items-center gap-3">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {editable
+              ? saveState === 'saved'
+                ? 'All changes saved'
+                : saveState === 'saving'
+                  ? 'Saving…'
+                  : 'Unsaved changes…'
+              : null}
+          </span>
         </div>
       }
     >

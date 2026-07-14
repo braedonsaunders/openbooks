@@ -252,12 +252,8 @@ export function TypeBuilderDrawer({
             ? 'Live — edits apply to the module immediately.'
             : 'Archived — publish again to restore the module.'
       }
-      footer={
-        <div className="flex w-full items-center gap-3">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {saveState === 'saved' ? 'All changes saved' : saveState === 'saving' ? 'Saving…' : 'Unsaved changes…'}
-          </span>
-          <span className="flex-1" />
+      headerActions={
+        <>
           {isDraft ? (
             <Button variant="ghost" disabled={busy} onClick={destroy}>
               <Trash2 size={14} /> Delete draft
@@ -279,6 +275,13 @@ export function TypeBuilderDrawer({
               {type.status === 'archived' ? 'Publish again' : 'Publish'}
             </Button>
           )}
+        </>
+      }
+      footer={
+        <div className="flex w-full items-center gap-3">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {saveState === 'saved' ? 'All changes saved' : saveState === 'saving' ? 'Saving…' : 'Unsaved changes…'}
+          </span>
         </div>
       }
     >
