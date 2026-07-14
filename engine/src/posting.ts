@@ -69,7 +69,7 @@ function taxLines(doc: Doc, lines: DocLine[], accountId: string, sign: 1 | -1): 
   }));
 }
 
-const RULES: Record<string, RuleFn> = {
+export const RULES: Record<string, RuleFn> = {
   vendor_bill: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
       accountId: l.accountId!,
@@ -191,6 +191,91 @@ const RULES: Record<string, RuleFn> = {
       partyId: doc.partyId,
       ...dims(doc, l),
     })),
+
+  /**
+   * Check: a direct bank disbursement. DR the line accounts (expense or the
+   * AP/liability being paid), CR bank. Like vendor_payment but the debit side
+   * is the document's own line accounts. Purchase-side tax (taxPaid).
+   */
+  check: (doc, lines, deps) => {
+    const expense: KernelLine[] = lines.map((l) => ({
+      accountId: l.accountId!,
+      amount: l.amount, // debit line account
+      memo: l.description,
+      partyId: doc.partyId,
+      ...dims(doc, l),
+    }));
+    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1);
+    const total = sum([...expense, ...tax].map((l) => l.amount));
+    return [
+      ...expense,
+      ...tax,
+      {
+        accountId: deps.control.bank,
+        amount: neg(total), // credit bank
+        ...dims(doc),
+      },
+    ];
+  },
+
+  /** Transfer: DR one account, CR another, equal amounts (line 0 = to, line 1 = from). */
+  transfer: (doc, lines, deps) => {
+    const total = sum(lines.map((l) => l.amount));
+    return [
+      { accountId: lines[0]?.accountId ?? deps.control.bank, amount: total, ...dims(doc) }, // debit destination
+      { accountId: lines[1]?.accountId ?? deps.control.bank, amount: neg(total), ...dims(doc) }, // credit source
+    ];
+  },
+
+  /** Vendor credit memo: the reverse of vendor_bill. DR AP / CR expense + tax. */
+  vendor_credit: (doc, lines, deps) => {
+    const expense: KernelLine[] = lines.map((l) => ({
+      accountId: l.accountId!,
+      amount: neg(l.amount), // credit expense (reverse of bill)
+      memo: l.description,
+      partyId: doc.partyId,
+      ...dims(doc, l),
+    }));
+    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, -1);
+    const total = sum([...expense, ...tax].map((l) => l.amount));
+    return [
+      {
+        accountId: deps.control.ap,
+        amount: neg(total), // debit AP (total is negative)
+        partyId: doc.partyId,
+        dueDate: doc.dueDate,
+        isOpenItem: true,
+        ...dims(doc),
+      },
+      ...expense,
+      ...tax,
+    ];
+  },
+
+  /** Customer credit memo: the reverse of customer_invoice. DR income / CR AR + tax. */
+  customer_credit: (doc, lines, deps) => {
+    const income: KernelLine[] = lines.map((l) => ({
+      accountId: l.accountId!,
+      amount: l.amount, // debit income (reverse of invoice)
+      memo: l.description,
+      partyId: doc.partyId,
+      ...dims(doc, l),
+    }));
+    const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, 1);
+    const total = sum([...income, ...tax].map((l) => l.amount));
+    return [
+      {
+        accountId: deps.control.ar,
+        amount: neg(total), // credit AR (total is positive)
+        partyId: doc.partyId,
+        dueDate: doc.dueDate,
+        isOpenItem: true,
+        ...dims(doc),
+      },
+      ...income,
+      ...tax,
+    ];
+  },
 };
 
 export class PostingError extends Error {}
