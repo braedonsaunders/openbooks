@@ -38,7 +38,7 @@ permission gates → build → verify in preview → commit.
 | Payments + application + EFT | agent | web/app/(app)/payments, /receipts, web/app/api/payments, engine/src/payments.ts | started |
 | Journal entry module | agent | web/app/(app)/journal (JournalDrawer + new-entry only; list page shared — coordinate via ?entry= param), web/app/api/journals | started |
 | Parties directory | agent | web/app/(app)/parties, web/app/api/parties | started |
-| Bank reconciliation | agent | web/app/(app)/banking, web/app/api/banking | started |
+| Bank reconciliation | agent-LANDED | web/app/(app)/banking, web/app/api/banking, engine/src/banking.ts | landed; e2e verified (import→auto/manual match→sign-off) |
 | Expenses | agent | web/app/(app)/expenses, web/app/api/expenses | started |
 | Period close | integrator | web/app/(app)/close, web/app/api/close | started |
 | Scripts + audit admin | integrator | web/app/(app)/admin/scripts, /admin/audit | pending |

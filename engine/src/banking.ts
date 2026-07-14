@@ -1,0 +1,891 @@
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db, schema } from "./db.ts";
+import { fromUnits, isZero, sum, toUnits } from "./money.ts";
+
+/**
+ * Banking: statement parsing (OFX / CSV) → import with dedupe → auto/manual
+ * matching against posted journal lines → reconciliation sign-off.
+ *
+ * Statement lines are the immutable imported truth (bank's perspective,
+ * signed). Matching connects them to unreconciled journal lines on the same
+ * reconcilable account; sign-off stamps `reconciled_at`/`reconciliation_id`
+ * on the matched journal lines (a metadata-only update the kernel's
+ * `jl_guard` trigger explicitly allows on posted lines).
+ */
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+/** Domain error → API 422. Message is safe to show to the user. */
+export class BankingError extends Error {
+  readonly name = "BankingError";
+  readonly status = 422;
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface ParsedStatementLine {
+  /** ISO date (YYYY-MM-DD). */
+  postedOn: string;
+  /** Signed decimal string from the bank's perspective (+ deposit / − withdrawal). */
+  amount: string;
+  description: string | null;
+  counterpartyRef?: string | null;
+  /** Source-provided dedupe key (OFX FITID). Synthesized at import when absent. */
+  bankTransactionId?: string | null;
+}
+
+export interface ParsedStatement {
+  lines: ParsedStatementLine[];
+  currency?: string;
+  /** Balance-as-of date when the file carries one (OFX LEDGERBAL/DTASOF). */
+  statementDate?: string;
+  closingBalance?: string;
+}
+
+export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "feed_api" | "manual";
+
+const CTX = Symbol();
+export interface BankingContext {
+  orgId: string;
+  userId: string;
+  // prevents accidental structural-typing mixups with other {orgId,userId} bags
+  [CTX]?: never;
+}
+
+// ---------------------------------------------------------------------------
+// OFX parsing (1.x SGML and 2.x XML)
+// ---------------------------------------------------------------------------
+
+function decodeOfxEntities(v: string): string {
+  return v
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&");
+}
+
+/** First leaf value for `<TAG>value` (SGML, unclosed) or `<TAG>value</TAG>`. */
+function ofxValue(block: string, tag: string): string | undefined {
+  const m = block.match(new RegExp(`<${tag}>\\s*([^<\\r\\n]*)`, "i"));
+  const v = m?.[1]?.trim();
+  return v ? decodeOfxEntities(v) : undefined;
+}
+
+/** OFX DTPOSTED/DTASOF: YYYYMMDD[HHMMSS[.mmm]][ [gmt offset] ] → YYYY-MM-DD. */
+function ofxDate(raw: string): string {
+  const m = raw.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (!m) throw new BankingError(`OFX: unparseable date "${raw}"`);
+  return assertRealDate(m[1], m[2], m[3], `OFX date "${raw}"`);
+}
+
+function assertRealDate(y: string, mo: string, d: string, label: string): string {
+  const year = Number(y), month = Number(mo), day = Number(d);
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if (
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() !== month - 1 ||
+    dt.getUTCDate() !== day
+  ) {
+    throw new BankingError(`${label} is not a real calendar date`);
+  }
+  return `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Normalize a raw amount ("1,234.56", "(45.00)", "45.00-", "1.234,56") to a signed decimal string. */
+function normalizeAmount(raw: string, label: string): string {
+  let s = raw.trim().replace(/[$€£\s]/g, "");
+  if (!s) throw new BankingError(`${label}: empty amount`);
+  let negative = false;
+  if (/^\(.*\)$/.test(s)) {
+    negative = true;
+    s = s.slice(1, -1);
+  }
+  if (s.endsWith("-")) {
+    negative = true;
+    s = s.slice(0, -1);
+  }
+  if (s.startsWith("-")) {
+    negative = true;
+    s = s.slice(1);
+  } else if (s.startsWith("+")) {
+    s = s.slice(1);
+  }
+  const hasDot = s.includes(".");
+  const hasComma = s.includes(",");
+  if (hasDot && hasComma) {
+    // rightmost separator is the decimal point
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    // "123,45" → decimal comma; "1,234" / "1,234,567" → thousands
+    s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, "") : s.replace(/,/g, ".");
+  }
+  let units: bigint;
+  try {
+    units = toUnits(s);
+  } catch {
+    throw new BankingError(`${label}: unparseable amount "${raw}"`);
+  }
+  return fromUnits(negative ? -units : units);
+}
+
+/**
+ * Parse an OFX bank statement (v1 SGML headers or v2 XML) into normalized
+ * lines. Reads `<STMTTRN>` blocks (DTPOSTED, TRNAMT, NAME/MEMO, FITID,
+ * REFNUM/CHECKNUM) plus statement-level CURDEF and LEDGERBAL.
+ */
+export function parseOfx(text: string): ParsedStatement {
+  const body = text.replace(/\r\n/g, "\n");
+  const chunks = body.split(/<STMTTRN>/i).slice(1);
+  if (chunks.length === 0) {
+    throw new BankingError("No transactions found — expected OFX <STMTTRN> blocks");
+  }
+  const lines: ParsedStatementLine[] = chunks.map((chunk, i) => {
+    const block = chunk.split(/<\/STMTTRN>/i)[0];
+    const dt = ofxValue(block, "DTPOSTED");
+    const amt = ofxValue(block, "TRNAMT");
+    if (!dt) throw new BankingError(`OFX transaction ${i + 1}: missing DTPOSTED`);
+    if (!amt) throw new BankingError(`OFX transaction ${i + 1}: missing TRNAMT`);
+    const name = ofxValue(block, "NAME");
+    const memo = ofxValue(block, "MEMO");
+    const description =
+      name && memo && memo !== name ? `${name} — ${memo}` : (name ?? memo ?? null);
+    return {
+      postedOn: ofxDate(dt),
+      amount: normalizeAmount(amt, `OFX transaction ${i + 1}`),
+      description,
+      counterpartyRef: ofxValue(block, "REFNUM") ?? ofxValue(block, "CHECKNUM") ?? null,
+      bankTransactionId: ofxValue(block, "FITID") ?? null,
+    };
+  });
+
+  const parsed: ParsedStatement = { lines };
+  const curdef = ofxValue(body, "CURDEF");
+  if (curdef && /^[A-Za-z]{3}$/.test(curdef)) parsed.currency = curdef.toUpperCase();
+  const ledger = body.match(/<LEDGERBAL>([\s\S]*?)(<\/LEDGERBAL>|<AVAILBAL>|$)/i)?.[1];
+  if (ledger) {
+    const bal = ofxValue(ledger, "BALAMT");
+    const asOf = ofxValue(ledger, "DTASOF");
+    if (bal) parsed.closingBalance = normalizeAmount(bal, "OFX ledger balance");
+    if (asOf) parsed.statementDate = ofxDate(asOf);
+  }
+  return parsed;
+}
+
+// ---------------------------------------------------------------------------
+// CSV parsing
+// ---------------------------------------------------------------------------
+
+/** RFC-4180 tokenizer: quoted fields, "" escapes, commas/newlines in quotes. */
+export function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  let sawAny = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
+      } else field += c;
+      continue;
+    }
+    if (c === '"') {
+      inQuotes = true;
+      sawAny = true;
+    } else if (c === ",") {
+      row.push(field);
+      field = "";
+      sawAny = true;
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      if (row.some((f) => f.trim() !== "")) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += c;
+      sawAny = true;
+    }
+  }
+  row.push(field);
+  if (row.some((f) => f.trim() !== "")) rows.push(row);
+  if (!sawAny || rows.length === 0) throw new BankingError("CSV is empty");
+  return rows;
+}
+
+const MONTHS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+/**
+ * Parse a CSV cell date. Accepts ISO (YYYY-MM-DD, YYYY/MM/DD), slash/dash
+ * numeric dates (disambiguated by >12 day part, otherwise assumed MM/DD/YYYY),
+ * and month-name forms ("12 Jan 2026", "Jan 12, 2026"). Returns null when the
+ * cell is not a date (used for header detection); import errors on null.
+ */
+export function parseCsvDate(raw: string): string | null {
+  const s = raw.trim();
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return safeDate(m[1], m[2], m[3]);
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (m) {
+    // first part >12 ⇒ it is the day (DD/MM/YYYY); otherwise MM/DD/YYYY
+    // (documented import assumption for ambiguous dates).
+    return Number(m[1]) > 12 ? safeDate(m[3], m[2], m[1]) : safeDate(m[3], m[1], m[2]);
+  }
+  m = s.match(/^(\d{1,2})[ -]([A-Za-z]{3,})[ -,]+(\d{4})$/);
+  if (m) {
+    const month = MONTHS[m[2].slice(0, 3).toLowerCase()];
+    return month ? safeDate(m[3], String(month), m[1]) : null;
+  }
+  m = s.match(/^([A-Za-z]{3,})[ .]+(\d{1,2}),?\s+(\d{4})$/);
+  if (m) {
+    const month = MONTHS[m[1].slice(0, 3).toLowerCase()];
+    return month ? safeDate(m[3], String(month), m[2]) : null;
+  }
+  return null;
+}
+
+function safeDate(y: string, mo: string, d: string): string | null {
+  try {
+    return assertRealDate(y, mo.padStart(2, "0"), d.padStart(2, "0"), "date");
+  } catch {
+    return null;
+  }
+}
+
+export interface CsvMapping {
+  /** Zero-based column indexes into each CSV row. */
+  date: number;
+  amount: number;
+  description: number;
+  counterpartyRef?: number;
+  bankTransactionId?: number;
+  /**
+   * Some bank exports split money into Debit and Credit columns; when set,
+   * `amount` is the credit (money-in) column and this is the money-out
+   * column, negated on import.
+   */
+  debitAmount?: number;
+}
+
+/**
+ * Parse CSV text into normalized statement lines using a column mapping.
+ * The header row is skipped automatically when the mapped date column of the
+ * first row does not parse as a date.
+ */
+export function parseCsv(text: string, mapping: CsvMapping): ParsedStatementLine[] {
+  const rows = parseCsvRows(text);
+  let start = 0;
+  if (rows[0] && parseCsvDate(rows[0][mapping.date] ?? "") === null) start = 1;
+  const dataRows = rows.slice(start);
+  if (dataRows.length === 0) throw new BankingError("CSV has a header but no data rows");
+
+  return dataRows.map((cols, i) => {
+    const rowNo = start + i + 1;
+    const rawDate = (cols[mapping.date] ?? "").trim();
+    const postedOn = parseCsvDate(rawDate);
+    if (!postedOn) throw new BankingError(`CSV row ${rowNo}: unparseable date "${rawDate}"`);
+
+    const rawAmount = (cols[mapping.amount] ?? "").trim();
+    let amount: string;
+    if (mapping.debitAmount !== undefined) {
+      const rawDebit = (cols[mapping.debitAmount] ?? "").trim();
+      if (rawAmount && rawDebit) {
+        throw new BankingError(`CSV row ${rowNo}: both credit and debit columns have values`);
+      }
+      if (!rawAmount && !rawDebit) {
+        throw new BankingError(`CSV row ${rowNo}: no amount in credit or debit column`);
+      }
+      amount = rawAmount
+        ? normalizeAmount(rawAmount, `CSV row ${rowNo}`)
+        : fromUnits(-toUnits(normalizeAmount(rawDebit, `CSV row ${rowNo}`)));
+    } else {
+      if (!rawAmount) throw new BankingError(`CSV row ${rowNo}: empty amount`);
+      amount = normalizeAmount(rawAmount, `CSV row ${rowNo}`);
+    }
+
+    const description = (cols[mapping.description] ?? "").trim() || null;
+    const counterpartyRef =
+      mapping.counterpartyRef !== undefined
+        ? (cols[mapping.counterpartyRef] ?? "").trim() || null
+        : null;
+    const bankTransactionId =
+      mapping.bankTransactionId !== undefined
+        ? (cols[mapping.bankTransactionId] ?? "").trim() || null
+        : null;
+    return { postedOn, amount, description, counterpartyRef, bankTransactionId };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------------
+
+interface ReconcilableAccount {
+  id: string;
+  name: string;
+  number: string | null;
+  currency: string | null;
+}
+
+async function loadReconcilableAccount(orgId: string, accountId: string): Promise<ReconcilableAccount> {
+  const r = (await db.execute(sql`
+    select id, name, number, currency_restriction as currency
+      from accounts
+     where id = ${accountId} and org_id = ${orgId}
+       and reconcilable and is_active and not is_summary
+  `)) as unknown as { rows: ReconcilableAccount[] };
+  const account = r.rows[0];
+  if (!account) throw new BankingError("Account not found or not reconcilable");
+  return account;
+}
+
+/**
+ * Deterministic fallback dedupe key for sources without a transaction id
+ * (most CSV exports): hash of account + date + amount + description + the
+ * line's occurrence index among identical tuples in the batch. Re-importing
+ * the same file is a no-op; a second identical-looking real transaction on
+ * the same day still imports (distinct occurrence index).
+ */
+function synthesizeTransactionIds(
+  accountId: string,
+  lines: ParsedStatementLine[],
+): ParsedStatementLine[] {
+  const seen = new Map<string, number>();
+  return lines.map((l) => {
+    if (l.bankTransactionId) return l;
+    const tuple = `${l.postedOn}|${l.amount}|${l.description ?? ""}`;
+    const n = seen.get(tuple) ?? 0;
+    seen.set(tuple, n + 1);
+    const hash = createHash("sha256").update(`${accountId}|${tuple}|${n}`).digest("hex").slice(0, 32);
+    return { ...l, bankTransactionId: `gen:${hash}` };
+  });
+}
+
+export interface ImportResult {
+  /** Null when every line was a duplicate (nothing was written). */
+  statementId: string | null;
+  imported: number;
+  duplicates: number;
+  /** The deduped lines (dry-run preview shows exactly what import would write). */
+  lines: ParsedStatementLine[];
+}
+
+/**
+ * Import normalized statement lines for a reconcilable account. Lines whose
+ * `bankTransactionId` (source-provided or synthesized) already exists on the
+ * account are skipped. With `dryRun` nothing is written — used for preview.
+ * `rawFileRef` stays null in v1 (no object storage yet); the schema column is
+ * reserved for the original file's store key.
+ */
+export async function importStatement(
+  opts: {
+    accountId: string;
+    source: StatementSource;
+    lines: ParsedStatementLine[];
+    statementDate?: string | null;
+    openingBalance?: string | null;
+    closingBalance?: string | null;
+    currency?: string | null;
+    dryRun?: boolean;
+  },
+  ctx: BankingContext,
+): Promise<ImportResult> {
+  if (opts.lines.length === 0) throw new BankingError("No statement lines to import");
+  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId);
+
+  const keyed = synthesizeTransactionIds(account.id, opts.lines);
+  const ids = keyed.map((l) => l.bankTransactionId as string);
+  const existing = (await db.execute(sql`
+    select l.bank_transaction_id as id
+      from bank_statement_lines l
+      join bank_statements s on s.id = l.statement_id
+     where s.account_id = ${account.id} and s.org_id = ${ctx.orgId}
+       and l.bank_transaction_id = any(${sql.param(ids)})
+  `)) as unknown as { rows: { id: string }[] };
+  const dupes = new Set(existing.rows.map((r) => r.id));
+
+  // also dedupe within the batch (a file can repeat its own FITIDs)
+  const batchSeen = new Set<string>();
+  const fresh: ParsedStatementLine[] = [];
+  let duplicates = 0;
+  for (const line of keyed) {
+    const key = line.bankTransactionId as string;
+    if (dupes.has(key) || batchSeen.has(key)) {
+      duplicates += 1;
+      continue;
+    }
+    batchSeen.add(key);
+    fresh.push(line);
+  }
+
+  if (opts.dryRun || fresh.length === 0) {
+    return { statementId: null, imported: opts.dryRun ? fresh.length : 0, duplicates, lines: fresh };
+  }
+
+  const ordered = fresh
+    .map((l, i) => ({ ...l, i }))
+    .sort((a, b) => (a.postedOn < b.postedOn ? -1 : a.postedOn > b.postedOn ? 1 : a.i - b.i));
+  const statementDate =
+    opts.statementDate ?? ordered[ordered.length - 1].postedOn;
+  const currency = opts.currency ?? account.currency ?? "CAD";
+
+  const statementId = await db.transaction(async (tx) => {
+    const [stmt] = await tx
+      .insert(schema.bankStatements)
+      .values({
+        orgId: ctx.orgId,
+        accountId: account.id,
+        source: opts.source,
+        statementDate,
+        openingBalance: opts.openingBalance || null,
+        closingBalance: opts.closingBalance || null,
+        rawFileRef: null, // v1: no object storage; text is parsed, not retained
+        createdBy: ctx.userId,
+      })
+      .returning({ id: schema.bankStatements.id });
+    await tx.insert(schema.bankStatementLines).values(
+      ordered.map((l, i) => ({
+        orgId: ctx.orgId,
+        statementId: stmt.id,
+        lineNumber: i + 1,
+        postedOn: l.postedOn,
+        amount: l.amount,
+        currency,
+        description: l.description,
+        counterpartyRef: l.counterpartyRef ?? null,
+        bankTransactionId: l.bankTransactionId ?? null,
+        matchStatus: "unmatched" as const,
+        createdBy: ctx.userId,
+      })),
+    );
+    return stmt.id;
+  });
+
+  return { statementId, imported: fresh.length, duplicates, lines: fresh };
+}
+
+// ---------------------------------------------------------------------------
+// Reconciliation sessions
+// ---------------------------------------------------------------------------
+
+interface ReconciliationRow {
+  id: string;
+  account_id: string;
+  through_date: string;
+  statement_balance: string;
+  status: "in_progress" | "balanced" | "signed_off";
+}
+
+async function loadReconciliation(orgId: string, reconciliationId: string): Promise<ReconciliationRow> {
+  const r = (await db.execute(sql`
+    select id, account_id, through_date, statement_balance, status
+      from reconciliations
+     where id = ${reconciliationId} and org_id = ${orgId}
+  `)) as unknown as { rows: ReconciliationRow[] };
+  const recon = r.rows[0];
+  if (!recon) throw new BankingError("Reconciliation not found");
+  return recon;
+}
+
+/**
+ * Start a reconciliation session. One open session per account: a second
+ * concurrent session would double-claim the same journal lines.
+ */
+export async function startReconciliation(
+  opts: { accountId: string; throughDate: string; statementBalance: string },
+  ctx: BankingContext,
+): Promise<{ id: string }> {
+  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.throughDate)) {
+    throw new BankingError("Through date must be YYYY-MM-DD");
+  }
+  const statementBalance = normalizeAmount(opts.statementBalance, "Statement balance");
+  const open = (await db.execute(sql`
+    select id from reconciliations
+     where org_id = ${ctx.orgId} and account_id = ${account.id} and status <> 'signed_off'
+     limit 1
+  `)) as unknown as { rows: { id: string }[] };
+  if (open.rows[0]) {
+    throw new BankingError("This account already has an open reconciliation — finish or discard it first");
+  }
+  const [recon] = await db
+    .insert(schema.reconciliations)
+    .values({
+      orgId: ctx.orgId,
+      accountId: account.id,
+      throughDate: opts.throughDate,
+      statementBalance,
+      status: "in_progress",
+      createdBy: ctx.userId,
+    })
+    .returning({ id: schema.reconciliations.id });
+  return { id: recon.id };
+}
+
+export interface ReconciliationTotals {
+  statementBalance: string;
+  /** GL balance of previously-reconciled lines + lines matched in this session. */
+  clearedBalance: string;
+  /** statementBalance − clearedBalance; sign-off requires exactly 0. */
+  difference: string;
+  matchedStatementLines: number;
+  unmatchedStatementLines: number;
+  matchedJournalLines: number;
+}
+
+/** Running totals for a session — the workspace difference badge and the sign-off gate. */
+export async function reconciliationTotals(
+  reconciliationId: string,
+  ctx: BankingContext,
+): Promise<ReconciliationTotals> {
+  const recon = await loadReconciliation(ctx.orgId, reconciliationId);
+  const r = (await db.execute(sql`
+    select
+      coalesce((
+        select sum(jl.amount)
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+         where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+           and (jl.reconciled_at is not null
+                or jl.id in (select journal_line_id from reconciliation_matches
+                              where reconciliation_id = ${recon.id}))
+      ), 0) as cleared,
+      (select count(distinct m.journal_line_id) from reconciliation_matches m
+        where m.reconciliation_id = ${recon.id}) as matched_journal,
+      (select count(distinct m.statement_line_id) from reconciliation_matches m
+        where m.reconciliation_id = ${recon.id}) as matched_stmt,
+      (select count(*)
+         from bank_statement_lines l
+         join bank_statements s on s.id = l.statement_id
+        where s.account_id = ${recon.account_id} and s.org_id = ${ctx.orgId}
+          and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}) as unmatched_stmt
+  `)) as unknown as {
+    rows: { cleared: string; matched_journal: string; matched_stmt: string; unmatched_stmt: string }[];
+  };
+  const row = r.rows[0];
+  const clearedBalance = fromUnits(toUnits(row.cleared));
+  const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(row.cleared));
+  return {
+    statementBalance: fromUnits(toUnits(recon.statement_balance)),
+    clearedBalance,
+    difference,
+    matchedStatementLines: Number(row.matched_stmt),
+    unmatchedStatementLines: Number(row.unmatched_stmt),
+    matchedJournalLines: Number(row.matched_journal),
+  };
+}
+
+/** Keep `status` honest: balanced ⇔ difference is 0 (signed_off never changes). */
+async function refreshStatus(reconciliationId: string, ctx: BankingContext): Promise<ReconciliationTotals> {
+  const totals = await reconciliationTotals(reconciliationId, ctx);
+  await db.execute(sql`
+    update reconciliations
+       set status = ${isZero(totals.difference) ? "balanced" : "in_progress"},
+           updated_at = now(), updated_by = ${ctx.userId}
+     where id = ${reconciliationId} and org_id = ${ctx.orgId} and status <> 'signed_off'
+  `);
+  return totals;
+}
+
+// ---------------------------------------------------------------------------
+// Matching
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+const daysBetween = (a: string, b: string) =>
+  Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / DAY_MS;
+
+export interface AutoMatchResult {
+  matched: number;
+  highConfidence: number; // exact amount, ≤ 3 days apart → 0.9
+  mediumConfidence: number; // exact amount, ≤ 14 days apart → 0.7
+  totals: ReconciliationTotals;
+}
+
+/**
+ * Auto-match unmatched statement lines to unreconciled, unclaimed posted
+ * journal lines on the session's account: exact signed amount + posting date
+ * within 3 days ⇒ confidence 0.9; within 14 days ⇒ 0.7. Each journal line is
+ * used at most once; the closest date wins.
+ */
+export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
+  const recon = await loadReconciliation(ctx.orgId, reconciliationId);
+  if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+
+  const [stmtRes, glRes] = (await Promise.all([
+    db.execute(sql`
+      select l.id, l.posted_on, l.amount
+        from bank_statement_lines l
+        join bank_statements s on s.id = l.statement_id
+       where s.account_id = ${recon.account_id} and s.org_id = ${ctx.orgId}
+         and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}
+       order by l.posted_on, l.line_number
+    `),
+    db.execute(sql`
+      select jl.id, je.posting_date, jl.amount
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+       where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+         and jl.reconciled_at is null and je.posting_date <= ${recon.through_date}
+         and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
+       order by je.posting_date, jl.line_number
+    `),
+  ])) as unknown as [
+    { rows: { id: string; posted_on: string; amount: string }[] },
+    { rows: { id: string; posting_date: string; amount: string }[] },
+  ];
+
+  // candidates by exact signed amount
+  const byAmount = new Map<string, { id: string; date: string }[]>();
+  for (const jl of glRes.rows) {
+    const key = toUnits(jl.amount).toString();
+    const list = byAmount.get(key) ?? [];
+    list.push({ id: jl.id, date: jl.posting_date });
+    byAmount.set(key, list);
+  }
+
+  const pairs: { statementLineId: string; journalLineId: string; confidence: string }[] = [];
+  for (const line of stmtRes.rows) {
+    const candidates = byAmount.get(toUnits(line.amount).toString());
+    if (!candidates?.length) continue;
+    let bestIdx = -1;
+    let bestDays = Infinity;
+    for (let i = 0; i < candidates.length; i++) {
+      const d = daysBetween(line.posted_on, candidates[i].date);
+      if (d < bestDays) {
+        bestDays = d;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx === -1 || bestDays > 14) continue;
+    const [winner] = candidates.splice(bestIdx, 1);
+    pairs.push({
+      statementLineId: line.id,
+      journalLineId: winner.id,
+      confidence: bestDays <= 3 ? "0.9" : "0.7",
+    });
+  }
+
+  if (pairs.length > 0) {
+    await db.transaction(async (tx) => {
+      await tx.insert(schema.reconciliationMatches).values(
+        pairs.map((p) => ({
+          orgId: ctx.orgId,
+          reconciliationId: recon.id,
+          statementLineId: p.statementLineId,
+          journalLineId: p.journalLineId,
+          matchedBy: "auto" as const,
+          confidence: p.confidence,
+          createdBy: ctx.userId,
+        })),
+      );
+      await tx.execute(sql`
+        update bank_statement_lines
+           set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
+         where id = any(${sql.param(pairs.map((p) => p.statementLineId))})
+      `);
+    });
+  }
+
+  const totals = await refreshStatus(recon.id, ctx);
+  return {
+    matched: pairs.length,
+    highConfidence: pairs.filter((p) => p.confidence === "0.9").length,
+    mediumConfidence: pairs.filter((p) => p.confidence === "0.7").length,
+    totals,
+  };
+}
+
+/** Manually pair one statement line with one or more journal lines. */
+export async function createMatch(
+  opts: { reconciliationId: string; statementLineId: string; journalLineIds: string[] },
+  ctx: BankingContext,
+): Promise<ReconciliationTotals> {
+  const recon = await loadReconciliation(ctx.orgId, opts.reconciliationId);
+  if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+  const journalLineIds = [...new Set(opts.journalLineIds)];
+  if (journalLineIds.length === 0) throw new BankingError("Select at least one journal line");
+
+  const stmt = (await db.execute(sql`
+    select l.id
+      from bank_statement_lines l
+      join bank_statements s on s.id = l.statement_id
+     where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
+       and s.account_id = ${recon.account_id} and l.match_status = 'unmatched'
+  `)) as unknown as { rows: { id: string }[] };
+  if (!stmt.rows[0]) {
+    throw new BankingError("Statement line not found on this account, or already matched");
+  }
+
+  const gl = (await db.execute(sql`
+    select jl.id
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+     where jl.id = any(${sql.param(journalLineIds)}) and jl.org_id = ${ctx.orgId}
+       and jl.account_id = ${recon.account_id} and jl.reconciled_at is null
+       and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
+  `)) as unknown as { rows: { id: string }[] };
+  if (gl.rows.length !== journalLineIds.length) {
+    throw new BankingError(
+      "One or more journal lines are unavailable — not posted on this account, already reconciled, or already matched",
+    );
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.insert(schema.reconciliationMatches).values(
+      journalLineIds.map((journalLineId) => ({
+        orgId: ctx.orgId,
+        reconciliationId: recon.id,
+        statementLineId: opts.statementLineId,
+        journalLineId,
+        matchedBy: "manual" as const,
+        confidence: null,
+        createdBy: ctx.userId,
+      })),
+    );
+    await tx.execute(sql`
+      update bank_statement_lines
+         set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
+       where id = ${opts.statementLineId}
+    `);
+  });
+
+  return refreshStatus(recon.id, ctx);
+}
+
+/** Undo all of a statement line's matches within a session. */
+export async function unmatchStatementLine(
+  opts: { reconciliationId: string; statementLineId: string },
+  ctx: BankingContext,
+): Promise<ReconciliationTotals> {
+  const recon = await loadReconciliation(ctx.orgId, opts.reconciliationId);
+  if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+
+  const deleted = (await db.execute(sql`
+    delete from reconciliation_matches
+     where reconciliation_id = ${recon.id} and statement_line_id = ${opts.statementLineId}
+       and org_id = ${ctx.orgId}
+    returning id
+  `)) as unknown as { rows: { id: string }[] };
+  if (deleted.rows.length === 0) {
+    throw new BankingError("No matches for that statement line in this reconciliation");
+  }
+  await db.execute(sql`
+    update bank_statement_lines l
+       set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
+     where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
+       and not exists (select 1 from reconciliation_matches m where m.statement_line_id = l.id)
+  `);
+
+  return refreshStatus(recon.id, ctx);
+}
+
+/**
+ * Discard an unsigned session: delete its matches and release its statement
+ * lines back to unmatched. Signed-off sessions are permanent.
+ */
+export async function discardReconciliation(reconciliationId: string, ctx: BankingContext): Promise<void> {
+  const recon = await loadReconciliation(ctx.orgId, reconciliationId);
+  if (recon.status === "signed_off") {
+    throw new BankingError("Signed-off reconciliations cannot be discarded");
+  }
+  await db.transaction(async (tx) => {
+    const released = (await tx.execute(sql`
+      delete from reconciliation_matches
+       where reconciliation_id = ${recon.id} and org_id = ${ctx.orgId}
+      returning statement_line_id
+    `)) as unknown as { rows: { statement_line_id: string }[] };
+    const stmtIds = [...new Set(released.rows.map((r) => r.statement_line_id))];
+    if (stmtIds.length > 0) {
+      await tx.execute(sql`
+        update bank_statement_lines l
+           set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
+         where l.id = any(${sql.param(stmtIds)})
+           and not exists (select 1 from reconciliation_matches m where m.statement_line_id = l.id)
+      `);
+    }
+    await tx.execute(sql`
+      delete from reconciliations where id = ${recon.id} and org_id = ${ctx.orgId}
+    `);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Sign-off
+// ---------------------------------------------------------------------------
+
+/**
+ * Sign off a session whose difference is exactly zero: stamp every matched
+ * journal line's `reconciled_at`/`reconciliation_id` (allowed on posted lines
+ * by jl_guard's metadata carve-out) and mark the session signed_off.
+ */
+export async function markReconciled(
+  reconciliationId: string,
+  ctx: BankingContext,
+): Promise<{ journalLinesReconciled: number }> {
+  return db.transaction(async (tx) => {
+    const r = (await tx.execute(sql`
+      select id, account_id, through_date, statement_balance, status
+        from reconciliations
+       where id = ${reconciliationId} and org_id = ${ctx.orgId}
+       for update
+    `)) as unknown as { rows: ReconciliationRow[] };
+    const recon = r.rows[0];
+    if (!recon) throw new BankingError("Reconciliation not found");
+    if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+
+    const bal = (await tx.execute(sql`
+      select coalesce(sum(jl.amount), 0) as cleared
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+       where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+         and (jl.reconciled_at is not null
+              or jl.id in (select journal_line_id from reconciliation_matches
+                            where reconciliation_id = ${recon.id}))
+    `)) as unknown as { rows: { cleared: string }[] };
+    const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(bal.rows[0].cleared));
+    if (!isZero(difference)) {
+      throw new BankingError(
+        `Cannot sign off: difference is ${difference}, not 0.0000 — match or unmatch lines until it balances`,
+      );
+    }
+
+    // journal_lines carries no audit columns (append-only kernel) — the
+    // reconciliation stamp itself is the audit trail.
+    const stamped = (await tx.execute(sql`
+      update journal_lines jl
+         set reconciled_at = now(), reconciliation_id = ${recon.id}
+       where jl.org_id = ${ctx.orgId} and jl.reconciled_at is null
+         and jl.id in (select journal_line_id from reconciliation_matches
+                        where reconciliation_id = ${recon.id})
+      returning jl.id
+    `)) as unknown as { rows: { id: string }[] };
+
+    await tx.execute(sql`
+      update reconciliations
+         set status = 'signed_off', signed_off_by = ${ctx.userId}, signed_off_at = now(),
+             updated_at = now(), updated_by = ${ctx.userId}
+       where id = ${recon.id} and org_id = ${ctx.orgId}
+    `);
+
+    return { journalLinesReconciled: stamped.rows.length };
+  });
+}

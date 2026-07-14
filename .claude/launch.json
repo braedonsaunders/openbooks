@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start", "-w", "web"],
       "port": 4780
+    },
+    {
+      "name": "openbooks-web-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "web"],
+      "port": 4780
     }
   ]
 }

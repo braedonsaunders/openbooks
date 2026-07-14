@@ -71,6 +71,16 @@ begin
   select status into v_status from journal_entries
     where id = coalesce(new.entry_id, old.entry_id);
   if v_status is distinct from 'draft' then
+    -- Bank-reconciliation sign-off stamps reconciled_at / reconciliation_id
+    -- on posted lines. That is bookkeeping METADATA, not accounting content:
+    -- allow an UPDATE that changes nothing else. Every other write to a
+    -- non-draft entry's lines stays blocked.
+    if tg_op = 'UPDATE'
+       and to_jsonb(new) - 'reconciled_at' - 'reconciliation_id'
+         = to_jsonb(old) - 'reconciled_at' - 'reconciliation_id'
+    then
+      return new;
+    end if;
     raise exception 'lines of a % journal entry are immutable', v_status;
   end if;
   return coalesce(new, old);
