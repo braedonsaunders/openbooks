@@ -44,6 +44,10 @@ export const PERMISSION_CATALOGUE = [
   // Projects & job costing
   "projects.read",
   "projects.manage",
+  // Time tracking & timesheets
+  "time.read",
+  "time.manage",
+  "time.approve",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -146,6 +150,15 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "time",
+    label: "Time & timesheets",
+    permissions: [
+      { key: "time.read", label: "View timesheets" },
+      { key: "time.manage", label: "Enter and edit time" },
+      { key: "time.approve", label: "Approve timesheets" },
+    ],
+  },
+  {
     key: "records",
     label: "Custom records",
     permissions: [
@@ -234,6 +247,9 @@ export const BUILT_IN_ROLES: Record<
       "items.manage",
       "projects.read",
       "projects.manage",
+      "time.read",
+      "time.manage",
+      "time.approve",
       "sql.execute",
       "sync.run",
       "parties.read",
@@ -269,6 +285,8 @@ export const BUILT_IN_ROLES: Record<
       "items.manage",
       "projects.read",
       "projects.manage",
+      "time.read",
+      "time.manage",
     ],
   },
   approver: {
@@ -284,12 +302,14 @@ export const BUILT_IN_ROLES: Record<
       "reports.read",
       "insights.read",
       "records.read",
+      "time.read",
+      "time.approve",
     ],
   },
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read"],
+    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "time.read"],
   },
 };
 
