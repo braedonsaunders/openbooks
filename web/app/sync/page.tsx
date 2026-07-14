@@ -1,3 +1,4 @@
+import { configuredSources } from "@openbooks/engine/src/sync/registry.ts";
 import { dashboardData } from "../../lib/data";
 import { dateTime } from "../../lib/format";
 import { SyncButton } from "./SyncButton";
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SyncPage() {
   const { runs } = await dashboardData();
+  const sources = configuredSources();
   const lastOk = runs.find((r: any) => r.status === "ok");
   const mismatches = lastOk?.stats?.tb?.mismatches ?? [];
 
@@ -13,25 +15,36 @@ export default async function SyncPage() {
     <>
       <h1>Sync</h1>
       <p className="sub">
-        Manual bridge to NetSuite while running in parallel. Pulls transactions modified since the
-        last sync: new ones post as migration entries; changed ones are reversed and re-posted
+        Manual bridge to a connected accounting system. Each sync pulls transactions modified since
+        the last run: new ones post as migration entries; changed ones are reversed and re-posted
         (full audit trail, no mutation). Every sync re-verifies the trial balance per account
-        against live NetSuite.
+        against the live source.
       </p>
 
-      <div className="banner">
-        Temporary by design — this page grows into one-click migration. The source adapter
-        interface (<span className="mono">MigrationSource</span>) already supports pluggable
-        systems: NetSuite today; QuickBooks / Xero adapters later.
-      </div>
-
-      <SyncButton />
+      {sources.length === 0 ? (
+        <div className="banner">
+          No external source configured. Connect one by adding a source adapter and its
+          credentials; it will appear here automatically.
+        </div>
+      ) : (
+        <>
+          <div className="section" style={{ marginTop: 0, marginBottom: 20 }}>
+            <h2>Connected sources</h2>
+            {sources.map((s) => (
+              <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10 }}>
+                <span className="pill ok">{s.displayName}</span>
+                <SyncButton source={s.name} label={s.displayName} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {mismatches.length > 0 && (
         <div className="section">
           <h2>Trial-balance mismatches (last sync)</h2>
           <table className="data">
-            <thead><tr><th>Source account</th><th className="num">openbooks</th><th className="num">NetSuite</th></tr></thead>
+            <thead><tr><th>Source account</th><th className="num">openbooks</th><th className="num">source</th></tr></thead>
             <tbody>
               {mismatches.map((m: any) => (
                 <tr key={m.accountRef}>
