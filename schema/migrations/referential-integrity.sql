@@ -268,3 +268,8 @@ create trigger inv_move_guard before update or delete on inventory_movements
 
 -- scripting
 alter table script_runs add foreign key (script_id) references user_scripts(id);
+
+-- custom records
+alter table custom_record_types add foreign key (org_id) references orgs(id);
+alter table custom_records add foreign key (org_id) references orgs(id);
+alter table custom_records add foreign key (type_id) references custom_record_types(id) on delete restrict;

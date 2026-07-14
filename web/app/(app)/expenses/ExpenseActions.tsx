@@ -1,0 +1,51 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Button } from '@openbooks/ui'
+
+export function ExpenseActions({
+  id,
+  status,
+  canSubmit,
+  canPost,
+}: {
+  id: string
+  status: string
+  canSubmit: boolean
+  canPost: boolean
+}) {
+  const [busy, setBusy] = useState(false)
+  const router = useRouter()
+
+  async function act(action: 'submit' | 'post') {
+    setBusy(true)
+    const res = await fetch('/api/expenses/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, documentId: id }),
+    })
+    const data = await res.json()
+    if (!res.ok) toast.error(data.error ?? 'Action failed')
+    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
+    setBusy(false)
+    router.refresh()
+  }
+
+  if (status === 'draft' && canSubmit) {
+    return (
+      <Button variant="outline" size="sm" disabled={busy} onClick={() => act('submit')}>
+        Submit for approval
+      </Button>
+    )
+  }
+  if (status === 'approved' && canPost) {
+    return (
+      <Button size="sm" disabled={busy} onClick={() => act('post')}>
+        Post
+      </Button>
+    )
+  }
+  return null
+}

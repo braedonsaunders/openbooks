@@ -1,0 +1,34 @@
+import { PageHeader } from '@openbooks/ui'
+import { ListPageLayout } from '../../../components/page-layout'
+import { requirePermission } from '../../../lib/authz'
+import { NewPaymentButton } from '../payments/NewPaymentButton'
+import { PaymentsSection } from '../payments/PaymentsSection'
+
+export const dynamic = 'force-dynamic'
+
+/**
+ * Money in: customer receipts applied to open AR items — the mirror of
+ * /payments, sharing its flyout and list section with side='ar'.
+ */
+export default async function Receipts({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const authz = await requirePermission('ar.pay')
+  const sp = await searchParams
+
+  return (
+    <ListPageLayout
+      header={
+        <PageHeader
+          title="Receipts"
+          description="Customer payments received and applied to open invoices through the kernel."
+          actions={<NewPaymentButton kind="customer_payment" basePath="/receipts" label="New receipt" />}
+        />
+      }
+    >
+      <PaymentsSection sp={sp} basePath="/receipts" kind="customer_payment" orgId={authz.user.orgId} />
+    </ListPageLayout>
+  )
+}

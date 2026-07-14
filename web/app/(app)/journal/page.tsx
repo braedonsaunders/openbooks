@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -9,6 +10,11 @@ import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../lib/list-params'
 import { money } from '../../../lib/format'
+import { can, getAuthz } from '../../../lib/authz'
+import { loadFieldDefs } from '../../../lib/custom-fields'
+import { createDraftJournal, loadJournalDoc } from '../../../lib/journals'
+import { JournalDrawer } from './JournalDrawer'
+import { NewJournalButton } from './NewJournalButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +38,18 @@ export default async function Journal({
   })
   const origin = pickString(sp.origin)
 
+  // ?entry= drives the manual-journal drawer over DOCUMENT ids;
+  // posted-entry links to /journal/[id] are a separate, untouched surface.
+  const entryParam = pickString(sp.entry)
+  if (entryParam === 'new') {
+    // deep-linkable instant draft: create it server-side, land on its drawer
+    const authz = await getAuthz()
+    if (!authz) redirect('/login')
+    if (!can(authz, 'gl.post')) redirect('/journal')
+    const draft = await createDraftJournal(authz.user.orgId, authz.user.id)
+    redirect(`/journal?entry=${draft.id}`)
+  }
+
   const where = sql`true
     ${origin ? sql` and e.origin = ${origin}` : sql``}
     ${params.q ? sql` and (e.entry_number ilike ${'%' + params.q + '%'} or e.memo ilike ${'%' + params.q + '%'})` : sql``}`
@@ -53,6 +71,28 @@ export default async function Journal({
   ])
   const total = Number(totalRow.rows[0].n)
 
+  // draft manual journals are documents (not entries yet) — surfaced separately
+  const [draftDocs, openJournal, pickers] = await Promise.all([
+    db.execute(sql`
+      select id, document_number, document_date, memo, total
+        from documents
+       where kind = 'journal' and status = 'draft'
+       order by created_at desc
+       limit 20
+    `) as any,
+    entryParam ? loadJournalDoc(entryParam) : null,
+    entryParam
+      ? Promise.all([
+          db.execute(sql`select id, display_name from parties where is_active order by display_name limit 2000`) as any,
+          db.execute(sql`select id, number, name from accounts where is_active and not is_summary order by number nulls last`) as any,
+          db.execute(sql`select id, name from departments where is_active order by name`) as any,
+          db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
+          loadFieldDefs('documents', 'journal'),
+          loadFieldDefs('document_lines', 'journal'),
+        ])
+      : null,
+  ])
+
   return (
     <ListPageLayout
       header={
@@ -60,6 +100,7 @@ export default async function Journal({
           <PageHeader
             title="Journal"
             description={`${total.toLocaleString()} posted entries · immutable, append-only.`}
+            actions={<NewJournalButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder="Search entry number or memo…" />
@@ -74,6 +115,29 @@ export default async function Journal({
         </>
       }
     >
+      {draftDocs.rows.length > 0 ? (
+        <div className="mb-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+            Draft journals — not yet posted
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {draftDocs.rows.map((d: any) => (
+              <Link
+                key={d.id}
+                href={`/journal?entry=${d.id}`}
+                className="flex items-center gap-3 rounded px-1.5 py-1 text-sm hover:bg-white dark:hover:bg-slate-800/60"
+              >
+                <span className="font-mono text-[13px] font-semibold text-teal-700 dark:text-teal-300">
+                  {d.document_number}
+                </span>
+                <span className="whitespace-nowrap text-slate-500 dark:text-slate-400">{d.document_date}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-500 dark:text-slate-400">{d.memo}</span>
+                <span className="tabular-nums">{money(d.total)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <Table>
         <TableHeader>
           <TableRow>
@@ -113,6 +177,17 @@ export default async function Journal({
       <div className="mt-3">
         <Pagination basePath="/journal" currentParams={sp} total={total} page={params.page} perPage={params.perPage} />
       </div>
+      {openJournal && pickers ? (
+        <JournalDrawer
+          journal={openJournal as any}
+          parties={pickers[0].rows}
+          accounts={pickers[1].rows}
+          departments={pickers[2].rows}
+          projects={pickers[3].rows}
+          headerDefs={pickers[4] as any}
+          lineDefs={pickers[5] as any}
+        />
+      ) : null}
     </ListPageLayout>
   )
 }

@@ -34,12 +34,12 @@ permission gates → build → verify in preview → commit.
 ## Wave 2 — module buildout (concurrent)
 | Module | Owner | Routes (exclusive) | Status |
 |---|---|---|---|
-| AR (customer invoices) | agent | web/app/(app)/ar, web/app/api/invoices | started |
-| Payments + application + EFT | agent | web/app/(app)/payments, /receipts, web/app/api/payments, engine/src/payments.ts | started |
-| Journal entry module | agent | web/app/(app)/journal (JournalDrawer + new-entry only; list page shared — coordinate via ?entry= param), web/app/api/journals | started |
-| Parties directory | agent | web/app/(app)/parties, web/app/api/parties | started |
+| AR (customer invoices) | agent-LANDED | web/app/(app)/ar, web/app/api/invoices | started |
+| Payments + application + EFT | agent-LANDED | web/app/(app)/payments, /receipts, web/app/api/payments, engine/src/payments.ts | started |
+| Journal entry module | agent-LANDED | web/app/(app)/journal (JournalDrawer + new-entry only; list page shared — coordinate via ?entry= param), web/app/api/journals | started |
+| Parties directory | agent-LANDED | web/app/(app)/parties, web/app/api/parties | started |
 | Bank reconciliation | agent-LANDED | web/app/(app)/banking, web/app/api/banking, engine/src/banking.ts | landed; e2e verified (import→auto/manual match→sign-off) |
-| Expenses | agent | web/app/(app)/expenses, web/app/api/expenses | started |
+| Expenses | agent-LANDED | web/app/(app)/expenses, web/app/api/expenses | started |
 | Period close | integrator | web/app/(app)/close, web/app/api/close | started |
 | Scripts + audit admin | integrator | web/app/(app)/admin/scripts, /admin/audit | pending |
 | Custom record types | agent | web/app/(app)/records, web/app/api/records, web/app/api/forms/options, schema/src/custom-records.ts, web/lib/record{s,-schema}.ts, web/components/record-fields.tsx | landed; schema UNMIGRATED (custom_record_types + custom_records + FKs pending) |
