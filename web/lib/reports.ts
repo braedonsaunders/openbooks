@@ -25,13 +25,25 @@ const CREDIT_NORMAL = new Set([
   "equity",
 ]);
 
-async function accountBalances(where: ReturnType<typeof sql>) {
+export interface DimFilter {
+  departmentId?: string;
+  projectId?: string;
+}
+
+function dimWhere(dims: DimFilter | undefined) {
+  let w = sql`true`;
+  if (dims?.departmentId) w = sql`${w} and l.department_id = ${dims.departmentId}`;
+  if (dims?.projectId) w = sql`${w} and l.project_id = ${dims.projectId}`;
+  return w;
+}
+
+async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter) {
   const r = (await db.execute(sql`
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
       from accounts a
       left join (journal_lines l join journal_entries e on e.id = l.entry_id)
-        on l.account_id = a.id and ${where}
+        on l.account_id = a.id and ${where} and ${dimWhere(dims)}
      group by a.id
      order by a.number nulls last, a.name
   `)) as any;
@@ -81,8 +93,8 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
   });
 }
 
-export async function profitAndLoss(from: string, to: string) {
-  const rows = await accountBalances(sql`e.posting_date >= ${from} and e.posting_date <= ${to}`);
+export async function profitAndLoss(from: string, to: string, dims?: DimFilter) {
+  const rows = await accountBalances(sql`e.posting_date >= ${from} and e.posting_date <= ${to}`, dims);
   const items = treeify(rows, PNL_TYPES);
   const total = (types: string[]) =>
     items.filter((r) => types.includes(r.type) && r.depth === 0).reduce((a, r) => a + r.balance, 0);
@@ -121,7 +133,7 @@ export async function balanceSheet(asOf: string) {
   return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity };
 }
 
-export async function trialBalance(asOf: string) {
+export async function trialBalance(asOf: string, dims?: DimFilter) {
   const r = (await db.execute(sql`
     select a.id, a.number, a.name, a.type,
            sum(case when l.amount > 0 then l.amount else 0 end) as debits,
@@ -130,7 +142,7 @@ export async function trialBalance(asOf: string) {
       from journal_lines l
       join accounts a on a.id = l.account_id
       join journal_entries e on e.id = l.entry_id
-     where e.posting_date <= ${asOf}
+     where e.posting_date <= ${asOf} and ${dimWhere(dims)}
      group by a.id having abs(sum(l.amount)) >= 0.005
      order by a.number nulls last, a.name
   `)) as any;
@@ -167,6 +179,15 @@ export async function accountRegister(accountId: string, limit = 100, offset = 0
   `)) as any;
   const c = (await db.execute(sql`select count(*) as n, coalesce(sum(amount),0) as bal from journal_lines where account_id = ${accountId}`)) as any;
   return { account: acct.rows[0], lines: r.rows, total: Number(c.rows[0].n), balance: c.rows[0].bal };
+}
+
+export async function dimensionOptions() {
+  const depts = (await db.execute(sql`select id, name from departments where is_active order by name`)) as any;
+  const projects = (await db.execute(sql`
+    select p.id, p.name from projects p
+     where exists (select 1 from journal_lines l where l.project_id = p.id)
+     order by p.name limit 500`)) as any;
+  return { departments: depts.rows, projects: projects.rows };
 }
 
 /** Fiscal years are April–March, named by ending year. */

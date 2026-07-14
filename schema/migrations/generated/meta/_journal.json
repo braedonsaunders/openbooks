@@ -15,6 +15,13 @@
       "when": 1784002066028,
       "tag": "0001_sync_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784003754805,
+      "tag": "0002_users_saved_reports",
+      "breakpoints": true
     }
   ]
 }

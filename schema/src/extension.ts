@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
@@ -86,6 +87,44 @@ export const scriptRuns = pgTable(
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("script_runs_script").on(t.scriptId, t.at)],
+);
+
+/**
+ * Application users. Password = scrypt (N=16384,r=8,p=1) stored as
+ * salt:hash hex. A user may link to a party (employee) for approvals.
+ */
+export const users = pgTable(
+  "users",
+  {
+    id: id(),
+    orgId: orgRef(),
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    role: text("role", { enum: ["admin", "controller", "accountant", "approver", "viewer"] })
+      .notNull()
+      .default("viewer"),
+    partyId: uuid("party_id"),
+    isActive: boolean("is_active").notNull().default(true),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("users_org_email").on(t.orgId, t.email)],
+);
+
+/** Saved report views: a report path + its query params, by name. */
+export const savedReports = pgTable(
+  "saved_reports",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(),
+    path: text("path").notNull(), // e.g. "/reports/pnl"
+    params: jsonb("params").notNull().default({}),
+    createdByUserId: uuid("created_by_user_id"),
+    ...auditColumns,
+  },
+  (t) => [index("saved_reports_org").on(t.orgId)],
 );
 
 /**

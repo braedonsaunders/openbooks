@@ -1,9 +1,18 @@
 import Link from "next/link";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
 import { currentFiscalYearEnd, fiscalYearRange } from "../../lib/reports";
 
 export const dynamic = "force-dynamic";
 
-export default function Reports() {
+async function savedViews() {
+  const r = (await db.execute(sql`
+    select id, name, path, params from saved_reports order by created_at desc limit 50`)) as any;
+  return r.rows as { id: string; name: string; path: string; params: Record<string, string> }[];
+}
+
+export default async function Reports() {
+  const saved = await savedViews();
   const fy = currentFiscalYearEnd();
   const cur = fiscalYearRange(fy);
   const prev = fiscalYearRange(fy - 1);
@@ -34,6 +43,29 @@ export default function Reports() {
         {" · "}
         <Link href={`/reports/pnl?from=${prev.from}&to=${prev.to}`} style={{ color: "var(--accent)" }}>{prev.label}</Link>
       </p>
+
+      {saved.length > 0 && (
+        <div className="section">
+          <h2>Saved views</h2>
+          <table className="data">
+            <tbody>
+              {saved.map((s) => {
+                const qs = new URLSearchParams(s.params ?? {}).toString();
+                return (
+                  <tr key={s.id}>
+                    <td>
+                      <Link href={`${s.path}${qs ? `?${qs}` : ""}`} style={{ color: "var(--accent)", fontWeight: 600 }}>
+                        {s.name}
+                      </Link>
+                    </td>
+                    <td className="muted mono">{s.path}{qs ? `?${qs}` : ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }
