@@ -97,6 +97,11 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
   filters, and pagination — URL-driven via `parseListParams`, `SearchInput`,
   `FilterChips`, `SortTh`/`SortableTh`, `Pagination` (prefixed params on
   multi-table pages). Never render an unbounded or unsearchable table.
+- NON-NEGOTIABLE — flyouts and in-app links use the client router, never a
+  full reload. Opening a `?param=id` flyout or navigating between app routes
+  uses Next `<Link>` or `router.push` — NEVER a plain `<a href="/…">` (that
+  reloads the whole shell). Plain `<a>` is only for real file downloads
+  (`/api/…/csv`, attachment downloads) and external URLs.
 - NON-NEGOTIABLE — records are flyout-first: create/view/edit for business
   records (vendor bills, invoices, payments, journal entries, parties, …)
   happens in a `UrlDrawer` over the list (`?<record>=<id>` URL param, closable

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -82,9 +83,9 @@ export default async function CustomFields({
           {defs.rows.map((d: any) => (
             <TableRow key={d.id}>
               <TableCell>
-                <a href={`/admin/custom-fields?field=${d.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={`/admin/custom-fields?field=${d.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {d.label}
-                </a>
+                </Link>
               </TableCell>
               <TableCell className="font-mono text-xs text-slate-500">{d.key}</TableCell>
               <TableCell className="font-mono text-xs">
