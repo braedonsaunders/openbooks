@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
+import { AttachmentPanel } from '../../../components/attachment-panel'
 import { money } from '../../../lib/format'
 
 /**
@@ -262,7 +263,7 @@ export function PaymentDrawer({
           ) : null}
           {doc.entry_id ? (
             <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View journal entry</Link>
+              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
             </Button>
           ) : null}
         </div>
@@ -470,6 +471,8 @@ export function PaymentDrawer({
             )}
           </div>
         )}
+
+        <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
     </UrlDrawer>
   )

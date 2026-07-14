@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import { AttachmentPanel } from '../../../components/attachment-panel'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -276,7 +277,7 @@ export function JournalDrawer({
           ) : null}
           {doc.entry_id ? (
             <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View journal entry</Link>
+              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
             </Button>
           ) : null}
         </div>
@@ -338,6 +339,8 @@ export function JournalDrawer({
             minRows={2}
           />
         </div>
+
+        <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
     </UrlDrawer>
   )
