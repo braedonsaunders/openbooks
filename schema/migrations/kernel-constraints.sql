@@ -40,6 +40,23 @@ begin
     return old;
   end if;
 
+  -- A document-sourced entry is a DERIVED projection of its source document:
+  -- entry = postingRules(document), re-materialized on every save. When
+  -- 'openbooks.amend' is on (set only by the engine's materialize path), a
+  -- posted entry's header may be regenerated in place — but only into an OPEN
+  -- period (a GL change can't land in a closed period). Balance + summary-
+  -- account rules still apply to the regenerated lines.
+  if old.status = 'posted' and new.status = 'posted'
+     and coalesce(current_setting('openbooks.amend', true), 'off') = 'on' then
+    if exists (
+      select 1 from accounting_periods p
+       where p.id in (old.period_id, new.period_id) and p.gl_closed_at is not null
+    ) then
+      raise exception 'period is closed for GL posting';
+    end if;
+    return new;
+  end if;
+
   if old.status = 'posted' and new.status = 'posted' then
     raise exception 'journal entry % is posted and immutable', old.id;
   end if;
@@ -80,6 +97,14 @@ begin
          = to_jsonb(old) - 'reconciled_at' - 'reconciliation_id'
     then
       return new;
+    end if;
+    -- Re-materializing a posted entry's GL-Impact projection from its edited
+    -- source document (engine-only 'openbooks.amend' flag). The entry stays
+    -- posted; its lines are regenerated to match the transaction. Balance and
+    -- account guards still fire on the new lines.
+    if v_status = 'posted'
+       and coalesce(current_setting('openbooks.amend', true), 'off') = 'on' then
+      return coalesce(new, old);
     end if;
     raise exception 'lines of a % journal entry are immutable', v_status;
   end if;
