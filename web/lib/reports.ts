@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { currentFiscalYear, fiscalStartMonth, fiscalYearRangeFor } from "./fiscal";
 
 /**
  * Financial statement queries. Sign convention: journal amounts are
@@ -190,11 +191,17 @@ export async function dimensionOptions() {
   return { departments: depts.rows, projects: projects.rows };
 }
 
-/** Fiscal years are April–March, named by ending year. */
-export function fiscalYearRange(fyEndYear: number) {
-  return { from: `${fyEndYear - 1}-04-01`, to: `${fyEndYear}-03-31`, label: `FY ${fyEndYear}` };
+/**
+ * Fiscal-year start/end dates for a fiscal year (named by its ending calendar
+ * year), driven by the org's configured `fiscalYearStartMonth` — never
+ * hardcoded to a calendar year or to April. Reads the setting via
+ * `web/lib/fiscal.ts` so a change in Company & Accounting settings flows here.
+ */
+export async function fiscalYearRange(fyEndYear: number) {
+  return fiscalYearRangeFor(fyEndYear, await fiscalStartMonth());
 }
 
-export function currentFiscalYearEnd(today = new Date()): number {
-  return today.getUTCMonth() >= 3 ? today.getUTCFullYear() + 1 : today.getUTCFullYear();
+/** The current fiscal year (end year) for today, per the org's start month. */
+export async function currentFiscalYearEnd(today = new Date().toISOString().slice(0, 10)): Promise<number> {
+  return currentFiscalYear(today);
 }

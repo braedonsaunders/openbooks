@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { submitForApproval, decide } from "@openbooks/engine/src/approvals.ts";
 import { postDocument, PostingError } from "@openbooks/engine/src/posting.ts";
+import { reopenDocument, ReopenError } from "@openbooks/engine/src/document-edit.ts";
 import { guardPermission } from "../../../../lib/authz";
 
 export const runtime = "nodejs";
@@ -11,6 +12,7 @@ const ACTION_PERMISSION = {
   submit: "ar.create",
   decide: "ar.approve",
   post: "ar.post",
+  reopen: "ar.create",
 } as const;
 
 async function controlDeps(orgId: string) {
@@ -29,7 +31,7 @@ async function assertInvoice(documentId: string, orgId: string): Promise<boolean
 
 export async function POST(req: Request) {
   const body = (await req.json()) as {
-    action: "submit" | "decide" | "post";
+    action: "submit" | "decide" | "post" | "reopen";
     documentId?: string;
     requestId?: string; stepNumber?: number; decision?: "approved" | "rejected"; note?: string;
   };
@@ -61,9 +63,16 @@ export async function POST(req: Request) {
         const entryId = await postDocument(body.documentId!, deps);
         return NextResponse.json({ ok: true, entryId });
       }
+      case "reopen": {
+        if (!(await assertInvoice(body.documentId!, user.orgId))) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
+        const res = await reopenDocument(body.documentId!, user.id);
+        return NextResponse.json({ ok: true, id: res.documentId });
+      }
     }
   } catch (e) {
-    const status = e instanceof PostingError ? 422 : 500;
+    const status = e instanceof PostingError || e instanceof ReopenError ? 422 : 500;
     return NextResponse.json({ error: (e as Error).message }, { status });
   }
 }

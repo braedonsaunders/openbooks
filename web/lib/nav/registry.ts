@@ -27,9 +27,17 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'ar', href: '/ar', label: 'Receivables', iconKey: 'clipboard-check', group: 'Money in', requiredPermission: 'ar.read' },
   { key: 'receipts', href: '/receipts', label: 'Receipts', iconKey: 'check', group: 'Money in', requiredPermission: 'ar.pay' },
 
+  // Entities — one underlying party directory, surfaced as the separate lists
+  // people expect (NetSuite Relationships). Roles decide which list a party
+  // appears in; a single record can be a customer AND a vendor. "All parties"
+  // is the unified catch-all for cross-role records.
+  { key: 'customers', href: '/entities/customers', label: 'Customers', iconKey: 'users', group: 'Entities', requiredPermission: 'parties.read' },
+  { key: 'vendors', href: '/entities/vendors', label: 'Vendors', iconKey: 'clipboard', group: 'Entities', requiredPermission: 'parties.read' },
+  { key: 'employees', href: '/entities/employees', label: 'Employees', iconKey: 'clipboard-check', group: 'Entities', requiredPermission: 'parties.read' },
+  { key: 'parties', href: '/parties', label: 'All parties', iconKey: 'layers', group: 'Entities', requiredPermission: 'parties.read' },
+
   { key: 'journal', href: '/journal', label: 'Journal', iconKey: 'journal', group: 'Ledger', requiredPermission: 'gl.read' },
   { key: 'accounts', href: '/accounts', label: 'Chart of Accounts', iconKey: 'layers', group: 'Ledger', requiredPermission: 'gl.read' },
-  { key: 'parties', href: '/parties', label: 'Parties', iconKey: 'users', group: 'Ledger', requiredPermission: 'parties.read' },
   { key: 'banking', href: '/banking', label: 'Banking', iconKey: 'building', group: 'Ledger', requiredPermission: 'banking.read' },
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Ledger', requiredPermission: 'gl.close' },
 
@@ -43,13 +51,33 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'admin-custom-fields', href: '/admin/custom-fields', label: 'Custom Fields', iconKey: 'tag', group: 'Build', requiredPermission: 'admin.custom_fields.manage' },
   { key: 'admin-scripts', href: '/admin/scripts', label: 'Scripts', iconKey: 'workflow', group: 'Build', requiredPermission: 'scripts.manage' },
 
-  // Administration — org configuration + system
-  { key: 'admin-users', href: '/admin/users', label: 'Users', iconKey: 'users', group: 'Administration', requiredPermission: 'admin.users.manage' },
-  { key: 'admin-roles', href: '/admin/roles', label: 'Roles', iconKey: 'shield', group: 'Administration', requiredPermission: 'admin.roles.manage' },
-  { key: 'admin-nav', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'Administration', requiredPermission: 'admin.nav.manage' },
-  { key: 'admin-audit', href: '/admin/audit', label: 'Audit Log', iconKey: 'scroll', group: 'Administration', requiredPermission: 'admin.audit.read' },
-  { key: 'sync', href: '/sync', label: 'Sync', iconKey: 'link', group: 'Administration', requiredPermission: 'sync.run' },
+  // Administration — a single sidebar entry into the /admin landing hub. The
+  // individual surfaces (users, roles, navigation, audit, sync, company &
+  // accounting settings) are reached from that landing page, not the sidebar.
+  // Gating is intentionally left unset here and handled specially in the nav
+  // resolver (see ADMIN_MODULE_KEY): the entry appears for anyone holding any
+  // admin-ish permission, and the landing page itself re-gates each card.
+  { key: 'admin', href: '/admin', label: 'Administration', iconKey: 'settings', group: 'Administration', exact: true },
 ]
+
+/**
+ * Permissions that grant access to *some* corner of the admin hub. The nav
+ * resolver shows the single 'Administration' entry when a user holds any of
+ * these; the /admin landing then filters individual cards by their own
+ * permission. Keep in sync with the cards on the admin landing page.
+ */
+export const ADMIN_HUB_PERMISSIONS = [
+  'admin.users.manage',
+  'admin.roles.manage',
+  'admin.nav.manage',
+  'admin.audit.read',
+  'admin.custom_fields.manage',
+  'scripts.manage',
+  'sync.run',
+] as const
+
+/** Nav module key for the collapsed Administration entry (special-cased in the resolver). */
+export const ADMIN_MODULE_KEY = 'admin'
 
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))
 

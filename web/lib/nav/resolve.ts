@@ -2,7 +2,14 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
-import { MODULE_BY_KEY, NAV_MODULES, defaultNavConfig, type OrgNavConfig } from './registry'
+import {
+  ADMIN_HUB_PERMISSIONS,
+  ADMIN_MODULE_KEY,
+  MODULE_BY_KEY,
+  NAV_MODULES,
+  defaultNavConfig,
+  type OrgNavConfig,
+} from './registry'
 
 /**
  * Resolve the sidebar for a user: saved org layout (or registry defaults) →
@@ -34,7 +41,12 @@ export async function resolveNav(
       if (item.kind === 'module') {
         const mod = MODULE_BY_KEY.get(item.moduleKey)
         if (!mod) continue
-        if (!can(mod.requiredPermission)) continue
+        // The collapsed Administration entry has no single permission — it
+        // opens the /admin hub, which is reachable by anyone holding any
+        // admin-ish permission (each card there is re-gated individually).
+        if (mod.key === ADMIN_MODULE_KEY) {
+          if (!ADMIN_HUB_PERMISSIONS.some((p) => can(p))) continue
+        } else if (!can(mod.requiredPermission)) continue
         items.push({
           href: mod.href,
           label: item.label ?? mod.label,

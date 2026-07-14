@@ -61,6 +61,7 @@ export function PartyDrawer({
   trades,
   fieldDefs,
   canManage,
+  basePath = '/parties',
 }: {
   payload: PartyPayload
   paymentTerms: Opt[]
@@ -68,6 +69,7 @@ export function PartyDrawer({
   trades: Opt[]
   fieldDefs: CustomFieldDefClient[]
   canManage: boolean
+  basePath?: string
 }) {
   const router = useRouter()
   const p = payload.party
@@ -226,7 +228,7 @@ export function PartyDrawer({
   return (
     <UrlDrawer
       open
-      closeHref="/parties"
+      closeHref={basePath}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">

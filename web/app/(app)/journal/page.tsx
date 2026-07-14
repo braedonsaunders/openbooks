@@ -50,7 +50,19 @@ export default async function Journal({
     redirect(`/journal?entry=${draft.id}`)
   }
 
-  const where = sql`true
+  // The Journal list shows ONLY actual journal entries — never the GL posting
+  // of a bill / invoice / payment / expense (those live in their subledger
+  // module). An entry qualifies if its source document is a journal, or it's a
+  // GL-native entry with no subledger document (closing, allocation, etc.).
+  const journalsOnly = sql`(
+    exists (select 1 from documents d where d.posted_entry_id = e.id and d.kind = 'journal')
+    or (
+      not exists (select 1 from documents d where d.posted_entry_id = e.id)
+      and e.origin in ('manual','closing','allocation','revaluation','labor_burden',
+                       'depreciation','revenue_recognition','fx_settlement','translation')
+    )
+  )`
+  const where = sql`${journalsOnly}
     ${origin ? sql` and e.origin = ${origin}` : sql``}
     ${params.q ? sql` and (e.entry_number ilike ${'%' + params.q + '%'} or e.memo ilike ${'%' + params.q + '%'})` : sql``}`
 
@@ -67,7 +79,7 @@ export default async function Journal({
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
     db.execute(sql`select count(*) as n from journal_entries e where ${where}`) as any,
-    db.execute(sql`select origin, count(*) as n from journal_entries group by origin order by count(*) desc`) as any,
+    db.execute(sql`select e.origin, count(*) as n from journal_entries e where ${journalsOnly} group by e.origin order by count(*) desc`) as any,
   ])
   const total = Number(totalRow.rows[0].n)
 

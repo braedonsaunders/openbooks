@@ -41,8 +41,12 @@ export default async function PnL({
   searchParams: Promise<{ from?: string; to?: string; dept?: string; project?: string; compare?: string; layout?: string }>
 }) {
   const sp = await searchParams
-  const fyNow = currentFiscalYearEnd()
-  const def = fiscalYearRange(fyNow)
+  const fyNow = await currentFiscalYearEnd()
+  // Resolve the three FY presets (current + two prior) once — the range reads
+  // the org's configured fiscal-year start month, so presets stay in sync with
+  // Company & Accounting settings.
+  const fyPresets = await Promise.all([fyNow, fyNow - 1, fyNow - 2].map((y) => fiscalYearRange(y)))
+  const def = fyPresets[0]
   const from = sp.from ?? def.from
   const to = sp.to ?? def.to
   const dims = { departmentId: sp.dept || undefined, projectId: sp.project || undefined }
@@ -68,11 +72,10 @@ export default async function PnL({
             actions={<SaveViewButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
-            {[fyNow, fyNow - 1, fyNow - 2].map((y) => {
-              const r = fiscalYearRange(y)
+            {fyPresets.map((r) => {
               const active = from === r.from && to === r.to
               return (
-                <Link key={y} href={`/reports/pnl?from=${r.from}&to=${r.to}&${keepDims}`}>
+                <Link key={r.label} href={`/reports/pnl?from=${r.from}&to=${r.to}&${keepDims}`}>
                   <Badge variant={active ? 'default' : 'outline'}>{r.label}</Badge>
                 </Link>
               )
