@@ -4,6 +4,7 @@ import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader,
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
+import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
@@ -26,14 +27,16 @@ export default async function Scripts({
     ${trigger ? sql` and trigger_point = ${trigger}` : sql``}
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}`
 
-  const [scripts, triggers, open, runs] = await Promise.all([
+  const [scripts, triggers, totalRow, open, runs] = await Promise.all([
     db.execute(sql`
       select s.*, (select count(*) from script_runs r where r.script_id = s.id) as run_count,
              (select max(r.at) from script_runs r where r.script_id = s.id) as last_run
         from user_scripts s where ${where}
-       order by s.trigger_point, s.sort_order, s.name limit ${params.perPage}
+       order by s.trigger_point, s.sort_order, s.name
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
     db.execute(sql`select trigger_point, count(*) as n from user_scripts group by 1`) as any,
+    db.execute(sql`select count(*) as n from user_scripts where ${where}`) as any,
     scriptId && scriptId !== 'new'
       ? (db.execute(sql`select * from user_scripts where id = ${scriptId}`) as any)
       : null,
@@ -105,6 +108,9 @@ export default async function Scripts({
           ))}
         </TableBody>
       </Table>
+      <div className="mt-3">
+        <Pagination basePath="/admin/scripts" currentParams={sp} total={Number(totalRow.rows[0].n)} page={params.page} perPage={params.perPage} />
+      </div>
 
       {scriptId ? <ScriptDrawer script={open?.rows[0] ?? null} runs={runs?.rows ?? []} /> : null}
     </ListPageLayout>

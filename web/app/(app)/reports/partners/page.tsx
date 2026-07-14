@@ -1,17 +1,29 @@
 import Link from 'next/link'
 import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { SearchInput } from '../../../../components/search-input'
+import { Pagination } from '../../../../components/pagination'
+import { parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
 import { money } from '../../../../lib/format'
 
 export const dynamic = 'force-dynamic'
+const PER_PAGE = 50
 
-export default async function Partners({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
-  const { kind } = await searchParams
-  const k = kind === 'receivable' ? 'receivable' : 'payable'
-  const rows = await partnerBalances(k)
-  const total = rows.reduce((a, r) => a + Number(r.balance), 0)
+export default async function Partners({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const k = sp.kind === 'receivable' ? 'receivable' : 'payable'
+  const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
   const flip = k === 'payable' ? -1 : 1
+  const all = await partnerBalances(k)
+  const q = params.q?.toLowerCase()
+  const filtered = q ? all.filter((r) => (r.display_name ?? '').toLowerCase().includes(q)) : all
+  const total = filtered.reduce((a, r) => a + Number(r.balance), 0)
+  const rows = filtered.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE)
 
   return (
     <ListPageLayout
@@ -30,6 +42,7 @@ export default async function Partners({ searchParams }: { searchParams: Promise
               <Badge variant={k === 'receivable' ? 'default' : 'outline'}>Receivables</Badge>
             </Link>
           </div>
+          <SearchInput placeholder="Search party…" />
           <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
             <Card>
               <CardContent className="p-4">
@@ -75,6 +88,9 @@ export default async function Partners({ searchParams }: { searchParams: Promise
           ))}
         </TableBody>
       </Table>
+      <div className="mt-3">
+        <Pagination basePath="/reports/partners" currentParams={sp} total={filtered.length} page={params.page} perPage={PER_PAGE} />
+      </div>
     </ListPageLayout>
   )
 }
