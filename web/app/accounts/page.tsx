@@ -80,7 +80,7 @@ function FragmentRow({ a, bal, depth, header }: {
       <tr className={`indent-${depth}`}>
         <td className="mono muted">{a.number}</td>
         <td style={a.is_summary ? { fontWeight: 600 } : undefined}>
-          {a.name}
+          <a href={`/accounts/${a.id}`} style={{ color: "inherit" }}>{a.name}</a>
           {!a.is_active && <span className="pill neutral" style={{ marginLeft: 8 }}>inactive</span>}
           {a.is_summary && <span className="pill neutral" style={{ marginLeft: 8 }}>summary</span>}
         </td>
