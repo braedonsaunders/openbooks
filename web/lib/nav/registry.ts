@@ -18,8 +18,7 @@ export interface NavModule {
 export const NAV_MODULES: NavModule[] = [
   { key: 'dashboard', href: '/', label: 'Dashboard', iconKey: 'gauge', group: 'Overview', exact: true },
   { key: 'approvals', href: '/approvals', label: 'Approvals', iconKey: 'check', group: 'Overview', requiredPermission: 'ap.approve' },
-  // Re-enable when the insights module lands (agent in flight):
-  // { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'sparkles', group: 'Overview', requiredPermission: 'insights.read' },
+  { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'sparkles', group: 'Overview', requiredPermission: 'insights.read' },
 
   { key: 'ap', href: '/ap', label: 'Payables', iconKey: 'clipboard', group: 'Money out', requiredPermission: 'ap.read' },
   { key: 'payments', href: '/payments', label: 'Payments', iconKey: 'check', group: 'Money out', requiredPermission: 'ap.pay' },
