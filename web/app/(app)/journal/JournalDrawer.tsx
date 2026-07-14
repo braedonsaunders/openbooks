@@ -8,7 +8,6 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
-import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -86,6 +85,10 @@ export function JournalDrawer({
   const router = useRouter()
   const doc = journal.doc
   const isDraft = doc.status === 'draft'
+  // NetSuite-style edit-in-place: draft and POSTED journals are both editable.
+  // Saving a posted journal re-materializes its GL-Impact projection (the server
+  // blocks only GL changes into a closed period). voided journals are read-only.
+  const editable = doc.status === 'draft' || doc.status === 'posted'
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -147,7 +150,7 @@ export function JournalDrawer({
   )
   const first = useRef(true)
   useEffect(() => {
-    if (!isDraft) return
+    if (!editable) return
     if (first.current) {
       first.current = false
       return
@@ -170,7 +173,7 @@ export function JournalDrawer({
     }, 600)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, isDraft])
+  }, [payload, editable])
 
   async function post() {
     setBusy(true)
@@ -182,29 +185,6 @@ export function JournalDrawer({
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? 'Posting failed')
     else toast.success('Posted to the ledger')
-    setBusy(false)
-    router.refresh()
-  }
-
-  async function edit() {
-    if (
-      !(await confirmDialog({
-        title: 'Edit this journal?',
-        message: 'Editing reverses the current GL posting and reopens this as a draft. Continue?',
-        confirmLabel: 'Edit',
-        tone: 'danger',
-      }))
-    )
-      return
-    setBusy(true)
-    const res = await fetch('/api/journals/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'reopen', documentId: doc.id }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else toast.success('Reopened as a draft — the GL posting was reversed')
     setBusy(false)
     router.refresh()
   }
@@ -262,18 +242,15 @@ export function JournalDrawer({
       description={
         isDraft
           ? 'Draft — changes save automatically. Debits and credits must balance to post.'
-          : (doc.party_name ?? undefined)
+          : editable
+            ? `${doc.party_name ? doc.party_name + ' · ' : ''}changes save automatically`
+            : (doc.party_name ?? undefined)
       }
       headerActions={
         <>
           {isDraft ? (
             <Button disabled={busy || !balanced || saveState !== 'saved'} onClick={post}>
               Post
-            </Button>
-          ) : null}
-          {doc.status === 'posted' ? (
-            <Button variant="outline" disabled={busy} onClick={edit}>
-              Edit
             </Button>
           ) : null}
           {doc.entry_id ? (
@@ -291,7 +268,7 @@ export function JournalDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {isDraft
+            {editable
               ? saveState === 'saved'
                 ? 'All changes saved'
                 : saveState === 'saving'
@@ -319,8 +296,8 @@ export function JournalDrawer({
       <div className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
-            <Label>Date{isDraft ? <span className="text-red-500"> *</span> : null}</Label>
-            {isDraft ? (
+            <Label>Date{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
@@ -328,7 +305,7 @@ export function JournalDrawer({
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>Party</Label>
-            {isDraft ? (
+            {editable ? (
               <SearchSelect
                 options={parties.map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
                 value={partyId}
@@ -343,7 +320,7 @@ export function JournalDrawer({
           </div>
           <div className={field}>
             <Label>Reference #</Label>
-            {isDraft ? (
+            {editable ? (
               <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
@@ -351,7 +328,7 @@ export function JournalDrawer({
           </div>
           <div className={`${field} lg:col-span-3`}>
             <Label>Memo</Label>
-            {isDraft ? (
+            {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.memo ?? '—'}</p>
@@ -359,7 +336,7 @@ export function JournalDrawer({
           </div>
         </div>
 
-        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!isDraft} />
+        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
 
         <div className="space-y-2">
           <Label>Lines</Label>
@@ -368,7 +345,7 @@ export function JournalDrawer({
             rows={rows}
             onRowsChange={handleRowsChange}
             emptyRow={emptyLine}
-            readOnly={!isDraft}
+            readOnly={!editable}
             minRows={2}
           />
         </div>

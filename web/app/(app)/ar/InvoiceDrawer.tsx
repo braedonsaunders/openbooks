@@ -8,7 +8,6 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
-import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -86,6 +85,11 @@ export function InvoiceDrawer({
   const doc = invoice.doc
   const isDraft = doc.status === 'draft'
   const isPosted = doc.status === 'posted'
+  // NetSuite-style edit-in-place: draft, approved, and POSTED invoices are all
+  // editable. Saving a posted invoice re-materializes its GL-Impact projection
+  // (the server blocks only GL changes into a closed period). pending_approval
+  // and voided invoices are read-only.
+  const editable = doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted'
   // Posted invoices resolve to open/paid from the applications ledger state.
   const displayStatus = isPosted ? (Number(doc.balance_due) > 0 ? 'open' : 'paid') : doc.status
 
@@ -137,7 +141,7 @@ export function InvoiceDrawer({
   )
   const first = useRef(true)
   useEffect(() => {
-    if (!isDraft) return
+    if (!editable) return
     if (first.current) {
       first.current = false
       return
@@ -162,9 +166,9 @@ export function InvoiceDrawer({
     }, 600)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, isDraft])
+  }, [payload, editable])
 
-  async function act(action: 'submit' | 'post' | 'reopen') {
+  async function act(action: 'submit' | 'post') {
     setBusy(true)
     const res = await fetch('/api/invoices/actions', {
       method: 'POST',
@@ -173,29 +177,9 @@ export function InvoiceDrawer({
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else
-      toast.success(
-        action === 'submit'
-          ? 'Submitted for approval'
-          : action === 'reopen'
-            ? 'Reopened as a draft — the GL posting was reversed'
-            : 'Posted to the ledger',
-      )
+    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
     setBusy(false)
     router.refresh()
-  }
-
-  async function edit() {
-    if (
-      !(await confirmDialog({
-        title: 'Edit this invoice?',
-        message: 'Editing reverses the current GL posting and reopens this as a draft. Continue?',
-        confirmLabel: 'Edit',
-        tone: 'danger',
-      }))
-    )
-      return
-    await act('reopen')
   }
 
   // -- grid columns ----------------------------------------------------------
@@ -266,7 +250,11 @@ export function InvoiceDrawer({
           </Badge>
         </span>
       }
-      description={isDraft ? 'Draft — changes save automatically.' : (doc.customer_name ?? undefined)}
+      description={
+        editable
+          ? `${doc.customer_name ? doc.customer_name + ' · ' : ''}changes save automatically`
+          : (doc.customer_name ?? undefined)
+      }
       headerActions={
         <>
           {isDraft ? (
@@ -294,7 +282,7 @@ export function InvoiceDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {isDraft
+            {editable
               ? saveState === 'saved'
                 ? 'All changes saved'
                 : saveState === 'saving'
@@ -324,8 +312,8 @@ export function InvoiceDrawer({
       <div className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
-            <Label>Customer{isDraft ? <span className="text-red-500"> *</span> : null}</Label>
-            {isDraft ? (
+            <Label>Customer{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            {editable ? (
               <SearchSelect
                 options={customers.map((c) => ({ value: c.id, label: c.display_name ?? '' }))}
                 value={partyId}
@@ -338,7 +326,7 @@ export function InvoiceDrawer({
           </div>
           <div className={field}>
             <Label>Invoice date</Label>
-            {isDraft ? (
+            {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
@@ -346,7 +334,7 @@ export function InvoiceDrawer({
           </div>
           <div className={field}>
             <Label>Due date</Label>
-            {isDraft ? (
+            {editable ? (
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.due_date ?? '—'}</p>
@@ -354,7 +342,7 @@ export function InvoiceDrawer({
           </div>
           <div className={field}>
             <Label>Customer ref #</Label>
-            {isDraft ? (
+            {editable ? (
               <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
@@ -362,7 +350,7 @@ export function InvoiceDrawer({
           </div>
           <div className={`${field} lg:col-span-3`}>
             <Label>Memo</Label>
-            {isDraft ? (
+            {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.memo ?? '—'}</p>
@@ -370,7 +358,7 @@ export function InvoiceDrawer({
           </div>
         </div>
 
-        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!isDraft} />
+        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
 
         <div className="space-y-2">
           <Label>Lines</Label>
@@ -379,7 +367,7 @@ export function InvoiceDrawer({
             rows={rows}
             onRowsChange={setRows}
             emptyRow={emptyLine}
-            readOnly={!isDraft}
+            readOnly={!editable}
           />
         </div>
 

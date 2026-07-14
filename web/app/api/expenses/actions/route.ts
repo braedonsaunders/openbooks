@@ -3,7 +3,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { submitForApproval, decide } from '@openbooks/engine/src/approvals.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
-import { reopenDocument, ReopenError } from '@openbooks/engine/src/document-edit.ts'
 import { can, getAuthz } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -42,7 +41,7 @@ export async function POST(req: Request) {
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const user = authz.user
   const body = (await req.json()) as {
-    action: 'submit' | 'decide' | 'post' | 'reopen'
+    action: 'submit' | 'decide' | 'post'
     documentId?: string
     requestId?: string
     stepNumber?: number
@@ -87,21 +86,11 @@ export async function POST(req: Request) {
         const entryId = await postDocument(body.documentId, deps)
         return NextResponse.json({ ok: true, entryId })
       }
-      case 'reopen': {
-        if (!can(authz, 'expenses.create')) {
-          return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
-        }
-        if (!body.documentId || !(await expenseReport(body.documentId, user.orgId))) {
-          return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
-        }
-        const res = await reopenDocument(body.documentId, user.id)
-        return NextResponse.json({ ok: true, id: res.documentId })
-      }
       default:
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
   } catch (e) {
-    const status = e instanceof PostingError || e instanceof ReopenError ? 422 : 500
+    const status = e instanceof PostingError ? 422 : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
   }
 }
