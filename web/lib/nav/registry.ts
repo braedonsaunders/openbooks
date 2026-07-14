@@ -25,6 +25,8 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'payments', href: '/payments', label: 'Payments', iconKey: 'check', group: 'Money out', requiredPermission: 'ap.pay' },
   { key: 'expenses', href: '/expenses', label: 'Expenses', iconKey: 'scroll', group: 'Money out', requiredPermission: 'expenses.read' },
 
+  { key: 'timesheets', href: '/timesheets', label: 'Weekly Timesheets', iconKey: 'timer', group: 'Time & billing', requiredPermission: 'time.read' },
+
   { key: 'estimates', href: '/estimates', label: 'Estimates', iconKey: 'file', group: 'Money in', requiredPermission: 'ar.read' },
   { key: 'sales-orders', href: '/sales-orders', label: 'Sales Orders', iconKey: 'clipboard-check', group: 'Money in', requiredPermission: 'ar.read' },
   { key: 'ar', href: '/ar', label: 'Receivables', iconKey: 'clipboard-check', group: 'Money in', requiredPermission: 'ar.read' },
