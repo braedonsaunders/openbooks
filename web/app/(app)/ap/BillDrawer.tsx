@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
+import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -14,12 +15,15 @@ interface Opt {
   number?: string
   name?: string
   code?: string
+  rate?: string
 }
-interface LineState {
+interface LineRow extends Record<string, unknown> {
   accountId: string
   description: string
-  amount: string
+  departmentId: string
+  projectId: string
   taxCodeId: string
+  amount: string
 }
 interface BillPayload {
   doc: Record<string, any>
@@ -34,23 +38,46 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   voided: 'outline',
 }
 
-/**
- * The AP bill flyout — create (instant draft), edit (autosave), and view.
- * Drafts autosave ~600ms after the last change; posting/submitting are
- * explicit actions. Non-draft bills render read-only with lifecycle actions.
- */
+const emptyLine = (): LineRow => ({
+  accountId: '',
+  description: '',
+  departmentId: '',
+  projectId: '',
+  taxCodeId: '',
+  amount: '',
+})
+
+function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRow {
+  const row: LineRow = {
+    accountId: l.account_id ?? '',
+    description: l.description ?? '',
+    departmentId: l.department_id ?? '',
+    projectId: l.project_id ?? '',
+    taxCodeId: l.tax_code_id ?? '',
+    amount: l.amount != null ? Number(l.amount).toFixed(2) : '',
+  }
+  for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
+  return row
+}
+
 export function BillDrawer({
   bill,
   vendors,
   accounts,
   taxCodes,
-  canApprove,
+  departments,
+  projects,
+  headerDefs,
+  lineDefs,
 }: {
   bill: BillPayload
   vendors: Opt[]
   accounts: Opt[]
   taxCodes: Opt[]
-  canApprove: boolean
+  departments: Opt[]
+  projects: Opt[]
+  headerDefs: CustomFieldDefClient[]
+  lineDefs: CustomFieldDefClient[]
 }) {
   const router = useRouter()
   const doc = bill.doc
@@ -61,19 +88,21 @@ export function BillDrawer({
   const [dueDate, setDueDate] = useState<string>(doc.due_date ?? '')
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
-  const [lines, setLines] = useState<LineState[]>(
-    bill.lines.length > 0
-      ? bill.lines.map((l) => ({
-          accountId: l.account_id ?? '',
-          description: l.description ?? '',
-          amount: String(Number(l.amount ?? 0) || ''),
-          taxCodeId: l.tax_code_id ?? '',
-        }))
-      : [{ accountId: '', description: '', amount: '', taxCodeId: '' }],
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
+  const [rows, setRows] = useState<LineRow[]>(
+    bill.lines.length > 0 ? bill.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()],
   )
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+
+  const rateByCode = useMemo(() => new Map(taxCodes.map((t) => [t.id, Number(t.rate ?? 0)])), [taxCodes])
+  const lineTax = (row: LineRow) => {
+    const rate = row.taxCodeId ? (rateByCode.get(row.taxCodeId) ?? 0) : 0
+    const amt = Number(row.amount)
+    if (!rate || Number.isNaN(amt)) return 0
+    return Math.round(amt * rate) / 100
+  }
 
   // -- autosave (drafts only) ----------------------------------------------
   const payload = useMemo(
@@ -83,11 +112,22 @@ export function BillDrawer({
       dueDate: dueDate || null,
       referenceNumber,
       memo,
-      lines: lines
-        .filter((l) => l.accountId && Number(l.amount) > 0)
-        .map((l) => ({ ...l, taxCodeId: l.taxCodeId || null })),
+      custom: customValues,
+      lines: rows
+        .filter((r) => r.accountId && Number(r.amount) > 0)
+        .map((r) => ({
+          accountId: r.accountId,
+          description: r.description,
+          amount: r.amount,
+          taxCodeId: r.taxCodeId || null,
+          departmentId: r.departmentId || null,
+          projectId: r.projectId || null,
+          custom: Object.fromEntries(
+            lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
+          ),
+        })),
     }),
-    [partyId, documentDate, dueDate, referenceNumber, memo, lines],
+    [partyId, documentDate, dueDate, referenceNumber, memo, customValues, rows, lineDefs],
   )
   const first = useRef(true)
   useEffect(() => {
@@ -110,7 +150,7 @@ export function BillDrawer({
         setSaveState('saved')
         router.refresh()
       } else {
-        setSaveState('dirty')
+        setSaveState('error')
         toast.error((await res.json()).error ?? 'Autosave failed')
       }
     }, 600)
@@ -118,15 +158,12 @@ export function BillDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, isDraft])
 
-  const setLine = (i: number, patch: Partial<LineState>) =>
-    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
-
-  async function act(action: 'submit' | 'post' | 'decide', extra?: Record<string, unknown>) {
+  async function act(action: 'submit' | 'post') {
     setBusy(true)
     const res = await fetch('/api/bills/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, documentId: doc.id, ...extra }),
+      body: JSON.stringify({ action, documentId: doc.id }),
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? 'Action failed')
@@ -135,13 +172,66 @@ export function BillDrawer({
     router.refresh()
   }
 
+  // -- grid columns ----------------------------------------------------------
+  const columns = useMemo<LineGridColumn<LineRow>[]>(
+    () => [
+      {
+        key: 'accountId',
+        label: 'Account',
+        width: 'minmax(200px,2fr)',
+        type: 'search-select',
+        required: true,
+        options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
+        placeholder: 'Account…',
+      },
+      { key: 'description', label: 'Description', width: 'minmax(160px,1.6fr)', type: 'text' },
+      {
+        key: 'departmentId',
+        label: 'Department',
+        width: '140px',
+        type: 'select',
+        options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
+      },
+      {
+        key: 'projectId',
+        label: 'Project',
+        width: 'minmax(150px,1.2fr)',
+        type: 'search-select',
+        options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
+        placeholder: '—',
+      },
+      {
+        key: 'taxCodeId',
+        label: 'Tax',
+        width: '110px',
+        type: 'select',
+        options: [{ value: '', label: 'No tax' }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
+      },
+      ...customFieldColumns<LineRow>(lineDefs),
+      { key: 'amount', label: 'Amount', width: '120px', type: 'amount', align: 'right', required: true },
+      {
+        key: '_tax',
+        label: 'Tax amt',
+        width: '100px',
+        type: 'readonly',
+        align: 'right',
+        render: (row) => {
+          const t = lineTax(row)
+          return t ? money(t) : ''
+        },
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [accounts, departments, projects, taxCodes, lineDefs],
+  )
+
   const field = 'space-y-1.5'
 
   return (
     <UrlDrawer
       open
       closeHref="/ap"
-      size="xl"
+      size="2xl"
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{doc.document_number}</span>
@@ -153,8 +243,21 @@ export function BillDrawer({
       description={isDraft ? 'Draft — changes save automatically.' : (doc.vendor_name ?? undefined)}
       footer={
         <div className="flex w-full items-center gap-3">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {isDraft ? (saveState === 'saved' ? 'All changes saved' : saveState === 'saving' ? 'Saving…' : 'Unsaved changes…') : null}
+          <span
+            className={
+              'text-xs ' +
+              (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+            }
+          >
+            {isDraft
+              ? saveState === 'saved'
+                ? 'All changes saved'
+                : saveState === 'saving'
+                  ? 'Saving…'
+                  : saveState === 'error'
+                    ? 'Save failed — fix and retry'
+                    : 'Unsaved changes…'
+              : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
@@ -180,9 +283,9 @@ export function BillDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className={field}>
-            <Label>Vendor</Label>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={`${field} lg:col-span-2`}>
+            <Label>Vendor{isDraft ? <span className="text-red-500"> *</span> : null}</Label>
             {isDraft ? (
               <SearchSelect
                 options={vendors.map((v) => ({ value: v.id, label: v.display_name ?? '' }))}
@@ -194,23 +297,21 @@ export function BillDrawer({
               <p className="text-sm">{doc.vendor_name}</p>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className={field}>
-              <Label>Bill date</Label>
-              {isDraft ? (
-                <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
-              ) : (
-                <p className="text-sm">{doc.document_date}</p>
-              )}
-            </div>
-            <div className={field}>
-              <Label>Due date</Label>
-              {isDraft ? (
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-              ) : (
-                <p className="text-sm">{doc.due_date ?? '—'}</p>
-              )}
-            </div>
+          <div className={field}>
+            <Label>Bill date</Label>
+            {isDraft ? (
+              <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+            ) : (
+              <p className="text-sm">{doc.document_date}</p>
+            )}
+          </div>
+          <div className={field}>
+            <Label>Due date</Label>
+            {isDraft ? (
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            ) : (
+              <p className="text-sm">{doc.due_date ?? '—'}</p>
+            )}
           </div>
           <div className={field}>
             <Label>Vendor ref #</Label>
@@ -220,7 +321,7 @@ export function BillDrawer({
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
             )}
           </div>
-          <div className={field}>
+          <div className={`${field} lg:col-span-3`}>
             <Label>Memo</Label>
             {isDraft ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
@@ -230,83 +331,17 @@ export function BillDrawer({
           </div>
         </div>
 
+        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!isDraft} />
+
         <div className="space-y-2">
           <Label>Lines</Label>
-          {isDraft ? (
-            <>
-              {lines.map((l, i) => (
-                <div key={i} className="grid items-start gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_110px_120px_36px]">
-                  <SearchSelect
-                    options={accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
-                    value={l.accountId}
-                    onChange={(v) => setLine(i, { accountId: v ?? '' })}
-                    placeholder="Account…"
-                  />
-                  <Input placeholder="Description" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="text-right tabular-nums"
-                    value={l.amount}
-                    onChange={(e) => setLine(i, { amount: e.target.value })}
-                  />
-                  <Select value={l.taxCodeId} onChange={(e) => setLine(i, { taxCodeId: e.target.value })}>
-                    <option value="">No tax</option>
-                    {taxCodes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.code}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Remove line"
-                    disabled={lines.length === 1}
-                    onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}
-                  >
-                    <Trash2 size={15} />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setLines((ls) => [...ls, { accountId: '', description: '', amount: '', taxCodeId: '' }])}
-              >
-                <Plus size={14} /> Add line
-              </Button>
-            </>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 uppercase dark:text-slate-400">
-                  <th className="py-1.5">Account</th>
-                  <th>Description</th>
-                  <th className="text-right">Amount</th>
-                  <th className="text-right">Tax</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bill.lines.map((l: any) => {
-                  const acct = accounts.find((a) => a.id === l.account_id)
-                  return (
-                    <tr key={l.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="py-2">
-                        <span className="mr-1.5 font-mono text-xs text-slate-500">{acct?.number}</span>
-                        {acct?.name}
-                      </td>
-                      <td className="text-slate-500 dark:text-slate-400">{l.description}</td>
-                      <td className={cn('text-right tabular-nums')}>{money(l.amount)}</td>
-                      <td className="text-right tabular-nums">{money(l.tax_amount)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+          <LineGrid<LineRow>
+            columns={columns}
+            rows={rows}
+            onRowsChange={setRows}
+            emptyRow={emptyLine}
+            readOnly={!isDraft}
+          />
         </div>
       </div>
     </UrlDrawer>

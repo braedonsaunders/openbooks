@@ -1,6 +1,7 @@
 {
   "version": 1,
   "functions": {
+    "/api/admin/custom-fields": {},
     "/api/admin/navigation": {},
     "/api/admin/roles": {},
     "/api/admin/users": {},

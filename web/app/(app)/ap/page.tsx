@@ -13,7 +13,7 @@ import { BillActions } from './BillActions'
 import { BillDrawer } from './BillDrawer'
 import { NewBillButton } from './NewBillButton'
 import { loadBill } from '../../../lib/bills'
-import { currentUser } from '../../../lib/auth'
+import { loadFieldDefs } from '../../../lib/custom-fields'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,16 +78,26 @@ export default async function AP({
          where ${where}`)) as any).rows[0].n)
     : total
 
-  const [openBill, pickers, user] = await Promise.all([
+  const [openBill, pickers] = await Promise.all([
     billId ? loadBill(billId) : null,
     billId
       ? Promise.all([
           db.execute(sql`select id, display_name from parties where custom->>'nsKind' = 'vendor' and is_active order by display_name limit 2000`) as any,
           db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs','asset_fixed','asset_current_other') and is_active and not is_summary order by number nulls last`) as any,
-          db.execute(sql`select id, code, name from tax_codes where is_active order by code`) as any,
+          db.execute(sql`
+            select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
+              from tax_codes tc
+              left join lateral (
+                select rate_percent from tax_rates
+                 where tax_code_id = tc.id and effective_from <= now()
+                 order by effective_from desc limit 1) tr on true
+             where tc.is_active order by tc.code`) as any,
+          db.execute(sql`select id, name from departments where is_active order by name`) as any,
+          db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
+          loadFieldDefs('documents', 'vendor_bill'),
+          loadFieldDefs('document_lines', 'vendor_bill'),
         ])
       : null,
-    currentUser(),
   ])
 
   const statusOptions = counts.rows.map((r: any) => ({
@@ -167,7 +177,10 @@ export default async function AP({
           vendors={pickers[0].rows}
           accounts={pickers[1].rows}
           taxCodes={pickers[2].rows}
-          canApprove={['admin', 'controller'].includes(user?.role ?? '')}
+          departments={pickers[3].rows}
+          projects={pickers[4].rows}
+          headerDefs={pickers[5] as any}
+          lineDefs={pickers[6] as any}
         />
       ) : null}
     </ListPageLayout>

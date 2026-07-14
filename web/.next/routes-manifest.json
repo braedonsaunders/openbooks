@@ -89,6 +89,12 @@
       "namedRegex": "^/accounts(?:/)?$"
     },
     {
+      "page": "/admin/custom-fields",
+      "regex": "^/admin/custom\\-fields(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/custom\\-fields(?:/)?$"
+    },
+    {
       "page": "/admin/navigation",
       "regex": "^/admin/navigation(?:/)?$",
       "routeKeys": {},
@@ -111,6 +117,12 @@
       "regex": "^/ap(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/ap(?:/)?$"
+    },
+    {
+      "page": "/api/admin/custom-fields",
+      "regex": "^/api/admin/custom\\-fields(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/custom\\-fields(?:/)?$"
     },
     {
       "page": "/api/admin/navigation",

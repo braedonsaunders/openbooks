@@ -124,6 +124,11 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
 - Heavy in-shell loading states use `<LogoLoader />` (or `<LogoMark draw />`),
   not bare spinners. Skeletons (`Skeleton`) remain right for row/card-level
   loading. Respect `prefers-reduced-motion` (the keyframes already do).
+- NEVER add a root `(app)/loading.tsx`: it replaces the whole content pane on
+  every soft navigation (drawers, filters, pagination) — the exact jank the
+  UrlDrawer pattern exists to avoid. Loading boundaries go on individual
+  slow segments only; URL-driven interactions must keep the current UI
+  visible while the next render streams.
 - Keep every brand shape a stroke with `pathLength={1}` so draw-in keeps
   working; update all three exports (Logo, LogoMark, BrandSplash) together.
 

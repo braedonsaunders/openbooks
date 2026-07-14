@@ -1,6 +1,7 @@
 {
   "/(app)/accounts/[id]/page": "/accounts/[id]",
   "/(app)/accounts/page": "/accounts",
+  "/(app)/admin/custom-fields/page": "/admin/custom-fields",
   "/(app)/admin/navigation/page": "/admin/navigation",
   "/(app)/admin/roles/page": "/admin/roles",
   "/(app)/admin/users/page": "/admin/users",
@@ -18,6 +19,7 @@
   "/(app)/sync/page": "/sync",
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
+  "/api/admin/custom-fields/route": "/api/admin/custom-fields",
   "/api/admin/navigation/route": "/api/admin/navigation",
   "/api/admin/roles/route": "/api/admin/roles",
   "/api/admin/users/route": "/api/admin/users",

@@ -38,6 +38,10 @@ export const PERMISSION_CATALOGUE = [
   "insights.read",
   "insights.create",
   "insights.publish",
+  // Custom records — user-defined record types + their generated modules
+  "records.read",
+  "records.create",
+  "records.manage_types",
   // SQL workbench — read-only ad hoc queries
   "sql.execute",
   // External-source sync/migration runs
@@ -45,6 +49,7 @@ export const PERMISSION_CATALOGUE = [
   // User scripts (sandboxed automation)
   "scripts.manage",
   // Admin
+  "admin.custom_fields.manage",
   "admin.users.manage",
   "admin.roles.manage",
   "admin.nav.manage",
@@ -113,6 +118,15 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "records",
+    label: "Custom records",
+    permissions: [
+      { key: "records.read", label: "View custom records" },
+      { key: "records.create", label: "Create and edit custom records" },
+      { key: "records.manage_types", label: "Design custom record types" },
+    ],
+  },
+  {
     key: "sql",
     label: "SQL workbench",
     permissions: [{ key: "sql.execute", label: "Run read-only SQL queries" }],
@@ -131,6 +145,7 @@ export const PERMISSION_GROUPS: {
     key: "admin",
     label: "Administration",
     permissions: [
+      { key: "admin.custom_fields.manage", label: "Manage custom fields" },
       { key: "admin.users.manage", label: "Manage users and role assignments" },
       { key: "admin.roles.manage", label: "Manage roles and permissions" },
       { key: "admin.nav.manage", label: "Customize navigation" },
@@ -178,6 +193,9 @@ export const BUILT_IN_ROLES: Record<
       "insights.read",
       "insights.create",
       "insights.publish",
+      "records.read",
+      "records.create",
+      "records.manage_types",
       "sql.execute",
       "sync.run",
       "admin.audit.read",
@@ -201,6 +219,8 @@ export const BUILT_IN_ROLES: Record<
       "reports.read",
       "reports.create",
       "insights.read",
+      "records.read",
+      "records.create",
     ],
   },
   approver: {
@@ -215,12 +235,13 @@ export const BUILT_IN_ROLES: Record<
       "ar.approve",
       "reports.read",
       "insights.read",
+      "records.read",
     ],
   },
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read"],
+    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read"],
   },
 };
 

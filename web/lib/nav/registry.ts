@@ -35,6 +35,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'admin-users', href: '/admin/users', label: 'Users', iconKey: 'users', group: 'System', requiredPermission: 'admin.users.manage' },
   { key: 'admin-roles', href: '/admin/roles', label: 'Roles', iconKey: 'shield', group: 'System', requiredPermission: 'admin.roles.manage' },
   { key: 'admin-nav', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'System', requiredPermission: 'admin.nav.manage' },
+  { key: 'admin-custom-fields', href: '/admin/custom-fields', label: 'Custom Fields', iconKey: 'tag', group: 'System', requiredPermission: 'admin.custom_fields.manage' },
 ]
 
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))

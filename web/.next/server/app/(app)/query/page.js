@@ -1,6 +1,6 @@
 var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/(app)/query/page.js")
 R.c("server/chunks/ssr/[root-of-the-server]__17rk7-m._.js")
-R.c("server/chunks/ssr/node_modules_next_dist_esm_build_templates_app-page_1h9rvot.js")
+R.c("server/chunks/ssr/node_modules_next_dist_esm_build_templates_app-page_0l9xph8.js")
 R.c("server/chunks/ssr/[root-of-the-server]__0yy6c1y._.js")
 R.c("server/chunks/ssr/[root-of-the-server]__09khie0._.js")
 R.c("server/chunks/ssr/_0uvtbc-._.js")
@@ -12,8 +12,6 @@ R.c("server/chunks/ssr/[root-of-the-server]__0fd4aky._.js")
 R.c("server/chunks/ssr/node_modules_drizzle-orm_1o80svc._.js")
 R.c("server/chunks/ssr/_17f-quh._.js")
 R.c("server/chunks/ssr/_0mwpg58._.js")
-R.c("server/chunks/ssr/web_app_(app)_loading_tsx_12o4msh._.js")
-R.c("server/chunks/ssr/_07sl__r._.js")
 R.c("server/chunks/ssr/web__next-internal_server_app_(app)_query_page_actions_1u8ld1n.js")
-R.m(84239)
-module.exports=R.m(84239).exports
+R.m(51074)
+module.exports=R.m(51074).exports

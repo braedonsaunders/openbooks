@@ -65,6 +65,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../app/(app)/admin/custom-fields/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/admin/custom-fields">> = Specific
+  const handler = {} as typeof import("../../app/(app)/admin/custom-fields/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../app/(app)/admin/navigation/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/admin/navigation">> = Specific
@@ -204,6 +213,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends AppPageConfig<"/login">> = Specific
   const handler = {} as typeof import("../../app/login/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/admin/custom-fields/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/custom-fields">> = Specific
+  const handler = {} as typeof import("../../app/api/admin/custom-fields/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

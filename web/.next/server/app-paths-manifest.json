@@ -1,6 +1,7 @@
 {
   "/(app)/accounts/[id]/page": "app/(app)/accounts/[id]/page.js",
   "/(app)/accounts/page": "app/(app)/accounts/page.js",
+  "/(app)/admin/custom-fields/page": "app/(app)/admin/custom-fields/page.js",
   "/(app)/admin/navigation/page": "app/(app)/admin/navigation/page.js",
   "/(app)/admin/roles/page": "app/(app)/admin/roles/page.js",
   "/(app)/admin/users/page": "app/(app)/admin/users/page.js",
@@ -18,6 +19,7 @@
   "/(app)/sync/page": "app/(app)/sync/page.js",
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/admin/custom-fields/route": "app/api/admin/custom-fields/route.js",
   "/api/admin/navigation/route": "app/api/admin/navigation/route.js",
   "/api/admin/roles/route": "app/api/admin/roles/route.js",
   "/api/admin/users/route": "app/api/admin/users/route.js",
