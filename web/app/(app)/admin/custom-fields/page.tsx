@@ -4,6 +4,7 @@ import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader,
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
+import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { FieldDrawer, NewFieldButton } from './FieldDrawer'
 
@@ -23,14 +24,15 @@ export default async function CustomFields({
     ${target ? sql` and target_table = ${target}` : sql``}
     ${params.q ? sql` and (label ilike ${'%' + params.q + '%'} or key ilike ${'%' + params.q + '%'})` : sql``}`
 
-  const [defs, counts, open] = await Promise.all([
+  const [defs, counts, totalRow, open] = await Promise.all([
     db.execute(sql`
       select id, target_table, target_kind, key, label, field_type, config, is_required, is_active, sort_order
         from custom_field_defs where ${where}
        order by target_table, target_kind nulls first, sort_order, label
-       limit ${params.perPage}
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
     db.execute(sql`select target_table, count(*) as n from custom_field_defs group by 1`) as any,
+    db.execute(sql`select count(*) as n from custom_field_defs where ${where}`) as any,
     fieldId && fieldId !== 'new'
       ? (db.execute(sql`select * from custom_field_defs where id = ${fieldId}`) as any)
       : null,
@@ -100,6 +102,9 @@ export default async function CustomFields({
           ))}
         </TableBody>
       </Table>
+      <div className="mt-3">
+        <Pagination basePath="/admin/custom-fields" currentParams={sp} total={Number(totalRow.rows[0].n)} page={params.page} perPage={params.perPage} />
+      </div>
 
       {fieldId ? <FieldDrawer def={open?.rows[0] ?? null} /> : null}
     </ListPageLayout>

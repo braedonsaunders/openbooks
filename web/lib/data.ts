@@ -29,13 +29,38 @@ export async function dashboardData() {
   return { totals: r.rows[0], runs: runs.rows };
 }
 
-export async function accountsWithBalances() {
+/**
+ * Chart-of-accounts balances in NATURAL sign (a bank account with cash reads
+ * positive; a payable owed reads positive), through `asOf`. Balance-sheet
+ * accounts carry their cumulative balance; income-statement accounts show the
+ * current-fiscal-year-to-date activity (a lifetime P&L balance is meaningless
+ * on a COA). Fiscal years run Apr–Mar.
+ */
+export async function accountsWithBalances(asOf?: string) {
+  const asOfDate = asOf ?? new Date().toISOString().slice(0, 10);
+  const y = Number(asOfDate.slice(0, 4));
+  const m = Number(asOfDate.slice(5, 7));
+  const fyStart = `${m >= 4 ? y : y - 1}-04-01`;
+
+  const CREDIT_NORMAL = [
+    'income', 'income_other',
+    'liability_payable', 'liability_card', 'liability_current_other', 'liability_long_term',
+    'equity',
+  ];
+  const PNL = ['income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred'];
+
   const r = (await db.execute(sql`
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, a.is_active,
-           coalesce(b.balance, 0) as balance
+           coalesce((
+             select sum(l.amount)
+               from journal_lines l
+               join journal_entries e on e.id = l.entry_id
+              where l.account_id = a.id
+                and e.posting_date <= ${asOfDate}
+                and (a.type not in ${PNL} or e.posting_date >= ${fyStart})
+           ), 0)
+           * case when a.type in ${CREDIT_NORMAL} then -1 else 1 end as balance
       from accounts a
-      left join (select account_id, sum(amount) as balance from journal_lines group by 1) b
-        on b.account_id = a.id
      order by a.number nulls last, a.name
   `)) as any;
   return r.rows as {
