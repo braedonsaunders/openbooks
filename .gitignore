@@ -7,3 +7,8 @@ web/.env.local
 
 web/.next/
 .next/
+
+# large NetSuite extraction data dumps (regenerate via extraction/dump_*.py)
+extraction/transactions/
+extraction/transactions_dump.log
+extraction/reconciliation-report.json
