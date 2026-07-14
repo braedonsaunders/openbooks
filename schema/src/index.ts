@@ -16,3 +16,4 @@ export * from "./iam";
 export * from "./nav";
 export * from "./forms";
 export * from "./custom-records";
+export * from "./reporting";
