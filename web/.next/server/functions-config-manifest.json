@@ -1,9 +1,9 @@
 {
   "version": 1,
   "functions": {
-    "/api/query": {},
     "/api/sync": {
       "maxDuration": 300
-    }
+    },
+    "/api/query": {}
   }
 }

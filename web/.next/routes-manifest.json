@@ -20,6 +20,14 @@
   },
   "dynamicRoutes": [
     {
+      "page": "/accounts/[id]",
+      "regex": "^/accounts/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/accounts/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/journal/[id]",
       "regex": "^/journal/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -58,6 +66,36 @@
       "regex": "^/query(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/query(?:/)?$"
+    },
+    {
+      "page": "/reports",
+      "regex": "^/reports(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/reports(?:/)?$"
+    },
+    {
+      "page": "/reports/balance-sheet",
+      "regex": "^/reports/balance\\-sheet(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/reports/balance\\-sheet(?:/)?$"
+    },
+    {
+      "page": "/reports/partners",
+      "regex": "^/reports/partners(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/reports/partners(?:/)?$"
+    },
+    {
+      "page": "/reports/pnl",
+      "regex": "^/reports/pnl(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/reports/pnl(?:/)?$"
+    },
+    {
+      "page": "/reports/trial-balance",
+      "regex": "^/reports/trial\\-balance(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/reports/trial\\-balance(?:/)?$"
     },
     {
       "page": "/sync",

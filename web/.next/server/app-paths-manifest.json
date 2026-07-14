@@ -1,11 +1,17 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/api/query/route": "app/api/query/route.js",
   "/api/sync/route": "app/api/sync/route.js",
+  "/api/query/route": "app/api/query/route.js",
   "/query/page": "app/query/page.js",
   "/journal/page": "app/journal/page.js",
-  "/accounts/page": "app/accounts/page.js",
   "/journal/[id]/page": "app/journal/[id]/page.js",
+  "/accounts/[id]/page": "app/accounts/[id]/page.js",
+  "/page": "app/page.js",
+  "/reports/balance-sheet/page": "app/reports/balance-sheet/page.js",
+  "/reports/partners/page": "app/reports/partners/page.js",
+  "/accounts/page": "app/accounts/page.js",
+  "/reports/pnl/page": "app/reports/pnl/page.js",
+  "/reports/page": "app/reports/page.js",
   "/sync/page": "app/sync/page.js",
-  "/page": "app/page.js"
+  "/reports/trial-balance/page": "app/reports/trial-balance/page.js"
 }

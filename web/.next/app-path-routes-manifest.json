@@ -1,11 +1,17 @@
 {
   "/_not-found/page": "/_not-found",
-  "/api/query/route": "/api/query",
   "/api/sync/route": "/api/sync",
+  "/api/query/route": "/api/query",
   "/query/page": "/query",
   "/journal/page": "/journal",
-  "/accounts/page": "/accounts",
   "/journal/[id]/page": "/journal/[id]",
+  "/accounts/[id]/page": "/accounts/[id]",
+  "/page": "/",
+  "/reports/balance-sheet/page": "/reports/balance-sheet",
+  "/reports/partners/page": "/reports/partners",
+  "/accounts/page": "/accounts",
+  "/reports/pnl/page": "/reports/pnl",
+  "/reports/page": "/reports",
   "/sync/page": "/sync",
-  "/page": "/"
+  "/reports/trial-balance/page": "/reports/trial-balance"
 }
