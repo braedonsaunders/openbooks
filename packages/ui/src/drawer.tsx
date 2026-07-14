@@ -43,6 +43,7 @@ export function Drawer({
   footer,
   headerActions,
   bodyClassName,
+  onExitComplete,
 }: {
   open: boolean
   onClose: () => void
@@ -58,6 +59,9 @@ export function Drawer({
   /** Override the body wrapper's classes (default: scroll + px-6 py-5 padding).
    *  Pass e.g. "overflow-hidden" for a child that manages its own layout/scroll. */
   bodyClassName?: string
+  /** Fires after the exit animation finishes — used by UrlDrawer to defer the
+   *  close navigation until the slide-out has played. */
+  onExitComplete?: () => void
 }) {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
@@ -140,7 +144,7 @@ export function Drawer({
   // and never slides on-screen, leaving the panel + close button off the right
   // edge. See the off-screen-drawer bug.
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onExitComplete}>
       {mounted && open ? (
         <div key="drawer" className="fixed inset-0 z-50">
           <motion.div
@@ -264,15 +268,26 @@ export function UrlDrawer({
   bodyClassName?: string
 }) {
   const navigate = React.useContext(DrawerNavigateContext)
+  // Local presence state: the URL says the drawer is open, but closing must
+  // first play the slide-out. `close()` just flips local `show` to false so
+  // AnimatePresence runs the exit; the actual navigation is deferred to
+  // onExitComplete — otherwise navigating immediately re-renders the server
+  // component, unmounts the drawer, and the exit animation never plays.
+  const [show, setShow] = React.useState(open)
+  React.useEffect(() => setShow(open), [open])
   function close() {
+    setShow(false)
+  }
+  function afterExit() {
     if (typeof window === 'undefined') return
     if (navigate) navigate(closeHref)
     else window.location.assign(closeHref)
   }
   return (
     <Drawer
-      open={open}
+      open={show}
       onClose={close}
+      onExitComplete={afterExit}
       title={title}
       description={description}
       size={size}
