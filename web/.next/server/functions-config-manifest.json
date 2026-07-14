@@ -1,13 +1,13 @@
 {
   "version": 1,
   "functions": {
+    "/api/bills": {},
+    "/api/bills/actions": {},
     "/api/login": {},
     "/api/query": {},
     "/api/saved-reports": {},
-    "/api/bills": {},
     "/api/sync": {
       "maxDuration": 300
-    },
-    "/api/bills/actions": {}
+    }
   }
 }

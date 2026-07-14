@@ -1,98 +1,364 @@
-:root {
-  --bg: #f7f7f5;
-  --surface: #ffffff;
-  --ink: #1a1d1e;
-  --ink-soft: #5b6366;
-  --line: #e4e4df;
-  --accent: #0f6b4f;
-  --accent-soft: #e7f3ee;
-  --danger: #b3403a;
-  --danger-soft: #f9ebea;
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+@import 'tailwindcss';
+@config '../tailwind.config.ts';
+
+/* Class-based dark mode: `dark:` variants respond to a `.dark` class on <html>
+   (toggled by the theme switcher) instead of the OS `prefers-color-scheme`. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare
+     `border` utilities don't fall back to currentColor across the app. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  :root {
+    --color-bg: 255 255 255;
+    --color-fg: 17 24 39;
+    --color-muted: 107 114 128;
+    --color-border: 229 231 235;
+    --color-primary: 15 118 110;
+    --color-primary-fg: 255 255 255;
+    --color-danger: 220 38 38;
+    --color-warning: 217 119 6;
+    --color-success: 22 163 74;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --color-bg: 17 24 39;
+    --color-fg: 243 244 246;
+    --color-muted: 156 163 175;
+    --color-border: 55 65 81;
+    --color-primary: 20 184 166;
+    --color-primary-fg: 17 24 39;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  /* Native-app feel on touch devices: no gray tap-highlight flash, no
+     double-tap-zoom delay on controls, no scroll-chaining/pull-to-refresh
+     bounce behind the app shell, no landscape font inflation. */
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  /* Suppress the page-wide focus ring that appears on a soft navigation — e.g.
+     when a list search clears its ?q= param via router.replace and focus leaves
+     the field. Chrome (notably on Windows) makes the scrollable content pane
+     (overflow:auto) keyboard-focusable and paints a 1–2px ring around the whole
+     pane; the App Router also focuses its <section tabindex="-1"> route
+     boundary. Neither is an interactive control, so drop the outline. Real
+     keyboard-focusable controls (links, buttons, inputs) keep their rings. */
+  .app-scroll:focus,
+  .app-scroll:focus-visible,
+  [tabindex='-1']:focus,
+  [tabindex='-1']:focus-visible {
+    outline: none;
+  }
+
+  /* Custom scrollbar (Mac-style, narrow) for app-shell scroll containers */
+  .app-scroll {
+    scrollbar-gutter: stable;
+  }
+  .app-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .app-scroll::-webkit-scrollbar-thumb {
+    background: rgb(203 213 225);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .app-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(148 163 184);
+    background-clip: padding-box;
+  }
+  .app-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dark .app-scroll::-webkit-scrollbar-thumb {
+    background: rgb(51 65 85);
+    background-clip: padding-box;
+  }
+  .dark .app-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(71 85 105);
+    background-clip: padding-box;
+  }
+
+  /* Raw <select> controls (where the shared <Select> isn't used, e.g. the dense
+     Insights card studio) drop the native macOS chrome that clips the value text
+     at small heights. Mirrors ui/select.tsx: appearance:none + a custom chevron +
+     line-height:normal. Add `pr-7` on the element to leave room for the chevron. */
+  .app-select {
+    appearance: none;
+    -webkit-appearance: none;
+    line-height: normal;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 0.7rem;
+  }
 }
 
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+/* Brand logo animation (components/brand-logo.tsx). Strokes carry a normalized
+   pathLength of 1 so one dasharray rule draws any shape. Resting styles are
+   the fully drawn logo; intros start hidden via fill-mode:backwards. Every
+   animated logo redraws itself on a 12s cycle: each element fades out, the
+   rays retract into the lamp, then everything redraws in build order. `--bd`
+   staggers both the intro and the cycle phase (so the redraw sweeps the logo
+   the same way the intro drew it); `--bp` staggers the beacon-ray pulse. */
+@keyframes brand-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
 }
-a { color: inherit; text-decoration: none; }
-
-.shell { display: flex; min-height: 100vh; }
-
-.sidebar {
-  width: 220px; flex-shrink: 0; padding: 20px 14px;
-  border-right: 1px solid var(--line); background: var(--surface);
-  display: flex; flex-direction: column; gap: 2px;
+@keyframes brand-in {
+  from {
+    opacity: 0;
+  }
 }
-.brand { font-weight: 700; font-size: 18px; padding: 6px 10px 18px; letter-spacing: -0.3px; }
-.brand span { color: var(--accent); }
-.brand small { display: block; font-weight: 400; font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
-.nav-item { padding: 8px 10px; border-radius: 7px; color: var(--ink-soft); font-weight: 500; }
-.nav-item:hover { background: var(--bg); color: var(--ink); }
-.nav-item.active { background: var(--accent-soft); color: var(--accent); }
-
-.main { flex: 1; padding: 28px 36px; max-width: 1200px; }
-h1 { font-size: 22px; letter-spacing: -0.4px; margin: 0 0 4px; }
-.sub { color: var(--ink-soft); margin: 0 0 24px; font-size: 13.5px; }
-
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; margin-bottom: 24px; }
-.card {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: 10px; padding: 16px 18px;
+@keyframes brand-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
-.card .label { font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.4px; }
-.card .value { font-size: 26px; font-weight: 650; margin-top: 4px; letter-spacing: -0.5px; }
-.card .value.small { font-size: 16px; }
-.card.good { border-color: #bcdccd; background: var(--accent-soft); }
-.card.good .value { color: var(--accent); }
-.card.bad { border-color: #e4bcb9; background: var(--danger-soft); }
-.card.bad .value { color: var(--danger); }
-
-table.data { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-table.data th {
-  text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px;
-  color: var(--ink-soft); font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--line); background: #fbfbfa;
+/* Lamp ignition: bloom past the resting glow, then settle. */
+@keyframes brand-ignite {
+  from {
+    opacity: 0;
+  }
+  55% {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 0.45;
+  }
 }
-table.data td { padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
-table.data tr:last-child td { border-bottom: none; }
-table.data tr.row-link:hover td { background: var(--accent-soft); cursor: pointer; }
-td.num, th.num { text-align: right; font-family: var(--mono); font-size: 13px; }
-td.neg { color: var(--danger); }
-.indent-1 td:first-child { padding-left: 32px; }
-.indent-2 td:first-child { padding-left: 50px; }
-.muted { color: var(--ink-soft); }
-.mono { font-family: var(--mono); font-size: 13px; }
-
-.btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  background: var(--accent); color: #fff; border: none; border-radius: 8px;
-  padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+/* 12s redraw cycle for ink strokes: hold → quick fade-out → redraw → hold. */
+@keyframes brand-cycle {
+  0% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  2% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+  2.05% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  6.65% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
 }
-.btn:hover { filter: brightness(1.08); }
-.btn:disabled { opacity: 0.55; cursor: wait; }
-.btn.secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
-
-.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.pill.ok { background: var(--accent-soft); color: var(--accent); }
-.pill.failed, .pill.bad { background: var(--danger-soft); color: var(--danger); }
-.pill.neutral { background: var(--bg); color: var(--ink-soft); border: 1px solid var(--line); }
-
-.banner {
-  border: 1px solid var(--line); border-left: 3px solid var(--accent);
-  background: var(--surface); border-radius: 8px; padding: 12px 16px;
-  font-size: 13.5px; color: var(--ink-soft); margin-bottom: 20px;
+/* Rays own opacity via brand-pulse, so their cycle is dash-only: retract
+   into the lamp, hold dark while the tower rebuilds, beam back out. */
+@keyframes brand-ray-cycle {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  2% {
+    stroke-dashoffset: 1;
+  }
+  3% {
+    stroke-dashoffset: 1;
+    animation-timing-function: ease-out;
+  }
+  5.9% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes brand-lamp-cycle {
+  0% {
+    opacity: 1;
+  }
+  2% {
+    opacity: 0;
+  }
+  4.5% {
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes brand-glow-cycle {
+  0% {
+    opacity: 0.45;
+  }
+  2% {
+    opacity: 0;
+  }
+  4.5% {
+    opacity: 0;
+  }
+  5.5% {
+    opacity: 0.95;
+  }
+  8% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+.brand-stroke-draw {
+  stroke-dasharray: 1;
+  animation:
+    brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) backwards,
+    brand-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-stroke-loop {
+  stroke-dasharray: 1;
+  animation: brand-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-ray-draw {
+  stroke-dasharray: 1;
+  animation:
+    brand-draw 0.35s ease-out var(--bd, 0s) backwards,
+    brand-ray-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite,
+    brand-pulse 2s ease-in-out var(--bp, 0s) infinite;
+}
+.brand-ray-loop {
+  stroke-dasharray: 1;
+  animation:
+    brand-ray-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite,
+    brand-pulse 2s ease-in-out var(--bp, 0s) infinite;
+}
+.brand-lamp-draw {
+  animation:
+    brand-in 0.5s ease-out var(--bd, 0s) backwards,
+    brand-lamp-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-lamp-loop {
+  animation: brand-lamp-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-glow-draw {
+  animation:
+    brand-ignite 0.9s ease-out var(--bd, 0s) backwards,
+    brand-glow-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-glow-loop {
+  animation: brand-glow-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-stroke-draw,
+  .brand-stroke-loop,
+  .brand-ray-draw,
+  .brand-ray-loop,
+  .brand-lamp-draw,
+  .brand-lamp-loop,
+  .brand-glow-draw,
+  .brand-glow-loop {
+    animation: none;
+  }
 }
 
-textarea.sql {
-  width: 100%; min-height: 130px; font-family: var(--mono); font-size: 13.5px;
-  border: 1px solid var(--line); border-radius: 10px; padding: 14px;
-  background: var(--surface); color: var(--ink); resize: vertical;
+/* Published rich-text rendering (RichContent): hide editing artifacts — comment
+   highlights and tracked deletions — and show insertions as plain accepted text,
+   matching the PDF output. */
+.rich-content .comment-mark {
+  background: transparent;
+  border-bottom: none;
 }
-textarea.sql:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.query-meta { font-size: 12.5px; color: var(--ink-soft); margin: 10px 0; }
-pre.error { background: var(--danger-soft); color: var(--danger); padding: 12px 16px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; }
-.section { margin-top: 30px; }
-.section h2 { font-size: 15px; margin: 0 0 10px; }
+.rich-content .suggestion-insert {
+  color: inherit;
+  text-decoration: none;
+}
+.rich-content .suggestion-delete {
+  display: none;
+}
+.rich-content [data-page-break] {
+  break-before: page;
+  page-break-before: always;
+}
+
+/* --- Form-fill ergonomics (jobsite / touch) ----------------------------- */
+/* Glove-friendly controls on phones (coarse pointer OR a narrow viewport) —
+   desktop mouse users keep the denser default. Scoped to `.ff-surface`, which
+   wraps the form-fill renderer and the native hazard-assessment page. */
+@media (pointer: coarse), (max-width: 640px) {
+  .ff-surface input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .ff-surface select,
+  .ff-surface textarea {
+    min-height: 48px;
+  }
+  .ff-surface textarea {
+    min-height: 96px;
+  }
+  .ff-surface input[type='checkbox'],
+  .ff-surface input[type='radio'] {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+  .ff-surface .ff-chip {
+    min-height: 52px;
+  }
+}
+
+/* Sticky footer: clear the iOS home-gesture bar. */
+.ff-footer {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+}
+
+/* High-contrast, large-type "field mode" for direct sunlight. Applies at any
+   size once toggled — it's a deliberate readability boost, not responsive. */
+.ff-surface.field-mode input,
+.ff-surface.field-mode select,
+.ff-surface.field-mode textarea {
+  border-width: 2px;
+  border-color: rgb(71 85 105);
+  font-size: 17px;
+}
+.ff-surface.field-mode .ff-chip {
+  border-width: 2px;
+  font-weight: 600;
+}
+.ff-surface.field-mode label {
+  color: rgb(15 23 42);
+  font-weight: 600;
+}
+.dark .ff-surface.field-mode input,
+.dark .ff-surface.field-mode select,
+.dark .ff-surface.field-mode textarea {
+  border-color: rgb(148 163 184);
+}
+.dark .ff-surface.field-mode label {
+  color: rgb(241 245 249);
+}

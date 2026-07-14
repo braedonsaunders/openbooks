@@ -1,0 +1,69 @@
+@layer base {
+  :root {
+    --color-bg: 255 255 255;
+    --color-fg: 17 24 39;
+    --color-muted: 107 114 128;
+    --color-border: 229 231 235;
+    --color-primary: 15 118 110;
+    --color-primary-fg: 255 255 255;
+    --color-danger: 220 38 38;
+    --color-warning: 217 119 6;
+    --color-success: 22 163 74;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --color-bg: 17 24 39;
+    --color-fg: 243 244 246;
+    --color-muted: 156 163 175;
+    --color-border: 55 65 81;
+    --color-primary: 20 184 166;
+    --color-primary-fg: 17 24 39;
+  }
+
+  html,
+  body {
+    background: rgb(var(--color-bg));
+    color: rgb(var(--color-fg));
+  }
+}
+
+/* --- Shared utility keyframes ------------------------------------------- */
+
+@keyframes bhs-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Skeleton shimmer sweep. Looped, 1.5s, respects prefers-reduced-motion. */
+.bhs-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: bhs-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bhs-shimmer::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* Soft tab-content crossfade fallback for when JS is disabled / SSR. */
+@keyframes bhs-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

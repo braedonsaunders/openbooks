@@ -1,0 +1,3 @@
+module.exports=[93515,a=>{"use strict";var b=a.i(87924),c=a.i(46271),d=a.i(21216);a.i(56120);var e=a.i(81938);a.s(["FadeInBody",0,function({children:a,className:f}){let g=(0,d.useReducedMotion)();return(0,b.jsx)(c.motion.div,{initial:!g&&{opacity:0,y:2},animate:{opacity:1,y:0},transition:{duration:.25,delay:.05,ease:[.22,.61,.36,1]},className:(0,e.cn)("h-full",f),children:a})},"FadeInHeader",0,function({children:a,className:f}){let g=(0,d.useReducedMotion)();return(0,b.jsx)(c.motion.div,{initial:!g&&{opacity:0,y:-4},animate:{opacity:1,y:0},transition:{duration:.2,ease:[.22,.61,.36,1]},className:(0,e.cn)(f),children:a})}])}];
+
+//# sourceMappingURL=web_components_page-layout-motion_tsx_1xwdagi._.js.map

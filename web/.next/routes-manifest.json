@@ -1,6 +1,7 @@
 {
   "version": 3,
   "pages404": true,
+  "appType": "app",
   "caseSensitive": false,
   "basePath": "",
   "redirects": [
@@ -8,11 +9,13 @@
       "source": "/:path+/",
       "destination": "/:path+",
       "internal": true,
+      "priority": true,
       "statusCode": 308,
       "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
     }
   ],
   "headers": [],
+  "onMatchHeaders": [],
   "rewrites": {
     "beforeFiles": [],
     "afterFiles": [],
@@ -44,6 +47,12 @@
       "namedRegex": "^/(?:/)?$"
     },
     {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
       "page": "/_not-found",
       "regex": "^/_not\\-found(?:/)?$",
       "routeKeys": {},
@@ -66,6 +75,42 @@
       "regex": "^/ap/new(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/ap/new(?:/)?$"
+    },
+    {
+      "page": "/api/bills",
+      "regex": "^/api/bills(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/bills(?:/)?$"
+    },
+    {
+      "page": "/api/bills/actions",
+      "regex": "^/api/bills/actions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/bills/actions(?:/)?$"
+    },
+    {
+      "page": "/api/login",
+      "regex": "^/api/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/login(?:/)?$"
+    },
+    {
+      "page": "/api/query",
+      "regex": "^/api/query(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/query(?:/)?$"
+    },
+    {
+      "page": "/api/saved-reports",
+      "regex": "^/api/saved\\-reports(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/saved\\-reports(?:/)?$"
+    },
+    {
+      "page": "/api/sync",
+      "regex": "^/api/sync(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/sync(?:/)?$"
     },
     {
       "page": "/approvals",
@@ -136,10 +181,11 @@
     "didPostponeHeader": "x-nextjs-postponed",
     "contentTypeHeader": "text/x-component",
     "suffix": ".rsc",
-    "prefetchSuffix": ".prefetch.rsc",
     "prefetchSegmentHeader": "next-router-segment-prefetch",
     "prefetchSegmentSuffix": ".segment.rsc",
-    "prefetchSegmentDirSuffix": ".segments"
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
   },
   "rewriteHeaders": {
     "pathHeader": "x-nextjs-rewritten-path",

@@ -4,7 +4,8 @@
   "workspaces": [
     "schema",
     "engine",
-    "web"
+    "web",
+    "packages/*"
   ],
   "devDependencies": {
     "drizzle-kit": "^0.31.10",
