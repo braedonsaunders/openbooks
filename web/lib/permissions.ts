@@ -38,6 +38,9 @@ export const PERMISSION_CATALOGUE = [
   "insights.read",
   "insights.create",
   "insights.publish",
+  // Items & services catalog
+  "items.read",
+  "items.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -121,6 +124,14 @@ export const PERMISSION_GROUPS: {
       { key: "insights.read", label: "View insights and the library" },
       { key: "insights.create", label: "Build cards and dashboards" },
       { key: "insights.publish", label: "Publish to the shared library" },
+    ],
+  },
+  {
+    key: "items",
+    label: "Items & services",
+    permissions: [
+      { key: "items.read", label: "View items and services" },
+      { key: "items.manage", label: "Create and edit items" },
     ],
   },
   {
@@ -208,6 +219,8 @@ export const BUILT_IN_ROLES: Record<
       "records.read",
       "records.create",
       "records.manage_types",
+      "items.read",
+      "items.manage",
       "sql.execute",
       "sync.run",
       "parties.read",
@@ -239,6 +252,8 @@ export const BUILT_IN_ROLES: Record<
       "insights.read",
       "records.read",
       "records.create",
+      "items.read",
+      "items.manage",
     ],
   },
   approver: {
@@ -259,7 +274,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read"],
+    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read"],
   },
 };
 
