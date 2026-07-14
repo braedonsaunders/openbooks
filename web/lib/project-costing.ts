@@ -1,0 +1,153 @@
+import 'server-only'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+
+/**
+ * Job-costing rollup for a single project — the heart of project accounting.
+ *
+ * Pulls four layers together against one project (job):
+ *   • Budget      — cost budget from the WBS task estimates + a contract value
+ *                   (revenue budget) stored on the project.
+ *   • Actual      — posted GL activity tagged to the project. Cost = the debit
+ *                   balance of expense/COGS accounts; revenue = the credit
+ *                   balance of income accounts (amount sign: debit +, credit −).
+ *   • Committed   — open purchase-order remainder (ordered, not yet billed) is
+ *                   committed COST; open sales-order remainder is committed
+ *                   REVENUE / backlog. This is what turns a ledger into a job
+ *                   forecast: Budget vs (Actual + Committed) vs Remaining.
+ *   • Breakdown   — actual cost by GL account and by coarse category, plus the
+ *                   source documents tagged to the job.
+ *
+ * All money is returned as JS numbers (dollars) — fine for display; the ledger
+ * itself stays numeric(19,4).
+ */
+
+// GL account types (see accounts.type) that count as job COST vs REVENUE.
+const COST_TYPES = ['expense', 'cogs', 'expense_other', 'expense_deferred']
+const REVENUE_TYPES = ['income', 'income_other']
+
+const COST_SET = sql`(${sql.join(COST_TYPES.map((t) => sql`${t}`), sql`, `)})`
+const REVENUE_SET = sql`(${sql.join(REVENUE_TYPES.map((t) => sql`${t}`), sql`, `)})`
+
+export interface ProjectCostSummary {
+  budget: { cost: number; contractValue: number }
+  actual: { cost: number; revenue: number; margin: number }
+  committed: { cost: number; revenue: number }
+  /** Budget vs (actual + committed). */
+  forecast: { projectedCost: number; remainingBudget: number; percentSpent: number | null }
+  costByAccount: { accountId: string; number: string | null; name: string; type: string; amount: number }[]
+  costByCategory: { category: string; amount: number }[]
+  documents: {
+    id: string
+    kind: string
+    documentNumber: string
+    documentDate: string
+    status: string
+    partyName: string | null
+    amount: number
+  }[]
+}
+
+const n = (v: unknown) => (v == null ? 0 : Number(v))
+
+export async function projectCostSummary(orgId: string, projectId: string): Promise<ProjectCostSummary> {
+  const [proj, actualRows, committedRows, byAccountRows, docRows] = await Promise.all([
+    // project custom (contract value) + task cost budget
+    db.execute(sql`
+      select coalesce((p.custom->>'contractValue')::numeric, 0) as contract_value,
+             coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id), 0) as cost_budget
+        from projects p where p.id = ${projectId} and p.org_id = ${orgId}
+    `) as any,
+    // posted actuals split into cost vs revenue
+    db.execute(sql`
+      select
+        coalesce(sum(l.amount) filter (where a.type in ${COST_SET}), 0) as cost,
+        coalesce(-sum(l.amount) filter (where a.type in ${REVENUE_SET}), 0) as revenue
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+      join accounts a on a.id = l.account_id
+      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'
+    `) as any,
+    // committed: open order remainders tagged to the project
+    db.execute(sql`
+      select
+        coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
+        coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price) filter (where d.kind = 'sales_order'), 0) as committed_revenue
+      from document_lines dl
+      join documents d on d.id = dl.document_id
+      where dl.org_id = ${orgId} and dl.project_id = ${projectId}
+        and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
+        and dl.quantity > dl.quantity_billed
+    `) as any,
+    // actual cost broken down by account
+    db.execute(sql`
+      select a.id as account_id, a.number, a.name, a.type, sum(l.amount) as amount
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+      join accounts a on a.id = l.account_id
+      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'
+        and a.type in ${COST_SET}
+      group by a.id, a.number, a.name, a.type
+      having sum(l.amount) <> 0
+      order by sum(l.amount) desc
+    `) as any,
+    // documents with at least one line tagged to the project (job cost detail)
+    db.execute(sql`
+      select d.id, d.kind, d.document_number, d.document_date, d.status,
+             pt.display_name as party_name,
+             sum(dl.amount) as amount
+      from documents d
+      join document_lines dl on dl.document_id = d.id and dl.project_id = ${projectId}
+      left join parties pt on pt.id = d.party_id
+      where d.org_id = ${orgId}
+      group by d.id, d.kind, d.document_number, d.document_date, d.status, pt.display_name
+      order by d.document_date desc
+      limit 500
+    `) as any,
+  ])
+
+  const p = proj.rows[0] ?? { contract_value: 0, cost_budget: 0 }
+  const contractValue = n(p.contract_value)
+  const costBudget = n(p.cost_budget)
+  const cost = n(actualRows.rows[0]?.cost)
+  const revenue = n(actualRows.rows[0]?.revenue)
+  const committedCost = n(committedRows.rows[0]?.committed_cost)
+  const committedRevenue = n(committedRows.rows[0]?.committed_revenue)
+
+  const costByAccount = (byAccountRows.rows as any[]).map((r) => ({
+    accountId: r.account_id,
+    number: r.number,
+    name: r.name,
+    type: r.type,
+    amount: n(r.amount),
+  }))
+  const catMap = new Map<string, number>()
+  for (const r of costByAccount) {
+    const cat = r.type === 'cogs' ? 'Cost of goods sold' : 'Operating expense'
+    catMap.set(cat, (catMap.get(cat) ?? 0) + r.amount)
+  }
+  const costByCategory = [...catMap.entries()].map(([category, amount]) => ({ category, amount }))
+
+  const projectedCost = cost + committedCost
+  return {
+    budget: { cost: costBudget, contractValue },
+    actual: { cost, revenue, margin: revenue - cost },
+    committed: { cost: committedCost, revenue: committedRevenue },
+    forecast: {
+      projectedCost,
+      remainingBudget: costBudget - projectedCost,
+      percentSpent: costBudget > 0 ? projectedCost / costBudget : null,
+    },
+    costByAccount,
+    costByCategory,
+    documents: (docRows.rows as any[]).map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      documentNumber: r.document_number,
+      documentDate: r.document_date,
+      status: r.status,
+      partyName: r.party_name,
+      amount: n(r.amount),
+    })),
+  }
+}

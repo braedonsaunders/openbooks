@@ -37,6 +37,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'customers', href: '/entities/customers', label: 'Customers', iconKey: 'users', group: 'Entities', requiredPermission: 'parties.read' },
   { key: 'vendors', href: '/entities/vendors', label: 'Vendors', iconKey: 'clipboard', group: 'Entities', requiredPermission: 'parties.read' },
   { key: 'employees', href: '/entities/employees', label: 'Employees', iconKey: 'clipboard-check', group: 'Entities', requiredPermission: 'parties.read' },
+  { key: 'projects', href: '/projects', label: 'Projects', iconKey: 'timer', group: 'Entities', requiredPermission: 'projects.read' },
   { key: 'parties', href: '/parties', label: 'All parties', iconKey: 'layers', group: 'Entities', requiredPermission: 'parties.read' },
 
   // Catalog — the item/service master that sales & purchase lines reference.

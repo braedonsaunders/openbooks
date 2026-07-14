@@ -41,6 +41,9 @@ export const PERMISSION_CATALOGUE = [
   // Items & services catalog
   "items.read",
   "items.manage",
+  // Projects & job costing
+  "projects.read",
+  "projects.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -135,6 +138,14 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "projects",
+    label: "Projects & job costing",
+    permissions: [
+      { key: "projects.read", label: "View projects and job costing" },
+      { key: "projects.manage", label: "Create and edit projects" },
+    ],
+  },
+  {
     key: "records",
     label: "Custom records",
     permissions: [
@@ -221,6 +232,8 @@ export const BUILT_IN_ROLES: Record<
       "records.manage_types",
       "items.read",
       "items.manage",
+      "projects.read",
+      "projects.manage",
       "sql.execute",
       "sync.run",
       "parties.read",
@@ -254,6 +267,8 @@ export const BUILT_IN_ROLES: Record<
       "records.create",
       "items.read",
       "items.manage",
+      "projects.read",
+      "projects.manage",
     ],
   },
   approver: {
