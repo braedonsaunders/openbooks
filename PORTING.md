@@ -42,6 +42,7 @@ permission gates → build → verify in preview → commit.
 | Expenses | agent | web/app/(app)/expenses, web/app/api/expenses | started |
 | Period close | integrator | web/app/(app)/close, web/app/api/close | started |
 | Scripts + audit admin | integrator | web/app/(app)/admin/scripts, /admin/audit | pending |
+| Custom record types | agent | web/app/(app)/records, web/app/api/records, web/app/api/forms/options, schema/src/custom-records.ts, web/lib/record{s,-schema}.ts, web/components/record-fields.tsx | landed; schema UNMIGRATED (custom_record_types + custom_records + FKs pending) |
 
 Shared files are PRE-STAGED by the integrator (nav registry entries + permission
 keys already exist for every module above). Agents: do NOT edit registry.ts,

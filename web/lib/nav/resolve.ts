@@ -7,12 +7,18 @@ import { MODULE_BY_KEY, NAV_MODULES, defaultNavConfig, type OrgNavConfig } from 
 /**
  * Resolve the sidebar for a user: saved org layout (or registry defaults) →
  * layer in modules shipped after the config was saved → filter by permission
- * via the caller-supplied `can` predicate → drop hidden items/empty groups.
- * (beaconhs nav/resolve.ts, org-scoped, minus form pinning for now.)
+ * via the caller-supplied `can` predicate → drop hidden items/empty groups →
+ * append the dynamic "Records" group (published custom record types flagged
+ * show_in_nav). (beaconhs nav/resolve.ts, org-scoped, minus form pinning for
+ * now.)
+ *
+ * `role` (the user's role key, e.g. authz.user.role) scopes role-gated record
+ * types; when omitted, only types without an allowed_roles restriction appear.
  */
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
+  role?: string | null,
 ): Promise<SidebarNavGroup[]> {
   const r = (await db.execute(
     sql`select config from org_nav_configs where org_id = ${orgId} limit 1`,
@@ -41,7 +47,49 @@ export async function resolveNav(
     }
     if (items.length > 0) groups.push({ label: g.label, items })
   }
+
+  const recordItems = await recordTypeNavItems(orgId, can, role ?? null)
+  if (recordItems.length > 0) groups.push({ label: 'Records', items: recordItems })
+
   return groups
+}
+
+/**
+ * Dynamic nav entries for published custom record types flagged show_in_nav:
+ * one item per generated module (/records/<key>), visible to records.read
+ * holders and filtered by each type's allowed_roles audience (admins always
+ * pass). Wrapped in try/catch so a database without the custom_record_types
+ * table yet (pre-migration) degrades to "no Records group" instead of
+ * breaking the whole shell.
+ */
+async function recordTypeNavItems(
+  orgId: string,
+  can: (permission: string | undefined) => boolean,
+  role: string | null,
+): Promise<SidebarNavGroup['items']> {
+  if (!can('records.read')) return []
+  try {
+    const r = (await db.execute(sql`
+      select key, plural_name, icon_key, allowed_roles
+        from custom_record_types
+       where org_id = ${orgId} and status = 'published' and show_in_nav
+       order by sort_order, plural_name
+    `)) as unknown as {
+      rows: { key: string; plural_name: string; icon_key: string; allowed_roles: string[] | null }[]
+    }
+    return r.rows
+      .filter(
+        (t) =>
+          !t.allowed_roles ||
+          t.allowed_roles.length === 0 ||
+          role === 'admin' ||
+          (role !== null && t.allowed_roles.includes(role)),
+      )
+      .map((t) => ({ href: `/records/${t.key}`, label: t.plural_name, iconKey: t.icon_key }))
+  } catch {
+    // custom_record_types not migrated yet — the shell must keep rendering.
+    return []
+  }
 }
 
 /** Modules shipped after the org saved its config get appended to their default group. */
