@@ -20,12 +20,12 @@ Standing rule: beaconhs is the boilerplate — copy, then adapt vendor-neutrally
 ## Workstreams
 | # | Subsystem | Owner | Status |
 |---|---|---|---|
-| 1 | RBAC (iam schema, permission catalogue, can/assertCan, admin UI) | agent | started |
+| 1 | RBAC (iam schema, permission catalogue, can/assertCan, admin UI) | agent | landed; migrated (0004); roles seeded |
 | 2 | Insights/analytics (BHQL engine pkg, insight tables, card studio, dashboards) | agent | started |
 | 3 | Reports engine (definitions/schedules/runs schema, studio UI, manual run + CSV) | agent | started |
-| 4 | App builder (forms-core pkg, form tables, designer + filler) | agent | started |
-| 5 | Sidebar customization (nav registry/resolve/org overrides + admin editor) | integrator | started |
-| 6 | List-view framework wiring (search/sort/filter/pagination on AP/journal/COA) | integrator | started |
+| 4 | App builder (forms-core pkg, form tables, designer + filler) | agent | landed; migrated (0004) |
+| 5 | Sidebar customization (nav registry/resolve/org overrides + admin editor) | integrator | DONE (0004; shell wiring pending RBAC integration) |
+| 6 | List-view framework wiring (search/sort/filter/pagination on AP/journal) | integrator | DONE + flyout-first/instant-draft pattern live on AP |
 
 Integration steps after agents land: add schema exports → drizzle generate 0004
 → apply to cluster (+ grants to openbooks_read) → npm install → wire nav items +

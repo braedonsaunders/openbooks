@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, schema } from "@openbooks/engine/src/db.ts";
 import { add, sum } from "@openbooks/engine/src/money.ts";
-import { currentUser } from "../../../lib/auth";
+import { guardPermission } from "../../../lib/authz";
 
 export const runtime = "nodejs";
 
@@ -14,8 +14,9 @@ interface BillLine {
 }
 
 export async function POST(req: Request) {
-  const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const gate = await guardPermission("ap.create");
+  if (gate instanceof NextResponse) return gate;
+  const user = gate.user;
   const body = (await req.json()) as {
     partyId?: string; documentDate?: string; dueDate?: string;
     referenceNumber?: string; memo?: string; lines?: BillLine[];

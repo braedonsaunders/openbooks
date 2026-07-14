@@ -1,8 +1,16 @@
 {
   "version": 1,
   "functions": {
+    "/api/admin/navigation": {},
+    "/api/admin/roles": {},
+    "/api/admin/users": {},
     "/api/bills": {},
+    "/api/bills/[id]": {},
     "/api/bills/actions": {},
+    "/api/bills/draft": {},
+    "/api/forms/templates": {},
+    "/api/forms/templates/[key]": {},
+    "/api/forms/templates/[key]/publish": {},
     "/api/login": {},
     "/api/query": {},
     "/api/saved-reports": {},

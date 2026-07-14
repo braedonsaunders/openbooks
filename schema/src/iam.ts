@@ -1,0 +1,100 @@
+import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { auditColumns, id, orgRef } from "./helpers";
+
+/**
+ * IAM — role-based access control, ported from the beaconhs iam foundation.
+ *
+ * Permission keys are strings: `module.action[.qualifier]`, e.g. `gl.post`,
+ * `ap.approve`, `admin.roles.manage`. Wildcards are supported at check time
+ * (`ap.*` grants any `ap.x`). The catalogue of built-in keys and the
+ * wildcard-matching logic live in web/lib/permissions.ts; the DB stores
+ * whatever keys a role was saved with.
+ */
+export type PermissionKey = string;
+
+/**
+ * Org-scoped roles: named bundles of permission keys. Built-in roles
+ * (admin/controller/accountant/approver/viewer) are seeded per org by
+ * engine/src/seed-roles.ts and mirror the legacy users.role enum; custom
+ * roles are created in the admin UI. `key` is a stable slug — built-in keys
+ * intentionally equal the legacy users.role values so the seed script can
+ * map existing users onto assignments.
+ *
+ * Named app_roles (not roles) to stay clear of Postgres's pg_roles and any
+ * future DB-level role work.
+ */
+export const appRoles = pgTable(
+  "app_roles",
+  {
+    id: id(),
+    orgId: orgRef(),
+    key: text("key").notNull(), // "controller", "ap_clerk", custom slugs
+    name: text("name").notNull(),
+    description: text("description"),
+    isBuiltIn: boolean("is_built_in").notNull().default(false),
+    permissions: jsonb("permissions").$type<PermissionKey[]>().notNull().default([]),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("app_roles_org_key").on(t.orgId, t.key),
+    index("app_roles_org").on(t.orgId),
+  ],
+);
+
+/**
+ * User ↔ role links. A user may hold any number of roles; their effective
+ * permissions are the union of every assigned role's keys. When a user has
+ * NO assignments, authorization falls back to mapping the legacy users.role
+ * column through the built-in role definitions — so the app keeps working
+ * before the seed script has run.
+ */
+export const roleAssignments = pgTable(
+  "role_assignments",
+  {
+    id: id(),
+    orgId: orgRef(),
+    userId: uuid("user_id").notNull(),
+    roleId: uuid("role_id").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    // One row per user/role — duplicates would be meaningless and make
+    // unassign ambiguous. Also the ON CONFLICT target for idempotent seeding.
+    uniqueIndex("role_assignments_org_user_role").on(t.orgId, t.userId, t.roleId),
+    index("role_assignments_user").on(t.userId),
+    index("role_assignments_role").on(t.roleId),
+  ],
+);
+
+/**
+ * Per-user permission exceptions, layered on top of role-granted permissions.
+ * `grant` adds a permission the user's roles don't carry; `deny` removes one
+ * they would otherwise have. Resolved in web/lib/authz.ts after the role
+ * union — denies win, including against wildcard grants.
+ */
+export const userPermissionOverrides = pgTable(
+  "user_permission_overrides",
+  {
+    id: id(),
+    orgId: orgRef(),
+    userId: uuid("user_id").notNull(),
+    permission: text("permission").$type<PermissionKey>().notNull(),
+    effect: text("effect", { enum: ["grant", "deny"] }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("user_permission_overrides_user_permission").on(t.userId, t.permission),
+    index("user_permission_overrides_org").on(t.orgId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Foreign keys (SQL, for the integrator's generated migration):
+//
+// -- ALTER TABLE app_roles                 ADD FOREIGN KEY (org_id)  REFERENCES orgs(id)      ON DELETE CASCADE;
+// -- ALTER TABLE role_assignments          ADD FOREIGN KEY (org_id)  REFERENCES orgs(id)      ON DELETE CASCADE;
+// -- ALTER TABLE role_assignments          ADD FOREIGN KEY (user_id) REFERENCES users(id)     ON DELETE CASCADE;
+// -- ALTER TABLE role_assignments          ADD FOREIGN KEY (role_id) REFERENCES app_roles(id) ON DELETE CASCADE;
+// -- ALTER TABLE user_permission_overrides ADD FOREIGN KEY (org_id)  REFERENCES orgs(id)      ON DELETE CASCADE;
+// -- ALTER TABLE user_permission_overrides ADD FOREIGN KEY (user_id) REFERENCES users(id)     ON DELETE CASCADE;
+// ---------------------------------------------------------------------------

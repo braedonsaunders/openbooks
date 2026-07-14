@@ -31,6 +31,30 @@
       "namedRegex": "^/accounts/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/api/bills/[id]",
+      "regex": "^/api/bills/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/bills/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/forms/templates/[key]",
+      "regex": "^/api/forms/templates/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPkey": "nxtPkey"
+      },
+      "namedRegex": "^/api/forms/templates/(?<nxtPkey>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/forms/templates/[key]/publish",
+      "regex": "^/api/forms/templates/([^/]+?)/publish(?:/)?$",
+      "routeKeys": {
+        "nxtPkey": "nxtPkey"
+      },
+      "namedRegex": "^/api/forms/templates/(?<nxtPkey>[^/]+?)/publish(?:/)?$"
+    },
+    {
       "page": "/journal/[id]",
       "regex": "^/journal/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -65,16 +89,46 @@
       "namedRegex": "^/accounts(?:/)?$"
     },
     {
+      "page": "/admin/navigation",
+      "regex": "^/admin/navigation(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/navigation(?:/)?$"
+    },
+    {
+      "page": "/admin/roles",
+      "regex": "^/admin/roles(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/roles(?:/)?$"
+    },
+    {
+      "page": "/admin/users",
+      "regex": "^/admin/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/users(?:/)?$"
+    },
+    {
       "page": "/ap",
       "regex": "^/ap(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/ap(?:/)?$"
     },
     {
-      "page": "/ap/new",
-      "regex": "^/ap/new(?:/)?$",
+      "page": "/api/admin/navigation",
+      "regex": "^/api/admin/navigation(?:/)?$",
       "routeKeys": {},
-      "namedRegex": "^/ap/new(?:/)?$"
+      "namedRegex": "^/api/admin/navigation(?:/)?$"
+    },
+    {
+      "page": "/api/admin/roles",
+      "regex": "^/api/admin/roles(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/roles(?:/)?$"
+    },
+    {
+      "page": "/api/admin/users",
+      "regex": "^/api/admin/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/users(?:/)?$"
     },
     {
       "page": "/api/bills",
@@ -87,6 +141,18 @@
       "regex": "^/api/bills/actions(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/bills/actions(?:/)?$"
+    },
+    {
+      "page": "/api/bills/draft",
+      "regex": "^/api/bills/draft(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/bills/draft(?:/)?$"
+    },
+    {
+      "page": "/api/forms/templates",
+      "regex": "^/api/forms/templates(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/forms/templates(?:/)?$"
     },
     {
       "page": "/api/login",
