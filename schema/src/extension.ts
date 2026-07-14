@@ -89,6 +89,33 @@ export const scriptRuns = pgTable(
 );
 
 /**
+ * External-system sync/migration runs. TEMPORARY BRIDGE in its current
+ * form (manual, NetSuite-only) — the MigrationSource interface it records
+ * for is the seed of one-click migration from NetSuite/QuickBooks/Xero.
+ */
+export const syncRuns = pgTable(
+  "sync_runs",
+  {
+    id: id(),
+    orgId: orgRef(),
+    source: text("source").notNull(), // "netsuite"
+    kind: text("kind", { enum: ["incremental", "full_migration", "tb_check"] })
+      .notNull()
+      .default("incremental"),
+    status: text("status", { enum: ["running", "ok", "failed"] }).notNull().default("running"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** High-water mark this run synced up to (source clock). */
+    syncedThrough: timestamp("synced_through", { withTimezone: true }),
+    /** { newEntries, reversedEntries, linesInserted, tbAccounts, tbMismatches, ... } */
+    stats: jsonb("stats").notNull().default({}),
+    errorMessage: text("error_message"),
+    triggeredBy: text("triggered_by"), // "ui", "cli"
+  },
+  (t) => [index("sync_runs_org_started").on(t.orgId, t.startedAt)],
+);
+
+/**
  * Field-level audit trail for the business layer (the ledger needs none —
  * it's append-only). Written by the API layer inside the same transaction.
  */

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "openbooks-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "-w", "web"],
+      "port": 4780
+    }
+  ]
+}
