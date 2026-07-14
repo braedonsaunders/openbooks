@@ -1,19 +1,24 @@
 import Link from "next/link";
-import { dashboardData } from "../lib/data";
+import { configuredSources } from "@openbooks/engine/src/sync/registry.ts";
+import { dashboardData, orgInfo } from "../lib/data";
 import { dateTime, money } from "../lib/format";
 import { SyncButton } from "./sync/SyncButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
-  const { totals, runs } = await dashboardData();
+  const [{ totals, runs }, org] = await Promise.all([dashboardData(), orgInfo()]);
+  const sources = configuredSources();
   const lastOk = runs.find((r: any) => r.status === "ok");
   const lastTb = lastOk?.stats?.tb;
+  const lastSourceLabel = sources.find((s) => s.name === lastOk?.source)?.displayName ?? lastOk?.source;
 
   return (
     <>
       <h1>Dashboard</h1>
-      <p className="sub">Rassaun Services Inc · CAD · primary book</p>
+      <p className="sub">
+        {org ? `${org.name} · ${org.base_currency} · ${org.book}` : "no organization configured"}
+      </p>
 
       <div className="grid">
         <div className="card">
@@ -28,23 +33,24 @@ export default async function Dashboard() {
           <div className="label">Ledger balance check</div>
           <div className="value small">Σ = {money(totals.ledger_sum)}</div>
         </div>
-        <div className={`card ${lastTb ? (lastTb.mismatches?.length === 0 ? "good" : "bad") : ""}`}>
-          <div className="label">NetSuite parallel-run</div>
-          <div className="value small">
-            {lastTb
-              ? `${lastTb.matches}/${lastTb.accounts} accounts match`
-              : "not yet verified"}
+        {lastTb && (
+          <div className={`card ${lastTb.mismatches?.length === 0 ? "good" : "bad"}`}>
+            <div className="label">Parallel-run vs {lastSourceLabel}</div>
+            <div className="value small">{lastTb.matches}/{lastTb.accounts} accounts match</div>
           </div>
-        </div>
+        )}
       </div>
 
-      <div className="banner">
-        The NetSuite bridge is a temporary parallel-run tool: sync is manual, verification runs on
-        every sync, and the same adapter interface becomes one-click migration (NetSuite, QuickBooks,
-        Xero) later. <Link href="/sync" style={{ color: "var(--accent)", fontWeight: 600 }}>Sync page →</Link>
-      </div>
-
-      <SyncButton />
+      {sources.length > 0 && (
+        <>
+          <div className="banner">
+            An external accounting system is connected for parallel-run verification. Sync is
+            manual; every sync re-verifies the trial balance per account.{" "}
+            <Link href="/sync" style={{ color: "var(--accent)", fontWeight: 600 }}>Sync page →</Link>
+          </div>
+          <SyncButton source={sources[0].name} label={sources[0].displayName} />
+        </>
+      )}
 
       <div className="section">
         <h2>Recent sync runs</h2>

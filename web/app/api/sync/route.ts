@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { NetSuiteSource } from "@openbooks/engine/src/sync/netsuite-source.ts";
+import { configuredSources, sourceByName } from "@openbooks/engine/src/sync/registry.ts";
 import { runSync } from "@openbooks/engine/src/sync/sync.ts";
 
 export const runtime = "nodejs";
@@ -7,12 +7,24 @@ export const maxDuration = 300;
 
 let inFlight: Promise<unknown> | null = null;
 
-export async function POST() {
+export async function GET() {
+  return NextResponse.json({
+    sources: configuredSources().map((s) => ({ name: s.name, displayName: s.displayName })),
+  });
+}
+
+export async function POST(req: Request) {
   if (inFlight) {
     return NextResponse.json({ error: "a sync is already running" }, { status: 409 });
   }
   try {
-    inFlight = runSync(new NetSuiteSource(), "ui");
+    const body = await req.json().catch(() => ({}));
+    const requested = (body as { source?: string }).source;
+    const cfg = requested ? sourceByName(requested) : configuredSources()[0];
+    if (!cfg) {
+      return NextResponse.json({ error: "no external source configured" }, { status: 400 });
+    }
+    inFlight = runSync(cfg.make(), "ui");
     const result = await inFlight;
     return NextResponse.json(result);
   } catch (e) {

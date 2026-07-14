@@ -4,6 +4,15 @@ import { db } from "@openbooks/engine/src/db.ts";
 
 export const runtime = "nodejs";
 
+export async function orgInfo() {
+  const r = (await db.execute(sql`
+    select o.name, o.base_currency,
+           (select b.name from accounting_books b where b.is_primary limit 1) as book
+      from orgs o limit 1
+  `)) as any;
+  return r.rows[0] as { name: string; base_currency: string; book: string } | undefined;
+}
+
 export async function dashboardData() {
   const r = (await db.execute(sql`
     select
