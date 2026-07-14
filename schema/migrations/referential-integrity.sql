@@ -278,3 +278,8 @@ alter table custom_records add foreign key (type_id) references custom_record_ty
 alter table report_definitions add foreign key (org_id) references orgs(id);
 alter table report_schedules add foreign key (org_id) references orgs(id), add foreign key (definition_id) references report_definitions(id) on delete cascade;
 alter table report_runs add foreign key (org_id) references orgs(id), add foreign key (schedule_id) references report_schedules(id) on delete set null, add foreign key (definition_id) references report_definitions(id) on delete cascade;
+
+-- insights
+alter table insight_cards add foreign key (org_id) references orgs(id);
+alter table insight_dashboards add foreign key (org_id) references orgs(id);
+alter table insight_dashboard_pins add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (dashboard_id) references insight_dashboards(id) on delete cascade;
