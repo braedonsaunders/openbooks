@@ -43,6 +43,13 @@
       "when": 1784038683917,
       "tag": "0005_custom_records",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784042891612,
+      "tag": "0006_reporting",
+      "breakpoints": true
     }
   ]
 }
