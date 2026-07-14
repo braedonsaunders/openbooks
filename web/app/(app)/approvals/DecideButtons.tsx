@@ -13,10 +13,10 @@ export function DecideButtons({ requestId, stepNumber }: { requestId: string; st
     const note = decision === 'rejected' ? (prompt('Rejection reason:') ?? undefined) : undefined
     if (decision === 'rejected' && !note) return
     setBusy(true)
-    const res = await fetch('/api/bills/actions', {
+    const res = await fetch('/api/approvals/decide', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'decide', requestId, stepNumber, decision, note }),
+      body: JSON.stringify({ requestId, stepNumber, decision, note }),
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? 'Decision failed')

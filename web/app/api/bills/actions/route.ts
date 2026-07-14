@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { submitForApproval, decide } from "@openbooks/engine/src/approvals.ts";
 import { postDocument, PostingError } from "@openbooks/engine/src/posting.ts";
 import { currentUser } from "../../../../lib/auth";
+import { guardPermission } from "../../../../lib/authz";
 
 export const runtime = "nodejs";
 
@@ -29,9 +30,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, requestId });
       }
       case "decide": {
-        if (!["controller", "admin"].includes(user.role)) {
-          return NextResponse.json({ error: "your role cannot approve" }, { status: 403 });
-        }
+        // Decisions go through the neutral /api/approvals/decide endpoint
+        // (permission-gated by target kind). Kept here only as a guarded
+        // fallback for any direct caller.
+        const gate = await guardPermission("ap.approve");
+        if (gate instanceof NextResponse) return gate;
         const res = await decide(body.requestId!, body.stepNumber!, body.decision!, user.id, body.note);
         return NextResponse.json({ ok: true, ...res });
       }

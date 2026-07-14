@@ -55,25 +55,42 @@ accounts match NetSuite exactly**.
       routing, role worklists, approve/reject with notes; full lifecycle
       verified draft → submit → approve → post (correct AP + ITC entry)
       *(2026-07-14 — per-person assignees + email nudges still to add)*
-- [ ] Payment runs → Canadian EFT (CPA-005) file export + remittance emails
-- [ ] Expense reports (mobile-friendly entry, receipt capture)
-- [ ] Vendor statements / open-item views (payment application UI)
+- [x] Payment runs → Canadian EFT (CPA-005) file export *(2026-07-14 —
+      remittance emails still to add; needs a worker)*
+- [x] Expense reports: instant-draft flyout, line grid, approval, posting to
+      employee payable *(2026-07-14 — receipt capture/attachments to add)*
+- [x] Payment application UI: open-item selection, apply amounts, post
+      atomically w/ auto-reversal safety net *(2026-07-14, live-verified)*
 - [ ] Dual-entry period: AP entered in openbooks, mirrored to NS until trust
 
 ### M3 — AR + projects: the revenue side
-- [ ] Customer invoices (T&M chains: time entries → billable → invoice)
+- [x] Customer invoices: instant-draft flyout, line grid, approval, posting
+      (DR AR / CR income + tax) *(2026-07-14, live-verified)*
 - [ ] Invoice PDF rendering (their 27 Calibri templates as data)
-- [ ] Payment application (any crediting doc → any open item)
+- [x] Payment application (any crediting doc → any open item) — receipts
+      apply to invoices, open balance clears *(2026-07-14, live-verified)*
 - [ ] Project costing views (Account × Project, WIP, estimate-vs-actual)
 - [ ] Sales orders / quotes (bidwright hookup point)
 
 ### M4 — Close the books in openbooks
-- [ ] Bank reconciliation (statement import + matching)
+- [x] Bank reconciliation: OFX/CSV import → dedupe → auto-match → two-pane
+      workspace → zero-difference sign-off *(2026-07-14)*
 - [ ] GST/HST return (tax report lines → GST34 numbers)
 - [ ] Fixed assets + depreciation runs (replace the locked FAM bundle)
 - [ ] Payroll journal import + labor burden runs (Paymate bridge)
-- [ ] Period close checklist + module locks
+- [x] Period close: per-module AR/AP/GL close/reopen with ordering rules,
+      kernel enforces closed-period posting refusal *(2026-07-14)*
 - [ ] One full month closed in parallel, TB green the whole way
+
+### Platform (NetSuite-parity foundations, built 2026-07-14)
+- [x] RBAC: roles, permission catalogue w/ wildcards, per-user overrides,
+      admin Users/Roles UI, gates on every mutation
+- [x] Custom fields: header + line, any module, server-validated
+- [x] Custom record types: NetSuite-custrecord equivalent — builder +
+      auto-generated modules + dynamic sidebar
+- [x] Sidebar customization (/admin/navigation), user scripting admin
+      (real JS), audit log viewer, parties directory
+- [ ] Insights (BHQL card studio) + custom reports engine — *in flight*
 
 ### M5 — Cutover
 - [ ] NetSuite → read-only; openbooks system of record
@@ -91,7 +108,7 @@ accounts match NetSuite exactly**.
 | Metric | Now | Target |
 |---|---|---|
 | TB parity vs source | 262/262 | green streak through a month-end close |
-| Workflows live in openbooks | 0 | AP → AR → close |
+| Workflows live in openbooks | AP · AR · payments · expenses · journals · banking · close | AP → AR → close ✅ |
 | NetSuite spend | $120k/yr | $0 |
 | Companies on openbooks | 0 (1 mirrored) | 2+ |
 
