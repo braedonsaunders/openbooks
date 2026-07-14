@@ -1,11 +1,11 @@
 {
   "version": 1,
   "functions": {
-    "/api/query": {},
     "/api/login": {},
+    "/api/query": {},
+    "/api/saved-reports": {},
     "/api/sync": {
       "maxDuration": 300
-    },
-    "/api/saved-reports": {}
+    }
   }
 }

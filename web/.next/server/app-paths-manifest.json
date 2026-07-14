@@ -6,15 +6,15 @@
   "/api/saved-reports/route": "app/api/saved-reports/route.js",
   "/login/page": "app/login/page.js",
   "/query/page": "app/query/page.js",
-  "/accounts/page": "app/accounts/page.js",
   "/accounts/[id]/page": "app/accounts/[id]/page.js",
-  "/journal/page": "app/journal/page.js",
+  "/accounts/page": "app/accounts/page.js",
   "/journal/[id]/page": "app/journal/[id]/page.js",
   "/reports/balance-sheet/page": "app/reports/balance-sheet/page.js",
-  "/reports/pnl/page": "app/reports/pnl/page.js",
   "/page": "app/page.js",
+  "/journal/page": "app/journal/page.js",
   "/reports/page": "app/reports/page.js",
   "/reports/trial-balance/page": "app/reports/trial-balance/page.js",
-  "/reports/partners/page": "app/reports/partners/page.js",
-  "/sync/page": "app/sync/page.js"
+  "/sync/page": "app/sync/page.js",
+  "/reports/pnl/page": "app/reports/pnl/page.js",
+  "/reports/partners/page": "app/reports/partners/page.js"
 }

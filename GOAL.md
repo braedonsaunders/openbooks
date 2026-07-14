@@ -35,14 +35,17 @@ accounts match NetSuite exactly**.
 - [x] Financial statements: trial balance, P&L (period ranges, FY presets),
       balance sheet (as-of, computed retained earnings) *(2026-07-14)*
 - [x] AR/AP position by party *(2026-07-14)*
-- [ ] Statement layouts as data (custom P&L groupings — the 25 NS layouts)
+- [x] Statement layouts as data: group/subtotal/formula rows, first-match
+      account claiming, automatic Other catch-all; "Contractor P&L" seeded
+      and cross-foots with the default statement *(2026-07-14)*
 - [x] Dimension filters (department/project) on P&L + trial balance *(2026-07-14)*
 - [x] Account register drill-down (account → entries → document) *(2026-07-14)*
 - [x] Auth: users, scrypt, signed-cookie sessions, middleware gate, login,
       roles enum *(2026-07-14 — role-based permissions still to enforce)*
 - [x] Saved report views *(2026-07-14)*
 - [ ] Scheduled report email delivery
-- [ ] P&L comparatives (period vs period columns)
+- [x] P&L comparatives (vs prior year, Δ and Δ% — FY26 shows −24.7%
+      revenue, matching the owner analysis) *(2026-07-14)*
 
 ### M2 — AP goes live: the first workflow leaves NetSuite
 - [ ] Vendor bill entry (line editor, tax codes, dimensions, files)

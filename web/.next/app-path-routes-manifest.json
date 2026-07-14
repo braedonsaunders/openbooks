@@ -6,15 +6,15 @@
   "/api/saved-reports/route": "/api/saved-reports",
   "/login/page": "/login",
   "/query/page": "/query",
-  "/accounts/page": "/accounts",
   "/accounts/[id]/page": "/accounts/[id]",
-  "/journal/page": "/journal",
+  "/accounts/page": "/accounts",
   "/journal/[id]/page": "/journal/[id]",
   "/reports/balance-sheet/page": "/reports/balance-sheet",
-  "/reports/pnl/page": "/reports/pnl",
   "/page": "/",
+  "/journal/page": "/journal",
   "/reports/page": "/reports",
   "/reports/trial-balance/page": "/reports/trial-balance",
-  "/reports/partners/page": "/reports/partners",
-  "/sync/page": "/sync"
+  "/sync/page": "/sync",
+  "/reports/pnl/page": "/reports/pnl",
+  "/reports/partners/page": "/reports/partners"
 }
