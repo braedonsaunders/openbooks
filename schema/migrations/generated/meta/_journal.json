@@ -57,6 +57,13 @@
       "when": 1784043405674,
       "tag": "0007_insights",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784045823377,
+      "tag": "0008_attachments",
+      "breakpoints": true
     }
   ]
 }

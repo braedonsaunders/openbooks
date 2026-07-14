@@ -283,3 +283,7 @@ alter table report_runs add foreign key (org_id) references orgs(id), add foreig
 alter table insight_cards add foreign key (org_id) references orgs(id);
 alter table insight_dashboards add foreign key (org_id) references orgs(id);
 alter table insight_dashboard_pins add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (dashboard_id) references insight_dashboards(id) on delete cascade;
+
+-- attachments
+alter table attachments add foreign key (org_id) references orgs(id);
+alter table attachment_blobs add foreign key (attachment_id) references attachments(id) on delete cascade;

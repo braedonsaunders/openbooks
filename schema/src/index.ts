@@ -18,3 +18,4 @@ export * from "./forms";
 export * from "./custom-records";
 export * from "./reporting";
 export * from "./insights";
+export * from "./attachments";
