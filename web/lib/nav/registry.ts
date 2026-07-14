@@ -36,6 +36,9 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'employees', href: '/entities/employees', label: 'Employees', iconKey: 'clipboard-check', group: 'Entities', requiredPermission: 'parties.read' },
   { key: 'parties', href: '/parties', label: 'All parties', iconKey: 'layers', group: 'Entities', requiredPermission: 'parties.read' },
 
+  // Catalog — the item/service master that sales & purchase lines reference.
+  { key: 'items', href: '/items', label: 'Items & Services', iconKey: 'grid', group: 'Catalog', requiredPermission: 'items.read' },
+
   { key: 'journal', href: '/journal', label: 'Journal', iconKey: 'journal', group: 'Ledger', requiredPermission: 'gl.read' },
   { key: 'accounts', href: '/accounts', label: 'Chart of Accounts', iconKey: 'layers', group: 'Ledger', requiredPermission: 'gl.read' },
   { key: 'banking', href: '/banking', label: 'Banking', iconKey: 'building', group: 'Ledger', requiredPermission: 'banking.read' },
