@@ -1,11 +1,44 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { computeBillTotals, loadBill, taxRateMap, type BillLineInput } from '../../../../lib/bills'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 
 export const runtime = 'nodejs'
+
+async function controlDeps(orgId: string) {
+  const r = (await db.execute(sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`)) as any
+  const c = r.rows[0]?.c ?? {}
+  return { control: { ar: c.ar, ap: c.ap, bank: c.bank, taxCollected: c.taxCollected, taxPaid: c.taxPaid } }
+}
+
+/**
+ * A document-layer signature of everything that shapes a bill's GL impact
+ * (party, posting/document date, currency, and each line's account/item/amount/
+ * tax/dimensions). Comparing this before vs after a save tells us whether the
+ * edit was GL-affecting — WITHOUT assuming the stored entry was produced by our
+ * own posting rules (migrated bills carry NetSuite's GL, so comparing rule
+ * output to stored lines would wrongly flag every edit). Non-GL edits (memo,
+ * reference #) leave this unchanged and never touch the ledger.
+ */
+async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, id: string): Promise<string> {
+  const r = (await tx.execute(sql`
+    select md5(
+      coalesce(d.party_id::text,'') || '~' || coalesce(d.document_date::text,'') || '~' ||
+      coalesce(d.posting_date::text,'') || '~' || coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
+      coalesce((select string_agg(
+        coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
+        coalesce(tax_code_id::text,'') || ':' || tax_amount::text || ':' ||
+        coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
+        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,''),
+        '|' order by line_number)
+        from document_lines where document_id = d.id), '')
+    ) as sig
+    from documents d where d.id = ${id}`)) as { rows: { sig: string }[] }
+  return r.rows[0]?.sig ?? ''
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ap.read')
@@ -16,7 +49,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json(bill)
 }
 
-/** Autosave for draft bills: header fields and/or full line replacement. */
+/**
+ * Autosave a bill. Draft/approved bills edit freely (no GL yet). A POSTED bill
+ * is editable in place, NetSuite-style: its journal entry is a derived
+ * projection re-materialized on save (regenerateGlImpactTx) — a non-GL change
+ * (memo, reference #) is a no-op on the ledger; a GL change regenerates the
+ * entry's lines and is blocked only if the posting period is closed.
+ */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ap.create')
   if (gate instanceof NextResponse) return gate
@@ -27,9 +66,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sql`select status from documents where id = ${id} and kind = 'vendor_bill' and org_id = ${user.orgId}`,
   )) as unknown as { rows: { status: string }[] }
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (existing.rows[0].status !== 'draft') {
-    return NextResponse.json({ error: 'only draft bills can be edited' }, { status: 422 })
+  if (existing.rows[0].status === 'voided') {
+    return NextResponse.json({ error: 'a voided bill cannot be edited' }, { status: 422 })
   }
+  const deps = await controlDeps(user.orgId)
 
   const body = (await req.json()) as {
     partyId?: string | null
@@ -57,13 +97,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     headerCustom = v.cleaned
   }
 
+  // Pre-validate + prepare lines (read-only) before touching the DB, so a bad
+  // line returns 422 without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
+  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxAmount: string; departmentId: string | null; projectId: string | null; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
     const computed = computeBillTotals(valid, await taxRateMap())
     totals = computed
-
-    await db.execute(sql`delete from document_lines where document_id = ${id}`)
+    preparedLines = []
     for (let i = 0; i < computed.lines.length; i++) {
       const l = computed.lines[i]! as (typeof computed.lines)[number] & {
         departmentId?: string | null
@@ -77,31 +119,67 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { status: 422 },
         )
       }
-      await db.execute(sql`
-        insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                    quantity, unit_price, amount, tax_code_id, tax_amount,
-                                    department_id, project_id, custom)
-        values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description ?? null},
-                '1', ${l.amount}, ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxAmount},
-                ${l.departmentId ?? null}, ${l.projectId ?? null}, ${JSON.stringify(lv.cleaned)})
-      `)
+      preparedLines.push({
+        accountId: l.accountId!,
+        description: l.description ?? null,
+        amount: l.amount,
+        taxCodeId: l.taxCodeId ?? null,
+        taxAmount: l.taxAmount,
+        departmentId: l.departmentId ?? null,
+        projectId: l.projectId ?? null,
+        custom: lv.cleaned,
+      })
     }
   }
 
-  await db.execute(sql`
-    update documents set
-      party_id = coalesce(${body.partyId ?? null}, party_id),
-      document_date = coalesce(${body.documentDate ?? null}, document_date),
-      due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
-      reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
-      memo = ${body.memo !== undefined ? body.memo : sql`memo`},
-      custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
-      subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
-      tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
-      total = coalesce(${totals?.total ?? null}, total),
-      updated_at = now(), updated_by = ${user.id}
-    where id = ${id}
-  `)
+  // All writes + the GL-Impact re-materialization happen in one transaction, so
+  // a GL edit into a closed period rolls the whole edit back (nothing partial).
+  try {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
+      const sigBefore = await glSignature(tx, id)
+
+      if (preparedLines) {
+        await tx.execute(sql`delete from document_lines where document_id = ${id}`)
+        for (let i = 0; i < preparedLines.length; i++) {
+          const l = preparedLines[i]!
+          await tx.execute(sql`
+            insert into document_lines (org_id, document_id, line_number, account_id, description,
+                                        quantity, unit_price, amount, tax_code_id, tax_amount,
+                                        department_id, project_id, custom)
+            values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
+                    '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxAmount},
+                    ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.custom)})
+          `)
+        }
+      }
+
+      await tx.execute(sql`
+        update documents set
+          party_id = coalesce(${body.partyId ?? null}, party_id),
+          document_date = coalesce(${body.documentDate ?? null}, document_date),
+          due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
+          reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
+          memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+          custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
+          subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
+          tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
+          total = coalesce(${totals?.total ?? null}, total),
+          updated_at = now(), updated_by = ${user.id}
+        where id = ${id}
+      `)
+
+      // Re-materialize the GL-Impact projection only when the edit actually
+      // changed GL-relevant fields (no-op for draft/approved bills and for
+      // non-GL edits like memo/reference #, which preserves migrated GL).
+      if ((await glSignature(tx, id)) !== sigBefore) {
+        await regenerateGlImpactTx(tx, id, deps, user.id)
+      }
+    })
+  } catch (e) {
+    if (e instanceof ClosedPeriodError) return NextResponse.json({ error: e.message }, { status: 422 })
+    throw e
+  }
 
   const bill = await loadBill(id)
   return NextResponse.json(bill)

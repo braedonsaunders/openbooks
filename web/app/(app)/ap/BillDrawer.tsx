@@ -8,7 +8,6 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
-import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -84,6 +83,11 @@ export function BillDrawer({
   const router = useRouter()
   const doc = bill.doc
   const isDraft = doc.status === 'draft'
+  // NetSuite-style edit-in-place: draft, approved, and POSTED bills are all
+  // editable. Saving a posted bill re-materializes its GL-Impact projection
+  // (the server blocks only GL changes into a closed period). pending_approval
+  // and voided bills are read-only.
+  const editable = doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted'
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -133,7 +137,7 @@ export function BillDrawer({
   )
   const first = useRef(true)
   useEffect(() => {
-    if (!isDraft) return
+    if (!editable) return
     if (first.current) {
       first.current = false
       return
@@ -158,9 +162,9 @@ export function BillDrawer({
     }, 600)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, isDraft])
+  }, [payload, editable])
 
-  async function act(action: 'submit' | 'post' | 'reopen') {
+  async function act(action: 'submit' | 'post') {
     setBusy(true)
     const res = await fetch('/api/bills/actions', {
       method: 'POST',
@@ -169,29 +173,9 @@ export function BillDrawer({
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else
-      toast.success(
-        action === 'submit'
-          ? 'Submitted for approval'
-          : action === 'reopen'
-            ? 'Reopened as a draft — the GL posting was reversed'
-            : 'Posted to the ledger',
-      )
+    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
     setBusy(false)
     router.refresh()
-  }
-
-  async function edit() {
-    if (
-      !(await confirmDialog({
-        title: 'Edit this bill?',
-        message: 'Editing reverses the current GL posting and reopens this as a draft. Continue?',
-        confirmLabel: 'Edit',
-        tone: 'danger',
-      }))
-    )
-      return
-    await act('reopen')
   }
 
   // -- grid columns ----------------------------------------------------------
@@ -262,7 +246,11 @@ export function BillDrawer({
           </Badge>
         </span>
       }
-      description={isDraft ? 'Draft — changes save automatically.' : (doc.vendor_name ?? undefined)}
+      description={
+        editable
+          ? `${doc.vendor_name ? doc.vendor_name + ' · ' : ''}changes save automatically`
+          : (doc.vendor_name ?? undefined)
+      }
       headerActions={
         <>
           {isDraft ? (
@@ -273,11 +261,6 @@ export function BillDrawer({
           {doc.status === 'approved' ? (
             <Button disabled={busy} onClick={() => act('post')}>
               Post
-            </Button>
-          ) : null}
-          {doc.status === 'posted' || doc.status === 'approved' ? (
-            <Button variant="outline" disabled={busy} onClick={edit}>
-              Edit
             </Button>
           ) : null}
           {doc.entry_id ? (
@@ -295,7 +278,7 @@ export function BillDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {isDraft
+            {editable
               ? saveState === 'saved'
                 ? 'All changes saved'
                 : saveState === 'saving'
@@ -316,8 +299,8 @@ export function BillDrawer({
       <div className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
-            <Label>Vendor{isDraft ? <span className="text-red-500"> *</span> : null}</Label>
-            {isDraft ? (
+            <Label>Vendor{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            {editable ? (
               <SearchSelect
                 options={vendors.map((v) => ({ value: v.id, label: v.display_name ?? '' }))}
                 value={partyId}
@@ -330,7 +313,7 @@ export function BillDrawer({
           </div>
           <div className={field}>
             <Label>Bill date</Label>
-            {isDraft ? (
+            {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
@@ -338,7 +321,7 @@ export function BillDrawer({
           </div>
           <div className={field}>
             <Label>Due date</Label>
-            {isDraft ? (
+            {editable ? (
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.due_date ?? '—'}</p>
@@ -346,7 +329,7 @@ export function BillDrawer({
           </div>
           <div className={field}>
             <Label>Vendor ref #</Label>
-            {isDraft ? (
+            {editable ? (
               <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
@@ -354,7 +337,7 @@ export function BillDrawer({
           </div>
           <div className={`${field} lg:col-span-3`}>
             <Label>Memo</Label>
-            {isDraft ? (
+            {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.memo ?? '—'}</p>
@@ -362,7 +345,7 @@ export function BillDrawer({
           </div>
         </div>
 
-        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!isDraft} />
+        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
 
         <div className="space-y-2">
           <Label>Lines</Label>
@@ -371,7 +354,7 @@ export function BillDrawer({
             rows={rows}
             onRowsChange={setRows}
             emptyRow={emptyLine}
-            readOnly={!isDraft}
+            readOnly={!editable}
           />
         </div>
 

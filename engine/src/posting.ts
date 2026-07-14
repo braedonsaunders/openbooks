@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
-import { add, isZero, neg, sum } from "./money.ts";
+import { add, isZero, neg, sum, toUnits } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 
 /**
@@ -324,4 +324,190 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
 
   await runTriggerScripts("after_post", { ...scriptCtx, trigger: "after_post" }, doc.id);
   return entryId;
+}
+
+// ---------------------------------------------------------------------------
+// GL Impact as a derived projection.
+//
+// For a document-sourced entry the DOCUMENT is the system of record; its
+// journal entry is a derived projection — entry = postingRules(document) —
+// re-materialized on every save (NetSuite's model). `postDocument` above is
+// the first materialization; `regenerateGlImpactTx` re-materializes a posted
+// document's entry in place after an edit. A non-GL edit (memo, reference #)
+// produces an identical projection and is a no-op on the ledger; a GL edit
+// produces a different projection and regenerates the entry's lines, blocked
+// only if the posting period is closed.
+// ---------------------------------------------------------------------------
+
+/** Raised when a GL-affecting edit would land in a closed accounting period. */
+export class ClosedPeriodError extends Error {}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Build + validate the GL-Impact projection (kernel lines) for a document. */
+function buildProjection(doc: Doc, lines: DocLine[], deps: PostingDeps): KernelLine[] {
+  const rule = RULES[doc.kind];
+  if (!rule) throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
+  const kl = rule(doc, lines, deps).filter((l) => !isZero(l.amount));
+  if (kl.length < 2) throw new PostingError("posting produced fewer than 2 lines");
+  if (!isZero(sum(kl.map((l) => l.amount)))) {
+    throw new PostingError(`posting rule for ${doc.kind} does not balance`);
+  }
+  return kl;
+}
+
+/** Stable comparison key for a set of GL lines (order-sensitive, amount-normalized). */
+function glKey(
+  lines: {
+    accountId: string;
+    amount: string;
+    partyId?: string | null;
+    departmentId?: string | null;
+    projectId?: string | null;
+    locationId?: string | null;
+    classId?: string | null;
+    taxCodeId?: string | null;
+    paymentCardId?: string | null;
+    dueDate?: string | null;
+    isOpenItem?: boolean | null;
+  }[],
+): string {
+  return JSON.stringify(
+    lines.map((l) => [
+      l.accountId,
+      toUnits(l.amount).toString(),
+      l.partyId ?? null,
+      l.departmentId ?? null,
+      l.projectId ?? null,
+      l.locationId ?? null,
+      l.classId ?? null,
+      l.taxCodeId ?? null,
+      l.paymentCardId ?? null,
+      l.dueDate ?? null,
+      !!l.isOpenItem,
+    ]),
+  );
+}
+
+/**
+ * Re-materialize a POSTED document's GL-Impact projection in place, from its
+ * (already-updated) source document + lines, inside the caller's transaction.
+ * The caller MUST have run `set local openbooks.amend = on`.
+ *
+ * Returns `{ changed: false }` when the projection is unchanged (a non-GL edit)
+ * — no ledger write happens, so it is allowed even in a closed period. When the
+ * projection differs it regenerates the entry's lines in place (the entry keeps
+ * its id and stays posted) and throws `ClosedPeriodError` if the old or new
+ * period is closed.
+ */
+export async function regenerateGlImpactTx(
+  tx: Tx,
+  documentId: string,
+  deps: PostingDeps,
+  _userId: string,
+): Promise<{ entryId: string | null; changed: boolean }> {
+  const [doc] = await tx.select().from(schema.documents).where(eq(schema.documents.id, documentId));
+  if (!doc) throw new PostingError(`document ${documentId} not found`);
+  // Only posted documents have a materialized projection to regenerate.
+  if (doc.status !== "posted" || !doc.postedEntryId) return { entryId: null, changed: false };
+
+  if (doc.paymentCardId && !deps.cardLiabilityAccountId) {
+    const [card] = await tx
+      .select()
+      .from(schema.paymentCards)
+      .where(eq(schema.paymentCards.id, doc.paymentCardId));
+    if (card) deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
+  }
+
+  const lines = await tx
+    .select()
+    .from(schema.documentLines)
+    .where(eq(schema.documentLines.documentId, documentId))
+    .orderBy(asc(schema.documentLines.lineNumber));
+
+  const kernelLines = buildProjection(doc, lines, deps);
+  const postingDate = doc.postingDate ?? doc.documentDate;
+
+  const periodRes = (await tx.execute(sql`
+    select id, gl_closed_at from accounting_periods
+     where org_id = ${doc.orgId} and starts_on <= ${postingDate} and ends_on >= ${postingDate}
+       and is_adjustment = false
+     limit 1`)) as unknown as { rows: { id: string; gl_closed_at: string | null }[] };
+  const period = periodRes.rows[0];
+  if (!period) throw new PostingError(`no accounting period covers ${postingDate}`);
+
+  const [entry] = await tx
+    .select()
+    .from(schema.journalEntries)
+    .where(eq(schema.journalEntries.id, doc.postedEntryId));
+  const existing = await tx
+    .select()
+    .from(schema.journalLines)
+    .where(eq(schema.journalLines.entryId, entry.id))
+    .orderBy(asc(schema.journalLines.lineNumber));
+
+  // Unchanged projection (same lines, same period, same posting date + memo) →
+  // this was a non-GL edit; the ledger is untouched (safe in a closed period).
+  const unchanged =
+    entry.periodId === period.id &&
+    entry.postingDate === postingDate &&
+    (entry.memo ?? null) === (doc.memo ?? null) &&
+    glKey(kernelLines) === glKey(existing as unknown as Parameters<typeof glKey>[0]);
+  if (unchanged) return { entryId: entry.id, changed: false };
+
+  // GL projection changed → must land in an open period (old + new).
+  if (period.gl_closed_at) throw new ClosedPeriodError(`the accounting period for ${postingDate} is closed`);
+  const oldClosed = (await tx.execute(sql`
+    select 1 from accounting_periods where id = ${entry.periodId} and gl_closed_at is not null`)) as unknown as {
+    rows: unknown[];
+  };
+  if (oldClosed.rows.length > 0) {
+    throw new ClosedPeriodError(`${doc.documentNumber} was posted into a period that is now closed`);
+  }
+
+  // Regenerate the entry's lines IN PLACE, preserving line identity so payment
+  // applications and bank-reconciliation matches (which FK to journal_line ids)
+  // stay linked. Overlapping lines are UPDATEd by position; extra new lines are
+  // inserted; surplus old lines are deleted (a delete of a still-referenced line
+  // FK-fails and rolls the whole edit back — you can't drop an applied line).
+  const vals = (l: KernelLine, i: number) => ({
+    orgId: doc.orgId,
+    entryId: entry.id,
+    lineNumber: i + 1,
+    accountId: l.accountId,
+    amount: l.amount,
+    currency: doc.currency,
+    txnAmount: l.amount,
+    fxRate: doc.fxRate,
+    partyId: l.partyId ?? null,
+    departmentId: l.departmentId ?? null,
+    projectId: l.projectId ?? null,
+    locationId: l.locationId ?? null,
+    classId: l.classId ?? null,
+    paymentCardId: l.paymentCardId ?? null,
+    taxCodeId: l.taxCodeId ?? null,
+    memo: l.memo ?? null,
+    dueDate: l.dueDate ?? null,
+    isOpenItem: l.isOpenItem ?? false,
+  });
+  const overlap = Math.min(existing.length, kernelLines.length);
+  for (let i = 0; i < overlap; i++) {
+    const { orgId: _o, entryId: _e, ...set } = vals(kernelLines[i]!, i);
+    await tx.update(schema.journalLines).set(set).where(eq(schema.journalLines.id, existing[i]!.id));
+  }
+  if (kernelLines.length > existing.length) {
+    await tx
+      .insert(schema.journalLines)
+      .values(kernelLines.slice(existing.length).map((l, k) => vals(l, existing.length + k)));
+  } else if (existing.length > kernelLines.length) {
+    for (let i = kernelLines.length; i < existing.length; i++) {
+      await tx.delete(schema.journalLines).where(eq(schema.journalLines.id, existing[i]!.id));
+    }
+  }
+  await tx
+    .update(schema.journalEntries)
+    .set({ postingDate, periodId: period.id, memo: doc.memo })
+    .where(eq(schema.journalEntries.id, entry.id));
+
+  return { entryId: entry.id, changed: true };
 }
