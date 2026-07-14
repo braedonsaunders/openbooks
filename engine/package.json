@@ -1,0 +1,23 @@
+{
+  "name": "@openbooks/engine",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openbooks/schema": "*",
+    "drizzle-orm": "*",
+    "pg": "^8",
+    "quickjs-emscripten": "^0.31"
+  },
+  "devDependencies": {
+    "@types/pg": "^8",
+    "tsx": "^4"
+  },
+  "scripts": {
+    "seed": "tsx src/seed-netsuite.ts",
+    "replay": "tsx src/replay-gl.ts",
+    "tb-proof": "tsx src/tb-proof.ts",
+    "demo": "tsx src/demo-e2e.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

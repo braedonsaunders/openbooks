@@ -2,3 +2,4 @@
 extraction/netsuite-sdf/project.json
 .env
 node_modules/
+gl-dump/
