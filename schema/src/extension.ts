@@ -112,6 +112,30 @@ export const users = pgTable(
   (t) => [uniqueIndex("users_org_email").on(t.orgId, t.email)],
 );
 
+/**
+ * Statement layouts as data — custom P&L / balance-sheet row structures
+ * (the job NetSuite does with 25 hand-built "financial layout" objects).
+ * rows: ordered JSON, e.g.
+ *   { kind: "group",    label: "Direct Labour", match: { numberPrefixes: ["51"] } }
+ *   { kind: "subtotal", label: "Total Direct Costs", of: ["Direct Labour", "Materials"] }
+ *   { kind: "formula",  label: "Gross Margin", plus: ["Revenue"], minus: ["Total Direct Costs"] }
+ * Unmatched accounts land in an automatic "Other" group so nothing is
+ * silently dropped from a statement.
+ */
+export const statementLayouts = pgTable(
+  "statement_layouts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(),
+    statement: text("statement", { enum: ["pnl", "balance_sheet"] }).notNull(),
+    rows: jsonb("rows").notNull().default([]),
+    isDefault: boolean("is_default").notNull().default(false),
+    ...auditColumns,
+  },
+  (t) => [index("statement_layouts_org").on(t.orgId, t.statement)],
+);
+
 /** Saved report views: a report path + its query params, by name. */
 export const savedReports = pgTable(
   "saved_reports",
