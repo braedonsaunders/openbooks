@@ -1,5 +1,7 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
+import { NextIntlClientProvider } from 'next-intl'
+import { getLocale, getMessages } from 'next-intl/server'
 import { Toaster } from 'sonner'
 import { AppLinkProvider } from '../components/app-link-provider'
 import { SplashScreen } from '../components/brand-splash'
@@ -24,18 +26,22 @@ export const dynamic = 'force-dynamic'
 // Applied before first paint so a dark-mode user never sees a white flash.
 const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme')||'system';var m=window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',t==='dark'||(t==='system'&&m));}catch(e){}})();`
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Locale: users.locale ?? orgs.settings.defaultLocale ?? 'en' (i18n/request.ts).
+  const [locale, messages] = await Promise.all([getLocale(), getMessages()])
   return (
-    <html lang="en" className="h-full" suppressHydrationWarning>
+    <html lang={locale} className="h-full" suppressHydrationWarning>
       <head>
         <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
-        <AppLinkProvider>{children}</AppLinkProvider>
-        <SplashScreen />
-        <Toaster richColors position="top-right" />
-        {/* confirmDialog()'s host — without it every confirm-gated action hangs. */}
-        <ConfirmRoot />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <AppLinkProvider>{children}</AppLinkProvider>
+          <SplashScreen />
+          <Toaster richColors position="top-right" />
+          {/* confirmDialog()'s host — without it every confirm-gated action hangs. */}
+          <ConfirmRoot />
+        </NextIntlClientProvider>
       </body>
     </html>
   )

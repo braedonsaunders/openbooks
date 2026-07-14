@@ -1,0 +1,22 @@
+{
+  "accountMenu": {
+    "account": "Account",
+    "menuAriaLabel": "Account menu",
+    "theme": "Theme",
+    "language": "Language",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…",
+    "roles": {
+      "admin": "Admin",
+      "controller": "Controller",
+      "accountant": "Accountant",
+      "approver": "Approver",
+      "viewer": "Viewer"
+    }
+  },
+  "language": {
+    "label": "Language",
+    "orgDefault": "Organization default",
+    "saveFailed": "Could not save your language preference"
+  }
+}

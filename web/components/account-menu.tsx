@@ -7,9 +7,12 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { ChevronDown, LogOut } from 'lucide-react'
 import { Popover } from '@openbooks/ui'
 import { ThemeToggle } from './theme-toggle'
+import { LanguageSelect } from './language-select'
+import type { Locale } from '../i18n/config'
 
 // Two-letter monogram from a display name, falling back to the email. Handles the
 // "Last, First" directory convention so the initials read First+Last either way.
@@ -23,6 +26,9 @@ function initialsFrom(name: string, email: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
+// The built-in users.role enum — custom role slugs render verbatim.
+const ROLE_KEYS = ['admin', 'controller', 'accountant', 'approver', 'viewer']
+
 const itemClass =
   'flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60'
 
@@ -34,15 +40,18 @@ export function AccountMenu({
   name,
   email,
   role,
+  localePreference,
 }: {
   name: string
   email: string
   role: string
+  localePreference: Locale | null
 }) {
+  const t = useTranslations('shell.accountMenu')
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pending, startSignOut] = useTransition()
-  const label = name || email || 'Account'
+  const label = name || email || t('account')
   const initials = initialsFrom(name, email)
 
   return (
@@ -55,7 +64,7 @@ export function AccountMenu({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label="Account menu"
+          aria-label={t('menuAriaLabel')}
           aria-expanded={open}
           aria-haspopup="menu"
           className="flex shrink-0 items-center gap-2 rounded-md border border-transparent px-1.5 py-1 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -85,13 +94,22 @@ export function AccountMenu({
         </span>
       </div>
 
-      <div className="border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-slate-500 capitalize dark:border-slate-800 dark:text-slate-400">
-        {role}
+      <div className="border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        {ROLE_KEYS.includes(role) ? t(`roles.${role}`) : role}
       </div>
 
       <div className="border-t border-slate-100 px-3 py-2.5 dark:border-slate-800">
-        <div className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">Theme</div>
+        <div className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+          {t('theme')}
+        </div>
         <ThemeToggle />
+      </div>
+
+      <div className="border-t border-slate-100 px-3 py-2.5 dark:border-slate-800">
+        <div className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+          {t('language')}
+        </div>
+        <LanguageSelect preference={localePreference} />
       </div>
 
       <div className="border-t border-slate-100 p-1 dark:border-slate-800">
@@ -108,7 +126,7 @@ export function AccountMenu({
           className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800/60"
         >
           <LogOut size={15} className="text-slate-500 dark:text-slate-400" />
-          {pending ? 'Signing out…' : 'Sign out'}
+          {pending ? t('signingOut') : t('signOut')}
         </button>
       </div>
     </Popover>

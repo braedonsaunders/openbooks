@@ -21,17 +21,33 @@ import {
  *
  * `role` (the user's role key, e.g. authz.user.role) scopes role-gated record
  * types; when omitted, only types without an allowed_roles restriction appear.
+ *
+ * `t` translates registry-default labels (nav.* messages). Labels an org
+ * customized in /admin/navigation are user content and render verbatim; a
+ * saved label that still equals the registry default is treated as default
+ * (org configs snapshot English defaults at save time).
  */
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
-  role?: string | null,
+  role: string | null | undefined,
+  t: (key: string) => string,
 ): Promise<SidebarNavGroup[]> {
   const r = (await db.execute(
     sql`select config from org_nav_configs where org_id = ${orgId} limit 1`,
   )) as unknown as { rows: { config: OrgNavConfig }[] }
   const saved = r.rows[0]?.config
   const config = saved?.version === 1 ? layerInNewModules(saved) : defaultNavConfig()
+
+  // Registry-default group names → nav.groups.* message keys. A saved config
+  // whose group label matches a default gets translated; anything else is an
+  // org's own wording.
+  const DEFAULT_GROUP_SLUGS = new Map(
+    [...new Set(NAV_MODULES.map((m) => m.group))].map((label) => [
+      label,
+      label.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    ]),
+  )
 
   const groups: SidebarNavGroup[] = []
   for (const g of config.groups) {
@@ -49,7 +65,8 @@ export async function resolveNav(
         } else if (!can(mod.requiredPermission)) continue
         items.push({
           href: mod.href,
-          label: item.label ?? mod.label,
+          label:
+            item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`),
           iconKey: item.iconKey ?? mod.iconKey,
           exact: mod.exact,
         })
@@ -57,11 +74,14 @@ export async function resolveNav(
         items.push({ href: item.href, label: item.label, iconKey: item.iconKey ?? 'link' })
       }
     }
-    if (items.length > 0) groups.push({ label: g.label, items })
+    if (items.length > 0) {
+      const slug = DEFAULT_GROUP_SLUGS.get(g.label)
+      groups.push({ label: slug ? t(`groups.${slug}`) : g.label, items })
+    }
   }
 
   const recordItems = await recordTypeNavItems(orgId, can, role ?? null)
-  if (recordItems.length > 0) groups.push({ label: 'Records', items: recordItems })
+  if (recordItems.length > 0) groups.push({ label: t('groups.records'), items: recordItems })
 
   return groups
 }

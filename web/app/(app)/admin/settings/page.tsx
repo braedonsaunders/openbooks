@@ -3,6 +3,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { PageContainer } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
+import { DEFAULT_LOCALE, isLocale } from '../../../../i18n/config'
 import { SettingsForm, type AccountOption } from './SettingsForm'
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +59,7 @@ export default async function CompanySettingsPage() {
             baseCurrency: (row?.base_currency as string) ?? '',
             fiscalYearStartMonth:
               typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
+            defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
             controlAccounts: {
               ar: control.ar ?? '',
               ap: control.ap ?? '',
