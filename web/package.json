@@ -10,15 +10,23 @@
   "dependencies": {
     "@openbooks/engine": "*",
     "@openbooks/schema": "*",
-    "next": "^15",
-    "react": "^19",
-    "react-dom": "^19",
-    "server-only": "^0.0.1"
+    "@openbooks/ui": "*",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^1.24.0",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "server-only": "^0.0.1",
+    "sonner": "^2.0.7"
   },
   "devDependencies": {
+    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^24",
-    "@types/react": "^19",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.3.2",
     "typescript": "^5.9.3"
   }
 }
