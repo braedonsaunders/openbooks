@@ -18,7 +18,8 @@ export interface NavModule {
 export const NAV_MODULES: NavModule[] = [
   { key: 'dashboard', href: '/', label: 'Dashboard', iconKey: 'gauge', group: 'Overview', exact: true },
   { key: 'approvals', href: '/approvals', label: 'Approvals', iconKey: 'check', group: 'Overview', requiredPermission: 'ap.approve' },
-  { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'sparkles', group: 'Overview', requiredPermission: 'insights.read' },
+  // Re-enable when the insights module lands (agent in flight):
+  // { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'sparkles', group: 'Overview', requiredPermission: 'insights.read' },
 
   { key: 'ap', href: '/ap', label: 'Payables', iconKey: 'clipboard', group: 'Money out', requiredPermission: 'ap.read' },
   { key: 'payments', href: '/payments', label: 'Payments', iconKey: 'check', group: 'Money out', requiredPermission: 'ap.pay' },
@@ -34,7 +35,8 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Ledger', requiredPermission: 'gl.close' },
 
   { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', group: 'Insight', requiredPermission: 'reports.read' },
-  { key: 'custom-reports', href: '/reports/custom', label: 'Custom Reports', iconKey: 'scroll', group: 'Insight', requiredPermission: 'reports.read' },
+  // Re-enable when the reports-engine module lands (agent in flight):
+  // { key: 'custom-reports', href: '/reports/custom', label: 'Custom Reports', iconKey: 'scroll', group: 'Insight', requiredPermission: 'reports.read' },
   { key: 'sql', href: '/query', label: 'SQL', iconKey: 'database', group: 'Insight', requiredPermission: 'sql.execute' },
 
   { key: 'apps', href: '/apps', label: 'Apps', iconKey: 'grid', group: 'Build', requiredPermission: 'forms.read' },

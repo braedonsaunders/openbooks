@@ -4,3 +4,6 @@ extraction/netsuite-sdf/project.json
 node_modules/
 gl-dump/
 web/.env.local
+
+web/.next/
+.next/
