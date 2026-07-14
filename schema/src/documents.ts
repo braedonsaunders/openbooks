@@ -94,6 +94,14 @@ export const documentLines = pgTable(
     amount: money("amount").notNull(), // qty × price, txn currency
     taxCodeId: uuid("tax_code_id"),
     taxAmount: money("tax_amount").notNull().default("0"),
+    /**
+     * True when tax_amount was manually set instead of computed from the tax
+     * code's rate (rounding, partial exemptions, "strange situations", and
+     * migrated transactions where the source system's tax was hand-adjusted).
+     * The engine still computes the expected tax for validation, but posting
+     * uses tax_amount as-is. Kept transparent so an override is auditable.
+     */
+    taxOverridden: boolean("tax_overridden").notNull().default(false),
 
     // Line dimensions (override header defaults).
     departmentId: uuid("department_id"),
