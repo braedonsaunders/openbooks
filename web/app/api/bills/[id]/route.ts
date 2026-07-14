@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { computeBillTotals, loadBill, taxRateMap, type BillLineInput } from '../../../../lib/bills'
+import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 
 export const runtime = 'nodejs'
 
@@ -36,7 +37,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     dueDate?: string | null
     referenceNumber?: string | null
     memo?: string | null
-    lines?: BillLineInput[]
+    custom?: Record<string, unknown>
+    lines?: (BillLineInput & {
+      departmentId?: string | null
+      projectId?: string | null
+      custom?: Record<string, unknown>
+    })[]
+  }
+
+  // custom-field validation (header + line) against the live definitions
+  const [headerDefs, lineDefs] = await Promise.all([
+    loadFieldDefs('documents', 'vendor_bill'),
+    loadFieldDefs('document_lines', 'vendor_bill'),
+  ])
+  let headerCustom: Record<string, unknown> | null = null
+  if (body.custom !== undefined) {
+    const v = validateCustomValues(headerDefs, body.custom)
+    if (!v.ok) return NextResponse.json({ error: Object.values(v.errors)[0], fieldErrors: v.errors }, { status: 422 })
+    headerCustom = v.cleaned
   }
 
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
@@ -47,12 +65,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     await db.execute(sql`delete from document_lines where document_id = ${id}`)
     for (let i = 0; i < computed.lines.length; i++) {
-      const l = computed.lines[i]!
+      const l = computed.lines[i]! as (typeof computed.lines)[number] & {
+        departmentId?: string | null
+        projectId?: string | null
+        custom?: Record<string, unknown>
+      }
+      const lv = validateCustomValues(lineDefs, l.custom)
+      if (!lv.ok) {
+        return NextResponse.json(
+          { error: `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, fieldErrors: lv.errors },
+          { status: 422 },
+        )
+      }
       await db.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                    quantity, unit_price, amount, tax_code_id, tax_amount)
+                                    quantity, unit_price, amount, tax_code_id, tax_amount,
+                                    department_id, project_id, custom)
         values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description ?? null},
-                '1', ${l.amount}, ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxAmount})
+                '1', ${l.amount}, ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxAmount},
+                ${l.departmentId ?? null}, ${l.projectId ?? null}, ${JSON.stringify(lv.cleaned)})
       `)
     }
   }
@@ -64,6 +95,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
       reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
       memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+      custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
       subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
       tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
       total = coalesce(${totals?.total ?? null}, total),
