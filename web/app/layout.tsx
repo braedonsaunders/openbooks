@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { Toaster } from 'sonner'
 import { AppLinkProvider } from '../components/app-link-provider'
+import { SplashScreen } from '../components/brand-splash'
 
 export const metadata: Metadata = {
   title: { default: 'openbooks', template: '%s · openbooks' },
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
         <AppLinkProvider>{children}</AppLinkProvider>
+        <SplashScreen />
         <Toaster richColors position="top-right" />
       </body>
     </html>
