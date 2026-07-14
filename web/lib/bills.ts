@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, sum } from '@openbooks/engine/src/money.ts'
+import { resolveLineTax } from '@openbooks/engine/src/tax.ts'
 
 /** Latest effective rate per tax code, as of now. */
 export async function taxRateMap(): Promise<Map<string, number>> {
@@ -21,14 +22,17 @@ export interface BillLineInput {
   description?: string | null
   amount: string
   taxCodeId?: string | null
+  /** Manual tax override: when true, `taxAmount` is honored instead of computed. */
+  taxOverridden?: boolean
+  taxAmount?: string | null
 }
 
-/** Pre-tax lines → per-line tax + document totals. */
+/** Pre-tax lines → per-line tax + document totals. Honors manual overrides. */
 export function computeBillTotals(lines: BillLineInput[], rateByCode: Map<string, number>) {
   const computed = lines.map((l) => {
     const rate = l.taxCodeId ? (rateByCode.get(l.taxCodeId) ?? 0) : 0
-    const taxAmount = (Math.round(Number(l.amount) * rate) / 100).toFixed(2)
-    return { ...l, taxAmount }
+    const res = resolveLineTax(l.amount, rate, { overridden: l.taxOverridden, taxAmount: l.taxAmount })
+    return { ...l, taxAmount: res.taxAmount, taxOverridden: res.overridden }
   })
   const subtotal = sum(computed.map((l) => l.amount))
   const taxTotal = sum(computed.map((l) => l.taxAmount))
