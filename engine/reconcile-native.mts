@@ -117,6 +117,15 @@ const applications = JSON.parse(readFileSync(join(glDir, "applications.json"), "
 }[];
 const paymentTids = new Set(applications.map((a) => a.payment_tid));
 
+// The set of transaction ids present in NetSuite's GL snapshot (gl.ndjson). The
+// TB ground truth (tb-netsuite.json) was extracted from the same snapshot. A few
+// transactions in the newer transaction extract postdate that snapshot (dated
+// 2026-07-14/15 vs the GL cutoff 2026-07-13) and have NO ground-truth GL — we
+// exclude them so the comparison is apples-to-apples (they'd otherwise inject
+// phantom deltas into bank/AR/sales). Reported separately as "post-snapshot".
+const glTids = new Set<string>();
+for await (const g of ndjson(join(glDir, "gl.ndjson"))) glTids.add(g.tid as string);
+
 // ---------------------------------------------------------------------------
 // 3. Headers
 // ---------------------------------------------------------------------------
@@ -181,31 +190,37 @@ const RULE_FOR_KIND: Record<string, string> = {
 type RawLine = {
   transaction: string; id: string; mainline: string; taxline: string;
   account?: string; expenseaccount?: string; item?: string | null;
-  netamount?: string; taxrate1?: string | null; department?: string | null;
+  netamount?: string; foreignamount?: string | null;
+  taxrate1?: string | null; department?: string | null;
   entity?: string | null; memo?: string | null;
 };
 
-// Determine the tax group (nsId) for a transaction from its taxlines' `item`.
-function txnTaxGroup(lines: RawLine[]): string | undefined {
-  for (const l of lines) if (l.taxline === "T" && l.item) return l.item;
-  return undefined;
+// The base-currency amount NetSuite actually posted to the GL is `foreignamount`
+// (verified: it matches gl.ndjson on 67,133/67,136 detail lines vs 65,989 for
+// netamount — netamount diverges on billable-markup / reclassified lines). Use
+// foreignamount as the posting amount; fall back to netamount only if absent.
+const glUnits = (l: RawLine): bigint =>
+  toUnits((l.foreignamount != null && l.foreignamount !== "" ? l.foreignamount : l.netamount) ?? "0");
+
+// Resolve OUR tax code for a detail line from its effective per-line rate
+// (taxrate1), matched to a code in OUR tax_codes table. A 0-rate / exempt line
+// resolves to a 0% code → contributes $0 tax. Returns the code id + its 1e4-
+// scaled rate_percent (e.g. 13% → 130000).
+function lineTaxCode(l: RawLine): { codeId: string; rateUnits: bigint } | null {
+  const tr = l.taxrate1;
+  if (tr == null || tr === "") return null;
+  const key = String(Math.round(Number(tr) * 100)); // 0.13 → "13"
+  const code = taxByRate.get(key);
+  if (!code) return null;
+  return { codeId: code.id, rateUnits: toUnits(code.rate) };
 }
 
-// Compute OUR tax for a detail line: round(amount × rate_percent/100, 2).
-// The rate comes from OUR tax_codes table (mapped by the detail's effective
-// rate — taxrate1 — matched to a code's rate_percent). Returns {codeId, taxUnits}.
-function computeLineTax(l: RawLine, amountUnits: bigint): { codeId: string | null; taxUnits: bigint } {
-  const tr = l.taxrate1;
-  if (tr == null || tr === "") return { codeId: null, taxUnits: 0n };
-  const ratePct = Number(tr) * 100; // taxrate1 is a fraction, e.g. 0.13 → 13
-  const key = String(Math.round(ratePct));
-  const code = taxByRate.get(key);
-  if (!code) return { codeId: null, taxUnits: 0n };
-  // OUR engine: tax = round(amount × rate_percent/100, 2)
-  const rateUnits = toUnits(code.rate); // 1e4-scaled percent, e.g. 13 -> 130000
-  // amount(1e4) × rate(1e4)/100 / 1e4 = amount×rate/1e6 ; keep 1e4 scale:
-  const raw = (amountUnits * rateUnits) / (100n * 10000n); // → 1e4 scaled tax
-  return { codeId: code.id, taxUnits: round2(raw) };
+// OUR tax engine — the tax on a taxable base = round(base × rate_percent/100, 2),
+// computed on the SIGNED base PER TAX CODE and rounded ONCE per code (matching
+// NetSuite: a line and its reversal at the same rate net their tax before
+// rounding). base & result are 1e4-scaled bigints.
+function taxOnBase(baseUnits: bigint, rateUnits: bigint): bigint {
+  return round2((baseUnits * rateUnits) / (100n * 10000n));
 }
 
 // Build the in-memory Doc + DocLines for one transaction. Returns null if the
@@ -233,9 +248,9 @@ function buildDoc(h: Header, rawLines: RawLine[], kind: string): Built | null {
     orgId: org.id,
   } as unknown as Doc;
 
-  // NetSuite's own tax total for this txn (abs of taxline netamounts).
+  // NetSuite's own tax total for this txn (sum of taxline GL amounts).
   let nsTaxUnits = 0n;
-  for (const l of rawLines) if (l.taxline === "T") nsTaxUnits += toUnits(l.netamount ?? "0");
+  for (const l of rawLines) if (l.taxline === "T") nsTaxUnits += glUnits(l);
 
   const negate = NEGATE_DETAIL.has(kind);
   const mkAcct = (l: RawLine): string | null => {
@@ -259,7 +274,7 @@ function buildDoc(h: Header, rawLines: RawLine[], kind: string): Built | null {
       if (l.taxline === "T") continue;
       const acct = mkAcct(l);
       if (!acct) return null;
-      const amtUnits = toUnits(l.netamount ?? "0"); // signed +DR/−CR
+      const amtUnits = glUnits(l); // signed +DR/−CR
       lines.push({
         accountId: acct,
         amount: fromUnits(amtUnits),
@@ -278,7 +293,7 @@ function buildDoc(h: Header, rawLines: RawLine[], kind: string): Built | null {
     // total stays = |transfer|). Reproduces DR dest / CR source exactly.
     const glLines = rawLines
       .filter((l) => l.taxline !== "T")
-      .map((l) => ({ l, amt: toUnits(l.netamount ?? "0") }));
+      .map((l) => ({ l, amt: glUnits(l) }));
     glLines.sort((a, b) => (b.amt > a.amt ? 1 : b.amt < a.amt ? -1 : 0)); // dest(+) first
     const dest = glLines[0], src = glLines[glLines.length - 1];
     if (!dest || !src || dest === src) return null;
@@ -313,7 +328,7 @@ function buildDoc(h: Header, rawLines: RawLine[], kind: string): Built | null {
         const acct = mkAcct(l);
         if (!acct) return null;
         lines.push({
-          accountId: acct, amount: fromUnits(toUnits(l.netamount ?? "0")), taxAmount: "0",
+          accountId: acct, amount: fromUnits(glUnits(l)), taxAmount: "0",
           taxCodeId: null, departmentId: dept(l), projectId: null, locationId: null,
           classId: null, description: l.memo ?? null, lineNumber: ++lineNo,
         } as unknown as DocLine);
@@ -325,8 +340,8 @@ function buildDoc(h: Header, rawLines: RawLine[], kind: string): Built | null {
     if (!bank) return null;
     const acct = mkAcct(bank);
     if (!acct) return null;
-    // magnitude = |netamount| of the control (AP/AR) leg = the amount cleared.
-    const totalUnits = toUnits((ctrlLine ?? bank).netamount ?? "0");
+    // magnitude = |GL amount| of the control (AP/AR) leg = the amount cleared.
+    const totalUnits = glUnits(ctrlLine ?? bank);
     lines.push({
       accountId: acct, amount: fromUnits(totalUnits < 0n ? -totalUnits : totalUnits),
       taxAmount: "0", taxCodeId: null, departmentId: dept(bank),
@@ -335,24 +350,50 @@ function buildDoc(h: Header, rawLines: RawLine[], kind: string): Built | null {
     } as unknown as DocLine);
   } else {
     // Standard document: detail lines (mainline='F' AND taxline='F').
+    // Pass 1 — build lines, remember each line's tax code + accumulate the
+    // SIGNED taxable base per tax code (a line and its reversal net out).
+    const lineIdx: number[] = []; // index into `lines` for each built detail line
+    const lineCode: (string | null)[] = [];
+    const baseByCode = new Map<string, bigint>(); // codeId → signed base (1e4)
+    const rateByCode = new Map<string, bigint>();
     for (const l of rawLines) {
       if (!(l.mainline === "F" && l.taxline === "F")) continue;
       const acct = mkAcct(l);
       if (!acct) return null;
-      let amtUnits = toUnits(l.netamount ?? "0");
+      let amtUnits = glUnits(l);
       if (negate) amtUnits = -amtUnits;
-      const { codeId, taxUnits } = computeLineTax(l, amtUnits < 0n ? -amtUnits : amtUnits);
-      ourTaxUnits += taxUnits;
+      const tc = lineTaxCode(l);
+      if (tc) {
+        baseByCode.set(tc.codeId, (baseByCode.get(tc.codeId) ?? 0n) + amtUnits);
+        rateByCode.set(tc.codeId, tc.rateUnits);
+      }
+      lineIdx.push(lines.length);
+      lineCode.push(tc?.codeId ?? null);
       lines.push({
         accountId: acct,
         amount: fromUnits(amtUnits),
-        taxAmount: fromUnits(taxUnits),
-        taxCodeId: codeId,
+        taxAmount: "0",
+        taxCodeId: tc?.codeId ?? null,
         departmentId: dept(l),
         projectId: null, locationId: null, classId: null,
         description: l.memo ?? null,
         lineNumber: ++lineNo,
       } as unknown as DocLine);
+    }
+    // Pass 2 — round the tax ONCE per code (on the signed base), then attach the
+    // whole code's tax to the first line carrying that code. taxLines() in the
+    // posting rules groups by code and sums, so the grouped total is exact.
+    const codeTaxAssigned = new Set<string>();
+    for (let i = 0; i < lineIdx.length; i++) {
+      const codeId = lineCode[i];
+      if (!codeId || codeTaxAssigned.has(codeId)) continue;
+      const base = baseByCode.get(codeId) ?? 0n;
+      const taxUnits = taxOnBase(base, rateByCode.get(codeId) ?? 0n);
+      if (taxUnits !== 0n) {
+        (lines[lineIdx[i]!] as unknown as { taxAmount: string }).taxAmount = fromUnits(taxUnits);
+        ourTaxUnits += taxUnits;
+      }
+      codeTaxAssigned.add(codeId);
     }
   }
 
@@ -403,6 +444,7 @@ const failReason = (r: string) => ruleFailReasons.set(r, (ruleFailReasons.get(r)
 let taxMatch = 0, taxMismatch = 0, taxZeroBoth = 0;
 let classifiedCustPayments = 0;
 let nonPostingSkipped = 0;
+let postSnapshotSkipped = 0;
 
 function processTxn(tid: string, rawLines: RawLine[]) {
   const h = headers.get(tid);
@@ -416,6 +458,10 @@ function processTxn(tid: string, rawLines: RawLine[]) {
   // as NetSuite does, or they inflate our TB.
   if (h.posting !== "T") { nonPostingSkipped++; bump(tt, "skipped"); return; }
 
+  // Exclude transactions newer than the GL/TB snapshot (no ground truth to
+  // reconcile against). Keeps the comparison apples-to-apples.
+  if (!glTids.has(tid)) { postSnapshotSkipped++; bump(tt, "skipped"); return; }
+
   let kind = TTYPE_KIND[tt];
   if (tt === "Journal") {
     // classify: applied-to-invoice payment that credits AR → customer_payment
@@ -424,7 +470,7 @@ function processTxn(tid: string, rawLines: RawLine[]) {
     if (paymentTids.has(tid) && arNs) {
       const creditsAr = rawLines.some(
         (l) => l.taxline !== "T" && (l.account === arNs || l.expenseaccount === arNs) &&
-          -toUnits(l.netamount ?? "0") < 0n, // GL credit = negative signed
+          glUnits(l) < 0n, // GL credit = negative signed
       );
       if (creditsAr) classifiedCustPayments++;
     }
@@ -444,6 +490,10 @@ function processTxn(tid: string, rawLines: RawLine[]) {
       txnDeps = { ...deps, control: { ...deps.control, ap: controlAccountId } };
     else if (kind === "customer_invoice" || kind === "customer_credit")
       txnDeps = { ...deps, control: { ...deps.control, ar: controlAccountId } };
+    else if (kind === "card_charge" || kind === "card_refund")
+      // The card's liability/clearing account is the header (mainline='T') control
+      // line — a per-card 2200.xx / employee subaccount, not a blanket AP.
+      txnDeps = { ...deps, cardLiabilityAccountId: controlAccountId };
   }
 
   // tax validation
@@ -556,6 +606,7 @@ const report = {
     imported: totalImported,
     ruleFailed: totalFailed,
     skippedNonPosting: totalSkipped,
+    skippedPostSnapshot: postSnapshotSkipped,
     classifiedCustomerPaymentsFromJournals: classifiedCustPayments,
   },
   byType: Object.fromEntries(
