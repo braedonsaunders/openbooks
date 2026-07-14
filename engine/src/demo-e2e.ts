@@ -31,6 +31,7 @@ async function main() {
   const deps: PostingDeps = { control: { ap: ap.id, ar: ap.id, bank: ap.id } };
 
   // -- 1. the user script --------------------------------------------------
+  await db.delete(schema.scriptRuns).where(eq(schema.scriptRuns.orgId, orgId));
   await db.delete(schema.userScripts).where(eq(schema.userScripts.orgId, orgId));
   await db.insert(schema.userScripts).values({
     orgId,
@@ -55,10 +56,11 @@ async function main() {
   });
 
   // -- 2. a big bill with no memo ------------------------------------------
+  const demoNumber = `OB-DEMO-${Date.now()}`;
   const [doc] = await db.insert(schema.documents).values({
     orgId,
     kind: "vendor_bill",
-    documentNumber: "OB-DEMO-1",
+    documentNumber: demoNumber,
     partyId: vendor.id,
     documentDate: "2026-07-13",
     dueDate: "2026-08-12",
@@ -99,7 +101,7 @@ async function main() {
       from journal_lines l
       join accounts a on a.id = l.account_id
       join journal_entries e on e.id = l.entry_id
-     where e.entry_number = 'OB-DEMO-1'
+     where e.entry_number = '${demoNumber}'
      order by l.line_number
   `);
   console.table(q1.rows);

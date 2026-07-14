@@ -62,9 +62,7 @@ export async function runScript(
     });
     const abortFn = vm.newFunction("abort", (reasonH) => {
       const reason = vm.dump(reasonH);
-      const err = vm.newError(`__OB_ABORT__${String(reason)}`);
-      const thrown = { value: err } as const;
-      return thrown as never;
+      return { error: vm.newError(`__OB_ABORT__${String(reason)}`) };
     });
     vm.setProp(obHandle, "log", logFn);
     vm.setProp(obHandle, "abort", abortFn);

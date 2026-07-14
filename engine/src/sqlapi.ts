@@ -64,21 +64,23 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Pr
   }
 }
 
-/** One-time: create the SELECT-only role. Idempotent. */
+/**
+ * Verify the SELECT-only role exists and is granted to us. Role creation is
+ * a superuser bootstrap step (see schema/migrations/README): create role
+ * openbooks_read nologin + grant select on all tables + grant to app user.
+ */
 export async function ensureReadRole(): Promise<void> {
   const client = await pool.connect();
   try {
-    await client.query(`
-      do $$ begin
-        if not exists (select 1 from pg_roles where rolname = 'openbooks_read') then
-          create role openbooks_read nologin;
-        end if;
-      end $$;
-      grant usage on schema public to openbooks_read;
-      grant select on all tables in schema public to openbooks_read;
-      alter default privileges in schema public grant select on tables to openbooks_read;
-      grant openbooks_read to current_user;
-    `);
+    const r = await client.query(
+      `select 1 from pg_roles r
+        join pg_auth_members m on m.roleid = r.oid
+        join pg_roles u on u.oid = m.member
+       where r.rolname = 'openbooks_read' and u.rolname = current_user`,
+    );
+    if (r.rowCount === 0) {
+      throw new Error("openbooks_read role missing or not granted — run the bootstrap grant as superuser");
+    }
   } finally {
     client.release();
   }
