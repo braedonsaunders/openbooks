@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { add, isZero, neg, sum } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -256,14 +256,12 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   }
 
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
-  const [period] = await db.execute<{ id: string }>(
-    // deliberate raw query: date-range lookup
-    (await import("drizzle-orm")).sql`
-      select id from accounting_periods
-      where org_id = ${doc.orgId} and starts_on <= ${postingDate} and ends_on >= ${postingDate}
-        and is_adjustment = false
-      limit 1`,
-  ).then((r: any) => r.rows);
+  const periodRes = (await db.execute(sql`
+    select id from accounting_periods
+    where org_id = ${doc.orgId} and starts_on <= ${postingDate} and ends_on >= ${postingDate}
+      and is_adjustment = false
+    limit 1`)) as unknown as { rows: { id: string }[] };
+  const period = periodRes.rows[0];
   if (!period) throw new PostingError(`no accounting period covers ${postingDate}`);
 
   const [book] = await db
