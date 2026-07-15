@@ -6,19 +6,16 @@ jobs:
     runs-on: [self-hosted, linux, x64, dokploy]
     timeout-minutes: 5
     steps:
-      - name: Inspect swarm + traefik + deploy log
+      - name: Clean stale compose network
         run: |
           set +e
-          echo "=== docker services (openbooks) ==="
-          docker service ls | grep -i openbook
-          echo "=== service ps (why tasks fail) ==="
-          SVC=$(docker service ls --format '{{.Name}}' | grep -i openbook | head -1)
-          echo "service: $SVC"
-          docker service ps --no-trunc "$SVC" 2>/dev/null | head -20
-          echo "=== latest deploy log tail ==="
-          LOG=$(ls -t /etc/dokploy/logs/compose-bypass-open-source-driver-miu7hf/*.log 2>/dev/null | head -1)
-          echo "log: $LOG"
-          tail -40 "$LOG" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'
-          echo "=== traefik dynamic file config for openbooks ==="
-          grep -rl openbooks /etc/dokploy/traefik/dynamic/ 2>/dev/null
-          cat /etc/dokploy/traefik/dynamic/*openbook* 2>/dev/null | head -40
+          PREFIX=compose-bypass-open-source-driver-miu7hf
+          echo "=== stale containers ==="
+          docker ps -a --filter "name=$PREFIX" --format '{{.Names}} {{.Status}}'
+          docker ps -aq --filter "name=$PREFIX" | xargs -r docker rm -f
+          echo "=== networks named $PREFIX ==="
+          docker network ls --filter "name=$PREFIX" --format '{{.Name}} {{.Driver}} {{.Scope}}'
+          docker network ls --filter "name=$PREFIX" -q | xargs -r docker network rm
+          echo "=== after cleanup ==="
+          docker network ls --filter "name=$PREFIX" --format '{{.Name}}'
+          echo "done"
