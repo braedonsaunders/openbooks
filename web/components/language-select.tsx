@@ -8,6 +8,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
+import { Select } from '@openbooks/ui'
 import { LOCALES, type Locale } from '../i18n/config'
 
 export function LanguageSelect({ preference }: { preference: Locale | null }) {
@@ -16,7 +17,8 @@ export function LanguageSelect({ preference }: { preference: Locale | null }) {
   const [value, setValue] = useState(preference ?? '')
   const [pending, startTransition] = useTransition()
 
-  async function change(next: string) {
+  async function change(e: React.ChangeEvent<HTMLSelectElement>) {
+    const next = e.currentTarget.value
     const prev = value
     setValue(next)
     const res = await fetch('/api/me', {
@@ -33,12 +35,12 @@ export function LanguageSelect({ preference }: { preference: Locale | null }) {
   }
 
   return (
-    <select
+    <Select
       aria-label={t('label')}
       value={value}
       disabled={pending}
-      onChange={(e) => change(e.target.value)}
-      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+      onChange={change}
+      triggerClassName="h-8 w-full text-sm"
     >
       <option value="">{t('orgDefault')}</option>
       {LOCALES.map((l) => (
@@ -46,6 +48,6 @@ export function LanguageSelect({ preference }: { preference: Locale | null }) {
           {l.label}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }
