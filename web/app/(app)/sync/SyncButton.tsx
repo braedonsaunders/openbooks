@@ -2,17 +2,19 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 
 export function SyncButton({ source, label }: { source: string; label: string }) {
+  const t = useTranslations('sync')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
   async function sync() {
     setBusy(true)
-    const id = toast.loading(`Syncing from ${label}…`)
+    const id = toast.loading(t('button.syncing', { source: label }))
     try {
       const res = await fetch('/api/sync', {
         method: 'POST',
@@ -22,15 +24,23 @@ export function SyncButton({ source, label }: { source: string; label: string })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       const tb = data.tb
-      const summary =
-        `${data.newEntries} new · ${data.reversedEntries} reversed · ${data.unchanged} unchanged — ` +
-        `TB ${tb.matches}/${tb.accounts}` +
-        (tb.mismatches.length ? ` (${tb.mismatches.length} MISMATCHES)` : ' exact')
+      const summary = t('toast.summary', {
+        newEntries: data.newEntries,
+        reversedEntries: data.reversedEntries,
+        unchanged: data.unchanged,
+        matches: tb.matches,
+        accounts: tb.accounts,
+        mismatches: tb.mismatches.length,
+      })
       if (tb.mismatches.length) toast.error(summary, { id, duration: 10_000 })
-      else toast.success(`Synced in ${(data.durationMs / 1000).toFixed(1)}s — ${summary}`, { id, duration: 8_000 })
+      else
+        toast.success(
+          t('toast.synced', { seconds: (data.durationMs / 1000).toFixed(1), summary }),
+          { id, duration: 8_000 },
+        )
       router.refresh()
     } catch (e) {
-      toast.error(`Sync failed: ${(e as Error).message}`, { id })
+      toast.error(t('toast.syncFailed', { detail: (e as Error).message }), { id })
     } finally {
       setBusy(false)
     }
@@ -39,7 +49,7 @@ export function SyncButton({ source, label }: { source: string; label: string })
   return (
     <Button onClick={sync} disabled={busy}>
       <RefreshCw size={15} className={busy ? 'animate-spin' : undefined} />
-      {busy ? `Syncing from ${label}…` : `Sync from ${label}`}
+      {busy ? t('button.syncing', { source: label }) : t('button.sync', { source: label })}
     </Button>
   )
 }

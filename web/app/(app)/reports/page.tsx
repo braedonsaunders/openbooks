@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Card, CardContent, CardDescription, CardTitle, PageHeader, Table, TableBody, TableCell, TableRow } from '@openbooks/ui'
 import { PageContainer } from '../../../components/page-layout'
@@ -14,24 +15,25 @@ async function savedViews() {
 }
 
 export default async function Reports() {
+  const t = await getTranslations('reports')
   const saved = await savedViews()
   const fy = await currentFiscalYearEnd()
   const cur = await fiscalYearRange(fy)
   const today = new Date().toISOString().slice(0, 10)
 
   const reports = [
-    { href: `/reports/pnl?from=${cur.from}&to=${cur.to}`, title: 'Profit & Loss', desc: `Income statement — ${cur.label} to date, fiscal-year presets, comparatives, custom layouts` },
-    { href: `/reports/balance-sheet?asof=${today}`, title: 'Balance Sheet', desc: 'Financial position as of any date, retained earnings computed' },
-    { href: `/reports/trial-balance?asof=${today}`, title: 'Trial Balance', desc: 'Every account with debits, credits, and net balance' },
-    { href: `/reports/partners?kind=payable`, title: 'Payables by Vendor', desc: 'Outstanding AP position per party' },
-    { href: `/reports/partners?kind=receivable`, title: 'Receivables by Customer', desc: 'Outstanding AR position per party' },
+    { href: `/reports/pnl?from=${cur.from}&to=${cur.to}`, title: t('hub.cards.pnlTitle'), desc: t('hub.cards.pnlDescription', { fyLabel: cur.label }) },
+    { href: `/reports/balance-sheet?asof=${today}`, title: t('hub.cards.balanceSheetTitle'), desc: t('hub.cards.balanceSheetDescription') },
+    { href: `/reports/trial-balance?asof=${today}`, title: t('hub.cards.trialBalanceTitle'), desc: t('hub.cards.trialBalanceDescription') },
+    { href: `/reports/partners?kind=payable`, title: t('hub.cards.payablesTitle'), desc: t('hub.cards.payablesDescription') },
+    { href: `/reports/partners?kind=receivable`, title: t('hub.cards.receivablesTitle'), desc: t('hub.cards.receivablesDescription') },
   ]
 
   return (
     <PageContainer>
       <PageHeader
-        title="Reports"
-        description="Statements are computed live from the ledger — never cached snapshots."
+        title={t('hub.title')}
+        description={t('hub.description')}
       />
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {reports.map((r) => (
@@ -48,7 +50,7 @@ export default async function Reports() {
 
       {saved.length > 0 ? (
         <>
-          <h2 className="mt-8 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Saved views</h2>
+          <h2 className="mt-8 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{t('hub.savedViews')}</h2>
           <Table>
             <TableBody>
               {saved.map((s) => {

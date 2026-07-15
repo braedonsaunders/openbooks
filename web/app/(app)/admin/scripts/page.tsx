@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -13,12 +14,30 @@ import { NewScriptButton, ScriptDrawer } from './ScriptDrawer'
 
 export const dynamic = 'force-dynamic'
 
+// Enum value → message key under admin.scripts. Unknown values render verbatim.
+const TRIGGER_KEYS: Record<string, string> = {
+  before_submit: 'beforeSubmit',
+  before_post: 'beforePost',
+  after_post: 'afterPost',
+  before_void: 'beforeVoid',
+  scheduled: 'scheduled',
+}
+const KIND_KEYS: Record<string, string> = {
+  vendor_bill: 'vendorBill',
+  customer_invoice: 'customerInvoice',
+  vendor_payment: 'vendorPayment',
+  customer_payment: 'customerPayment',
+  expense_report: 'expenseReport',
+  journal: 'journal',
+}
+
 export default async function Scripts({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requirePermission('scripts.manage')
+  const t = await getTranslations('admin.scripts')
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 50 })
   const trigger = pickString(sp.trigger)
@@ -48,23 +67,27 @@ export default async function Scripts({
       : null,
   ])
 
+  const triggerLabel = (v: string) =>
+    TRIGGER_KEYS[v] ? t(`triggers.${TRIGGER_KEYS[v]}`) : v.replace('_', ' ')
+  const kindLabel = (v: string) => (KIND_KEYS[v] ? t(`kinds.${KIND_KEYS[v]}`) : v)
+
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
-            title="Scripts"
-            description="Real JavaScript, run in a sandbox at document trigger points — validate, mutate whitelisted fields, or veto with ob.abort(). Every run is recorded."
+            title={t('title')}
+            description={t('description')}
             actions={<NewScriptButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search scripts…" />
+            <SearchInput placeholder={t('searchPlaceholder')} />
             <FilterChips
               basePath="/admin/scripts"
               currentParams={sp}
               paramKey="trigger"
-              label="Trigger"
-              options={triggers.rows.map((r: any) => ({ value: r.trigger_point, label: r.trigger_point.replace('_', ' '), count: Number(r.n) }))}
+              label={t('triggerFilter')}
+              options={triggers.rows.map((r: any) => ({ value: r.trigger_point, label: triggerLabel(r.trigger_point), count: Number(r.n) }))}
             />
           </div>
         </>
@@ -73,19 +96,19 @@ export default async function Scripts({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Script</TableHead>
-            <TableHead>Trigger</TableHead>
-            <TableHead>Kind</TableHead>
-            <TableHead className="text-right">Runs</TableHead>
-            <TableHead>Last run</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>{t('table.script')}</TableHead>
+            <TableHead>{t('table.trigger')}</TableHead>
+            <TableHead>{t('table.kind')}</TableHead>
+            <TableHead className="text-right">{t('table.runs')}</TableHead>
+            <TableHead>{t('table.lastRun')}</TableHead>
+            <TableHead>{t('table.status')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {scripts.rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={6} className="text-slate-500 dark:text-slate-400">
-                No scripts yet — automate a document workflow.
+                {t('empty')}
               </TableCell>
             </TableRow>
           ) : null}
@@ -97,13 +120,17 @@ export default async function Scripts({
                 </Link>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{String(s.trigger_point).replace('_', ' ')}</Badge>
+                <Badge variant="secondary">{triggerLabel(String(s.trigger_point))}</Badge>
               </TableCell>
-              <TableCell className="text-slate-500 dark:text-slate-400">{s.document_kind ?? 'all'}</TableCell>
+              <TableCell className="text-slate-500 dark:text-slate-400">
+                {s.document_kind ? kindLabel(s.document_kind) : t('allKinds')}
+              </TableCell>
               <TableCell className="text-right tabular-nums">{s.run_count}</TableCell>
               <TableCell className="text-slate-500 dark:text-slate-400">{s.last_run ? dateTime(s.last_run) : ''}</TableCell>
               <TableCell>
-                <Badge variant={s.is_active ? 'success' : 'outline'}>{s.is_active ? 'active' : 'disabled'}</Badge>
+                <Badge variant={s.is_active ? 'success' : 'outline'}>
+                  {s.is_active ? t('statusActive') : t('statusDisabled')}
+                </Badge>
               </TableCell>
             </TableRow>
           ))}

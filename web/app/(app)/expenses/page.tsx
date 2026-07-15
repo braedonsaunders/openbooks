@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -26,6 +27,16 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   voided: 'outline',
 }
 
+// Built-in expense_report statuses → common.status.* message keys. Unknown
+// (custom) statuses render verbatim with underscores humanized.
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  posted: 'posted',
+  voided: 'voided',
+}
+
 const SORT_COLUMNS = {
   date: sql`d.document_date`,
   number: sql`d.document_number`,
@@ -39,6 +50,13 @@ export default async function Expenses({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const t = await getTranslations('expenses')
+  const tCommon = await getTranslations('common')
+  const statusLabel = (s: string) => {
+    const key = STATUS_LABEL_KEYS[s]
+    return key ? tCommon(`status.${key}`) : String(s).replace('_', ' ')
+  }
+
   const authz = await requirePermission('expenses.read')
   const canSubmit = can(authz, 'expenses.create')
   const canPost = can(authz, 'ap.post')
@@ -121,7 +139,7 @@ export default async function Expenses({
 
   const statusOptions = statusCounts.rows.map((r: any) => ({
     value: r.status,
-    label: String(r.status).replace('_', ' '),
+    label: statusLabel(String(r.status)),
     count: Number(r.n),
   }))
   const employeeOptions = employeeCounts.rows.map((r: any) => ({
@@ -135,22 +153,22 @@ export default async function Expenses({
       header={
         <>
           <PageHeader
-            title="Expense Reports"
-            description="Employee expense reports — draft → approval → posted against the employee payable."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={canSubmit ? <NewExpenseButton /> : undefined}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search reports, employees, memos…" />
-            <FilterChips basePath="/expenses" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
-            <FilterChips basePath="/expenses" currentParams={sp} paramKey="employee" label="Employee" options={employeeOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath="/expenses" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+            <FilterChips basePath="/expenses" currentParams={sp} paramKey="employee" label={tCommon('labels.employee')} options={employeeOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No expense reports yet"
-          description="Enter the first expense report to start the reimbursement workflow."
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
           action={canSubmit ? <NewExpenseButton /> : undefined}
         />
       ) : (
@@ -158,13 +176,13 @@ export default async function Expenses({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/expenses" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>Report</SortTh>
-                <SortTh basePath="/expenses" currentParams={sp} column="employee" sort={params.sort} dir={params.dir}>Employee</SortTh>
-                <SortTh basePath="/expenses" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>Date</SortTh>
-                <TableHead>Memo</TableHead>
-                <SortTh basePath="/expenses" currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">Total</SortTh>
-                <SortTh basePath="/expenses" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>Status</SortTh>
-                <TableHead>Actions</TableHead>
+                <SortTh basePath="/expenses" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{t('list.columns.report')}</SortTh>
+                <SortTh basePath="/expenses" currentParams={sp} column="employee" sort={params.sort} dir={params.dir}>{tCommon('labels.employee')}</SortTh>
+                <SortTh basePath="/expenses" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>{tCommon('labels.date')}</SortTh>
+                <TableHead>{tCommon('labels.memo')}</TableHead>
+                <SortTh basePath="/expenses" currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">{tCommon('labels.total')}</SortTh>
+                <SortTh basePath="/expenses" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>{tCommon('labels.status')}</SortTh>
+                <TableHead>{tCommon('labels.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -181,7 +199,7 @@ export default async function Expenses({
                   <TableCell className="text-right tabular-nums">{money(r.total)}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>
-                      {String(r.status).replace('_', ' ')}
+                      {statusLabel(String(r.status))}
                     </Badge>
                   </TableCell>
                   <TableCell>

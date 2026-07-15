@@ -1,1 +1,33 @@
-{}
+{
+  "title": "Dashboard",
+  "orgDescription": "{name} · {currency} · {book}",
+  "stats": {
+    "journalEntries": "Journal entries",
+    "journalLines": "Journal lines",
+    "ledgerBalance": "Ledger balance",
+    "ledgerBalanced": "Σ = 0.00",
+    "ledgerSum": "Σ = {amount}",
+    "parallelRun": "Parallel-run vs {source}",
+    "parityValue": "{matches}/{accounts} match"
+  },
+  "syncCard": {
+    "body": "An external accounting system is connected for parallel-run verification. Sync is manual; every sync re-verifies the trial balance per account.",
+    "link": "Sync page"
+  },
+  "recentRuns": {
+    "title": "Recent sync runs",
+    "started": "Started",
+    "source": "Source",
+    "trigger": "Trigger",
+    "new": "New",
+    "reversed": "Reversed",
+    "unchanged": "Unchanged",
+    "tbVerification": "TB verification",
+    "empty": "No syncs yet.",
+    "runStatus": {
+      "ok": "ok",
+      "failed": "failed",
+      "running": "running"
+    }
+  }
+}

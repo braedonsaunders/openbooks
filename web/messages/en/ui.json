@@ -1,1 +1,69 @@
-{}
+{
+  "pagination": {
+    "outOfRange": "Page {page} is past the end of these results.",
+    "showing": "Showing <strong>{from}</strong>–<strong>{to}</strong> of <strong>{total}</strong>",
+    "goToLastPageAria": "Go to last page, page {page}",
+    "goToPage": "Go to page {page}",
+    "previousPageAria": "Previous page",
+    "nextPageAria": "Next page",
+    "prev": "Prev",
+    "pageOf": "Page {page} of {pages}"
+  },
+  "search": {
+    "placeholder": "Search…",
+    "clearAria": "Clear search"
+  },
+  "confirm": {
+    "defaultTitle": "Confirm"
+  },
+  "select": {
+    "placeholder": "Select…",
+    "searchPlaceholder": "Search…",
+    "noMatches": "No matches",
+    "searching": "Searching…"
+  },
+  "sparkline": {
+    "noTrend": "No trend data",
+    "trend": "Trend: {count} points from {first} to {last}"
+  },
+  "attachments": {
+    "tooLarge": "{name} exceeds the 25 MB limit",
+    "attached": "Attached {name}",
+    "attachFailed": "Could not attach {name}",
+    "removed": "Removed {name}",
+    "removeFailed": "Could not remove attachment",
+    "empty": "No files attached yet.",
+    "downloadAria": "Download {name}",
+    "removeAria": "Remove {name}",
+    "uploading": "{count, plural, one {Uploading # file…} other {Uploading # files…}}",
+    "dropFiles": "Drop files here or <browse>browse</browse>",
+    "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · up to 25 MB"
+  },
+  "recordFields": {
+    "inactiveSelected": "(currently selected — inactive)",
+    "ratingAria": "Rating out of {max}",
+    "ratingValueAria": "{value} of {max}",
+    "loadAccountsFailed": "Could not load accounts — reload to retry.",
+    "loadPartiesFailed": "Could not load parties — reload to retry.",
+    "selectAccount": "Select account…",
+    "selectParty": "Select party…",
+    "noFields": "No fields to show — the record type has no visible fields."
+  },
+  "lineGrid": {
+    "addLine": "Add line",
+    "keyboardHint": "Enter adds/moves down · Alt+↑/↓ reorders · ⌘D duplicates · ⌘⌫ removes",
+    "lineActionsAria": "Line {number} actions",
+    "insertAbove": "Insert above",
+    "insertBelow": "Insert below",
+    "removeLine": "Remove line",
+    "clearLine": "Clear line",
+    "tax": {
+      "overriddenAria": "Tax overridden",
+      "overriddenTitle": "Tax manually overridden — differs from the computed rate",
+      "overriddenShortTitle": "Tax manually overridden",
+      "computedOverriddenTitle": "Computed {amount} · overridden",
+      "resetAria": "Reset tax to computed",
+      "resetTitle": "Reset to computed {amount}"
+    }
+  }
+}

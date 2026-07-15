@@ -1,1 +1,31 @@
-{}
+{
+  "title": "Period Close",
+  "description": "Close modules per period: AR and AP lock their subledgers; GL close locks the period for posting entirely (enforced by the kernel — a closed period refuses postings at the database).",
+  "filters": {
+    "fiscalYear": "Fiscal year",
+    "fyOption": "FY {year}"
+  },
+  "table": {
+    "range": "Range",
+    "entries": "Entries",
+    "debits": "Debits",
+    "rangeValue": "{start} → {end}"
+  },
+  "modules": {
+    "ar": "AR",
+    "ap": "AP",
+    "gl": "GL"
+  },
+  "status": {
+    "closed": "closed",
+    "open": "open"
+  },
+  "buttons": {
+    "close": "Close",
+    "reopen": "Reopen",
+    "reopenConfirm": "Reopen {module} for this period?",
+    "actionFailed": "Action failed",
+    "closedToast": "{module} closed",
+    "reopenedToast": "{module} reopened"
+  }
+}

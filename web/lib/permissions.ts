@@ -44,6 +44,9 @@ export const PERMISSION_CATALOGUE = [
   // Projects & job costing
   "projects.read",
   "projects.manage",
+  // Fixed assets & depreciation
+  "assets.read",
+  "assets.manage",
   // Time tracking & timesheets
   "time.read",
   "time.manage",
@@ -75,128 +78,146 @@ export const PERMISSION_CATALOGUE = [
 export type CataloguePermission = (typeof PERMISSION_CATALOGUE)[number];
 
 /**
- * Catalogue grouped by module with human labels — drives the grouped-checkbox
- * permission picker in /admin/roles. Every catalogue key appears in exactly
- * one group (asserted by the picker rendering all groups).
+ * Catalogue grouped by module — drives the grouped-checkbox permission picker
+ * in /admin/roles. Every catalogue key appears in exactly one group (asserted
+ * by the picker rendering all groups).
+ *
+ * Labels are next-intl message keys (relative to the `admin` namespace,
+ * catalogued in web/messages/<locale>/admin.json under `permissions`), since
+ * this module is pure and cannot call translation hooks. The render site
+ * translates: `t(perm.labelKey)`. A permission key `x.y.z` maps to the
+ * message key `permissions.x_y_z`.
  */
+export function permissionLabelKey(key: CataloguePermission): string {
+  return `permissions.${key.replace(/\./g, "_")}`;
+}
+
 export const PERMISSION_GROUPS: {
   key: string;
-  label: string;
-  permissions: { key: CataloguePermission; label: string }[];
+  labelKey: string;
+  permissions: { key: CataloguePermission; labelKey: string }[];
 }[] = [
   {
     key: "gl",
-    label: "General ledger",
+    labelKey: "permissions.groups.gl",
     permissions: [
-      { key: "gl.read", label: "View journals and balances" },
-      { key: "gl.post", label: "Post journal entries" },
-      { key: "gl.close", label: "Close accounting periods" },
+      { key: "gl.read", labelKey: permissionLabelKey("gl.read") },
+      { key: "gl.post", labelKey: permissionLabelKey("gl.post") },
+      { key: "gl.close", labelKey: permissionLabelKey("gl.close") },
     ],
   },
   {
     key: "ap",
-    label: "Accounts payable",
+    labelKey: "permissions.groups.ap",
     permissions: [
-      { key: "ap.read", label: "View bills" },
-      { key: "ap.create", label: "Create and submit bills" },
-      { key: "ap.approve", label: "Approve or reject bills" },
-      { key: "ap.post", label: "Post bills to the ledger" },
-      { key: "ap.pay", label: "Pay bills" },
+      { key: "ap.read", labelKey: permissionLabelKey("ap.read") },
+      { key: "ap.create", labelKey: permissionLabelKey("ap.create") },
+      { key: "ap.approve", labelKey: permissionLabelKey("ap.approve") },
+      { key: "ap.post", labelKey: permissionLabelKey("ap.post") },
+      { key: "ap.pay", labelKey: permissionLabelKey("ap.pay") },
     ],
   },
   {
     key: "ar",
-    label: "Accounts receivable",
+    labelKey: "permissions.groups.ar",
     permissions: [
-      { key: "ar.read", label: "View invoices" },
-      { key: "ar.create", label: "Create and submit invoices" },
-      { key: "ar.approve", label: "Approve or reject invoices" },
-      { key: "ar.post", label: "Post invoices to the ledger" },
-      { key: "ar.pay", label: "Record customer payments" },
+      { key: "ar.read", labelKey: permissionLabelKey("ar.read") },
+      { key: "ar.create", labelKey: permissionLabelKey("ar.create") },
+      { key: "ar.approve", labelKey: permissionLabelKey("ar.approve") },
+      { key: "ar.post", labelKey: permissionLabelKey("ar.post") },
+      { key: "ar.pay", labelKey: permissionLabelKey("ar.pay") },
     ],
   },
   {
     key: "reports",
-    label: "Reports",
+    labelKey: "permissions.groups.reports",
     permissions: [
-      { key: "reports.read", label: "View reports" },
-      { key: "reports.create", label: "Create and save reports" },
-      { key: "reports.schedule", label: "Schedule report delivery" },
+      { key: "reports.read", labelKey: permissionLabelKey("reports.read") },
+      { key: "reports.create", labelKey: permissionLabelKey("reports.create") },
+      { key: "reports.schedule", labelKey: permissionLabelKey("reports.schedule") },
     ],
   },
   {
     key: "insights",
-    label: "Insights",
+    labelKey: "permissions.groups.insights",
     permissions: [
-      { key: "insights.read", label: "View insights and the library" },
-      { key: "insights.create", label: "Build cards and dashboards" },
-      { key: "insights.publish", label: "Publish to the shared library" },
+      { key: "insights.read", labelKey: permissionLabelKey("insights.read") },
+      { key: "insights.create", labelKey: permissionLabelKey("insights.create") },
+      { key: "insights.publish", labelKey: permissionLabelKey("insights.publish") },
     ],
   },
   {
     key: "items",
-    label: "Items & services",
+    labelKey: "permissions.groups.items",
     permissions: [
-      { key: "items.read", label: "View items and services" },
-      { key: "items.manage", label: "Create and edit items" },
+      { key: "items.read", labelKey: permissionLabelKey("items.read") },
+      { key: "items.manage", labelKey: permissionLabelKey("items.manage") },
     ],
   },
   {
     key: "projects",
-    label: "Projects & job costing",
+    labelKey: "permissions.groups.projects",
     permissions: [
-      { key: "projects.read", label: "View projects and job costing" },
-      { key: "projects.manage", label: "Create and edit projects" },
+      { key: "projects.read", labelKey: permissionLabelKey("projects.read") },
+      { key: "projects.manage", labelKey: permissionLabelKey("projects.manage") },
+    ],
+  },
+  {
+    key: "assets",
+    labelKey: "permissions.groups.assets",
+    permissions: [
+      { key: "assets.read", labelKey: permissionLabelKey("assets.read") },
+      { key: "assets.manage", labelKey: permissionLabelKey("assets.manage") },
     ],
   },
   {
     key: "time",
-    label: "Time & timesheets",
+    labelKey: "permissions.groups.time",
     permissions: [
-      { key: "time.read", label: "View timesheets" },
-      { key: "time.manage", label: "Enter and edit time" },
-      { key: "time.approve", label: "Approve timesheets" },
+      { key: "time.read", labelKey: permissionLabelKey("time.read") },
+      { key: "time.manage", labelKey: permissionLabelKey("time.manage") },
+      { key: "time.approve", labelKey: permissionLabelKey("time.approve") },
     ],
   },
   {
     key: "records",
-    label: "Custom records",
+    labelKey: "permissions.groups.records",
     permissions: [
-      { key: "records.read", label: "View custom records" },
-      { key: "records.create", label: "Create and edit custom records" },
-      { key: "records.manage_types", label: "Design custom record types" },
+      { key: "records.read", labelKey: permissionLabelKey("records.read") },
+      { key: "records.create", labelKey: permissionLabelKey("records.create") },
+      { key: "records.manage_types", labelKey: permissionLabelKey("records.manage_types") },
     ],
   },
   {
     key: "sql",
-    label: "SQL workbench",
-    permissions: [{ key: "sql.execute", label: "Run read-only SQL queries" }],
+    labelKey: "permissions.groups.sql",
+    permissions: [{ key: "sql.execute", labelKey: permissionLabelKey("sql.execute") }],
   },
   {
     key: "sync",
-    label: "Sync",
-    permissions: [{ key: "sync.run", label: "Run external-source syncs" }],
+    labelKey: "permissions.groups.sync",
+    permissions: [{ key: "sync.run", labelKey: permissionLabelKey("sync.run") }],
   },
   {
     key: "scripts",
-    label: "Scripting",
-    permissions: [{ key: "scripts.manage", label: "Manage user scripts" }],
+    labelKey: "permissions.groups.scripts",
+    permissions: [{ key: "scripts.manage", labelKey: permissionLabelKey("scripts.manage") }],
   },
   {
     key: "admin",
-    label: "Administration",
+    labelKey: "permissions.groups.admin",
     permissions: [
-      { key: "parties.read", label: "View parties" },
-      { key: "parties.manage", label: "Manage parties" },
-      { key: "banking.read", label: "View banking" },
-      { key: "banking.reconcile", label: "Reconcile bank accounts" },
-      { key: "expenses.read", label: "View expense reports" },
-      { key: "expenses.create", label: "Enter expense reports" },
-      { key: "admin.custom_fields.manage", label: "Manage custom fields" },
-      { key: "admin.users.manage", label: "Manage users and role assignments" },
-      { key: "admin.roles.manage", label: "Manage roles and permissions" },
-      { key: "admin.nav.manage", label: "Customize navigation" },
-      { key: "admin.audit.read", label: "View the audit log" },
+      { key: "parties.read", labelKey: permissionLabelKey("parties.read") },
+      { key: "parties.manage", labelKey: permissionLabelKey("parties.manage") },
+      { key: "banking.read", labelKey: permissionLabelKey("banking.read") },
+      { key: "banking.reconcile", labelKey: permissionLabelKey("banking.reconcile") },
+      { key: "expenses.read", labelKey: permissionLabelKey("expenses.read") },
+      { key: "expenses.create", labelKey: permissionLabelKey("expenses.create") },
+      { key: "admin.custom_fields.manage", labelKey: permissionLabelKey("admin.custom_fields.manage") },
+      { key: "admin.users.manage", labelKey: permissionLabelKey("admin.users.manage") },
+      { key: "admin.roles.manage", labelKey: permissionLabelKey("admin.roles.manage") },
+      { key: "admin.nav.manage", labelKey: permissionLabelKey("admin.nav.manage") },
+      { key: "admin.audit.read", labelKey: permissionLabelKey("admin.audit.read") },
     ],
   },
 ];
@@ -247,6 +268,8 @@ export const BUILT_IN_ROLES: Record<
       "items.manage",
       "projects.read",
       "projects.manage",
+      "assets.read",
+      "assets.manage",
       "time.read",
       "time.manage",
       "time.approve",
@@ -285,6 +308,8 @@ export const BUILT_IN_ROLES: Record<
       "items.manage",
       "projects.read",
       "projects.manage",
+      "assets.read",
+      "assets.manage",
       "time.read",
       "time.manage",
     ],
@@ -309,7 +334,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "time.read"],
+    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read"],
   },
 };
 

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
@@ -21,6 +22,7 @@ import { parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { requirePermission } from '../../../../lib/authz'
 import { loadRecordTypeById, type RecordTypeRow } from '../../../../lib/records'
+import { RECORD_TYPE_STATUSES } from '../../../../lib/record-schema'
 import { NewTypeButton } from './NewTypeButton'
 import { TypeBuilderDrawer } from './TypeBuilderDrawer'
 
@@ -46,6 +48,8 @@ export default async function RecordTypes({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('records.manage_types')
+  const t = await getTranslations('records')
+  const tc = await getTranslations('common')
   const sp = await searchParams
   const typeId = typeof sp.type === 'string' ? sp.type : undefined
   const params = parseListParams(sp, {
@@ -93,7 +97,9 @@ export default async function RecordTypes({
 
   const statusOptions = counts.rows.map((r: any) => ({
     value: r.status,
-    label: String(r.status),
+    label: (RECORD_TYPE_STATUSES as readonly string[]).includes(r.status)
+      ? t(`typeStatus.${r.status}`)
+      : String(r.status),
     count: Number(r.n),
   }))
 
@@ -102,17 +108,17 @@ export default async function RecordTypes({
       header={
         <>
           <PageHeader
-            title="Record Types"
-            description="Design your own record types — each published type becomes a full module with its own list, numbering, and flyout editor."
+            title={t('types.title')}
+            description={t('types.description')}
             actions={<NewTypeButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search record types…" />
+            <SearchInput placeholder={t('types.searchPlaceholder')} />
             <FilterChips
               basePath="/records/types"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tc('labels.status')}
               options={statusOptions}
             />
           </div>
@@ -121,8 +127,8 @@ export default async function RecordTypes({
     >
       {total === 0 ? (
         <EmptyState
-          title="No record types yet"
-          description="Create the first record type to generate a custom module — equipment, contracts, sites, anything the ledger doesn't already model."
+          title={t('types.empty.title')}
+          description={t('types.empty.description')}
           action={<NewTypeButton />}
         />
       ) : (
@@ -130,51 +136,55 @@ export default async function RecordTypes({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/records/types" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>Name</SortTh>
-                <SortTh basePath="/records/types" currentParams={sp} column="key" sort={params.sort} dir={params.dir}>Key</SortTh>
-                <TableHead>Fields</TableHead>
-                <SortTh basePath="/records/types" currentParams={sp} column="records" sort={params.sort} dir={params.dir} align="right">Records</SortTh>
-                <TableHead>In nav</TableHead>
-                <SortTh basePath="/records/types" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>Status</SortTh>
-                <SortTh basePath="/records/types" currentParams={sp} column="updated" sort={params.sort} dir={params.dir}>Updated</SortTh>
+                <SortTh basePath="/records/types" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>{tc('labels.name')}</SortTh>
+                <SortTh basePath="/records/types" currentParams={sp} column="key" sort={params.sort} dir={params.dir}>{t('types.columns.key')}</SortTh>
+                <TableHead>{t('types.columns.fields')}</TableHead>
+                <SortTh basePath="/records/types" currentParams={sp} column="records" sort={params.sort} dir={params.dir} align="right">{t('types.columns.records')}</SortTh>
+                <TableHead>{t('types.columns.inNav')}</TableHead>
+                <SortTh basePath="/records/types" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>{tc('labels.status')}</SortTh>
+                <SortTh basePath="/records/types" currentParams={sp} column="updated" sort={params.sort} dir={params.dir}>{tc('labels.updated')}</SortTh>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {types.rows.map((t: any) => (
-                <TableRow key={t.id}>
+              {types.rows.map((row: any) => (
+                <TableRow key={row.id}>
                   <TableCell className="font-medium">
                     <Link
-                      href={`/records/types?type=${t.id}` as any}
+                      href={`/records/types?type=${row.id}` as any}
                       className="text-teal-700 hover:underline dark:text-teal-300"
                     >
-                      {t.name}
+                      {row.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="font-mono text-[13px] text-slate-500 dark:text-slate-400">{t.key}</TableCell>
-                  <TableCell className="tabular-nums">{Number(t.field_count)}</TableCell>
+                  <TableCell className="font-mono text-[13px] text-slate-500 dark:text-slate-400">{row.key}</TableCell>
+                  <TableCell className="tabular-nums">{Number(row.field_count)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {t.status === 'published' ? (
+                    {row.status === 'published' ? (
                       <Link
-                        href={`/records/${t.key}` as any}
+                        href={`/records/${row.key}` as any}
                         className="text-teal-700 hover:underline dark:text-teal-300"
                       >
-                        {Number(t.record_count)}
+                        {Number(row.record_count)}
                       </Link>
                     ) : (
-                      Number(t.record_count)
+                      Number(row.record_count)
                     )}
                   </TableCell>
                   <TableCell>
-                    {t.show_in_nav && t.status === 'published' ? (
-                      <Badge variant="default">shown</Badge>
+                    {row.show_in_nav && row.status === 'published' ? (
+                      <Badge variant="default">{t('types.shownInNav')}</Badge>
                     ) : (
                       <span className="text-slate-400 dark:text-slate-500">—</span>
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_VARIANT[t.status] ?? 'secondary'}>{t.status}</Badge>
+                    <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>
+                      {(RECORD_TYPE_STATUSES as readonly string[]).includes(row.status)
+                        ? t(`typeStatus.${row.status}`)
+                        : row.status}
+                    </Badge>
                   </TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{dateTime(t.updated_at)}</TableCell>
+                  <TableCell className="text-slate-500 dark:text-slate-400">{dateTime(row.updated_at)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

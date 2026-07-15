@@ -1,1 +1,63 @@
-{}
+{
+  "list": {
+    "title": "Diario",
+    "description": "{count, plural, one {# asiento contabilizado} other {# asientos contabilizados}} · inmutable, de solo adición.",
+    "searchPlaceholder": "Buscar por número de asiento o memo…",
+    "originFilter": "Origen",
+    "draftsHeading": "Asientos en borrador — aún sin contabilizar",
+    "columns": {
+      "entry": "Asiento",
+      "origin": "Origen",
+      "debits": "Débitos"
+    }
+  },
+  "origins": {
+    "manual": "Manual",
+    "closing": "Cierre",
+    "allocation": "Asignación",
+    "revaluation": "Revaluación",
+    "laborBurden": "Carga laboral",
+    "depreciation": "Depreciación",
+    "revenueRecognition": "Reconocimiento de ingresos",
+    "fxSettlement": "Liquidación de divisas",
+    "translation": "Conversión de moneda"
+  },
+  "detail": {
+    "notFound": "Asiento no encontrado",
+    "origin": "origen: {origin}",
+    "reverses": "revierte {number}",
+    "openItemBadge": "partida abierta",
+    "totals": "Totales",
+    "columns": {
+      "debit": "Débito",
+      "credit": "Crédito",
+      "openItem": "Partida abierta"
+    }
+  },
+  "newButton": {
+    "label": "Nuevo asiento",
+    "createFailed": "No se pudo crear un borrador de asiento"
+  },
+  "drawer": {
+    "draftDescription": "Borrador — los cambios se guardan automáticamente. Los débitos y créditos deben cuadrar para contabilizar.",
+    "autosaveWithParty": "{party} · los cambios se guardan automáticamente",
+    "autosave": "los cambios se guardan automáticamente",
+    "postFailed": "La contabilización falló",
+    "postedToast": "Contabilizado en el libro mayor",
+    "autosaveFailed": "Falló el guardado automático",
+    "viewGlImpact": "Ver impacto en el libro mayor",
+    "allChangesSaved": "Todos los cambios guardados",
+    "saveFailedRetry": "Error al guardar — corrija y reintente",
+    "unsavedChanges": "Cambios sin guardar…",
+    "totals": "Débitos <strong>{debits}</strong> · Créditos <strong>{credits}</strong>",
+    "outOfBalance": "Descuadrado · {amount}",
+    "balanced": "Cuadrado",
+    "referenceNumber": "N.º de referencia",
+    "noParty": "Sin tercero",
+    "accountPlaceholder": "Cuenta…",
+    "columns": {
+      "debit": "Débito",
+      "credit": "Crédito"
+    }
+  }
+}

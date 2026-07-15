@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
@@ -22,17 +23,18 @@ interface ItemPayload {
   taxCodeName: string | null
 }
 
-const KIND_OPTIONS = [
-  { value: 'service', label: 'Service' },
-  { value: 'non_inventory', label: 'Non-inventory' },
-  { value: 'inventory', label: 'Inventory' },
-  { value: 'assembly', label: 'Assembly' },
-  { value: 'kit', label: 'Kit' },
-  { value: 'other_charge', label: 'Other charge' },
-  { value: 'labor', label: 'Labor' },
-  { value: 'absence', label: 'Absence' },
-  { value: 'discount', label: 'Discount' },
-]
+// item.kind enum values sent to the API — labels come from items.kinds.*
+const KIND_VALUES = [
+  'service',
+  'non_inventory',
+  'inventory',
+  'assembly',
+  'kit',
+  'other_charge',
+  'labor',
+  'absence',
+  'discount',
+] as const
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -52,9 +54,18 @@ export function ItemDrawer({
   canManage: boolean
   basePath?: string
 }) {
+  const t = useTranslations('items')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const it = payload.item
+  // 'New item' is the server-side draft sentinel stored in the DB — compared
+  // and saved verbatim; only its *display* goes through the catalog.
   const isPlaceholderName = it.name === 'New item'
+
+  const kindOptions = useMemo(
+    () => KIND_VALUES.map((k) => ({ value: k, label: t(`kinds.${k}`) })),
+    [t],
+  )
 
   const [kind, setKind] = useState<string>(it.kind ?? 'service')
   const [name, setName] = useState<string>(isPlaceholderName ? '' : (it.name ?? ''))
@@ -106,7 +117,7 @@ export function ItemDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/items/${it.id}`, {
         method: 'PATCH',
@@ -118,10 +129,10 @@ export function ItemDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('drawer.autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload, canManage])
 
@@ -133,10 +144,10 @@ export function ItemDrawer({
       body: JSON.stringify({ isActive: next }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Update failed')
+    if (!res.ok) toast.error(data.error ?? t('drawer.updateFailed'))
     else {
       setIsActive(next)
-      toast.success(next ? 'Item activated' : 'Item deactivated')
+      toast.success(next ? t('drawer.activated') : t('drawer.deactivated'))
     }
     setBusy(false)
     router.refresh()
@@ -151,25 +162,27 @@ export function ItemDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span>{name.trim() || 'New item'}</span>
-          <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? 'Active' : 'Inactive'}</Badge>
+          <span>{name.trim() || t('drawer.newItem')}</span>
+          <Badge variant={isActive ? 'success' : 'outline'}>
+            {isActive ? tCommon('status.active') : tCommon('status.inactive')}
+          </Badge>
         </span>
       }
-      description={canManage ? 'Changes save automatically.' : undefined}
+      description={canManage ? t('drawer.autosaveHint') : undefined}
       headerActions={
         <>
           {canManage ? (
             isActive ? (
               <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                Deactivate
+                {t('drawer.deactivate')}
               </Button>
             ) : (
               <>
                 {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Name the item to activate it</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
                 ) : null}
                 <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                  Activate
+                  {t('drawer.activate')}
                 </Button>
               </>
             )
@@ -186,12 +199,12 @@ export function ItemDrawer({
           >
             {canManage
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('drawer.allSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('drawer.saveFailedRetry')
+                    : t('drawer.unsavedChanges')
               : null}
           </span>
         </div>
@@ -202,24 +215,24 @@ export function ItemDrawer({
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              Name<span className="text-red-500"> *</span>
+              {tCommon('labels.name')}<span className="text-red-500"> *</span>
             </Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item or service name…" disabled={ro} />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Code</Label>
+            <Label>{t('labels.code')}</Label>
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value)}
               className="font-mono"
-              placeholder="SVC-01"
+              placeholder={t('drawer.codePlaceholder')}
               disabled={ro}
             />
           </div>
           <div className={field}>
-            <Label>Kind</Label>
+            <Label>{t('labels.kind')}</Label>
             <Select value={kind} onChange={(e) => setKind(e.target.value)} disabled={ro}>
-              {KIND_OPTIONS.map((o) => (
+              {kindOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -227,15 +240,15 @@ export function ItemDrawer({
             </Select>
           </div>
           <div className={field}>
-            <Label>Category</Label>
-            <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Services" disabled={ro} />
+            <Label>{t('labels.category')}</Label>
+            <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('drawer.categoryPlaceholder')} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Unit</Label>
-            <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="hr" disabled={ro} />
+            <Label>{t('labels.unit')}</Label>
+            <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t('drawer.unitPlaceholder')} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Default rate</Label>
+            <Label>{t('labels.defaultRate')}</Label>
             <Input
               inputMode="decimal"
               className="text-right tabular-nums"
@@ -249,40 +262,40 @@ export function ItemDrawer({
         {/* -- accounting ---------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className={field}>
-            <Label>Income account</Label>
+            <Label>{t('labels.incomeAccount')}</Label>
             <SearchSelect
               value={incomeAccountId}
               onChange={setIncomeAccountId}
               options={accountOptions}
               clearable
-              emptyLabel="No income account"
-              placeholder="Select account…"
-              sheetTitle="Income account"
-              ariaLabel="Income account"
+              emptyLabel={t('drawer.noIncomeAccount')}
+              placeholder={t('drawer.selectAccount')}
+              sheetTitle={t('labels.incomeAccount')}
+              ariaLabel={t('labels.incomeAccount')}
               disabled={ro}
             />
           </div>
           <div className={field}>
-            <Label>Expense account</Label>
+            <Label>{t('labels.expenseAccount')}</Label>
             <SearchSelect
               value={expenseAccountId}
               onChange={setExpenseAccountId}
               options={accountOptions}
               clearable
-              emptyLabel="No expense account"
-              placeholder="Select account…"
-              sheetTitle="Expense account"
-              ariaLabel="Expense account"
+              emptyLabel={t('drawer.noExpenseAccount')}
+              placeholder={t('drawer.selectAccount')}
+              sheetTitle={t('labels.expenseAccount')}
+              ariaLabel={t('labels.expenseAccount')}
               disabled={ro}
             />
           </div>
           <div className={field}>
-            <Label>Tax code</Label>
+            <Label>{t('labels.taxCode')}</Label>
             <Select value={taxCodeId} onChange={(e) => setTaxCodeId(e.target.value)} disabled={ro}>
               <option value="">—</option>
-              {taxCodes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              {taxCodes.map((tc) => (
+                <option key={tc.id} value={tc.id}>
+                  {tc.name}
                 </option>
               ))}
             </Select>
@@ -301,7 +314,7 @@ export function ItemDrawer({
               disabled={ro}
               className={checkboxClass}
             />
-            <span className="text-sm">Show on timesheet</span>
+            <span className="text-sm">{t('drawer.showOnTimesheet')}</span>
           </label>
         </section>
       </div>

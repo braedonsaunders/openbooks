@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -21,10 +22,9 @@ const SORT_COLUMNS = {
   unmatched: sql`coalesce(unm.n, 0)`,
 } as const
 
-const TYPE_LABEL: Record<string, string> = {
-  asset_bank: 'Bank',
-  liability_card: 'Card',
-}
+// Reconcilable account types with translated labels — unknown enum values
+// render as the raw code with underscores spaced out.
+const TYPE_KEYS = ['asset_bank', 'liability_card']
 
 export default async function Banking({
   searchParams,
@@ -32,6 +32,10 @@ export default async function Banking({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requirePermission('banking.read')
+  const t = await getTranslations('banking')
+  const tCommon = await getTranslations('common')
+  const typeLabel = (type: string) =>
+    TYPE_KEYS.includes(type) ? t(`types.${type}`) : String(type).replace(/_/g, ' ')
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'number',
@@ -86,7 +90,7 @@ export default async function Banking({
   const filteredTotal = Number(filtered.rows[0].n)
   const typeOptions = typeCounts.rows.map((r: any) => ({
     value: r.type,
-    label: TYPE_LABEL[r.type] ?? String(r.type).replace(/_/g, ' '),
+    label: typeLabel(r.type),
     count: Number(r.n),
   }))
 
@@ -94,34 +98,28 @@ export default async function Banking({
     <ListPageLayout
       header={
         <>
-          <PageHeader
-            title="Banking"
-            description="Reconcilable accounts — import bank statements, match activity against the ledger, and sign off reconciliations."
-          />
+          <PageHeader title={t('list.title')} description={t('list.description')} />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search accounts…" />
-            <FilterChips basePath="/banking" currentParams={sp} paramKey="type" label="Type" options={typeOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath="/banking" currentParams={sp} paramKey="type" label={tCommon('labels.type')} options={typeOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
-        <EmptyState
-          title="No reconcilable accounts"
-          description="Mark your bank, card, and clearing accounts as reconcilable in the chart of accounts to start reconciling them here."
-        />
+        <EmptyState title={t('list.emptyTitle')} description={t('list.emptyDescription')} />
       ) : (
         <>
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/banking" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>Account</SortTh>
-                <SortTh basePath="/banking" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>Name</SortTh>
-                <TableHead>Type</TableHead>
-                <SortTh basePath="/banking" currentParams={sp} column="balance" sort={params.sort} dir={params.dir} align="right">GL balance</SortTh>
-                <SortTh basePath="/banking" currentParams={sp} column="reconciled" sort={params.sort} dir={params.dir}>Reconciled through</SortTh>
-                <SortTh basePath="/banking" currentParams={sp} column="unmatched" sort={params.sort} dir={params.dir} align="right">Unmatched lines</SortTh>
-                <TableHead>Status</TableHead>
+                <SortTh basePath="/banking" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{tCommon('labels.account')}</SortTh>
+                <SortTh basePath="/banking" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>{tCommon('labels.name')}</SortTh>
+                <TableHead>{tCommon('labels.type')}</TableHead>
+                <SortTh basePath="/banking" currentParams={sp} column="balance" sort={params.sort} dir={params.dir} align="right">{t('list.columns.glBalance')}</SortTh>
+                <SortTh basePath="/banking" currentParams={sp} column="reconciled" sort={params.sort} dir={params.dir}>{t('list.columns.reconciledThrough')}</SortTh>
+                <SortTh basePath="/banking" currentParams={sp} column="unmatched" sort={params.sort} dir={params.dir} align="right">{t('list.columns.unmatchedLines')}</SortTh>
+                <TableHead>{tCommon('labels.status')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -138,19 +136,19 @@ export default async function Banking({
                     </Link>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">
-                    {TYPE_LABEL[a.type] ?? String(a.type).replace(/_/g, ' ')}
+                    {typeLabel(a.type)}
                     {a.currency_restriction ? ` · ${a.currency_restriction}` : ''}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{money(a.balance)}</TableCell>
-                  <TableCell>{a.reconciled_through ?? <span className="text-slate-400 dark:text-slate-500">never</span>}</TableCell>
+                  <TableCell>{a.reconciled_through ?? <span className="text-slate-400 dark:text-slate-500">{t('labels.never')}</span>}</TableCell>
                   <TableCell className="text-right tabular-nums">{Number(a.unmatched_lines).toLocaleString()}</TableCell>
                   <TableCell>
                     {a.open_reconciliation_id ? (
-                      <Badge variant="warning">reconciling</Badge>
+                      <Badge variant="warning">{t('list.badges.reconciling')}</Badge>
                     ) : Number(a.unmatched_lines) > 0 ? (
-                      <Badge variant="secondary">lines to match</Badge>
+                      <Badge variant="secondary">{t('list.badges.linesToMatch')}</Badge>
                     ) : (
-                      <Badge variant="success">up to date</Badge>
+                      <Badge variant="success">{t('list.badges.upToDate')}</Badge>
                     )}
                   </TableCell>
                 </TableRow>

@@ -1,1 +1,254 @@
-{}
+{
+  "hub": {
+    "title": "Reports",
+    "description": "Statements are computed live from the ledger — never cached snapshots.",
+    "savedViews": "Saved views",
+    "cards": {
+      "pnlTitle": "Profit & Loss",
+      "pnlDescription": "Income statement — {fyLabel} to date, fiscal-year presets, comparatives, custom layouts",
+      "balanceSheetTitle": "Balance Sheet",
+      "balanceSheetDescription": "Financial position as of any date, retained earnings computed",
+      "trialBalanceTitle": "Trial Balance",
+      "trialBalanceDescription": "Every account with debits, credits, and net balance",
+      "payablesTitle": "Payables by Vendor",
+      "payablesDescription": "Outstanding AP position per party",
+      "receivablesTitle": "Receivables by Customer",
+      "receivablesDescription": "Outstanding AR position per party"
+    }
+  },
+  "statement": {
+    "sectionTotal": "Total {section}",
+    "other": "Other",
+    "otherTotal": "Total Other",
+    "accumulatedEarnings": "Accumulated earnings (computed)"
+  },
+  "saveView": {
+    "namePrompt": "Name this view:",
+    "save": "Save view",
+    "savedToast": "Saved “{name}”",
+    "saveFailed": "Could not save this view"
+  },
+  "dimensionFilter": {
+    "departmentAria": "Department filter",
+    "allDepartments": "All departments",
+    "projectAria": "Project filter",
+    "allProjects": "All projects"
+  },
+  "balanceSheet": {
+    "title": "Balance Sheet",
+    "asOf": "as of {date}",
+    "assets": "Assets",
+    "liabilities": "Liabilities",
+    "equity": "Equity",
+    "equation": "A = L + E",
+    "balanced": "balanced",
+    "offBy": "off by {amount}"
+  },
+  "pnl": {
+    "title": "Profit & Loss",
+    "dateRange": "{from} → {to}",
+    "vsPriorYear": "vs prior year",
+    "revenue": "Revenue",
+    "grossProfit": "Gross profit",
+    "netIncome": "Net income",
+    "costOfGoodsSold": "Cost of Goods Sold",
+    "expenses": "Expenses",
+    "totalRevenue": "Total Revenue",
+    "columns": {
+      "current": "Current",
+      "priorYear": "Prior year",
+      "delta": "Δ",
+      "deltaPct": "Δ%"
+    }
+  },
+  "trialBalance": {
+    "title": "Trial Balance",
+    "description": "as of {date} · {count, plural, one {# account} other {# accounts}} with activity",
+    "columns": {
+      "debits": "Debits",
+      "credits": "Credits"
+    },
+    "totals": "Totals"
+  },
+  "partners": {
+    "payablesTitle": "Payables by Vendor",
+    "receivablesTitle": "Receivables by Customer",
+    "description": "Net position per party, from open-item ledger lines.",
+    "payables": "Payables",
+    "receivables": "Receivables",
+    "searchPlaceholder": "Search party…",
+    "totalOutstanding": "Total outstanding",
+    "partiesWithBalance": "Parties with balance",
+    "columns": {
+      "outstanding": "Outstanding",
+      "glLines": "GL lines"
+    },
+    "noPartyOnLines": "(no party on lines)"
+  },
+  "custom": {
+    "kind": {
+      "builtIn": "Built-in",
+      "custom": "Custom"
+    },
+    "running": "Running…",
+    "list": {
+      "title": "Custom Reports",
+      "description": "Build, save, run and schedule reports over the ledger — detail rows or grouped summaries, with filters, breakouts and measures.",
+      "searchPlaceholder": "Search reports…",
+      "kindFilterLabel": "Kind",
+      "emptyTitle": "No reports yet",
+      "emptyDescription": "Seed the built-in reports or build your first custom report to get started.",
+      "columns": {
+        "report": "Report",
+        "kind": "Kind"
+      },
+      "summarySummarize": "Summary of {source} · {groups, plural, one {# group} other {# groups}}, {measures, plural, one {# measure} other {# measures}}",
+      "summaryRows": "{source} detail · {columns, plural, one {# column} other {# columns}}"
+    },
+    "actions": {
+      "run": "Run",
+      "clone": "Clone",
+      "loadFailed": "Could not load report",
+      "cloneFailed": "Could not clone report",
+      "cloned": "Report cloned",
+      "copyName": "{name} (copy)",
+      "deleteConfirm": "Delete this report? Its schedules and run history are removed too.",
+      "deleteFailed": "Could not delete report",
+      "deleted": "Report deleted"
+    },
+    "newButton": {
+      "label": "New report",
+      "untitledName": "Untitled report",
+      "createFailed": "Could not create a report"
+    },
+    "filterTree": {
+      "match": "Match",
+      "allOfFollowing": "ALL of the following",
+      "anyOfFollowing": "ANY of the following",
+      "noConditions": "No conditions — the report returns every row.",
+      "addCondition": "Condition",
+      "addGroup": "Group",
+      "noValue": "(no value)",
+      "valuePlaceholder": "value",
+      "listPlaceholder": "comma-separated values",
+      "removeConditionAria": "Remove condition"
+    },
+    "resultView": {
+      "noRows": "No rows match this report."
+    },
+    "builder": {
+      "namePlaceholder": "Report name",
+      "descriptionPlaceholder": "Description (optional)",
+      "allChangesSaved": "All changes saved",
+      "unsavedChanges": "Unsaved changes…",
+      "runAndSchedule": "Run & schedule",
+      "source": "Source",
+      "mode": "Mode",
+      "detailRows": "Detail rows",
+      "summarize": "Summarize",
+      "sortBy": "Sort by",
+      "sortDefault": "Default",
+      "direction": "Direction",
+      "descending": "Descending",
+      "ascending": "Ascending",
+      "rowLimit": "Row limit",
+      "rowLimitHint": "Capped at 10,000 rows. Previews show the first {previewRows}.",
+      "livePreview": "Live preview",
+      "previewFailed": "Preview failed",
+      "runningPreview": "Running preview…",
+      "previewEmptyHint": "Adjust the report to see a live preview.",
+      "columns": "Columns",
+      "sectionBy": "Section by (optional)",
+      "noSections": "No sections",
+      "sectionByHint": "Buckets detail rows into titled sections by this column.",
+      "groupBy": "Group by",
+      "noGroupsHint": "No groups — measures roll up to a single grand total.",
+      "measures": "Measures",
+      "noBin": "No bin",
+      "removeGroupAria": "Remove group",
+      "removeMeasureAria": "Remove measure",
+      "bin": {
+        "day": "by day",
+        "week": "by week",
+        "month": "by month",
+        "quarter": "by quarter",
+        "year": "by year"
+      },
+      "agg": {
+        "count": "Count of rows",
+        "countDistinct": "Distinct count",
+        "sum": "Sum",
+        "avg": "Average",
+        "min": "Min",
+        "max": "Max"
+      }
+    },
+    "runner": {
+      "downloadCsv": "Download CSV",
+      "runNow": "Run now",
+      "runFailed": "Report run failed",
+      "runComplete": "Report run complete",
+      "emptyHint": "Run the report to see results here. Runs are saved and downloadable as CSV.",
+      "scheduledDelivery": "Scheduled delivery",
+      "recentRuns": "Recent runs",
+      "columns": {
+        "trigger": "Trigger",
+        "rows": "Rows",
+        "finished": "Finished"
+      },
+      "status": {
+        "succeeded": "Succeeded",
+        "running": "Running",
+        "queued": "Queued",
+        "failed": "Failed"
+      },
+      "trigger": {
+        "manual": "Manual",
+        "scheduled": "Scheduled"
+      },
+      "csv": "CSV"
+    }
+  },
+  "schedule": {
+    "updateFailed": "Update failed",
+    "paused": "Schedule paused",
+    "resumed": "Schedule resumed",
+    "deleteConfirm": "Delete this schedule?",
+    "deleted": "Schedule deleted",
+    "noScheduleYet": "No delivery schedule yet.",
+    "addOneHint": "Add one to email this report on a cadence.",
+    "pausedBadge": "Paused",
+    "pause": "Pause",
+    "resume": "Resume",
+    "deleteAria": "Delete schedule",
+    "recipientsTo": "To {emails}",
+    "noRecipients": "No recipients set",
+    "nextRun": "Next run {time}",
+    "addSchedule": "Add schedule",
+    "cadence": "Cadence",
+    "cadences": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "dayOfWeek": "Day of week",
+    "weekdays": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "dayOfMonth": "Day of month",
+    "time": "Time",
+    "timezone": "Timezone",
+    "recipients": "Recipients",
+    "recipientsPlaceholder": "finance@example.com, cfo@example.com",
+    "recipientsHint": "Comma-separated email addresses. Delivery is queued for the worker (see below).",
+    "saveSchedule": "Save schedule",
+    "saved": "Schedule saved",
+    "saveFailed": "Could not save schedule"
+  }
+}

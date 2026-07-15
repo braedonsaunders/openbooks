@@ -18,5 +18,27 @@
     "label": "Language",
     "orgDefault": "Organization default",
     "saveFailed": "Could not save your language preference"
+  },
+  "meta": {
+    "description": "The open business suite. Run on open books."
+  },
+  "sidebar": {
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
+  },
+  "mobileNav": {
+    "openMenu": "Open menu",
+    "menu": "Menu",
+    "primaryAriaLabel": "Primary"
+  },
+  "themeToggle": {
+    "label": "Theme",
+    "options": {
+      "light": "Light",
+      "system": "System",
+      "dark": "Dark"
+    },
+    "current": "Theme: {theme}",
+    "currentHint": "Theme: {theme} (click to change)"
   }
 }

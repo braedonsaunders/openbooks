@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -26,6 +27,20 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   voided: 'outline',
 }
 
+// documents.status enum → common.status.* message keys (fallback: raw value).
+const STATUS_LABEL_KEY: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  rejected: 'rejected',
+  posted: 'posted',
+  paid: 'paid',
+  partially_paid: 'partiallyPaid',
+  voided: 'voided',
+  reversed: 'reversed',
+  cancelled: 'cancelled',
+}
+
 const SORT_COLUMNS = {
   date: sql`d.document_date`,
   number: sql`d.document_number`,
@@ -40,6 +55,12 @@ export default async function AP({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requirePermission('ap.read')
+  const t = await getTranslations('ap')
+  const tCommon = await getTranslations('common')
+  const statusLabel = (status: string) => {
+    const key = STATUS_LABEL_KEY[status]
+    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
+  }
   const sp = await searchParams
   const billId = typeof sp.bill === 'string' ? sp.bill : undefined
   const params = parseListParams(sp, {
@@ -104,7 +125,7 @@ export default async function AP({
 
   const statusOptions = counts.rows.map((r: any) => ({
     value: r.status,
-    label: String(r.status).replace('_', ' '),
+    label: statusLabel(String(r.status)),
     count: Number(r.n),
   }))
 
@@ -113,21 +134,21 @@ export default async function AP({
       header={
         <>
           <PageHeader
-            title="Accounts Payable"
-            description="Vendor bills entered in openbooks — draft → approval → posted through the kernel."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={<NewBillButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search bills, vendors, refs…" />
-            <FilterChips basePath="/ap" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath="/ap" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No bills yet"
-          description="Enter the first vendor bill to start the AP workflow."
+          title={t('list.empty.title')}
+          description={t('list.empty.description')}
           action={<NewBillButton />}
         />
       ) : (
@@ -135,13 +156,13 @@ export default async function AP({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/ap" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>Bill</SortTh>
-                <SortTh basePath="/ap" currentParams={sp} column="vendor" sort={params.sort} dir={params.dir}>Vendor</SortTh>
-                <SortTh basePath="/ap" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>Date</SortTh>
-                <TableHead>Ref</TableHead>
-                <SortTh basePath="/ap" currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">Total</SortTh>
-                <SortTh basePath="/ap" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>Status</SortTh>
-                <TableHead>Actions</TableHead>
+                <SortTh basePath="/ap" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{t('list.columns.bill')}</SortTh>
+                <SortTh basePath="/ap" currentParams={sp} column="vendor" sort={params.sort} dir={params.dir}>{tCommon('labels.vendor')}</SortTh>
+                <SortTh basePath="/ap" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>{tCommon('labels.date')}</SortTh>
+                <TableHead>{t('list.columns.ref')}</TableHead>
+                <SortTh basePath="/ap" currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">{tCommon('labels.total')}</SortTh>
+                <SortTh basePath="/ap" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>{tCommon('labels.status')}</SortTh>
+                <TableHead>{tCommon('labels.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -158,7 +179,7 @@ export default async function AP({
                   <TableCell className="text-right tabular-nums">{money(b.total)}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[b.status] ?? 'secondary'}>
-                      {String(b.status).replace('_', ' ')}
+                      {statusLabel(String(b.status))}
                     </Badge>
                   </TableCell>
                   <TableCell>

@@ -47,6 +47,7 @@ export const NAV_MODULES: NavModule[] = [
 
   { key: 'journal', href: '/journal', label: 'Journal', iconKey: 'journal', group: 'Ledger', requiredPermission: 'gl.read' },
   { key: 'accounts', href: '/accounts', label: 'Chart of Accounts', iconKey: 'layers', group: 'Ledger', requiredPermission: 'gl.read' },
+  { key: 'assets', href: '/assets', label: 'Fixed Assets', iconKey: 'building', group: 'Ledger', requiredPermission: 'assets.read' },
   { key: 'banking', href: '/banking', label: 'Banking', iconKey: 'building', group: 'Ledger', requiredPermission: 'banking.read' },
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Ledger', requiredPermission: 'gl.close' },
 

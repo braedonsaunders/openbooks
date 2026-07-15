@@ -1,1 +1,57 @@
-{}
+{
+  "list": {
+    "title": "Weekly timesheets",
+    "description": "Employee time by the week — enter, submit, and approve hours across every job.",
+    "newButton": "New timesheet",
+    "emptyTitle": "No timesheets yet",
+    "emptyDescription": "Time entries roll up into weekly timesheets here. Create one to log hours against a job.",
+    "week": "Week",
+    "unnamed": "(unnamed)"
+  },
+  "labels": {
+    "totalHours": "Total hours",
+    "billableHours": "Billable hours",
+    "serviceItem": "Service item",
+    "timeType": "Time type",
+    "bill": "Bill",
+    "billable": "Billable",
+    "dailyTotals": "Daily totals"
+  },
+  "status": {
+    "submitted": "Submitted",
+    "empty": "No hours"
+  },
+  "days": {
+    "sun": "Sun",
+    "mon": "Mon",
+    "tue": "Tue",
+    "wed": "Wed",
+    "thu": "Thu",
+    "fri": "Fri",
+    "sat": "Sat"
+  },
+  "grid": {
+    "title": "Weekly timesheet",
+    "selectEmployee": "Select employee…",
+    "submitForApproval": "Submit for approval",
+    "prev": "Prev",
+    "thisWeek": "This week",
+    "weekOf": "Week of {from} – {to}",
+    "approvedReadOnly": "Approved timesheets are read-only.",
+    "viewOnly": "You have view-only access.",
+    "noEmployee": "No employee selected. Pick an employee above to enter time.",
+    "discardConfirm": "Discard unsaved changes?",
+    "networkError": "Network error",
+    "saved": "Timesheet saved",
+    "saveBeforeSubmit": "Save your changes before submitting",
+    "submittedToast": "Submitted for approval",
+    "approvedToast": "Timesheet approved",
+    "addLine": "Add line",
+    "projectPlaceholder": "Project…",
+    "lineProjectAria": "Line {line} project",
+    "lineItemAria": "Line {line} item",
+    "lineBillableAria": "Line {line} billable",
+    "lineHoursAria": "Line {line} {day} hours",
+    "removeLineAria": "Remove line {line}"
+  }
+}

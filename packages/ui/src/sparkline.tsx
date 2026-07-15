@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslations } from 'next-intl'
 import { cn } from './utils'
 
 /**
@@ -66,6 +67,7 @@ export function Sparkline({
   className,
   ariaLabel,
 }: SparklineProps) {
+  const t = useTranslations('ui.sparkline')
   // Derive effective tone if auto requested.
   const resolvedTone: SparklineTone = React.useMemo(() => {
     if (!auto || points.length < 2) return tone
@@ -86,7 +88,7 @@ export function Sparkline({
         viewBox="0 0 100 32"
         preserveAspectRatio="none"
         role="img"
-        aria-label={ariaLabel ?? 'No trend data'}
+        aria-label={ariaLabel ?? t('noTrend')}
         className={cn('block', className)}
       >
         <line
@@ -124,7 +126,12 @@ export function Sparkline({
   const areaD = pathD + ` L ${VB_W} ${VB_H} L 0 ${VB_H} Z` // close path to baseline for the fill
 
   const label =
-    ariaLabel ?? `Trend: ${points.length} points from ${points[0]} to ${points[points.length - 1]}`
+    ariaLabel ??
+    t('trend', {
+      count: points.length,
+      first: points[0]!,
+      last: points[points.length - 1]!,
+    })
 
   return (
     <svg

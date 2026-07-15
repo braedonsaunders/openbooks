@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
@@ -34,6 +35,7 @@ export default async function InsightsDashboards({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const [t, tCommon] = await Promise.all([getTranslations('insights'), getTranslations('common')])
   const authz = await requirePermission('insights.read')
   const canCreate = can(authz, 'insights.create')
   const orgId = authz.user.orgId
@@ -76,8 +78,8 @@ export default async function InsightsDashboards({
       : total
 
   const statusOptions = [
-    { value: 'draft', label: 'Draft', count: Number(c.drafts) },
-    { value: 'published', label: 'Published', count: Number(c.published) },
+    { value: 'draft', label: tCommon('status.draft'), count: Number(c.drafts) },
+    { value: 'published', label: t('status.published'), count: Number(c.published) },
   ]
 
   return (
@@ -85,22 +87,22 @@ export default async function InsightsDashboards({
       header={
         <>
           <PageHeader
-            title="Insights"
-            description="Arrange published cards on shared dashboards."
+            title={t('title')}
+            description={t('dashboards.description')}
             actions={canCreate ? <NewDashboardButton /> : undefined}
           />
           <InsightsTabs active="dashboards" />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search dashboards…" />
-            <FilterChips basePath="/insights/dashboards" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+            <SearchInput placeholder={t('dashboards.searchPlaceholder')} />
+            <FilterChips basePath="/insights/dashboards" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No dashboards yet"
-          description="Create a dashboard, then drop your published cards onto it."
+          title={t('dashboards.emptyTitle')}
+          description={t('dashboards.emptyDescription')}
           action={canCreate ? <NewDashboardButton /> : undefined}
         />
       ) : (
@@ -109,12 +111,12 @@ export default async function InsightsDashboards({
             <TableHeader>
               <TableRow>
                 <SortTh basePath="/insights/dashboards" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>
-                  Name
+                  {tCommon('labels.name')}
                 </SortTh>
-                <TableHead>Cards</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t('dashboards.cardsColumn')}</TableHead>
+                <TableHead>{tCommon('labels.status')}</TableHead>
                 <SortTh basePath="/insights/dashboards" currentParams={sp} column="updated" sort={params.sort} dir={params.dir}>
-                  Updated
+                  {tCommon('labels.updated')}
                 </SortTh>
               </TableRow>
             </TableHeader>
@@ -132,7 +134,7 @@ export default async function InsightsDashboards({
                   <TableCell className="text-slate-500 dark:text-slate-400">{Number(row.card_count)}</TableCell>
                   <TableCell>
                     <Badge variant={row.status === 'published' ? 'success' : 'outline'}>
-                      {row.status === 'published' ? 'Published' : 'Draft'}
+                      {row.status === 'published' ? t('status.published') : tCommon('status.draft')}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">

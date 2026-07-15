@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useTranslations } from 'next-intl'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -63,6 +64,7 @@ export function Drawer({
    *  close navigation until the slide-out has played. */
   onExitComplete?: () => void
 }) {
+  const t = useTranslations('common.actions')
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
@@ -191,7 +193,7 @@ export function Drawer({
                     type="button"
                     onClick={onClose}
                     className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                    aria-label="Close"
+                    aria-label={t('close')}
                   >
                     <svg
                       width="18"

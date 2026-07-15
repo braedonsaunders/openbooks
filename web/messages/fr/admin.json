@@ -1,1 +1,511 @@
-{}
+{
+  "hub": {
+    "metaTitle": "Administration",
+    "title": "Administration",
+    "subtitle": "Tout ce qui configure cet espace de travail — profil de l’entreprise, personnes et système.",
+    "groups": {
+      "company": "Entreprise",
+      "people": "Personnes et accès",
+      "workspace": "Espace de travail",
+      "activity": "Activité et données"
+    },
+    "cards": {
+      "settings": {
+        "title": "Entreprise et comptabilité",
+        "description": "Identité de l’organisation, devise de base, exercice financier et comptes de contrôle"
+      },
+      "users": {
+        "title": "Utilisateurs",
+        "description": "Invitez des personnes, attribuez des rôles et des dérogations de permissions"
+      },
+      "roles": {
+        "title": "Rôles",
+        "description": "Définissez les rôles et exactement ce que chacun accorde"
+      },
+      "navigation": {
+        "title": "Navigation",
+        "description": "Réorganisez la barre latérale et renommez les modules par organisation"
+      },
+      "customFields": {
+        "title": "Champs personnalisés",
+        "description": "Ajoutez des champs typés aux enregistrements dans toute l’application"
+      },
+      "scripts": {
+        "title": "Scripts",
+        "description": "Automatisation en environnement isolé exécutée sur les événements du grand livre"
+      },
+      "audit": {
+        "title": "Journal d’audit",
+        "description": "Chaque écriture capturée avec son auteur et les différences avant/après"
+      },
+      "sync": {
+        "title": "Synchronisation",
+        "description": "Importez depuis des sources externes et rapprochez les migrations"
+      }
+    }
+  },
+  "audit": {
+    "title": "Journal d’audit",
+    "description": "Historique au niveau des champs des modifications de la couche métier. Le grand livre n’a pas besoin de piste d’audit — il est, par construction, en ajout seulement.",
+    "searchPlaceholder": "Rechercher une table, un auteur ou un id de ligne…",
+    "actionFilter": "Action",
+    "empty": {
+      "title": "Aucune entrée d’audit pour l’instant",
+      "description": "Les mutations de la couche métier apparaîtront ici à mesure que les modules enregistrent leurs modifications."
+    },
+    "table": {
+      "when": "Quand",
+      "actor": "Auteur",
+      "action": "Action",
+      "tableName": "Table",
+      "row": "Ligne",
+      "changes": "Modifications"
+    },
+    "systemActor": "système",
+    "actions": {
+      "insert": "insertion",
+      "update": "mise à jour",
+      "delete": "suppression",
+      "post": "comptabilisation",
+      "void": "annulation",
+      "approve": "approbation",
+      "reject": "rejet"
+    }
+  },
+  "customFields": {
+    "title": "Champs personnalisés",
+    "description": "Étendez n’importe quel module — en-têtes de documents, lignes de transactions, tiers, projets, comptes. Les champs s’affichent partout où l’enregistrement apparaît : tiroirs, grilles de lignes et rapports.",
+    "searchPlaceholder": "Rechercher des champs…",
+    "targetFilter": "Cible",
+    "table": {
+      "field": "Champ",
+      "key": "Clé",
+      "target": "Cible",
+      "type": "Type",
+      "required": "Obligatoire",
+      "status": "Statut"
+    },
+    "empty": "Aucun champ personnalisé pour l’instant.",
+    "statusActive": "actif",
+    "statusArchived": "archivé",
+    "newField": "Nouveau champ",
+    "targets": {
+      "documents": {
+        "label": "En-tête de transaction",
+        "description": "Une valeur par transaction (facture fournisseur, facture, paiement, note de frais, écriture de journal)."
+      },
+      "documentLines": {
+        "label": "Lignes de transaction",
+        "description": "Une colonne sur chaque ligne du type de transaction choisi."
+      },
+      "parties": {
+        "label": "Tiers",
+        "description": "Fournisseurs, clients et employés."
+      },
+      "projects": {
+        "label": "Projets",
+        "description": "Travaux / projets."
+      },
+      "accounts": {
+        "label": "Comptes",
+        "description": "Plan comptable."
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "Factures fournisseurs",
+        "customerInvoice": "Factures clients",
+        "vendorPayment": "Paiements fournisseurs",
+        "customerPayment": "Encaissements clients",
+        "expenseReport": "Notes de frais",
+        "journal": "Écritures de journal"
+      },
+      "lines": {
+        "vendorBill": "Lignes de facture fournisseur",
+        "customerInvoice": "Lignes de facture client",
+        "expenseReport": "Lignes de note de frais",
+        "journal": "Lignes d’écriture de journal"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "Texte",
+        "help": "Une seule ligne de texte."
+      },
+      "longText": {
+        "label": "Zone de texte",
+        "help": "Plusieurs lignes de texte."
+      },
+      "number": {
+        "label": "Nombre",
+        "help": "Une valeur numérique."
+      },
+      "currency": {
+        "label": "Montant monétaire",
+        "help": "Un montant d’argent (2 décimales)."
+      },
+      "date": {
+        "label": "Date",
+        "help": "Une date civile."
+      },
+      "boolean": {
+        "label": "Case à cocher",
+        "help": "Oui / non."
+      },
+      "select": {
+        "label": "Liste déroulante (choix unique)",
+        "help": "Choisissez un élément dans une liste."
+      },
+      "multiSelect": {
+        "label": "Liste déroulante (choix multiples)",
+        "help": "Choisissez autant d’éléments que voulu dans une liste."
+      }
+    },
+    "drawer": {
+      "newTitle": "Nouveau champ personnalisé",
+      "editTitle": "Modifier « {label} »",
+      "newDescription": "Étendez un type d’enregistrement avec votre propre champ.",
+      "createField": "Créer le champ",
+      "saveChanges": "Enregistrer les modifications",
+      "created": "Champ créé",
+      "updated": "Champ mis à jour",
+      "saveFailed": "Impossible d’enregistrer le champ",
+      "appliesTo": "S’applique à",
+      "recordType": "Type d’enregistrement",
+      "whichTransactions": "Quelles transactions",
+      "allTypes": "Tous les types",
+      "allTypesHint": "Laissez « Tous les types » pour appliquer le champ à tous les genres.",
+      "allKindsSuffix": "tous les genres",
+      "lockedAfterCreation": "· verrouillé après la création (des valeurs y font déjà référence)",
+      "label": "Libellé",
+      "labelPlaceholder": "Numéro de bon de commande",
+      "fieldKey": "Clé du champ",
+      "permanent": "(permanente)",
+      "keyPlaceholder": "po_number",
+      "keyHint": "Remplie automatiquement à partir du libellé; snake_case.",
+      "type": "Type",
+      "options": "Options",
+      "noOptions": "Aucune option pour l’instant — ajoutez-en au moins une.",
+      "addOptionPlaceholder": "Ajouter une option…",
+      "removeOption": "Retirer {option}",
+      "helpText": "Texte d’aide",
+      "optionalSuffix": "(facultatif)",
+      "helpTextPlaceholder": "Affiché sous le champ",
+      "placeholder": "Texte indicatif",
+      "defaultValue": "Valeur par défaut",
+      "min": "Min",
+      "max": "Max",
+      "showInList": "Afficher comme colonne dans les vues de liste"
+    }
+  },
+  "navigation": {
+    "title": "Navigation",
+    "description": "Personnalisez la barre latérale pour toute l’organisation : renommez, réorganisez, masquez des modules ou ajoutez des liens. Les restrictions de permissions s’appliquent toujours en plus.",
+    "groupLabelAria": "Libellé du groupe",
+    "moveGroupUp": "Monter le groupe",
+    "moveGroupDown": "Descendre le groupe",
+    "itemLabelAria": "Libellé de l’élément",
+    "showItem": "Afficher l’élément",
+    "hideItem": "Masquer l’élément",
+    "moveItemUp": "Monter l’élément",
+    "moveItemDown": "Descendre l’élément",
+    "linkUrlPrompt": "URL du lien (route interne ou https://…) :",
+    "linkLabelPrompt": "Libellé :",
+    "addLink": "Ajouter un lien",
+    "save": "Enregistrer la navigation",
+    "saved": "Navigation enregistrée",
+    "saveFailed": "Impossible d’enregistrer",
+    "resetDefaults": "Rétablir les valeurs par défaut"
+  },
+  "roles": {
+    "metaTitle": "Rôles",
+    "title": "Rôles",
+    "description": "Des ensembles de permissions que vous attribuez aux utilisateurs. Les rôles intégrés sont fournis avec l’application; créez des rôles personnalisés pour un contrôle plus fin.",
+    "manageUsers": "Gérer les utilisateurs",
+    "searchPlaceholder": "Rechercher par nom, clé ou description de rôle…",
+    "typeFilter": "Type",
+    "builtIn": "Intégré",
+    "custom": "Personnalisé",
+    "emptyTitle": "Aucun rôle pour l’instant",
+    "emptyDescription": "Exécutez le script d’amorçage des rôles (engine/src/seed-roles.ts) pour créer les rôles intégrés, ou créez un rôle personnalisé.",
+    "noMatchTitle": "Aucun rôle correspondant",
+    "noMatchDescription": "Ajustez la recherche ou le filtre de type.",
+    "table": {
+      "key": "Clé",
+      "permissions": "Permissions",
+      "members": "Membres"
+    },
+    "newRole": "Nouveau rôle",
+    "drawer": {
+      "newTitle": "Nouveau rôle",
+      "lockedDescription": "Le rôle Administrateur détient toujours toutes les permissions et ne peut pas être modifié.",
+      "builtInDescription": "Rôle intégré : le nom et la clé sont fixes, mais vous pouvez ajuster ses permissions.",
+      "newDescription": "Nommez le rôle, puis choisissez les permissions qu’il accorde.",
+      "deleteRole": "Supprimer le rôle",
+      "createRole": "Créer le rôle",
+      "saveChanges": "Enregistrer les modifications",
+      "nameRequired": "Le nom du rôle est obligatoire",
+      "saveFailed": "L’enregistrement du rôle a échoué",
+      "created": "Rôle créé",
+      "updated": "Rôle mis à jour",
+      "deleteConfirm": "Supprimer le rôle « {name} »? Les utilisateurs qui le détiennent perdent immédiatement ses permissions.",
+      "deleteFailed": "La suppression du rôle a échoué",
+      "deleted": "Rôle supprimé",
+      "namePlaceholder": "Commis aux comptes fournisseurs",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "À quoi sert ce rôle?",
+      "permissionsHeading": "Permissions",
+      "selectedCount": "{count} sélectionnées"
+    }
+  },
+  "scripts": {
+    "title": "Scripts",
+    "description": "Du vrai JavaScript, exécuté dans un environnement isolé aux points de déclenchement des documents — validez, modifiez les champs autorisés ou opposez un veto avec ob.abort(). Chaque exécution est consignée.",
+    "searchPlaceholder": "Rechercher des scripts…",
+    "triggerFilter": "Déclencheur",
+    "table": {
+      "script": "Script",
+      "trigger": "Déclencheur",
+      "kind": "Genre",
+      "runs": "Exécutions",
+      "lastRun": "Dernière exécution",
+      "status": "Statut"
+    },
+    "empty": "Aucun script pour l’instant — automatisez un flux de travail documentaire.",
+    "allKinds": "tous",
+    "statusActive": "actif",
+    "statusDisabled": "désactivé",
+    "triggers": {
+      "beforeSubmit": "avant soumission",
+      "beforePost": "avant comptabilisation",
+      "afterPost": "après comptabilisation",
+      "beforeVoid": "avant annulation",
+      "scheduled": "planifié"
+    },
+    "kinds": {
+      "vendorBill": "facture fournisseur",
+      "customerInvoice": "facture client",
+      "vendorPayment": "paiement fournisseur",
+      "customerPayment": "paiement client",
+      "expenseReport": "note de frais",
+      "journal": "journal"
+    },
+    "drawer": {
+      "newScript": "Nouveau script",
+      "newTitle": "Nouveau script",
+      "description": "JavaScript en environnement isolé (QuickJS) — aucun accès au système de fichiers, au réseau ni à la base de données.",
+      "createScript": "Créer le script",
+      "saveScript": "Enregistrer le script",
+      "created": "Script créé",
+      "saved": "Script enregistré",
+      "saveFailed": "Impossible d’enregistrer le script",
+      "namePlaceholder": "Politique comptes fournisseurs : les grosses factures exigent une note",
+      "trigger": "Déclencheur",
+      "documentKind": "Genre de document",
+      "allKindsOption": "Tous les genres",
+      "source": "Source",
+      "sourceHint": "— doit définir function main(ctx)",
+      "timeoutMs": "Délai d’expiration (ms)",
+      "runOrder": "Ordre d’exécution",
+      "recentRuns": "Exécutions récentes",
+      "runStatus": {
+        "ok": "ok",
+        "aborted": "interrompue",
+        "error": "erreur"
+      }
+    }
+  },
+  "settings": {
+    "metaTitle": "Entreprise et comptabilité",
+    "title": "Entreprise et comptabilité",
+    "description": "Identité de l’organisation, devise de base, calendrier fiscal et comptes de contrôle par lesquels le grand livre comptabilise.",
+    "organization": {
+      "title": "Organisation",
+      "description": "Comment cette entreprise est identifiée dans l’application.",
+      "displayName": "Nom d’affichage",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "legalName": "Raison sociale",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "country": "Pays",
+      "countryPlaceholder": "CA",
+      "countryHint": "Code ISO à deux lettres (p. ex. CA, US, GB).",
+      "defaultLanguage": "Langue par défaut",
+      "defaultLanguageHint": "La langue dans laquelle l’application s’affiche pour toute personne qui n’a pas choisi la sienne dans le menu du compte.",
+      "baseCurrency": "Devise de base",
+      "baseCurrencyHint": "La devise de présentation dans laquelle le grand livre s’équilibre. Ajoutez d’autres devises avant d’en changer."
+    },
+    "fiscal": {
+      "title": "Exercice financier",
+      "description": "Le mois où commence votre exercice financier. Tout ce qui dépend de l’exercice — rapports, clôture de période, préréglages — se fonde sur ce paramètre.",
+      "startsIn": "L’exercice financier commence en",
+      "runs": "L’exercice financier s’étend",
+      "range": "{start} → {end}",
+      "warning": "Changer le mois de début ré-étiquette <strong>chaque période comptable</strong> — leur exercice financier, leur numéro et leur nom de période sont recalculés à partir de la date de début de chaque période dès l’enregistrement. Les écritures de journal et les dates demeurent intactes, mais les rapports et les regroupements de clôture de période basculeront vers le nouveau calendrier."
+    },
+    "months": {
+      "january": "Janvier",
+      "february": "Février",
+      "march": "Mars",
+      "april": "Avril",
+      "may": "Mai",
+      "june": "Juin",
+      "july": "Juillet",
+      "august": "Août",
+      "september": "Septembre",
+      "october": "Octobre",
+      "november": "Novembre",
+      "december": "Décembre"
+    },
+    "controlAccounts": {
+      "title": "Comptes de contrôle",
+      "description": "Les comptes du grand livre par lesquels les grands livres auxiliaires et les taxes sont comptabilisés. Seuls les comptes imputables (non sommaires) apparaissent.",
+      "selectPlaceholder": "Sélectionner un compte…",
+      "searchPlaceholder": "Rechercher des comptes…",
+      "fields": {
+        "ar": {
+          "label": "Comptes clients",
+          "hint": "Les soldes clients sont comptabilisés ici"
+        },
+        "ap": {
+          "label": "Comptes fournisseurs",
+          "hint": "Les soldes fournisseurs sont comptabilisés ici"
+        },
+        "bank": {
+          "label": "Banque par défaut",
+          "hint": "Compte de trésorerie par défaut pour les paiements et encaissements"
+        },
+        "taxCollected": {
+          "label": "Taxes perçues",
+          "hint": "Taxes de vente dues sur les factures"
+        },
+        "taxPaid": {
+          "label": "Taxes payées",
+          "hint": "Taxes récupérables sur les factures fournisseurs"
+        },
+        "employeePayable": {
+          "label": "Dû aux employés",
+          "hint": "Remboursements de dépenses dus au personnel"
+        }
+      }
+    },
+    "documentKinds": {
+      "vendorBill": "Facture fournisseur",
+      "customerInvoice": "Facture client",
+      "vendorPayment": "Paiement fournisseur",
+      "customerPayment": "Paiement client",
+      "expenseReport": "Note de frais",
+      "journal": "Journal"
+    },
+    "numbering": {
+      "title": "Numérotation des documents",
+      "description": "Séquences qui génèrent les numéros de documents. Préfixe et remplissage affichés pour chaque genre.",
+      "empty": "Aucune séquence configurée pour l’instant.",
+      "table": {
+        "document": "Document",
+        "prefix": "Préfixe",
+        "next": "Prochain n°",
+        "padding": "Remplissage",
+        "example": "Exemple"
+      }
+    },
+    "validation": {
+      "nameRequired": "Le nom d’affichage est obligatoire",
+      "countryRequired": "Le pays est obligatoire"
+    },
+    "saved": "Paramètres enregistrés",
+    "savedPeriodsRederived": "Paramètres enregistrés — périodes comptables ré-étiquetées selon le nouvel exercice financier",
+    "saveSettings": "Enregistrer les paramètres"
+  },
+  "users": {
+    "metaTitle": "Utilisateurs",
+    "title": "Utilisateurs",
+    "description": "Qui peut se connecter, et quels rôles chacun détient. L’accès d’un utilisateur est l’union de ses rôles attribués; les utilisateurs sans attribution retombent sur leur ancien rôle.",
+    "manageRoles": "Gérer les rôles",
+    "searchPlaceholder": "Rechercher un nom ou un courriel…",
+    "statusFilter": "Statut",
+    "emptyTitle": "Aucun utilisateur correspondant",
+    "emptySearchDescription": "Aucun utilisateur ne correspond à votre recherche. Essayez un autre terme ou un autre filtre de statut.",
+    "emptyFilterDescription": "Essayez un autre filtre de statut.",
+    "table": {
+      "roles": "Rôles",
+      "lastSignIn": "Dernière connexion"
+    },
+    "you": "vous",
+    "legacyRole": "ancien : {role}",
+    "statusActive": "actif",
+    "statusInactive": "inactif",
+    "requestFailed": "La requête a échoué",
+    "editRolesFor": "Modifier les rôles de {name}",
+    "rolesFor": "Rôles — {name}",
+    "noRoles": "Aucun rôle pour l’instant — amorcez les rôles intégrés ou créez-en un sous Gérer les rôles.",
+    "builtInBadge": "intégré",
+    "deactivateConfirm": "Désactiver {name}? La personne sera déconnectée et ne pourra plus se connecter tant qu’elle ne sera pas réactivée.",
+    "deactivate": "Désactiver",
+    "reactivate": "Réactiver",
+    "deactivated": "{name} désactivé",
+    "reactivated": "{name} réactivé"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "Grand livre",
+      "ap": "Comptes fournisseurs",
+      "ar": "Comptes clients",
+      "reports": "Rapports",
+      "insights": "Analyses",
+      "items": "Articles et services",
+      "projects": "Projets et coût de revient",
+      "time": "Temps et feuilles de temps",
+      "records": "Enregistrements personnalisés",
+      "sql": "Console SQL",
+      "sync": "Synchronisation",
+      "scripts": "Scripts",
+      "admin": "Administration",
+      "assets": "Immobilisations et amortissement"
+    },
+    "gl_read": "Consulter les journaux et les soldes",
+    "gl_post": "Comptabiliser des écritures de journal",
+    "gl_close": "Clôturer les périodes comptables",
+    "ap_read": "Consulter les factures fournisseurs",
+    "ap_create": "Créer et soumettre des factures fournisseurs",
+    "ap_approve": "Approuver ou rejeter des factures fournisseurs",
+    "ap_post": "Comptabiliser les factures fournisseurs au grand livre",
+    "ap_pay": "Payer les factures fournisseurs",
+    "ar_read": "Consulter les factures",
+    "ar_create": "Créer et soumettre des factures",
+    "ar_approve": "Approuver ou rejeter des factures",
+    "ar_post": "Comptabiliser les factures au grand livre",
+    "ar_pay": "Enregistrer les paiements clients",
+    "reports_read": "Consulter les rapports",
+    "reports_create": "Créer et enregistrer des rapports",
+    "reports_schedule": "Planifier l’envoi de rapports",
+    "insights_read": "Consulter les analyses et la bibliothèque",
+    "insights_create": "Créer des cartes et des tableaux de bord",
+    "insights_publish": "Publier dans la bibliothèque partagée",
+    "items_read": "Consulter les articles et services",
+    "items_manage": "Créer et modifier des articles",
+    "projects_read": "Consulter les projets et le coût de revient",
+    "projects_manage": "Créer et modifier des projets",
+    "time_read": "Consulter les feuilles de temps",
+    "time_manage": "Saisir et modifier le temps",
+    "time_approve": "Approuver les feuilles de temps",
+    "records_read": "Consulter les enregistrements personnalisés",
+    "records_create": "Créer et modifier des enregistrements personnalisés",
+    "records_manage_types": "Concevoir des types d’enregistrements personnalisés",
+    "sql_execute": "Exécuter des requêtes SQL en lecture seule",
+    "sync_run": "Exécuter des synchronisations de sources externes",
+    "scripts_manage": "Gérer les scripts utilisateur",
+    "parties_read": "Consulter les tiers",
+    "parties_manage": "Gérer les tiers",
+    "banking_read": "Consulter les opérations bancaires",
+    "banking_reconcile": "Rapprocher les comptes bancaires",
+    "expenses_read": "Consulter les notes de frais",
+    "expenses_create": "Saisir des notes de frais",
+    "admin_custom_fields_manage": "Gérer les champs personnalisés",
+    "admin_users_manage": "Gérer les utilisateurs et l’attribution des rôles",
+    "admin_roles_manage": "Gérer les rôles et les permissions",
+    "admin_nav_manage": "Personnaliser la navigation",
+    "admin_audit_read": "Consulter le journal d’audit",
+    "assets_read": "Consulter les immobilisations et l’amortissement",
+    "assets_manage": "Créer et modifier des immobilisations, exécuter l’amortissement"
+  }
+}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
@@ -33,6 +34,14 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   posted: 'success',
   draft: 'secondary',
   voided: 'outline',
+}
+
+// documents.status enum → common.status.* key (unknown values render verbatim).
+const STATUS_KEYS: Record<string, string> = {
+  draft: 'draft',
+  posted: 'posted',
+  voided: 'voided',
+  reversed: 'reversed',
 }
 
 const emptyLine = (): LineRow => ({
@@ -82,6 +91,8 @@ export function JournalDrawer({
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
 }) {
+  const t = useTranslations('journal.drawer')
+  const tc = useTranslations('common')
   const router = useRouter()
   const doc = journal.doc
   const isDraft = doc.status === 'draft'
@@ -156,7 +167,7 @@ export function JournalDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/journals/${doc.id}`, {
         method: 'PATCH',
@@ -168,10 +179,10 @@ export function JournalDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, editable])
 
@@ -183,8 +194,8 @@ export function JournalDrawer({
       body: JSON.stringify({ action: 'post', documentId: doc.id }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Posting failed')
-    else toast.success('Posted to the ledger')
+    if (!res.ok) toast.error(data.error ?? t('postFailed'))
+    else toast.success(t('postedToast'))
     setBusy(false)
     router.refresh()
   }
@@ -194,34 +205,34 @@ export function JournalDrawer({
     () => [
       {
         key: 'accountId',
-        label: 'Account',
+        label: tc('labels.account'),
         width: 'minmax(200px,2fr)',
         type: 'search-select',
         required: true,
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
-        placeholder: 'Account…',
+        placeholder: t('accountPlaceholder'),
       },
-      { key: 'description', label: 'Description', width: 'minmax(160px,1.6fr)', type: 'text' },
+      { key: 'description', label: tc('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
       {
         key: 'departmentId',
-        label: 'Department',
+        label: tc('labels.department'),
         width: '140px',
         type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
       },
       {
         key: 'projectId',
-        label: 'Project',
+        label: tc('labels.project'),
         width: 'minmax(150px,1.2fr)',
         type: 'search-select',
         options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
         placeholder: '—',
       },
       ...customFieldColumns<LineRow>(lineDefs),
-      { key: 'debit', label: 'Debit', width: '120px', type: 'amount', align: 'right' },
-      { key: 'credit', label: 'Credit', width: '120px', type: 'amount', align: 'right' },
+      { key: 'debit', label: t('columns.debit'), width: '120px', type: 'amount', align: 'right' },
+      { key: 'credit', label: t('columns.credit'), width: '120px', type: 'amount', align: 'right' },
     ],
-    [accounts, departments, projects, lineDefs],
+    [accounts, departments, projects, lineDefs, t, tc],
   )
 
   const field = 'space-y-1.5'
@@ -235,27 +246,29 @@ export function JournalDrawer({
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
-            {String(doc.status).replace('_', ' ')}
+            {STATUS_KEYS[doc.status] ? tc(`status.${STATUS_KEYS[doc.status]}`) : String(doc.status).replace('_', ' ')}
           </Badge>
         </span>
       }
       description={
         isDraft
-          ? 'Draft — changes save automatically. Debits and credits must balance to post.'
+          ? t('draftDescription')
           : editable
-            ? `${doc.party_name ? doc.party_name + ' · ' : ''}changes save automatically`
+            ? doc.party_name
+              ? t('autosaveWithParty', { party: doc.party_name })
+              : t('autosave')
             : (doc.party_name ?? undefined)
       }
       headerActions={
         <>
           {isDraft ? (
             <Button disabled={busy || !balanced || saveState !== 'saved'} onClick={post}>
-              Post
+              {tc('actions.post')}
             </Button>
           ) : null}
           {doc.entry_id ? (
             <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+              <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
             </Button>
           ) : null}
         </>
@@ -270,24 +283,29 @@ export function JournalDrawer({
           >
             {editable
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('allChangesSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tc('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('saveFailedRetry')
+                    : t('unsavedChanges')
               : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            Debits <strong className="text-slate-900 dark:text-slate-100">{money(debits / 100)}</strong> · Credits{' '}
-            <strong className="text-slate-900 dark:text-slate-100">{money(credits / 100)}</strong>
+            {t.rich('totals', {
+              debits: money(debits / 100),
+              credits: money(credits / 100),
+              strong: (chunks) => (
+                <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>
+              ),
+            })}
           </span>
           {isDraft ? (
             diff !== 0 ? (
-              <Badge variant="destructive">Out of balance · {money(Math.abs(diff) / 100)}</Badge>
+              <Badge variant="destructive">{t('outOfBalance', { amount: money(Math.abs(diff) / 100) })}</Badge>
             ) : debits > 0 ? (
-              <Badge variant="success">Balanced</Badge>
+              <Badge variant="success">{t('balanced')}</Badge>
             ) : null
           ) : null}
         </div>
@@ -296,7 +314,7 @@ export function JournalDrawer({
       <div className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
-            <Label>Date{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
@@ -304,22 +322,22 @@ export function JournalDrawer({
             )}
           </div>
           <div className={`${field} lg:col-span-2`}>
-            <Label>Party</Label>
+            <Label>{tc('labels.party')}</Label>
             {editable ? (
               <SearchSelect
                 options={parties.map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
                 value={partyId}
                 onChange={(v) => setPartyId(v ?? '')}
-                placeholder="No party"
+                placeholder={t('noParty')}
                 clearable
-                emptyLabel="No party"
+                emptyLabel={t('noParty')}
               />
             ) : (
               <p className="text-sm">{doc.party_name ?? '—'}</p>
             )}
           </div>
           <div className={field}>
-            <Label>Reference #</Label>
+            <Label>{t('referenceNumber')}</Label>
             {editable ? (
               <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (
@@ -327,7 +345,7 @@ export function JournalDrawer({
             )}
           </div>
           <div className={`${field} lg:col-span-3`}>
-            <Label>Memo</Label>
+            <Label>{tc('labels.memo')}</Label>
             {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
@@ -339,7 +357,7 @@ export function JournalDrawer({
         <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
 
         <div className="space-y-2">
-          <Label>Lines</Label>
+          <Label>{tc('labels.lines')}</Label>
           <LineGrid<LineRow>
             columns={columns}
             rows={rows}

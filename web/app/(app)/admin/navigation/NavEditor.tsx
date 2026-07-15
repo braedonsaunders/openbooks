@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, cn } from '@openbooks/ui'
@@ -22,6 +23,8 @@ function itemLabel(item: NavItemConfig): string {
 }
 
 export function NavEditor({ initial }: { initial: OrgNavConfig }) {
+  const t = useTranslations('admin.navigation')
+  const tCommon = useTranslations('common')
   const [config, setConfig] = useState<OrgNavConfig>(initial)
   const [busy, setBusy] = useState(false)
   const router = useRouter()
@@ -37,10 +40,10 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
       body: JSON.stringify({ config }),
     })
     if (res.ok) {
-      toast.success('Navigation saved')
+      toast.success(t('saved'))
       router.refresh()
     } else {
-      toast.error((await res.json()).error ?? 'Could not save')
+      toast.error((await res.json()).error ?? t('saveFailed'))
     }
     setBusy(false)
   }
@@ -55,14 +58,14 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
                 value={g.label}
                 onChange={(e) => setGroup(gi, { label: e.target.value })}
                 className="max-w-56 font-semibold"
-                aria-label="Group label"
+                aria-label={t('groupLabelAria')}
               />
               <span className="flex-1" />
-              <Button variant="ghost" size="icon" aria-label="Move group up"
+              <Button variant="ghost" size="icon" aria-label={t('moveGroupUp')}
                 onClick={() => setConfig((c) => ({ ...c, groups: move(c.groups, gi, -1) }))}>
                 <ArrowUp size={14} />
               </Button>
-              <Button variant="ghost" size="icon" aria-label="Move group down"
+              <Button variant="ghost" size="icon" aria-label={t('moveGroupDown')}
                 onClick={() => setConfig((c) => ({ ...c, groups: move(c.groups, gi, 1) }))}>
                 <ArrowDown size={14} />
               </Button>
@@ -79,7 +82,7 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
                       })
                     }
                     className="max-w-64"
-                    aria-label="Item label"
+                    aria-label={t('itemLabelAria')}
                   />
                   {item.kind === 'module' ? (
                     <span className="font-mono text-xs text-slate-400">{item.moduleKey}</span>
@@ -87,17 +90,17 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
                     <span className="truncate font-mono text-xs text-slate-400">{item.href}</span>
                   )}
                   <span className="flex-1" />
-                  <Button variant="ghost" size="icon" aria-label={item.hidden ? 'Show item' : 'Hide item'}
+                  <Button variant="ghost" size="icon" aria-label={item.hidden ? t('showItem') : t('hideItem')}
                     onClick={() =>
                       setGroup(gi, { items: g.items.map((x, k) => (k === ii ? { ...x, hidden: !x.hidden } : x)) })
                     }>
                     {item.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                   </Button>
-                  <Button variant="ghost" size="icon" aria-label="Move item up"
+                  <Button variant="ghost" size="icon" aria-label={t('moveItemUp')}
                     onClick={() => setGroup(gi, { items: move(g.items, ii, -1) })}>
                     <ArrowUp size={14} />
                   </Button>
-                  <Button variant="ghost" size="icon" aria-label="Move item down"
+                  <Button variant="ghost" size="icon" aria-label={t('moveItemDown')}
                     onClick={() => setGroup(gi, { items: move(g.items, ii, 1) })}>
                     <ArrowDown size={14} />
                   </Button>
@@ -109,13 +112,13 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
               variant="outline"
               size="sm"
               onClick={() => {
-                const href = prompt('Link URL (internal route or https://…):')
+                const href = prompt(t('linkUrlPrompt'))
                 if (!href) return
-                const label = prompt('Label:') ?? href
+                const label = prompt(t('linkLabelPrompt')) ?? href
                 setGroup(gi, { items: [...g.items, { kind: 'link', href, label }] })
               }}
             >
-              <Plus size={13} /> Add link
+              <Plus size={13} /> {t('addLink')}
             </Button>
           </CardContent>
         </Card>
@@ -123,10 +126,10 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
 
       <div className="flex items-center gap-2">
         <Button onClick={save} disabled={busy}>
-          {busy ? 'Saving…' : 'Save navigation'}
+          {busy ? tCommon('actions.saving') : t('save')}
         </Button>
         <Button variant="outline" onClick={() => setConfig(defaultNavConfig())}>
-          <RotateCcw size={14} /> Reset to defaults
+          <RotateCcw size={14} /> {t('resetDefaults')}
         </Button>
       </div>
     </div>

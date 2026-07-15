@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { sql, type SQL } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader } from '@openbooks/ui'
 import { Users } from 'lucide-react'
@@ -13,7 +14,10 @@ import { dateTime } from '../../../../lib/format'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { RoleAssignmentButton, ActiveToggle } from './UserActions'
 
-export const metadata = { title: 'Users' }
+export async function generateMetadata() {
+  const t = await getTranslations('admin.users')
+  return { title: t('metaTitle') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/admin/users'
@@ -30,6 +34,8 @@ export default async function AdminUsersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('admin.users.manage')
+  const t = await getTranslations('admin.users')
+  const tCommon = await getTranslations('common')
   const orgId = authz.user.orgId
   const sp = await searchParams
   const listParams = parseListParams(sp, {
@@ -110,25 +116,25 @@ export default async function AdminUsersPage({
       header={
         <>
           <PageHeader
-            title="Users"
-            description="Who can sign in, and which roles they hold. A user's access is the union of their assigned roles; users with no assignment fall back to their legacy role."
+            title={t('title')}
+            description={t('description')}
             actions={
               <Link href="/admin/roles">
-                <Button variant="outline">Manage roles</Button>
+                <Button variant="outline">{t('manageRoles')}</Button>
               </Link>
             }
           />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <SearchInput placeholder="Search name or email…" />
+            <SearchInput placeholder={t('searchPlaceholder')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={t('statusFilter')}
               defaultValue="active"
               options={[
-                { value: 'active', label: 'Active', count: statusCounts.active ?? 0 },
-                { value: 'inactive', label: 'Inactive', count: statusCounts.inactive ?? 0 },
+                { value: 'active', label: tCommon('labels.active'), count: statusCounts.active ?? 0 },
+                { value: 'inactive', label: tCommon('labels.inactive'), count: statusCounts.inactive ?? 0 },
               ]}
             />
           </div>
@@ -138,12 +144,8 @@ export default async function AdminUsersPage({
       {users.length === 0 ? (
         <EmptyState
           icon={<Users />}
-          title="No users match"
-          description={
-            listParams.q
-              ? 'No users match your search. Try a different term or status filter.'
-              : 'Try a different status filter.'
-          }
+          title={t('emptyTitle')}
+          description={listParams.q ? t('emptySearchDescription') : t('emptyFilterDescription')}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -151,17 +153,17 @@ export default async function AdminUsersPage({
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
                 <SortTh column="name" {...sortProps}>
-                  Name
+                  {tCommon('labels.name')}
                 </SortTh>
                 <SortTh column="email" {...sortProps}>
-                  Email
+                  {tCommon('labels.email')}
                 </SortTh>
-                <th className="px-3 py-2">Roles</th>
-                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">{t('table.roles')}</th>
+                <th className="px-3 py-2">{tCommon('labels.status')}</th>
                 <SortTh column="last_login" {...sortProps}>
-                  Last sign-in
+                  {t('table.lastSignIn')}
                 </SortTh>
-                <th className="px-3 py-2 text-right">Actions</th>
+                <th className="px-3 py-2 text-right">{tCommon('labels.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -174,7 +176,7 @@ export default async function AdminUsersPage({
                       {u.name}
                       {isSelf ? (
                         <Badge variant="secondary" className="ml-2 text-[10px]">
-                          you
+                          {t('you')}
                         </Badge>
                       ) : null}
                     </td>
@@ -183,7 +185,7 @@ export default async function AdminUsersPage({
                       <div className="flex flex-wrap items-center gap-1">
                         {assigned.length === 0 ? (
                           <Badge variant="warning" className="text-[10px]">
-                            legacy: {u.role}
+                            {t('legacyRole', { role: u.role })}
                           </Badge>
                         ) : (
                           assigned.map((r) => (
@@ -206,7 +208,7 @@ export default async function AdminUsersPage({
                     </td>
                     <td className="px-3 py-2">
                       <Badge variant={u.is_active ? 'success' : 'destructive'}>
-                        {u.is_active ? 'active' : 'inactive'}
+                        {u.is_active ? t('statusActive') : t('statusInactive')}
                       </Badge>
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">

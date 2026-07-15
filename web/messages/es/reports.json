@@ -1,1 +1,254 @@
-{}
+{
+  "hub": {
+    "title": "Informes",
+    "description": "Los estados financieros se calculan en vivo desde el libro mayor — nunca son instantáneas en caché.",
+    "savedViews": "Vistas guardadas",
+    "cards": {
+      "pnlTitle": "Estado de resultados",
+      "pnlDescription": "Estado de resultados — {fyLabel} a la fecha, valores predefinidos por ejercicio fiscal, comparativos, diseños personalizados",
+      "balanceSheetTitle": "Balance general",
+      "balanceSheetDescription": "Situación financiera a cualquier fecha, con utilidades retenidas calculadas",
+      "trialBalanceTitle": "Balanza de comprobación",
+      "trialBalanceDescription": "Cada cuenta con débitos, créditos y saldo neto",
+      "payablesTitle": "Cuentas por pagar por proveedor",
+      "payablesDescription": "Posición pendiente de cuentas por pagar por tercero",
+      "receivablesTitle": "Cuentas por cobrar por cliente",
+      "receivablesDescription": "Posición pendiente de cuentas por cobrar por tercero"
+    }
+  },
+  "statement": {
+    "sectionTotal": "Total {section}",
+    "other": "Otros",
+    "otherTotal": "Total Otros",
+    "accumulatedEarnings": "Utilidades acumuladas (calculadas)"
+  },
+  "saveView": {
+    "namePrompt": "Nombre para esta vista:",
+    "save": "Guardar vista",
+    "savedToast": "Se guardó “{name}”",
+    "saveFailed": "No se pudo guardar esta vista"
+  },
+  "dimensionFilter": {
+    "departmentAria": "Filtro de departamento",
+    "allDepartments": "Todos los departamentos",
+    "projectAria": "Filtro de proyecto",
+    "allProjects": "Todos los proyectos"
+  },
+  "balanceSheet": {
+    "title": "Balance general",
+    "asOf": "al {date}",
+    "assets": "Activos",
+    "liabilities": "Pasivos",
+    "equity": "Capital",
+    "equation": "A = P + C",
+    "balanced": "cuadrado",
+    "offBy": "descuadre de {amount}"
+  },
+  "pnl": {
+    "title": "Estado de resultados",
+    "dateRange": "{from} → {to}",
+    "vsPriorYear": "vs. año anterior",
+    "revenue": "Ingresos",
+    "grossProfit": "Utilidad bruta",
+    "netIncome": "Utilidad neta",
+    "costOfGoodsSold": "Costo de ventas",
+    "expenses": "Gastos",
+    "totalRevenue": "Total Ingresos",
+    "columns": {
+      "current": "Actual",
+      "priorYear": "Año anterior",
+      "delta": "Δ",
+      "deltaPct": "Δ%"
+    }
+  },
+  "trialBalance": {
+    "title": "Balanza de comprobación",
+    "description": "al {date} · {count, plural, one {# cuenta} other {# cuentas}} con movimientos",
+    "columns": {
+      "debits": "Débitos",
+      "credits": "Créditos"
+    },
+    "totals": "Totales"
+  },
+  "partners": {
+    "payablesTitle": "Cuentas por pagar por proveedor",
+    "receivablesTitle": "Cuentas por cobrar por cliente",
+    "description": "Posición neta por tercero, a partir de líneas del libro mayor de partidas abiertas.",
+    "payables": "Cuentas por pagar",
+    "receivables": "Cuentas por cobrar",
+    "searchPlaceholder": "Buscar tercero…",
+    "totalOutstanding": "Total pendiente",
+    "partiesWithBalance": "Terceros con saldo",
+    "columns": {
+      "outstanding": "Pendiente",
+      "glLines": "Líneas del mayor"
+    },
+    "noPartyOnLines": "(sin tercero en las líneas)"
+  },
+  "custom": {
+    "kind": {
+      "builtIn": "Integrado",
+      "custom": "Personalizado"
+    },
+    "running": "Ejecutando…",
+    "list": {
+      "title": "Informes personalizados",
+      "description": "Cree, guarde, ejecute y programe informes sobre el libro mayor — filas de detalle o resúmenes agrupados, con filtros, desgloses y medidas.",
+      "searchPlaceholder": "Buscar informes…",
+      "kindFilterLabel": "Clase",
+      "emptyTitle": "Aún no hay informes",
+      "emptyDescription": "Cargue los informes integrados o cree su primer informe personalizado para comenzar.",
+      "columns": {
+        "report": "Informe",
+        "kind": "Clase"
+      },
+      "summarySummarize": "Resumen de {source} · {groups, plural, one {# grupo} other {# grupos}}, {measures, plural, one {# medida} other {# medidas}}",
+      "summaryRows": "Detalle de {source} · {columns, plural, one {# columna} other {# columnas}}"
+    },
+    "actions": {
+      "run": "Ejecutar",
+      "clone": "Duplicar",
+      "loadFailed": "No se pudo cargar el informe",
+      "cloneFailed": "No se pudo duplicar el informe",
+      "cloned": "Informe duplicado",
+      "copyName": "{name} (copia)",
+      "deleteConfirm": "¿Eliminar este informe? Sus programaciones y su historial de ejecuciones también se eliminan.",
+      "deleteFailed": "No se pudo eliminar el informe",
+      "deleted": "Informe eliminado"
+    },
+    "newButton": {
+      "label": "Nuevo informe",
+      "untitledName": "Informe sin título",
+      "createFailed": "No se pudo crear el informe"
+    },
+    "filterTree": {
+      "match": "Coincidir con",
+      "allOfFollowing": "TODAS las siguientes",
+      "anyOfFollowing": "CUALQUIERA de las siguientes",
+      "noConditions": "Sin condiciones — el informe devuelve todas las filas.",
+      "addCondition": "Condición",
+      "addGroup": "Grupo",
+      "noValue": "(sin valor)",
+      "valuePlaceholder": "valor",
+      "listPlaceholder": "valores separados por comas",
+      "removeConditionAria": "Quitar condición"
+    },
+    "resultView": {
+      "noRows": "Ninguna fila coincide con este informe."
+    },
+    "builder": {
+      "namePlaceholder": "Nombre del informe",
+      "descriptionPlaceholder": "Descripción (opcional)",
+      "allChangesSaved": "Todos los cambios guardados",
+      "unsavedChanges": "Cambios sin guardar…",
+      "runAndSchedule": "Ejecutar y programar",
+      "source": "Origen",
+      "mode": "Modo",
+      "detailRows": "Filas de detalle",
+      "summarize": "Resumir",
+      "sortBy": "Ordenar por",
+      "sortDefault": "Predeterminado",
+      "direction": "Dirección",
+      "descending": "Descendente",
+      "ascending": "Ascendente",
+      "rowLimit": "Límite de filas",
+      "rowLimitHint": "Limitado a 10,000 filas. Las vistas previas muestran las primeras {previewRows}.",
+      "livePreview": "Vista previa en vivo",
+      "previewFailed": "La vista previa falló",
+      "runningPreview": "Ejecutando vista previa…",
+      "previewEmptyHint": "Ajuste el informe para ver una vista previa en vivo.",
+      "columns": "Columnas",
+      "sectionBy": "Seccionar por (opcional)",
+      "noSections": "Sin secciones",
+      "sectionByHint": "Agrupa las filas de detalle en secciones con título según esta columna.",
+      "groupBy": "Agrupar por",
+      "noGroupsHint": "Sin grupos — las medidas se consolidan en un único total general.",
+      "measures": "Medidas",
+      "noBin": "Sin intervalo",
+      "removeGroupAria": "Quitar grupo",
+      "removeMeasureAria": "Quitar medida",
+      "bin": {
+        "day": "por día",
+        "week": "por semana",
+        "month": "por mes",
+        "quarter": "por trimestre",
+        "year": "por año"
+      },
+      "agg": {
+        "count": "Cantidad de filas",
+        "countDistinct": "Cantidad de valores distintos",
+        "sum": "Suma",
+        "avg": "Promedio",
+        "min": "Mín",
+        "max": "Máx"
+      }
+    },
+    "runner": {
+      "downloadCsv": "Descargar CSV",
+      "runNow": "Ejecutar ahora",
+      "runFailed": "La ejecución del informe falló",
+      "runComplete": "Ejecución del informe completada",
+      "emptyHint": "Ejecute el informe para ver los resultados aquí. Las ejecuciones se guardan y se pueden descargar como CSV.",
+      "scheduledDelivery": "Envío programado",
+      "recentRuns": "Ejecuciones recientes",
+      "columns": {
+        "trigger": "Disparador",
+        "rows": "Filas",
+        "finished": "Finalizada"
+      },
+      "status": {
+        "succeeded": "Correcta",
+        "running": "En ejecución",
+        "queued": "En cola",
+        "failed": "Fallida"
+      },
+      "trigger": {
+        "manual": "Manual",
+        "scheduled": "Programada"
+      },
+      "csv": "CSV"
+    }
+  },
+  "schedule": {
+    "updateFailed": "La actualización falló",
+    "paused": "Programación pausada",
+    "resumed": "Programación reanudada",
+    "deleteConfirm": "¿Eliminar esta programación?",
+    "deleted": "Programación eliminada",
+    "noScheduleYet": "Aún no hay una programación de envío.",
+    "addOneHint": "Agregue una para enviar este informe por correo electrónico con una frecuencia definida.",
+    "pausedBadge": "Pausada",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "deleteAria": "Eliminar programación",
+    "recipientsTo": "Para {emails}",
+    "noRecipients": "Sin destinatarios definidos",
+    "nextRun": "Próxima ejecución {time}",
+    "addSchedule": "Agregar programación",
+    "cadence": "Frecuencia",
+    "cadences": {
+      "daily": "Diaria",
+      "weekly": "Semanal",
+      "monthly": "Mensual"
+    },
+    "dayOfWeek": "Día de la semana",
+    "weekdays": {
+      "sunday": "Domingo",
+      "monday": "Lunes",
+      "tuesday": "Martes",
+      "wednesday": "Miércoles",
+      "thursday": "Jueves",
+      "friday": "Viernes",
+      "saturday": "Sábado"
+    },
+    "dayOfMonth": "Día del mes",
+    "time": "Hora",
+    "timezone": "Zona horaria",
+    "recipients": "Destinatarios",
+    "recipientsPlaceholder": "finance@example.com, cfo@example.com",
+    "recipientsHint": "Direcciones de correo electrónico separadas por comas. El envío se pone en cola para el worker (vea más abajo).",
+    "saveSchedule": "Guardar programación",
+    "saved": "Programación guardada",
+    "saveFailed": "No se pudo guardar la programación"
+  }
+}

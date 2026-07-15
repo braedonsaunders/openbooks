@@ -1,1 +1,111 @@
-{}
+{
+  "list": {
+    "title": "Projets",
+    "description": "Les chantiers, leurs contrats et le budget de coûts derrière chaque dollar qui y est comptabilisé.",
+    "searchPlaceholder": "Rechercher nom, code, client…",
+    "billingFilter": "Facturation",
+    "emptyTitle": "Aucun projet pour l’instant",
+    "emptyDescription": "Créez le premier chantier pour suivre son contrat, son budget et ses coûts.",
+    "newButton": "Nouveau projet",
+    "createDraftFailed": "Impossible de créer un projet brouillon"
+  },
+  "labels": {
+    "code": "Code",
+    "billing": "Facturation",
+    "billingMethod": "Mode de facturation",
+    "contractValue": "Valeur du contrat",
+    "actualCost": "Coût réel",
+    "foreman": "Contremaître",
+    "manager": "Gestionnaire",
+    "customerPo": "N° de BC du client",
+    "startDate": "Date de début",
+    "endDate": "Date de fin",
+    "task": "Tâche",
+    "estHours": "Heures est.",
+    "estCost": "Coût est.",
+    "kind": "Type"
+  },
+  "status": {
+    "quoted": "Soumissionné",
+    "awarded": "Octroyé",
+    "substantially_complete": "Substantiellement achevé"
+  },
+  "billing": {
+    "time_and_materials": "Temps et matériaux",
+    "fixed_price": "Prix fixe",
+    "cost_plus": "Coût majoré"
+  },
+  "taskStatus": {
+    "complete": "Terminée"
+  },
+  "docKinds": {
+    "bill": "Facture fournisseur",
+    "invoice": "Facture",
+    "expense": "Note de frais",
+    "purchaseOrder": "Bon de commande",
+    "salesOrder": "Commande client",
+    "journal": "Écriture de journal"
+  },
+  "drawer": {
+    "newProject": "Nouveau projet",
+    "autosaveHint": "Les modifications s’enregistrent automatiquement.",
+    "openCockpit": "Ouvrir le poste de pilotage",
+    "activate": "Activer",
+    "deactivate": "Désactiver",
+    "nameToActivate": "Nommez le projet pour l’activer",
+    "activated": "Projet activé",
+    "deactivated": "Projet désactivé",
+    "updateFailed": "Échec de la mise à jour",
+    "autosaveFailed": "Échec de l’enregistrement automatique",
+    "allSaved": "Toutes les modifications sont enregistrées",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "unsavedChanges": "Modifications non enregistrées…",
+    "namePlaceholder": "Nom du projet ou du chantier…",
+    "codePlaceholder": "JOB-01",
+    "noCustomer": "Aucun client",
+    "selectCustomer": "Sélectionner un client…",
+    "noForeman": "Aucun contremaître",
+    "selectForeman": "Sélectionner un contremaître…",
+    "noManager": "Aucun gestionnaire",
+    "selectManager": "Sélectionner un gestionnaire…",
+    "wbsTitle": "Structure de découpage et budget de coûts",
+    "wbsDescription": "Les tâches et leurs heures et coûts estimés. Le budget de coûts est la somme de ces estimations.",
+    "addTask": "Ajouter une tâche",
+    "noTasks": "Aucune tâche pour l’instant.",
+    "taskNamePlaceholder": "Nom de la tâche…",
+    "removeTaskAria": "Retirer la tâche"
+  },
+  "cockpit": {
+    "subtitle": "Poste de pilotage des coûts de chantier",
+    "starts": "Débute le {date}",
+    "ends": "Se termine le {date}",
+    "allProjects": "Tous les projets",
+    "costBudget": "Budget de coûts",
+    "committedCost": "Coûts engagés",
+    "projectedCost": "Coût projeté",
+    "remainingBudget": "Budget restant",
+    "actualRevenue": "Produits réels",
+    "margin": "Marge",
+    "percentSpent": "% dépensé",
+    "budgetBarTitle": "Budget, réel et engagé",
+    "overBudget": "{amount} au-dessus du budget",
+    "underBudget": "{amount} sous le budget",
+    "noCostBudget": "Aucun budget de coûts défini",
+    "actualAmount": "Réel {amount}",
+    "committedAmount": "Engagé {amount}",
+    "costBudgetAmount": "Budget de coûts {amount}",
+    "costByCategory": "Coûts par catégorie",
+    "costByAccount": "Coûts par compte",
+    "noPostedCosts": "Aucun coût comptabilisé pour l’instant.",
+    "category": "Catégorie",
+    "categories": {
+      "cogs": "Coût des marchandises vendues",
+      "operating_expense": "Charges d’exploitation"
+    },
+    "wbsTitle": "Structure de découpage du projet",
+    "noWbsTasks": "Aucune tâche de SDP. Ajoutez-les depuis l’éditeur de projet.",
+    "transactions": "Transactions",
+    "noTransactionsTitle": "Aucune transaction rattachée à ce chantier",
+    "noTransactionsDescription": "Les factures fournisseurs, factures, notes de frais, commandes et écritures dont une ligne est rattachée à ce projet apparaissent ici."
+  }
+}

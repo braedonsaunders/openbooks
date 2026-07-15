@@ -1,1 +1,141 @@
-{}
+{
+  "title": "Analyses",
+  "tabs": {
+    "cards": "Cartes",
+    "dashboards": "Tableaux de bord"
+  },
+  "viz": {
+    "table": "Tableau",
+    "bar": "Barres",
+    "line": "Courbe",
+    "area": "Aires",
+    "pie": "Secteurs"
+  },
+  "status": {
+    "published": "Publié"
+  },
+  "actions": {
+    "publish": "Publier",
+    "unpublish": "Dépublier"
+  },
+  "autosave": {
+    "saved": "Toutes les modifications sont enregistrées",
+    "unsaved": "Modifications non enregistrées…",
+    "failed": "Échec de l’enregistrement automatique"
+  },
+  "errors": {
+    "queryFailed": "Échec de la requête",
+    "updateFailed": "Échec de la mise à jour"
+  },
+  "empty": {
+    "dashboardNoCards": "Ce tableau de bord ne contient encore aucune carte."
+  },
+  "cards": {
+    "description": "Créez des cartes de graphique et de tableau à partir d’une requête sur le grand livre, puis disposez-les sur des tableaux de bord.",
+    "searchPlaceholder": "Rechercher des cartes…",
+    "emptyTitle": "Aucune carte pour l’instant",
+    "emptyDescription": "Créez votre première carte — choisissez une source, ce que vous voulez mesurer et regrouper, puis un type de graphique.",
+    "sourceColumn": "Source",
+    "chartColumn": "Graphique",
+    "newButton": "Nouvelle carte",
+    "createDraftFailed": "Impossible de créer une carte brouillon"
+  },
+  "dashboards": {
+    "description": "Disposez les cartes publiées sur des tableaux de bord partagés.",
+    "searchPlaceholder": "Rechercher des tableaux de bord…",
+    "emptyTitle": "Aucun tableau de bord pour l’instant",
+    "emptyDescription": "Créez un tableau de bord, puis déposez-y vos cartes publiées.",
+    "cardsColumn": "Cartes",
+    "newButton": "Nouveau tableau de bord",
+    "createDraftFailed": "Impossible de créer un tableau de bord brouillon"
+  },
+  "cardStudio": {
+    "untitled": "Carte sans titre",
+    "autosaveHint": "Les modifications s’enregistrent automatiquement. L’aperçu se met à jour en direct.",
+    "nameRequiredToPublish": "Nommez la carte pour la publier",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "namePlaceholder": "Dépenses mensuelles par service",
+    "sourceLabel": "Source",
+    "measuresTitle": "Mesures",
+    "measuresEmpty": "Ajoutez une mesure à agréger (ou laissez vide pour un tableau détaillé).",
+    "ofRows": "des lignes",
+    "selectFieldPlaceholder": "Sélectionner un champ…",
+    "removeMeasure": "Retirer la mesure",
+    "groupByTitle": "Regrouper par",
+    "groupByEmpty": "Regroupez les lignes par une dimension pour les résumer.",
+    "binExact": "Exact",
+    "bins": {
+      "day": "par jour",
+      "week": "par semaine",
+      "month": "par mois",
+      "quarter": "par trimestre",
+      "year": "par année"
+    },
+    "removeDimension": "Retirer la dimension",
+    "filtersTitle": "Filtres",
+    "filtersEmpty": "Aucun filtre — la carte couvre toutes les lignes.",
+    "removeFilter": "Retirer le filtre",
+    "filterPlaceholderList": "a, b, c",
+    "filterPlaceholderNumber": "30",
+    "filterPlaceholderDate": "AAAA-MM-JJ",
+    "filterPlaceholderValue": "Valeur",
+    "previewRequestFailed": "Échec de la demande d’aperçu",
+    "runningPreview": "Exécution de l’aperçu…",
+    "buildToPreview": "Construisez une requête pour afficher un aperçu.",
+    "rowCount": "{count, plural, one {# ligne} other {# lignes}}",
+    "capped": "(plafonné à 10 000)",
+    "duration": "{ms} ms",
+    "publishedToast": "Carte publiée",
+    "draftToast": "Carte remise en brouillon",
+    "deleteConfirm": "Supprimer cette carte? Elle sera retirée de tous les tableaux de bord.",
+    "deleteFailed": "Impossible de supprimer la carte",
+    "deletedToast": "Carte supprimée"
+  },
+  "vizSettings": {
+    "category": "Catégorie",
+    "auto": "Auto",
+    "value": "Valeur",
+    "allMeasures": "Toutes les mesures",
+    "stacked": "Empilé",
+    "horizontal": "Horizontal",
+    "smooth": "Lissé",
+    "showValues": "Valeurs",
+    "hideLegend": "Masquer la légende"
+  },
+  "cardTile": {
+    "loadFailed": "Impossible de charger cette carte"
+  },
+  "builder": {
+    "back": "Tableaux de bord",
+    "untitled": "Tableau de bord sans titre",
+    "pinToHome": "Épingler à l’accueil",
+    "unpin": "Désépingler",
+    "namePlaceholder": "Vue d’ensemble de la direction",
+    "addCard": "Ajouter une carte :",
+    "noPublishedCards": "Aucune carte publiée pour l’instant. <link>Créez et publiez une carte</link> pour la placer ici.",
+    "emptyEditor": "Ajoutez des cartes publiées ci-dessus pour construire ce tableau de bord.",
+    "widths": {
+      "third": "Tiers",
+      "half": "Moitié",
+      "twoThirds": "Deux tiers",
+      "full": "Pleine largeur"
+    },
+    "heights": {
+      "short": "Courte",
+      "medium": "Moyenne",
+      "tall": "Haute"
+    },
+    "cardWidth": "Largeur de la carte",
+    "cardHeight": "Hauteur de la carte",
+    "removeCard": "Retirer la carte",
+    "unavailableCard": "Cette carte n’est pas disponible (supprimée ou dépubliée).",
+    "pinnedToast": "Épinglé à votre accueil",
+    "unpinnedToast": "Désépinglé",
+    "pinFailed": "Impossible de mettre à jour l’épinglage",
+    "publishedToast": "Tableau de bord publié",
+    "draftToast": "Tableau de bord remis en brouillon",
+    "deleteConfirm": "Supprimer ce tableau de bord?",
+    "deletedToast": "Tableau de bord supprimé",
+    "deleteFailed": "Impossible de supprimer le tableau de bord"
+  }
+}

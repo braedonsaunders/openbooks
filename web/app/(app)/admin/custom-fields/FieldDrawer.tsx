@@ -2,69 +2,73 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 
 // The record types a custom field can extend, and the per-kind narrowing each
 // one supports. Header = the document itself; lines = each transaction line.
-const TARGETS: { table: string; label: string; description: string; kinds: { value: string; label: string }[] }[] = [
+// Labels are message keys under admin.customFields, translated at render time.
+const TARGETS: {
+  table: string
+  labelKey: string
+  descriptionKey: string
+  kinds: { value: string; labelKey: string }[]
+}[] = [
   {
     table: 'documents',
-    label: 'Transaction header',
-    description: 'One value per transaction (bill, invoice, payment, expense report, journal).',
+    labelKey: 'targets.documents.label',
+    descriptionKey: 'targets.documents.description',
     kinds: [
-      { value: 'vendor_bill', label: 'Vendor bills' },
-      { value: 'customer_invoice', label: 'Customer invoices' },
-      { value: 'vendor_payment', label: 'Vendor payments' },
-      { value: 'customer_payment', label: 'Customer receipts' },
-      { value: 'expense_report', label: 'Expense reports' },
-      { value: 'journal', label: 'Journal entries' },
+      { value: 'vendor_bill', labelKey: 'kinds.header.vendorBill' },
+      { value: 'customer_invoice', labelKey: 'kinds.header.customerInvoice' },
+      { value: 'vendor_payment', labelKey: 'kinds.header.vendorPayment' },
+      { value: 'customer_payment', labelKey: 'kinds.header.customerPayment' },
+      { value: 'expense_report', labelKey: 'kinds.header.expenseReport' },
+      { value: 'journal', labelKey: 'kinds.header.journal' },
     ],
   },
   {
     table: 'document_lines',
-    label: 'Transaction lines',
-    description: 'A column on every line of the chosen transaction type.',
+    labelKey: 'targets.documentLines.label',
+    descriptionKey: 'targets.documentLines.description',
     kinds: [
-      { value: 'vendor_bill', label: 'Vendor bill lines' },
-      { value: 'customer_invoice', label: 'Customer invoice lines' },
-      { value: 'expense_report', label: 'Expense report lines' },
-      { value: 'journal', label: 'Journal entry lines' },
+      { value: 'vendor_bill', labelKey: 'kinds.lines.vendorBill' },
+      { value: 'customer_invoice', labelKey: 'kinds.lines.customerInvoice' },
+      { value: 'expense_report', labelKey: 'kinds.lines.expenseReport' },
+      { value: 'journal', labelKey: 'kinds.lines.journal' },
     ],
   },
-  { table: 'parties', label: 'Parties', description: 'Vendors, customers, and employees.', kinds: [] },
-  { table: 'projects', label: 'Projects', description: 'Jobs / projects.', kinds: [] },
-  { table: 'accounts', label: 'Accounts', description: 'Chart of accounts.', kinds: [] },
+  { table: 'parties', labelKey: 'targets.parties.label', descriptionKey: 'targets.parties.description', kinds: [] },
+  { table: 'projects', labelKey: 'targets.projects.label', descriptionKey: 'targets.projects.description', kinds: [] },
+  { table: 'accounts', labelKey: 'targets.accounts.label', descriptionKey: 'targets.accounts.description', kinds: [] },
 ]
 
-const TYPES: { value: string; label: string; help: string }[] = [
-  { value: 'text', label: 'Text', help: 'Single line of text.' },
-  { value: 'long_text', label: 'Text area', help: 'Multiple lines of text.' },
-  { value: 'number', label: 'Number', help: 'A numeric value.' },
-  { value: 'currency', label: 'Currency', help: 'A money amount (2 decimals).' },
-  { value: 'date', label: 'Date', help: 'A calendar date.' },
-  { value: 'boolean', label: 'Checkbox', help: 'Yes / no.' },
-  { value: 'select', label: 'Dropdown (single)', help: 'Choose one from a list.' },
-  { value: 'multi_select', label: 'Dropdown (multiple)', help: 'Choose any number from a list.' },
+const TYPES: { value: string; labelKey: string; helpKey: string }[] = [
+  { value: 'text', labelKey: 'types.text.label', helpKey: 'types.text.help' },
+  { value: 'long_text', labelKey: 'types.longText.label', helpKey: 'types.longText.help' },
+  { value: 'number', labelKey: 'types.number.label', helpKey: 'types.number.help' },
+  { value: 'currency', labelKey: 'types.currency.label', helpKey: 'types.currency.help' },
+  { value: 'date', labelKey: 'types.date.label', helpKey: 'types.date.help' },
+  { value: 'boolean', labelKey: 'types.boolean.label', helpKey: 'types.boolean.help' },
+  { value: 'select', labelKey: 'types.select.label', helpKey: 'types.select.help' },
+  { value: 'multi_select', labelKey: 'types.multiSelect.label', helpKey: 'types.multiSelect.help' },
 ]
-
-function targetLabel(table: string, kind: string | null): string {
-  const t = TARGETS.find((x) => x.table === table)
-  const k = t?.kinds.find((x) => x.value === kind)
-  return `${t?.label ?? table}${k ? ` · ${k.label}` : t?.kinds.length ? ' · all kinds' : ''}`
-}
 
 export function NewFieldButton() {
+  const t = useTranslations('admin.customFields')
   const router = useRouter()
   return (
     <Button onClick={() => router.push('/admin/custom-fields?field=new')}>
-      <Plus size={15} /> New field
+      <Plus size={15} /> {t('newField')}
     </Button>
   )
 }
 
 export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
+  const t = useTranslations('admin.customFields')
+  const tCommon = useTranslations('common')
   const creating = !def
   const router = useRouter()
   const config = (def?.config ?? {}) as Record<string, any>
@@ -86,11 +90,21 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
   const [isActive, setIsActive] = useState<boolean>(def?.is_active ?? true)
   const [busy, setBusy] = useState(false)
 
-  const target = TARGETS.find((t) => t.table === targetTable)
+  const target = TARGETS.find((x) => x.table === targetTable)
   const needsOptions = fieldType === 'select' || fieldType === 'multi_select'
   const isNumeric = fieldType === 'number' || fieldType === 'currency'
   const slug = (s: string) =>
     s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
+
+  // "Transaction header · Vendor bills" badge text for the locked edit view.
+  function targetLabel(table: string, kind: string | null): string {
+    const tgt = TARGETS.find((x) => x.table === table)
+    const k = tgt?.kinds.find((x) => x.value === kind)
+    const base = tgt ? t(tgt.labelKey) : table
+    if (k) return `${base} · ${t(k.labelKey)}`
+    if (tgt?.kinds.length) return `${base} · ${t('drawer.allKindsSuffix')}`
+    return base
+  }
 
   function buildConfig() {
     const c: Record<string, unknown> = {}
@@ -116,11 +130,11 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not save the field')
+      toast.error(data.error ?? t('drawer.saveFailed'))
       setBusy(false)
       return
     }
-    toast.success(creating ? 'Field created' : 'Field updated')
+    toast.success(creating ? t('drawer.created') : t('drawer.updated'))
     router.push('/admin/custom-fields')
     router.refresh()
   }
@@ -132,12 +146,16 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
       open
       closeHref="/admin/custom-fields"
       size="lg"
-      title={creating ? 'New custom field' : `Edit “${def!.label}”`}
-      description={creating ? 'Extend a record type with your own field.' : undefined}
+      title={creating ? t('drawer.newTitle') : t('drawer.editTitle', { label: def!.label })}
+      description={creating ? t('drawer.newDescription') : undefined}
       headerActions={
         <>
           <Button disabled={busy || !label || (needsOptions && options.length === 0)} onClick={save}>
-            {busy ? 'Saving…' : creating ? 'Create field' : 'Save changes'}
+            {busy
+              ? tCommon('actions.saving')
+              : creating
+                ? t('drawer.createField')
+                : t('drawer.saveChanges')}
           </Button>
         </>
       }
@@ -151,7 +169,7 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
                 onChange={(e) => setIsActive(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
               />
-              Active
+              {tCommon('labels.active')}
             </label>
           ) : (
             <span />
@@ -163,12 +181,12 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
         {/* Applies to — editable on create, shown clearly (locked) on edit */}
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
           <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            Applies to
+            {t('drawer.appliesTo')}
           </div>
           {creating ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className={section}>
-                <Label>Record type</Label>
+                <Label>{t('drawer.recordType')}</Label>
                 <Select
                   value={targetTable}
                   onChange={(e) => {
@@ -176,27 +194,29 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
                     setTargetKind('')
                   }}
                 >
-                  {TARGETS.map((t) => (
-                    <option key={t.table} value={t.table}>
-                      {t.label}
+                  {TARGETS.map((tgt) => (
+                    <option key={tgt.table} value={tgt.table}>
+                      {t(tgt.labelKey)}
                     </option>
                   ))}
                 </Select>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{target?.description}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {target ? t(target.descriptionKey) : null}
+                </p>
               </div>
               {target && target.kinds.length > 0 ? (
                 <div className={section}>
-                  <Label>Which transactions</Label>
+                  <Label>{t('drawer.whichTransactions')}</Label>
                   <Select value={targetKind} onChange={(e) => setTargetKind(e.target.value)}>
-                    <option value="">All types</option>
+                    <option value="">{t('drawer.allTypes')}</option>
                     {target.kinds.map((k) => (
                       <option key={k.value} value={k.value}>
-                        {k.label}
+                        {t(k.labelKey)}
                       </option>
                     ))}
                   </Select>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Leave as “All types” to apply the field to every kind.
+                    {t('drawer.allTypesHint')}
                   </p>
                 </div>
               ) : null}
@@ -205,7 +225,7 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{targetLabel(def!.target_table, def!.target_kind)}</Badge>
               <span className="font-mono text-xs text-slate-400">{def!.key}</span>
-              <span className="text-xs text-slate-400">· locked after creation (values already reference it)</span>
+              <span className="text-xs text-slate-400">{t('drawer.lockedAfterCreation')}</span>
             </div>
           )}
         </div>
@@ -213,53 +233,61 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
         {/* Identity */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
-            <Label>Label</Label>
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="PO Number" />
+            <Label>{t('drawer.label')}</Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={t('drawer.labelPlaceholder')}
+            />
           </div>
           {creating ? (
             <div className={section}>
               <Label>
-                Field key <span className="font-normal text-slate-400">(permanent)</span>
+                {t('drawer.fieldKey')}{' '}
+                <span className="font-normal text-slate-400">{t('drawer.permanent')}</span>
               </Label>
               <Input
                 value={key}
                 onChange={(e) => setKey(slug(e.target.value))}
-                placeholder={label ? slug(label) : 'po_number'}
+                placeholder={label ? slug(label) : t('drawer.keyPlaceholder')}
                 className="font-mono"
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled from the label; snake_case.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.keyHint')}</p>
             </div>
           ) : null}
         </div>
 
         {/* Type */}
         <div className={section}>
-          <Label>Type</Label>
+          <Label>{t('drawer.type')}</Label>
           <Select value={fieldType} onChange={(e) => setFieldType(e.target.value)}>
-            {TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
+            {TYPES.map((ty) => (
+              <option key={ty.value} value={ty.value}>
+                {t(ty.labelKey)}
               </option>
             ))}
           </Select>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {TYPES.find((t) => t.value === fieldType)?.help}
+            {(() => {
+              const ty = TYPES.find((x) => x.value === fieldType)
+              return ty ? t(ty.helpKey) : null
+            })()}
           </p>
         </div>
 
         {/* Options editor */}
         {needsOptions ? (
           <div className={section}>
-            <Label>Options</Label>
+            <Label>{t('drawer.options')}</Label>
             {options.length > 0 ? (
               <ul className="divide-y divide-slate-100 rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                {options.map((o, i) => (
+                {options.map((o) => (
                   <li key={o} className="flex items-center gap-2 px-2.5 py-1.5 text-sm">
                     <GripVertical size={13} className="text-slate-300" />
                     <span className="flex-1">{o}</span>
                     <button
                       type="button"
-                      aria-label={`Remove ${o}`}
+                      aria-label={t('drawer.removeOption', { option: o })}
                       className="text-slate-400 hover:text-red-600"
                       onClick={() => setOptions(options.filter((x) => x !== o))}
                     >
@@ -269,13 +297,13 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-slate-400">No options yet — add at least one.</p>
+              <p className="text-xs text-slate-400">{t('drawer.noOptions')}</p>
             )}
             <div className="flex gap-2">
               <Input
                 value={optionDraft}
                 onChange={(e) => setOptionDraft(e.target.value)}
-                placeholder="Add an option…"
+                placeholder={t('drawer.addOptionPlaceholder')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && optionDraft.trim()) {
                     e.preventDefault()
@@ -293,7 +321,7 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
                   setOptionDraft('')
                 }}
               >
-                Add
+                {tCommon('actions.add')}
               </Button>
             </div>
           </div>
@@ -302,20 +330,33 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
         {/* Behaviour */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className={section}>
-            <Label>Help text <span className="font-normal text-slate-400">(optional)</span></Label>
-            <Input value={helpText} onChange={(e) => setHelpText(e.target.value)} placeholder="Shown under the field" />
+            <Label>
+              {t('drawer.helpText')}{' '}
+              <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
+            </Label>
+            <Input
+              value={helpText}
+              onChange={(e) => setHelpText(e.target.value)}
+              placeholder={t('drawer.helpTextPlaceholder')}
+            />
           </div>
           {!needsOptions && fieldType !== 'boolean' ? (
             <div className={section}>
-              <Label>Placeholder <span className="font-normal text-slate-400">(optional)</span></Label>
+              <Label>
+                {t('drawer.placeholder')}{' '}
+                <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
+              </Label>
               <Input value={placeholder} onChange={(e) => setPlaceholder(e.target.value)} />
             </div>
           ) : null}
           <div className={section}>
-            <Label>Default value <span className="font-normal text-slate-400">(optional)</span></Label>
+            <Label>
+              {t('drawer.defaultValue')}{' '}
+              <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
+            </Label>
             {needsOptions ? (
               <Select value={defaultValue} onChange={(e) => setDefaultValue(e.target.value)}>
-                <option value="">None</option>
+                <option value="">{tCommon('labels.none')}</option>
                 {options.map((o) => (
                   <option key={o} value={o}>
                     {o}
@@ -334,11 +375,11 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
           {isNumeric ? (
             <div className="grid grid-cols-2 gap-2">
               <div className={section}>
-                <Label>Min</Label>
+                <Label>{t('drawer.min')}</Label>
                 <Input inputMode="decimal" value={minValue} onChange={(e) => setMinValue(e.target.value)} />
               </div>
               <div className={section}>
-                <Label>Max</Label>
+                <Label>{t('drawer.max')}</Label>
                 <Input inputMode="decimal" value={maxValue} onChange={(e) => setMaxValue(e.target.value)} />
               </div>
             </div>
@@ -354,7 +395,7 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
               onChange={(e) => setIsRequired(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            Required
+            {tCommon('labels.required')}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -363,7 +404,7 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
               onChange={(e) => setShowInList(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            Show as a column in list views
+            {t('drawer.showInList')}
           </label>
         </div>
       </div>

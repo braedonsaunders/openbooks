@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { FormField } from '@openbooks/forms-core'
@@ -29,6 +30,7 @@ import {
   resolveEntityLabels,
 } from '../../../../lib/records'
 import {
+  RECORD_STATUSES,
   formatFieldValue,
   isNumericField,
   lintRecordFields,
@@ -58,6 +60,8 @@ export default async function RecordModule({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('records.read')
+  const t = await getTranslations('records')
+  const tc = await getTranslations('common')
   const { typeKey } = await params
   const sp = await searchParams
 
@@ -150,7 +154,9 @@ export default async function RecordModule({
 
   const statusOptions = statusCounts.rows.map((r: any) => ({
     value: r.status,
-    label: String(r.status),
+    label: (RECORD_STATUSES as readonly string[]).includes(r.status)
+      ? tc(`status.${r.status}`)
+      : String(r.status),
     count: Number(r.n),
   }))
 
@@ -160,16 +166,22 @@ export default async function RecordModule({
         <>
           <PageHeader
             title={type.plural_name}
-            description={type.description ?? `${type.plural_name} tracked as a custom record type.`}
+            description={
+              type.description ?? t('module.defaultDescription', { pluralName: type.plural_name })
+            }
             actions={canCreate ? <NewRecordButton typeKey={typeKey} typeName={type.name} /> : undefined}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder={`Search ${type.plural_name.toLowerCase()}…`} />
+            <SearchInput
+              placeholder={t('module.searchPlaceholder', {
+                pluralName: type.plural_name.toLowerCase(),
+              })}
+            />
             <FilterChips
               basePath={basePath}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tc('labels.status')}
               options={statusOptions}
             />
             {filterFields.map((f) => {
@@ -200,11 +212,11 @@ export default async function RecordModule({
     >
       {total === 0 ? (
         <EmptyState
-          title={`No ${type.plural_name.toLowerCase()} yet`}
+          title={t('module.emptyTitle', { pluralName: type.plural_name.toLowerCase() })}
           description={
             canCreate
-              ? `Create the first ${type.name.toLowerCase()} to start this register.`
-              : `Nothing has been recorded here yet.`
+              ? t('module.emptyCreate', { typeName: type.name.toLowerCase() })
+              : t('module.emptyNoAccess')
           }
           action={canCreate ? <NewRecordButton typeKey={typeKey} typeName={type.name} /> : undefined}
         />
@@ -229,9 +241,9 @@ export default async function RecordModule({
                     {f.label}
                   </SortTh>
                 ))}
-                <TableHead>Status</TableHead>
+                <TableHead>{tc('labels.status')}</TableHead>
                 <SortTh basePath={basePath} currentParams={sp} column="created" sort={listParams.sort} dir={listParams.dir}>
-                  Created
+                  {tc('labels.created')}
                 </SortTh>
               </TableRow>
             </TableHeader>
@@ -258,7 +270,11 @@ export default async function RecordModule({
                     )
                   })}
                   <TableCell>
-                    <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>{r.status}</Badge>
+                    <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>
+                      {(RECORD_STATUSES as readonly string[]).includes(r.status)
+                        ? tc(`status.${r.status}`)
+                        : r.status}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{dateTime(r.created_at)}</TableCell>
                 </TableRow>

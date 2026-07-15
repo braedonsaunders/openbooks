@@ -1,1 +1,31 @@
-{}
+{
+  "title": "Clôture de période",
+  "description": "Fermez les modules par période : les comptes clients et les comptes fournisseurs verrouillent leurs livres auxiliaires; la clôture du GL verrouille entièrement la période pour la comptabilisation (appliqué par le noyau — une période fermée refuse toute écriture au niveau de la base de données).",
+  "filters": {
+    "fiscalYear": "Exercice",
+    "fyOption": "Exercice {year}"
+  },
+  "table": {
+    "range": "Plage",
+    "entries": "Écritures",
+    "debits": "Débits",
+    "rangeValue": "{start} → {end}"
+  },
+  "modules": {
+    "ar": "CC",
+    "ap": "CF",
+    "gl": "GL"
+  },
+  "status": {
+    "closed": "fermée",
+    "open": "ouverte"
+  },
+  "buttons": {
+    "close": "Fermer",
+    "reopen": "Rouvrir",
+    "reopenConfirm": "Rouvrir {module} pour cette période?",
+    "actionFailed": "Échec de l’action",
+    "closedToast": "{module} fermé",
+    "reopenedToast": "{module} rouvert"
+  }
+}

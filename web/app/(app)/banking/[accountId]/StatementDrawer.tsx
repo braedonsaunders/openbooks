@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
@@ -11,11 +12,14 @@ const MATCH_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   excluded: 'outline',
 }
 
+// Known match_status enum values — unknown values render verbatim.
+const MATCH_STATUS_KEYS = ['matched', 'unmatched', 'excluded']
+
 /**
  * Read-only flyout over the account view (?statement=<id>) showing an
  * imported statement's lines — the immutable bank-side truth.
  */
-export function StatementDrawer({
+export async function StatementDrawer({
   basePath,
   currentParams,
   statement,
@@ -51,6 +55,8 @@ export function StatementDrawer({
   sort: string
   dir: 'asc' | 'desc'
 }) {
+  const t = await getTranslations('banking')
+  const tCommon = await getTranslations('common')
   const closeHref = mergeHref(basePath, currentParams, {
     statement: undefined,
     slQ: undefined,
@@ -76,32 +82,34 @@ export function StatementDrawer({
       size="xl"
       title={
         <span className="flex items-center gap-2.5">
-          Statement {statement.statement_date}
+          {t('drawer.title', { date: statement.statement_date })}
           <Badge variant="outline">{statement.source}</Badge>
         </span>
       }
-      description={`Imported ${new Date(statement.imported_at).toLocaleDateString('en-CA')} · opening ${
-        statement.opening_balance != null ? money(statement.opening_balance) : '—'
-      } · closing ${statement.closing_balance != null ? money(statement.closing_balance) : '—'}`}
+      description={t('drawer.description', {
+        date: new Date(statement.imported_at).toLocaleDateString('en-CA'),
+        opening: statement.opening_balance != null ? money(statement.opening_balance) : '—',
+        closing: statement.closing_balance != null ? money(statement.closing_balance) : '—',
+      })}
     >
       <div className="space-y-3">
-        <SearchInput placeholder="Search lines…" paramKey="slQ" pageParamKey="slPage" />
+        <SearchInput placeholder={t('drawer.searchLines')} paramKey="slQ" pageParamKey="slPage" />
         <Table>
           <TableHeader>
             <TableRow>
               <SortableTh {...sortProps} column="line" active={sort === 'line'}>#</SortableTh>
-              <SortableTh {...sortProps} column="date" active={sort === 'date'}>Date</SortableTh>
-              <TableHead>Description</TableHead>
-              <TableHead>Ref</TableHead>
-              <SortableTh {...sortProps} column="amount" active={sort === 'amount'} align="right">Amount</SortableTh>
-              <TableHead>Match</TableHead>
+              <SortableTh {...sortProps} column="date" active={sort === 'date'}>{tCommon('labels.date')}</SortableTh>
+              <TableHead>{tCommon('labels.description')}</TableHead>
+              <TableHead>{t('labels.ref')}</TableHead>
+              <SortableTh {...sortProps} column="amount" active={sort === 'amount'} align="right">{tCommon('labels.amount')}</SortableTh>
+              <TableHead>{t('drawer.matchColumn')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {lines.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-slate-500 dark:text-slate-400">
-                  No lines match this search.
+                  {t('drawer.noLines')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -113,7 +121,9 @@ export function StatementDrawer({
                   <TableCell className="text-slate-500 dark:text-slate-400">{l.counterparty_ref ?? ''}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
                   <TableCell>
-                    <Badge variant={MATCH_VARIANT[l.match_status] ?? 'secondary'}>{l.match_status}</Badge>
+                    <Badge variant={MATCH_VARIANT[l.match_status] ?? 'secondary'}>
+                      {MATCH_STATUS_KEYS.includes(l.match_status) ? t(`matchStatus.${l.match_status}`) : l.match_status}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))

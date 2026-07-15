@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { mergeHref } from '@/lib/list-params'
 
 export function Pagination({
@@ -18,6 +19,8 @@ export function Pagination({
   /** URL param that carries the page number. Sub-tables pass a prefixed key. */
   pageParamKey?: string
 }) {
+  const t = useTranslations('ui.pagination')
+  const tCommon = useTranslations('common')
   const pageCount = Math.max(1, Math.ceil(total / perPage))
   const isOutOfRange = total > 0 && page > pageCount
   const from = total === 0 ? 0 : (page - 1) * perPage + 1
@@ -36,43 +39,40 @@ export function Pagination({
   return (
     <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
       <span>
-        {isOutOfRange ? (
-          <>Page {page.toLocaleString()} is past the end of these results.</>
-        ) : total === 0 ? (
-          <>No results</>
-        ) : (
-          <>
-            Showing{' '}
-            <strong className="font-medium text-slate-900 dark:text-slate-100">
-              {from.toLocaleString()}
-            </strong>
-            {'–'}
-            <strong className="font-medium text-slate-900 dark:text-slate-100">
-              {to.toLocaleString()}
-            </strong>{' '}
-            of{' '}
-            <strong className="font-medium text-slate-900 dark:text-slate-100">
-              {total.toLocaleString()}
-            </strong>
-          </>
-        )}
+        {isOutOfRange
+          ? t('outOfRange', { page: page.toLocaleString() })
+          : total === 0
+            ? tCommon('feedback.noResults')
+            : t.rich('showing', {
+                from: from.toLocaleString(),
+                to: to.toLocaleString(),
+                total: total.toLocaleString(),
+                strong: (chunks) => (
+                  <strong className="font-medium text-slate-900 dark:text-slate-100">
+                    {chunks}
+                  </strong>
+                ),
+              })}
       </span>
       {isOutOfRange ? (
-        <PageButton href={lastPageHref} aria-label={`Go to last page, page ${pageCount}`}>
+        <PageButton
+          href={lastPageHref}
+          aria-label={t('goToLastPageAria', { page: pageCount.toLocaleString() })}
+        >
           <ChevronLeft size={14} />
-          Go to page {pageCount.toLocaleString()}
+          {t('goToPage', { page: pageCount.toLocaleString() })}
         </PageButton>
       ) : pageCount > 1 ? (
         <div className="flex items-center gap-1">
-          <PageButton href={prevHref} disabled={page <= 1} aria-label="Previous page">
+          <PageButton href={prevHref} disabled={page <= 1} aria-label={t('previousPageAria')}>
             <ChevronLeft size={14} />
-            Prev
+            {t('prev')}
           </PageButton>
           <span className="px-2 text-slate-500 dark:text-slate-400">
-            Page {page} of {pageCount}
+            {t('pageOf', { page, pages: pageCount })}
           </span>
-          <PageButton href={nextHref} disabled={page >= pageCount} aria-label="Next page">
-            Next
+          <PageButton href={nextHref} disabled={page >= pageCount} aria-label={t('nextPageAria')}>
+            {tCommon('actions.next')}
             <ChevronRight size={14} />
           </PageButton>
         </div>

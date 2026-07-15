@@ -3,10 +3,11 @@
 import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Input } from '@openbooks/ui'
 
 export function SearchInput({
-  placeholder = 'Search…',
+  placeholder,
   paramKey = 'q',
   pageParamKey = 'page',
 }: {
@@ -15,6 +16,7 @@ export function SearchInput({
   /** Pagination param to reset when the search changes (sub-tables use prefixed params). */
   pageParamKey?: string
 }) {
+  const t = useTranslations('ui.search')
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
@@ -55,7 +57,7 @@ export function SearchInput({
       />
       <Input
         type="search"
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('placeholder')}
         value={value}
         onChange={(e) => setEdit({ source: urlValue, value: e.target.value })}
         // Hide the browser's native search clear (×) — we render our own below,
@@ -65,7 +67,7 @@ export function SearchInput({
       {value ? (
         <button
           type="button"
-          aria-label="Clear search"
+          aria-label={t('clearAria')}
           onClick={() => setEdit({ source: urlValue, value: '' })}
           className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
         >

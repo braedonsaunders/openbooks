@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
@@ -16,6 +17,8 @@ export function NewPaymentButton({
   basePath: string
   label: string
 }) {
+  const t = useTranslations('payments.newButton')
+  const tCommon = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -28,7 +31,7 @@ export function NewPaymentButton({
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not create a draft')
+      toast.error(data.error ?? t('createDraftFailed'))
       setBusy(false)
       return
     }
@@ -39,7 +42,7 @@ export function NewPaymentButton({
 
   return (
     <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? 'Creating…' : label}
+      <Plus size={15} /> {busy ? tCommon('actions.creating') : label}
     </Button>
   )
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import type { InsightQuery, VizSettings, VizType } from '@openbooks/analytics'
 import { CardTile, type CardTileData } from './CardTile'
 
@@ -22,19 +23,20 @@ export type EmbedWidget = { cardId: string; x: number; y: number; w: number; h: 
 export function DashboardEmbed({
   cards,
   layout,
-  emptyMessage = 'This dashboard has no cards yet.',
+  emptyMessage,
 }: {
   cards: EmbedCard[]
   layout: EmbedWidget[]
   emptyMessage?: string
 }) {
+  const t = useTranslations('insights')
   const byId = new Map(cards.map((c) => [c.id, c]))
   const placed = layout.filter((w) => byId.has(w.cardId)).sort((a, b) => a.y - b.y || a.x - b.x)
 
   if (placed.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 px-6 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-        {emptyMessage}
+        {emptyMessage ?? t('empty.dashboardNoCards')}
       </div>
     )
   }

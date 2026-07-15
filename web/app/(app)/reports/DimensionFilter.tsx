@@ -1,6 +1,7 @@
 'use client'
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Select } from '@openbooks/ui'
 
 export function DimensionFilter({
@@ -10,6 +11,7 @@ export function DimensionFilter({
   departments: { id: string; name: string }[]
   projects: { id: string; name: string }[]
 }) {
+  const t = useTranslations('reports.dimensionFilter')
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -27,9 +29,9 @@ export function DimensionFilter({
         value={params.get('dept') ?? ''}
         onChange={(e) => apply('dept', e.target.value)}
         className="w-52"
-        aria-label="Department filter"
+        aria-label={t('departmentAria')}
       >
-        <option value="">All departments</option>
+        <option value="">{t('allDepartments')}</option>
         {departments.map((d) => (
           <option key={d.id} value={d.id}>
             {d.name}
@@ -40,9 +42,9 @@ export function DimensionFilter({
         value={params.get('project') ?? ''}
         onChange={(e) => apply('project', e.target.value)}
         className="w-52"
-        aria-label="Project filter"
+        aria-label={t('projectAria')}
       >
-        <option value="">All projects</option>
+        <option value="">{t('allProjects')}</option>
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}

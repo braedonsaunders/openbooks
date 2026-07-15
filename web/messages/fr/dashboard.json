@@ -1,1 +1,33 @@
-{}
+{
+  "title": "Tableau de bord",
+  "orgDescription": "{name} · {currency} · {book}",
+  "stats": {
+    "journalEntries": "Écritures de journal",
+    "journalLines": "Lignes de journal",
+    "ledgerBalance": "Solde du grand livre",
+    "ledgerBalanced": "Σ = 0,00",
+    "ledgerSum": "Σ = {amount}",
+    "parallelRun": "Exécution en parallèle avec {source}",
+    "parityValue": "{matches}/{accounts} concordent"
+  },
+  "syncCard": {
+    "body": "Un système comptable externe est connecté pour la vérification en parallèle. La synchronisation est manuelle; chaque synchronisation revérifie la balance de vérification compte par compte.",
+    "link": "Page de synchronisation"
+  },
+  "recentRuns": {
+    "title": "Synchronisations récentes",
+    "started": "Démarrée",
+    "source": "Source",
+    "trigger": "Déclencheur",
+    "new": "Nouvelles",
+    "reversed": "Contrepassées",
+    "unchanged": "Inchangées",
+    "tbVerification": "Vérification de la BV",
+    "empty": "Aucune synchronisation pour l’instant.",
+    "runStatus": {
+      "ok": "ok",
+      "failed": "échec",
+      "running": "en cours"
+    }
+  }
+}

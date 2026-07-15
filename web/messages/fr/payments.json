@@ -1,1 +1,152 @@
-{}
+{
+  "page": {
+    "title": "Paiements",
+    "description": "Paiements fournisseurs appliqués aux factures fournisseurs ouvertes, et lots de paiements EFT exportés en fichiers CPA-005.",
+    "newPayment": "Nouveau paiement",
+    "tabs": {
+      "payments": "Paiements",
+      "runs": "Lots de paiements"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {Rechercher des paiements, fournisseurs, réf…} other {Rechercher des encaissements, clients, réf…}}",
+    "newLabel": "{side, select, ap {Nouveau paiement} other {Nouvel encaissement}}",
+    "columns": {
+      "document": "{side, select, ap {Paiement} other {Encaissement}}",
+      "bankAccount": "Compte bancaire",
+      "ref": "Réf."
+    },
+    "empty": {
+      "title": "{side, select, ap {Aucun paiement pour l’instant} other {Aucun encaissement pour l’instant}}",
+      "description": "{side, select, ap {Enregistrez le premier paiement fournisseur pour commencer à régler les factures fournisseurs ouvertes.} other {Enregistrez le premier encaissement client pour commencer à régler les factures clients ouvertes.}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "Impossible de créer un brouillon"
+  },
+  "drawer": {
+    "draftHint": "Brouillon — les modifications s’enregistrent automatiquement.",
+    "viewGlImpact": "Voir l’impact au grand livre",
+    "postAction": "{side, select, ap {Payer et comptabiliser} other {Encaisser et comptabiliser}}",
+    "bankAccount": "Compte bancaire",
+    "selectPartyPlaceholder": "{side, select, ap {Sélectionner un fournisseur…} other {Sélectionner un client…}}",
+    "selectBankAccountPlaceholder": "Sélectionner un compte bancaire…",
+    "referencePlaceholder": "Réf. chèque / EFT…",
+    "openItems": "{side, select, ap {Factures fournisseurs ouvertes} other {Factures clients ouvertes}}",
+    "selectPartyHint": "{side, select, ap {Sélectionnez un fournisseur pour afficher ses éléments ouverts.} other {Sélectionnez un client pour afficher ses éléments ouverts.}}",
+    "loadingOpenItems": "Chargement des éléments ouverts…",
+    "noOpenItems": "{side, select, ap {Aucune facture ouverte pour ce fournisseur.} other {Aucune facture ouverte pour ce client.}}",
+    "columns": {
+      "apply": "Appliquer",
+      "document": "Document",
+      "due": "Échéance",
+      "original": "Montant initial",
+      "appliedToDate": "Appliqué à ce jour",
+      "open": "Solde ouvert",
+      "appliedOn": "Appliqué le",
+      "applied": "Appliqué"
+    },
+    "applyAriaLabel": "Appliquer à {document}",
+    "invalidAllocation": "Chaque montant appliqué doit être supérieur à zéro et ne pas dépasser le solde ouvert de l’élément.",
+    "appliedTo": "Appliqué à",
+    "voidedNote": "Ce paiement a été annulé; sa comptabilisation a été contrepassée.",
+    "noLiveApplications": "Aucune imputation active.",
+    "kind": {
+      "vendorBill": "Facture fournisseur",
+      "customerInvoice": "Facture client",
+      "expenseReport": "Note de frais",
+      "journal": "Journal",
+      "entry": "Écriture"
+    },
+    "saveState": {
+      "saved": "Toutes les modifications sont enregistrées",
+      "error": "Échec de l’enregistrement — corrigez et réessayez",
+      "dirty": "Modifications non enregistrées…"
+    },
+    "applyingSummary": "{count, plural, one {Imputation de # élément} other {Imputation de # éléments}} · <total>Total {amount}</total>",
+    "totalAmount": "Total {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "Impossible de charger les éléments ouverts",
+      "autosaveFailed": "Échec de l’enregistrement automatique",
+      "postFailed": "Échec de la comptabilisation",
+      "posted": "{side, select, ap {Paiement comptabilisé et appliqué} other {Encaissement comptabilisé et appliqué}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "L’émission EFT n’est pas configurée",
+    "notConfiguredListDescription": "Les lots de paiements peuvent être assemblés, mais le fichier CPA-005 ne peut pas être généré tant qu’un administrateur n’a pas défini <code>orgs.settings.eft</code> — manquant : {missing}. Amorcez des valeurs provisoires avec <code>engine/src/seed-eft-settings.ts</code>, puis renseignez les coordonnées d’initiateur attribuées par la banque.",
+    "notConfiguredDrawerDescription": "Le fichier CPA-005 ne peut pas être généré tant qu’un administrateur n’a pas défini <code>orgs.settings.eft</code> — manquant : {missing}. Des valeurs provisoires peuvent être amorcées avec <code>engine/src/seed-eft-settings.ts</code>, puis remplies avec les coordonnées d’initiateur attribuées par la banque."
+  },
+  "runBuilder": {
+    "noOpenBills": "Aucune facture fournisseur comptabilisée avec un solde ouvert ne correspond.",
+    "selectAllAriaLabel": "Sélectionner toutes les factures de cette page",
+    "selectAriaLabel": "Sélectionner {document}",
+    "columns": {
+      "bill": "Facture",
+      "due": "Échéance",
+      "ref": "Réf.",
+      "bankDetails": "Coordonnées bancaires",
+      "openBalance": "Solde ouvert"
+    },
+    "bankApproved": "approuvées",
+    "bankMissing": "manquantes",
+    "payFromBankAccount": "Payer depuis le compte bancaire",
+    "selectBankAccountPlaceholder": "Sélectionner un compte bancaire…",
+    "fundsDate": "Date des fonds",
+    "selectionSummary": "{count, plural, one {# facture} other {# factures}} · <total>{amount}</total>",
+    "createRun": "Créer un lot de paiements",
+    "toasts": {
+      "createFailed": "Impossible de créer le lot de paiements",
+      "created": "Lot de paiements {number} créé"
+    }
+  },
+  "runs": {
+    "openBillsHeading": "Factures fournisseurs ouvertes à payer",
+    "billsSearchPlaceholder": "Rechercher des factures, fournisseurs, réf…",
+    "runsHeading": "Lots de paiements",
+    "noRunsYet": "Aucun lot de paiements pour l’instant — sélectionnez des factures ci-dessus pour créer le premier.",
+    "columns": {
+      "run": "Lot",
+      "bankAccount": "Compte bancaire",
+      "fundsDate": "Date des fonds",
+      "payments": "Paiements"
+    },
+    "status": {
+      "confirmed": "Confirmé",
+      "exported": "Exporté"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "EFT depuis {bank}",
+    "descriptionEftWithDate": "EFT depuis {bank} · fonds le {date}",
+    "bankAccountFallback": "compte bancaire",
+    "cancelRun": "Annuler le lot",
+    "downloadFile": "Télécharger le fichier CPA-005",
+    "downloadBlockedTitle": "Résolvez d’abord les problèmes de configuration EFT et de coordonnées bancaires",
+    "postPayments": "Comptabiliser les paiements",
+    "paymentsSummary": "{count, plural, one {# paiement} other {# paiements}} · <total>Total {amount}</total>",
+    "payeesMissingBankDetails": "Bénéficiaires sans coordonnées bancaires approuvées",
+    "columns": {
+      "payee": "Bénéficiaire",
+      "payment": "Paiement",
+      "bankDetails": "Coordonnées bancaires"
+    },
+    "bankApproved": "approuvées",
+    "instructionStatus": {
+      "pending": "en attente",
+      "sent": "envoyé",
+      "settled": "réglé",
+      "returned": "retourné",
+      "cancelled": "annulé"
+    },
+    "confirmPost": "{count, plural, one {Comptabiliser # paiement} other {Comptabiliser # paiements}} totalisant {total} au grand livre et les appliquer aux factures sélectionnées?",
+    "confirmCancel": "Annuler le lot {number}? Ses paiements en brouillon seront supprimés; rien n’a été comptabilisé.",
+    "toasts": {
+      "postFailed": "Échec de la comptabilisation",
+      "postedWithFailures": "{count} comptabilisés; échecs : {failures}",
+      "posted": "{count, plural, one {# paiement comptabilisé et appliqué} other {# paiements comptabilisés et appliqués}}",
+      "cancelFailed": "Impossible d’annuler le lot",
+      "cancelled": "Lot annulé"
+    }
+  }
+}

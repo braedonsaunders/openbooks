@@ -1,1 +1,28 @@
-{}
+{
+  "title": "Approvals",
+  "description": "Pending items assigned to your role ({role}).",
+  "empty": {
+    "title": "Nothing waiting on you",
+    "description": "Approval requests routed to your role will appear here."
+  },
+  "table": {
+    "document": "Document",
+    "kind": "Kind",
+    "step": "Step",
+    "decision": "Decision",
+    "stepNumber": "step {number}"
+  },
+  "kinds": {
+    "vendor_bill": "vendor bill",
+    "customer_invoice": "customer invoice",
+    "expense_report": "expense report",
+    "journal": "journal",
+    "purchase_order": "purchase order",
+    "sales_order": "sales order",
+    "quote": "quote"
+  },
+  "decide": {
+    "rejectionReason": "Rejection reason:",
+    "decisionFailed": "Decision failed"
+  }
+}

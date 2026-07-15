@@ -1,1 +1,511 @@
-{}
+{
+  "hub": {
+    "metaTitle": "Administración",
+    "title": "Administración",
+    "subtitle": "Todo lo que configura este espacio de trabajo: configuración de la empresa, personas y sistema.",
+    "groups": {
+      "company": "Empresa",
+      "people": "Personas y acceso",
+      "workspace": "Espacio de trabajo",
+      "activity": "Actividad y datos"
+    },
+    "cards": {
+      "settings": {
+        "title": "Empresa y contabilidad",
+        "description": "Identidad de la organización, moneda base, ejercicio fiscal y cuentas de control"
+      },
+      "users": {
+        "title": "Usuarios",
+        "description": "Invite personas, asigne roles y excepciones de permisos"
+      },
+      "roles": {
+        "title": "Roles",
+        "description": "Defina roles y exactamente qué otorga cada uno"
+      },
+      "navigation": {
+        "title": "Navegación",
+        "description": "Reordene la barra lateral y renombre los módulos por organización"
+      },
+      "customFields": {
+        "title": "Campos personalizados",
+        "description": "Agregue campos tipados a los registros en toda la aplicación"
+      },
+      "scripts": {
+        "title": "Scripts",
+        "description": "Automatización aislada (sandbox) que se ejecuta con eventos del libro mayor"
+      },
+      "audit": {
+        "title": "Registro de auditoría",
+        "description": "Cada escritura queda capturada con el actor y las diferencias antes/después"
+      },
+      "sync": {
+        "title": "Sincronización",
+        "description": "Importe desde fuentes externas y concilie migraciones"
+      }
+    }
+  },
+  "audit": {
+    "title": "Registro de auditoría",
+    "description": "Historial a nivel de campo de los cambios de la capa de negocio. El libro mayor no necesita pista de auditoría: es de solo adición por construcción.",
+    "searchPlaceholder": "Buscar tabla, actor o id de fila…",
+    "actionFilter": "Acción",
+    "empty": {
+      "title": "Aún no hay entradas de auditoría",
+      "description": "Las mutaciones de la capa de negocio aparecerán aquí a medida que los módulos registren sus cambios."
+    },
+    "table": {
+      "when": "Cuándo",
+      "actor": "Actor",
+      "action": "Acción",
+      "tableName": "Tabla",
+      "row": "Fila",
+      "changes": "Cambios"
+    },
+    "systemActor": "sistema",
+    "actions": {
+      "insert": "inserción",
+      "update": "actualización",
+      "delete": "eliminación",
+      "post": "contabilización",
+      "void": "anulación",
+      "approve": "aprobación",
+      "reject": "rechazo"
+    }
+  },
+  "customFields": {
+    "title": "Campos personalizados",
+    "description": "Extienda cualquier módulo: encabezados de documentos, líneas de transacción, terceros, proyectos, cuentas. Los campos se muestran dondequiera que aparezca el registro: paneles, cuadrículas de líneas e informes.",
+    "searchPlaceholder": "Buscar campos…",
+    "targetFilter": "Destino",
+    "table": {
+      "field": "Campo",
+      "key": "Clave",
+      "target": "Destino",
+      "type": "Tipo",
+      "required": "Obligatorio",
+      "status": "Estado"
+    },
+    "empty": "Aún no hay campos personalizados.",
+    "statusActive": "activo",
+    "statusArchived": "archivado",
+    "newField": "Nuevo campo",
+    "targets": {
+      "documents": {
+        "label": "Encabezado de transacción",
+        "description": "Un valor por transacción (factura de proveedor, factura, pago, informe de gastos, asiento)."
+      },
+      "documentLines": {
+        "label": "Líneas de transacción",
+        "description": "Una columna en cada línea del tipo de transacción elegido."
+      },
+      "parties": {
+        "label": "Terceros",
+        "description": "Proveedores, clientes y empleados."
+      },
+      "projects": {
+        "label": "Proyectos",
+        "description": "Trabajos / proyectos."
+      },
+      "accounts": {
+        "label": "Cuentas",
+        "description": "Plan de cuentas."
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "Facturas de proveedor",
+        "customerInvoice": "Facturas de cliente",
+        "vendorPayment": "Pagos a proveedores",
+        "customerPayment": "Cobros de clientes",
+        "expenseReport": "Informes de gastos",
+        "journal": "Asientos contables"
+      },
+      "lines": {
+        "vendorBill": "Líneas de factura de proveedor",
+        "customerInvoice": "Líneas de factura de cliente",
+        "expenseReport": "Líneas de informe de gastos",
+        "journal": "Líneas de asiento contable"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "Texto",
+        "help": "Una sola línea de texto."
+      },
+      "longText": {
+        "label": "Área de texto",
+        "help": "Varias líneas de texto."
+      },
+      "number": {
+        "label": "Número",
+        "help": "Un valor numérico."
+      },
+      "currency": {
+        "label": "Moneda",
+        "help": "Un importe monetario (2 decimales)."
+      },
+      "date": {
+        "label": "Fecha",
+        "help": "Una fecha de calendario."
+      },
+      "boolean": {
+        "label": "Casilla de verificación",
+        "help": "Sí / no."
+      },
+      "select": {
+        "label": "Lista desplegable (única)",
+        "help": "Elija una opción de una lista."
+      },
+      "multiSelect": {
+        "label": "Lista desplegable (múltiple)",
+        "help": "Elija cualquier cantidad de opciones de una lista."
+      }
+    },
+    "drawer": {
+      "newTitle": "Nuevo campo personalizado",
+      "editTitle": "Editar “{label}”",
+      "newDescription": "Extienda un tipo de registro con su propio campo.",
+      "createField": "Crear campo",
+      "saveChanges": "Guardar cambios",
+      "created": "Campo creado",
+      "updated": "Campo actualizado",
+      "saveFailed": "No se pudo guardar el campo",
+      "appliesTo": "Se aplica a",
+      "recordType": "Tipo de registro",
+      "whichTransactions": "Qué transacciones",
+      "allTypes": "Todos los tipos",
+      "allTypesHint": "Deje “Todos los tipos” para aplicar el campo a todas las clases.",
+      "allKindsSuffix": "todas las clases",
+      "lockedAfterCreation": "· bloqueado tras la creación (ya hay valores que lo referencian)",
+      "label": "Etiqueta",
+      "labelPlaceholder": "Número de OC",
+      "fieldKey": "Clave del campo",
+      "permanent": "(permanente)",
+      "keyPlaceholder": "po_number",
+      "keyHint": "Se completa automáticamente a partir de la etiqueta; en snake_case.",
+      "type": "Tipo",
+      "options": "Opciones",
+      "noOptions": "Aún no hay opciones — agregue al menos una.",
+      "addOptionPlaceholder": "Agregar una opción…",
+      "removeOption": "Quitar {option}",
+      "helpText": "Texto de ayuda",
+      "optionalSuffix": "(opcional)",
+      "helpTextPlaceholder": "Se muestra debajo del campo",
+      "placeholder": "Texto de ejemplo",
+      "defaultValue": "Valor predeterminado",
+      "min": "Mín",
+      "max": "Máx",
+      "showInList": "Mostrar como columna en las vistas de lista"
+    }
+  },
+  "navigation": {
+    "title": "Navegación",
+    "description": "Personalice la barra lateral para toda la organización: renombre, reordene, oculte módulos o agregue enlaces. Los controles de permisos se siguen aplicando además de esto.",
+    "groupLabelAria": "Etiqueta del grupo",
+    "moveGroupUp": "Subir grupo",
+    "moveGroupDown": "Bajar grupo",
+    "itemLabelAria": "Etiqueta del elemento",
+    "showItem": "Mostrar elemento",
+    "hideItem": "Ocultar elemento",
+    "moveItemUp": "Subir elemento",
+    "moveItemDown": "Bajar elemento",
+    "linkUrlPrompt": "URL del enlace (ruta interna o https://…):",
+    "linkLabelPrompt": "Etiqueta:",
+    "addLink": "Agregar enlace",
+    "save": "Guardar navegación",
+    "saved": "Navegación guardada",
+    "saveFailed": "No se pudo guardar",
+    "resetDefaults": "Restablecer valores predeterminados"
+  },
+  "roles": {
+    "metaTitle": "Roles",
+    "title": "Roles",
+    "description": "Conjuntos de permisos que se asignan a los usuarios. Los roles integrados vienen incluidos con la aplicación; cree roles personalizados para un control más detallado.",
+    "manageUsers": "Administrar usuarios",
+    "searchPlaceholder": "Buscar por nombre, clave o descripción del rol…",
+    "typeFilter": "Tipo",
+    "builtIn": "Integrado",
+    "custom": "Personalizado",
+    "emptyTitle": "Aún no hay roles",
+    "emptyDescription": "Ejecute el script de datos iniciales de roles (engine/src/seed-roles.ts) para crear los roles integrados, o cree un rol personalizado.",
+    "noMatchTitle": "No hay roles coincidentes",
+    "noMatchDescription": "Ajuste la búsqueda o el filtro de tipo.",
+    "table": {
+      "key": "Clave",
+      "permissions": "Permisos",
+      "members": "Miembros"
+    },
+    "newRole": "Nuevo rol",
+    "drawer": {
+      "newTitle": "Nuevo rol",
+      "lockedDescription": "El rol de Administrador siempre incluye todos los permisos y no se puede editar.",
+      "builtInDescription": "Rol integrado: el nombre y la clave son fijos, pero puede ajustar sus permisos.",
+      "newDescription": "Asigne un nombre al rol y luego elija los permisos que otorga.",
+      "deleteRole": "Eliminar rol",
+      "createRole": "Crear rol",
+      "saveChanges": "Guardar cambios",
+      "nameRequired": "El nombre del rol es obligatorio",
+      "saveFailed": "No se pudo guardar el rol",
+      "created": "Rol creado",
+      "updated": "Rol actualizado",
+      "deleteConfirm": "¿Eliminar el rol “{name}”? Los usuarios que lo tengan perderán sus permisos de inmediato.",
+      "deleteFailed": "No se pudo eliminar el rol",
+      "deleted": "Rol eliminado",
+      "namePlaceholder": "Auxiliar de cuentas por pagar",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "¿Para qué sirve este rol?",
+      "permissionsHeading": "Permisos",
+      "selectedCount": "{count} seleccionados"
+    }
+  },
+  "scripts": {
+    "title": "Scripts",
+    "description": "JavaScript real, ejecutado en un sandbox en los puntos de activación de los documentos: valide, modifique campos autorizados o vete la operación con ob.abort(). Cada ejecución queda registrada.",
+    "searchPlaceholder": "Buscar scripts…",
+    "triggerFilter": "Disparador",
+    "table": {
+      "script": "Script",
+      "trigger": "Disparador",
+      "kind": "Clase",
+      "runs": "Ejecuciones",
+      "lastRun": "Última ejecución",
+      "status": "Estado"
+    },
+    "empty": "Aún no hay scripts — automatice un flujo de trabajo de documentos.",
+    "allKinds": "todas",
+    "statusActive": "activo",
+    "statusDisabled": "deshabilitado",
+    "triggers": {
+      "beforeSubmit": "antes de enviar",
+      "beforePost": "antes de contabilizar",
+      "afterPost": "después de contabilizar",
+      "beforeVoid": "antes de anular",
+      "scheduled": "programado"
+    },
+    "kinds": {
+      "vendorBill": "factura de proveedor",
+      "customerInvoice": "factura de cliente",
+      "vendorPayment": "pago a proveedor",
+      "customerPayment": "cobro de cliente",
+      "expenseReport": "informe de gastos",
+      "journal": "asiento contable"
+    },
+    "drawer": {
+      "newScript": "Nuevo script",
+      "newTitle": "Nuevo script",
+      "description": "JavaScript aislado (QuickJS): sin acceso al sistema de archivos, a la red ni a la base de datos.",
+      "createScript": "Crear script",
+      "saveScript": "Guardar script",
+      "created": "Script creado",
+      "saved": "Script guardado",
+      "saveFailed": "No se pudo guardar el script",
+      "namePlaceholder": "Política de cuentas por pagar: las facturas grandes requieren una nota",
+      "trigger": "Disparador",
+      "documentKind": "Clase de documento",
+      "allKindsOption": "Todas las clases",
+      "source": "Código fuente",
+      "sourceHint": "— debe definir function main(ctx)",
+      "timeoutMs": "Tiempo de espera (ms)",
+      "runOrder": "Orden de ejecución",
+      "recentRuns": "Ejecuciones recientes",
+      "runStatus": {
+        "ok": "correcto",
+        "aborted": "abortado",
+        "error": "error"
+      }
+    }
+  },
+  "settings": {
+    "metaTitle": "Empresa y contabilidad",
+    "title": "Empresa y contabilidad",
+    "description": "Identidad de la organización, moneda base, calendario fiscal y las cuentas de control a través de las cuales contabiliza el libro mayor.",
+    "organization": {
+      "title": "Organización",
+      "description": "Cómo se identifica esta empresa en toda la aplicación.",
+      "displayName": "Nombre para mostrar",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "legalName": "Razón social",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "country": "País",
+      "countryPlaceholder": "CA",
+      "countryHint": "Código ISO de dos letras (p. ej., CA, US, GB).",
+      "defaultLanguage": "Idioma predeterminado",
+      "defaultLanguageHint": "El idioma en que se muestra la aplicación para todos los que no hayan elegido el suyo en el menú de la cuenta.",
+      "baseCurrency": "Moneda base",
+      "baseCurrencyHint": "La moneda de reporte en la que se equilibra el libro mayor. Agregue más monedas antes de cambiarla."
+    },
+    "fiscal": {
+      "title": "Ejercicio fiscal",
+      "description": "El mes en que comienza su ejercicio fiscal. Todo lo que depende del ejercicio fiscal — informes, cierre de período, valores predefinidos — lee esta configuración.",
+      "startsIn": "El ejercicio fiscal comienza en",
+      "runs": "El ejercicio fiscal abarca",
+      "range": "{start} → {end}",
+      "warning": "Cambiar el mes de inicio vuelve a etiquetar <strong>todos los períodos contables</strong>: su ejercicio fiscal, número de período y nombre se vuelven a derivar de la fecha de inicio de cada período en el momento en que guarda. Los asientos contables y las fechas no se modifican, pero los informes y las agrupaciones de cierre de período cambiarán al nuevo calendario."
+    },
+    "months": {
+      "january": "Enero",
+      "february": "Febrero",
+      "march": "Marzo",
+      "april": "Abril",
+      "may": "Mayo",
+      "june": "Junio",
+      "july": "Julio",
+      "august": "Agosto",
+      "september": "Septiembre",
+      "october": "Octubre",
+      "november": "Noviembre",
+      "december": "Diciembre"
+    },
+    "controlAccounts": {
+      "title": "Cuentas de control",
+      "description": "Las cuentas del libro mayor a través de las cuales contabilizan los auxiliares y los impuestos. Solo aparecen las cuentas imputables (no de resumen).",
+      "selectPlaceholder": "Seleccione una cuenta…",
+      "searchPlaceholder": "Buscar cuentas…",
+      "fields": {
+        "ar": {
+          "label": "Cuentas por cobrar",
+          "hint": "Los saldos de clientes se contabilizan aquí"
+        },
+        "ap": {
+          "label": "Cuentas por pagar",
+          "hint": "Los saldos de proveedores se contabilizan aquí"
+        },
+        "bank": {
+          "label": "Banco predeterminado",
+          "hint": "Cuenta de efectivo predeterminada para pagos y cobros"
+        },
+        "taxCollected": {
+          "label": "Impuesto cobrado",
+          "hint": "Impuesto sobre ventas adeudado por las facturas"
+        },
+        "taxPaid": {
+          "label": "Impuesto pagado",
+          "hint": "Impuesto recuperable de las facturas de proveedor"
+        },
+        "employeePayable": {
+          "label": "Por pagar a empleados",
+          "hint": "Reembolsos de gastos adeudados al personal"
+        }
+      }
+    },
+    "documentKinds": {
+      "vendorBill": "Factura de proveedor",
+      "customerInvoice": "Factura de cliente",
+      "vendorPayment": "Pago a proveedor",
+      "customerPayment": "Cobro de cliente",
+      "expenseReport": "Informe de gastos",
+      "journal": "Asiento"
+    },
+    "numbering": {
+      "title": "Numeración de documentos",
+      "description": "Secuencias que generan los números de documento. Se muestran el prefijo y el relleno de cada clase.",
+      "empty": "Aún no hay secuencias configuradas.",
+      "table": {
+        "document": "Documento",
+        "prefix": "Prefijo",
+        "next": "Próximo n.º",
+        "padding": "Relleno",
+        "example": "Ejemplo"
+      }
+    },
+    "validation": {
+      "nameRequired": "El nombre para mostrar es obligatorio",
+      "countryRequired": "El país es obligatorio"
+    },
+    "saved": "Configuración guardada",
+    "savedPeriodsRederived": "Configuración guardada — los períodos contables se volvieron a etiquetar según el nuevo ejercicio fiscal",
+    "saveSettings": "Guardar configuración"
+  },
+  "users": {
+    "metaTitle": "Usuarios",
+    "title": "Usuarios",
+    "description": "Quién puede iniciar sesión y qué roles tiene. El acceso de un usuario es la unión de sus roles asignados; los usuarios sin asignación conservan su rol heredado.",
+    "manageRoles": "Administrar roles",
+    "searchPlaceholder": "Buscar nombre o correo electrónico…",
+    "statusFilter": "Estado",
+    "emptyTitle": "Ningún usuario coincide",
+    "emptySearchDescription": "Ningún usuario coincide con su búsqueda. Pruebe con otro término u otro filtro de estado.",
+    "emptyFilterDescription": "Pruebe con otro filtro de estado.",
+    "table": {
+      "roles": "Roles",
+      "lastSignIn": "Último inicio de sesión"
+    },
+    "you": "usted",
+    "legacyRole": "heredado: {role}",
+    "statusActive": "activo",
+    "statusInactive": "inactivo",
+    "requestFailed": "La solicitud falló",
+    "editRolesFor": "Editar roles de {name}",
+    "rolesFor": "Roles — {name}",
+    "noRoles": "Aún no hay roles — cargue los roles integrados o cree uno en Administrar roles.",
+    "builtInBadge": "integrado",
+    "deactivateConfirm": "¿Desactivar a {name}? Se cerrará su sesión y no podrá iniciar sesión hasta que se le reactive.",
+    "deactivate": "Desactivar",
+    "reactivate": "Reactivar",
+    "deactivated": "{name} desactivado",
+    "reactivated": "{name} reactivado"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "Libro mayor",
+      "ap": "Cuentas por pagar",
+      "ar": "Cuentas por cobrar",
+      "reports": "Informes",
+      "insights": "Análisis",
+      "items": "Artículos y servicios",
+      "projects": "Proyectos y costeo de trabajos",
+      "time": "Tiempo y hojas de horas",
+      "records": "Registros personalizados",
+      "sql": "Consola SQL",
+      "sync": "Sincronización",
+      "scripts": "Scripts",
+      "admin": "Administración",
+      "assets": "Activos fijos y depreciación"
+    },
+    "gl_read": "Ver asientos y saldos",
+    "gl_post": "Contabilizar asientos contables",
+    "gl_close": "Cerrar períodos contables",
+    "ap_read": "Ver facturas de proveedor",
+    "ap_create": "Crear y enviar facturas de proveedor",
+    "ap_approve": "Aprobar o rechazar facturas de proveedor",
+    "ap_post": "Contabilizar facturas de proveedor en el libro mayor",
+    "ap_pay": "Pagar facturas de proveedor",
+    "ar_read": "Ver facturas",
+    "ar_create": "Crear y enviar facturas",
+    "ar_approve": "Aprobar o rechazar facturas",
+    "ar_post": "Contabilizar facturas en el libro mayor",
+    "ar_pay": "Registrar cobros de clientes",
+    "reports_read": "Ver informes",
+    "reports_create": "Crear y guardar informes",
+    "reports_schedule": "Programar el envío de informes",
+    "insights_read": "Ver análisis y la biblioteca",
+    "insights_create": "Crear tarjetas y tableros",
+    "insights_publish": "Publicar en la biblioteca compartida",
+    "items_read": "Ver artículos y servicios",
+    "items_manage": "Crear y editar artículos",
+    "projects_read": "Ver proyectos y costeo de trabajos",
+    "projects_manage": "Crear y editar proyectos",
+    "time_read": "Ver hojas de horas",
+    "time_manage": "Registrar y editar tiempo",
+    "time_approve": "Aprobar hojas de horas",
+    "records_read": "Ver registros personalizados",
+    "records_create": "Crear y editar registros personalizados",
+    "records_manage_types": "Diseñar tipos de registros personalizados",
+    "sql_execute": "Ejecutar consultas SQL de solo lectura",
+    "sync_run": "Ejecutar sincronizaciones de fuentes externas",
+    "scripts_manage": "Administrar scripts de usuario",
+    "parties_read": "Ver terceros",
+    "parties_manage": "Administrar terceros",
+    "banking_read": "Ver bancos",
+    "banking_reconcile": "Conciliar cuentas bancarias",
+    "expenses_read": "Ver informes de gastos",
+    "expenses_create": "Registrar informes de gastos",
+    "admin_custom_fields_manage": "Administrar campos personalizados",
+    "admin_users_manage": "Administrar usuarios y asignaciones de roles",
+    "admin_roles_manage": "Administrar roles y permisos",
+    "admin_nav_manage": "Personalizar la navegación",
+    "admin_audit_read": "Ver el registro de auditoría",
+    "assets_read": "Ver activos fijos y depreciación",
+    "assets_manage": "Crear y editar activos, ejecutar depreciación"
+  }
+}

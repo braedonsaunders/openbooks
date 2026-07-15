@@ -1,1 +1,7 @@
-{}
+{
+  "title": "SQL",
+  "description": "Du vrai PostgreSQL — pas un dialecte de requête. S’exécute en lecture seule sous un rôle limité à SELECT avec un délai d’expiration de 10 secondes. ⌘⏎ pour exécuter.",
+  "run": "Exécuter la requête",
+  "running": "Exécution…",
+  "resultSummary": "{count, plural, one {# ligne} other {# lignes}}{truncated, select, true { (tronqué)} other {}} · {duration} ms"
+}

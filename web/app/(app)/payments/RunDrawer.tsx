@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Download } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, UrlDrawer } from '@openbooks/ui'
@@ -32,6 +33,18 @@ const INSTRUCTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 
   cancelled: 'outline',
 }
 
+// payment_instructions.status enum values with a translated display label.
+const INSTRUCTION_STATUS_KEYS = ['pending', 'sent', 'settled', 'returned', 'cancelled']
+
+// payment_runs.status enum → common.status.* message keys (confirmed/exported
+// live in payments.runs.status.*; fallback: raw value).
+const RUN_STATUS_COMMON_KEY: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  cancelled: 'cancelled',
+}
+
 export interface RunBlockerClient {
   instructionId: string
   payee: string
@@ -51,9 +64,16 @@ export function RunDrawer({
   eftMissing: string[]
   blockers: RunBlockerClient[]
 }) {
+  const t = useTranslations('payments')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const closeHref = '/payments?view=runs'
+  const runStatusLabel = (status: string) => {
+    if (status === 'confirmed' || status === 'exported') return t(`runs.status.${status}`)
+    const key = RUN_STATUS_COMMON_KEY[status]
+    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
+  }
   const blockerByInstruction = new Map(blockers.map((b) => [b.instructionId, b.reason]))
   const live = instructions.filter((i) => i.status !== 'cancelled')
   const total = live.reduce((acc, i) => acc + Number(i.amount), 0)
@@ -63,20 +83,26 @@ export function RunDrawer({
 
   async function postRun() {
     const ok = await confirmDialog({
-      message: `Post ${live.filter((i) => i.status === 'pending').length} payment(s) totalling ${money(total)} to the ledger and apply them to the selected bills?`,
+      message: t('runDrawer.confirmPost', {
+        count: live.filter((i) => i.status === 'pending').length,
+        total: money(total),
+      }),
     })
     if (!ok) return
     setBusy(true)
     const res = await fetch(`/api/payments/runs/${run.id}/post`, { method: 'POST' })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Posting failed')
+      toast.error(data.error ?? t('runDrawer.toasts.postFailed'))
     } else if (data.failures?.length) {
       toast.error(
-        `${data.posted} posted; failed: ${data.failures.map((f: any) => `${f.payee} (${f.error})`).join('; ')}`,
+        t('runDrawer.toasts.postedWithFailures', {
+          count: data.posted,
+          failures: data.failures.map((f: any) => `${f.payee} (${f.error})`).join('; '),
+        }),
       )
     } else {
-      toast.success(`${data.posted} payment(s) posted and applied`)
+      toast.success(t('runDrawer.toasts.posted', { count: data.posted }))
     }
     setBusy(false)
     router.refresh()
@@ -84,15 +110,15 @@ export function RunDrawer({
 
   async function cancelRun() {
     const ok = await confirmDialog({
-      message: `Cancel run ${run.run_number}? Its draft payments are deleted; nothing has posted.`,
+      message: t('runDrawer.confirmCancel', { number: run.run_number }),
       tone: 'danger',
     })
     if (!ok) return
     setBusy(true)
     const res = await fetch(`/api/payments/runs/${run.id}`, { method: 'DELETE' })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Could not cancel the run')
-    else toast.success('Run cancelled')
+    if (!res.ok) toast.error(data.error ?? t('runDrawer.toasts.cancelFailed'))
+    else toast.success(t('runDrawer.toasts.cancelled'))
     setBusy(false)
     router.refresh()
   }
@@ -105,15 +131,24 @@ export function RunDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{run.run_number}</span>
-          <Badge variant={RUN_VARIANT[run.status] ?? 'secondary'}>{String(run.status).replace('_', ' ')}</Badge>
+          <Badge variant={RUN_VARIANT[run.status] ?? 'secondary'}>{runStatusLabel(String(run.status))}</Badge>
         </span>
       }
-      description={`EFT from ${`${run.bank_number ?? ''} ${run.bank_name ?? ''}`.trim() || 'bank account'}${run.scheduled_for ? ` · funds ${run.scheduled_for}` : ''}`}
+      description={
+        run.scheduled_for
+          ? t('runDrawer.descriptionEftWithDate', {
+              bank: `${run.bank_number ?? ''} ${run.bank_name ?? ''}`.trim() || t('runDrawer.bankAccountFallback'),
+              date: run.scheduled_for,
+            })
+          : t('runDrawer.descriptionEft', {
+              bank: `${run.bank_number ?? ''} ${run.bank_name ?? ''}`.trim() || t('runDrawer.bankAccountFallback'),
+            })
+      }
       headerActions={
         <>
           {canCancel ? (
             <Button variant="outline" disabled={busy} onClick={cancelRun}>
-              Cancel run
+              {t('runDrawer.cancelRun')}
             </Button>
           ) : null}
           {run.status === 'draft' || run.status === 'exported' ? (
@@ -124,18 +159,18 @@ export function RunDrawer({
                   download
                   onClick={() => setTimeout(() => router.refresh(), 800)}
                 >
-                  <Download size={15} /> Download CPA-005 file
+                  <Download size={15} /> {t('runDrawer.downloadFile')}
                 </a>
               </Button>
             ) : (
-              <Button disabled title="Resolve the EFT configuration / bank-detail issues first">
-                <Download size={15} /> Download CPA-005 file
+              <Button disabled title={t('runDrawer.downloadBlockedTitle')}>
+                <Download size={15} /> {t('runDrawer.downloadFile')}
               </Button>
             )
           ) : null}
           {canPost ? (
             <Button disabled={busy} onClick={postRun}>
-              {busy ? 'Posting…' : 'Post payments'}
+              {busy ? tCommon('actions.posting') : t('runDrawer.postPayments')}
             </Button>
           ) : null}
         </>
@@ -143,8 +178,11 @@ export function RunDrawer({
       footer={
         <div className="flex w-full flex-wrap items-center gap-3">
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {live.length} payment{live.length === 1 ? '' : 's'} ·{' '}
-            <strong className="text-slate-900 dark:text-slate-100">Total {money(total)}</strong>
+            {t.rich('runDrawer.paymentsSummary', {
+              count: live.length,
+              amount: money(total),
+              total: (chunks) => <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>,
+            })}
           </span>
         </div>
       }
@@ -152,19 +190,18 @@ export function RunDrawer({
       <div className="space-y-4 p-1">
         {!eftConfigured ? (
           <Alert variant="warning">
-            <AlertTitle>EFT origination is not configured</AlertTitle>
+            <AlertTitle>{t('eft.notConfiguredTitle')}</AlertTitle>
             <AlertDescription>
-              The CPA-005 file cannot be generated until an administrator sets{' '}
-              <code className="font-mono text-xs">orgs.settings.eft</code> — missing:{' '}
-              {eftMissing.join(', ')}. Placeholders can be seeded with{' '}
-              <code className="font-mono text-xs">engine/src/seed-eft-settings.ts</code>, then filled with the
-              bank-assigned originator details.
+              {t.rich('eft.notConfiguredDrawerDescription', {
+                missing: eftMissing.join(', '),
+                code: (chunks) => <code className="font-mono text-xs">{chunks}</code>,
+              })}
             </AlertDescription>
           </Alert>
         ) : null}
         {blockers.length > 0 && run.status !== 'cancelled' && run.status !== 'confirmed' ? (
           <Alert variant="destructive">
-            <AlertTitle>Payees missing approved bank details</AlertTitle>
+            <AlertTitle>{t('runDrawer.payeesMissingBankDetails')}</AlertTitle>
             <AlertDescription>
               <ul className="list-disc pl-5">
                 {blockers.map((b) => (
@@ -181,11 +218,11 @@ export function RunDrawer({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <th className="px-3 py-2">Payee</th>
-                <th className="px-3 py-2">Payment</th>
-                <th className="px-3 py-2">Bank details</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2">{t('runDrawer.columns.payee')}</th>
+                <th className="px-3 py-2">{t('runDrawer.columns.payment')}</th>
+                <th className="px-3 py-2">{t('runDrawer.columns.bankDetails')}</th>
+                <th className="px-3 py-2">{tCommon('labels.status')}</th>
+                <th className="px-3 py-2 text-right">{tCommon('labels.amount')}</th>
               </tr>
             </thead>
             <tbody>
@@ -210,11 +247,15 @@ export function RunDrawer({
                     ) : blockerByInstruction.has(i.id) ? (
                       <Badge variant="warning">{blockerByInstruction.get(i.id)}</Badge>
                     ) : (
-                      <Badge variant="success">approved</Badge>
+                      <Badge variant="success">{t('runDrawer.bankApproved')}</Badge>
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant={INSTRUCTION_VARIANT[i.status] ?? 'secondary'}>{i.status}</Badge>
+                    <Badge variant={INSTRUCTION_VARIANT[i.status] ?? 'secondary'}>
+                      {INSTRUCTION_STATUS_KEYS.includes(i.status)
+                        ? t(`runDrawer.instructionStatus.${i.status}`)
+                        : i.status}
+                    </Badge>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(i.amount)}</td>
                 </tr>

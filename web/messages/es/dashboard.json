@@ -1,1 +1,33 @@
-{}
+{
+  "title": "Panel",
+  "orgDescription": "{name} · {currency} · {book}",
+  "stats": {
+    "journalEntries": "Asientos contables",
+    "journalLines": "Líneas de asiento",
+    "ledgerBalance": "Saldo del libro mayor",
+    "ledgerBalanced": "Σ = 0.00",
+    "ledgerSum": "Σ = {amount}",
+    "parallelRun": "Ejecución paralela vs {source}",
+    "parityValue": "{matches}/{accounts} coinciden"
+  },
+  "syncCard": {
+    "body": "Hay un sistema contable externo conectado para verificación en ejecución paralela. La sincronización es manual; cada sincronización vuelve a verificar la balanza de comprobación por cuenta.",
+    "link": "Página de sincronización"
+  },
+  "recentRuns": {
+    "title": "Sincronizaciones recientes",
+    "started": "Inicio",
+    "source": "Origen",
+    "trigger": "Disparador",
+    "new": "Nuevos",
+    "reversed": "Revertidos",
+    "unchanged": "Sin cambios",
+    "tbVerification": "Verificación de balanza",
+    "empty": "Aún no hay sincronizaciones.",
+    "runStatus": {
+      "ok": "ok",
+      "failed": "falló",
+      "running": "en ejecución"
+    }
+  }
+}

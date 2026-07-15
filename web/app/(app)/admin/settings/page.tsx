@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { PageContainer } from '../../../../components/page-layout'
@@ -7,7 +8,11 @@ import { DEFAULT_LOCALE, isLocale } from '../../../../i18n/config'
 import { SettingsForm, type AccountOption } from './SettingsForm'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Company & Accounting' }
+
+export async function generateMetadata() {
+  const t = await getTranslations('admin.settings')
+  return { title: t('metaTitle') }
+}
 
 /**
  * Company & Accounting settings. The single admin.users.manage gate matches the
@@ -17,6 +22,7 @@ export const metadata = { title: 'Company & Accounting' }
  */
 export default async function CompanySettingsPage() {
   const authz = await requirePermission('admin.users.manage')
+  const t = await getTranslations('admin')
   const { orgId } = authz.user
 
   const [org, accounts, currencies, sequences] = (await Promise.all([
@@ -46,9 +52,9 @@ export default async function CompanySettingsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Company & Accounting"
-        description="Organization identity, base currency, fiscal calendar and the control accounts the ledger posts through."
-        back={{ href: '/admin', label: 'Administration' }}
+        title={t('settings.title')}
+        description={t('settings.description')}
+        back={{ href: '/admin', label: t('hub.title') }}
       />
       <div className="mt-6">
         <SettingsForm

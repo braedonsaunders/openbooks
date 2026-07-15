@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { CheckCheck, Link2, Pencil, Trash2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -66,6 +67,9 @@ interface MatchedRow {
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
 
+// Known matched_by enum values — unknown values render verbatim.
+const MATCHED_BY_KEYS = ['auto', 'manual', 'rule']
+
 /**
  * Two-pane matching workspace: unmatched bank statement lines (left) against
  * unreconciled posted GL lines (right). Click a bank line, tick 1..n GL lines,
@@ -104,6 +108,9 @@ export function ReconcileWorkspace({
   matchedTotal: number
   mParams: PaneParams
 }) {
+  const t = useTranslations('banking.workspace')
+  const tBanking = useTranslations('banking')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [selectedStmt, setSelectedStmt] = useState<string | null>(null)
@@ -134,7 +141,7 @@ export function ReconcileWorkspace({
       })
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.error ?? 'Request failed')
+        toast.error(data.error ?? tBanking('errors.requestFailed'))
         return null
       }
       return data
@@ -146,10 +153,14 @@ export function ReconcileWorkspace({
   async function runAutoMatch() {
     const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/auto-match`)
     if (!data) return
-    if (data.matched === 0) toast.info('No automatic matches found')
+    if (data.matched === 0) toast.info(t('noAutoMatches'))
     else
       toast.success(
-        `Auto-matched ${data.matched} line${data.matched === 1 ? '' : 's'} (${data.highConfidence} high, ${data.mediumConfidence} medium confidence)`,
+        t('autoMatchedToast', {
+          count: data.matched,
+          high: data.highConfidence,
+          medium: data.mediumConfidence,
+        }),
       )
     router.refresh()
   }
@@ -161,7 +172,7 @@ export function ReconcileWorkspace({
       journalLineIds: [...selectedGl],
     })
     if (!data) return
-    toast.success('Matched')
+    toast.success(t('matchedToast'))
     setSelectedStmt(null)
     setSelectedGl(new Set())
     router.refresh()
@@ -173,31 +184,30 @@ export function ReconcileWorkspace({
       `/api/banking/reconciliations/${reconciliation.id}/matches?statementLineId=${statementLineId}`,
     )
     if (!data) return
-    toast.success('Unmatched')
+    toast.success(t('unmatchedToast'))
     router.refresh()
   }
 
   async function signOff() {
     const ok = await confirmDialog({
-      message:
-        'Sign off this reconciliation? Matched journal lines are stamped as reconciled — this cannot be undone.',
+      message: t('signOffConfirm'),
     })
     if (!ok) return
     const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/sign-off`)
     if (!data) return
-    toast.success(`Signed off — ${data.journalLinesReconciled} journal line${data.journalLinesReconciled === 1 ? '' : 's'} reconciled`)
+    toast.success(t('signedOffToast', { count: data.journalLinesReconciled }))
     router.refresh()
   }
 
   async function discard() {
     const ok = await confirmDialog({
-      message: 'Discard this reconciliation session? Its matches are undone and statement lines released.',
+      message: t('discardConfirm'),
       tone: 'danger',
     })
     if (!ok) return
     const data = await call('DELETE', `/api/banking/reconciliations/${reconciliation.id}`)
     if (!data) return
-    toast.success('Reconciliation discarded')
+    toast.success(t('discardedToast'))
     router.push(accountPath as any)
     router.refresh()
   }
@@ -208,7 +218,7 @@ export function ReconcileWorkspace({
       statementBalance,
     })
     if (!data) return
-    toast.success('Reconciliation updated')
+    toast.success(t('updatedToast'))
     setAdjustOpen(false)
     router.refresh()
   }
@@ -218,32 +228,30 @@ export function ReconcileWorkspace({
   return (
     <div className="space-y-6">
       {signedOff ? (
-        <Alert variant="success">
-          This reconciliation is signed off — the matched journal lines below are permanently stamped as reconciled.
-        </Alert>
+        <Alert variant="success">{t('signedOffAlert')}</Alert>
       ) : (
         canReconcile && (
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" disabled={busy} onClick={runAutoMatch}>
-              <Wand2 size={15} /> Auto-match
+              <Wand2 size={15} /> {t('autoMatch')}
             </Button>
             <Button variant="outline" disabled={busy} onClick={() => setAdjustOpen(true)}>
-              <Pencil size={15} /> Adjust
+              <Pencil size={15} /> {t('adjust')}
             </Button>
             <Button variant="outline" disabled={busy} onClick={discard} className="text-red-600 dark:text-red-400">
-              <Trash2 size={15} /> Discard session
+              <Trash2 size={15} /> {t('discardSession')}
             </Button>
             <span className="flex-1" />
             {selectedStmt ? (
               <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                Bank {money(stmtSelection?.amount ?? 0)} vs GL {money(glSelectionSum)} selected
+                {t('selectionSummary', { bank: money(stmtSelection?.amount ?? 0), gl: money(glSelectionSum) })}
               </span>
             ) : null}
             <Button disabled={busy || !selectedStmt || selectedGl.size === 0} onClick={matchSelected}>
-              <Link2 size={15} /> Match selected
+              <Link2 size={15} /> {t('matchSelected')}
             </Button>
-            <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : 'Difference must be 0.00 to sign off'}>
-              <CheckCheck size={15} /> Sign off
+            <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : t('signOffDisabledTitle')}>
+              <CheckCheck size={15} /> {t('signOff')}
             </Button>
           </div>
         )
@@ -255,24 +263,24 @@ export function ReconcileWorkspace({
           <section className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className={cn(paneTitle, 'mr-auto')}>
-                Bank statement lines <span className="font-normal text-slate-500 dark:text-slate-400">({stmtTotal.toLocaleString()} unmatched)</span>
+                {t('bankLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('bankLinesCount', { count: stmtTotal })}</span>
               </h2>
-              <SearchInput placeholder="Search bank lines…" paramKey="stmtQ" pageParamKey="stmtPage" />
+              <SearchInput placeholder={t('searchBankLines')} paramKey="stmtQ" pageParamKey="stmtPage" />
             </div>
             <Table>
               <TableHeader>
                 <TableRow>
                   {!readOnly ? <TableHead className="w-8" /> : null}
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={stmtParams.sort === 'date'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">Date</SortableTh>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="description" active={stmtParams.sort === 'description'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">Description</SortableTh>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="amount" active={stmtParams.sort === 'amount'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">Amount</SortableTh>
+                  <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={stmtParams.sort === 'date'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.date')}</SortableTh>
+                  <SortableTh basePath={basePath} currentParams={currentParams} column="description" active={stmtParams.sort === 'description'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.description')}</SortableTh>
+                  <SortableTh basePath={basePath} currentParams={currentParams} column="amount" active={stmtParams.sort === 'amount'} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">{tCommon('labels.amount')}</SortableTh>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {stmtRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={readOnly ? 3 : 4} className="text-center text-slate-500 dark:text-slate-400">
-                      {stmtParams.q ? 'No bank lines match this search.' : 'Every statement line up to the cutoff is matched.'}
+                      {stmtParams.q ? t('noBankLinesSearch') : t('allBankLinesMatched')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -289,7 +297,7 @@ export function ReconcileWorkspace({
                             <input
                               type="radio"
                               name="stmt-line"
-                              aria-label={`Select bank line of ${l.posted_on} for ${money(l.amount)}`}
+                              aria-label={t('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })}
                               checked={selected}
                               onChange={() => setSelectedStmt(selected ? null : l.id)}
                               onClick={(e) => e.stopPropagation()}
@@ -318,25 +326,25 @@ export function ReconcileWorkspace({
           <section className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className={cn(paneTitle, 'mr-auto')}>
-                Ledger lines <span className="font-normal text-slate-500 dark:text-slate-400">({glTotal.toLocaleString()} unreconciled)</span>
+                {t('ledgerLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('ledgerLinesCount', { count: glTotal })}</span>
               </h2>
-              <SearchInput placeholder="Search GL lines…" paramKey="glQ" pageParamKey="glPage" />
+              <SearchInput placeholder={t('searchGlLines')} paramKey="glQ" pageParamKey="glPage" />
             </div>
             <Table>
               <TableHeader>
                 <TableRow>
                   {!readOnly ? <TableHead className="w-8" /> : null}
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={glParams.sort === 'date'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">Date</SortableTh>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="entry" active={glParams.sort === 'entry'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">Entry</SortableTh>
-                  <TableHead>Memo</TableHead>
-                  <SortableTh basePath={basePath} currentParams={currentParams} column="amount" active={glParams.sort === 'amount'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage" align="right">Amount</SortableTh>
+                  <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={glParams.sort === 'date'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tCommon('labels.date')}</SortableTh>
+                  <SortableTh basePath={basePath} currentParams={currentParams} column="entry" active={glParams.sort === 'entry'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tBanking('labels.entry')}</SortableTh>
+                  <TableHead>{tCommon('labels.memo')}</TableHead>
+                  <SortableTh basePath={basePath} currentParams={currentParams} column="amount" active={glParams.sort === 'amount'} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage" align="right">{tCommon('labels.amount')}</SortableTh>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {glRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={readOnly ? 4 : 5} className="text-center text-slate-500 dark:text-slate-400">
-                      {glParams.q ? 'No ledger lines match this search.' : 'Every posted line up to the cutoff is reconciled or matched.'}
+                      {glParams.q ? t('noGlLinesSearch') : t('allGlLinesReconciled')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -359,7 +367,7 @@ export function ReconcileWorkspace({
                           <TableCell className="w-8">
                             <input
                               type="checkbox"
-                              aria-label={`Select ledger line ${l.entry_number} for ${money(l.amount)}`}
+                              aria-label={t('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })}
                               checked={selected}
                               onChange={toggle}
                               onClick={(e) => e.stopPropagation()}
@@ -388,20 +396,20 @@ export function ReconcileWorkspace({
       <section className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className={cn(paneTitle, 'mr-auto')}>
-            Matched <span className="font-normal text-slate-500 dark:text-slate-400">({matchedTotal.toLocaleString()} pair{matchedTotal === 1 ? '' : 's'})</span>
+            {t('matchedTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('matchedCount', { count: matchedTotal })}</span>
           </h2>
-          <SearchInput placeholder="Search matches…" paramKey="mQ" pageParamKey="mPage" />
+          <SearchInput placeholder={t('searchMatches')} paramKey="mQ" pageParamKey="mPage" />
         </div>
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={mParams.sort === 'date'} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">Bank date</SortableTh>
-              <TableHead>Bank description</TableHead>
-              <TableHead className="text-right">Bank amount</TableHead>
-              <TableHead>Entry</TableHead>
-              <TableHead>GL memo</TableHead>
-              <TableHead className="text-right">GL amount</TableHead>
-              <SortableTh basePath={basePath} currentParams={currentParams} column="by" active={mParams.sort === 'by'} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">Matched by</SortableTh>
+              <SortableTh basePath={basePath} currentParams={currentParams} column="date" active={mParams.sort === 'date'} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.bankDate')}</SortableTh>
+              <TableHead>{t('columns.bankDescription')}</TableHead>
+              <TableHead className="text-right">{t('columns.bankAmount')}</TableHead>
+              <TableHead>{tBanking('labels.entry')}</TableHead>
+              <TableHead>{t('columns.glMemo')}</TableHead>
+              <TableHead className="text-right">{t('columns.glAmount')}</TableHead>
+              <SortableTh basePath={basePath} currentParams={currentParams} column="by" active={mParams.sort === 'by'} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.matchedBy')}</SortableTh>
               {!readOnly ? <TableHead /> : null}
             </TableRow>
           </TableHeader>
@@ -409,7 +417,7 @@ export function ReconcileWorkspace({
             {matchedRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={readOnly ? 7 : 8} className="text-center text-slate-500 dark:text-slate-400">
-                  {mParams.q ? 'No matches found for this search.' : 'Nothing matched yet — run Auto-match or pair lines manually above.'}
+                  {mParams.q ? t('noMatchesSearch') : t('noMatchesYet')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -423,14 +431,14 @@ export function ReconcileWorkspace({
                   <TableCell className="text-right tabular-nums">{money(m.gl_amount)}</TableCell>
                   <TableCell>
                     <Badge variant={m.matched_by === 'auto' ? 'default' : 'secondary'}>
-                      {m.matched_by}
+                      {MATCHED_BY_KEYS.includes(m.matched_by) ? tBanking(`matchedBy.${m.matched_by}`) : m.matched_by}
                       {m.confidence ? ` · ${Number(m.confidence).toFixed(1)}` : ''}
                     </Badge>
                   </TableCell>
                   {!readOnly ? (
                     <TableCell>
                       <Button variant="ghost" size="sm" disabled={busy} onClick={() => unmatch(m.statement_line_id)}>
-                        Unmatch
+                        {t('unmatch')}
                       </Button>
                     </TableCell>
                   ) : null}
@@ -447,26 +455,26 @@ export function ReconcileWorkspace({
         open={adjustOpen}
         onClose={() => setAdjustOpen(false)}
         size="sm"
-        title="Adjust reconciliation"
-        description="Change the cutoff date or the bank statement balance for this session."
+        title={t('adjustTitle')}
+        description={t('adjustDescription')}
         headerActions={
           <>
             <Button variant="outline" onClick={() => setAdjustOpen(false)}>
-              Cancel
+              {tCommon('actions.cancel')}
             </Button>
             <Button disabled={busy || !throughDate || statementBalance.trim() === '' || Number.isNaN(Number(statementBalance))} onClick={saveAdjust}>
-              Save
+              {tCommon('actions.save')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Reconcile through</Label>
+            <Label>{tBanking('labels.reconcileThrough')}</Label>
             <Input type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Statement balance</Label>
+            <Label>{tBanking('labels.statementBalance')}</Label>
             <Input
               inputMode="decimal"
               value={statementBalance}

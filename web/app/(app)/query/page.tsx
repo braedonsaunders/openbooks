@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { Play } from 'lucide-react'
 import { Alert, AlertDescription, Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, cn } from '@openbooks/ui'
 import { PageContainer } from '../../../components/page-layout'
@@ -13,6 +14,7 @@ const STARTER = `select a.number, a.name, sum(l.amount) as balance
  limit 15`
 
 export default function QueryConsole() {
+  const t = useTranslations('query')
   const [sqlText, setSqlText] = useState(STARTER)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,10 +48,7 @@ export default function QueryConsole() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="SQL"
-        description="Real PostgreSQL — not a query dialect. Runs read-only under a SELECT-only role with a 10-second timeout. ⌘⏎ to run."
-      />
+      <PageHeader title={t('title')} description={t('description')} />
       <div className="mt-6 space-y-4">
         <Textarea
           className="min-h-36 font-mono text-[13px]"
@@ -65,7 +64,7 @@ export default function QueryConsole() {
         />
         <Button onClick={run} disabled={busy}>
           <Play size={14} />
-          {busy ? 'Running…' : 'Run query'}
+          {busy ? t('running') : t('run')}
         </Button>
 
         {error ? (
@@ -77,8 +76,11 @@ export default function QueryConsole() {
         {result ? (
           <div className="space-y-2">
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {result.rowCount} row{result.rowCount === 1 ? '' : 's'}
-              {result.truncated ? ' (truncated)' : ''} · {result.durationMs}ms
+              {t('resultSummary', {
+                count: result.rowCount,
+                truncated: result.truncated ? 'true' : 'false',
+                duration: result.durationMs,
+              })}
             </p>
             <div className="overflow-x-auto">
               <Table>

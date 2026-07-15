@@ -1,1 +1,35 @@
-{}
+{
+  "title": "Sync",
+  "description": "Manual bridge to a connected accounting system while running in parallel. Changed transactions are reversed and re-posted — full audit trail, no mutation. Every sync re-verifies the trial balance per account against the live source.",
+  "noSource": {
+    "title": "No external source configured",
+    "description": "Connect one by adding a source adapter and its credentials; it will appear here automatically."
+  },
+  "connectedSources": "Connected sources",
+  "mismatchesHeading": "Trial-balance mismatches (last sync)",
+  "allRuns": "All runs",
+  "columns": {
+    "sourceAccount": "Source account",
+    "ours": "openbooks",
+    "theirs": "source",
+    "started": "Started",
+    "finished": "Finished",
+    "trigger": "Trigger",
+    "detail": "Detail"
+  },
+  "runStatus": {
+    "ok": "OK",
+    "failed": "Failed",
+    "running": "Running"
+  },
+  "runStats": "{newEntries} new · {reversedEntries} reversed · {unchanged} unchanged · TB {matches}/{accounts}",
+  "button": {
+    "syncing": "Syncing from {source}…",
+    "sync": "Sync from {source}"
+  },
+  "toast": {
+    "summary": "{newEntries} new · {reversedEntries} reversed · {unchanged} unchanged — TB {matches}/{accounts}{mismatches, plural, =0 { exact} one { (# MISMATCH)} other { (# MISMATCHES)}}",
+    "synced": "Synced in {seconds}s — {summary}",
+    "syncFailed": "Sync failed: {detail}"
+  }
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 
 /**
@@ -10,6 +11,7 @@ import { toast } from 'sonner'
  * on a persisted record.
  */
 export function NewProjectRedirect() {
+  const t = useTranslations('projects')
   const router = useRouter()
   const started = useRef(false)
 
@@ -24,13 +26,14 @@ export function NewProjectRedirect() {
       })
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.error ?? 'Could not create a draft project')
+        toast.error(data.error ?? t('list.createDraftFailed'))
         router.replace('/projects')
         return
       }
       router.replace(`/projects?project=${data.id}`)
       router.refresh()
     })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
   return null

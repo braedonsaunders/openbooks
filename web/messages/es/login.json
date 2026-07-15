@@ -1,1 +1,7 @@
-{}
+{
+  "tagline": "opere con libros abiertos",
+  "password": "Contraseña",
+  "invalidCredentials": "Correo electrónico o contraseña no válidos",
+  "signIn": "Iniciar sesión",
+  "signingIn": "Iniciando sesión…"
+}

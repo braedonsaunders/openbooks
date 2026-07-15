@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { ArrowRight, Scale, ScrollText, SquareStack } from 'lucide-react'
 import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { PageContainer } from '../../components/page-layout'
@@ -50,7 +51,12 @@ function StatCard({
   )
 }
 
+// Known sync-run statuses — unknown values from the database render verbatim.
+const RUN_STATUSES = ['ok', 'failed', 'running']
+
 export default async function Dashboard() {
+  const t = await getTranslations('dashboard')
+  const tc = await getTranslations('common')
   const [{ totals, runs }, org] = await Promise.all([dashboardData(), orgInfo()])
   const sources = configuredSources()
   const lastOk = runs.find((r: any) => r.status === 'ok')
@@ -61,31 +67,43 @@ export default async function Dashboard() {
   return (
     <PageContainer>
       <PageHeader
-        title="Dashboard"
-        description={org ? `${org.name} · ${org.base_currency} · ${org.book}` : undefined}
+        title={t('title')}
+        description={
+          org
+            ? t('orgDescription', { name: org.name, currency: org.base_currency, book: org.book })
+            : undefined
+        }
       />
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Journal entries"
+          label={t('stats.journalEntries')}
           value={Number(totals.entries).toLocaleString()}
           icon={<ScrollText size={18} />}
         />
         <StatCard
-          label="Journal lines"
+          label={t('stats.journalLines')}
           value={Number(totals.lines).toLocaleString()}
           icon={<SquareStack size={18} />}
         />
         <StatCard
-          label="Ledger balance"
-          value={balanced ? 'Σ = 0.00' : `Σ = ${money(totals.ledger_sum)}`}
+          label={t('stats.ledgerBalance')}
+          value={
+            balanced
+              ? t('stats.ledgerBalanced')
+              : t('stats.ledgerSum', { amount: money(totals.ledger_sum) })
+          }
           tone={balanced ? 'good' : 'bad'}
           icon={<Scale size={18} />}
         />
         {lastTb ? (
           <StatCard
-            label={`Parallel-run vs ${lastOk.source}`}
-            value={`${lastTb.matches}/${lastTb.accounts} match`}
+            label={t('stats.parallelRun', { source: lastOk.source })}
+            value={t('stats.parityValue', {
+              // Stringified so ICU doesn't add digit grouping to the counts.
+              matches: String(lastTb.matches),
+              accounts: String(lastTb.accounts),
+            })}
             tone={parityOk ? 'good' : 'bad'}
           />
         ) : null}
@@ -95,13 +113,12 @@ export default async function Dashboard() {
         <Card className="mt-6">
           <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 text-sm text-slate-600 dark:text-slate-300">
-              An external accounting system is connected for parallel-run verification. Sync is
-              manual; every sync re-verifies the trial balance per account.{' '}
+              {t('syncCard.body')}{' '}
               <Link
                 href="/sync"
                 className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300"
               >
-                Sync page <ArrowRight size={13} />
+                {t('syncCard.link')} <ArrowRight size={13} />
               </Link>
             </div>
             <SyncButton source={sources[0]!.name} label={sources[0]!.displayName} />
@@ -110,26 +127,26 @@ export default async function Dashboard() {
       ) : null}
 
       <h2 className="mt-8 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-        Recent sync runs
+        {t('recentRuns.title')}
       </h2>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Started</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Trigger</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">New</TableHead>
-            <TableHead className="text-right">Reversed</TableHead>
-            <TableHead className="text-right">Unchanged</TableHead>
-            <TableHead>TB verification</TableHead>
+            <TableHead>{t('recentRuns.started')}</TableHead>
+            <TableHead>{t('recentRuns.source')}</TableHead>
+            <TableHead>{t('recentRuns.trigger')}</TableHead>
+            <TableHead>{tc('labels.status')}</TableHead>
+            <TableHead className="text-right">{t('recentRuns.new')}</TableHead>
+            <TableHead className="text-right">{t('recentRuns.reversed')}</TableHead>
+            <TableHead className="text-right">{t('recentRuns.unchanged')}</TableHead>
+            <TableHead>{t('recentRuns.tbVerification')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {runs.length === 0 ? (
             <TableRow>
               <TableCell colSpan={8} className="text-slate-500 dark:text-slate-400">
-                No syncs yet.
+                {t('recentRuns.empty')}
               </TableCell>
             </TableRow>
           ) : null}
@@ -140,7 +157,7 @@ export default async function Dashboard() {
               <TableCell>{r.triggered_by}</TableCell>
               <TableCell>
                 <Badge variant={r.status === 'ok' ? 'success' : r.status === 'failed' ? 'destructive' : 'secondary'}>
-                  {r.status}
+                  {RUN_STATUSES.includes(r.status) ? t(`recentRuns.runStatus.${r.status}`) : r.status}
                 </Badge>
               </TableCell>
               <TableCell className="text-right tabular-nums">{r.stats?.newEntries ?? ''}</TableCell>

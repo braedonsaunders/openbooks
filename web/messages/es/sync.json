@@ -1,1 +1,35 @@
-{}
+{
+  "title": "Sincronización",
+  "description": "Puente manual hacia un sistema contable conectado mientras se opera en paralelo. Las transacciones modificadas se revierten y se vuelven a contabilizar — pista de auditoría completa, sin mutaciones. Cada sincronización vuelve a verificar el balance de comprobación por cuenta contra la fuente en vivo.",
+  "noSource": {
+    "title": "No hay una fuente externa configurada",
+    "description": "Conecte una agregando un adaptador de fuente y sus credenciales; aparecerá aquí automáticamente."
+  },
+  "connectedSources": "Fuentes conectadas",
+  "mismatchesHeading": "Discrepancias del balance de comprobación (última sincronización)",
+  "allRuns": "Todas las ejecuciones",
+  "columns": {
+    "sourceAccount": "Cuenta de la fuente",
+    "ours": "openbooks",
+    "theirs": "fuente",
+    "started": "Iniciada",
+    "finished": "Finalizada",
+    "trigger": "Disparador",
+    "detail": "Detalle"
+  },
+  "runStatus": {
+    "ok": "OK",
+    "failed": "Fallida",
+    "running": "En ejecución"
+  },
+  "runStats": "{newEntries} nuevos · {reversedEntries} revertidos · {unchanged} sin cambios · BC {matches}/{accounts}",
+  "button": {
+    "syncing": "Sincronizando desde {source}…",
+    "sync": "Sincronizar desde {source}"
+  },
+  "toast": {
+    "summary": "{newEntries} nuevos · {reversedEntries} revertidos · {unchanged} sin cambios — BC {matches}/{accounts}{mismatches, plural, =0 { exacto} one { (# DISCREPANCIA)} other { (# DISCREPANCIAS)}}",
+    "synced": "Sincronizado en {seconds}s — {summary}",
+    "syncFailed": "La sincronización falló: {detail}"
+  }
+}

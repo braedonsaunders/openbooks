@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { loadEftSettings, paymentRunReadiness } from '@openbooks/engine/src/payments.ts'
@@ -24,6 +25,15 @@ const RUN_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline
   cancelled: 'outline',
 }
 
+// payment_runs.status enum → common.status.* message keys (confirmed/exported
+// live in payments.runs.status.*; fallback: raw value).
+const RUN_STATUS_COMMON_KEY: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  cancelled: 'cancelled',
+}
+
 const BILL_SORTS = {
   number: sql`document_number`,
   vendor: sql`vendor`,
@@ -38,6 +48,13 @@ export async function RunsSection({
   sp: Record<string, string | string[] | undefined>
   orgId: string
 }) {
+  const t = await getTranslations('payments')
+  const tCommon = await getTranslations('common')
+  const runStatusLabel = (status: string) => {
+    if (status === 'confirmed' || status === 'exported') return t(`runs.status.${status}`)
+    const key = RUN_STATUS_COMMON_KEY[status]
+    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
+  }
   const eft = await loadEftSettings(orgId)
 
   const billParams = parsePrefixedListParams(sp, 'bills', {
@@ -152,12 +169,12 @@ export async function RunsSection({
     <div className="space-y-8">
       {!eft.ok ? (
         <Alert variant="warning">
-          <AlertTitle>EFT origination is not configured</AlertTitle>
+          <AlertTitle>{t('eft.notConfiguredTitle')}</AlertTitle>
           <AlertDescription>
-            Payment runs can be assembled, but the CPA-005 file cannot be generated until an administrator
-            sets <code className="font-mono text-xs">orgs.settings.eft</code> — missing: {eft.missing.join(', ')}.
-            Seed placeholders with <code className="font-mono text-xs">engine/src/seed-eft-settings.ts</code>,
-            then fill in the originator details assigned by the bank.
+            {t.rich('eft.notConfiguredListDescription', {
+              missing: eft.missing.join(', '),
+              code: (chunks) => <code className="font-mono text-xs">{chunks}</code>,
+            })}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -165,9 +182,9 @@ export async function RunsSection({
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="mr-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Open bills to pay
+            {t('runs.openBillsHeading')}
           </h2>
-          <SearchInput placeholder="Search bills, vendors, refs…" paramKey="billsQ" pageParamKey="billsPage" />
+          <SearchInput placeholder={t('runs.billsSearchPlaceholder')} paramKey="billsQ" pageParamKey="billsPage" />
         </div>
         <RunBuilder
           bills={bills.rows as RunBill[]}
@@ -188,36 +205,36 @@ export async function RunsSection({
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Payment runs</h2>
+          <h2 className="mr-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runs.runsHeading')}</h2>
           <FilterChips
             basePath="/payments"
             currentParams={sp}
             paramKey="runsStatus"
-            label="Status"
+            label={tCommon('labels.status')}
             pageParamKey="runsPage"
             options={runCounts.rows.map((r: any) => ({
               value: r.status,
-              label: String(r.status).replace('_', ' '),
+              label: runStatusLabel(String(r.status)),
               count: Number(r.n),
             }))}
           />
         </div>
         {runsTotal === 0 ? (
           <p className="rounded-md border border-dashed border-slate-300 px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            No payment runs yet — select bills above to create the first one.
+            {t('runs.noRunsYet')}
           </p>
         ) : (
           <>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Run</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Bank account</TableHead>
-                  <TableHead>Funds date</TableHead>
-                  <TableHead className="text-right">Payments</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t('runs.columns.run')}</TableHead>
+                  <TableHead>{tCommon('labels.created')}</TableHead>
+                  <TableHead>{t('runs.columns.bankAccount')}</TableHead>
+                  <TableHead>{t('runs.columns.fundsDate')}</TableHead>
+                  <TableHead className="text-right">{t('runs.columns.payments')}</TableHead>
+                  <TableHead className="text-right">{tCommon('labels.total')}</TableHead>
+                  <TableHead>{tCommon('labels.status')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -238,7 +255,7 @@ export async function RunsSection({
                     <TableCell className="text-right tabular-nums">{money(r.total)}</TableCell>
                     <TableCell>
                       <Badge variant={RUN_VARIANT[r.status] ?? 'secondary'}>
-                        {String(r.status).replace('_', ' ')}
+                        {runStatusLabel(String(r.status))}
                       </Badge>
                     </TableCell>
                   </TableRow>

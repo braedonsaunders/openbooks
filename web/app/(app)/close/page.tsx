@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
@@ -19,6 +20,8 @@ export default async function PeriodClose({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requirePermission('gl.close')
+  const t = await getTranslations('close')
+  const tc = await getTranslations('common')
   const sp = await searchParams
   // Fiscal year derives from the org's configured start month (fiscal.ts),
   // not a hardcoded April boundary.
@@ -55,18 +58,19 @@ export default async function PeriodClose({
     <ListPageLayout
       header={
         <>
-          <PageHeader
-            title="Period Close"
-            description="Close modules per period: AR and AP lock their subledgers; GL close locks the period for posting entirely (enforced by the kernel — a closed period refuses postings at the database)."
-          />
+          <PageHeader title={t('title')} description={t('description')} />
           <FilterChips
             basePath="/close"
             currentParams={sp}
             paramKey="fy"
-            label="Fiscal year"
+            label={t('filters.fiscalYear')}
             hideAll
             defaultValue={String(currentFy)}
-            options={fys.rows.map((r: any) => ({ value: String(r.fiscal_year), label: `FY ${r.fiscal_year}` }))}
+            options={fys.rows.map((r: any) => ({
+              value: String(r.fiscal_year),
+              // Stringified so ICU doesn't add digit grouping ("FY 2,026").
+              label: t('filters.fyOption', { year: String(r.fiscal_year) }),
+            }))}
           />
         </>
       }
@@ -74,12 +78,12 @@ export default async function PeriodClose({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Period</TableHead>
-            <TableHead>Range</TableHead>
-            <TableHead className="text-right">Entries</TableHead>
-            <TableHead className="text-right">Debits</TableHead>
+            <TableHead>{tc('labels.period')}</TableHead>
+            <TableHead>{t('table.range')}</TableHead>
+            <TableHead className="text-right">{t('table.entries')}</TableHead>
+            <TableHead className="text-right">{t('table.debits')}</TableHead>
             {MODULES.map((m) => (
-              <TableHead key={m} className="uppercase">{m}</TableHead>
+              <TableHead key={m} className="uppercase">{t(`modules.${m}`)}</TableHead>
             ))}
           </TableRow>
         </TableHeader>
@@ -88,7 +92,7 @@ export default async function PeriodClose({
             <TableRow key={p.id}>
               <TableCell className="font-medium">{p.name}</TableCell>
               <TableCell className="text-slate-500 dark:text-slate-400">
-                {p.starts_on} → {p.ends_on}
+                {t('table.rangeValue', { start: p.starts_on, end: p.ends_on })}
               </TableCell>
               <TableCell className="text-right tabular-nums">{Number(p.entries).toLocaleString()}</TableCell>
               <TableCell className="text-right tabular-nums">{money(p.debits)}</TableCell>
@@ -97,8 +101,15 @@ export default async function PeriodClose({
                 return (
                   <TableCell key={m}>
                     <span className="flex items-center gap-2">
-                      <Badge variant={closedAt ? 'success' : 'outline'}>{closedAt ? 'closed' : 'open'}</Badge>
-                      <CloseButtons periodId={p.id} module={m} closed={!!closedAt} />
+                      <Badge variant={closedAt ? 'success' : 'outline'}>
+                        {closedAt ? t('status.closed') : t('status.open')}
+                      </Badge>
+                      <CloseButtons
+                        periodId={p.id}
+                        module={m}
+                        moduleLabel={t(`modules.${m}`)}
+                        closed={!!closedAt}
+                      />
                     </span>
                   </TableCell>
                 )

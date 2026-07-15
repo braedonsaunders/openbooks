@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { SortTh } from '../../../components/sortable-th'
@@ -38,6 +39,8 @@ export function RunBuilder({
   sort: string
   dir: 'asc' | 'desc'
 }) {
+  const t = useTranslations('payments.runBuilder')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   /** Selected bills (whole row kept so totals survive pagination). */
   const [selected, setSelected] = useState<Record<string, RunBill>>({})
@@ -79,11 +82,11 @@ export function RunBuilder({
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not create the payment run')
+      toast.error(data.error ?? t('toasts.createFailed'))
       setBusy(false)
       return
     }
-    toast.success(`Payment run ${data.runNumber} created`)
+    toast.success(t('toasts.created', { number: data.runNumber }))
     setSelected({})
     setBusy(false)
     router.push(`/payments?view=runs&run=${data.id}` as any)
@@ -104,7 +107,7 @@ export function RunBuilder({
     <div className="space-y-3">
       {bills.length === 0 ? (
         <p className="rounded-md border border-dashed border-slate-300 px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          No posted bills with an open balance match.
+          {t('noOpenBills')}
         </p>
       ) : (
         <Table>
@@ -116,15 +119,15 @@ export function RunBuilder({
                   className="h-4 w-4 accent-teal-600"
                   checked={allOnPage}
                   onChange={toggleAll}
-                  aria-label="Select all bills on this page"
+                  aria-label={t('selectAllAriaLabel')}
                 />
               </TableHead>
-              <SortTh {...thProps} column="number">Bill</SortTh>
-              <SortTh {...thProps} column="vendor">Vendor</SortTh>
-              <SortTh {...thProps} column="due">Due</SortTh>
-              <TableHead>Ref</TableHead>
-              <TableHead>Bank details</TableHead>
-              <SortTh {...thProps} column="open" align="right">Open balance</SortTh>
+              <SortTh {...thProps} column="number">{t('columns.bill')}</SortTh>
+              <SortTh {...thProps} column="vendor">{tCommon('labels.vendor')}</SortTh>
+              <SortTh {...thProps} column="due">{t('columns.due')}</SortTh>
+              <TableHead>{t('columns.ref')}</TableHead>
+              <TableHead>{t('columns.bankDetails')}</TableHead>
+              <SortTh {...thProps} column="open" align="right">{t('columns.openBalance')}</SortTh>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -136,7 +139,7 @@ export function RunBuilder({
                     className="h-4 w-4 accent-teal-600"
                     checked={!!selected[b.id]}
                     onChange={() => toggle(b)}
-                    aria-label={`Select ${b.document_number}`}
+                    aria-label={t('selectAriaLabel', { document: b.document_number })}
                   />
                 </TableCell>
                 <TableCell className="font-mono text-[13px] font-semibold">{b.document_number}</TableCell>
@@ -145,9 +148,9 @@ export function RunBuilder({
                 <TableCell className="text-slate-500 dark:text-slate-400">{b.reference_number}</TableCell>
                 <TableCell>
                   {b.has_bank ? (
-                    <Badge variant="success">approved</Badge>
+                    <Badge variant="success">{t('bankApproved')}</Badge>
                   ) : (
-                    <Badge variant="warning">missing</Badge>
+                    <Badge variant="warning">{t('bankMissing')}</Badge>
                   )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{money(b.open)}</TableCell>
@@ -160,26 +163,29 @@ export function RunBuilder({
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
         <div className="w-64 space-y-1.5">
           <Label>
-            Pay from bank account<span className="text-red-500"> *</span>
+            {t('payFromBankAccount')}<span className="text-red-500"> *</span>
           </Label>
           <SearchSelect
             options={bankAccounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name}`.trim() }))}
             value={bankAccountId}
             onChange={(v) => setBankAccountId(v ?? '')}
-            placeholder="Select bank account…"
+            placeholder={t('selectBankAccountPlaceholder')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Funds date</Label>
+          <Label>{t('fundsDate')}</Label>
           <Input type="date" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
         </div>
         <span className="flex-1" />
         <span className="pb-2 text-sm text-slate-600 tabular-nums dark:text-slate-300">
-          {selectedList.length} bill{selectedList.length === 1 ? '' : 's'} ·{' '}
-          <strong className="text-slate-900 dark:text-slate-100">{money(totalSelected)}</strong>
+          {t.rich('selectionSummary', {
+            count: selectedList.length,
+            amount: money(totalSelected),
+            total: (chunks) => <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>,
+          })}
         </span>
         <Button disabled={busy || selectedList.length === 0 || !bankAccountId} onClick={createRun}>
-          {busy ? 'Creating…' : 'Create payment run'}
+          {busy ? tCommon('actions.creating') : t('createRun')}
         </Button>
       </div>
     </div>

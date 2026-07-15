@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Filter, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -25,6 +26,9 @@ import type { CardRow } from '../../api/insights/_lib'
 
 const field = 'space-y-1.5'
 const DATE_BINS: DateBin[] = ['day', 'week', 'month', 'quarter', 'year']
+// Sentinel persisted to the DB for unnamed cards — stored data, never translated.
+// The drawer title shows the localized `cardStudio.untitled` instead.
+const UNTITLED_CARD = 'Untitled card'
 
 type MeasureState = { field: string | ''; agg: AggFn }
 type DimensionState = { field: string; bin: DateBin | '' }
@@ -62,11 +66,13 @@ export function CardStudio({
   canCreate: boolean
   canPublish: boolean
 }) {
+  const t = useTranslations('insights')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const ro = !canCreate
 
   const initialQuery = (card.query ?? {}) as InsightQuery
-  const [name, setName] = useState(card.name === 'Untitled card' ? '' : card.name)
+  const [name, setName] = useState(card.name === UNTITLED_CARD ? '' : card.name)
   const [description, setDescription] = useState(card.description ?? '')
   const [sourceKey, setSourceKey] = useState(initialQuery.source ?? 'ledger_lines')
 
@@ -114,28 +120,29 @@ export function CardStudio({
       const data = await res.json()
       if (seq !== previewSeq.current) return
       if (!res.ok) {
-        setPreviewError(data.error ?? 'Query failed')
+        setPreviewError(data.error ?? t('errors.queryFailed'))
         setResult(null)
       } else {
         setResult(data as QueryResult)
       }
     } catch {
-      if (seq === previewSeq.current) setPreviewError('Preview request failed')
+      if (seq === previewSeq.current) setPreviewError(t('cardStudio.previewRequestFailed'))
     } finally {
       if (seq === previewSeq.current) setPreviewing(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
   useEffect(() => {
-    const t = setTimeout(runPreview, 350)
-    return () => clearTimeout(t)
+    const timer = setTimeout(runPreview, 350)
+    return () => clearTimeout(timer)
   }, [runPreview])
 
   // -- autosave (debounced PATCH) -------------------------------------------
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const savePayload = useMemo(
     () => ({
-      name: name.trim() || 'Untitled card',
+      name: name.trim() || UNTITLED_CARD,
       description: description.trim() || null,
       query,
       vizType,
@@ -151,7 +158,7 @@ export function CardStudio({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/insights/cards/${card.id}`, {
         method: 'PATCH',
@@ -163,10 +170,10 @@ export function CardStudio({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('autosave.failed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload, ro])
 
@@ -179,25 +186,25 @@ export function CardStudio({
       body: JSON.stringify({ publish: next }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Update failed')
+    if (!res.ok) toast.error(data.error ?? t('errors.updateFailed'))
     else {
       setStatus(next ? 'published' : 'draft')
-      toast.success(next ? 'Card published' : 'Card returned to draft')
+      toast.success(next ? t('cardStudio.publishedToast') : t('cardStudio.draftToast'))
     }
     setBusy(false)
     router.refresh()
   }
 
   async function remove() {
-    if (!confirm('Delete this card? It will be removed from any dashboards.')) return
+    if (!confirm(t('cardStudio.deleteConfirm'))) return
     setBusy(true)
     const res = await fetch(`/api/insights/cards/${card.id}`, { method: 'DELETE' })
     if (!res.ok) {
-      toast.error('Could not delete the card')
+      toast.error(t('cardStudio.deleteFailed'))
       setBusy(false)
       return
     }
-    toast.success('Card deleted')
+    toast.success(t('cardStudio.deletedToast'))
     router.push('/insights')
     router.refresh()
   }
@@ -226,32 +233,32 @@ export function CardStudio({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span>{name.trim() || 'Untitled card'}</span>
+          <span>{name.trim() || t('cardStudio.untitled')}</span>
           <Badge variant={status === 'published' ? 'success' : 'outline'}>
-            {status === 'published' ? 'Published' : 'Draft'}
+            {status === 'published' ? t('status.published') : tCommon('status.draft')}
           </Badge>
         </span>
       }
-      description={canCreate ? 'Changes save automatically. Preview updates live.' : undefined}
+      description={canCreate ? t('cardStudio.autosaveHint') : undefined}
       headerActions={
         <>
           {canCreate ? (
             <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
-              <Trash2 size={14} /> Delete
+              <Trash2 size={14} /> {tCommon('actions.delete')}
             </Button>
           ) : null}
           {canPublish ? (
             status === 'published' ? (
               <Button variant="outline" disabled={busy} onClick={() => setPublished(false)}>
-                Unpublish
+                {t('actions.unpublish')}
               </Button>
             ) : (
               <>
                 {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Name the card to publish it</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.nameRequiredToPublish')}</span>
                 ) : null}
                 <Button disabled={busy || !nameValid} onClick={() => setPublished(true)}>
-                  Publish
+                  {t('actions.publish')}
                 </Button>
               </>
             )
@@ -267,12 +274,12 @@ export function CardStudio({
           >
             {canCreate
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('autosave.saved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('cardStudio.saveFailedRetry')
+                    : t('autosave.unsaved')
               : null}
           </span>
         </div>
@@ -283,15 +290,15 @@ export function CardStudio({
         <div className="space-y-6">
           <section className="grid gap-4">
             <div className={field}>
-              <Label>Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Monthly spend by department" disabled={ro} />
+              <Label>{tCommon('labels.name')}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cardStudio.namePlaceholder')} disabled={ro} />
             </div>
             <div className={field}>
-              <Label>Description</Label>
-              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" disabled={ro} />
+              <Label>{tCommon('labels.description')}</Label>
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tCommon('labels.optional')} disabled={ro} />
             </div>
             <div className={field}>
-              <Label>Source</Label>
+              <Label>{t('cardStudio.sourceLabel')}</Label>
               <Select value={sourceKey} onChange={(e) => changeSource(e.target.value)} disabled={ro}>
                 {INSIGHT_SOURCES.map((s) => (
                   <option key={s.key} value={s.key}>
@@ -306,15 +313,15 @@ export function CardStudio({
           {/* -- measures ---------------------------------------------- */}
           <section className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Measures</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cardStudio.measuresTitle')}</h3>
               {!ro ? (
                 <Button variant="outline" size="sm" onClick={() => setMeasures([...measures, { agg: 'count', field: '' }])}>
-                  <Plus size={14} /> Add
+                  <Plus size={14} /> {tCommon('actions.add')}
                 </Button>
               ) : null}
             </div>
             {measures.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">Add a measure to aggregate (or leave empty for a detail table).</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.measuresEmpty')}</p>
             ) : (
               measures.map((m, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -340,7 +347,7 @@ export function CardStudio({
                       disabled={ro}
                       className="flex-1"
                     >
-                      <option value="">Select field…</option>
+                      <option value="">{t('cardStudio.selectFieldPlaceholder')}</option>
                       {measureFields.map((f) => (
                         <option key={f.key} value={f.key}>
                           {f.label}
@@ -348,10 +355,10 @@ export function CardStudio({
                       ))}
                     </Select>
                   ) : (
-                    <span className="flex-1 text-sm text-slate-500 dark:text-slate-400">of rows</span>
+                    <span className="flex-1 text-sm text-slate-500 dark:text-slate-400">{t('cardStudio.ofRows')}</span>
                   )}
                   {!ro ? (
-                    <Button variant="ghost" size="sm" aria-label="Remove measure" onClick={() => setMeasures(measures.filter((_, j) => j !== i))}>
+                    <Button variant="ghost" size="sm" aria-label={t('cardStudio.removeMeasure')} onClick={() => setMeasures(measures.filter((_, j) => j !== i))}>
                       <Trash2 size={14} />
                     </Button>
                   ) : null}
@@ -363,19 +370,19 @@ export function CardStudio({
           {/* -- dimensions -------------------------------------------- */}
           <section className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Group by</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cardStudio.groupByTitle')}</h3>
               {!ro ? (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setDimensions([...dimensions, { field: dimensionFields[0]?.key ?? '', bin: '' }])}
                 >
-                  <Plus size={14} /> Add
+                  <Plus size={14} /> {tCommon('actions.add')}
                 </Button>
               ) : null}
             </div>
             {dimensions.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">Group rows by a dimension to summarize them.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.groupByEmpty')}</p>
             ) : (
               dimensions.map((d, i) => {
                 const f = source?.fields.find((x) => x.key === d.field)
@@ -400,16 +407,16 @@ export function CardStudio({
                         disabled={ro}
                         className="w-28"
                       >
-                        <option value="">Exact</option>
+                        <option value="">{t('cardStudio.binExact')}</option>
                         {DATE_BINS.map((b) => (
                           <option key={b} value={b}>
-                            by {b}
+                            {t(`cardStudio.bins.${b}`)}
                           </option>
                         ))}
                       </Select>
                     ) : null}
                     {!ro ? (
-                      <Button variant="ghost" size="sm" aria-label="Remove dimension" onClick={() => setDimensions(dimensions.filter((_, j) => j !== i))}>
+                      <Button variant="ghost" size="sm" aria-label={t('cardStudio.removeDimension')} onClick={() => setDimensions(dimensions.filter((_, j) => j !== i))}>
                         <Trash2 size={14} />
                       </Button>
                     ) : null}
@@ -423,7 +430,7 @@ export function CardStudio({
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                <Filter size={14} /> Filters
+                <Filter size={14} /> {t('cardStudio.filtersTitle')}
               </h3>
               {!ro ? (
                 <Button
@@ -431,12 +438,12 @@ export function CardStudio({
                   size="sm"
                   onClick={() => setFilters([...filters, { field: allFields[0]?.key ?? '', op: 'eq', value: '' }])}
                 >
-                  <Plus size={14} /> Add
+                  <Plus size={14} /> {tCommon('actions.add')}
                 </Button>
               ) : null}
             </div>
             {filters.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No filters — the card covers all rows.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.filtersEmpty')}</p>
             ) : (
               filters.map((flt, i) => {
                 const f = allFields.find((x) => x.key === flt.field)
@@ -464,7 +471,7 @@ export function CardStudio({
                         ))}
                       </Select>
                       {!ro ? (
-                        <Button variant="ghost" size="sm" aria-label="Remove filter" onClick={() => setFilters(filters.filter((_, j) => j !== i))}>
+                        <Button variant="ghost" size="sm" aria-label={t('cardStudio.removeFilter')} onClick={() => setFilters(filters.filter((_, j) => j !== i))}>
                           <Trash2 size={14} />
                         </Button>
                       ) : null}
@@ -488,12 +495,12 @@ export function CardStudio({
                           onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
                           placeholder={
                             meta?.needsValue === 'list'
-                              ? 'a, b, c'
+                              ? t('cardStudio.filterPlaceholderList')
                               : meta?.needsValue === 'number'
-                                ? '30'
+                                ? t('cardStudio.filterPlaceholderNumber')
                                 : f?.semanticType === 'date'
-                                  ? 'YYYY-MM-DD'
-                                  : 'Value'
+                                  ? t('cardStudio.filterPlaceholderDate')
+                                  : t('cardStudio.filterPlaceholderValue')
                           }
                           disabled={ro}
                           className="flex-1"
@@ -523,7 +530,7 @@ export function CardStudio({
                     : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900')
                 }
               >
-                <v.Icon size={15} /> {v.label}
+                <v.Icon size={15} /> {t(v.labelKey)}
               </button>
             ))}
           </div>
@@ -546,7 +553,7 @@ export function CardStudio({
               </div>
             ) : !result ? (
               <div className="flex h-full min-h-[20rem] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-                {previewing ? 'Running preview…' : 'Build a query to preview.'}
+                {previewing ? t('cardStudio.runningPreview') : t('cardStudio.buildToPreview')}
               </div>
             ) : (
               <div className="h-[20rem]">
@@ -556,8 +563,8 @@ export function CardStudio({
           </div>
           {result ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {result.rowCount.toLocaleString()} row{result.rowCount === 1 ? '' : 's'}
-              {result.truncated ? ' (capped at 10,000)' : ''} · {result.durationMs} ms
+              {t('cardStudio.rowCount', { count: result.rowCount })}
+              {result.truncated ? ` ${t('cardStudio.capped')}` : ''} · {t('cardStudio.duration', { ms: result.durationMs })}
             </p>
           ) : null}
         </div>
@@ -581,6 +588,7 @@ function VizSettingsEditor({
   measureCols: { key: string; label: string }[]
   disabled: boolean
 }) {
+  const t = useTranslations('insights.vizSettings')
   const set = (patch: Partial<VizSettings>) => onChange({ ...settings, ...patch })
   const toggle = (
     label: string,
@@ -601,9 +609,9 @@ function VizSettingsEditor({
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
       <div className={field + ' min-w-[9rem]'}>
-        <Label>Category</Label>
+        <Label>{t('category')}</Label>
         <Select value={settings.categoryField ?? ''} onChange={(e) => set({ categoryField: e.target.value || undefined })} disabled={disabled}>
-          <option value="">Auto</option>
+          <option value="">{t('auto')}</option>
           {dimensionCols.map((c) => (
             <option key={c.key} value={c.key}>
               {c.label}
@@ -612,13 +620,13 @@ function VizSettingsEditor({
         </Select>
       </div>
       <div className={field + ' min-w-[9rem]'}>
-        <Label>Value</Label>
+        <Label>{t('value')}</Label>
         <Select
           value={settings.valueFields?.[0] ?? ''}
           onChange={(e) => set({ valueFields: e.target.value ? [e.target.value] : undefined })}
           disabled={disabled}
         >
-          <option value="">All measures</option>
+          <option value="">{t('allMeasures')}</option>
           {measureCols.map((c) => (
             <option key={c.key} value={c.key}>
               {c.label}
@@ -627,11 +635,11 @@ function VizSettingsEditor({
         </Select>
       </div>
       <div className="flex flex-wrap items-center gap-3 pb-2">
-        {(vizType === 'bar' || vizType === 'area') && toggle('Stacked', 'stacked')}
-        {vizType === 'bar' && toggle('Horizontal', 'horizontal')}
-        {(vizType === 'line' || vizType === 'area') && toggle('Smooth', 'smooth')}
-        {toggle('Values', 'showValues')}
-        {toggle('Hide legend', 'hideLegend')}
+        {(vizType === 'bar' || vizType === 'area') && toggle(t('stacked'), 'stacked')}
+        {vizType === 'bar' && toggle(t('horizontal'), 'horizontal')}
+        {(vizType === 'line' || vizType === 'area') && toggle(t('smooth'), 'smooth')}
+        {toggle(t('showValues'), 'showValues')}
+        {toggle(t('hideLegend'), 'hideLegend')}
       </div>
     </div>
   )

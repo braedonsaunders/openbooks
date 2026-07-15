@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -21,7 +22,6 @@ const KIND = 'sales_order' as const
 const BASE = '/sales-orders'
 const PARAM = 'order'
 const API = '/api/sales-orders'
-const LABEL = 'Sales order'
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   approved: 'success',
@@ -29,6 +29,8 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   voided: 'outline',
 }
 const STATUS_ORDER = ['draft', 'approved', 'voided']
+/** documents.status values with a generic label in common.status. */
+const STATUS_LABEL_KEYS = new Set(['draft', 'approved', 'voided'])
 
 const SORT_COLUMNS = {
   date: sql`d.document_date`,
@@ -50,6 +52,12 @@ export default async function SalesOrders({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const [t, tCommon] = await Promise.all([
+    getTranslations('salesOrders'),
+    getTranslations('common'),
+  ])
+  const statusLabel = (s: string) =>
+    STATUS_LABEL_KEYS.has(s) ? tCommon(`status.${s}`) : String(s).replace('_', ' ')
   const authz = await requirePermission('ar.read')
   const canManage = can(authz, 'ar.create')
   const sp = await searchParams
@@ -121,30 +129,38 @@ export default async function SalesOrders({
   const statusOptions = counts.rows
     .slice()
     .sort((a: any, b: any) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status))
-    .map((r: any) => ({ value: r.status, label: String(r.status).replace('_', ' '), count: Number(r.n) }))
+    .map((r: any) => ({ value: r.status, label: statusLabel(String(r.status)), count: Number(r.n) }))
 
-  const newBtn = canManage ? <NewOrderButton apiPath={API} base={BASE} param={PARAM} label={LABEL} /> : undefined
+  const newBtn = canManage ? (
+    <NewOrderButton
+      apiPath={API}
+      base={BASE}
+      param={PARAM}
+      label={t('list.newButton')}
+      createFailedMessage={t('list.createDraftFailed')}
+    />
+  ) : undefined
 
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
-            title="Sales Orders"
-            description="Confirmed customer orders — issue, then convert into an invoice as you bill."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={newBtn}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search sales orders, customers, memo…" />
-            <FilterChips basePath={BASE} currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath={BASE} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No sales orders yet"
-          description="Create a sales order, or convert one from an estimate."
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
           action={newBtn}
         />
       ) : (
@@ -152,12 +168,12 @@ export default async function SalesOrders({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath={BASE} currentParams={sp} column="number" sort={params.sort} dir={params.dir}>Number</SortTh>
-                <SortTh basePath={BASE} currentParams={sp} column="customer" sort={params.sort} dir={params.dir}>Customer</SortTh>
-                <SortTh basePath={BASE} currentParams={sp} column="date" sort={params.sort} dir={params.dir}>Date</SortTh>
-                <SortTh basePath={BASE} currentParams={sp} column="status" sort={params.sort} dir={params.dir}>Status</SortTh>
-                <TableHead className="text-right">Converted</TableHead>
-                <SortTh basePath={BASE} currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">Total</SortTh>
+                <SortTh basePath={BASE} currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{tCommon('labels.number')}</SortTh>
+                <SortTh basePath={BASE} currentParams={sp} column="customer" sort={params.sort} dir={params.dir}>{tCommon('labels.customer')}</SortTh>
+                <SortTh basePath={BASE} currentParams={sp} column="date" sort={params.sort} dir={params.dir}>{tCommon('labels.date')}</SortTh>
+                <SortTh basePath={BASE} currentParams={sp} column="status" sort={params.sort} dir={params.dir}>{tCommon('labels.status')}</SortTh>
+                <TableHead className="text-right">{t('list.converted')}</TableHead>
+                <SortTh basePath={BASE} currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">{tCommon('labels.total')}</SortTh>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -176,7 +192,7 @@ export default async function SalesOrders({
                     <TableCell>{r.document_date}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>
-                        {String(r.status).replace('_', ' ')}
+                        {statusLabel(String(r.status))}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">
@@ -193,7 +209,9 @@ export default async function SalesOrders({
           </div>
         </>
       )}
-      {openId === 'new' && canManage ? <NewOrderRedirect apiPath={API} base={BASE} param={PARAM} /> : null}
+      {openId === 'new' && canManage ? (
+        <NewOrderRedirect apiPath={API} base={BASE} param={PARAM} createFailedMessage={t('list.createDraftFailed')} />
+      ) : null}
       {openOrder && pickers ? (
         <OrderDrawer
           order={openOrder as any}

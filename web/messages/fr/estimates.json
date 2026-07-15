@@ -1,1 +1,12 @@
-{}
+{
+  "list": {
+    "title": "Soumissions",
+    "description": "Soumissions clients sans comptabilisation — émettez-les, puis convertissez-les en commande client ou en facture.",
+    "searchPlaceholder": "Rechercher soumissions, clients, mémo…",
+    "converted": "Convertie",
+    "emptyTitle": "Aucune soumission pour l’instant",
+    "emptyDescription": "Créez la première soumission pour lancer le flux commande-encaissement.",
+    "newButton": "Nouvelle soumission",
+    "createDraftFailed": "Impossible de créer une soumission brouillon"
+  }
+}

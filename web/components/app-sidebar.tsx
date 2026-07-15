@@ -5,6 +5,7 @@
 // width flash). Hosts the brand, the nav, the theme switcher, and the version tag.
 
 import { useCallback, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Badge, cn } from '@openbooks/ui'
 import { Logo } from './brand-logo'
@@ -21,6 +22,7 @@ export function AppSidebar({
   groups: SidebarNavGroup[]
   defaultCollapsed?: boolean
 }) {
+  const t = useTranslations('shell.sidebar')
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
   const navGroups = useNavGroups(groups)
 
@@ -54,8 +56,8 @@ export function AppSidebar({
         <button
           type="button"
           onClick={toggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? t('expand') : t('collapse')}
+          title={collapsed ? t('expand') : t('collapse')}
           className={cn(
             'grid h-8 w-8 place-items-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200',
             collapsed ? '' : 'ml-auto',

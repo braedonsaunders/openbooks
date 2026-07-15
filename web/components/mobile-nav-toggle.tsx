@@ -6,6 +6,7 @@
 
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslations } from 'next-intl'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
@@ -17,6 +18,8 @@ import { ThemeToggle } from './theme-toggle'
 import { useHydrated } from '@/lib/use-hydrated'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
+  const t = useTranslations('shell.mobileNav')
+  const tCommon = useTranslations('common')
   const { open, setOpen } = useMobileNav()
   const navGroups = useNavGroups(groups)
   const mounted = useHydrated()
@@ -40,7 +43,7 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Open menu"
+        aria-label={t('openMenu')}
         className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 lg:hidden dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
       >
         <Menu size={18} />
@@ -74,7 +77,7 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                       <button
                         type="button"
                         onClick={() => setOpen(false)}
-                        aria-label="Close"
+                        aria-label={tCommon('actions.close')}
                         className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                       >
                         <X size={18} />

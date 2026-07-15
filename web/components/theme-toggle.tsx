@@ -5,17 +5,20 @@
 // light → dark → system. Renders an inert placeholder until mounted so the SSR
 // markup (which can't know the stored preference) doesn't mismatch on hydration.
 
+import { useTranslations } from 'next-intl'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { useTheme, type Theme } from './theme-provider'
 
-const OPTIONS: { value: Theme; icon: typeof Sun; label: string }[] = [
-  { value: 'light', icon: Sun, label: 'Light' },
-  { value: 'system', icon: Monitor, label: 'System' },
-  { value: 'dark', icon: Moon, label: 'Dark' },
+// Module-level constants can't call hooks — store message keys, translate at render.
+const OPTIONS: { value: Theme; icon: typeof Sun; labelKey: 'light' | 'system' | 'dark' }[] = [
+  { value: 'light', icon: Sun, labelKey: 'light' },
+  { value: 'system', icon: Monitor, labelKey: 'system' },
+  { value: 'dark', icon: Moon, labelKey: 'dark' },
 ]
 
 export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
+  const t = useTranslations('shell.themeToggle')
   const { theme, setTheme, mounted } = useTheme()
 
   if (collapsed) {
@@ -26,8 +29,8 @@ export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
       <button
         type="button"
         onClick={() => setTheme(next)}
-        title={`Theme: ${active.label} (click to change)`}
-        aria-label={`Theme: ${active.label}`}
+        title={t('currentHint', { theme: t(`options.${active.labelKey}`) })}
+        aria-label={t('current', { theme: t(`options.${active.labelKey}`) })}
         className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
       >
         {mounted ? <Icon size={16} /> : <Monitor size={16} className="opacity-0" />}
@@ -38,7 +41,7 @@ export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <div
       role="radiogroup"
-      aria-label="Theme"
+      aria-label={t('label')}
       className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/60"
     >
       {OPTIONS.map((o) => {
@@ -51,7 +54,7 @@ export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
             role="radio"
             aria-checked={selected}
             onClick={() => setTheme(o.value)}
-            title={o.label}
+            title={t(`options.${o.labelKey}`)}
             className={cn(
               'inline-flex h-7 flex-1 items-center justify-center rounded-md transition-colors',
               selected
