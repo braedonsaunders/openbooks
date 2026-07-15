@@ -1,0 +1,61 @@
+# openbooks dev stack for Dokploy (project "openbooks").
+#
+# Source of truth: this file is stored as the compose service's raw compose in
+# Dokploy; the GitHub deploy workflow updates OPENBOOKS_TAG in the Dokploy env
+# and triggers compose.deploy. All ${VARS} live in the Dokploy environment.
+#
+# Database: the EXISTING Patroni pgcluster VM database — no bundled Postgres.
+# OPENBOOKS_DB_URL points at it directly (LAN address, reachable from the
+# Dokploy host's containers).
+#
+# Networks:
+#   dokploy-network — Traefik ingress (the Dokploy domain routes to web:3000).
+#   infra-net       — shared infrastructure overlay; MinIO lives here (minio:9000).
+
+networks:
+  dokploy-network:
+    external: true
+  infra-net:
+    external: true
+
+services:
+  web:
+    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+      # Existing pgcluster database.
+      OPENBOOKS_DB_URL: ${OPENBOOKS_DB_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      # File-cabinet blob storage → shared MinIO over infra-net.
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      # First-boot seed (org + admin). No-ops on the existing database.
+      ORG_NAME: ${ORG_NAME}
+      ORG_CURRENCY: ${ORG_CURRENCY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_NAME: ${ADMIN_NAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Optional: AI assistant provider key.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    networks:
+      - dokploy-network
+      - infra-net
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2g

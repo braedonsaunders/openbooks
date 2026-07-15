@@ -1,0 +1,53 @@
+# openbooks — production image (Next.js standalone + bundled bootstrap).
+#
+# Build:  docker build -t openbooks .
+# Run:    needs OPENBOOKS_DB_URL, SESSION_SECRET (+ optional S3_*, ADMIN_*).
+#         Entrypoint applies migrations/seeds (scripts/bootstrap.ts) and then
+#         starts the web server on $PORT (default 3000).
+
+# --- deps: workspace-aware install ------------------------------------------
+FROM node:24-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY schema/package.json schema/
+COPY engine/package.json engine/
+COPY web/package.json web/
+COPY packages/analytics/package.json packages/analytics/
+COPY packages/customization/package.json packages/customization/
+COPY packages/forms-core/package.json packages/forms-core/
+COPY packages/office/package.json packages/office/
+COPY packages/pdf/package.json packages/pdf/
+COPY packages/reports/package.json packages/reports/
+COPY packages/ui/package.json packages/ui/
+RUN npm ci
+
+# --- build: next standalone + bootstrap bundle -------------------------------
+FROM deps AS build
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN cd web && npx next build
+RUN npx esbuild scripts/bootstrap.ts \
+      --bundle --platform=node --format=esm \
+      --external:pg-native \
+      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
+      --outfile=/out/bootstrap.mjs
+
+# --- runtime ------------------------------------------------------------------
+FROM node:24-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+
+# Standalone output is rooted at the monorepo (outputFileTracingRoot):
+# node_modules + web/server.js + web/.next live inside it.
+COPY --from=build /app/web/.next/standalone ./
+COPY --from=build /app/web/.next/static ./web/.next/static
+COPY --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
+# The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
+COPY schema/migrations ./schema/migrations
+
+EXPOSE 3000
+# Bootstrap (migrate + seed) must succeed before the server takes traffic.
+CMD ["sh", "-c", "node scripts/bootstrap.mjs && exec node web/server.js"]
