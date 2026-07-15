@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
@@ -39,6 +40,20 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   pending_approval: 'warning',
   draft: 'secondary',
   voided: 'outline',
+}
+
+// documents.status enum → common.status.* message keys (fallback: raw value).
+const STATUS_LABEL_KEY: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  rejected: 'rejected',
+  posted: 'posted',
+  paid: 'paid',
+  partially_paid: 'partiallyPaid',
+  voided: 'voided',
+  reversed: 'reversed',
+  cancelled: 'cancelled',
 }
 
 const emptyLine = (): LineRow => ({
@@ -86,6 +101,8 @@ export function BillDrawer({
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
 }) {
+  const t = useTranslations('ap')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const doc = bill.doc
   const isDraft = doc.status === 'draft'
@@ -151,7 +168,7 @@ export function BillDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/bills/${doc.id}`, {
         method: 'PATCH',
@@ -165,10 +182,10 @@ export function BillDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('toasts.autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, editable])
 
@@ -180,8 +197,8 @@ export function BillDrawer({
       body: JSON.stringify({ action, documentId: doc.id }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
+    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
     setBusy(false)
     router.refresh()
   }
@@ -191,24 +208,24 @@ export function BillDrawer({
     () => [
       {
         key: 'accountId',
-        label: 'Account',
+        label: tCommon('labels.account'),
         width: 'minmax(200px,2fr)',
         type: 'search-select',
         required: true,
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
-        placeholder: 'Account…',
+        placeholder: t('drawer.accountPlaceholder'),
       },
-      { key: 'description', label: 'Description', width: 'minmax(160px,1.6fr)', type: 'text' },
+      { key: 'description', label: tCommon('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
       {
         key: 'departmentId',
-        label: 'Department',
+        label: tCommon('labels.department'),
         width: '140px',
         type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
       },
       {
         key: 'projectId',
-        label: 'Project',
+        label: tCommon('labels.project'),
         width: 'minmax(150px,1.2fr)',
         type: 'search-select',
         options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
@@ -216,16 +233,16 @@ export function BillDrawer({
       },
       {
         key: 'taxCodeId',
-        label: 'Tax',
+        label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: 'No tax' }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
+        options: [{ value: '', label: t('drawer.noTax') }, ...taxCodes.map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
       },
       ...customFieldColumns<LineRow>(lineDefs),
-      { key: 'amount', label: 'Amount', width: '120px', type: 'amount', align: 'right', required: true },
+      { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
       {
         key: 'taxAmount',
-        label: 'Tax amt',
+        label: t('drawer.taxAmountColumn'),
         width: '120px',
         type: 'tax',
         align: 'right',
@@ -239,7 +256,7 @@ export function BillDrawer({
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxCodes, lineDefs],
+    [accounts, departments, projects, taxCodes, lineDefs, t, tCommon],
   )
 
   const field = 'space-y-1.5'
@@ -253,30 +270,34 @@ export function BillDrawer({
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
-            {String(doc.status).replace('_', ' ')}
+            {STATUS_LABEL_KEY[doc.status]
+              ? tCommon(`status.${STATUS_LABEL_KEY[doc.status]}`)
+              : String(doc.status).replace('_', ' ')}
           </Badge>
         </span>
       }
       description={
         editable
-          ? `${doc.vendor_name ? doc.vendor_name + ' · ' : ''}changes save automatically`
+          ? doc.vendor_name
+            ? t('drawer.vendorAutosaveHint', { vendor: doc.vendor_name })
+            : t('drawer.autosaveHint')
           : (doc.vendor_name ?? undefined)
       }
       headerActions={
         <>
           {isDraft ? (
             <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
-              Submit for approval
+              {t('actions.submitForApproval')}
             </Button>
           ) : null}
           {doc.status === 'approved' ? (
             <Button disabled={busy} onClick={() => act('post')}>
-              Post
+              {tCommon('actions.post')}
             </Button>
           ) : null}
           {doc.entry_id ? (
             <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+              <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
             </Button>
           ) : null}
         </>
@@ -291,18 +312,20 @@ export function BillDrawer({
           >
             {editable
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('drawer.saveState.saved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('drawer.saveState.error')
+                    : t('drawer.saveState.dirty')
               : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            Subtotal {money(totals.subtotal)} · Tax {money(totals.taxTotal)} ·{' '}
-            <strong className="text-slate-900 dark:text-slate-100">Total {money(totals.total)}</strong>
+            {tCommon('labels.subtotal')} {money(totals.subtotal)} · {tCommon('labels.tax')} {money(totals.taxTotal)} ·{' '}
+            <strong className="text-slate-900 dark:text-slate-100">
+              {tCommon('labels.total')} {money(totals.total)}
+            </strong>
           </span>
         </div>
       }
@@ -310,20 +333,20 @@ export function BillDrawer({
       <div className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
-            <Label>Vendor{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            <Label>{tCommon('labels.vendor')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
               <SearchSelect
                 options={vendors.map((v) => ({ value: v.id, label: v.display_name ?? '' }))}
                 value={partyId}
                 onChange={(v) => setPartyId(v ?? '')}
-                placeholder="Select vendor…"
+                placeholder={t('drawer.selectVendorPlaceholder')}
               />
             ) : (
               <p className="text-sm">{doc.vendor_name}</p>
             )}
           </div>
           <div className={field}>
-            <Label>Bill date</Label>
+            <Label>{t('drawer.billDate')}</Label>
             {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
@@ -331,7 +354,7 @@ export function BillDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Due date</Label>
+            <Label>{t('drawer.dueDate')}</Label>
             {editable ? (
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             ) : (
@@ -339,7 +362,7 @@ export function BillDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Vendor ref #</Label>
+            <Label>{t('drawer.vendorRef')}</Label>
             {editable ? (
               <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (
@@ -347,7 +370,7 @@ export function BillDrawer({
             )}
           </div>
           <div className={`${field} lg:col-span-3`}>
-            <Label>Memo</Label>
+            <Label>{tCommon('labels.memo')}</Label>
             {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
@@ -359,7 +382,7 @@ export function BillDrawer({
         <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
 
         <div className="space-y-2">
-          <Label>Lines</Label>
+          <Label>{tCommon('labels.lines')}</Label>
           <LineGrid<LineRow>
             columns={columns}
             rows={rows}

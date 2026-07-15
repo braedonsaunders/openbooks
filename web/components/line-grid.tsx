@@ -18,6 +18,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Button, Popover, SearchSelect, Select, cn } from '@openbooks/ui'
 
 export interface LineGridOption {
@@ -66,7 +67,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   readOnly = false,
   minRows = 1,
   footer,
-  addLabel = 'Add line',
+  addLabel,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -77,6 +78,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   footer?: React.ReactNode
   addLabel?: string
 }) {
+  const t = useTranslations('ui.lineGrid')
   const containerRef = useRef<HTMLDivElement>(null)
   const [menuRow, setMenuRow] = useState<number | null>(null)
 
@@ -223,7 +225,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
       <div className="mt-2 flex items-center justify-between gap-3">
         {!readOnly ? (
           <Button type="button" variant="outline" size="sm" onClick={() => insertRow(rows.length)}>
-            <Plus size={14} /> {addLabel}
+            <Plus size={14} /> {addLabel ?? t('addLine')}
           </Button>
         ) : (
           <span />
@@ -232,7 +234,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
       </div>
       {!readOnly ? (
         <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-          Enter adds/moves down · Alt+↑/↓ reorders · ⌘D duplicates · ⌘⌫ removes
+          {t('keyboardHint')}
         </p>
       ) : null}
     </div>
@@ -256,6 +258,7 @@ function TaxCell<Row extends Record<string, unknown>>({
   index: number
   inputBase: string
 }) {
+  const t = useTranslations('ui.lineGrid.tax')
   const overridden = row.taxOverridden === true
   const computed = column.computeTax?.(row) ?? 0
   // While overridden, show the explicit amount; otherwise mirror the computed
@@ -282,8 +285,8 @@ function TaxCell<Row extends Record<string, unknown>>({
     <div className="flex w-full items-center gap-1">
       {overridden ? (
         <span
-          aria-label="Tax overridden"
-          title="Tax manually overridden — differs from the computed rate"
+          aria-label={t('overriddenAria')}
+          title={t('overriddenTitle')}
           className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
         />
       ) : null}
@@ -294,7 +297,9 @@ function TaxCell<Row extends Record<string, unknown>>({
         aria-invalid={shown !== '' && Number.isNaN(Number(shown)) ? true : undefined}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(e) => commit(e.target.value)}
-        title={overridden ? `Computed ${computed.toFixed(2)} · overridden` : undefined}
+        title={
+          overridden ? t('computedOverriddenTitle', { amount: computed.toFixed(2) }) : undefined
+        }
         className={cn(
           inputBase,
           'text-right tabular-nums',
@@ -306,8 +311,8 @@ function TaxCell<Row extends Record<string, unknown>>({
       {overridden ? (
         <button
           type="button"
-          aria-label="Reset tax to computed"
-          title={`Reset to computed ${computed.toFixed(2)}`}
+          aria-label={t('resetAria')}
+          title={t('resetTitle', { amount: computed.toFixed(2) })}
           onClick={() => {
             setDraft(null)
             column.onTaxChange?.(index, { taxAmount: computed.toFixed(2), overridden: false })
@@ -354,6 +359,8 @@ function RowCells<Row extends Record<string, unknown>>({
   moveRow: (i: number, delta: number) => void
   canRemove: boolean
 }) {
+  const t = useTranslations('ui.lineGrid')
+  const tCommon = useTranslations('common')
   return (
     <>
       {!readOnly ? (
@@ -366,7 +373,7 @@ function RowCells<Row extends Record<string, unknown>>({
             trigger={
               <button
                 type="button"
-                aria-label={`Line ${i + 1} actions`}
+                aria-label={t('lineActionsAria', { number: i + 1 })}
                 onClick={() => setMenuOpen(!menuOpen)}
                 className="group flex h-7 w-7 items-center justify-center rounded text-slate-300 hover:bg-slate-100 hover:text-slate-500 dark:hover:bg-slate-800"
               >
@@ -377,9 +384,9 @@ function RowCells<Row extends Record<string, unknown>>({
           >
             <div className="py-1 text-sm">
               {[
-                { label: 'Insert above', icon: ArrowUp, fn: () => insertRow(i) },
-                { label: 'Insert below', icon: ArrowDown, fn: () => insertRow(i + 1) },
-                { label: 'Duplicate', icon: Copy, fn: () => duplicateRow(i) },
+                { label: t('insertAbove'), icon: ArrowUp, fn: () => insertRow(i) },
+                { label: t('insertBelow'), icon: ArrowDown, fn: () => insertRow(i + 1) },
+                { label: tCommon('actions.duplicate'), icon: Copy, fn: () => duplicateRow(i) },
               ].map((a) => (
                 <button
                   key={a.label}
@@ -401,7 +408,7 @@ function RowCells<Row extends Record<string, unknown>>({
                   setMenuOpen(false)
                 }}
               >
-                <Trash2 size={14} /> {canRemove ? 'Remove line' : 'Clear line'}
+                <Trash2 size={14} /> {canRemove ? t('removeLine') : t('clearLine')}
               </button>
             </div>
           </Popover>
@@ -421,8 +428,8 @@ function RowCells<Row extends Record<string, unknown>>({
               <span className="inline-flex items-center gap-1.5">
                 {overridden ? (
                   <span
-                    aria-label="Tax overridden"
-                    title="Tax manually overridden"
+                    aria-label={t('tax.overriddenAria')}
+                    title={t('tax.overriddenShortTitle')}
                     className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
                   />
                 ) : null}

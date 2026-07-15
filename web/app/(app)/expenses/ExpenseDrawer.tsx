@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
@@ -39,6 +40,16 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   pending_approval: 'warning',
   draft: 'secondary',
   voided: 'outline',
+}
+
+// Built-in expense_report statuses → common.status.* message keys. Unknown
+// (custom) statuses render verbatim with underscores humanized.
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  posted: 'posted',
+  voided: 'voided',
 }
 
 const emptyLine = (): LineRow => ({
@@ -90,8 +101,11 @@ export function ExpenseDrawer({
   canSubmit: boolean
   canPost: boolean
 }) {
+  const t = useTranslations('expenses')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const doc = report.doc
+  const statusKey = STATUS_LABEL_KEYS[String(doc.status)]
   const isDraft = doc.status === 'draft'
   // NetSuite-style edit-in-place: draft, approved, and POSTED reports are all
   // editable (provided the viewer can enter expenses). Saving a posted report
@@ -111,7 +125,7 @@ export function ExpenseDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  const rateByCode = useMemo(() => new Map(taxCodes.map((t) => [t.id, Number(t.rate ?? 0)])), [taxCodes])
+  const rateByCode = useMemo(() => new Map(taxCodes.map((tc) => [tc.id, Number(tc.rate ?? 0)])), [taxCodes])
   const lineTax = (row: LineRow) => {
     const rate = row.taxCodeId ? (rateByCode.get(row.taxCodeId) ?? 0) : 0
     const amt = Number(row.amount)
@@ -152,7 +166,7 @@ export function ExpenseDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/expenses/${doc.id}`, {
         method: 'PATCH',
@@ -166,10 +180,10 @@ export function ExpenseDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('toasts.autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, editable])
 
@@ -181,8 +195,8 @@ export function ExpenseDrawer({
       body: JSON.stringify({ action, documentId: doc.id }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
+    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
     setBusy(false)
     router.refresh()
   }
@@ -192,24 +206,24 @@ export function ExpenseDrawer({
     () => [
       {
         key: 'accountId',
-        label: 'Account',
+        label: tCommon('labels.account'),
         width: 'minmax(200px,2fr)',
         type: 'search-select',
         required: true,
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
-        placeholder: 'Account…',
+        placeholder: t('drawer.accountPlaceholder'),
       },
-      { key: 'description', label: 'Description', width: 'minmax(160px,1.6fr)', type: 'text' },
+      { key: 'description', label: tCommon('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
       {
         key: 'departmentId',
-        label: 'Department',
+        label: tCommon('labels.department'),
         width: '140px',
         type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
       },
       {
         key: 'projectId',
-        label: 'Project',
+        label: tCommon('labels.project'),
         width: 'minmax(150px,1.2fr)',
         type: 'search-select',
         options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
@@ -217,16 +231,16 @@ export function ExpenseDrawer({
       },
       {
         key: 'taxCodeId',
-        label: 'Tax',
+        label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: 'No tax' }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
+        options: [{ value: '', label: t('drawer.noTax') }, ...taxCodes.map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
       },
       ...customFieldColumns<LineRow>(lineDefs),
-      { key: 'amount', label: 'Amount', width: '120px', type: 'amount', align: 'right', required: true },
+      { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
       {
         key: 'taxAmount',
-        label: 'Tax amt',
+        label: t('drawer.columns.taxAmount'),
         width: '120px',
         type: 'tax',
         align: 'right',
@@ -240,7 +254,7 @@ export function ExpenseDrawer({
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxCodes, lineDefs],
+    [accounts, departments, projects, taxCodes, lineDefs, t, tCommon],
   )
 
   const field = 'space-y-1.5'
@@ -254,26 +268,26 @@ export function ExpenseDrawer({
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
-            {String(doc.status).replace('_', ' ')}
+            {statusKey ? tCommon(`status.${statusKey}`) : String(doc.status).replace('_', ' ')}
           </Badge>
         </span>
       }
-      description={editable ? 'Draft — changes save automatically.' : (doc.employee_name ?? undefined)}
+      description={editable ? t('drawer.autosaveHint') : (doc.employee_name ?? undefined)}
       headerActions={
         <>
           {isDraft && canSubmit ? (
             <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
-              Submit for approval
+              {t('actions.submitForApproval')}
             </Button>
           ) : null}
           {doc.status === 'approved' && canPost ? (
             <Button disabled={busy} onClick={() => act('post')}>
-              Post
+              {tCommon('actions.post')}
             </Button>
           ) : null}
           {doc.entry_id ? (
             <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+              <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
             </Button>
           ) : null}
         </>
@@ -288,18 +302,24 @@ export function ExpenseDrawer({
           >
             {editable
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('drawer.saveState.saved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('drawer.saveState.error')
+                    : t('drawer.saveState.dirty')
               : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            Subtotal {money(totals.subtotal)} · Tax {money(totals.taxTotal)} ·{' '}
-            <strong className="text-slate-900 dark:text-slate-100">Total {money(totals.total)}</strong>
+            {t.rich('drawer.totals', {
+              subtotal: money(totals.subtotal),
+              tax: money(totals.taxTotal),
+              total: money(totals.total),
+              strong: (chunks) => (
+                <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>
+              ),
+            })}
           </span>
         </div>
       }
@@ -307,20 +327,20 @@ export function ExpenseDrawer({
       <div className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
-            <Label>Employee{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            <Label>{tCommon('labels.employee')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
               <SearchSelect
                 options={employees.map((e) => ({ value: e.id, label: e.display_name ?? '' }))}
                 value={partyId}
                 onChange={(v) => setPartyId(v ?? '')}
-                placeholder="Select employee…"
+                placeholder={t('drawer.selectEmployeePlaceholder')}
               />
             ) : (
               <p className="text-sm">{doc.employee_name}</p>
             )}
           </div>
           <div className={field}>
-            <Label>Report date</Label>
+            <Label>{t('drawer.reportDate')}</Label>
             {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
@@ -328,7 +348,7 @@ export function ExpenseDrawer({
             )}
           </div>
           <div className={`${field} lg:col-span-4`}>
-            <Label>Memo</Label>
+            <Label>{tCommon('labels.memo')}</Label>
             {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
@@ -340,7 +360,7 @@ export function ExpenseDrawer({
         <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
 
         <div className="space-y-2">
-          <Label>Lines</Label>
+          <Label>{tCommon('labels.lines')}</Label>
           <LineGrid<LineRow>
             columns={columns}
             rows={rows}
