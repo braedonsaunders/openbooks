@@ -6,19 +6,19 @@ jobs:
     runs-on: [self-hosted, linux, x64, dokploy]
     timeout-minutes: 5
     steps:
-      - name: Probe Traefik providers
+      - name: Inspect swarm + traefik + deploy log
         run: |
           set +e
-          echo "=== traefik:8080 reachable? total routers ==="
-          curl -s -m 8 http://traefik:8080/api/http/routers -o /tmp/routers.json -w "http_code=%{http_code}\n"
-          echo "router count: $(cat /tmp/routers.json | grep -o '\"name\"' | wc -l)"
-          echo "=== routers whose rule mentions openbooks OR name has openbooks ==="
-          cat /tmp/routers.json | python3 -c "import json,sys; d=json.load(sys.stdin); [print(r.get('name'),'|',r.get('rule'),'|',r.get('status'),'|',r.get('provider')) for r in d if 'openbook' in json.dumps(r).lower()]" 2>/dev/null
-          echo "=== all router providers (unique) ==="
-          cat /tmp/routers.json | python3 -c "import json,sys; d=json.load(sys.stdin); import collections; print(collections.Counter(r.get('provider') for r in d))" 2>/dev/null
-          echo "=== docker-provider routers (sample rules) ==="
-          cat /tmp/routers.json | python3 -c "import json,sys; d=json.load(sys.stdin); [print(r.get('name'),'|',r.get('rule')) for r in d if r.get('provider')=='docker'][:15]" 2>/dev/null
-          echo "=== baseline: s3-dev route present? ==="
-          cat /tmp/routers.json | python3 -c "import json,sys; d=json.load(sys.stdin); [print(r.get('name'),'|',r.get('rule'),'|',r.get('provider')) for r in d if 's3-dev' in json.dumps(r).lower()]" 2>/dev/null
-          echo "=== bidwright route present? (docker provider proof) ==="
-          cat /tmp/routers.json | python3 -c "import json,sys; d=json.load(sys.stdin); [print(r.get('name'),'|',r.get('provider')) for r in d if 'bidwright' in json.dumps(r).lower()]" 2>/dev/null
+          echo "=== docker services (openbooks) ==="
+          docker service ls | grep -i openbook
+          echo "=== service ps (why tasks fail) ==="
+          SVC=$(docker service ls --format '{{.Name}}' | grep -i openbook | head -1)
+          echo "service: $SVC"
+          docker service ps --no-trunc "$SVC" 2>/dev/null | head -20
+          echo "=== latest deploy log tail ==="
+          LOG=$(ls -t /etc/dokploy/logs/compose-bypass-open-source-driver-miu7hf/*.log 2>/dev/null | head -1)
+          echo "log: $LOG"
+          tail -40 "$LOG" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'
+          echo "=== traefik dynamic file config for openbooks ==="
+          grep -rl openbooks /etc/dokploy/traefik/dynamic/ 2>/dev/null
+          cat /etc/dokploy/traefik/dynamic/*openbook* 2>/dev/null | head -40
