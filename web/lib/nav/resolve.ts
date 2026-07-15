@@ -66,7 +66,9 @@ export async function resolveNav(
         items.push({
           href: mod.href,
           label:
-            item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`),
+            item.label && item.label !== mod.label
+              ? item.label
+              : t(`modules.${mod.key}`) || mod.label,
           iconKey: item.iconKey ?? mod.iconKey,
           exact: mod.exact,
         })

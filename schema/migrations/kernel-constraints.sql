@@ -34,7 +34,12 @@ create or replace function je_guard() returns trigger
 language plpgsql as $$
 begin
   if tg_op = 'DELETE' then
-    if old.status <> 'draft' then
+    -- Deleting a transaction removes its journal entry too. That is the one
+    -- legitimate removal of a posted entry, done by the engine's guarded
+    -- delete under the 'openbooks.amend' flag (after it has proven the delete
+    -- is safe: open period, no applied payments, no downstream conversion).
+    if old.status <> 'draft'
+       and coalesce(current_setting('openbooks.amend', true), 'off') <> 'on' then
       raise exception 'journal entry % is % and cannot be deleted', old.id, old.status;
     end if;
     return old;

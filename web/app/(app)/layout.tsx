@@ -23,7 +23,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     authz.user.orgId,
     (permission) => permission === undefined || can(authz, permission),
     authz.user.role,
-    (key) => tNav(key),
+    // Fall back to the registry label when a module has no translation yet, so
+    // a newly-added nav module can never crash the whole app (MISSING_MESSAGE).
+    (key) => {
+      try {
+        return tNav(key)
+      } catch {
+        return ''
+      }
+    },
   )
 
   return (
