@@ -9,9 +9,19 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function loadEnv(): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const line of readFileSync(join(repoRoot, ".env"), "utf8").split("\n")) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m) env[m[1]] = m[2];
+  // Local dev reads the repo-root .env; containers have no .env file and
+  // provide everything through the process environment instead.
+  try {
+    for (const line of readFileSync(join(repoRoot, ".env"), "utf8").split("\n")) {
+      const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+      if (m) env[m[1]] = m[2];
+    }
+  } catch {
+    // no .env — container/CI environment
+  }
+  // Process env wins over the file so a deploy can override single values.
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined && /^[A-Z0-9_]+$/.test(k)) env[k] = v;
   }
   return env;
 }

@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+.git
+.next
+**/.next
+web/tsconfig.tsbuildinfo
+.env
+.env.*
+**/.env.local
+*.log
+.claude
+account-data
+deploy
+.github
+Dockerfile
+.dockerignore
