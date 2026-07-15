@@ -755,7 +755,9 @@
       "type": "Type",
       "party": "Party",
       "latestDue": "Latest due"
-    }
+    },
+    "print": "Print",
+    "printFailed": "Could not open the print dialog"
   },
   "builtIns": {
     "ap-aging-by-vendor": {

@@ -813,5 +813,12 @@
   "flyout": {
     "title": "Écriture de journal",
     "openTransaction": "Ouvrir la transaction complète"
+  },
+  "export": {
+    "pdf": "PDF",
+    "xlsx": "Excel",
+    "csv": "CSV",
+    "print": "Imprimer",
+    "printFailed": "Impossible d'ouvrir la boîte d'impression"
   }
 }
