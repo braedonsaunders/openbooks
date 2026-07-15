@@ -13,6 +13,7 @@
  */
 
 import type {
+  FieldMeta,
   FilterOperator,
   ListColumnMeta,
   ListFilterKind,
@@ -35,12 +36,40 @@ export const OPERATORS_BY_KIND: Record<ListFilterKind, readonly FilterOperator[]
  *  decides visibility/order/labels per record type. */
 const TRANSACTION_LINE_FIELDS: RecordTypeMeta["lineFields"] = [
   { key: "account_id", labelKey: "common.labels.account", level: "line", kind: "entity_ref", required: true, locked: true },
+  { key: "item_id", labelKey: "common.labels.item", level: "line", kind: "entity_ref", defaultHidden: true },
   { key: "description", labelKey: "common.labels.description", level: "line", kind: "text" },
+  { key: "quantity", labelKey: "common.labels.quantity", level: "line", kind: "number", defaultHidden: true },
+  { key: "unit", labelKey: "common.labels.unit", level: "line", kind: "text", defaultHidden: true },
+  { key: "unit_price", labelKey: "common.labels.unitPrice", level: "line", kind: "currency", defaultHidden: true },
   { key: "department_id", labelKey: "common.labels.department", level: "line", kind: "dimension" },
   { key: "project_id", labelKey: "common.labels.project", level: "line", kind: "dimension" },
+  { key: "location_id", labelKey: "common.labels.location", level: "line", kind: "dimension", defaultHidden: true },
+  { key: "class_id", labelKey: "common.labels.class", level: "line", kind: "dimension", defaultHidden: true },
   { key: "tax_code_id", labelKey: "common.labels.tax", level: "line", kind: "entity_ref" },
   { key: "amount", labelKey: "common.labels.amount", level: "line", kind: "amount", required: true },
   { key: "tax_amount", labelKey: "ap.drawer.taxAmountColumn", level: "line", kind: "tax" },
+];
+
+/** Header built-ins available on every transaction form (off by default). */
+const COMMON_HEADER_EXTRAS: FieldMeta[] = [
+  { key: "posting_date", labelKey: "common.labels.postingDate", level: "header", kind: "date", defaultHidden: true },
+  { key: "department_id", labelKey: "common.labels.department", level: "header", kind: "dimension", defaultHidden: true },
+  { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension", defaultHidden: true },
+  { key: "location_id", labelKey: "common.labels.location", level: "header", kind: "dimension", defaultHidden: true },
+  { key: "class_id", labelKey: "common.labels.class", level: "header", kind: "dimension", defaultHidden: true },
+  { key: "internal_notes", labelKey: "common.labels.internalNotes", level: "header", kind: "long_text", defaultHidden: true },
+];
+
+/** Extra AP-side header built-ins (bills/credits). */
+const PAYABLE_HEADER_EXTRAS: FieldMeta[] = [
+  { key: "expected_pay_date", labelKey: "common.labels.expectedPayDate", level: "header", kind: "date", defaultHidden: true },
+  { key: "payment_hold_reason", labelKey: "common.labels.paymentHold", level: "header", kind: "text", defaultHidden: true },
+];
+
+/** Extra AR-side header built-ins (project-billing invoices). */
+const INVOICE_HEADER_EXTRAS: FieldMeta[] = [
+  { key: "billing_method", labelKey: "common.labels.billingMethod", level: "header", kind: "select", defaultHidden: true },
+  { key: "is_final_invoice", labelKey: "common.labels.finalInvoice", level: "header", kind: "boolean", defaultHidden: true },
 ];
 
 /** Status filter shared by the approval-flow kinds (bill/invoice/credits). */
@@ -102,16 +131,10 @@ const VENDOR_BILL: RecordTypeMeta = {
     { key: "due_date", labelKey: "ap.drawer.dueDate", level: "header", kind: "date" },
     { key: "reference_number", labelKey: "ap.drawer.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ...COMMON_HEADER_EXTRAS,
+    ...PAYABLE_HEADER_EXTRAS,
   ],
-  lineFields: [
-    { key: "account_id", labelKey: "common.labels.account", level: "line", kind: "entity_ref", required: true, locked: true },
-    { key: "description", labelKey: "common.labels.description", level: "line", kind: "text" },
-    { key: "department_id", labelKey: "common.labels.department", level: "line", kind: "dimension" },
-    { key: "project_id", labelKey: "common.labels.project", level: "line", kind: "dimension" },
-    { key: "tax_code_id", labelKey: "common.labels.tax", level: "line", kind: "entity_ref" },
-    { key: "amount", labelKey: "common.labels.amount", level: "line", kind: "amount", required: true },
-    { key: "tax_amount", labelKey: "ap.drawer.taxAmountColumn", level: "line", kind: "tax" },
-  ],
+  lineFields: TRANSACTION_LINE_FIELDS,
   listColumns: [
     { key: "document_number", labelKey: "ap.list.columns.bill", kind: "reference", sortable: true, sortKey: "number", locked: true },
     { key: "party_name", labelKey: "common.labels.vendor", kind: "text", sortable: true, sortKey: "vendor" },
@@ -151,6 +174,8 @@ const VENDOR_CREDIT: RecordTypeMeta = {
     { key: "due_date", labelKey: "ap.drawer.dueDate", level: "header", kind: "date" },
     { key: "reference_number", labelKey: "ap.drawer.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ...COMMON_HEADER_EXTRAS,
+    ...PAYABLE_HEADER_EXTRAS,
   ],
   lineFields: TRANSACTION_LINE_FIELDS,
   listColumns: partyListColumns("common.labels.number", "common.labels.vendor"),
@@ -172,6 +197,8 @@ const CUSTOMER_INVOICE: RecordTypeMeta = {
     { key: "due_date", labelKey: "ar.drawer.dueDate", level: "header", kind: "date" },
     { key: "reference_number", labelKey: "ar.drawer.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ...COMMON_HEADER_EXTRAS,
+    ...INVOICE_HEADER_EXTRAS,
   ],
   lineFields: TRANSACTION_LINE_FIELDS,
   listColumns: partyListColumns("ar.list.columns.invoice", "common.labels.customer"),
@@ -203,6 +230,7 @@ function cardRecordType(key: string): RecordTypeMeta {
       { key: "payment_card_id", labelKey: "banking.drawer.card", level: "header", kind: "entity_ref", required: true, locked: true },
       { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
       { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+      ...COMMON_HEADER_EXTRAS,
     ],
     lineFields: TRANSACTION_LINE_FIELDS,
     listColumns: [
@@ -227,6 +255,7 @@ const CHECK: RecordTypeMeta = {
     { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
     { key: "reference_number", labelKey: "common.labels.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ...COMMON_HEADER_EXTRAS,
   ],
   lineFields: TRANSACTION_LINE_FIELDS,
   listColumns: [

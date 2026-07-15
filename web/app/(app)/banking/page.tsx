@@ -18,6 +18,7 @@ import {
   bankAccountOptions,
   cardOptions,
   dimensionOptions,
+  itemOptions,
   loadDocument,
   taxCodeOptions,
 } from '../../../lib/documents'
@@ -168,8 +169,8 @@ export default async function Banking({
     ? await Promise.all([
         accountOptions(DOC_KINDS[openKind! as 'card_charge']!),
         taxCodeOptions(),
-        dimensionOptions().then((d) => d.departments),
-        dimensionOptions().then((d) => d.projects),
+        dimensionOptions(),
+        itemOptions(),
         cardOptions(),
         bankAccountOptions(),
         loadFieldDefs('documents', openKind!),
@@ -337,8 +338,11 @@ export default async function Banking({
           basePath="/banking"
           accounts={pickers[0] as any}
           taxCodes={pickers[1] as any}
-          departments={pickers[2] as any}
-          projects={pickers[3] as any}
+          departments={(pickers[2] as any).departments}
+          projects={(pickers[2] as any).projects}
+          locations={(pickers[2] as any).locations}
+          classes={(pickers[2] as any).classes}
+          items={pickers[3] as any}
           cards={pickers[4] as any}
           bankAccounts={pickers[5] as any}
           headerDefs={pickers[6] as any}

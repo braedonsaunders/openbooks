@@ -13,6 +13,7 @@ import {
   getRecordType,
   isCustomFieldKey,
   type FieldKind,
+  type FieldMeta,
   type FormLayoutConfig,
   type HeaderFieldPlacement,
   type HeaderGroup,
@@ -112,17 +113,33 @@ function slugifyKey(label: string, used: Set<string>): string {
   return key
 }
 
-/** Clone a layout and ensure every active custom def has a placement. */
-function ensureCustomPlaced(layout: FormLayoutConfig, headerDefs: FieldDef[], lineDefs: FieldDef[]): FormLayoutConfig {
+/** Clone a layout and ensure every active custom def AND every built-in field
+ *  has a placement — so a form saved before a field existed (custom or a new
+ *  built-in) still surfaces it in the designer. New built-ins that default to
+ *  hidden are placed hidden, so editing an old form doesn't reveal them on the
+ *  live form until the admin turns them on. */
+function ensureCustomPlaced(
+  layout: FormLayoutConfig,
+  headerDefs: FieldDef[],
+  lineDefs: FieldDef[],
+  meta: { headerFields: FieldMeta[]; lineFields: FieldMeta[] } | undefined,
+): FormLayoutConfig {
   const placedHeader = new Set<string>()
-  for (const g of layout.header.groups) for (const f of g.fields) if (isCustomFieldKey(f.key)) placedHeader.add(f.key)
+  for (const g of layout.header.groups) for (const f of g.fields) placedHeader.add(f.key)
   const firstGroup = layout.header.groups[0]!
+  // Missing built-in header fields (registry order).
+  for (const f of meta?.headerFields ?? []) {
+    if (!placedHeader.has(f.key)) firstGroup.fields.push({ key: f.key, visible: !f.defaultHidden, required: f.required ? true : null, labelOverride: null, colSpan: null })
+  }
   for (const d of headerDefs) {
     const k = `cf_${d.key}`
     if (!placedHeader.has(k)) firstGroup.fields.push({ key: k, visible: true, required: d.isRequired ? true : null, labelOverride: null, colSpan: null })
   }
   const placedLine = new Set<string>()
-  for (const c of layout.lines.columns) if (isCustomFieldKey(c.key)) placedLine.add(c.key)
+  for (const c of layout.lines.columns) placedLine.add(c.key)
+  for (const f of meta?.lineFields ?? []) {
+    if (!placedLine.has(f.key)) layout.lines.columns.push({ key: f.key, visible: !f.defaultHidden, width: null, labelOverride: null })
+  }
   for (const d of lineDefs) {
     const k = `cf_${d.key}`
     if (!placedLine.has(k)) layout.lines.columns.push({ key: k, visible: true, width: null, labelOverride: null })
@@ -180,7 +197,7 @@ export function FormDesigner({
       duplicateFrom?.layout ??
       (def?.layout as FormLayoutConfig | undefined) ??
       defaultFormLayout(recordType)
-    return ensureCustomPlaced(structuredClone(base), headerDefs ?? [], lineDefs ?? [])
+    return ensureCustomPlaced(structuredClone(base), headerDefs ?? [], lineDefs ?? [], meta)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [def, recordType, duplicateFrom])
 

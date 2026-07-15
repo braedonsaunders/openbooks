@@ -5,6 +5,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import {
   defaultFormLayout,
   defaultListView,
+  getRecordType,
   type FormLayoutConfig,
   type HeaderFieldPlacement,
   type LineColumnPlacement,
@@ -122,6 +123,35 @@ function mergeCustomFieldsIntoLayout(
   layout.lines.columns = layout.lines.columns.filter(
     (c) => !isCustomFieldKey(c.key) || liveLineKeys.has(c.key),
   );
+
+  // Merge in built-in fields the stored layout predates (e.g. the full-schema
+  // extras added after it was saved). New built-ins default to hidden, so an
+  // old layout gains them off — no visible change to the live form.
+  const meta = getRecordType(layout.recordType);
+  if (meta) {
+    const placedH = new Set<string>();
+    for (const g of layout.header.groups) for (const f of g.fields) placedH.add(f.key);
+    const missingH = meta.headerFields.filter((f) => !placedH.has(f.key));
+    if (missingH.length > 0) {
+      layout.header.groups[layout.header.groups.length - 1]!.fields.push(
+        ...missingH.map<HeaderFieldPlacement>((f) => ({
+          key: f.key,
+          visible: !f.defaultHidden,
+          required: f.required ? true : null,
+          labelOverride: null,
+          colSpan: null,
+        })),
+      );
+    }
+    const placedL = new Set(layout.lines.columns.map((c) => c.key));
+    const missingL = meta.lineFields.filter((f) => !placedL.has(f.key));
+    if (missingL.length > 0) {
+      const amountIdx = layout.lines.columns.findIndex((c) => c.key === "amount");
+      const cols = missingL.map<LineColumnPlacement>((f) => ({ key: f.key, visible: !f.defaultHidden, width: null, labelOverride: null }));
+      if (amountIdx >= 0) layout.lines.columns.splice(amountIdx, 0, ...cols);
+      else layout.lines.columns.push(...cols);
+    }
+  }
 
   return layout;
 }

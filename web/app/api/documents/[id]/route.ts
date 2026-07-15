@@ -107,10 +107,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     dueDate?: string | null
     referenceNumber?: string | null
     memo?: string | null
+    // Full-schema header built-ins (optional; only sent when a form exposes them).
+    postingDate?: string | null
+    departmentId?: string | null
+    projectId?: string | null
+    locationId?: string | null
+    classId?: string | null
+    expectedPayDate?: string | null
+    paymentHoldReason?: string | null
+    internalNotes?: string | null
+    billingMethod?: string | null
+    isFinalInvoice?: boolean
     custom?: Record<string, unknown>
     lines?: (BillLineInput & {
+      itemId?: string | null
+      quantity?: string | null
+      unit?: string | null
+      unitPrice?: string | null
       departmentId?: string | null
       projectId?: string | null
+      locationId?: string | null
+      classId?: string | null
       custom?: Record<string, unknown>
     })[]
   }
@@ -139,7 +156,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Pre-validate + prepare lines before touching the DB, so a bad line
   // returns 422 without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
-  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; custom: Record<string, unknown> }[] | null = null
+  let preparedLines: { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
     const computed = computeBillTotals(valid, await taxRateMap())
@@ -154,8 +171,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     preparedLines = []
     for (let i = 0; i < computed.lines.length; i++) {
       const l = computed.lines[i]! as (typeof computed.lines)[number] & {
+        itemId?: string | null
+        quantity?: string | null
+        unit?: string | null
+        unitPrice?: string | null
         departmentId?: string | null
         projectId?: string | null
+        locationId?: string | null
+        classId?: string | null
         custom?: Record<string, unknown>
       }
       const lv = validateCustomValues(lineDefs, l.custom)
@@ -167,13 +190,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       preparedLines.push({
         accountId: l.accountId!,
+        itemId: l.itemId ?? null,
         description: l.description ?? null,
+        quantity: l.quantity ?? null,
+        unit: l.unit ?? null,
+        unitPrice: l.unitPrice ?? null,
         amount: l.amount,
         taxCodeId: l.taxCodeId ?? null,
         taxAmount: l.taxAmount,
         taxOverridden: l.taxOverridden === true,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
+        locationId: l.locationId ?? null,
+        classId: l.classId ?? null,
         custom: lv.cleaned,
       })
     }
@@ -192,12 +221,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
           await tx.execute(sql`
-            insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                        quantity, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
-                                        department_id, project_id, custom)
-            values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
-                    '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
-                    ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.custom)})
+            insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
+                                        quantity, unit, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
+                                        department_id, project_id, location_id, class_id, custom)
+            values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
+                    ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
+                    ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
+                    ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId}, ${JSON.stringify(l.custom)})
           `)
         }
       }
@@ -210,6 +240,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
           reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
           memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+          posting_date = ${body.postingDate !== undefined ? body.postingDate : sql`posting_date`},
+          department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},
+          project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
+          location_id = ${body.locationId !== undefined ? body.locationId : sql`location_id`},
+          class_id = ${body.classId !== undefined ? body.classId : sql`class_id`},
+          expected_pay_date = ${body.expectedPayDate !== undefined ? body.expectedPayDate : sql`expected_pay_date`},
+          payment_hold_reason = ${body.paymentHoldReason !== undefined ? body.paymentHoldReason : sql`payment_hold_reason`},
+          internal_notes = ${body.internalNotes !== undefined ? body.internalNotes : sql`internal_notes`},
+          billing_method = ${body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`},
+          is_final_invoice = ${body.isFinalInvoice !== undefined ? body.isFinalInvoice : sql`is_final_invoice`},
           custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
           subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
           tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),

@@ -93,7 +93,16 @@
     "from": "From",
     "to": "To",
     "of": "of",
-    "settings": "Settings"
+    "settings": "Settings",
+    "item": "Item",
+    "unit": "Unit",
+    "unitPrice": "Unit price",
+    "postingDate": "Posting date",
+    "internalNotes": "Internal notes",
+    "billingMethod": "Billing method",
+    "finalInvoice": "Final invoice",
+    "paymentHold": "Payment hold",
+    "expectedPayDate": "Expected pay date"
   },
   "status": {
     "draft": "Draft",
@@ -135,5 +144,9 @@
     "deleteBody": "This cannot be undone.",
     "confirm": "Confirm",
     "cancel": "Cancel"
+  },
+  "billingMethods": {
+    "timeAndMaterials": "Time & materials",
+    "fixedPrice": "Fixed price"
   }
 }
