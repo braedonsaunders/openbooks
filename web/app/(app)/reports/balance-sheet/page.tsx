@@ -9,7 +9,7 @@ import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { money } from '../../../../lib/format'
 import { StatementMatrixTable } from '../StatementMatrixTable'
 import { StatementPaper } from '../StatementPaper'
-import { StatementExport } from '../StatementExport'
+import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
 
@@ -64,12 +64,6 @@ export default async function BalanceSheet({
             title={t('balanceSheet.title')}
             description={t('balanceSheet.asOf', { date: period.to })}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={
-              <>
-                <SaveViewButton />
-                <StatementExport kind="balance-sheet" params={sp} />
-              </>
-            }
           />
           <ReportFilterBar
             controls={{
@@ -84,6 +78,12 @@ export default async function BalanceSheet({
               scale: true,
             }}
             dimensions={opts}
+            actions={
+              <>
+                <SaveViewButton />
+                <ExportMenu kind="balance-sheet" params={sp} />
+              </>
+            }
           />
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span>{t('balanceSheet.equation')}</span>
@@ -105,7 +105,7 @@ export default async function BalanceSheet({
         <StatementMatrixTable
           view={view}
           scale={q.scale}
-          periodQs={`?to=${period.to}`}
+          currency={org?.base_currency}
           drill={{
             dims: q.dims,
             basis: q.basis,

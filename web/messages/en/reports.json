@@ -94,7 +94,8 @@
     "scaleThousands": "Thousands",
     "scaleMillions": "Millions",
     "showZeros": "Show zeros",
-    "truncated": "Some breakout columns were hidden to keep the report readable."
+    "truncated": "Some breakout columns were hidden to keep the report readable.",
+    "options": "Options"
   },
   "balanceSheet": {
     "title": "Balance Sheet",
@@ -757,7 +758,8 @@
       "latestDue": "Latest due"
     },
     "print": "Print",
-    "printFailed": "Could not open the print dialog"
+    "printFailed": "Could not open the print dialog",
+    "export": "Export"
   },
   "builtIns": {
     "ap-aging-by-vendor": {

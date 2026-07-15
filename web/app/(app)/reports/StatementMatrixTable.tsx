@@ -1,89 +1,99 @@
 import Link from 'next/link'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
 import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-matrix'
 import { buildDrillHref, type ReportScale } from '../../../lib/report-filters'
-import { formatCell, isNegative } from '../../../lib/statement-format'
+import { currencySymbol, formatCell, isNegative } from '../../../lib/statement-format'
 
 /**
- * Renders a multi-column statement view (P&L, Balance Sheet, …) as a table:
- * account rows indented by depth and linked to their register, section headers,
- * subtotals with a top rule, and grand totals in bold with a double rule.
- *
- * When `drill` is supplied, EVERY amount value becomes a link to the journal
- * lines behind it (account subtree or section types × the column's period /
- * dimension / basis), carrying a `back` link to this exact report.
+ * Renders a multi-column statement view (P&L, Balance Sheet, …) as a clean,
+ * paper-style statement — no card chrome, no zebra: just a ruled header, section
+ * headings, indented account rows, and bold subtotal/total rows with a rule
+ * above (double rule below the grand total). The currency symbol shows on the
+ * first row and on total rows (GAAP convention). Every amount drills through.
  */
 export function StatementMatrixTable({
   view,
   scale = 'actual',
-  periodQs = '',
+  currency,
   drill,
 }: {
   view: StatementView
   scale?: ReportScale
-  /** Query string appended to account-name drill-through links. */
-  periodQs?: string
-  /** Enables per-value drill-through to /reports/detail. */
+  /** Currency code (e.g. 'CAD') → symbol shown on first + total rows. */
+  currency?: string
   drill?: { dims: StatementDimFilter; basis: StatementBasis; back: string; backLabel: string }
 }) {
   const cols = view.columns
+  const sym = currencySymbol(currency)
+  let firstAmountShown = false
+
   return (
     <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="min-w-[16rem]" />
+      <table className="w-full text-sm tabular-nums">
+        <thead>
+          <tr className="border-b border-slate-300 dark:border-slate-600">
+            <th className="min-w-[16rem] py-2 pr-4 text-left font-semibold text-slate-500 dark:text-slate-400" />
             {cols.map((c) => (
-              <TableHead
+              <th
                 key={c.key}
                 className={cn(
-                  'text-right whitespace-nowrap tabular-nums',
-                  c.kind !== 'amount' && 'text-slate-500 dark:text-slate-400',
+                  'py-2 pl-4 text-right font-semibold whitespace-nowrap',
+                  c.kind === 'amount' ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500',
                 )}
               >
                 {c.label}
-              </TableHead>
+              </th>
             ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+          </tr>
+        </thead>
+        <tbody>
           {view.lines.map((l, i) => {
             if (l.kind === 'section') {
               return (
-                <TableRow key={i}>
-                  <TableCell
+                <tr key={i}>
+                  <td
                     colSpan={cols.length + 1}
-                    className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:bg-slate-900 dark:text-slate-300"
+                    className="pt-4 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"
                   >
                     {l.label}
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               )
             }
-            const isTotal = l.kind === 'subtotal' || l.kind === 'total'
-            const weight = l.kind === 'total' || l.emphasis ? 'font-bold' : isTotal ? 'font-semibold' : ''
-            const topRule = isTotal ? 'border-t border-slate-300 dark:border-slate-600' : ''
-            const doubleRule = l.kind === 'total' ? 'border-b-[3px] border-double border-slate-400 dark:border-slate-500' : ''
+            const isSub = l.kind === 'subtotal'
+            const isTotal = l.kind === 'total'
+            const isTotalish = isSub || isTotal
+            const weight = isTotal || l.emphasis ? 'font-semibold text-slate-900 dark:text-slate-100' : isSub ? 'font-medium' : ''
+            const showSym = isTotalish || !firstAmountShown
+            if (l.values?.some((v) => typeof v === 'number')) firstAmountShown = true
+
             return (
-              <TableRow key={i} className={cn(topRule, doubleRule)}>
-                <TableCell
+              <tr
+                key={i}
+                className={cn(
+                  isTotalish && '[&>td]:border-t [&>td]:border-slate-300 dark:[&>td]:border-slate-600',
+                  isTotal && '[&>td]:border-b-[3px] [&>td]:border-double [&>td]:border-slate-400 dark:[&>td]:border-slate-500',
+                )}
+              >
+                <td
                   className={cn(
+                    'py-1 pr-4',
                     weight,
-                    l.depth === 1 && 'pl-8',
-                    l.depth >= 2 && 'pl-12',
-                    l.kind === 'account' && !l.depth && 'pl-4',
+                    l.depth === 1 && 'pl-6',
+                    l.depth === 2 && 'pl-10',
+                    l.depth >= 3 && 'pl-14',
                   )}
                 >
                   {l.kind === 'account' && l.accountId ? (
-                    <Link href={`/accounts/${l.accountId}${periodQs}`} className="hover:text-teal-700 dark:hover:text-teal-300">
-                      {l.number && <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{l.number}</span>}
+                    <Link href={`/accounts/${l.accountId}`} className="hover:text-teal-700 dark:hover:text-teal-300">
+                      {l.number && <span className="mr-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">{l.number}</span>}
                       {l.label}
                     </Link>
                   ) : (
                     l.label
                   )}
-                </TableCell>
+                </td>
                 {cols.map((c, ci) => {
                   const v = l.values?.[ci]
                   const href =
@@ -101,28 +111,27 @@ export function StatementMatrixTable({
                         })
                       : null
                   const neg = v !== undefined && isNegative(v, c.kind)
+                  const text = v === undefined ? '' : formatCell(v, c.kind, scale, c.kind === 'amount' && showSym ? sym : '')
                   return (
-                    <TableCell
+                    <td
                       key={c.key}
-                      className={cn('text-right whitespace-nowrap tabular-nums', weight, neg && 'text-red-600 dark:text-red-400')}
+                      className={cn('py-1 pl-4 text-right whitespace-nowrap', weight, neg && 'text-red-600 dark:text-red-400')}
                     >
-                      {v === undefined ? (
-                        ''
-                      ) : href ? (
+                      {href ? (
                         <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
-                          {formatCell(v, c.kind, scale)}
+                          {text}
                         </Link>
                       ) : (
-                        formatCell(v, c.kind, scale)
+                        text
                       )}
-                    </TableCell>
+                    </td>
                   )
                 })}
-              </TableRow>
+              </tr>
             )
           })}
-        </TableBody>
-      </Table>
+        </tbody>
+      </table>
     </div>
   )
 }
