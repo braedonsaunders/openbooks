@@ -5,7 +5,7 @@
     "savedViews": "Vues enregistrées",
     "cards": {
       "pnlTitle": "État des résultats",
-      "pnlDescription": "État des résultats — {fyLabel} à ce jour, préréglages par exercice financier, comparatifs, mises en page personnalisées",
+      "pnlDescription": "État des résultats — préréglages par exercice, comparatifs, ventilation par département, mises en page personnalisées",
       "balanceSheetTitle": "Bilan",
       "balanceSheetDescription": "Situation financière à toute date, bénéfices non répartis calculés",
       "trialBalanceTitle": "Balance de vérification",
@@ -26,6 +26,17 @@
       "registersDescription": "Registres de transactions par client et par fournisseur avec soldes progressifs",
       "budgetTitle": "Budget vs Réel",
       "budgetDescription": "Réels par rapport à un scénario budgétaire, par compte, avec écart $ et %"
+    },
+    "groups": {
+      "financial": "États financiers",
+      "ledger": "Grand livre",
+      "receivablesPayables": "Clients et fournisseurs",
+      "budgeting": "Budgets",
+      "custom": "Personnalisés et enregistrés"
+    },
+    "customStudio": {
+      "title": "Constructeur de rapports",
+      "description": "Créez, enregistrez et planifiez vos propres rapports sur le grand livre"
     }
   },
   "statement": {
@@ -796,5 +807,9 @@
     "truncated": "Affichage des 2 000 premières lignes — affinez le rapport pour tout voir.",
     "empty": "Aucune transaction derrière cette valeur.",
     "backTo": "Retour à {report}"
+  },
+  "flyout": {
+    "title": "Écriture de journal",
+    "openTransaction": "Ouvrir la transaction complète"
   }
 }

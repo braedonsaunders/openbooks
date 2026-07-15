@@ -5,7 +5,7 @@
     "savedViews": "Vistas guardadas",
     "cards": {
       "pnlTitle": "Estado de resultados",
-      "pnlDescription": "Estado de resultados — {fyLabel} a la fecha, valores predefinidos por ejercicio fiscal, comparativos, diseños personalizados",
+      "pnlDescription": "Estado de resultados — valores predefinidos por ejercicio fiscal, comparativos, desglose por departamento, diseños personalizados",
       "balanceSheetTitle": "Balance general",
       "balanceSheetDescription": "Situación financiera a cualquier fecha, con utilidades retenidas calculadas",
       "trialBalanceTitle": "Balanza de comprobación",
@@ -26,6 +26,17 @@
       "registersDescription": "Registros de transacciones por cliente y proveedor con saldos acumulados",
       "budgetTitle": "Presupuesto vs Real",
       "budgetDescription": "Valores reales frente a un escenario de presupuesto, por cuenta, con variación $ y %"
+    },
+    "groups": {
+      "financial": "Estados financieros",
+      "ledger": "Libro mayor",
+      "receivablesPayables": "Cuentas por cobrar y pagar",
+      "budgeting": "Presupuestos",
+      "custom": "Personalizados y guardados"
+    },
+    "customStudio": {
+      "title": "Constructor de informes",
+      "description": "Cree, guarde y programe sus propios informes sobre el libro mayor"
     }
   },
   "statement": {
@@ -796,5 +807,9 @@
     "truncated": "Mostrando las primeras 2.000 líneas — acote el informe para ver todo.",
     "empty": "No hay transacciones detrás de este valor.",
     "backTo": "Volver a {report}"
+  },
+  "flyout": {
+    "title": "Asiento contable",
+    "openTransaction": "Abrir transacción completa"
   }
 }

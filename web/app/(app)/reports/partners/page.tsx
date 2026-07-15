@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
@@ -49,24 +49,9 @@ export default async function Partners({
             </Link>
           </div>
           <SearchInput placeholder={t('searchPlaceholder')} />
-          <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  {t('totalOutstanding')}
-                </span>
-                <span className="block text-xl font-semibold tabular-nums">{money(flip * total)}</span>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  {t('partiesWithBalance')}
-                </span>
-                <span className="block text-xl font-semibold tabular-nums">{rows.length}</span>
-              </CardContent>
-            </Card>
-          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {t('totalOutstanding')}: <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(flip * total)}</span>
+          </p>
         </>
       }
     >

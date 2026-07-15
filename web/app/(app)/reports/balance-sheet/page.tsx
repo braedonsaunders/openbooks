@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { Badge, Card, CardContent, PageHeader, cn } from '@openbooks/ui'
+import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions } from '../../../../lib/reports'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
@@ -82,33 +82,13 @@ export default async function BalanceSheet({
             }}
             dimensions={opts}
           />
-          <div className="grid gap-3 sm:grid-cols-4">
-            {[
-              { label: t('balanceSheet.assets'), value: money(totalAssets) },
-              { label: t('balanceSheet.liabilities'), value: money(totalLiabilities) },
-              { label: t('balanceSheet.equity'), value: money(totalEquity) },
-            ].map((s) => (
-              <Card key={s.label}>
-                <CardContent className="p-4">
-                  <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{s.label}</span>
-                  <span className="block text-xl font-semibold tabular-nums">{s.value}</span>
-                </CardContent>
-              </Card>
-            ))}
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  {t('balanceSheet.equation')}
-                </span>
-                <span className={cn('mt-1 inline-block')}>
-                  <Badge variant={balanced ? 'success' : 'destructive'}>
-                    {balanced
-                      ? t('balanceSheet.balanced')
-                      : t('balanceSheet.offBy', { amount: money(totalAssets - totalLiabilities - totalEquity) })}
-                  </Badge>
-                </span>
-              </CardContent>
-            </Card>
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span>{t('balanceSheet.equation')}</span>
+            <Badge variant={balanced ? 'success' : 'destructive'}>
+              {balanced
+                ? t('balanceSheet.balanced')
+                : t('balanceSheet.offBy', { amount: money(totalAssets - totalLiabilities - totalEquity) })}
+            </Badge>
           </div>
         </>
       }
