@@ -8,16 +8,22 @@
 // /api/forms/options (module-level cached per source).
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Star } from 'lucide-react'
+import { Plus, Star, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import {
   evaluateLogicRule,
   type FieldValueMap,
   type FormField,
+  type FormSection,
   type PartyPickerKind,
 } from '@openbooks/forms-core'
-import { cn, Input, Label, SearchSelect, Textarea, type SelectOption } from '@openbooks/ui'
-import { formatFieldValue, withComputedFormulas } from '../lib/record-schema'
+import { Button, cn, Input, Label, SearchSelect, Textarea, type SelectOption } from '@openbooks/ui'
+import {
+  formatFieldValue,
+  isNumericField,
+  splitRecordData,
+  withComputedFormulas,
+} from '../lib/record-schema'
 
 // --- /api/forms/options cache ------------------------------------------------
 
@@ -221,61 +227,279 @@ function EntityPicker({
 
 // --- Main renderer -------------------------------------------------------------
 
+/**
+ * Section-aware editor for a custom record type. Non-repeating sections render
+ * as a field grid; repeating sections render as an editable line-list table
+ * (add/remove rows, per-cell inputs, row-level formulas + errors). Formula
+ * values — header and row — recompute live so dependent fields and rollups
+ * update as you type; showIf visibility evaluates against the same computed
+ * context.
+ *
+ * `values` is the merged record `data` map (header field ids + repeating
+ * section ids → row arrays). `onChange(key, value)` sets a header field by id;
+ * a whole line list is replaced with `onChange(sectionId, nextRows)`.
+ */
 export function RecordFields({
-  fields,
+  sections,
   values,
   onChange,
   disabled = false,
   errors = {},
 }: {
-  fields: FormField[]
+  sections: FormSection[]
   values: FieldValueMap
-  /** Called with the field id and the new value (undefined clears). */
-  onChange: (fieldId: string, value: unknown) => void
+  /** Header field id → value, or repeating section id → row array. */
+  onChange: (key: string, value: unknown) => void
   /** Read-only rendering (inactive records). */
   disabled?: boolean
-  /** fieldId → message, e.g. the PATCH route's validation errors. */
+  /**
+   * Error messages. Header fields are keyed by field id; row cells by the
+   * validator's composite `${sectionId}.${rowIndex}.${fieldId}` key.
+   */
   errors?: Record<string, string>
 }) {
   const t = useTranslations('ui.recordFields')
-  // Formula values recompute live so dependent fields update as you type;
-  // showIf visibility evaluates against the same computed context.
-  const computed = useMemo(() => withComputedFormulas(fields, values), [fields, values])
-  const ctx = useMemo(() => ({ values: computed, rows: {} }), [computed])
+  const computed = useMemo(() => withComputedFormulas(sections, values), [sections, values])
+  const split = useMemo(() => splitRecordData(sections, computed), [sections, computed])
+  const headerCtx = useMemo(
+    () => ({ values: split.values, rows: split.rows }),
+    [split],
+  )
 
-  const visibleFields = fields.filter((f) => !f.showIf || evaluateLogicRule(f.showIf, ctx))
-  if (visibleFields.length === 0) {
+  const visibleSections = sections.filter(
+    (s) => !s.showIf || evaluateLogicRule(s.showIf, headerCtx),
+  )
+  if (visibleSections.length === 0) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">{t('noFields')}</p>
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {visibleFields.map((field) => {
-        const wide = field.type === 'long_text' || field.type === 'multi_select'
-        const error = errors[field.id]
-        const required = Boolean(field.required || field.validation?.required)
-        return (
-          <div key={field.id} className={cn('space-y-1.5', wide && 'sm:col-span-2')}>
-            <Label>
-              {field.label}
-              {required ? <span className="ml-0.5 text-red-500">*</span> : null}
-            </Label>
-            <FieldInput
-              field={field}
-              value={computed[field.id]}
-              onCommit={(v) => onChange(field.id, v)}
-              disabled={disabled}
-              invalid={Boolean(error)}
-            />
-            {error ? (
-              <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-            ) : field.helpText ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{field.helpText}</p>
-            ) : null}
-          </div>
-        )
-      })}
+    <div className="space-y-6">
+      {visibleSections.map((section) =>
+        section.repeating ? (
+          <LineListEditor
+            key={section.id}
+            section={section}
+            rows={(split.rows[section.id] ?? []) as FieldValueMap[]}
+            headerValues={split.values}
+            allRows={split.rows}
+            onChange={(rows) => onChange(section.id, rows)}
+            disabled={disabled}
+            errors={errors}
+          />
+        ) : (
+          <HeaderSection
+            key={section.id}
+            section={section}
+            computed={computed}
+            ctx={headerCtx}
+            onChange={onChange}
+            disabled={disabled}
+            errors={errors}
+          />
+        ),
+      )}
     </div>
+  )
+}
+
+/** A non-repeating section: optional title + a two-column field grid. */
+function HeaderSection({
+  section,
+  computed,
+  ctx,
+  onChange,
+  disabled,
+  errors,
+}: {
+  section: FormSection
+  computed: FieldValueMap
+  ctx: { values: FieldValueMap; rows: Record<string, FieldValueMap[]> }
+  onChange: (key: string, value: unknown) => void
+  disabled: boolean
+  errors: Record<string, string>
+}) {
+  const visibleFields = section.fields.filter((f) => !f.showIf || evaluateLogicRule(f.showIf, ctx))
+  if (visibleFields.length === 0) return null
+  return (
+    <section className="space-y-3">
+      {section.title ? (
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{section.title}</h3>
+      ) : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {visibleFields.map((field) => {
+          const wide = field.type === 'long_text' || field.type === 'multi_select'
+          const error = errors[field.id]
+          const required = Boolean(field.required || field.validation?.required)
+          return (
+            <div key={field.id} className={cn('space-y-1.5', wide && 'sm:col-span-2')}>
+              <Label>
+                {field.label}
+                {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+              </Label>
+              <FieldInput
+                field={field}
+                value={computed[field.id]}
+                onCommit={(v) => onChange(field.id, v)}
+                disabled={disabled}
+                invalid={Boolean(error)}
+              />
+              {error ? (
+                <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+              ) : field.helpText ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">{field.helpText}</p>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * A repeating section rendered as an editable table: one column per row field,
+ * one line per entry, with add/remove controls. Row-field visibility and
+ * row-level formulas evaluate against the top-level header values merged with
+ * the row's own values (siblings shadow header ids).
+ */
+function LineListEditor({
+  section,
+  rows,
+  headerValues,
+  allRows,
+  onChange,
+  disabled,
+  errors,
+}: {
+  section: FormSection
+  rows: FieldValueMap[]
+  headerValues: FieldValueMap
+  allRows: Record<string, FieldValueMap[]>
+  onChange: (rows: FieldValueMap[]) => void
+  disabled: boolean
+  errors: Record<string, string>
+}) {
+  const t = useTranslations('ui.recordFields')
+  const columns = section.fields
+  const atMax = section.maxRows !== undefined && rows.length >= section.maxRows
+
+  const setCell = (rowIndex: number, fieldId: string, value: unknown) => {
+    const next = rows.map((r, i) => {
+      if (i !== rowIndex) return r
+      const nr = { ...r }
+      if (value === undefined) delete nr[fieldId]
+      else nr[fieldId] = value
+      return nr
+    })
+    onChange(next)
+  }
+  const addRow = () => onChange([...rows, {}])
+  const removeRow = (rowIndex: number) => onChange(rows.filter((_, i) => i !== rowIndex))
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          {section.title ?? t('lineItems')}
+        </h3>
+        <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
+          {t('rowCount', { count: rows.length })}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          {t('noRows')}
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
+                {columns.map((f) => {
+                  const required = Boolean(f.required || f.validation?.required)
+                  return (
+                    <th
+                      key={f.id}
+                      className={cn(
+                        'px-2.5 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-300',
+                        isNumericField(f) && 'text-right',
+                      )}
+                    >
+                      {f.label}
+                      {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+                    </th>
+                  )
+                })}
+                {disabled ? null : <th className="w-9 px-1" aria-label={t('rowActions')} />}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => {
+                const rowCtx = {
+                  values: { ...headerValues, ...row },
+                  rows: allRows,
+                }
+                return (
+                  <tr
+                    key={rowIndex}
+                    className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
+                  >
+                    {columns.map((f) => {
+                      const hidden = f.showIf && !evaluateLogicRule(f.showIf, rowCtx)
+                      const error = errors[`${section.id}.${rowIndex}.${f.id}`]
+                      return (
+                        <td key={f.id} className="px-2 py-1.5 align-top">
+                          {hidden ? (
+                            <span className="text-slate-300 dark:text-slate-600">—</span>
+                          ) : (
+                            <>
+                              <FieldInput
+                                field={f}
+                                value={row[f.id]}
+                                onCommit={(v) => setCell(rowIndex, f.id, v)}
+                                disabled={disabled}
+                                invalid={Boolean(error)}
+                              />
+                              {error ? (
+                                <p className="mt-0.5 text-xs text-red-600 dark:text-red-400">{error}</p>
+                              ) : null}
+                            </>
+                          )}
+                        </td>
+                      )
+                    })}
+                    {disabled ? null : (
+                      <td className="px-1 py-1.5 align-top">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t('removeRow')}
+                          onClick={() => removeRow(rowIndex)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {disabled ? null : (
+        <Button type="button" variant="outline" size="sm" disabled={atMax} onClick={addRow}>
+          <Plus size={14} /> {t('addRow')}
+        </Button>
+      )}
+      {atMax ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t('maxRowsReached', { count: section.maxRows ?? 0 })}
+        </p>
+      ) : null}
+    </section>
   )
 }
 

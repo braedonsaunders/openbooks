@@ -12,6 +12,7 @@ import {
 } from '../../../../../lib/records'
 import {
   lintRecordFields,
+  stripUnknownData,
   validateRecordData,
   withComputedFormulas,
   type RecordStatus,
@@ -27,7 +28,7 @@ async function loadScope(orgId: string, role: string, typeKey: string, id: strin
   if (!record) return null
   const lint = lintRecordFields(type.fields, type.name)
   if (!lint.success) return null
-  return { type, record, fields: lint.fields }
+  return { type, record, sections: lint.sections }
 }
 
 export async function GET(
@@ -67,7 +68,7 @@ export async function PATCH(
   const { typeKey, id } = await params
   const scope = await loadScope(user.orgId, user.role, typeKey, id)
   if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const { record, fields } = scope
+  const { record, sections } = scope
 
   const body = (await req.json()) as { data?: unknown; status?: string }
 
@@ -90,13 +91,10 @@ export async function PATCH(
     nextStatus = body.status
   }
 
-  // Values under field ids that no longer exist on the type (the designer
-  // removed a field after records were saved) are silently dropped rather
-  // than tripping the validator's unknown-key rejection.
-  const knownIds = new Set(fields.map((f) => f.id))
-  const stripUnknown = (data: FieldValueMap): FieldValueMap =>
-    Object.fromEntries(Object.entries(data).filter(([k]) => knownIds.has(k)))
-
+  // Values under ids that no longer exist on the type (the designer removed a
+  // field or line list after records were saved) are silently dropped rather
+  // than tripping the validator's unknown-key rejection — header fields,
+  // repeating-section keys, and unknown row-field keys alike.
   let nextData: FieldValueMap | undefined
   if (body.data !== undefined) {
     if (record.status === 'inactive' && nextStatus !== 'active') {
@@ -105,15 +103,15 @@ export async function PATCH(
     if (typeof body.data !== 'object' || body.data === null || Array.isArray(body.data)) {
       return NextResponse.json({ error: 'data must be an object' }, { status: 422 })
     }
-    nextData = withComputedFormulas(fields, stripUnknown(body.data as FieldValueMap))
+    nextData = withComputedFormulas(sections, stripUnknownData(sections, body.data as FieldValueMap))
   }
 
   // Value validation: supplied values must always be VALID; required fields
   // are enforced whenever the record is (or is becoming) active.
-  const effectiveData = nextData ?? stripUnknown(record.data)
+  const effectiveData = nextData ?? stripUnknownData(sections, record.data)
   const effectiveStatus = nextStatus ?? record.status
   const stage = effectiveStatus === 'active' ? 'submit' : 'draft'
-  const errors = validateRecordData(fields, effectiveData, stage)
+  const errors = validateRecordData(sections, effectiveData, stage)
   if (errors.length > 0) {
     return NextResponse.json(
       {
@@ -128,7 +126,7 @@ export async function PATCH(
   }
 
   const searchText =
-    nextData !== undefined ? await buildSearchText(fields, nextData, record.record_number) : undefined
+    nextData !== undefined ? await buildSearchText(sections, nextData, record.record_number) : undefined
 
   await db.execute(sql`
     update custom_records set

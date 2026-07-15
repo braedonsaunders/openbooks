@@ -14,16 +14,21 @@ import { auditColumns, id, orgRef } from "./helpers";
  * Custom record types — the app-builder's "define your own master data"
  * subsystem (the NetSuite custom-record equivalent). Lifecycle:
  *
- *   custom_record_types (org-scoped definition: key slug + FormField[] jsonb)
+ *   custom_record_types (org-scoped definition: key slug + FormSection[] jsonb)
  *     └─ custom_records (instances: per-type numbered rows with a data jsonb
- *        payload validated against the type's fields)
+ *        payload validated against the type's sections)
  *
- * The `fields` jsonb is a FormField[] — the SAME runtime-validated field
- * model as the app-builder forms (@openbooks/forms-core: zod validators,
- * conditional-visibility rules, typed formula trees, gl_account/party entity
- * pickers). Record types deliberately reuse it rather than inventing a
- * second field language; validation wraps the fields in a synthetic
- * single-section FormSchemaV1 (see web/lib/record-schema.ts).
+ * The `fields` jsonb is a FormSection[] — an ordered list of sections, each a
+ * non-repeating HEADER group or a REPEATING line list (a sublist/table). It
+ * uses the SAME runtime-validated model as the app-builder forms
+ * (@openbooks/forms-core: zod validators, conditional-visibility rules, typed
+ * formula trees incl. line-item rollups, gl_account/party entity pickers).
+ * Record types deliberately reuse it rather than inventing a second field
+ * language; the column keeps its historical `fields` name and still accepts a
+ * legacy flat FormField[] (normalized into one header section on read — see
+ * web/lib/record-schema.ts). A record's `data` jsonb is one merged map: header
+ * values keyed by field id, plus each repeating section's rows keyed by section
+ * id (data[sectionId] = [{ rowFieldId: value }, …]).
  *
  * Unlike form templates, record types are NOT versioned: records are living
  * master data (equipment, sites, contracts, …), not point-in-time
@@ -53,7 +58,7 @@ export const customRecordTypes = pgTable(
     /** Sidebar icon key (web/components/sidebar-nav.tsx ICONS registry). */
     iconKey: text("icon_key").notNull().default("grid"),
     description: text("description"),
-    /** FormField[] from @openbooks/forms-core (see module docblock). */
+    /** FormSection[] from @openbooks/forms-core (see module docblock). */
     fields: jsonb("fields").$type<Array<Record<string, unknown>>>().notNull().default([]),
     status: text("status", { enum: CUSTOM_RECORD_TYPE_STATUSES }).notNull().default("draft"),
     /** Published types with this flag get a dynamic sidebar entry ("Records" group). */

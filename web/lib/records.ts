@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import type { FieldValueMap, FormField } from '@openbooks/forms-core'
+import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
 import { formatFieldValue, type RecordStatus, type RecordTypeStatus } from './record-schema'
 
 /**
@@ -18,7 +18,12 @@ export type RecordTypeRow = {
   plural_name: string
   icon_key: string
   description: string | null
-  fields: FormField[]
+  /**
+   * The raw stored definition jsonb — either a FormSection[] (current shape)
+   * or a legacy flat FormField[]. Always run it through `lintRecordFields`
+   * (which normalizes both) rather than reading it directly.
+   */
+  fields: unknown
   status: RecordTypeStatus
   show_in_nav: boolean
   allowed_roles: string[] | null
@@ -86,24 +91,31 @@ export function inTypeAudience(role: string, allowedRoles: string[] | null | und
 }
 
 /**
- * Resolve display labels for every party/gl_account uuid referenced by the
- * given records' data (batched — one query per entity table, only when the
- * type has such fields). Used by the list page's cell formatting and the
- * search-text builder.
+ * Resolve display labels for every party/gl_account uuid referenced anywhere
+ * in the given records' data — header fields AND repeating line-list rows
+ * (batched — one query per entity table, only when the type has such fields).
+ * Used by the list page's cell formatting and the search-text builder.
  */
 export async function resolveEntityLabels(
-  fields: FormField[],
-  rows: FieldValueMap[],
+  sections: FormSection[],
+  dataRows: FieldValueMap[],
 ): Promise<{ parties: Map<string, string>; accounts: Map<string, string> }> {
   const partyIds = new Set<string>()
   const accountIds = new Set<string>()
-  for (const f of fields) {
-    if (f.type !== 'party' && f.type !== 'gl_account') continue
-    for (const data of rows) {
-      const v = data[f.id]
-      if (typeof v !== 'string' || v.length === 0) continue
-      if (f.type === 'party') partyIds.add(v)
-      else accountIds.add(v)
+  const collect = (f: FormField, v: unknown) => {
+    if (f.type !== 'party' && f.type !== 'gl_account') return
+    if (typeof v !== 'string' || v.length === 0) return
+    if (f.type === 'party') partyIds.add(v)
+    else accountIds.add(v)
+  }
+  for (const data of dataRows) {
+    for (const section of sections) {
+      if (section.repeating) {
+        const rows = Array.isArray(data[section.id]) ? (data[section.id] as FieldValueMap[]) : []
+        for (const row of rows) for (const f of section.fields) collect(f, row?.[f.id])
+      } else {
+        for (const f of section.fields) collect(f, data[f.id])
+      }
     }
   }
   const [parties, accounts] = await Promise.all([
@@ -128,20 +140,32 @@ export async function resolveEntityLabels(
 
 /**
  * Space-joined lowercase haystack for a record: the record number plus every
- * field's display value (choice labels, resolved party/account names, raw
- * text/numbers). Recomputed on every save; the module list searches it with
- * a single ILIKE.
+ * field's display value across header fields AND repeating line-list rows
+ * (choice labels, resolved party/account names, raw text/numbers). Recomputed
+ * on every save; the module list searches it with a single ILIKE.
  */
 export async function buildSearchText(
-  fields: FormField[],
+  sections: FormSection[],
   data: FieldValueMap,
   recordNumber: string,
 ): Promise<string> {
-  const labels = await resolveEntityLabels(fields, [data])
+  const labels = await resolveEntityLabels(sections, [data])
   const parts: string[] = [recordNumber]
-  for (const f of fields) {
-    const text = formatFieldValue(f, data[f.id], labels)
-    if (text) parts.push(text)
+  for (const section of sections) {
+    if (section.repeating) {
+      const rows = Array.isArray(data[section.id]) ? (data[section.id] as FieldValueMap[]) : []
+      for (const row of rows) {
+        for (const f of section.fields) {
+          const text = formatFieldValue(f, row?.[f.id], labels)
+          if (text) parts.push(text)
+        }
+      }
+    } else {
+      for (const f of section.fields) {
+        const text = formatFieldValue(f, data[f.id], labels)
+        if (text) parts.push(text)
+      }
+    }
   }
   return parts.join(' ').toLowerCase().slice(0, 10_000)
 }

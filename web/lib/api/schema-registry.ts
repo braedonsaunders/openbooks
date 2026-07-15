@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { normalizeSectionsInput } from "../record-schema";
 
 /**
  * API schema registry — the self-documenting foundation.
@@ -215,15 +216,17 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
      order by sort_order, name`)) as any;
 
   for (const row of custom.rows) {
-    const fields: ApiField[] = Array.isArray(row.fields)
-      ? row.fields.map((f: any): ApiField => ({
-          name: String(f.id ?? f.key ?? ""),
-          type: fieldTypeToApi(f.type ?? "text"),
-          required: Boolean(f.required),
-          description: f.label ? String(f.label) : null,
-          custom: true,
-        }))
-      : [];
+    // The stored definition is a FormSection[] (or a legacy flat FormField[]);
+    // flatten every section's fields into the API's flat field list.
+    const sections = normalizeSectionsInput(row.fields) as Array<{ fields?: any[] }>;
+    const flat = sections.flatMap((s) => (Array.isArray(s.fields) ? s.fields : []));
+    const fields: ApiField[] = flat.map((f: any): ApiField => ({
+      name: String(f.id ?? f.key ?? ""),
+      type: fieldTypeToApi(f.type ?? "text"),
+      required: Boolean(f.required),
+      description: f.label ? String(f.label) : null,
+      custom: true,
+    }));
     result.push({
       key: row.key,
       label: row.name,

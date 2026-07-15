@@ -4,11 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Plus, Trash2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ExternalLink,
+  ListPlus,
+  Plus,
+  Rows3,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   type FieldType,
   type FormField,
+  type FormSection,
   type FormulaExpression,
 } from '@openbooks/forms-core'
 import {
@@ -27,6 +37,7 @@ import { ICON_KEYS, NavIcon } from '../../../../components/sidebar-nav'
 import {
   RECORD_FIELD_TYPES,
   describeIssue,
+  normalizeSectionsInput,
   slugifyFieldId,
   slugifyTypeKey,
 } from '../../../../lib/record-schema'
@@ -55,12 +66,21 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
 
 const field = 'space-y-1.5'
 
+/** Coerce the stored definition into sections; seed one header group for a
+ * brand-new (empty) type so the builder always has somewhere to add fields. */
+function initialSections(stored: unknown): FormSection[] {
+  const sections = normalizeSectionsInput(stored) as FormSection[]
+  if (sections.length > 0) return sections
+  return [{ id: 'details', title: 'Details', fields: [] }]
+}
+
 /**
  * The record-type builder flyout — create (instant draft), edit (autosave),
- * publish/archive. Field definitions use the forms-core field model; the
- * server lints on every save and publishing requires a clean definition.
- * Published types stay editable (changes go live immediately); only the key
- * is pinned after publish.
+ * publish/archive. A type is an ordered list of SECTIONS: non-repeating header
+ * groups and repeating line lists (sublists/tables). Field definitions use the
+ * forms-core field model; the server lints on every save and publishing
+ * requires a clean definition. Published types stay editable (changes go live
+ * immediately); only the key is pinned after publish.
  */
 export function TypeBuilderDrawer({
   type,
@@ -84,13 +104,13 @@ export function TypeBuilderDrawer({
   const [showInNav, setShowInNav] = useState(type.showInNav)
   const [sortOrder, setSortOrder] = useState(type.sortOrder)
   const [allowedRoles, setAllowedRoles] = useState<string[]>(type.allowedRoles ?? [])
-  const [fields, setFields] = useState<FormField[]>(
-    Array.isArray(type.fields) ? (type.fields as FormField[]) : [],
-  )
+  const [sections, setSections] = useState<FormSection[]>(() => initialSections(type.fields))
   const [expanded, setExpanded] = useState<string | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
   const [busy, setBusy] = useState(false)
+
+  const fieldCount = sections.reduce((n, s) => n + s.fields.length, 0)
 
   function rename(nextName: string) {
     setName(nextName)
@@ -109,9 +129,10 @@ export function TypeBuilderDrawer({
       showInNav,
       sortOrder,
       allowedRoles: allowedRoles.length > 0 ? allowedRoles : null,
-      fields,
+      // The API's `fields` body carries the full section structure.
+      fields: sections,
     }),
-    [name, pluralName, key, iconKey, description, showInNav, sortOrder, allowedRoles, fields, isDraft],
+    [name, pluralName, key, iconKey, description, showInNav, sortOrder, allowedRoles, sections, isDraft],
   )
   const first = useRef(true)
   useEffect(() => {
@@ -141,18 +162,60 @@ export function TypeBuilderDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload])
 
-  // -- field operations ---------------------------------------------------------
-  function uniqueFieldId(base: string): string {
-    const taken = new Set(fields.map((f) => f.id))
-    let id = base || 'field'
-    for (let n = 2; taken.has(id); n++) id = `${base || 'field'}_${n}`
+  // -- id allocation (section + field ids share one namespace) ----------------
+  function takenIds(): Set<string> {
+    const taken = new Set<string>()
+    for (const s of sections) {
+      taken.add(s.id)
+      for (const f of s.fields) taken.add(f.id)
+    }
+    return taken
+  }
+  function uniqueId(base: string, fallback: string): string {
+    const taken = takenIds()
+    let id = base || fallback
+    for (let n = 2; taken.has(id); n++) id = `${base || fallback}_${n}`
     return id
   }
 
-  function addField(fieldType: FieldType) {
+  // -- section operations -----------------------------------------------------
+  function addSection(repeating: boolean) {
+    const title = repeating ? t('typeBuilder.lineListDefaultTitle') : t('typeBuilder.sectionDefaultTitle')
+    const next: FormSection = {
+      id: uniqueId(slugifyFieldId(title), repeating ? 'line_items' : 'section'),
+      title,
+      fields: [],
+      ...(repeating ? { repeating: true } : {}),
+    }
+    setSections((ss) => [...ss, next])
+  }
+
+  const updateSection = (id: string, patch: Partial<FormSection>) =>
+    setSections((ss) => ss.map((s) => (s.id === id ? ({ ...s, ...patch } as FormSection) : s)))
+
+  const moveSection = (index: number, dir: -1 | 1) =>
+    setSections((ss) => {
+      const j = index + dir
+      if (j < 0 || j >= ss.length) return ss
+      const next = [...ss]
+      const [s] = next.splice(index, 1)
+      next.splice(j, 0, s!)
+      return next
+    })
+
+  async function removeSection(s: FormSection) {
+    const ok = await confirmDialog({
+      message: t('typeBuilder.removeSectionConfirm', { title: s.title ?? s.id }),
+      tone: 'danger',
+    })
+    if (ok) setSections((ss) => ss.filter((x) => x.id !== s.id))
+  }
+
+  // -- field operations (scoped to a section) ---------------------------------
+  function addField(sectionId: string, fieldType: FieldType) {
     const label = t(`fieldTypes.${fieldType}.label`)
     const next: FormField = {
-      id: uniqueFieldId(slugifyFieldId(label)),
+      id: uniqueId(slugifyFieldId(label), 'field'),
       type: fieldType,
       label,
       ...(fieldType === 'select' || fieldType === 'multi_select' || fieldType === 'radio'
@@ -162,32 +225,45 @@ export function TypeBuilderDrawer({
         ? { formula: { kind: 'sum', of: [] } as FormulaExpression, config: { format: 'number' } }
         : {}),
     }
-    setFields((fs) => [...fs, next])
-    setExpanded(next.id)
+    setSections((ss) => ss.map((s) => (s.id === sectionId ? { ...s, fields: [...s.fields, next] } : s)))
+    setExpanded(`${sectionId}:${next.id}`)
   }
 
-  const updateField = (id: string, patch: Partial<FormField>) =>
-    setFields((fs) => fs.map((f) => (f.id === id ? ({ ...f, ...patch } as FormField) : f)))
+  const updateField = (sectionId: string, id: string, patch: Partial<FormField>) =>
+    setSections((ss) =>
+      ss.map((s) =>
+        s.id === sectionId
+          ? { ...s, fields: s.fields.map((f) => (f.id === id ? ({ ...f, ...patch } as FormField) : f)) }
+          : s,
+      ),
+    )
 
-  const moveField = (index: number, dir: -1 | 1) =>
-    setFields((fs) => {
-      const j = index + dir
-      if (j < 0 || j >= fs.length) return fs
-      const next = [...fs]
-      const [f] = next.splice(index, 1)
-      next.splice(j, 0, f!)
-      return next
-    })
+  const moveField = (sectionId: string, index: number, dir: -1 | 1) =>
+    setSections((ss) =>
+      ss.map((s) => {
+        if (s.id !== sectionId) return s
+        const j = index + dir
+        if (j < 0 || j >= s.fields.length) return s
+        const next = [...s.fields]
+        const [f] = next.splice(index, 1)
+        next.splice(j, 0, f!)
+        return { ...s, fields: next }
+      }),
+    )
 
-  async function removeField(f: FormField) {
+  async function removeField(sectionId: string, f: FormField) {
     const ok = await confirmDialog({
       message: t('typeBuilder.removeFieldConfirm', { label: f.label }),
       tone: 'danger',
     })
-    if (ok) setFields((fs) => fs.filter((x) => x.id !== f.id))
+    if (ok) {
+      setSections((ss) =>
+        ss.map((s) => (s.id === sectionId ? { ...s, fields: s.fields.filter((x) => x.id !== f.id) } : s)),
+      )
+    }
   }
 
-  // -- lifecycle actions ----------------------------------------------------------
+  // -- lifecycle actions ------------------------------------------------------
   async function lifecycle(action: 'publish' | 'archive') {
     if (action === 'archive') {
       const ok = await confirmDialog({
@@ -236,7 +312,7 @@ export function TypeBuilderDrawer({
     router.refresh()
   }
 
-  const canPublish = saveState === 'saved' && !busy && fields.length > 0 && issues.length === 0
+  const canPublish = saveState === 'saved' && !busy && fieldCount > 0 && issues.length === 0
 
   return (
     <UrlDrawer
@@ -418,29 +494,41 @@ export function TypeBuilderDrawer({
           </div>
         </div>
 
-        <div className="space-y-2">
+        {/* -- Sections -------------------------------------------------------- */}
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label>{t('typeBuilder.fieldsLabel')}</Label>
-            <AddFieldButton onAdd={addField} />
+            <Label>{t('typeBuilder.sectionsLabel')}</Label>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => addSection(false)}>
+                <Plus size={14} /> {t('typeBuilder.addSection')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => addSection(true)}>
+                <ListPlus size={14} /> {t('typeBuilder.addLineList')}
+              </Button>
+            </div>
           </div>
-          {fields.length === 0 ? (
+          {sections.length === 0 ? (
             <p className="rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {t('typeBuilder.noFields')}
+              {t('typeBuilder.noSections')}
             </p>
           ) : (
-            <div className="space-y-1.5">
-              {fields.map((f, i) => (
-                <FieldRow
-                  key={f.id}
-                  field={f}
+            <div className="space-y-3">
+              {sections.map((s, i) => (
+                <SectionCard
+                  key={s.id}
+                  section={s}
                   index={i}
-                  count={fields.length}
-                  allFields={fields}
-                  expanded={expanded === f.id}
-                  onToggle={() => setExpanded((cur) => (cur === f.id ? null : f.id))}
-                  onChange={(patch) => updateField(f.id, patch)}
-                  onMove={(dir) => moveField(i, dir)}
-                  onRemove={() => removeField(f)}
+                  count={sections.length}
+                  sections={sections}
+                  expanded={expanded}
+                  setExpanded={setExpanded}
+                  onSectionChange={(patch) => updateSection(s.id, patch)}
+                  onMoveSection={(dir) => moveSection(i, dir)}
+                  onRemoveSection={() => removeSection(s)}
+                  onAddField={(ft) => addField(s.id, ft)}
+                  onFieldChange={(fid, patch) => updateField(s.id, fid, patch)}
+                  onMoveField={(idx, dir) => moveField(s.id, idx, dir)}
+                  onRemoveField={(f) => removeField(s.id, f)}
                 />
               ))}
             </div>
@@ -448,6 +536,138 @@ export function TypeBuilderDrawer({
         </div>
       </div>
     </UrlDrawer>
+  )
+}
+
+// --- Section card -------------------------------------------------------------
+
+function SectionCard({
+  section: s,
+  index,
+  count,
+  sections,
+  expanded,
+  setExpanded,
+  onSectionChange,
+  onMoveSection,
+  onRemoveSection,
+  onAddField,
+  onFieldChange,
+  onMoveField,
+  onRemoveField,
+}: {
+  section: FormSection
+  index: number
+  count: number
+  sections: FormSection[]
+  expanded: string | null
+  setExpanded: (v: string | null | ((cur: string | null) => string | null)) => void
+  onSectionChange: (patch: Partial<FormSection>) => void
+  onMoveSection: (dir: -1 | 1) => void
+  onRemoveSection: () => void
+  onAddField: (t: FieldType) => void
+  onFieldChange: (fieldId: string, patch: Partial<FormField>) => void
+  onMoveField: (index: number, dir: -1 | 1) => void
+  onRemoveField: (f: FormField) => void
+}) {
+  const t = useTranslations('records')
+  const repeating = Boolean(s.repeating)
+  const num = (v: unknown) => (typeof v === 'number' ? String(v) : '')
+  const parseRows = (str: string) => {
+    const n = Math.trunc(Number(str))
+    return str.trim() !== '' && Number.isFinite(n) && n >= 0 ? n : undefined
+  }
+
+  return (
+    <div
+      className={cn(
+        'rounded-lg border p-3',
+        repeating
+          ? 'border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/50 dark:bg-indigo-950/20'
+          : 'border-slate-200 dark:border-slate-800',
+      )}
+    >
+      <div className="flex items-center gap-2">
+        {repeating ? (
+          <Rows3 size={15} className="shrink-0 text-indigo-500 dark:text-indigo-400" />
+        ) : null}
+        <Input
+          value={s.title ?? ''}
+          placeholder={t('typeBuilder.sectionTitlePlaceholder')}
+          className="h-8 flex-1 font-medium"
+          onChange={(e) => onSectionChange({ title: e.target.value || undefined })}
+        />
+        <Badge variant={repeating ? 'secondary' : 'outline'}>
+          {repeating ? t('typeBuilder.lineListBadge') : t('typeBuilder.headerBadge')}
+        </Badge>
+        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.moveUp')} disabled={index === 0} onClick={() => onMoveSection(-1)}>
+          <ArrowUp size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.moveDown')} disabled={index === count - 1} onClick={() => onMoveSection(1)}>
+          <ArrowDown size={14} />
+        </Button>
+        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.removeSection')} onClick={onRemoveSection}>
+          <Trash2 size={14} />
+        </Button>
+      </div>
+
+      {repeating ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            {t('typeBuilder.minRows')}
+            <Input
+              inputMode="numeric"
+              value={num(s.minRows)}
+              className="h-8 w-20 text-right tabular-nums"
+              onChange={(e) => onSectionChange({ minRows: parseRows(e.target.value) })}
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            {t('typeBuilder.maxRows')}
+            <Input
+              inputMode="numeric"
+              value={num(s.maxRows)}
+              className="h-8 w-20 text-right tabular-nums"
+              onChange={(e) => onSectionChange({ maxRows: parseRows(e.target.value) })}
+            />
+          </label>
+        </div>
+      ) : null}
+
+      <div className="mt-3 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            {repeating ? t('typeBuilder.columnsLabel') : t('typeBuilder.fieldsLabel')}
+          </span>
+          <AddFieldButton onAdd={onAddField} />
+        </div>
+        {s.fields.length === 0 ? (
+          <p className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            {repeating ? t('typeBuilder.noColumns') : t('typeBuilder.noFields')}
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {s.fields.map((f, i) => (
+              <FieldRow
+                key={f.id}
+                field={f}
+                index={i}
+                count={s.fields.length}
+                sections={sections}
+                ownerSectionId={s.id}
+                expanded={expanded === `${s.id}:${f.id}`}
+                onToggle={() =>
+                  setExpanded((cur) => (cur === `${s.id}:${f.id}` ? null : `${s.id}:${f.id}`))
+                }
+                onChange={(patch) => onFieldChange(f.id, patch)}
+                onMove={(dir) => onMoveField(i, dir)}
+                onRemove={() => onRemoveField(f)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -545,7 +765,8 @@ function FieldRow({
   field: f,
   index,
   count,
-  allFields,
+  sections,
+  ownerSectionId,
   expanded,
   onToggle,
   onChange,
@@ -555,7 +776,8 @@ function FieldRow({
   field: FormField
   index: number
   count: number
-  allFields: FormField[]
+  sections: FormSection[]
+  ownerSectionId: string
   expanded: boolean
   onToggle: () => void
   onChange: (patch: Partial<FormField>) => void
@@ -564,7 +786,7 @@ function FieldRow({
 }) {
   const t = useTranslations('records')
   return (
-    <div className="rounded-md border border-slate-200 dark:border-slate-800">
+    <div className="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center gap-2 px-2.5 py-2">
         <button
           type="button"
@@ -633,7 +855,12 @@ function FieldRow({
               {t('typeBuilder.requiredToActivate')}
             </label>
           ) : null}
-          <TypeSpecificConfig field={f} allFields={allFields} onChange={onChange} />
+          <TypeSpecificConfig
+            field={f}
+            sections={sections}
+            ownerSectionId={ownerSectionId}
+            onChange={onChange}
+          />
         </div>
       ) : null}
     </div>
@@ -642,11 +869,13 @@ function FieldRow({
 
 function TypeSpecificConfig({
   field: f,
-  allFields,
+  sections,
+  ownerSectionId,
   onChange,
 }: {
   field: FormField
-  allFields: FormField[]
+  sections: FormSection[]
+  ownerSectionId: string
   onChange: (patch: Partial<FormField>) => void
 }) {
   const t = useTranslations('records.typeBuilder')
@@ -739,7 +968,15 @@ function TypeSpecificConfig({
       )
     }
     case 'formula':
-      return <FormulaBuilder field={f} allFields={allFields} onChange={onChange} setConfig={setConfig} />
+      return (
+        <FormulaBuilder
+          field={f}
+          sections={sections}
+          ownerSectionId={ownerSectionId}
+          onChange={onChange}
+          setConfig={setConfig}
+        />
+      )
     default:
       return null
   }
@@ -811,25 +1048,46 @@ function ChoiceOptionsEditor({
 // --- Formula builder ---------------------------------------------------------------
 //
 // Authors a single-level typed formula tree: one operation over a list of
-// operands (field references or constants). subtract/divide take exactly two
-// operands. Deeper nesting stays representable in the stored tree (the
-// evaluator and validator support it fully); a tree this builder can't
-// decompose is rebuilt from scratch on the first edit.
+// operands. An operand is a field reference, a constant, or a ROLLUP over a
+// repeating line list (sum/count/avg/min/max of a column). subtract/divide
+// take exactly two operands. Deeper nesting stays representable in the stored
+// tree (the evaluator and validator support it fully); a tree this builder
+// can't decompose is rebuilt from scratch on the first edit.
 
 type SimpleOp = 'sum' | 'product' | 'subtract' | 'divide' | 'min' | 'max' | 'concat'
-type Operand = { kind: 'field'; fieldKey: string } | { kind: 'literal'; value: string }
+type RollupAgg = 'sum' | 'count' | 'avg' | 'min' | 'max'
+type Operand =
+  | { kind: 'field'; fieldKey: string }
+  | { kind: 'literal'; value: string }
+  | { kind: 'rollup'; agg: RollupAgg; sectionKey: string; rowFieldKey: string }
 
 // Operation values only — labels come from records.typeBuilder.formula.ops.<value>.
 const OP_VALUES: SimpleOp[] = ['sum', 'subtract', 'product', 'divide', 'min', 'max', 'concat']
+const NUMERIC_ROW_TYPES = ['number', 'currency', 'percentage', 'rating', 'formula']
+
+function rollupToExpr(o: Extract<Operand, { kind: 'rollup' }>): FormulaExpression {
+  return o.agg === 'count'
+    ? { kind: 'count_section', sectionKey: o.sectionKey }
+    : { kind: `${o.agg}_section` as const, sectionKey: o.sectionKey, rowFieldKey: o.rowFieldKey }
+}
 
 function decompose(expr: FormulaExpression | undefined): { op: SimpleOp; operands: Operand[] } | null {
   if (!expr) return { op: 'sum', operands: [] }
-  const toOperand = (e: FormulaExpression): Operand | null =>
-    e.kind === 'field_ref'
-      ? { kind: 'field', fieldKey: e.fieldKey }
-      : e.kind === 'literal'
-        ? { kind: 'literal', value: String(e.value) }
-        : null
+  const toOperand = (e: FormulaExpression): Operand | null => {
+    if (e.kind === 'field_ref') return { kind: 'field', fieldKey: e.fieldKey }
+    if (e.kind === 'literal') return { kind: 'literal', value: String(e.value) }
+    if (e.kind === 'count_section') return { kind: 'rollup', agg: 'count', sectionKey: e.sectionKey, rowFieldKey: '' }
+    if (
+      e.kind === 'sum_section' ||
+      e.kind === 'avg_section' ||
+      e.kind === 'min_section' ||
+      e.kind === 'max_section'
+    ) {
+      const agg = e.kind.replace('_section', '') as RollupAgg
+      return { kind: 'rollup', agg, sectionKey: e.sectionKey, rowFieldKey: e.rowFieldKey }
+    }
+    return null
+  }
   if (expr.kind === 'sum' || expr.kind === 'product' || expr.kind === 'min' || expr.kind === 'max' || expr.kind === 'concat') {
     const operands = expr.of.map(toOperand)
     if (operands.some((o) => o === null)) return null
@@ -848,10 +1106,12 @@ function compose(op: SimpleOp, operands: Operand[], numeric: boolean): FormulaEx
   const toExpr = (o: Operand): FormulaExpression =>
     o.kind === 'field'
       ? { kind: 'field_ref', fieldKey: o.fieldKey }
-      : {
-          kind: 'literal',
-          value: numeric && o.value.trim() !== '' && Number.isFinite(Number(o.value)) ? Number(o.value) : o.value,
-        }
+      : o.kind === 'rollup'
+        ? rollupToExpr(o)
+        : {
+            kind: 'literal',
+            value: numeric && o.value.trim() !== '' && Number.isFinite(Number(o.value)) ? Number(o.value) : o.value,
+          }
   if (op === 'subtract' || op === 'divide') {
     const [left, right] = operands
     return {
@@ -865,12 +1125,14 @@ function compose(op: SimpleOp, operands: Operand[], numeric: boolean): FormulaEx
 
 function FormulaBuilder({
   field: f,
-  allFields,
+  sections,
+  ownerSectionId,
   onChange,
   setConfig,
 }: {
   field: FormField
-  allFields: FormField[]
+  sections: FormSection[]
+  ownerSectionId: string
   onChange: (patch: Partial<FormField>) => void
   setConfig: (patch: Record<string, unknown>) => void
 }) {
@@ -880,17 +1142,42 @@ function FormulaBuilder({
   const state = decomposed ?? { op: 'sum' as SimpleOp, operands: [] }
   const format = typeof f.config?.format === 'string' ? f.config.format : 'number'
 
-  // Join-text can reference any field (string coercion); arithmetic sticks to
-  // numeric-valued fields. Formula-on-formula is allowed — field_ref resolves
-  // the referenced formula's computed VALUE (never its tree), and lint rejects
-  // self-reference, so evaluation cannot recurse.
-  const referencable = allFields.filter(
-    (x) =>
-      x.id !== f.id &&
-      (state.op === 'concat'
-        ? true
-        : ['number', 'currency', 'percentage', 'rating', 'formula'].includes(x.type)),
+  const ownerSection = sections.find((s) => s.id === ownerSectionId)
+  const ownerRepeating = Boolean(ownerSection?.repeating)
+
+  // Field refs: header value fields, plus (for a row formula) its own section's
+  // sibling row fields. Join-text can reference any field; arithmetic sticks to
+  // numeric-valued fields. Self-reference is excluded (lint rejects it too).
+  const referencable = useMemo(() => {
+    const out: FormField[] = []
+    for (const s of sections) {
+      const inScope = !s.repeating || s.id === ownerSectionId
+      if (!inScope) continue
+      for (const x of s.fields) {
+        if (x.id === f.id) continue
+        if (state.op === 'concat' || NUMERIC_ROW_TYPES.includes(x.type)) out.push(x)
+      }
+    }
+    return out
+  }, [sections, ownerSectionId, f.id, state.op])
+
+  // Rollups aggregate a repeating line list. Only offered on a HEADER formula
+  // (a row formula rolling up its own list would be circular); the linter still
+  // permits it, but the builder keeps it simple.
+  const rollupSections = useMemo(
+    () => (ownerRepeating ? [] : sections.filter((s) => s.repeating)),
+    [sections, ownerRepeating],
   )
+  const rollupAvailable = rollupSections.length > 0 && state.op !== 'concat'
+
+  const operandKindOptions = useMemo(() => {
+    const opts = [
+      { value: 'field', label: t('operandField') },
+      { value: 'literal', label: t('operandConstant') },
+    ]
+    if (rollupAvailable) opts.push({ value: 'rollup', label: t('operandRollup') })
+    return opts
+  }, [rollupAvailable, t])
 
   const commit = (op: SimpleOp, operands: Operand[]) => {
     const fixed =
@@ -903,12 +1190,13 @@ function FormulaBuilder({
     onChange({ formula: compose(op, fixed, op !== 'concat') })
   }
 
+  const newOperand = (): Operand =>
+    referencable[0] ? { kind: 'field', fieldKey: referencable[0].id } : { kind: 'literal', value: '' }
+
   return (
     <div className="space-y-2 rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/30">
       {!decomposed && !advancedReplaced ? (
-        <p className="text-xs text-amber-700 dark:text-amber-300">
-          {t('advancedWarning')}
-        </p>
+        <p className="text-xs text-amber-700 dark:text-amber-300">{t('advancedWarning')}</p>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className={field}>
@@ -940,101 +1228,134 @@ function FormulaBuilder({
       </div>
       <div className="space-y-1.5">
         <Label>{state.op === 'subtract' || state.op === 'divide' ? t('leftRight') : t('operands')}</Label>
-        {state.operands.map((o, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <SearchSelect
-              className="w-40 shrink-0"
-              options={[
-                { value: 'field', label: t('operandField') },
-                { value: 'literal', label: t('operandConstant') },
-              ]}
-              value={o.kind}
-              onChange={(v) => {
-                const next = [...state.operands]
-                next[i] =
-                  v === 'field'
-                    ? { kind: 'field', fieldKey: referencable[0]?.id ?? '' }
-                    : { kind: 'literal', value: '' }
-                setAdvancedReplaced(true)
-                commit(state.op, next)
-              }}
-              ariaLabel={t('operandKindAria')}
-            />
-            {o.kind === 'field' ? (
+        {state.operands.map((o, i) => {
+          const update = (next: Operand) => {
+            const operands = [...state.operands]
+            operands[i] = next
+            setAdvancedReplaced(true)
+            commit(state.op, operands)
+          }
+          return (
+            <div key={i} className="flex flex-wrap items-center gap-2">
               <SearchSelect
-                className="flex-1"
-                options={referencable.map((x) => ({ value: x.id, label: x.label }))}
-                value={o.fieldKey}
+                className="w-36 shrink-0"
+                options={operandKindOptions}
+                value={o.kind}
                 onChange={(v) => {
-                  const next = [...state.operands]
-                  next[i] = { kind: 'field', fieldKey: v }
-                  setAdvancedReplaced(true)
-                  commit(state.op, next)
+                  if (v === 'field') update({ kind: 'field', fieldKey: referencable[0]?.id ?? '' })
+                  else if (v === 'rollup')
+                    update({
+                      kind: 'rollup',
+                      agg: 'sum',
+                      sectionKey: rollupSections[0]?.id ?? '',
+                      rowFieldKey: '',
+                    })
+                  else update({ kind: 'literal', value: '' })
                 }}
-                placeholder={t('pickFieldPlaceholder')}
-                ariaLabel={t('operandFieldAria')}
+                ariaLabel={t('operandKindAria')}
               />
-            ) : (
-              <Input
-                className="flex-1"
-                inputMode={state.op === 'concat' ? 'text' : 'decimal'}
-                value={o.value}
-                placeholder={state.op === 'concat' ? t('textPlaceholder') : '0'}
-                onChange={(e) => {
-                  const next = [...state.operands]
-                  next[i] = { kind: 'literal', value: e.target.value }
+              {o.kind === 'field' ? (
+                <SearchSelect
+                  className="min-w-40 flex-1"
+                  options={referencable.map((x) => ({ value: x.id, label: x.label }))}
+                  value={o.fieldKey}
+                  onChange={(v) => update({ kind: 'field', fieldKey: v })}
+                  placeholder={t('pickFieldPlaceholder')}
+                  ariaLabel={t('operandFieldAria')}
+                />
+              ) : o.kind === 'rollup' ? (
+                <RollupOperand operand={o} rollupSections={rollupSections} onChange={update} />
+              ) : (
+                <Input
+                  className="min-w-40 flex-1"
+                  inputMode={state.op === 'concat' ? 'text' : 'decimal'}
+                  value={o.value}
+                  placeholder={state.op === 'concat' ? t('textPlaceholder') : '0'}
+                  onChange={(e) => update({ kind: 'literal', value: e.target.value })}
+                />
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={t('removeOperand')}
+                onClick={() => {
                   setAdvancedReplaced(true)
-                  commit(state.op, next)
+                  commit(state.op, state.operands.filter((_, j) => j !== i))
                 }}
-              />
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={t('removeOperand')}
-              onClick={() => {
-                setAdvancedReplaced(true)
-                commit(state.op, state.operands.filter((_, j) => j !== i))
-              }}
-            >
-              <Trash2 size={14} />
-            </Button>
-          </div>
-        ))}
-        {state.op === 'subtract' || state.op === 'divide' ? (
-          state.operands.length < 2 ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setAdvancedReplaced(true)
-                commit(state.op, [...state.operands, { kind: 'field', fieldKey: referencable[0]?.id ?? '' }])
-              }}
-            >
-              <Plus size={14} /> {t('addOperand')}
-            </Button>
-          ) : null
-        ) : (
+              >
+                <Trash2 size={14} />
+              </Button>
+            </div>
+          )
+        })}
+        {(state.op === 'subtract' || state.op === 'divide') && state.operands.length >= 2 ? null : (
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => {
               setAdvancedReplaced(true)
-              commit(state.op, [...state.operands, { kind: 'field', fieldKey: referencable[0]?.id ?? '' }])
+              commit(state.op, [...state.operands, newOperand()])
             }}
           >
             <Plus size={14} /> {t('addOperand')}
           </Button>
         )}
         {state.operands.length === 0 ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t('operandsHelp')}
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('operandsHelp')}</p>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+/** Aggregate + line-list + column pickers for a single rollup operand. */
+function RollupOperand({
+  operand: o,
+  rollupSections,
+  onChange,
+}: {
+  operand: Extract<Operand, { kind: 'rollup' }>
+  rollupSections: FormSection[]
+  onChange: (next: Operand) => void
+}) {
+  const t = useTranslations('records.typeBuilder.formula')
+  const section = rollupSections.find((s) => s.id === o.sectionKey)
+  const columns = (section?.fields ?? []).filter((x) => NUMERIC_ROW_TYPES.includes(x.type))
+  return (
+    <div className="flex min-w-40 flex-1 flex-wrap items-center gap-2">
+      <SearchSelect
+        className="w-28 shrink-0"
+        options={[
+          { value: 'sum', label: t('rollupSum') },
+          { value: 'count', label: t('rollupCount') },
+          { value: 'avg', label: t('rollupAvg') },
+          { value: 'min', label: t('rollupMin') },
+          { value: 'max', label: t('rollupMax') },
+        ]}
+        value={o.agg}
+        onChange={(v) => onChange({ ...o, agg: v as RollupAgg })}
+        ariaLabel={t('rollupAggAria')}
+      />
+      <SearchSelect
+        className="min-w-32 flex-1"
+        options={rollupSections.map((s) => ({ value: s.id, label: s.title ?? s.id }))}
+        value={o.sectionKey}
+        onChange={(v) => onChange({ ...o, sectionKey: v, rowFieldKey: '' })}
+        placeholder={t('rollupSectionPlaceholder')}
+        ariaLabel={t('rollupSectionAria')}
+      />
+      {o.agg === 'count' ? null : (
+        <SearchSelect
+          className="min-w-32 flex-1"
+          options={columns.map((x) => ({ value: x.id, label: x.label }))}
+          value={o.rowFieldKey}
+          onChange={(v) => onChange({ ...o, rowFieldKey: v })}
+          placeholder={t('rollupColumnPlaceholder')}
+          ariaLabel={t('rollupColumnAria')}
+        />
+      )}
     </div>
   )
 }

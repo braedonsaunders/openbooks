@@ -40,19 +40,27 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
     rows: {},
     requestContext: { now: new Date(), currentUserName: user.name ?? null },
   }
-  for (const field of lint.fields) {
-    if (!field.defaultValue) continue
-    const v = resolveDefaultValue(field.defaultValue, ctx)
-    if (v !== undefined && v !== null && v !== '') values[field.id] = v
+  // Seed header-field defaults (today/now/current-user/expression); repeating
+  // line lists start empty — rows and their defaults are added in the drawer.
+  for (const section of lint.sections) {
+    if (section.repeating) {
+      values[section.id] = []
+      continue
+    }
+    for (const field of section.fields) {
+      if (!field.defaultValue) continue
+      const v = resolveDefaultValue(field.defaultValue, ctx)
+      if (v !== undefined && v !== null && v !== '') values[field.id] = v
+    }
   }
-  const data = withComputedFormulas(lint.fields, values)
+  const data = withComputedFormulas(lint.sections, values)
 
   const recordNumber = await nextDocumentNumber(
     user.orgId,
     `custrec:${typeKey}`,
     recordNumberPrefix(typeKey),
   )
-  const searchText = await buildSearchText(lint.fields, data, recordNumber)
+  const searchText = await buildSearchText(lint.sections, data, recordNumber)
 
   const r = (await db.execute(sql`
     insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, created_by, updated_by)
