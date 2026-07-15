@@ -31,6 +31,7 @@ import {
   renderStatementViewPdf,
   resolveLayout,
   statementViewToExportData,
+  statementViewToXlsx,
   trialBalanceExportData,
   type ExportData,
   type Translator,
@@ -134,6 +135,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       if (format === 'pdf') {
         const page = resolvePdfPageSetup({ paperSize: 'letter', orientation: view.columns.length > 4 ? 'landscape' : 'portrait', marginMm: 16, density: 'standard' })
         return pdfResponse(await renderStatementViewPdf(view, branding, page, { title, periodPhrase, scale: q.scale }), filename)
+      }
+      if (format === 'xlsx') {
+        return xlsxResponse(
+          await statementViewToXlsx(view, { company: branding.orgName, title, periodPhrase, accountLabel: t('export.columns.accountName') }),
+          filename,
+        )
       }
       const data = statementViewToExportData(view, { title, dateRangeLabel: periodPhrase, accountLabel: t('export.columns.accountName') })
       return emitData(data)

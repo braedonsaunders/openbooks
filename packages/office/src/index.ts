@@ -145,6 +145,119 @@ export async function reportResultToXlsx(
   return Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer)
 }
 
+// --- financial-statement workbook (proper indentation + styled totals) ------
+
+export type StatementSheetColumn = { label: string; kind: 'amount' | 'variance_abs' | 'variance_pct' }
+export type StatementSheetRow = {
+  kind: 'section' | 'account' | 'subtotal' | 'total'
+  label: string
+  /** Account-tree depth (real Excel indentation is applied from this). */
+  indent?: number
+  /** Column-aligned values; null renders blank. */
+  values?: (number | null)[]
+}
+export type StatementSheet = {
+  company: string
+  title: string
+  periodPhrase: string
+  note?: string
+  accountLabel: string
+  columns: StatementSheetColumn[]
+  rows: StatementSheetRow[]
+}
+
+const AMOUNT_FMT = '#,##0.00;(#,##0.00)'
+const PCT_FMT = '0.0"%";(0.0"%")'
+const RULE = 'ffb0b6be'
+
+/**
+ * A financial statement as a properly-formatted .xlsx: a centred 3-line title
+ * block, a frozen bold header, section headers, account rows indented by their
+ * tree depth (real Excel indent, not leading spaces), and subtotal/total rows
+ * that are bold with a rule above (and a double rule below the grand total).
+ * Numbers use an accounting format (negatives in parentheses).
+ */
+export async function statementSheetToXlsx(sheet: StatementSheet): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'openbooks'
+  const now = new Date()
+  wb.created = now
+  wb.modified = now
+
+  const nCols = sheet.columns.length
+  const lastCol = nCols + 1 // col 1 is the account/description column
+  const ws = wb.addWorksheet(truncate(sanitizeSheetName(sheet.title), MAX_SHEET_NAME), {
+    views: [{ state: 'frozen', ySplit: 5 }],
+  })
+
+  // Title block (rows 1-3, centred across the used columns).
+  const centre = (row: number, text: string, fmt: { bold?: boolean; size?: number; muted?: boolean }) => {
+    ws.mergeCells(row, 1, row, lastCol)
+    const cell = ws.getCell(row, 1)
+    cell.value = text
+    cell.alignment = { horizontal: 'center' }
+    cell.font = { bold: fmt.bold, size: fmt.size, color: fmt.muted ? { argb: 'ff6b7280' } : undefined }
+  }
+  centre(1, sheet.company, { bold: true, size: 12 })
+  centre(2, sheet.title, { bold: true, size: 14 })
+  centre(3, sheet.periodPhrase, { muted: true })
+  if (sheet.note) centre(4, sheet.note, { muted: true })
+
+  // Header row (row 5): blank account column + right-aligned column labels.
+  const headerRow = 5
+  ws.getCell(headerRow, 1).value = sheet.accountLabel
+  ws.getCell(headerRow, 1).font = { bold: true, color: { argb: 'ff374151' } }
+  sheet.columns.forEach((c, i) => {
+    const cell = ws.getCell(headerRow, i + 2)
+    cell.value = c.label
+    cell.font = { bold: true, color: { argb: 'ff374151' } }
+    cell.alignment = { horizontal: 'right' }
+    cell.border = { bottom: { style: 'thin', color: { argb: 'ffd1d5db' } } }
+  })
+
+  let r = headerRow + 1
+  for (const row of sheet.rows) {
+    const isTotal = row.kind === 'total'
+    const isSub = row.kind === 'subtotal'
+    const bold = row.kind === 'section' || isSub || isTotal
+
+    const labelCell = ws.getCell(r, 1)
+    labelCell.value = row.kind === 'section' ? row.label.toUpperCase() : row.label
+    labelCell.font = { bold }
+    labelCell.alignment = { indent: row.kind === 'account' ? Math.min(1 + (row.indent ?? 0), 8) : 0 }
+
+    if (row.values) {
+      for (let i = 0; i < nCols; i++) {
+        const cell = ws.getCell(r, i + 2)
+        const v = row.values[i]
+        cell.value = v === null || v === undefined || !Number.isFinite(v) ? null : v
+        cell.numFmt = sheet.columns[i]!.kind === 'variance_pct' ? PCT_FMT : AMOUNT_FMT
+        cell.alignment = { horizontal: 'right' }
+        cell.font = { bold }
+      }
+    }
+
+    // Rules on total/subtotal rows, across the value columns.
+    if (isSub || isTotal) {
+      for (let c = 2; c <= lastCol; c++) {
+        const cell = ws.getCell(r, c)
+        cell.border = {
+          ...(cell.border ?? {}),
+          top: { style: 'thin', color: { argb: RULE } },
+          ...(isTotal ? { bottom: { style: 'double', color: { argb: RULE } } } : {}),
+        }
+      }
+    }
+    r++
+  }
+
+  ws.getColumn(1).width = 46
+  for (let i = 2; i <= lastCol; i++) ws.getColumn(i).width = 16
+
+  const buf = await wb.xlsx.writeBuffer()
+  return Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer)
+}
+
 function setCell(
   ws: ExcelJS.Worksheet,
   row: number,
