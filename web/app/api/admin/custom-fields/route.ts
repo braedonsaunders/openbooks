@@ -5,10 +5,27 @@ import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
-/** Targets a custom field can extend, with the kinds that narrow them. */
+/** Targets a custom field can extend, with the kinds that narrow them. The
+ *  transaction document kinds mirror the customization registry's RECORD_TYPES
+ *  so the Forms designer can create header/line fields for any transaction
+ *  form (bills, credits, card charges/refunds, checks) inline. */
 export const FIELD_TARGETS = [
-  { table: 'documents', kinds: ['vendor_bill', 'customer_invoice', 'vendor_payment', 'customer_payment', 'expense_report', 'journal'] },
-  { table: 'document_lines', kinds: ['vendor_bill', 'customer_invoice', 'expense_report', 'journal'] },
+  {
+    table: 'documents',
+    kinds: [
+      'vendor_bill', 'vendor_credit', 'customer_invoice', 'customer_credit',
+      'card_charge', 'card_refund', 'check',
+      'vendor_payment', 'customer_payment', 'expense_report', 'journal',
+    ],
+  },
+  {
+    table: 'document_lines',
+    kinds: [
+      'vendor_bill', 'vendor_credit', 'customer_invoice', 'customer_credit',
+      'card_charge', 'card_refund', 'check',
+      'expense_report', 'journal',
+    ],
+  },
   { table: 'parties', kinds: [] },
   { table: 'projects', kinds: [] },
   { table: 'accounts', kinds: [] },

@@ -98,9 +98,9 @@ const VENDOR_BILL: RecordTypeMeta = {
   category: "transaction",
   headerFields: [
     { key: "party_id", labelKey: "common.labels.vendor", level: "header", kind: "entity_ref", required: true, locked: true },
-    { key: "document_date", labelKey: "ap.drawer.billDate", level: "header", kind: "date" },
+    { key: "document_date", labelKey: "ap.drawer.dateLabel", level: "header", kind: "date" },
     { key: "due_date", labelKey: "ap.drawer.dueDate", level: "header", kind: "date" },
-    { key: "reference_number", labelKey: "ap.drawer.vendorRef", level: "header", kind: "text" },
+    { key: "reference_number", labelKey: "ap.drawer.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
   ],
   lineFields: [
@@ -149,7 +149,7 @@ const VENDOR_CREDIT: RecordTypeMeta = {
     { key: "party_id", labelKey: "common.labels.vendor", level: "header", kind: "entity_ref", required: true, locked: true },
     { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
     { key: "due_date", labelKey: "ap.drawer.dueDate", level: "header", kind: "date" },
-    { key: "reference_number", labelKey: "ap.drawer.vendorRef", level: "header", kind: "text" },
+    { key: "reference_number", labelKey: "ap.drawer.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
   ],
   lineFields: TRANSACTION_LINE_FIELDS,
@@ -292,6 +292,16 @@ export function headerFieldMeta(recordType: string, key: string) {
 
 export function lineFieldMeta(recordType: string, key: string) {
   return RECORD_TYPE_BY_KEY[recordType]?.lineFields.find((f) => f.key === key);
+}
+
+/** Built-in field meta for a key, searching header then line fields. */
+export function fieldMetaFor(recordType: string, key: string) {
+  const meta = RECORD_TYPE_BY_KEY[recordType];
+  if (!meta) return undefined;
+  return (
+    meta.headerFields.find((f) => f.key === key) ??
+    meta.lineFields.find((f) => f.key === key)
+  );
 }
 
 export function listColumnMeta(recordType: string, key: string): ListColumnMeta | undefined {
