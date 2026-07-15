@@ -133,6 +133,19 @@ const applications = JSON.parse(readFileSync(join(glDir, "applications.json"), "
 }[];
 const paymentTids = new Set(applications.map((a) => a.payment_tid));
 
+// The set of transaction ids present in NetSuite's GL snapshot (gl.ndjson) — the
+// exact same ground-truth cutoff the proven dry-run (reconcile-native.mts) uses.
+// A handful of transactions in the newer native extract postdate that snapshot
+// (dated 2026-07-13/14/15, posting='T' but NOT in gl.ndjson) and have NO
+// ground-truth GL to reconcile against. The dry-run EXCLUDES them; the live
+// importer must too, or it injects phantom balances into bank/AR/sales/tax/AP
+// (the dominant source of the live-vs-dry-run divergence). Gate posting
+// transactions on membership here, exactly as the dry-run does.
+console.log("loading gl-snapshot tid set…");
+const glTids = new Set<string>();
+for await (const g of ndjson(join(glDir, "gl.ndjson"))) glTids.add(g.tid as string);
+console.log(`  gl-snapshot tids: ${glTids.size}`);
+
 // ---------------------------------------------------------------------------
 // 3. Headers
 // ---------------------------------------------------------------------------
@@ -398,11 +411,20 @@ const deps: PostingDeps = { control, cardLiabilityAccountId: control.ap };
 
 // ---------------------------------------------------------------------------
 // 9. Load already-imported nsIds (idempotency).
+//    We distinguish POSTED docs (skip entirely) from docs that exist but were
+//    left approved-and-unposted (a prior run inserted the document then died —
+//    e.g. a WG blackout — before postDocument ran). Those must be POSTED on a
+//    re-run, not skipped, else their GL never lands. We map nsId → {docId,
+//    posted} so processTxn can post the orphan in place.
 // ---------------------------------------------------------------------------
 const existingNs = new Set<string>();
-for (const r of (await db.execute(sql`select custom->>'nsId' ns from documents where custom->>'nsId' is not null`)).rows as any[])
+const unpostedByNs = new Map<string, string>(); // nsId → documentId (approved, no entry)
+for (const r of (await db.execute(sql`
+  select id, custom->>'nsId' ns, status, posted_entry_id pe from documents where custom->>'nsId' is not null`)).rows as any[]) {
   existingNs.add(r.ns);
-console.log(`  already imported: ${existingNs.size} documents`);
+  if (r.status !== "posted" && r.status !== "voided" && !r.pe) unpostedByNs.set(r.ns, r.id);
+}
+console.log(`  already imported: ${existingNs.size} documents  (${unpostedByNs.size} unposted orphans to re-post)`);
 
 // ---------------------------------------------------------------------------
 // 10. Stream + group lines, then process each transaction.
@@ -467,11 +489,31 @@ async function processTxn(tid: string): Promise<void> {
   // NetSuite only posts posting='T' to the GL.
   if (h.posting !== "T") { skippedNonPosting++; bump(tt, "skipped"); return; }
 
-  if (existingNs.has(tid)) { skippedExisting++; bump(tt, "skipped"); return; }
+  // Exclude post-snapshot transactions (posting='T' but absent from the GL
+  // snapshot) — no ground truth to reconcile against; the proven dry-run
+  // excludes them and so must we (see glTids note above).
+  if (!glTids.has(tid)) { skippedNonPosting++; bump(tt, "skipped"); return; }
 
   let kind = TTYPE_KIND[tt];
   if (tt === "Journal") kind = "journal";
   if (!kind) { skippedNonPosting++; bump(tt, "skipped"); return; }
+
+  // Idempotency: a POSTED doc is done. A doc that exists but is unposted (a
+  // prior run inserted it then died before posting) gets posted in place now.
+  if (existingNs.has(tid)) {
+    const orphanId = unpostedByNs.get(tid);
+    if (!orphanId) { skippedExisting++; bump(tt, "skipped"); return; }
+    try {
+      await postDocument(orphanId, deps);
+      entriesCreated++;
+      unpostedByNs.delete(tid);
+      bump(tt, "imported");
+    } catch (e: any) {
+      failures.push({ tid, kind, reason: `repost:${(e?.message ?? String(e)).slice(0, 100)}` });
+      bump(tt, "failed");
+    }
+    return;
+  }
 
   const built = buildDoc(h, rawLines, kind);
   if (!built) { failures.push({ tid, kind, reason: "build-failed/unmapped" }); bump(tt, "failed"); return; }

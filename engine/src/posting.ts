@@ -165,7 +165,9 @@ export const RULES: Record<string, RuleFn> = {
   vendor_payment: (doc, lines, deps) => {
     const total = sum(lines.map(lineTotal));
     return [
-      { accountId: deps.control.ap, amount: total, partyId: doc.partyId, ...dims(doc) }, // debit AP
+      // The AP leg is an OPEN ITEM: it settles against the bills it paid, so it
+      // must carry is_open_item to be a valid application source (from_line).
+      { accountId: deps.control.ap, amount: total, partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // debit AP
       { accountId: lines[0]?.accountId ?? deps.control.bank, amount: neg(total), ...dims(doc) }, // credit bank
     ];
   },
@@ -174,7 +176,8 @@ export const RULES: Record<string, RuleFn> = {
     const total = sum(lines.map(lineTotal));
     return [
       { accountId: lines[0]?.accountId ?? deps.control.bank, amount: total, ...dims(doc) }, // debit bank
-      { accountId: deps.control.ar, amount: neg(total), partyId: doc.partyId, ...dims(doc) }, // credit AR
+      // The AR leg is an OPEN ITEM: it settles the invoices it paid (from_line).
+      { accountId: deps.control.ar, amount: neg(total), partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // credit AR
     ];
   },
 
