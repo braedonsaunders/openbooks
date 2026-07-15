@@ -9,6 +9,7 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
+import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -268,6 +269,7 @@ export function BillDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
+          <DocTypeBadge kind="vendor_bill" />
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {STATUS_LABEL_KEY[doc.status]
