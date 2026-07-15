@@ -16,6 +16,7 @@ import type { StatementView } from './statement-matrix'
 import {
   reportResultToXlsx,
   reportResultToCsv,
+  statementSheetToXlsx,
   type ReportRunResult,
 } from '@openbooks/office'
 import type {
@@ -466,6 +467,29 @@ export async function renderStatementViewPdf(
     page,
     generatedAt: opts.generatedAt ?? new Date(),
     footnote: divisor !== 1 ? 'Amounts are rounded; columns may not sum exactly.' : undefined,
+  })
+}
+
+/** A StatementView → a properly-formatted statement .xlsx: real cell
+ *  indentation, bold section/subtotal/total rows with rules, accounting number
+ *  formats. Numbers stay raw (unscaled) — a spreadsheet wants real figures. */
+export async function statementViewToXlsx(
+  view: StatementView,
+  opts: { company: string; title: string; periodPhrase: string; accountLabel: string; note?: string },
+): Promise<Buffer> {
+  return statementSheetToXlsx({
+    company: opts.company,
+    title: opts.title,
+    periodPhrase: opts.periodPhrase,
+    note: opts.note,
+    accountLabel: opts.accountLabel,
+    columns: view.columns.map((c) => ({ label: c.label, kind: c.kind })),
+    rows: view.lines.map((l) => ({
+      kind: l.kind,
+      label: l.label,
+      indent: l.depth,
+      values: l.values?.map((v) => (Number.isFinite(v) ? v : null)),
+    })),
   })
 }
 
