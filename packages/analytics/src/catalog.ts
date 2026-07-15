@@ -99,10 +99,12 @@ const SOURCES: CatalogSource[] = [
     fields: [
       { key: 'display_name', label: 'Name', expr: 'pt.display_name', semanticType: 'category' },
       { key: 'kind', label: 'Kind', expr: 'pt.kind', semanticType: 'category' },
-      { key: 'is_active', label: 'Active', expr: "case when pt.is_active then 'Active' else 'Inactive' end", semanticType: 'category' },
-      { key: 'is_customer', label: 'Customer', expr: "case when cr.id is not null then 'Yes' else 'No' end", semanticType: 'category' },
-      { key: 'is_vendor', label: 'Vendor', expr: "case when vr.id is not null then 'Yes' else 'No' end", semanticType: 'category' },
-      { key: 'is_employee', label: 'Employee', expr: "case when er.id is not null then 'Yes' else 'No' end", semanticType: 'category' },
+      // Fixed-vocabulary fields emit stable codes; the renderer localizes them
+      // (valueKind). Filters against these fields store the codes.
+      { key: 'is_active', label: 'Active', expr: "case when pt.is_active then 'active' else 'inactive' end", semanticType: 'category', valueKind: 'activeInactive' },
+      { key: 'is_customer', label: 'Customer', expr: "case when cr.id is not null then 'yes' else 'no' end", semanticType: 'category', valueKind: 'yesNo' },
+      { key: 'is_vendor', label: 'Vendor', expr: "case when vr.id is not null then 'yes' else 'no' end", semanticType: 'category', valueKind: 'yesNo' },
+      { key: 'is_employee', label: 'Employee', expr: "case when er.id is not null then 'yes' else 'no' end", semanticType: 'category', valueKind: 'yesNo' },
       { key: 'hired_on', label: 'Hired on', expr: 'er.hired_on', semanticType: 'date' },
       { key: 'created_at', label: 'Created at', expr: 'pt.created_at::date', semanticType: 'date' },
     ],
@@ -120,8 +122,8 @@ const SOURCES: CatalogSource[] = [
       { key: 'number', label: 'Account #', expr: 'a.number', semanticType: 'category' },
       { key: 'name', label: 'Name', expr: 'a.name', semanticType: 'category' },
       { key: 'type', label: 'Type', expr: 'a.type', semanticType: 'category' },
-      { key: 'is_summary', label: 'Summary', expr: "case when a.is_summary then 'Yes' else 'No' end", semanticType: 'category' },
-      { key: 'is_active', label: 'Active', expr: "case when a.is_active then 'Active' else 'Inactive' end", semanticType: 'category' },
+      { key: 'is_summary', label: 'Summary', expr: "case when a.is_summary then 'yes' else 'no' end", semanticType: 'category', valueKind: 'yesNo' },
+      { key: 'is_active', label: 'Active', expr: "case when a.is_active then 'active' else 'inactive' end", semanticType: 'category', valueKind: 'activeInactive' },
       { key: 'account_count', label: 'Account', expr: 'a.id', semanticType: 'category' },
     ],
     detailColumns: ['number', 'name', 'type', 'is_summary', 'is_active'],

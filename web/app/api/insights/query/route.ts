@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
+import { getTranslations } from 'next-intl/server'
 import { pool } from '@openbooks/engine/src/db.ts'
 import { runInsightQuery } from '@openbooks/analytics/server'
 import { InsightCompileError, InsightValidationError } from '@openbooks/analytics'
 import { guardPermission } from '../../../../lib/authz'
+import { insightCompileErrorMessage, insightLabelResolver } from '../../../../lib/insight-labels'
 import { normalizeQuery } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -32,16 +34,22 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await runInsightQuery(pool, query, gate.user.orgId)
+    // Column labels compile in the caller's locale (results are never persisted).
+    const result = await runInsightQuery(pool, query, gate.user.orgId, await insightLabelResolver())
     return NextResponse.json(result)
   } catch (e) {
-    if (e instanceof InsightValidationError || e instanceof InsightCompileError) {
+    if (e instanceof InsightCompileError) {
+      return NextResponse.json({ error: await insightCompileErrorMessage(e) }, { status: 422 })
+    }
+    if (e instanceof InsightValidationError) {
+      // Structural plan corruption (the studio can't produce this) — technical detail verbatim.
       return NextResponse.json({ error: e.message }, { status: 422 })
     }
     const msg = e instanceof Error ? e.message : 'query failed'
     // Postgres statement_timeout / cancel surfaces as a friendly 400.
     if (/statement timeout|canceling statement/i.test(msg)) {
-      return NextResponse.json({ error: 'Query took too long — narrow the range or add filters.' }, { status: 400 })
+      const t = await getTranslations('insights')
+      return NextResponse.json({ error: t('compileErrors.timeout') }, { status: 400 })
     }
     return NextResponse.json({ error: msg }, { status: 400 })
   }

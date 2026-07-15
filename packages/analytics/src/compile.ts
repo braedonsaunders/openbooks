@@ -23,8 +23,50 @@ import type {
   SemanticType,
 } from './types'
 
+/** Machine codes for every compile failure — the API layer translates these
+ *  for the studio; `message` stays the English fallback. */
+export type InsightCompileErrorCode =
+  | 'unknown_source'
+  | 'unknown_field'
+  | 'unknown_aggregation'
+  | 'aggregation_needs_field'
+  | 'not_a_dimension'
+  | 'not_a_measure'
+  | 'unknown_operator'
+  | 'unknown_bin'
+  | 'contains_needs_text'
+  | 'last_n_days_needs_number'
+  | 'no_columns'
+
 export class InsightCompileError extends Error {
   readonly name = 'InsightCompileError'
+  readonly code: InsightCompileErrorCode
+  /** The offending key/operator/etc., for interpolation into a translated message. */
+  readonly subject?: string
+
+  constructor(code: InsightCompileErrorCode, message: string, subject?: string) {
+    super(message)
+    this.code = code
+    this.subject = subject
+  }
+}
+
+/**
+ * Locale hooks for the display labels the compiler bakes into ResultColumns.
+ * Injected by the caller (the web API layer builds one from the request
+ * locale); every hook is optional and defaults to the authored English.
+ * Keeping this a plain callback bag keeps the package free of any i18n
+ * runtime.
+ */
+export type InsightLabelResolver = {
+  /** Display label for a catalog field. */
+  field?: (sourceKey: string, field: AnalyticsField) => string
+  /** Column label for the COUNT(*) measure. */
+  count?: () => string
+  /** Column label for an aggregated measure over `fieldLabel`. */
+  measure?: (agg: Exclude<AggFn, 'count'>, fieldLabel: string) => string
+  /** Column label for a date-binned dimension. */
+  binnedDimension?: (fieldLabel: string, bin: DateBin) => string
 }
 
 const MAX_ROWS = 10_000
@@ -42,7 +84,8 @@ function safeAlias(raw: string | undefined, fallback: string): string {
 /** Aggregation SQL for a measure over an already-resolved field expression. */
 function aggSql(agg: AggFn, expr: string | null): string {
   if (agg === 'count') return 'count(*)'
-  if (!expr) throw new InsightCompileError(`aggregation "${agg}" requires a field`)
+  if (!expr)
+    throw new InsightCompileError('aggregation_needs_field', `aggregation "${agg}" requires a field`, agg)
   switch (agg) {
     case 'sum':
       return `sum(${expr})`
@@ -53,13 +96,14 @@ function aggSql(agg: AggFn, expr: string | null): string {
     case 'max':
       return `max(${expr})`
     default:
-      throw new InsightCompileError(`unknown aggregation "${agg}"`)
+      throw new InsightCompileError('unknown_aggregation', `unknown aggregation "${agg}"`, agg)
   }
 }
 
 /** date_trunc wrapper for a temporal dimension bin. */
 function binSql(expr: string, bin: DateBin): string {
-  if (!DATE_BINS.includes(bin)) throw new InsightCompileError(`unknown date bin "${bin}"`)
+  if (!DATE_BINS.includes(bin))
+    throw new InsightCompileError('unknown_bin', `unknown date bin "${bin}"`, bin)
   return `date_trunc('${bin}', ${expr})::date`
 }
 
@@ -83,7 +127,8 @@ function bind(ctx: Ctx, value: unknown): string {
 
 function compileFilter(ctx: Ctx, filter: QueryFilter): string {
   const field = sourceField(ctx.source, filter.field)
-  if (!field) throw new InsightCompileError(`unknown filter field "${filter.field}"`)
+  if (!field)
+    throw new InsightCompileError('unknown_field', `unknown filter field "${filter.field}"`, filter.field)
   const ref = field.expr
   const op: FilterOp = filter.op
   const v = filter.value
@@ -102,7 +147,8 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
     case 'lte':
       return `${ref} <= ${bind(ctx, v)}`
     case 'contains': {
-      if (typeof v !== 'string') throw new InsightCompileError('"contains" needs a text value')
+      if (typeof v !== 'string')
+        throw new InsightCompileError('contains_needs_text', '"contains" needs a text value')
       return `${ref} ilike ${bind(ctx, `%${v}%`)}`
     }
     case 'in':
@@ -117,7 +163,8 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
       return `${ref} is not null`
     case 'last_n_days': {
       const n = Number(v)
-      if (!Number.isFinite(n) || n < 0) throw new InsightCompileError('"within last N days" needs a number')
+      if (!Number.isFinite(n) || n < 0)
+        throw new InsightCompileError('last_n_days_needs_number', '"within last N days" needs a number')
       return `${ref} >= (current_date - ${bind(ctx, Math.trunc(n))}::int)`
     }
     case 'this_month':
@@ -129,14 +176,15 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
     case 'ytd':
       return `${ref} >= date_trunc('year', current_date)::date and ${ref} <= current_date`
     default:
-      throw new InsightCompileError(`unknown filter operator "${op as string}"`)
+      throw new InsightCompileError('unknown_operator', `unknown filter operator "${op as string}"`, op as string)
   }
 }
 
 function resolveDimension(source: AnalyticsSource, dim: QueryDimension): { expr: string; alias: string; field: AnalyticsField } {
   const field = sourceField(source, dim.field)
-  if (!field) throw new InsightCompileError(`unknown dimension "${dim.field}"`)
-  if (!field.canDimension) throw new InsightCompileError(`"${dim.field}" cannot be a dimension`)
+  if (!field) throw new InsightCompileError('unknown_field', `unknown dimension "${dim.field}"`, dim.field)
+  if (!field.canDimension)
+    throw new InsightCompileError('not_a_dimension', `"${dim.field}" cannot be a dimension`, dim.field)
   const binned = dim.bin && field.canBin
   const expr = binned ? binSql(field.expr, dim.bin!) : field.expr
   const alias = safeAlias(dim.alias, binned ? `${field.key}_${dim.bin}` : field.key)
@@ -144,13 +192,16 @@ function resolveDimension(source: AnalyticsSource, dim: QueryDimension): { expr:
 }
 
 function resolveMeasure(source: AnalyticsSource, m: QueryMeasure): { expr: string; alias: string; field: AnalyticsField | null } {
-  if (!AGG_FNS.includes(m.agg)) throw new InsightCompileError(`unknown aggregation "${m.agg}"`)
+  if (!AGG_FNS.includes(m.agg))
+    throw new InsightCompileError('unknown_aggregation', `unknown aggregation "${m.agg}"`, m.agg)
   if (m.agg === 'count') {
     return { expr: 'count(*)', alias: safeAlias(m.alias, 'count'), field: null }
   }
   const field = sourceField(source, m.field ?? '')
-  if (!field) throw new InsightCompileError(`unknown measure field "${m.field}"`)
-  if (!field.canMeasure) throw new InsightCompileError(`"${m.field}" is not a numeric measure`)
+  if (!field)
+    throw new InsightCompileError('unknown_field', `unknown measure field "${m.field}"`, m.field)
+  if (!field.canMeasure)
+    throw new InsightCompileError('not_a_measure', `"${m.field}" is not a numeric measure`, m.field)
   return {
     expr: aggSql(m.agg, field.expr),
     alias: safeAlias(m.alias, `${m.agg}_${field.key}`),
@@ -158,10 +209,18 @@ function resolveMeasure(source: AnalyticsSource, m: QueryMeasure): { expr: strin
   }
 }
 
-/** Compile an InsightQuery into parameterized SQL + the output column plan. */
-export function compileInsightQuery(query: InsightQuery, orgId: string): CompiledQuery {
+/** Compile an InsightQuery into parameterized SQL + the output column plan.
+ *  `labels` localizes the display labels baked into the column plan; omitted
+ *  hooks fall back to the authored English. */
+export function compileInsightQuery(
+  query: InsightQuery,
+  orgId: string,
+  labels: InsightLabelResolver = {},
+): CompiledQuery {
   const source = getSource(query.source)
-  if (!source) throw new InsightCompileError(`unknown source "${query.source}"`)
+  if (!source)
+    throw new InsightCompileError('unknown_source', `unknown source "${query.source}"`, query.source)
+  const fieldLabel = (f: AnalyticsField) => labels.field?.(source.key, f) ?? f.label
 
   const ctx: Ctx = { source, params: [orgId] }
   const wheres: string[] = [`${source.orgColumn} = $1`]
@@ -191,24 +250,47 @@ export function compileInsightQuery(query: InsightQuery, orgId: string): Compile
       if (!field) continue
       const alias = uniq(field.key)
       selects.push(`${field.expr} as "${alias}"`)
-      columns.push({ key: alias, label: field.label, type: field.semanticType, role: 'dimension' })
+      columns.push({
+        key: alias,
+        label: fieldLabel(field),
+        type: field.semanticType,
+        role: 'dimension',
+        valueKind: field.valueKind,
+      })
     }
   } else {
     for (const dim of dimensions) {
       const r = resolveDimension(source, dim)
       const alias = uniq(r.alias)
       selects.push(`${r.expr} as "${alias}"`)
-      columns.push({ key: alias, label: dimLabel(r.field, dim.bin), type: r.field.semanticType, role: 'dimension' })
+      const base = fieldLabel(r.field)
+      const label =
+        dim.bin && r.field.canBin
+          ? (labels.binnedDimension?.(base, dim.bin) ?? `${base} (${dim.bin})`)
+          : base
+      columns.push({
+        key: alias,
+        label,
+        type: r.field.semanticType,
+        role: 'dimension',
+        valueKind: dim.bin && r.field.canBin ? undefined : r.field.valueKind,
+      })
     }
     for (const m of measures) {
       const r = resolveMeasure(source, m)
       const alias = uniq(r.alias)
       selects.push(`${r.expr} as "${alias}"`)
-      columns.push({ key: alias, label: measureLabel(m, r.field), type: measureType(m.agg, r.field), role: 'measure' })
+      const label =
+        m.agg === 'count'
+          ? (labels.count?.() ?? 'Count')
+          : (labels.measure?.(m.agg, r.field ? fieldLabel(r.field) : '') ??
+            defaultMeasureLabel(m, r.field))
+      columns.push({ key: alias, label, type: measureType(m.agg, r.field), role: 'measure' })
     }
   }
 
-  if (selects.length === 0) throw new InsightCompileError('query selects no columns')
+  if (selects.length === 0)
+    throw new InsightCompileError('no_columns', 'query selects no columns')
 
   // GROUP BY every dimension by ordinal position (safe — no user identifiers).
   const groupBy =
@@ -268,11 +350,8 @@ function clampLimit(raw: number | null | undefined): number {
   return Math.max(1, Math.min(MAX_ROWS, Math.trunc(raw)))
 }
 
-function dimLabel(field: AnalyticsField, bin: DateBin | undefined): string {
-  return bin && field.canBin ? `${field.label} (${bin})` : field.label
-}
-
-function measureLabel(m: QueryMeasure, field: AnalyticsField | null): string {
+/** English fallback for an aggregated measure's column label. */
+function defaultMeasureLabel(m: QueryMeasure, field: AnalyticsField | null): string {
   if (m.agg === 'count') return 'Count'
   const verb = m.agg === 'sum' ? 'Total' : m.agg[0].toUpperCase() + m.agg.slice(1)
   return `${verb} ${field?.label ?? ''}`.trim()

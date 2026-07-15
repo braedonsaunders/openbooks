@@ -9,7 +9,18 @@
     "bar": "Barras",
     "line": "Líneas",
     "area": "Área",
-    "pie": "Circular"
+    "pie": "Circular",
+    "empty": {
+      "noData": "No hay datos para esta consulta.",
+      "pickFields": "Elija una dimensión y al menos una medida para graficar esto."
+    },
+    "noRows": "No hay filas.",
+    "values": {
+      "yes": "Sí",
+      "no": "No",
+      "active": "Activo",
+      "inactive": "Inactivo"
+    }
   },
   "status": {
     "published": "Publicado"
@@ -137,5 +148,134 @@
     "deleteConfirm": "¿Eliminar este panel?",
     "deletedToast": "Panel eliminado",
     "deleteFailed": "No se pudo eliminar el panel"
+  },
+  "catalog": {
+    "sources": {
+      "ledger_lines": {
+        "label": "Líneas del mayor",
+        "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento."
+      },
+      "documents": {
+        "label": "Documentos",
+        "description": "Documentos comerciales — facturas de proveedor, facturas de cliente, pagos, órdenes — con etiquetas de tercero y dimensiones."
+      },
+      "parties": {
+        "label": "Terceros",
+        "description": "Clientes, proveedores y empleados — una fila por tercero con sus indicadores de rol."
+      },
+      "accounts": {
+        "label": "Cuentas",
+        "description": "El plan de cuentas — número, nombre, tipo e indicadores de contabilización."
+      }
+    },
+    "fields": {
+      "ledger_lines": {
+        "posting_date": "Fecha de contabilización",
+        "entry_number": "N.º de asiento",
+        "entry_status": "Estado del asiento",
+        "entry_origin": "Origen",
+        "account_number": "N.º de cuenta",
+        "account_name": "Cuenta",
+        "account_type": "Tipo de cuenta",
+        "party": "Tercero",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "location": "Ubicación",
+        "class": "Clase",
+        "memo": "Memo",
+        "amount": "Importe (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
+        "quantity": "Cantidad",
+        "currency": "Moneda"
+      },
+      "documents": {
+        "kind": "Clase",
+        "document_number": "N.º de documento",
+        "party": "Tercero",
+        "status": "Estado",
+        "document_date": "Fecha del documento",
+        "due_date": "Fecha de vencimiento",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "currency": "Moneda",
+        "subtotal": "Subtotal",
+        "tax_total": "Impuesto",
+        "total": "Total",
+        "document_count": "Documento"
+      },
+      "parties": {
+        "display_name": "Nombre",
+        "kind": "Clase",
+        "is_active": "Activo",
+        "is_customer": "Cliente",
+        "is_vendor": "Proveedor",
+        "is_employee": "Empleado",
+        "hired_on": "Fecha de contratación",
+        "created_at": "Fecha de creación"
+      },
+      "accounts": {
+        "number": "N.º de cuenta",
+        "name": "Nombre",
+        "type": "Tipo",
+        "is_summary": "De resumen",
+        "is_active": "Activa",
+        "account_count": "Cuenta"
+      }
+    }
+  },
+  "aggs": {
+    "sum": "Suma",
+    "avg": "Promedio",
+    "count": "Cantidad",
+    "min": "Mínimo",
+    "max": "Máximo"
+  },
+  "operators": {
+    "eq": "es igual a",
+    "neq": "es distinto de",
+    "in": "es cualquiera de",
+    "not_in": "no es ninguno de",
+    "gt": "mayor que",
+    "gte": "en o después de / ≥",
+    "lt": "menor que",
+    "lte": "en o antes de / ≤",
+    "contains": "contiene",
+    "is_null": "está vacío",
+    "is_not_null": "tiene valor",
+    "last_n_days": "en los últimos N días",
+    "this_month": "es este mes",
+    "this_quarter": "es este trimestre",
+    "this_year": "es este año",
+    "ytd": "año a la fecha"
+  },
+  "measureLabels": {
+    "count": "Cantidad",
+    "sum": "Total {field}",
+    "avg": "Promedio {field}",
+    "min": "Mín {field}",
+    "max": "Máx {field}",
+    "binned": "{field} ({bin})",
+    "bins": {
+      "day": "día",
+      "week": "semana",
+      "month": "mes",
+      "quarter": "trimestre",
+      "year": "año"
+    }
+  },
+  "compileErrors": {
+    "unknown_source": "Origen desconocido “{subject}”",
+    "unknown_field": "Campo desconocido “{subject}”",
+    "unknown_aggregation": "Agregación desconocida “{subject}”",
+    "aggregation_needs_field": "La agregación “{subject}” necesita un campo",
+    "not_a_dimension": "“{subject}” no se puede usar para agrupar",
+    "not_a_measure": "“{subject}” no es una medida numérica",
+    "unknown_operator": "Operador de filtro desconocido “{subject}”",
+    "unknown_bin": "Intervalo de fecha desconocido “{subject}”",
+    "contains_needs_text": "El filtro “contiene” necesita un valor de texto",
+    "last_n_days_needs_number": "El filtro “en los últimos N días” necesita un número",
+    "no_columns": "La consulta no selecciona ninguna columna",
+    "timeout": "La consulta tardó demasiado — acote el rango o agregue filtros."
   }
 }

@@ -10,11 +10,14 @@
     "./server": "./src/server/index.ts",
     "./viz": "./src/viz/index.client.ts"
   },
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
     "echarts": "^6.0.0",
-    "lucide-react": "^1.24.0"
+    "lucide-react": "^1.24.0",
+    "next-intl": "^4.13.2"
   },
   "peerDependencies": {
     "@openbooks/ui": "*",

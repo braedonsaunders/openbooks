@@ -9,7 +9,18 @@
     "bar": "Barres",
     "line": "Courbe",
     "area": "Aires",
-    "pie": "Secteurs"
+    "pie": "Secteurs",
+    "empty": {
+      "noData": "Aucune donnée pour cette requête.",
+      "pickFields": "Choisissez une dimension et au moins une mesure pour tracer ce graphique."
+    },
+    "noRows": "Aucune ligne.",
+    "values": {
+      "yes": "Oui",
+      "no": "Non",
+      "active": "Actif",
+      "inactive": "Inactif"
+    }
   },
   "status": {
     "published": "Publié"
@@ -137,5 +148,134 @@
     "deleteConfirm": "Supprimer ce tableau de bord?",
     "deletedToast": "Tableau de bord supprimé",
     "deleteFailed": "Impossible de supprimer le tableau de bord"
+  },
+  "catalog": {
+    "sources": {
+      "ledger_lines": {
+        "label": "Lignes du grand livre",
+        "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal."
+      },
+      "documents": {
+        "label": "Documents",
+        "description": "Documents d’affaires — factures fournisseurs, factures clients, paiements, commandes — avec les libellés de tiers et de dimensions."
+      },
+      "parties": {
+        "label": "Tiers",
+        "description": "Clients, fournisseurs et employés — une ligne par tiers avec ses indicateurs de rôle."
+      },
+      "accounts": {
+        "label": "Comptes",
+        "description": "Le plan comptable — numéro, nom, type et indicateurs de comptabilisation."
+      }
+    },
+    "fields": {
+      "ledger_lines": {
+        "posting_date": "Date de comptabilisation",
+        "entry_number": "N° d’écriture",
+        "entry_status": "Statut de l’écriture",
+        "entry_origin": "Origine",
+        "account_number": "N° de compte",
+        "account_name": "Compte",
+        "account_type": "Type de compte",
+        "party": "Tiers",
+        "department": "Département",
+        "project": "Projet",
+        "location": "Emplacement",
+        "class": "Classe",
+        "memo": "Note",
+        "amount": "Montant (base)",
+        "debit": "Débit",
+        "credit": "Crédit",
+        "quantity": "Quantité",
+        "currency": "Devise"
+      },
+      "documents": {
+        "kind": "Genre",
+        "document_number": "N° de document",
+        "party": "Tiers",
+        "status": "Statut",
+        "document_date": "Date du document",
+        "due_date": "Date d’échéance",
+        "department": "Département",
+        "project": "Projet",
+        "currency": "Devise",
+        "subtotal": "Sous-total",
+        "tax_total": "Taxe",
+        "total": "Total",
+        "document_count": "Document"
+      },
+      "parties": {
+        "display_name": "Nom",
+        "kind": "Genre",
+        "is_active": "Actif",
+        "is_customer": "Client",
+        "is_vendor": "Fournisseur",
+        "is_employee": "Employé",
+        "hired_on": "Embauché le",
+        "created_at": "Créé le"
+      },
+      "accounts": {
+        "number": "N° de compte",
+        "name": "Nom",
+        "type": "Type",
+        "is_summary": "Sommaire",
+        "is_active": "Actif",
+        "account_count": "Compte"
+      }
+    }
+  },
+  "aggs": {
+    "sum": "Somme",
+    "avg": "Moyenne",
+    "count": "Nombre",
+    "min": "Minimum",
+    "max": "Maximum"
+  },
+  "operators": {
+    "eq": "est égal à",
+    "neq": "est différent de",
+    "in": "est l’un de",
+    "not_in": "n’est aucun de",
+    "gt": "supérieur à",
+    "gte": "à partir du / ≥",
+    "lt": "inférieur à",
+    "lte": "jusqu’au / ≤",
+    "contains": "contient",
+    "is_null": "est vide",
+    "is_not_null": "est renseigné",
+    "last_n_days": "dans les N derniers jours",
+    "this_month": "est ce mois-ci",
+    "this_quarter": "est ce trimestre",
+    "this_year": "est cette année",
+    "ytd": "depuis le début de l’année"
+  },
+  "measureLabels": {
+    "count": "Nombre",
+    "sum": "Total {field}",
+    "avg": "Moy. {field}",
+    "min": "Min {field}",
+    "max": "Max {field}",
+    "binned": "{field} ({bin})",
+    "bins": {
+      "day": "jour",
+      "week": "semaine",
+      "month": "mois",
+      "quarter": "trimestre",
+      "year": "année"
+    }
+  },
+  "compileErrors": {
+    "unknown_source": "Source inconnue « {subject} »",
+    "unknown_field": "Champ inconnu « {subject} »",
+    "unknown_aggregation": "Agrégation inconnue « {subject} »",
+    "aggregation_needs_field": "L’agrégation « {subject} » requiert un champ",
+    "not_a_dimension": "« {subject} » ne peut pas servir à regrouper",
+    "not_a_measure": "« {subject} » n’est pas une mesure numérique",
+    "unknown_operator": "Opérateur de filtre inconnu « {subject} »",
+    "unknown_bin": "Intervalle de dates inconnu « {subject} »",
+    "contains_needs_text": "Le filtre « contient » requiert une valeur texte",
+    "last_n_days_needs_number": "Le filtre « dans les N derniers jours » requiert un nombre",
+    "no_columns": "La requête ne sélectionne aucune colonne",
+    "timeout": "La requête a pris trop de temps — réduisez la plage ou ajoutez des filtres."
   }
 }

@@ -51,6 +51,7 @@ export function ReportRunner({
   definition: {
     id: string
     kind: 'built_in' | 'custom'
+    slug: string
     name: string
     description: string | null
     query: ReportCustomQuery
@@ -63,7 +64,18 @@ export function ReportRunner({
   const t = useTranslations('reports.custom.runner')
   const tk = useTranslations('reports.custom')
   const tc = useTranslations('common')
+  const tReports = useTranslations('reports')
   const router = useRouter()
+
+  // Built-in definitions localize by slug; custom slugs fall back to stored text.
+  const displayName =
+    definition.kind === 'built_in' && tReports.has(`builtIns.${definition.slug}.name`)
+      ? tReports(`builtIns.${definition.slug}.name`)
+      : definition.name
+  const displayDescription =
+    definition.kind === 'built_in' && tReports.has(`builtIns.${definition.slug}.description`)
+      ? tReports(`builtIns.${definition.slug}.description`)
+      : definition.description
   const [result, setResult] = useState<ReportRunResult | null>(null)
   const [lastRunId, setLastRunId] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
@@ -96,13 +108,13 @@ export function ReportRunner({
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
-                {definition.name}
+                {displayName}
               </h1>
               {definition.kind === 'built_in' ? <Badge variant="secondary">{tk('kind.builtIn')}</Badge> : null}
             </div>
-            {definition.description ? (
+            {displayDescription ? (
               <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                {definition.description}
+                {displayDescription}
               </p>
             ) : null}
           </div>

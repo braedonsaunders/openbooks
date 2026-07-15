@@ -17,8 +17,10 @@ import {
 } from './custom-query'
 import {
   formatLabel,
+  type ReportBreakout,
   type ReportCustomQuery,
   type ReportGroup,
+  type ReportMeasure,
   type ReportRunResult,
   type ReportTemporalBin,
 } from './types'
@@ -28,11 +30,51 @@ export type PgQueryable = {
   query(text: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>
 }
 
+/**
+ * Locale hooks for every display string this executor bakes into a shaped
+ * result (column headings, group titles, subtitles, summary labels, boolean
+ * cells). The web layer builds one from the request locale; every hook is
+ * optional and falls back to the authored English, so tests and non-request
+ * callers need nothing. Plain callbacks — this package stays i18n-runtime-free.
+ */
+export type ReportRunLabels = {
+  /** Heading for an output column (fallback: catalog label). */
+  column?: (entity: ReportEntity, key: string) => string
+  /** Heading for a summarize-mode measure (fallback: "<Fn> of <column>"). */
+  measure?: (entity: ReportEntity, m: ReportMeasure) => string
+  /** Heading for a summarize-mode breakout (fallback: "<column> (by <bin>)"). */
+  breakout?: (entity: ReportEntity, b: ReportBreakout) => string
+  /** Title of the single unsectioned results group. */
+  resultsTitle?: () => string
+  /** Title of the summarize-mode group. */
+  summaryTitle?: () => string
+  /** Title of one groupBy section: "<column label>: <value>". */
+  sectionTitle?: (columnLabel: string, value: string) => string
+  /** "<n> row(s)" subtitle. */
+  rowCount?: (n: number) => string
+  /** "<n> group(s)" subtitle. */
+  groupCount?: (n: number) => string
+  /** Summary-band labels. */
+  summaryRows?: () => string
+  summaryGroups?: () => string
+  summarySource?: () => string
+  /** Summary-band grand-total label over a measure heading. */
+  summaryTotal?: (measureHeading: string) => string
+  /** Bucket title for rows whose groupBy value is null. */
+  none?: () => string
+  /** Boolean enum cell text (fallback: 'yes'/'no'). */
+  bool?: (v: boolean) => string
+  /** Display label for the entity itself (the summary band's Source value). */
+  entityLabel?: (entity: ReportEntity) => string
+}
+
 export type RunCustomQueryOpts = CompileCustomQueryOpts & {
   /** Entity catalog to resolve against; injectable for tests/scoped catalogs. */
   entityMap: Record<string, ReportEntity>
   /** Org every query is scoped to — bound into the WHERE, never optional. */
   orgId: string
+  /** Locale hooks for baked display strings (defaults: authored English). */
+  labels?: ReportRunLabels
 }
 
 export async function runCustomQuery(
@@ -49,10 +91,11 @@ export async function runCustomQuery(
   const compiled = compileCustomQuery(entity, q, opts.orgId, { maxRows: opts.maxRows })
   const { rows } = await client.query(compiled.text, compiled.values)
 
+  const labels = opts.labels ?? {}
   if (compiled.mode === 'summarize') {
-    return shapeSummarizeResult(entity, compiled.breakouts, compiled.measures, rows)
+    return shapeSummarizeResult(entity, compiled.breakouts, compiled.measures, rows, labels)
   }
-  return shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows)
+  return shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels)
 }
 
 // --- rows mode ---------------------------------------------------------------
@@ -62,26 +105,33 @@ function shapeRowsResult(
   requestedColumns: string[],
   groupBy: string | null,
   dataRows: Record<string, unknown>[],
+  labels: ReportRunLabels,
 ): ReportRunResult {
   const groups: ReportGroup[] = []
-  const columnLabels = requestedColumns.map((c) => labelFor(entity, c))
-  const cell = (column: string, v: unknown) => formatCellValue(entity, column, v)
+  const columnLabel = (c: string) => labels.column?.(entity, c) ?? labelFor(entity, c)
+  const columnLabels = requestedColumns.map(columnLabel)
+  const resultsTitle = labels.resultsTitle?.() ?? 'Results'
+  const rowCount = (n: number) => labels.rowCount?.(n) ?? `${n} row(s)`
+  const cell = (column: string, v: unknown) => formatCellValue(entity, column, v, labels)
 
   if (groupBy) {
     const byKey = new Map<string, Record<string, unknown>[]>()
     for (const row of dataRows) {
-      const k = String(row[groupBy] ?? '(none)')
+      const k = row[groupBy] == null ? (labels.none?.() ?? '(none)') : String(row[groupBy])
       const list = byKey.get(k) ?? []
       list.push(row)
       byKey.set(k, list)
     }
     if (byKey.size === 0) {
-      groups.push({ title: 'Results', columns: columnLabels, rows: [], isEmpty: true })
+      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true })
     } else {
       for (const [k, list] of [...byKey.entries()].sort()) {
         groups.push({
-          title: `${labelFor(entity, groupBy)}: ${formatLabel(k)}`,
-          subtitle: `${list.length} row(s)`,
+          kind: 'section',
+          title:
+            labels.sectionTitle?.(columnLabel(groupBy), formatLabel(k)) ??
+            `${columnLabel(groupBy)}: ${formatLabel(k)}`,
+          subtitle: rowCount(list.length),
           columns: columnLabels,
           rows: list.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
         })
@@ -89,8 +139,9 @@ function shapeRowsResult(
     }
   } else {
     groups.push({
-      title: 'Results',
-      subtitle: `${dataRows.length} row(s)`,
+      kind: 'results',
+      title: resultsTitle,
+      subtitle: rowCount(dataRows.length),
       columns: columnLabels,
       rows: dataRows.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
       isEmpty: dataRows.length === 0,
@@ -100,8 +151,8 @@ function shapeRowsResult(
   return {
     groups,
     summary: [
-      { label: 'Rows', value: dataRows.length },
-      { label: 'Source', value: entity.label },
+      { label: labels.summaryRows?.() ?? 'Rows', value: dataRows.length },
+      { label: labels.summarySource?.() ?? 'Source', value: labels.entityLabel?.(entity) ?? entity.label },
     ],
     rowCount: dataRows.length,
   }
@@ -114,26 +165,31 @@ function shapeSummarizeResult(
   breakouts: NonNullable<ReportCustomQuery['breakouts']>,
   measures: NonNullable<ReportCustomQuery['measures']>,
   dataRows: Record<string, unknown>[],
+  labels: ReportRunLabels,
 ): ReportRunResult {
+  const measureHeading = (m: (typeof measures)[number]) =>
+    labels.measure?.(entity, m) ?? measureLabel(entity, m)
   const columns = [
-    ...breakouts.map((b) => breakoutLabel(entity, b)),
-    ...measures.map((m) => measureLabel(entity, m)),
+    ...breakouts.map((b) => labels.breakout?.(entity, b) ?? breakoutLabel(entity, b)),
+    ...measures.map(measureHeading),
   ]
   const rows = dataRows.map((row) => [
     ...breakouts.map((b, i) =>
       b.bin
         ? formatBreakoutValue(row[`d${i}`], b.bin)
-        : formatCellValue(entity, b.column, row[`d${i}`]),
+        : formatCellValue(entity, b.column, row[`d${i}`], labels),
     ),
     ...measures.map((_, i) => formatCustomValue(row[`m${i}`])),
   ])
 
   const groups: ReportGroup[] = [
     {
-      title: 'Summary',
+      kind: 'summary',
+      title: labels.summaryTitle?.() ?? 'Summary',
       subtitle:
         breakouts.length > 0
-          ? `${dataRows.length} group${dataRows.length === 1 ? '' : 's'}`
+          ? (labels.groupCount?.(dataRows.length) ??
+            `${dataRows.length} group${dataRows.length === 1 ? '' : 's'}`)
           : undefined,
       columns,
       rows,
@@ -143,13 +199,21 @@ function shapeSummarizeResult(
 
   // Grand totals for count/sum measures make useful summary cards.
   const summary: ReportRunResult['summary'] = [
-    { label: breakouts.length > 0 ? 'Groups' : 'Rows', value: dataRows.length },
+    {
+      label:
+        breakouts.length > 0
+          ? (labels.summaryGroups?.() ?? 'Groups')
+          : (labels.summaryRows?.() ?? 'Rows'),
+      value: dataRows.length,
+    },
   ]
   measures.forEach((m, i) => {
     if (m.fn === 'count' || m.fn === 'count_distinct' || m.fn === 'sum') {
       const total = dataRows.reduce((acc, r) => acc + (Number(r[`m${i}`]) || 0), 0)
       summary.push({
-        label: `Total ${measureLabel(entity, m).toLowerCase()}`,
+        label:
+          labels.summaryTotal?.(measureHeading(m)) ??
+          `Total ${measureLabel(entity, m).toLowerCase()}`,
         value: Math.round(total * 100) / 100,
       })
     }
@@ -182,10 +246,15 @@ function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin): string | numb
 
 /** Cell value for display: enum-kind columns print humanised (underscores →
  *  spaces), everything else through formatCustomValue. */
-function formatCellValue(entity: ReportEntity, column: string, v: unknown): string | number | null {
+function formatCellValue(
+  entity: ReportEntity,
+  column: string,
+  v: unknown,
+  labels: ReportRunLabels = {},
+): string | number | null {
   const kind = entityColumn(entity, column)?.kind
   if (kind === 'enum') {
-    if (typeof v === 'boolean') return v ? 'yes' : 'no'
+    if (typeof v === 'boolean') return labels.bool?.(v) ?? (v ? 'yes' : 'no')
     if (typeof v === 'string') return formatLabel(v)
   }
   return formatCustomValue(v)
@@ -210,13 +279,17 @@ function csvEscape(v: string | number | null | undefined): string {
 
 /**
  * Serialize a run result to CSV. Multi-section results (rows mode with a
- * groupBy) get a leading "Section" column so the flat file stays lossless.
+ * groupBy) get a leading section column so the flat file stays lossless.
+ * `sectionHeader` localizes that column's heading (default 'Section').
  */
-export function reportResultToCsv(result: ReportRunResult): string {
+export function reportResultToCsv(
+  result: ReportRunResult,
+  opts: { sectionHeader?: string } = {},
+): string {
   const multi = result.groups.length > 1
   const lines: string[] = []
   const header = result.groups[0]?.columns ?? []
-  lines.push([...(multi ? ['Section'] : []), ...header].map(csvEscape).join(','))
+  lines.push([...(multi ? [opts.sectionHeader ?? 'Section'] : []), ...header].map(csvEscape).join(','))
   for (const group of result.groups) {
     for (const row of group.rows) {
       lines.push([...(multi ? [group.title] : []), ...row].map(csvEscape).join(','))

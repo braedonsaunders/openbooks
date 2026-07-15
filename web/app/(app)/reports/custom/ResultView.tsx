@@ -39,7 +39,7 @@ export function ResultView({ result }: { result: ReportRunResult }) {
 
       {result.groups.map((group, gi) => (
         <div key={gi} className="space-y-2">
-          {result.groups.length > 1 || group.title !== 'Results' ? (
+          {result.groups.length > 1 || group.kind !== 'results' ? (
             <div className="flex items-baseline gap-2">
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{group.title}</h3>
               {group.subtitle ? (

@@ -249,6 +249,191 @@
     "recipientsHint": "Adresses courriel séparées par des virgules. L’envoi est mis en file pour le processus de traitement (voir ci-dessous).",
     "saveSchedule": "Enregistrer la planification",
     "saved": "Planification enregistrée",
-    "saveFailed": "Impossible d’enregistrer la planification"
+    "saveFailed": "Impossible d’enregistrer la planification",
+    "describe": {
+      "daily": "Chaque jour à {time} ({zone})",
+      "weekly": "Chaque semaine le {day} à {time} ({zone})",
+      "monthly": "Chaque mois le {dayOfMonth} à {time} ({zone})",
+      "weekdays": {
+        "sun": "dimanche",
+        "mon": "lundi",
+        "tue": "mardi",
+        "wed": "mercredi",
+        "thu": "jeudi",
+        "fri": "vendredi",
+        "sat": "samedi"
+      }
+    }
+  },
+  "catalog": {
+    "entities": {
+      "ledger_lines": {
+        "label": "Lignes du grand livre",
+        "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal comptabilisée (ou en brouillon)."
+      },
+      "documents": {
+        "label": "Documents",
+        "description": "Documents d’affaires — factures fournisseurs, factures clients, paiements, commandes — avec les libellés de tiers et de dimensions."
+      },
+      "parties": {
+        "label": "Tiers",
+        "description": "Clients, fournisseurs et employés — une ligne par tiers avec ses indicateurs de rôle et son détail d’employé."
+      },
+      "accounts": {
+        "label": "Comptes",
+        "description": "Le plan comptable — numéro, nom, type et indicateurs de comptabilisation."
+      }
+    },
+    "columns": {
+      "ledger_lines": {
+        "posting_date": "Date de comptabilisation",
+        "entry_number": "N° d’écriture",
+        "entry_status": "Statut de l’écriture",
+        "origin": "Origine",
+        "account_number": "N° de compte",
+        "account_name": "Compte",
+        "account_type": "Type de compte",
+        "party_name": "Tiers",
+        "department": "Département",
+        "project": "Projet",
+        "location": "Emplacement",
+        "class": "Classe",
+        "memo": "Note",
+        "amount": "Montant (base)",
+        "currency": "Devise",
+        "txn_amount": "Montant (transaction)",
+        "quantity": "Quantité",
+        "unit": "Unité",
+        "due_date": "Date d’échéance",
+        "is_open_item": "Poste ouvert",
+        "reconciled_at": "Rapproché le",
+        "entry_id": "Écriture (id)",
+        "account_id": "Compte (id)",
+        "party_id": "Tiers (id)"
+      },
+      "documents": {
+        "kind": "Genre",
+        "document_number": "N° de document",
+        "party_name": "Tiers",
+        "document_date": "Date du document",
+        "posting_date": "Date de comptabilisation",
+        "due_date": "Date d’échéance",
+        "status": "Statut",
+        "currency": "Devise",
+        "subtotal": "Sous-total",
+        "tax_total": "Taxe",
+        "total": "Total",
+        "reference_number": "N° de référence",
+        "billing_method": "Mode de facturation",
+        "payment_hold_reason": "Retenue de paiement",
+        "expected_pay_date": "Date de paiement prévue",
+        "department": "Département",
+        "project": "Projet",
+        "memo": "Note",
+        "created_at": "Créé le",
+        "id": "Document (id)",
+        "party_id": "Tiers (id)"
+      },
+      "parties": {
+        "display_name": "Nom",
+        "legal_name": "Raison sociale",
+        "kind": "Genre",
+        "short_code": "Code court",
+        "email": "Courriel",
+        "phone": "Téléphone",
+        "is_active": "Actif",
+        "is_customer": "Client",
+        "is_vendor": "Fournisseur",
+        "is_employee": "Employé",
+        "employee_number": "N° d’employé",
+        "hired_on": "Embauché le",
+        "terminated_on": "Fin d’emploi le",
+        "created_at": "Créé le",
+        "id": "Tiers (id)"
+      },
+      "accounts": {
+        "number": "N° de compte",
+        "name": "Nom",
+        "type": "Type",
+        "description": "Description",
+        "is_summary": "Sommaire",
+        "is_active": "Actif",
+        "reconcilable": "Rapprochable",
+        "currency_restriction": "Restriction de devise",
+        "created_at": "Créé le",
+        "id": "Compte (id)",
+        "parent_id": "Parent (id)"
+      }
+    }
+  },
+  "operators": {
+    "eq": "est égal à",
+    "neq": "est différent de",
+    "in": "est l’un de",
+    "not_in": "n’est aucun de",
+    "gte": "à partir du / ≥",
+    "lte": "jusqu’au / ≤",
+    "is_null": "est vide",
+    "is_not_null": "est renseigné",
+    "is_true": "est oui",
+    "is_false": "est non",
+    "contains": "contient",
+    "between_days_ago": "dans les N derniers jours",
+    "due_within_days": "à échéance dans les N prochains jours",
+    "since_today": "est aujourd’hui",
+    "this_week": "est cette semaine",
+    "this_month": "est ce mois-ci",
+    "this_year": "est cette année",
+    "before_now": "est dans le passé (en retard)"
+  },
+  "aggs": {
+    "count": "Nombre",
+    "count_distinct": "Nombre distinct",
+    "sum": "Somme",
+    "avg": "Moyenne",
+    "min": "Min",
+    "max": "Max"
+  },
+  "run": {
+    "results": "Résultats",
+    "summary": "Sommaire",
+    "section": "{label} : {value}",
+    "rowCount": "{count, plural, one {# ligne} other {# lignes}}",
+    "groupCount": "{count, plural, one {# groupe} other {# groupes}}",
+    "summaryRows": "Lignes",
+    "summaryGroups": "Groupes",
+    "summarySource": "Source",
+    "summaryTotal": "Total {measure}",
+    "none": "(aucune)",
+    "yes": "oui",
+    "no": "non",
+    "measureOf": "{fn} de {column}",
+    "breakoutBy": "{column} (par {bin})",
+    "bins": {
+      "day": "jour",
+      "week": "semaine",
+      "month": "mois",
+      "quarter": "trimestre",
+      "year": "année"
+    },
+    "csvSection": "Section"
+  },
+  "builtIns": {
+    "ap-aging-by-vendor": {
+      "name": "Âge des comptes fournisseurs par fournisseur",
+      "description": "Lignes ouvertes de comptes fournisseurs du grand livre, sommées par fournisseur et par mois d’échéance. Les totaux négatifs sont des montants dus (comptes fournisseurs de nature créditrice)."
+    },
+    "open-ar-by-customer": {
+      "name": "Comptes clients ouverts par client",
+      "description": "Solde à recevoir par client à partir des postes ouverts du grand livre. Les totaux positifs sont des montants qui vous sont dus."
+    },
+    "gl-activity-by-account-fy": {
+      "name": "Activité du GL par compte (exercice courant)",
+      "description": "Activité de journal comptabilisée cette année, une ligne par compte : mouvement net et nombre de lignes. Utilise l’année civile jusqu’à l’arrivée des opérateurs de période financière."
+    },
+    "expense-detail-by-department-fy": {
+      "name": "Détail des charges par département (exercice courant)",
+      "description": "Lignes de charges et de coût des marchandises vendues comptabilisées cette année, sectionnées par département — date, écriture, compte, tiers, note et montant."
+    }
   }
 }

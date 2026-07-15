@@ -6,7 +6,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
-import { describeCadence, REPORT_CADENCES, type ReportCadence } from '@openbooks/reports'
+import { REPORT_CADENCES, type ReportCadence } from '@openbooks/reports'
 import { confirmDialog } from '@/lib/confirm'
 
 export type ScheduleRow = {
@@ -26,22 +26,14 @@ export type ScheduleRow = {
 // Message keys under reports.schedule.weekdays, indexed by day-of-week number.
 const WEEKDAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
+// Message keys under reports.schedule.describe.weekdays, indexed by day-of-week number.
+const DESCRIBE_WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+
 // Message keys under reports.schedule.cadences — unknown cadence codes render verbatim.
 const CADENCE_KEY: Record<string, string> = {
   daily: 'cadences.daily',
   weekly: 'cadences.weekly',
   monthly: 'cadences.monthly',
-}
-
-function describe(s: ScheduleRow): string {
-  return describeCadence({
-    cadence: s.cadence as ReportCadence,
-    dayOfWeek: s.day_of_week,
-    dayOfMonth: s.day_of_month,
-    hour: s.hour,
-    minute: s.minute,
-    timezone: s.timezone,
-  })
 }
 
 export function ScheduleEditor({
@@ -57,6 +49,20 @@ export function ScheduleEditor({
   const tc = useTranslations('common')
   const router = useRouter()
   const [adding, setAdding] = useState(false)
+
+  /** Localized cadence headline, composed from reports.schedule.describe.*. */
+  function describe(s: ScheduleRow): string {
+    const time = `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`
+    const zone = s.timezone
+    if (s.cadence === 'weekly') {
+      const dayKey = DESCRIBE_WEEKDAY_KEYS[s.day_of_week ?? 1] ?? 'mon'
+      return t('describe.weekly', { day: t(`describe.weekdays.${dayKey}`), time, zone })
+    }
+    if (s.cadence === 'monthly') {
+      return t('describe.monthly', { dayOfMonth: s.day_of_month ?? 1, time, zone })
+    }
+    return t('describe.daily', { time, zone })
+  }
 
   async function toggleActive(s: ScheduleRow) {
     const res = await fetch(`/api/reports/schedules/${s.id}`, {

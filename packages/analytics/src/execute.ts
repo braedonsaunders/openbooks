@@ -7,7 +7,7 @@
 // SERVER ONLY — imports node-postgres. Never import from a client bundle; the
 // client renderer takes a QueryResult, not the pool.
 
-import { compileInsightQuery, INSIGHT_MAX_ROWS } from './compile'
+import { compileInsightQuery, INSIGHT_MAX_ROWS, type InsightLabelResolver } from './compile'
 import { validateInsightQuery } from './validate'
 import type { InsightQuery, QueryResult } from './types'
 
@@ -32,9 +32,10 @@ export async function runInsightQuery(
   pool: QueryPool,
   query: InsightQuery,
   orgId: string,
+  labels?: InsightLabelResolver,
 ): Promise<QueryResult> {
   validateInsightQuery(query)
-  const compiled = compileInsightQuery(query, orgId)
+  const compiled = compileInsightQuery(query, orgId, labels)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
   const wrapped = `select * from (${compiled.sql}) __insight limit ${capped + 1}`
