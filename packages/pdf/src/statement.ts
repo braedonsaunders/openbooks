@@ -254,6 +254,12 @@ function stampFooters(
   const stamp = input.generatedAt.toISOString().slice(0, 10)
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i)
+    // The footer sits in the bottom MARGIN band (below contentBottom). Drawing
+    // text there makes pdfkit think the page overflowed and auto-insert a new
+    // page (one per text call → runaway trailing blank pages). Zeroing the
+    // page's bottom margin while stamping lets us write in the band safely.
+    const savedBottom = doc.page.margins.bottom
+    doc.page.margins.bottom = 0
     doc.font(theme.font).fontSize(8).fillColor(theme.muted)
     doc.text(`${input.companyName} · ${input.title}`, page.contentLeft, footerY, {
       width: page.contentWidth * 0.5,
@@ -266,5 +272,6 @@ function stampFooters(
       align: 'right',
       lineBreak: false,
     })
+    doc.page.margins.bottom = savedBottom
   }
 }

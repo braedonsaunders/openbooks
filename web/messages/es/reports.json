@@ -813,5 +813,12 @@
   "flyout": {
     "title": "Asiento contable",
     "openTransaction": "Abrir transacción completa"
+  },
+  "export": {
+    "pdf": "PDF",
+    "xlsx": "Excel",
+    "csv": "CSV",
+    "print": "Imprimir",
+    "printFailed": "No se pudo abrir el cuadro de impresión"
   }
 }

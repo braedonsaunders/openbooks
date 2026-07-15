@@ -2,10 +2,12 @@ import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions } from '../../../../lib/reports'
+import { orgInfo } from '../../../../lib/data'
 import { profitAndLossView } from '../../../../lib/statement-matrix'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { StatementMatrixTable } from '../StatementMatrixTable'
+import { StatementPaper } from '../StatementPaper'
 import { StatementExport } from '../StatementExport'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
@@ -27,7 +29,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
     totalOf: (section: string) => t('statement.sectionTotal', { section }),
   }
 
-  const [view, opts] = await Promise.all([
+  const [view, opts, org] = await Promise.all([
     profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
       breakout: q.breakout,
       compare: q.compare,
@@ -36,6 +38,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
       showZero: q.showZero,
     }),
     dimensionOptions(),
+    orgInfo(),
   ])
 
   const periodQs = new URLSearchParams({ from: period.from, to: period.to }).toString()
@@ -77,12 +80,19 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
         </>
       }
     >
-      <StatementMatrixTable
-        view={view}
-        scale={q.scale}
-        periodQs={`?${periodQs}`}
-        drill={{ dims: q.dims, basis: q.basis, back: backHref, backLabel: t('pnl.title') }}
-      />
+      <StatementPaper
+        company={org?.name ?? 'openbooks'}
+        title={t('pnl.title')}
+        periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
+        note={scale.note || undefined}
+      >
+        <StatementMatrixTable
+          view={view}
+          scale={q.scale}
+          periodQs={`?${periodQs}`}
+          drill={{ dims: q.dims, basis: q.basis, back: backHref, backLabel: t('pnl.title') }}
+        />
+      </StatementPaper>
     </ListPageLayout>
   )
 }

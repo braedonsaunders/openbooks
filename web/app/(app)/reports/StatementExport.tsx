@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { Button } from '@openbooks/ui'
 import { Download, FileText, Sheet } from 'lucide-react'
+import { PrintButton } from './PrintButton'
 
 /**
  * Export buttons for a financial statement: PDF, Excel, CSV. Links are plain
@@ -24,6 +25,7 @@ export async function StatementExport({
   const csv = `${base}?${new URLSearchParams({ format: 'csv', ...Object.fromEntries(qs) })}`
   return (
     <div className="flex items-center gap-2">
+      <PrintButton href={pdf} />
       <Button variant="outline" asChild>
         <a href={pdf}>
           <FileText size={15} /> {t('pdf')}
