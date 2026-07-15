@@ -107,11 +107,15 @@ export function BillDrawer({
   const router = useRouter()
   const doc = bill.doc
   const isDraft = doc.status === 'draft'
-  // NetSuite-style edit-in-place: draft, approved, and POSTED bills are all
-  // editable. Saving a posted bill re-materializes its GL-Impact projection
-  // (the server blocks only GL changes into a closed period). pending_approval
-  // and voided bills are read-only.
-  const editable = doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted'
+  // NetSuite-style record model: the flyout opens READ-ONLY (view mode) with an
+  // Edit button; a brand-new draft opens straight into edit. Draft/approved/
+  // posted are all editable (saving a posted bill re-materializes its GL-Impact
+  // projection; the server blocks only GL changes into a closed period).
+  // pending_approval and voided bills cannot be edited. Save is EXPLICIT — one
+  // Save button, no per-field autosave.
+  const canEditStatus = doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted'
+  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -161,34 +165,58 @@ export function BillDrawer({
     }),
     [partyId, documentDate, dueDate, referenceNumber, memo, customValues, rows, lineDefs],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!editable) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/bills/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        const data = (await res.json()) as BillPayload
-        setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('toasts.autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, editable])
+  }, [payload])
+
+  /** Reset every field back to the loaded document (used by Cancel). */
+  function resetForm() {
+    setPartyId(doc.party_id ?? '')
+    setDocumentDate(doc.document_date ?? '')
+    setDueDate(doc.due_date ?? '')
+    setReferenceNumber(doc.reference_number ?? '')
+    setMemo(doc.memo ?? '')
+    setCustomValues(doc.custom ?? {})
+    setRows(bill.lines.length > 0 ? bill.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()])
+    setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/bills/${doc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      const data = (await res.json()) as BillPayload
+      setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? 'Save failed')
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function act(action: 'submit' | 'post') {
     setBusy(true)
@@ -278,30 +306,42 @@ export function BillDrawer({
           </Badge>
         </span>
       }
-      description={
-        editable
-          ? doc.vendor_name
-            ? t('drawer.vendorAutosaveHint', { vendor: doc.vendor_name })
-            : t('drawer.autosaveHint')
-          : (doc.vendor_name ?? undefined)
-      }
+      description={mode === 'edit' ? 'Editing — Save to apply changes' : (doc.vendor_name ?? undefined)}
       headerActions={
         <>
-          {isDraft ? (
-            <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
-              {t('actions.submitForApproval')}
-            </Button>
-          ) : null}
-          {doc.status === 'approved' ? (
-            <Button disabled={busy} onClick={() => act('post')}>
-              {tCommon('actions.post')}
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
-            </Button>
-          ) : null}
+          {mode === 'edit' ? (
+            <>
+              <Button disabled={busy} onClick={save}>
+                {busy ? 'Saving…' : 'Save'}
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {canEditStatus ? (
+                <Button variant="outline" onClick={() => setMode('edit')}>
+                  Edit
+                </Button>
+              ) : null}
+              {isDraft ? (
+                <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
+                  {t('actions.submitForApproval')}
+                </Button>
+              ) : null}
+              {doc.status === 'approved' ? (
+                <Button disabled={busy} onClick={() => act('post')}>
+                  {tCommon('actions.post')}
+                </Button>
+              ) : null}
+              {doc.entry_id ? (
+                <Button variant="outline" asChild>
+                  <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
+                </Button>
+              ) : null}
+            </>
+          )}
         </>
       }
       footer={
@@ -312,14 +352,14 @@ export function BillDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {editable
-              ? saveState === 'saved'
-                ? t('drawer.saveState.saved')
-                : saveState === 'saving'
-                  ? tCommon('actions.saving')
-                  : saveState === 'error'
-                    ? t('drawer.saveState.error')
-                    : t('drawer.saveState.dirty')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tCommon('actions.saving')
+                : saveState === 'error'
+                  ? t('drawer.saveState.error')
+                  : dirty
+                    ? t('drawer.saveState.dirty')
+                    : null
               : null}
           </span>
           <span className="flex-1" />
