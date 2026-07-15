@@ -17,7 +17,15 @@
       "agingTitle": "AR / AP Aging",
       "agingDescription": "Open-item balances per party, bucketed by age past due",
       "cashFlowTitle": "Cash Flow Statement",
-      "cashFlowDescription": "Direct method — operating, investing and financing, tied to bank movements"
+      "cashFlowDescription": "Direct method — operating, investing and financing, tied to bank movements",
+      "generalLedgerTitle": "General Ledger",
+      "generalLedgerDescription": "Per-account posted activity with a running balance — the audit-ready detail behind every statement",
+      "journalTitle": "Journal",
+      "journalDescription": "Every posted journal entry with its lines — the chronological book of original entry",
+      "registersTitle": "A/R & A/P Registers",
+      "registersDescription": "Per-customer and per-vendor transaction registers with running balances",
+      "budgetTitle": "Budget vs Actual",
+      "budgetDescription": "Actuals against a budget scenario, by account, with variance $ and %"
     }
   },
   "statement": {
@@ -38,6 +46,43 @@
     "projectAria": "Project filter",
     "allProjects": "All projects"
   },
+  "filterBar": {
+    "period": "Period",
+    "asOf": "As of",
+    "from": "From",
+    "to": "To",
+    "breakout": "Breakout",
+    "breakoutNone": "Total",
+    "breakoutOpts": {
+      "department": "Department",
+      "project": "Project",
+      "location": "Location",
+      "class": "Class",
+      "month": "Month",
+      "quarter": "Quarter"
+    },
+    "compare": "Compare",
+    "compareNone": "None",
+    "comparePriorPeriod": "Prior period",
+    "comparePriorYear": "Prior year",
+    "basis": "Basis",
+    "basisAccrual": "Accrual",
+    "basisCash": "Cash",
+    "department": "Department filter",
+    "project": "Project filter",
+    "location": "Location filter",
+    "class": "Class filter",
+    "allDepartments": "All departments",
+    "allProjects": "All projects",
+    "allLocations": "All locations",
+    "allClasses": "All classes",
+    "scale": "Scale",
+    "scaleActual": "Actual",
+    "scaleThousands": "Thousands",
+    "scaleMillions": "Millions",
+    "showZeros": "Show zeros",
+    "truncated": "Some breakout columns were hidden to keep the report readable."
+  },
   "balanceSheet": {
     "title": "Balance Sheet",
     "asOf": "as of {date}",
@@ -46,7 +91,8 @@
     "equity": "Equity",
     "equation": "A = L + E",
     "balanced": "balanced",
-    "offBy": "off by {amount}"
+    "offBy": "off by {amount}",
+    "liabilitiesAndEquity": "Total Liabilities and Equity"
   },
   "pnl": {
     "title": "Profit & Loss",
@@ -98,7 +144,10 @@
     "noParty": "(no party)",
     "empty": "No open items as of this date.",
     "columns": {
-      "total": "Total"
+      "total": "Total",
+      "due": "Due",
+      "age": "Age (days)",
+      "bucket": "Bucket"
     },
     "buckets": {
       "current": "Current",
@@ -106,7 +155,9 @@
       "b2": "31–60",
       "b3": "61–90",
       "b4": "90+"
-    }
+    },
+    "summary": "Summary",
+    "detail": "Detail"
   },
   "cashFlow": {
     "title": "Cash Flow Statement",
@@ -227,7 +278,10 @@
         "week": "by week",
         "month": "by month",
         "quarter": "by quarter",
-        "year": "by year"
+        "year": "by year",
+        "fiscal_period": "by fiscal period",
+        "fiscal_quarter": "by fiscal quarter",
+        "fiscal_year": "by fiscal year"
       },
       "agg": {
         "count": "Count of rows",
@@ -638,7 +692,8 @@
     "this_week": "is this week",
     "this_month": "is this month",
     "this_year": "is this year",
-    "before_now": "is in the past (overdue)"
+    "before_now": "is in the past (overdue)",
+    "period_preset": "in fiscal period"
   },
   "aggs": {
     "count": "Count",
@@ -668,7 +723,10 @@
       "week": "week",
       "month": "month",
       "quarter": "quarter",
-      "year": "year"
+      "year": "year",
+      "fiscal_period": "fiscal period",
+      "fiscal_quarter": "fiscal quarter",
+      "fiscal_year": "fiscal year"
     },
     "csvSection": "Section"
   },
@@ -703,5 +761,49 @@
       "name": "Expense detail by department (this FY)",
       "description": "Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount."
     }
+  },
+  "generalLedger": {
+    "title": "General Ledger",
+    "empty": "No posted activity in this period.",
+    "truncated": "Showing the first 5,000 lines — narrow the period or filter to an account to see everything.",
+    "opening": "Opening balance",
+    "closing": "Closing balance",
+    "columns": {
+      "date": "Date",
+      "entry": "Entry",
+      "detail": "Party / memo"
+    }
+  },
+  "journal": {
+    "title": "Journal",
+    "empty": "No posted entries in this period.",
+    "truncated": "Showing the first 4,000 lines — narrow the period to see everything.",
+    "columns": {
+      "detail": "Party / memo"
+    }
+  },
+  "registers": {
+    "arTitle": "A/R Register",
+    "apTitle": "A/P Register",
+    "receivables": "Receivables",
+    "payables": "Payables",
+    "truncated": "Showing the first 4,000 lines — narrow the period to see everything.",
+    "empty": "No activity in this period.",
+    "closing": "Closing"
+  },
+  "budget": {
+    "title": "Budget vs Actual",
+    "description": "Actual ledger activity against a budget scenario, by account.",
+    "noScenarios": "No budget scenarios yet. Create one to compare against actuals.",
+    "scenario": "Scenario",
+    "actual": "Actual",
+    "budget": "Budget",
+    "variance": "Variance",
+    "variancePct": "Variance %"
+  },
+  "statements": {
+    "title": "Account Statement",
+    "opening": "Opening balance",
+    "closing": "Closing balance"
   }
 }

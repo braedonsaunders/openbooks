@@ -46,6 +46,7 @@ type Initial = {
   baseCurrency: string
   fiscalYearStartMonth: number
   defaultLocale: Locale
+  reportPdfStyle: 'formal' | 'modern'
   controlAccounts: ControlAccounts
 }
 
@@ -206,6 +207,22 @@ export function SettingsForm({
             </Select>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {t('organization.defaultLanguageHint')}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="reportPdfStyle">{t('organization.reportPdfStyle')}</Label>
+            <Select
+              id="reportPdfStyle"
+              value={form.reportPdfStyle}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, reportPdfStyle: e.target.value === 'formal' ? 'formal' : 'modern' }))
+              }
+            >
+              <option value="modern">{t('organization.reportPdfStyleModern')}</option>
+              <option value="formal">{t('organization.reportPdfStyleFormal')}</option>
+            </Select>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('organization.reportPdfStyleHint')}
             </p>
           </div>
           <div className="space-y-1.5">

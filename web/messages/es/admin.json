@@ -10,51 +10,11 @@
       "activity": "Actividad y datos"
     },
     "cards": {
-  "apiKeys": {
-    "title": "Claves API",
-    "description": "Claves API con permisos específicos para integraciones y automatización. Cada clave lleva un subconjunto de permisos — una solicitud se permite solo cuando los permisos de la clave Y los permisos efectivos del propietario la cubren.",
-    "searchPlaceholder": "Buscar claves, propietarios…",
-    "empty": "Aún no hay claves API — cree una para comenzar a crear integraciones.",
-    "table": {
-      "name": "Nombre",
-      "key": "Clave",
-      "owner": "Propietario",
-      "scopes": "Permisos",
-      "scopesCount": "{count, plural, one {# permiso} other {# permisos}}",
-      "fullScope": "Permiso completo (hereda del propietario)",
-      "lastUsed": "Último uso",
-      "status": "Estado"
-    },
-    "statusActive": "activa",
-    "statusRevoked": "revocada",
-    "drawer": {
-      "newKey": "Nueva clave API",
-      "newTitle": "Nueva clave API",
-      "description": "Cree una clave con permisos específicos para acceso programático a la API REST. La clave se muestra una sola vez — guárdela de forma segura.",
-      "nameRequired": "Se requiere un nombre",
-      "namePlaceholder": "Integración de sincronización de producción",
-      "descriptionPlaceholder": "¿Para qué sirve esta clave?",
-      "saveFailed": "No se pudo guardar la clave",
-      "created": "Clave creada",
-      "updated": "Clave actualizada",
-      "revoke": "Revocar",
-      "revokeConfirm": "¿Revocar esta clave? Todas las integraciones que la usen dejarán de funcionar inmediatamente. Esta acción no se puede deshacer.",
-      "revokeFailed": "No se pudo revocar la clave",
-      "revoked": "Clave revocada",
-      "revokedNotice": "Esta clave ha sido revocada y ya no puede autenticar solicitudes.",
-      "keyCreated": "Copie su clave API",
-      "keyCreatedHint": "Esta es la única vez que se mostrará la clave completa. Guárdela de forma segura — no podrá volver a verla.",
-      "copy": "Copiar",
-      "copied": "Copiado al portapapeles",
-      "createKey": "Crear clave",
-      "saveChanges": "Guardar cambios",
-      "scopesHeading": "Permisos de la clave",
-      "scopesHint": "Seleccione los permisos que otorga esta clave. Déjelo vacío para heredar el conjunto completo de permisos del propietario. Una clave nunca otorga más de lo que tiene su propietario.",
-      "fullScope": "Permiso completo (hereda los permisos del propietario)",
-      "scopesCount": "{count, plural, one {# permiso seleccionado} other {# permisos seleccionados}}"
-    }
-  },
-  "settings": {
+      "apiKeys": {
+        "title": "Claves API",
+        "description": "Cree claves API con permisos específicos para integraciones y consulte los registros de uso"
+      },
+      "settings": {
         "title": "Empresa y contabilidad",
         "description": "Identidad de la organización, moneda base, ejercicio fiscal y cuentas de control"
       },
@@ -81,10 +41,6 @@
       "scripts": {
         "title": "Scripts",
         "description": "Automatización aislada (sandbox) que se ejecuta con eventos del libro mayor"
-      },
-      "apiKeys": {
-        "title": "Claves API",
-        "description": "Cree claves API con permisos específicos para integraciones y consulte los registros de uso"
       },
       "audit": {
         "title": "Registro de auditoría",
@@ -419,7 +375,11 @@
       "defaultLanguage": "Idioma predeterminado",
       "defaultLanguageHint": "El idioma en que se muestra la aplicación para todos los que no hayan elegido el suyo en el menú de la cuenta.",
       "baseCurrency": "Moneda base",
-      "baseCurrencyHint": "La moneda de reporte en la que se equilibra el libro mayor. Agregue más monedas antes de cambiarla."
+      "baseCurrencyHint": "La moneda de reporte en la que se equilibra el libro mayor. Agregue más monedas antes de cambiarla.",
+      "reportPdfStyle": "Estilo de PDF de informes financieros",
+      "reportPdfStyleModern": "Moderno (con marca)",
+      "reportPdfStyleFormal": "Formal (PCGA)",
+      "reportPdfStyleHint": "Cómo se ven los estados financieros exportados: Moderno usa el color de su marca y una tipografía sans-serif; Formal es un estado clásico en serif, escala de grises, listo para auditoría."
     },
     "fiscal": {
       "title": "Ejercicio fiscal",

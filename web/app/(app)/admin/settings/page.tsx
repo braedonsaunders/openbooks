@@ -66,6 +66,7 @@ export default async function CompanySettingsPage() {
             fiscalYearStartMonth:
               typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
             defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
+            reportPdfStyle: settings.reportPdfStyle === 'formal' ? 'formal' : 'modern',
             controlAccounts: {
               ar: control.ar ?? '',
               ap: control.ap ?? '',

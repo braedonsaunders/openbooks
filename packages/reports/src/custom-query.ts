@@ -43,6 +43,9 @@ export type CompiledReportQuery = {
 export type CompileCustomQueryOpts = {
   /** Extra clamp under MAX_REPORT_ROWS (e.g. 50 for studio previews). */
   maxRows?: number
+  /** Org fiscal-year start month (1–12) for the `fiscal_*` temporal bins. The
+   *  engine stays DB-free — the caller supplies it. Defaults to 1 (calendar). */
+  fiscalStartMonth?: number
 }
 
 /**
@@ -148,7 +151,8 @@ function compileSummarize(
   measures = measures.filter((m) => REPORT_AGG_FNS.includes(m.fn))
   if (measures.length === 0) measures = [{ fn: 'count' }]
 
-  const dimSelect = breakouts.map((b, i) => `${dimExpr(entity, b)} AS "d${i}"`)
+  const startMonth = opts.fiscalStartMonth && opts.fiscalStartMonth >= 1 && opts.fiscalStartMonth <= 12 ? opts.fiscalStartMonth : 1
+  const dimSelect = breakouts.map((b, i) => `${dimExpr(entity, b, startMonth)} AS "d${i}"`)
   const measSelect = measures.map((m, i) => `${measureExpr(entity, m)} AS "m${i}"`)
 
   const params = new SqlParams()
@@ -192,11 +196,22 @@ function compileSummarize(
 }
 
 /** SQL for a group-by dimension, with optional temporal bucketing. The bin is
- *  re-validated against the whitelist before interpolation (defence in depth). */
-function dimExpr(entity: ReportEntity, b: ReportBreakout): string {
+ *  re-validated against the whitelist before interpolation (defence in depth).
+ *  `fiscal_*` bins bucket to the fiscal calendar: shift the date back by
+ *  (startMonth − 1) months so fiscal boundaries align to calendar ones, truncate,
+ *  then shift forward. `startMonth` is a clamped integer, never user input. */
+function dimExpr(entity: ReportEntity, b: ReportBreakout, startMonth = 1): string {
   const ref = columnRef(entity, b.column)!
   const bin = b.bin && REPORT_TEMPORAL_BINS.includes(b.bin) ? b.bin : null
-  return bin ? `date_trunc('${bin}', ${ref})` : ref
+  if (!bin) return ref
+  if (bin === 'fiscal_period') return `date_trunc('month', ${ref})`
+  if (bin === 'fiscal_quarter' || bin === 'fiscal_year') {
+    const unit = bin === 'fiscal_year' ? 'year' : 'quarter'
+    const shift = startMonth - 1
+    if (shift === 0) return `date_trunc('${unit}', ${ref})`
+    return `(date_trunc('${unit}', (${ref})::timestamp - interval '${shift} months') + interval '${shift} months')`
+  }
+  return `date_trunc('${bin}', ${ref})`
 }
 
 /** SQL for an aggregate measure. Identifiers come from the catalog only. */

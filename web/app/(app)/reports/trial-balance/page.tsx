@@ -3,8 +3,10 @@ import { getTranslations } from 'next-intl/server'
 import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions, trialBalance } from '../../../../lib/reports'
+import { resolvePeriod } from '../../../../lib/periods'
+import { parseReportQuery } from '../../../../lib/report-filters'
 import { money } from '../../../../lib/format'
-import { DimensionFilter } from '../DimensionFilter'
+import { ReportFilterBar } from '../ReportFilterBar'
 import { StatementExport } from '../StatementExport'
 import { SaveViewButton } from '../SaveViewButton'
 
@@ -13,13 +15,15 @@ export const dynamic = 'force-dynamic'
 export default async function TrialBalance({
   searchParams,
 }: {
-  searchParams: Promise<{ asof?: string; dept?: string; project?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
-  const date = sp.asof ?? new Date().toISOString().slice(0, 10)
-  const dims = { departmentId: sp.dept || undefined, projectId: sp.project || undefined }
+  const q = parseReportQuery(sp)
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const date = period.to
+  const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
   const [rows, opts] = await Promise.all([trialBalance(date, dims), dimensionOptions()])
   const totalDebits = rows.reduce((a, r) => a + Number(r.debits), 0)
   const totalCredits = rows.reduce((a, r) => a + Number(r.credits), 0)
@@ -32,9 +36,9 @@ export default async function TrialBalance({
             title={t('trialBalance.title')}
             description={t('trialBalance.description', { date, count: rows.length })}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={<><SaveViewButton /><StatementExport kind="trial-balance" params={{ asOf: date, dept: sp.dept, project: sp.project }} /></>}
+            actions={<><SaveViewButton /><StatementExport kind="trial-balance" params={sp} /></>}
           />
-          <DimensionFilter departments={opts.departments} projects={opts.projects} />
+          <ReportFilterBar controls={{ period: true, asOf: true, dimensions: true }} dimensions={opts} />
         </>
       }
     >

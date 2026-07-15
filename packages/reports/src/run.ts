@@ -91,7 +91,10 @@ export async function runCustomQuery(
     throw new Error('Custom query missing or has unknown entity')
   }
 
-  const compiled = compileCustomQuery(entity, q, opts.orgId, { maxRows: opts.maxRows })
+  const compiled = compileCustomQuery(entity, q, opts.orgId, {
+    maxRows: opts.maxRows,
+    fiscalStartMonth: opts.fiscalStartMonth,
+  })
   const { rows } = await client.query(compiled.text, compiled.values)
 
   const labels = opts.labels ?? {}
