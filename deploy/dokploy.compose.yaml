@@ -1,35 +1,29 @@
 # openbooks dev stack for Dokploy (project "openbooks").
 #
-# Source of truth: this file is stored as the compose service's raw compose in
-# Dokploy; the GitHub deploy workflow updates OPENBOOKS_TAG in the Dokploy env
-# and triggers compose.deploy. All ${VARS} live in the Dokploy environment.
+# Deployed as a SWARM STACK (composeType "stack") pinned to the manager node,
+# matching the other cluster apps (beaconhs, minio). Swarm placement puts the
+# service on the same node as dokploy-traefik and makes it visible to Traefik's
+# swarm provider; ingress is wired by a Dokploy managed domain (file provider),
+# the proven routing path for *.cloud.rassaun.com. The GitHub deploy workflow
+# bumps OPENBOOKS_TAG and triggers compose.deploy.
 #
-# Database: the EXISTING Patroni pgcluster VM database — no bundled Postgres.
-# OPENBOOKS_DB_URL points at it directly (LAN address, reachable from the
-# Dokploy host's containers).
-#
-# Networks:
-#   dokploy-network — Traefik ingress (the Dokploy domain routes to web:3000).
-#   infra-net       — shared infrastructure overlay; MinIO lives here (minio:9000).
+# Database: the EXISTING Patroni pgcluster VM database (never a bundled
+# Postgres). MinIO blob storage is reached over its public S3 endpoint.
 
 networks:
   dokploy-network:
-    external: true
-  infra-net:
     external: true
 
 services:
   web:
     image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_TAG:-latest}
-    restart: unless-stopped
     environment:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: '3000'
-      # Existing pgcluster database.
       OPENBOOKS_DB_URL: ${OPENBOOKS_DB_URL}
       SESSION_SECRET: ${SESSION_SECRET}
-      # File-cabinet blob storage → shared MinIO over infra-net.
+      # File-cabinet blob storage → shared MinIO via its public S3 endpoint.
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
@@ -40,11 +34,9 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_NAME: ${ADMIN_NAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      # Optional: AI assistant provider key.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     networks:
       - dokploy-network
-      - infra-net
     healthcheck:
       test:
         - CMD
@@ -56,6 +48,13 @@ services:
       retries: 5
       start_period: 60s
     deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname==dokploy-mgr
       resources:
         limits:
           memory: 2g
+      restart_policy:
+        condition: any
+        delay: 5s
