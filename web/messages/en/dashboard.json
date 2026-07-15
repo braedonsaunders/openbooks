@@ -14,6 +14,21 @@
     "body": "An external accounting system is connected for parallel-run verification. Sync is manual; every sync re-verifies the trial balance per account.",
     "link": "Sync page"
   },
+  "home": {
+    "customize": "Customize",
+    "customizeHint": "Rearrange the cards on your home board",
+    "browseInsights": "All insights",
+    "noBoard": "No home dashboard yet",
+    "noBoardBody": "Build cards in Insights, arrange them on a dashboard, then set it as the home board.",
+    "openInsights": "Open Insights",
+    "personalBadge": "Your board",
+    "roleBadge": "Role default",
+    "systemBadge": "Company default",
+    "ledgerBalanced": "Ledger balanced",
+    "ledgerOut": "Ledger out by {amount}",
+    "parityOk": "Parallel-run matched",
+    "parityOff": "Parallel-run mismatch"
+  },
   "recentRuns": {
     "title": "Recent sync runs",
     "started": "Started",

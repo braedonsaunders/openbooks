@@ -108,6 +108,14 @@ export const users = pgTable(
     /** UI language (BCP 47, e.g. "en", "fr"). Null = inherit the org default
      *  (orgs.settings.defaultLocale). Shipped locales: web/i18n/config.ts. */
     locale: text("locale"),
+    /**
+     * The user's personal home dashboard (insight_dashboards.id). Null = fall
+     * back to their role's default home, then the org's seeded system default.
+     * See web/app/(app)/page.tsx `resolveHomeDashboard`. No FK column — the home
+     * loader tolerates a dangling pointer (renders the fallback) so deleting a
+     * dashboard can't lock a user out of their home.
+     */
+    homeDashboardId: uuid("home_dashboard_id"),
     isActive: boolean("is_active").notNull().default(true),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     ...auditColumns,

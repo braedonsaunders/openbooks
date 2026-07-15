@@ -14,6 +14,21 @@
     "body": "Un système comptable externe est connecté pour la vérification en parallèle. La synchronisation est manuelle; chaque synchronisation revérifie la balance de vérification compte par compte.",
     "link": "Page de synchronisation"
   },
+  "home": {
+    "customize": "Personnaliser",
+    "customizeHint": "Réorganisez les cartes de votre tableau d’accueil",
+    "browseInsights": "Toutes les analyses",
+    "noBoard": "Aucun tableau d’accueil",
+    "noBoardBody": "Créez des cartes dans Analyses, disposez-les sur un tableau, puis définissez-le comme tableau d’accueil.",
+    "openInsights": "Ouvrir Analyses",
+    "personalBadge": "Votre tableau",
+    "roleBadge": "Par défaut du rôle",
+    "systemBadge": "Par défaut de l’entreprise",
+    "ledgerBalanced": "Grand livre équilibré",
+    "ledgerOut": "Grand livre en écart de {amount}",
+    "parityOk": "Exécution en parallèle concordante",
+    "parityOff": "Écart d’exécution en parallèle"
+  },
   "recentRuns": {
     "title": "Synchronisations récentes",
     "started": "Démarrée",
