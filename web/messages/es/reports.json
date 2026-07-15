@@ -37,7 +37,9 @@
     "customStudio": {
       "title": "Constructor de informes",
       "description": "Cree, guarde y programe sus propios informes sobre el libro mayor"
-    }
+    },
+    "searchPlaceholder": "Buscar informes…",
+    "noMatches": "Ningún informe coincide con tu búsqueda."
   },
   "statement": {
     "sectionTotal": "Total {section}",

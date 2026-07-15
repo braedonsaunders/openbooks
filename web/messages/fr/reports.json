@@ -37,7 +37,9 @@
     "customStudio": {
       "title": "Constructeur de rapports",
       "description": "Créez, enregistrez et planifiez vos propres rapports sur le grand livre"
-    }
+    },
+    "searchPlaceholder": "Rechercher des rapports…",
+    "noMatches": "Aucun rapport ne correspond à votre recherche."
   },
   "statement": {
     "sectionTotal": "Total {section}",
