@@ -6,16 +6,13 @@ jobs:
     runs-on: [self-hosted, linux, x64, dokploy]
     timeout-minutes: 5
     steps:
-      - name: Clean stale compose network
+      - name: Confirm bootstrap + reachability from runner
         run: |
           set +e
-          PREFIX=compose-bypass-open-source-driver-miu7hf
-          echo "=== stale containers ==="
-          docker ps -a --filter "name=$PREFIX" --format '{{.Names}} {{.Status}}'
-          docker ps -aq --filter "name=$PREFIX" | xargs -r docker rm -f
-          echo "=== networks named $PREFIX ==="
-          docker network ls --filter "name=$PREFIX" --format '{{.Name}} {{.Driver}} {{.Scope}}'
-          docker network ls --filter "name=$PREFIX" -q | xargs -r docker network rm
-          echo "=== after cleanup ==="
-          docker network ls --filter "name=$PREFIX" --format '{{.Name}}'
-          echo "done"
+          echo "=== bootstrap log lines from web task ==="
+          CID=$(docker ps --filter "name=miu7hf_web" --format '{{.ID}}' | head -1)
+          docker logs "$CID" 2>&1 | grep -iE "bootstrap|baselin|migrat|admin|role|period|error" | tail -20
+          echo "=== health via public URL (hairpin) ==="
+          curl -s -m 10 -o /dev/null -w "public = %{http_code}\n" https://openbooks.cloud.rassaun.com/api/v1/health
+          echo "=== health via swarm service DNS ==="
+          curl -s -m 10 -o /dev/null -w "svc = %{http_code}\n" "http://compose-bypass-open-source-driver-miu7hf_web:3000/api/v1/health"
