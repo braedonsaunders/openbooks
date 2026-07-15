@@ -107,11 +107,20 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
-  await db.execute(sql`
-    delete from form_layouts where id = ${id} and org_id = ${user.orgId}
-      returning name`);
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${user.orgId}, 'form_layouts', ${id}, 'delete', null, ${user.id})`);
+  // Delete + audit in one transaction so the two can't diverge (db.execute
+  // pools per-statement). audit_log.changes is jsonb NOT NULL, so log the
+  // deleted form's name rather than a bare null (which raised a 500).
+  const deleted = await db.transaction(async (tx) => {
+    const r = (await tx.execute(sql`
+      delete from form_layouts where id = ${id} and org_id = ${user.orgId}
+        returning name`)) as any;
+    const row = r.rows[0];
+    if (!row) return null;
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${user.orgId}, 'form_layouts', ${id}, 'delete', ${JSON.stringify({ name: row.name })}, ${user.id})`);
+    return row;
+  });
+  if (!deleted) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
