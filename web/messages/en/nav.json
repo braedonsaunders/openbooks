@@ -1,6 +1,7 @@
 {
   "modules": {
     "dashboard": "Dashboard",
+    "assistant": "Assistant",
     "approvals": "Approvals",
     "insights": "Insights",
     "purchase-orders": "Purchase Orders",
@@ -20,10 +21,10 @@
     "items": "Items & Services",
     "journal": "Journal",
     "accounts": "Chart of Accounts",
+    "assets": "Fixed Assets",
     "banking": "Banking",
     "close": "Period Close",
     "reports": "Reports",
-    "custom-reports": "Custom Reports",
     "sql": "SQL",
     "apps": "Apps",
     "records": "Record Types",

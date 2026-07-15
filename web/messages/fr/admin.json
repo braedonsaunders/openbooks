@@ -41,6 +41,10 @@
       "sync": {
         "title": "Synchronisation",
         "description": "Importez depuis des sources externes et rapprochez les migrations"
+      },
+      "ai": {
+        "title": "IA",
+        "description": "Fournisseur, modèles et clé API chiffrée pour l'assistant"
       }
     }
   },
@@ -456,6 +460,7 @@
       "projects": "Projets et coût de revient",
       "time": "Temps et feuilles de temps",
       "records": "Enregistrements personnalisés",
+      "assistant": "Assistant IA",
       "sql": "Console SQL",
       "sync": "Synchronisation",
       "scripts": "Scripts",
@@ -491,6 +496,8 @@
     "records_read": "Consulter les enregistrements personnalisés",
     "records_create": "Créer et modifier des enregistrements personnalisés",
     "records_manage_types": "Concevoir des types d’enregistrements personnalisés",
+    "assistant_use": "Utiliser l'assistant IA",
+    "assistant_write": "Autoriser l'assistant à préparer des brouillons",
     "sql_execute": "Exécuter des requêtes SQL en lecture seule",
     "sync_run": "Exécuter des synchronisations de sources externes",
     "scripts_manage": "Gérer les scripts utilisateur",
@@ -505,7 +512,52 @@
     "admin_roles_manage": "Gérer les rôles et les permissions",
     "admin_nav_manage": "Personnaliser la navigation",
     "admin_audit_read": "Consulter le journal d’audit",
+    "admin_ai_manage": "Gérer les paramètres d'IA",
     "assets_read": "Consulter les immobilisations et l’amortissement",
     "assets_manage": "Créer et modifier des immobilisations, exécuter l’amortissement"
+  },
+  "ai": {
+    "metaTitle": "Paramètres d'IA",
+    "title": "Paramètres d'IA",
+    "description": "Choisissez le fournisseur d'IA utilisé par l'assistant. La clé API est stockée chiffrée — jamais dans un fichier ni une variable d'environnement.",
+    "enabledLabel": "Activer les fonctions d'IA",
+    "providerLabel": "Fournisseur",
+    "baseUrlLabel": "URL de base",
+    "baseUrlRequired": "(requise)",
+    "baseUrlOptional": "(remplacement facultatif)",
+    "baseUrlDefault": "Laissez vide pour utiliser la valeur par défaut : {url}",
+    "baseUrlHint": "Un point de terminaison public HTTPS compatible OpenAI.",
+    "keyLabel": "Clé API",
+    "keyPlaceholder": "Collez la clé API de votre fournisseur",
+    "keySavedPlaceholder": "•••••••••••• (enregistrée — saisissez pour remplacer)",
+    "keySavedHint": "Une clé est enregistrée, chiffrée au repos. Saisissez-en une nouvelle pour la remplacer.",
+    "keyHint": "Stockée chiffrée au repos ; elle ne quitte jamais le serveur.",
+    "modelsLabel": "Modèles",
+    "fastModelLabel": "Modèle rapide",
+    "fastModelHint": "recherches rapides",
+    "smartModelLabel": "Modèle avancé",
+    "smartModelHint": "l'assistant",
+    "save": "Enregistrer les paramètres",
+    "saved": "Paramètres d'IA enregistrés.",
+    "saveFailed": "Les paramètres n'ont pas pu être enregistrés.",
+    "keyCleared": "Clé API supprimée.",
+    "removeKey": "Supprimer la clé API",
+    "testConnection": "Tester la connexion",
+    "testFailed": "La requête de test a échoué.",
+    "models": {
+      "load": "Charger les modèles",
+      "reload": "Recharger les modèles",
+      "loading": "Chargement…",
+      "loaded": "{count, plural, one {# modèle disponible} other {# modèles disponibles}}",
+      "loadError": "Impossible de charger les modèles.",
+      "none": "Aucun modèle",
+      "pick": "Choisir un modèle…",
+      "loadFirst": "Chargez d'abord les modèles, ou saisissez l'identifiant manuellement",
+      "pickFromList": "Choisir dans la liste",
+      "typeManually": "Saisir manuellement",
+      "current": "{id} (actuel)",
+      "hint": "Chargez la liste des modèles avec votre clé API, ou saisissez un identifiant de modèle manuellement.",
+      "idPlaceholder": "identifiant du modèle"
+    }
   }
 }

@@ -287,3 +287,7 @@ alter table insight_dashboard_pins add foreign key (org_id) references orgs(id),
 -- attachments
 alter table attachments add foreign key (org_id) references orgs(id);
 alter table attachment_blobs add foreign key (attachment_id) references attachments(id) on delete cascade;
+
+-- ai assistant
+alter table ai_conversations add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade;
+alter table ai_messages add foreign key (org_id) references orgs(id), add foreign key (conversation_id) references ai_conversations(id) on delete cascade;

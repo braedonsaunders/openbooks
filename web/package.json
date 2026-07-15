@@ -8,17 +8,25 @@
     "start": "next start -p 4780"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.97",
+    "@ai-sdk/google": "^3.0.93",
+    "@ai-sdk/openai": "^3.0.85",
+    "@ai-sdk/openai-compatible": "^2.0.60",
     "@openbooks/engine": "*",
     "@openbooks/schema": "*",
     "@openbooks/ui": "*",
+    "ai": "^6.0.226",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.24.0",
     "next": "16.2.10",
     "next-intl": "^4.13.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
-    "sonner": "^2.0.7"
+    "sonner": "^2.0.7",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.11",

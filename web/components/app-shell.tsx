@@ -5,6 +5,7 @@ import { type SidebarNavGroup } from './sidebar-nav'
 import type { Locale } from '../i18n/config'
 import { AppSidebar } from './app-sidebar'
 import { AccountMenu } from './account-menu'
+import { AssistantLauncher } from './assistant-launcher'
 import { MobileNavProvider } from './mobile-nav'
 import { MobileNavToggle } from './mobile-nav-toggle'
 import { MobileTabBar } from './mobile-tab-bar'
@@ -14,12 +15,15 @@ export function AppShell({
   orgName,
   groups,
   defaultCollapsed = false,
+  showAssistantLauncher = false,
   children,
 }: {
   account: { name: string; email: string; role: string; localePreference: Locale | null }
   orgName: string
   groups: SidebarNavGroup[]
   defaultCollapsed?: boolean
+  /** Renders the global ⌘K assistant launcher (user holds assistant.use). */
+  showAssistantLauncher?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -34,6 +38,7 @@ export function AppShell({
               {orgName}
             </span>
             <div className="flex-1" />
+            {showAssistantLauncher ? <AssistantLauncher /> : null}
             <AccountMenu
               name={account.name}
               email={account.email}

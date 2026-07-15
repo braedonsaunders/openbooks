@@ -19,3 +19,4 @@ export * from "./custom-records";
 export * from "./reporting";
 export * from "./insights";
 export * from "./attachments";
+export * from "./ai";

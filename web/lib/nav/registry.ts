@@ -17,6 +17,7 @@ export interface NavModule {
 
 export const NAV_MODULES: NavModule[] = [
   { key: 'dashboard', href: '/', label: 'Dashboard', iconKey: 'gauge', group: 'Overview', exact: true },
+  { key: 'assistant', href: '/assistant', label: 'Assistant', iconKey: 'sparkles', group: 'Overview', requiredPermission: 'assistant.use' },
   { key: 'approvals', href: '/approvals', label: 'Approvals', iconKey: 'check', group: 'Overview', requiredPermission: 'ap.approve' },
   { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'sparkles', group: 'Overview', requiredPermission: 'insights.read' },
 
@@ -52,9 +53,6 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Ledger', requiredPermission: 'gl.close' },
 
   { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', group: 'Insight', requiredPermission: 'reports.read' },
-  { key: 'report-cashflow', href: '/reports/cash-flow', label: 'Cash Flow', iconKey: 'file', group: 'Insight', requiredPermission: 'reports.read' },
-  { key: 'report-aging', href: '/reports/aging', label: 'AR / AP Aging', iconKey: 'file', group: 'Insight', requiredPermission: 'reports.read' },
-  { key: 'custom-reports', href: '/reports/custom', label: 'Custom Reports', iconKey: 'scroll', group: 'Insight', requiredPermission: 'reports.read' },
   { key: 'sql', href: '/query', label: 'SQL', iconKey: 'database', group: 'Insight', requiredPermission: 'sql.execute' },
 
   // Build — the customization/authoring tools
@@ -84,6 +82,7 @@ export const ADMIN_HUB_PERMISSIONS = [
   'admin.nav.manage',
   'admin.audit.read',
   'admin.custom_fields.manage',
+  'admin.ai.manage',
   'scripts.manage',
   'sync.run',
 ] as const
