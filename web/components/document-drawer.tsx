@@ -35,9 +35,15 @@ interface Opt {
 }
 interface LineRow extends Record<string, unknown> {
   accountId: string
+  itemId: string
   description: string
+  quantity: string
+  unit: string
+  unitPrice: string
   departmentId: string
   projectId: string
+  locationId: string
+  classId: string
   taxCodeId: string
   amount: string
   taxOverridden: boolean
@@ -70,9 +76,15 @@ const STATUS_KEYS: Record<string, string> = {
 
 const emptyLine = (): LineRow => ({
   accountId: '',
+  itemId: '',
   description: '',
+  quantity: '',
+  unit: '',
+  unitPrice: '',
   departmentId: '',
   projectId: '',
+  locationId: '',
+  classId: '',
   taxCodeId: '',
   amount: '',
   taxOverridden: false,
@@ -82,9 +94,15 @@ const emptyLine = (): LineRow => ({
 function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRow {
   const row: LineRow = {
     accountId: l.account_id ?? '',
+    itemId: l.item_id ?? '',
     description: l.description ?? '',
+    quantity: l.quantity != null ? String(l.quantity) : '',
+    unit: l.unit ?? '',
+    unitPrice: l.unit_price != null ? Number(l.unit_price).toFixed(2) : '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
+    locationId: l.location_id ?? '',
+    classId: l.class_id ?? '',
     taxCodeId: l.tax_code_id ?? '',
     amount: l.amount != null ? Number(l.amount).toFixed(2) : '',
     taxOverridden: l.tax_overridden === true,
@@ -105,6 +123,9 @@ export interface DocumentDrawerProps {
   bankAccounts?: Opt[]
   departments: Opt[]
   projects: Opt[]
+  locations?: Opt[]
+  classes?: Opt[]
+  items?: Opt[]
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
   canCreate: boolean
@@ -134,6 +155,9 @@ export function DocumentDrawer({
   bankAccounts,
   departments,
   projects,
+  locations,
+  classes,
+  items,
   headerDefs,
   lineDefs,
   canCreate,
@@ -173,6 +197,17 @@ export function DocumentDrawer({
   const [dueDate, setDueDate] = useState<string>(doc.due_date ?? '')
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
+  // Full-schema header built-ins (off by default; shown when a form enables them).
+  const [postingDate, setPostingDate] = useState<string>(doc.posting_date ?? '')
+  const [departmentId, setDepartmentId] = useState<string>(doc.department_id ?? '')
+  const [projectIdHeader, setProjectIdHeader] = useState<string>(doc.project_id ?? '')
+  const [locationId, setLocationId] = useState<string>(doc.location_id ?? '')
+  const [classId, setClassId] = useState<string>(doc.class_id ?? '')
+  const [expectedPayDate, setExpectedPayDate] = useState<string>(doc.expected_pay_date ?? '')
+  const [paymentHoldReason, setPaymentHoldReason] = useState<string>(doc.payment_hold_reason ?? '')
+  const [internalNotes, setInternalNotes] = useState<string>(doc.internal_notes ?? '')
+  const [billingMethod, setBillingMethod] = useState<string>(doc.billing_method ?? '')
+  const [isFinalInvoice, setIsFinalInvoice] = useState<boolean>(doc.is_final_invoice === true)
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
 
   // -- transfer: dedicated to/from + amount state ---------------------------
@@ -228,24 +263,42 @@ export function DocumentDrawer({
       dueDate: config.hasDueDate ? dueDate || null : null,
       referenceNumber: config.hasReference ? referenceNumber : null,
       memo,
+      // Full-schema header built-ins (persisted only when the form exposes them,
+      // but harmless to always send — the API updates the columns directly).
+      postingDate: postingDate || null,
+      departmentId: departmentId || null,
+      projectId: projectIdHeader || null,
+      locationId: locationId || null,
+      classId: classId || null,
+      expectedPayDate: expectedPayDate || null,
+      paymentHoldReason: paymentHoldReason || null,
+      internalNotes: internalNotes || null,
+      billingMethod: billingMethod || null,
+      isFinalInvoice,
       custom: customValues,
       lines: rows
         .filter((r) => r.accountId && Number(r.amount) > 0)
         .map((r) => ({
           accountId: r.accountId,
+          itemId: r.itemId || null,
           description: r.description,
+          quantity: r.quantity !== '' ? r.quantity : null,
+          unit: r.unit || null,
+          unitPrice: r.unitPrice !== '' ? r.unitPrice : null,
           amount: r.amount,
           taxCodeId: config.hasTax ? r.taxCodeId || null : null,
           taxOverridden: config.hasTax ? r.taxOverridden : false,
           taxAmount: config.hasTax && r.taxOverridden ? r.taxAmount : null,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
+          locationId: r.locationId || null,
+          classId: r.classId || null,
           custom: Object.fromEntries(
             lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
           ),
         })),
     }
-  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, customValues, rows, lineDefs, config])
+  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, rows, lineDefs, config])
 
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
@@ -265,6 +318,16 @@ export function DocumentDrawer({
     setDueDate(doc.due_date ?? '')
     setReferenceNumber(doc.reference_number ?? '')
     setMemo(doc.memo ?? '')
+    setPostingDate(doc.posting_date ?? '')
+    setDepartmentId(doc.department_id ?? '')
+    setProjectIdHeader(doc.project_id ?? '')
+    setLocationId(doc.location_id ?? '')
+    setClassId(doc.class_id ?? '')
+    setExpectedPayDate(doc.expected_pay_date ?? '')
+    setPaymentHoldReason(doc.payment_hold_reason ?? '')
+    setInternalNotes(doc.internal_notes ?? '')
+    setBillingMethod(doc.billing_method ?? '')
+    setIsFinalInvoice(doc.is_final_invoice === true)
     setCustomValues(doc.custom ?? {})
     setTransfer(initialTransfer)
     setRows(payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()])
@@ -424,7 +487,14 @@ export function DocumentDrawer({
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
         placeholder: t('drawer.accountPlaceholder'),
       },
+      item_id: {
+        key: 'itemId', width: 'minmax(150px,1.4fr)', type: 'search-select',
+        options: (items ?? []).map((it) => ({ value: it.id, label: `${it.code ? it.code + ' ' : ''}${it.name ?? ''}`.trim() })), placeholder: '—',
+      },
       description: { key: 'description', width: 'minmax(160px,1.6fr)', type: 'text' },
+      quantity: { key: 'quantity', width: '90px', type: 'text', align: 'right' },
+      unit: { key: 'unit', width: '80px', type: 'text' },
+      unit_price: { key: 'unitPrice', width: '110px', type: 'amount', align: 'right' },
       department_id: {
         key: 'departmentId', width: '140px', type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
@@ -432,6 +502,14 @@ export function DocumentDrawer({
       project_id: {
         key: 'projectId', width: 'minmax(150px,1.2fr)', type: 'search-select',
         options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })), placeholder: '—',
+      },
+      location_id: {
+        key: 'locationId', width: '140px', type: 'select',
+        options: [{ value: '', label: '—' }, ...(locations ?? []).map((l) => ({ value: l.id, label: l.name ?? '' }))],
+      },
+      class_id: {
+        key: 'classId', width: '140px', type: 'select',
+        options: [{ value: '', label: '—' }, ...(classes ?? []).map((c) => ({ value: c.id, label: c.name ?? '' }))],
       },
       tax_code_id: {
         key: 'taxCodeId', width: '110px', type: 'select',
@@ -446,9 +524,15 @@ export function DocumentDrawer({
     }
     const defLabel: Record<string, string> = {
       account_id: t('drawer.accountColumn'),
+      item_id: tCommon('labels.item'),
       description: tCommon('labels.description'),
+      quantity: tCommon('labels.quantity'),
+      unit: tCommon('labels.unit'),
+      unit_price: tCommon('labels.unitPrice'),
       department_id: tCommon('labels.department'),
       project_id: tCommon('labels.project'),
+      location_id: tCommon('labels.location'),
+      class_id: tCommon('labels.class'),
       tax_code_id: tCommon('labels.tax'),
       amount: tCommon('labels.amount'),
       tax_amount: t('drawer.taxAmountColumn'),
@@ -473,7 +557,7 @@ export function DocumentDrawer({
       })
       .filter((c): c is LineGridColumn<LineRow> => c !== null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, taxCodes, lineDefs, cfColumns, columns, recordType, t, tCommon])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxCodes, lineDefs, cfColumns, columns, recordType, t, tCommon])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {
@@ -484,11 +568,25 @@ export function DocumentDrawer({
       case 'due_date': return t('drawer.dueDate')
       case 'reference_number': return t('drawer.reference')
       case 'memo': return tCommon('labels.memo')
+      case 'posting_date': return tCommon('labels.postingDate')
+      case 'department_id': return tCommon('labels.department')
+      case 'project_id': return tCommon('labels.project')
+      case 'location_id': return tCommon('labels.location')
+      case 'class_id': return tCommon('labels.class')
+      case 'expected_pay_date': return tCommon('labels.expectedPayDate')
+      case 'payment_hold_reason': return tCommon('labels.paymentHold')
+      case 'internal_notes': return tCommon('labels.internalNotes')
+      case 'billing_method': return tCommon('labels.billingMethod')
+      case 'is_final_invoice': return tCommon('labels.finalInvoice')
       default:
         if (isCustomFieldKey(key)) return headerDefByDefKey.get(customFieldDefKey(key))?.label ?? key
         return key
     }
   }
+
+  // Look up a dimension/entity display name for read-only header rendering.
+  const optName = (opts: Opt[] | undefined, id: unknown): string =>
+    (opts ?? []).find((o) => o.id === id)?.name ?? (opts ?? []).find((o) => o.id === id)?.display_name ?? '—'
 
   const renderHeaderField = (p: HeaderFieldPlacement, isEditable: boolean): React.ReactNode => {
     const label = p.labelOverride?.trim() ? p.labelOverride.trim() : defLabelForHeader(p.key)
@@ -560,6 +658,107 @@ export function DocumentDrawer({
             {isEditable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (<p className="text-sm">{doc.memo ?? '—'}</p>)}
+          </>
+        )
+      case 'posting_date':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
+            ) : (<p className="text-sm">{doc.posting_date ?? '—'}</p>)}
+          </>
+        )
+      case 'expected_pay_date':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <Input type="date" value={expectedPayDate} onChange={(e) => setExpectedPayDate(e.target.value)} />
+            ) : (<p className="text-sm">{doc.expected_pay_date ?? '—'}</p>)}
+          </>
+        )
+      case 'department_id':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <SearchSelect options={(departments ?? []).map((d) => ({ value: d.id, label: d.name ?? '' }))} value={departmentId} onChange={(v) => setDepartmentId(v ?? '')} placeholder="—" />
+            ) : (<p className="text-sm">{optName(departments, doc.department_id)}</p>)}
+          </>
+        )
+      case 'project_id':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <SearchSelect options={(projects ?? []).map((pr) => ({ value: pr.id, label: pr.name ?? '' }))} value={projectIdHeader} onChange={(v) => setProjectIdHeader(v ?? '')} placeholder="—" />
+            ) : (<p className="text-sm">{optName(projects, doc.project_id)}</p>)}
+          </>
+        )
+      case 'location_id':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <SearchSelect options={(locations ?? []).map((l) => ({ value: l.id, label: l.name ?? '' }))} value={locationId} onChange={(v) => setLocationId(v ?? '')} placeholder="—" />
+            ) : (<p className="text-sm">{optName(locations, doc.location_id)}</p>)}
+          </>
+        )
+      case 'class_id':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <SearchSelect options={(classes ?? []).map((c) => ({ value: c.id, label: c.name ?? '' }))} value={classId} onChange={(v) => setClassId(v ?? '')} placeholder="—" />
+            ) : (<p className="text-sm">{optName(classes, doc.class_id)}</p>)}
+          </>
+        )
+      case 'payment_hold_reason':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <Input value={paymentHoldReason} onChange={(e) => setPaymentHoldReason(e.target.value)} />
+            ) : (<p className="text-sm">{doc.payment_hold_reason ?? '—'}</p>)}
+          </>
+        )
+      case 'internal_notes':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <Input value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} />
+            ) : (<p className="text-sm">{doc.internal_notes ?? '—'}</p>)}
+          </>
+        )
+      case 'billing_method':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)}>
+                <option value="">—</option>
+                <option value="time_and_materials">{tCommon('billingMethods.timeAndMaterials')}</option>
+                <option value="fixed_price">{tCommon('billingMethods.fixedPrice')}</option>
+              </Select>
+            ) : (
+              <p className="text-sm">
+                {doc.billing_method === 'time_and_materials' ? tCommon('billingMethods.timeAndMaterials') : doc.billing_method === 'fixed_price' ? tCommon('billingMethods.fixedPrice') : '—'}
+              </p>
+            )}
+          </>
+        )
+      case 'is_final_invoice':
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable ? (
+              <label className="flex h-9 items-center gap-2 text-sm">
+                <input type="checkbox" checked={isFinalInvoice} onChange={(e) => setIsFinalInvoice(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                {tCommon('labels.finalInvoice')}
+              </label>
+            ) : (<p className="text-sm">{doc.is_final_invoice ? tCommon('labels.yes') : tCommon('labels.no')}</p>)}
           </>
         )
       default:

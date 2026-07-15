@@ -17,6 +17,7 @@ import {
   DOC_KINDS,
   accountOptions,
   dimensionOptions,
+  itemOptions,
   loadDocument,
   partyOptions,
   taxCodeOptions,
@@ -153,8 +154,8 @@ export default async function AP({
           partyOptions('vendor'),
           accountOptions(DOC_KINDS[openKind as 'vendor_bill']!),
           taxCodeOptions(),
-          dimensionOptions().then((d) => d.departments),
-          dimensionOptions().then((d) => d.projects),
+          dimensionOptions(),
+          itemOptions(),
         ])
       : null,
     drawerOpen
@@ -330,8 +331,11 @@ export default async function AP({
           parties={pickers[0] as any}
           accounts={pickers[1] as any}
           taxCodes={pickers[2] as any}
-          departments={pickers[3] as any}
-          projects={pickers[4] as any}
+          departments={(pickers[3] as any).departments}
+          projects={(pickers[3] as any).projects}
+          locations={(pickers[3] as any).locations}
+          classes={(pickers[3] as any).classes}
+          items={pickers[4] as any}
           headerDefs={headerDefs as any}
           lineDefs={lineDefs as any}
           canCreate={canCreate}

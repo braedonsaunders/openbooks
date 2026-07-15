@@ -16,6 +16,7 @@ import {
   DOC_KINDS,
   accountOptions,
   dimensionOptions,
+  itemOptions,
   loadDocument,
   partyOptions,
   taxCodeOptions,
@@ -151,8 +152,8 @@ export default async function AR({
         partyOptions('customer'),
         accountOptions(DOC_KINDS[openKind! as 'customer_invoice']!),
         taxCodeOptions(),
-        dimensionOptions().then((d) => d.departments),
-        dimensionOptions().then((d) => d.projects),
+        dimensionOptions(),
+        itemOptions(),
         loadFieldDefs('documents', openKind!),
         loadFieldDefs('document_lines', openKind!),
       ])
@@ -301,8 +302,11 @@ export default async function AR({
           parties={pickers[0] as any}
           accounts={pickers[1] as any}
           taxCodes={pickers[2] as any}
-          departments={pickers[3] as any}
-          projects={pickers[4] as any}
+          departments={(pickers[3] as any).departments}
+          projects={(pickers[3] as any).projects}
+          locations={(pickers[3] as any).locations}
+          classes={(pickers[3] as any).classes}
+          items={pickers[4] as any}
           headerDefs={pickers[5] as any}
           lineDefs={pickers[6] as any}
           canCreate={canCreate}

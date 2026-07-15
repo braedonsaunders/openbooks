@@ -111,8 +111,9 @@ export async function loadDocument(id: string) {
   `)) as unknown as { rows: Record<string, unknown>[] }
   if (!doc.rows[0]) return null
   const lines = (await db.execute(sql`
-    select l.id, l.line_number, l.account_id, l.description, l.amount, l.tax_code_id, l.tax_amount,
-           l.tax_overridden, l.department_id, l.project_id, l.custom
+    select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
+           l.unit_price, l.amount, l.tax_code_id, l.tax_amount,
+           l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id, l.custom
       from document_lines l
      where l.document_id = ${id}
      order by l.line_number
@@ -177,11 +178,26 @@ export async function taxCodeOptions(): Promise<Opt[]> {
 }
 
 export async function dimensionOptions() {
-  const [departments, projects] = await Promise.all([
+  const [departments, projects, locations, classes] = await Promise.all([
     db.execute(sql`select id, name from departments where is_active order by name`) as any,
     db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
+    db.execute(sql`select id, name from locations where is_active order by name`) as any,
+    db.execute(sql`select id, name from classes where is_active order by name`) as any,
   ])
-  return { departments: departments.rows as Opt[], projects: projects.rows as Opt[] }
+  return {
+    departments: departments.rows as Opt[],
+    projects: projects.rows as Opt[],
+    locations: locations.rows as Opt[],
+    classes: classes.rows as Opt[],
+  }
+}
+
+/** Active catalog items (for the optional line `item` column). */
+export async function itemOptions(): Promise<Opt[]> {
+  const r = (await db.execute(sql`
+    select id, code, name from items where is_active order by coalesce(code, name), name limit 2000
+  `)) as unknown as { rows: Opt[] }
+  return r.rows
 }
 
 /** Active corporate cards (for card_charge / card_refund funding source). */
