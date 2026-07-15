@@ -1,0 +1,75 @@
+{
+  "list": {
+    "title": "Immobilisations",
+    "description": "Le registre des immobilisations derrière l'amortissement — coût, amortissement cumulé et valeur nette comptable par actif.",
+    "searchPlaceholder": "Rechercher par nom, numéro, série…",
+    "emptyTitle": "Aucune immobilisation pour l'instant",
+    "emptyDescription": "Ajoutez le premier actif pour démarrer le registre et les plans d'amortissement.",
+    "newButton": "Nouvel actif",
+    "createDraftFailed": "Impossible de créer un actif brouillon",
+    "runDepreciation": "Exécuter l'amortissement"
+  },
+  "labels": {
+    "number": "Numéro",
+    "category": "Catégorie",
+    "cost": "Coût",
+    "accumulated": "Amortissement cumulé",
+    "nbv": "Valeur nette comptable",
+    "salvage": "Valeur résiduelle",
+    "acquiredOn": "Acquis le",
+    "inServiceOn": "En service le",
+    "method": "Méthode",
+    "lifeMonths": "Durée d'utilisation (mois)",
+    "ratePercent": "Taux (%/an)",
+    "serialNumber": "Numéro de série",
+    "description": "Description",
+    "assetAccount": "Compte d'actif",
+    "accumulatedAccount": "Compte d'amortissement cumulé",
+    "expenseAccount": "Compte de dotation aux amortissements"
+  },
+  "methods": {
+    "straight_line": "Linéaire",
+    "declining_balance": "Solde dégressif",
+    "double_declining": "Solde dégressif accéléré",
+    "units_of_production": "Unités de production",
+    "manual": "Manuel"
+  },
+  "status": {
+    "draft": "Brouillon",
+    "in_service": "En service",
+    "fully_depreciated": "Entièrement amorti",
+    "disposed": "Cédé",
+    "written_off": "Mis hors service"
+  },
+  "drawer": {
+    "newAsset": "Nouvel actif",
+    "editing": "Modification — Enregistrer pour appliquer les modifications",
+    "identity": "Identité",
+    "depreciation": "Amortissement",
+    "accounts": "Comptes du grand livre",
+    "schedule": "Plan d'amortissement",
+    "scheduleEmpty": "Aucun plan pour l'instant — définissez le coût, la date de mise en service, la méthode et la durée d'utilité, puis enregistrez.",
+    "period": "Période",
+    "planned": "Prévu",
+    "postedAmount": "Comptabilisé",
+    "runForAsset": "Exécuter l'amortissement",
+    "placeInService": "Mettre en service",
+    "viewEntry": "Voir l'écriture",
+    "noAccount": "—",
+    "selectAccount": "Sélectionner un compte",
+    "selectCategory": "Sélectionner une catégorie",
+    "saveFailed": "Échec de l'enregistrement",
+    "runFailed": "Échec de l'exécution",
+    "deleteBlocked": "Cet actif a un amortissement comptabilisé et ne peut pas être supprimé.",
+    "deleteTitle": "Supprimer cet actif ?",
+    "deleteMessage": "Cela supprime définitivement l'actif brouillon et son plan. Cette action est irréversible.",
+    "deleted": "Actif supprimé",
+    "unsavedChanges": "Modifications non enregistrées"
+  },
+  "run": {
+    "asOf": "Au",
+    "posted": "Comptabilisation de {count, plural, one {# écriture} other {# écritures}} pour un total de {amount}",
+    "nothingDue": "Rien à amortir",
+    "someSkipped": "{count, plural, one {# ignoré} other {# ignorés}}"
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "list": {
+    "title": "Activos fijos",
+    "description": "El registro de activos detrás de la depreciación — costo, depreciación acumulada y valor en libros neto por activo.",
+    "searchPlaceholder": "Buscar por nombre, número, serie…",
+    "emptyTitle": "Aún no hay activos fijos",
+    "emptyDescription": "Agregue el primer activo para iniciar el registro y los cronogramas de depreciación.",
+    "newButton": "Nuevo activo",
+    "createDraftFailed": "No se pudo crear un activo borrador",
+    "runDepreciation": "Ejecutar depreciación"
+  },
+  "labels": {
+    "number": "Número",
+    "category": "Categoría",
+    "cost": "Costo",
+    "accumulated": "Depreciación acumulada",
+    "nbv": "Valor en libros neto",
+    "salvage": "Valor residual",
+    "acquiredOn": "Adquirido",
+    "inServiceOn": "En servicio",
+    "method": "Método",
+    "lifeMonths": "Vida útil (meses)",
+    "ratePercent": "Tasa (%/año)",
+    "serialNumber": "Número de serie",
+    "description": "Descripción",
+    "assetAccount": "Cuenta de activo",
+    "accumulatedAccount": "Cuenta de depreciación acumulada",
+    "expenseAccount": "Cuenta de gasto por depreciación"
+  },
+  "methods": {
+    "straight_line": "Línea recta",
+    "declining_balance": "Saldo decreciente",
+    "double_declining": "Saldo decreciente doble",
+    "units_of_production": "Unidades de producción",
+    "manual": "Manual"
+  },
+  "status": {
+    "draft": "Borrador",
+    "in_service": "En servicio",
+    "fully_depreciated": "Totalmente depreciado",
+    "disposed": "Dispuesto",
+    "written_off": "Dados de baja"
+  },
+  "drawer": {
+    "newAsset": "Nuevo activo",
+    "editing": "Editando — Guarde para aplicar los cambios",
+    "identity": "Identidad",
+    "depreciation": "Depreciación",
+    "accounts": "Cuentas del libro mayor",
+    "schedule": "Cronograma de depreciación",
+    "scheduleEmpty": "Aún no hay cronograma — defina costo, fecha de servicio, método y vida útil, luego guarde.",
+    "period": "Período",
+    "planned": "Planificado",
+    "postedAmount": "Contabilizado",
+    "runForAsset": "Ejecutar depreciación",
+    "placeInService": "Poner en servicio",
+    "viewEntry": "Ver asiento",
+    "noAccount": "—",
+    "selectAccount": "Seleccionar cuenta",
+    "selectCategory": "Seleccionar categoría",
+    "saveFailed": "Error al guardar",
+    "runFailed": "Error al ejecutar",
+    "deleteBlocked": "Este activo tiene depreciación contabilizada y no se puede eliminar.",
+    "deleteTitle": "¿Eliminar este activo?",
+    "deleteMessage": "Esto elimina permanentemente el activo borrador y su cronograma. Esta acción no se puede deshacer.",
+    "deleted": "Activo eliminado",
+    "unsavedChanges": "Cambios sin guardar"
+  },
+  "run": {
+    "asOf": "Al",
+    "posted": "Se contabilizaron {count, plural, one {# asiento} other {# asientos}} por un total de {amount}",
+    "nothingDue": "Nada que depreciar",
+    "someSkipped": "{count, plural, one {# omitido} other {# omitidos}}"
+  }
+}

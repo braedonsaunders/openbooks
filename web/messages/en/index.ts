@@ -13,6 +13,7 @@ import ap from './ap.json'
 import approvals from './approvals.json'
 import assistant from './assistant.json'
 import ar from './ar.json'
+import assets from './assets.json'
 import banking from './banking.json'
 import close from './close.json'
 import entities from './entities.json'
@@ -46,6 +47,7 @@ export default {
   approvals,
   assistant,
   ar,
+  assets,
   banking,
   close,
   entities,

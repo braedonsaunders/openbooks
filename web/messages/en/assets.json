@@ -1,0 +1,75 @@
+{
+  "list": {
+    "title": "Fixed Assets",
+    "description": "The asset register behind depreciation — cost, accumulated depreciation, and net book value per asset.",
+    "searchPlaceholder": "Search name, number, serial…",
+    "emptyTitle": "No fixed assets yet",
+    "emptyDescription": "Add the first asset to start the register and depreciation schedules.",
+    "newButton": "New asset",
+    "createDraftFailed": "Could not create a draft asset",
+    "runDepreciation": "Run depreciation"
+  },
+  "labels": {
+    "number": "Number",
+    "category": "Category",
+    "cost": "Cost",
+    "accumulated": "Accumulated depreciation",
+    "nbv": "Net book value",
+    "salvage": "Salvage value",
+    "acquiredOn": "Acquired",
+    "inServiceOn": "In service",
+    "method": "Method",
+    "lifeMonths": "Useful life (months)",
+    "ratePercent": "Rate (%/yr)",
+    "serialNumber": "Serial number",
+    "description": "Description",
+    "assetAccount": "Asset account",
+    "accumulatedAccount": "Accumulated depreciation account",
+    "expenseAccount": "Depreciation expense account"
+  },
+  "methods": {
+    "straight_line": "Straight-line",
+    "declining_balance": "Declining balance",
+    "double_declining": "Double declining balance",
+    "units_of_production": "Units of production",
+    "manual": "Manual"
+  },
+  "status": {
+    "draft": "Draft",
+    "in_service": "In service",
+    "fully_depreciated": "Fully depreciated",
+    "disposed": "Disposed",
+    "written_off": "Written off"
+  },
+  "drawer": {
+    "newAsset": "New asset",
+    "editing": "Editing — Save to apply changes",
+    "identity": "Identity",
+    "depreciation": "Depreciation",
+    "accounts": "GL accounts",
+    "schedule": "Depreciation schedule",
+    "scheduleEmpty": "No schedule yet — set cost, in-service date, method, and useful life, then save.",
+    "period": "Period",
+    "planned": "Planned",
+    "postedAmount": "Posted",
+    "runForAsset": "Run depreciation",
+    "placeInService": "Place in service",
+    "viewEntry": "View entry",
+    "noAccount": "—",
+    "selectAccount": "Select account",
+    "selectCategory": "Select category",
+    "saveFailed": "Save failed",
+    "runFailed": "Run failed",
+    "deleteBlocked": "This asset has posted depreciation and cannot be deleted.",
+    "deleteTitle": "Delete this asset?",
+    "deleteMessage": "This permanently deletes the draft asset and its schedule. This cannot be undone.",
+    "deleted": "Asset deleted",
+    "unsavedChanges": "Unsaved changes"
+  },
+  "run": {
+    "asOf": "As of",
+    "posted": "Posted {count} entries totalling {amount}",
+    "nothingDue": "Nothing due to depreciate",
+    "someSkipped": "{count} skipped"
+  }
+}
