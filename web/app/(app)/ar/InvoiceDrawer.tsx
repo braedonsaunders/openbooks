@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
@@ -40,6 +41,17 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
   pending_approval: 'warning',
   draft: 'secondary',
   voided: 'outline',
+}
+
+/** DB status/bucket value → `common.status.*` message key. Unknown values render verbatim. */
+const STATUS_KEYS: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  posted: 'posted',
+  open: 'open',
+  paid: 'paid',
+  voided: 'voided',
 }
 
 const emptyLine = (): LineRow => ({
@@ -87,6 +99,8 @@ export function InvoiceDrawer({
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
 }) {
+  const t = useTranslations('ar')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const doc = invoice.doc
   const isDraft = doc.status === 'draft'
@@ -155,7 +169,7 @@ export function InvoiceDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/invoices/${doc.id}`, {
         method: 'PATCH',
@@ -169,10 +183,10 @@ export function InvoiceDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('toasts.autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, editable])
 
@@ -184,8 +198,8 @@ export function InvoiceDrawer({
       body: JSON.stringify({ action, documentId: doc.id }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
+    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
     setBusy(false)
     router.refresh()
   }
@@ -195,24 +209,24 @@ export function InvoiceDrawer({
     () => [
       {
         key: 'accountId',
-        label: 'Income account',
+        label: t('drawer.columns.incomeAccount'),
         width: 'minmax(200px,2fr)',
         type: 'search-select',
         required: true,
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
-        placeholder: 'Account…',
+        placeholder: t('drawer.columns.accountPlaceholder'),
       },
-      { key: 'description', label: 'Description', width: 'minmax(160px,1.6fr)', type: 'text' },
+      { key: 'description', label: tCommon('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
       {
         key: 'departmentId',
-        label: 'Department',
+        label: tCommon('labels.department'),
         width: '140px',
         type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
       },
       {
         key: 'projectId',
-        label: 'Project',
+        label: tCommon('labels.project'),
         width: 'minmax(150px,1.2fr)',
         type: 'search-select',
         options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
@@ -220,16 +234,16 @@ export function InvoiceDrawer({
       },
       {
         key: 'taxCodeId',
-        label: 'Tax',
+        label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: 'No tax' }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
+        options: [{ value: '', label: t('drawer.columns.noTax') }, ...taxCodes.map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
       },
       ...customFieldColumns<LineRow>(lineDefs),
-      { key: 'amount', label: 'Amount', width: '120px', type: 'amount', align: 'right', required: true },
+      { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
       {
         key: 'taxAmount',
-        label: 'Tax amt',
+        label: t('drawer.columns.taxAmount'),
         width: '120px',
         type: 'tax',
         align: 'right',
@@ -243,7 +257,7 @@ export function InvoiceDrawer({
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxCodes, lineDefs],
+    [accounts, departments, projects, taxCodes, lineDefs, t, tCommon],
   )
 
   const field = 'space-y-1.5'
@@ -257,30 +271,32 @@ export function InvoiceDrawer({
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[displayStatus] ?? 'secondary'}>
-            {String(displayStatus).replace('_', ' ')}
+            {STATUS_KEYS[displayStatus]
+              ? tCommon(`status.${STATUS_KEYS[displayStatus]}`)
+              : String(displayStatus).replace('_', ' ')}
           </Badge>
         </span>
       }
       description={
         editable
-          ? `${doc.customer_name ? doc.customer_name + ' · ' : ''}changes save automatically`
+          ? `${doc.customer_name ? doc.customer_name + ' · ' : ''}${t('drawer.autosaveHint')}`
           : (doc.customer_name ?? undefined)
       }
       headerActions={
         <>
           {isDraft ? (
             <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
-              Submit for approval
+              {t('actions.submitForApproval')}
             </Button>
           ) : null}
           {doc.status === 'approved' ? (
             <Button disabled={busy} onClick={() => act('post')}>
-              Post
+              {tCommon('actions.post')}
             </Button>
           ) : null}
           {doc.entry_id ? (
             <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+              <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
             </Button>
           ) : null}
         </>
@@ -295,24 +311,27 @@ export function InvoiceDrawer({
           >
             {editable
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('drawer.allChangesSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('drawer.saveFailedRetry')
+                    : t('drawer.unsavedChanges')
               : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            Subtotal {money(totals.subtotal)} · Tax {money(totals.taxTotal)} ·{' '}
-            <strong className="text-slate-900 dark:text-slate-100">Total {money(totals.total)}</strong>
+            {t('drawer.subtotalAmount', { amount: money(totals.subtotal) })} ·{' '}
+            {t('drawer.taxTotalAmount', { amount: money(totals.taxTotal) })} ·{' '}
+            <strong className="text-slate-900 dark:text-slate-100">
+              {t('drawer.totalAmount', { amount: money(totals.total) })}
+            </strong>
             {isPosted ? (
               <>
                 {' '}
                 ·{' '}
                 <strong className="text-slate-900 dark:text-slate-100">
-                  Balance due {money(doc.balance_due)}
+                  {t('drawer.balanceDueAmount', { amount: money(doc.balance_due) })}
                 </strong>
               </>
             ) : null}
@@ -323,20 +342,20 @@ export function InvoiceDrawer({
       <div className="space-y-6 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
-            <Label>Customer{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            <Label>{tCommon('labels.customer')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
               <SearchSelect
                 options={customers.map((c) => ({ value: c.id, label: c.display_name ?? '' }))}
                 value={partyId}
                 onChange={(v) => setPartyId(v ?? '')}
-                placeholder="Select customer…"
+                placeholder={t('drawer.selectCustomerPlaceholder')}
               />
             ) : (
               <p className="text-sm">{doc.customer_name}</p>
             )}
           </div>
           <div className={field}>
-            <Label>Invoice date</Label>
+            <Label>{t('drawer.invoiceDate')}</Label>
             {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
@@ -344,7 +363,7 @@ export function InvoiceDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Due date</Label>
+            <Label>{t('drawer.dueDate')}</Label>
             {editable ? (
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             ) : (
@@ -352,7 +371,7 @@ export function InvoiceDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Customer ref #</Label>
+            <Label>{t('drawer.customerRef')}</Label>
             {editable ? (
               <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (
@@ -360,7 +379,7 @@ export function InvoiceDrawer({
             )}
           </div>
           <div className={`${field} lg:col-span-3`}>
-            <Label>Memo</Label>
+            <Label>{tCommon('labels.memo')}</Label>
             {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
@@ -372,7 +391,7 @@ export function InvoiceDrawer({
         <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
 
         <div className="space-y-2">
-          <Label>Lines</Label>
+          <Label>{tCommon('labels.lines')}</Label>
           <LineGrid<LineRow>
             columns={columns}
             rows={rows}
