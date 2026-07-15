@@ -1,48 +1,97 @@
 {
   "title": "Tableau de bord",
   "orgDescription": "{name} · {currency} · {book}",
-  "stats": {
+  "greeting": {
+    "morning": "Bonjour",
+    "afternoon": "Bon après-midi",
+    "evening": "Bonsoir"
+  },
+  "tenantSummary": "{entries} écritures · {parties} tiers",
+  "header": {
+    "customize": "Personnaliser"
+  },
+  "widgets": {
     "journalEntries": "Écritures de journal",
     "journalLines": "Lignes de journal",
+    "activeAccounts": "Comptes actifs",
+    "parties": "Tiers",
+    "entriesToday": "Écritures aujourd'hui",
+    "pendingApprovals": "Approbations en attente",
     "ledgerBalance": "Solde du grand livre",
-    "ledgerBalanced": "Σ = 0,00",
-    "ledgerSum": "Σ = {amount}",
-    "parallelRun": "Exécution en parallèle avec {source}",
-    "parityValue": "{matches}/{accounts} concordent"
+    "recentEntries": "Écritures récentes",
+    "pendingApprovalsList": "Approbations en attente",
+    "myApprovals": "Mes approbations",
+    "inProgress": "En cours"
   },
-  "syncCard": {
-    "body": "Un système comptable externe est connecté pour la vérification en parallèle. La synchronisation est manuelle; chaque synchronisation revérifie la balance de vérification compte par compte.",
-    "link": "Page de synchronisation"
+  "grid": {
+    "customizing": "Personnalisation du tableau de bord",
+    "save": "Enregistrer",
+    "saved": "Mise en page enregistrée",
+    "saveFailed": "Échec de l'enregistrement",
+    "reset": "Réinitialiser",
+    "resetDone": "Mise en page réinitialisée",
+    "resetFailed": "Échec de la réinitialisation",
+    "resetConfirm": "Réinitialiser la mise en page par défaut de votre rôle ? Vos personnalisations seront perdues.",
+    "addWidget": "Ajouter un widget",
+    "closePalette": "Fermer",
+    "remove": "Retirer le widget",
+    "cardMissing": "Carte indisponible",
+    "unknownWidget": "Widget inconnu : {id}"
+  },
+  "palette": {
+    "title": "Widgets",
+    "subtitle": "Cliquez pour ajouter à votre tableau de bord",
+    "close": "Fermer",
+    "added": "Ajouté",
+    "libraryCards": "Cartes d'analyses"
+  },
+  "customize": {
+    "title": "Personnaliser le tableau de bord",
+    "back": "Retour au tableau de bord",
+    "roleLabel": "Mise en page par défaut pour : {role}"
+  },
+  "quickActions": {
+    "title": "Actions rapides",
+    "customize": "Personnaliser",
+    "empty": "Aucune action rapide",
+    "addFirst": "Ajouter votre première action",
+    "editor": {
+      "title": "Personnaliser les actions rapides",
+      "description": "Ajouter, réorganiser et supprimer des raccourcis.",
+      "addAction": "Ajouter une action",
+      "edit": "Modifier l'action",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saved": "Actions rapides enregistrées",
+      "saveFailed": "Échec de l'enregistrement",
+      "loadFailed": "Échec du chargement des options",
+      "back": "Retour",
+      "common": "Courantes",
+      "customUrl": "URL personnalisée",
+      "label": "Étiquette",
+      "labelPlaceholder": "Nouvelle facture",
+      "link": "Lien",
+      "linkHint": "Chemin interne (/ar) ou URL https",
+      "icon": "Icône",
+      "color": "Couleur",
+      "preview": "Aperçu",
+      "unnamed": "Sans nom",
+      "searchPlaceholder": "Rechercher…",
+      "loading": "Chargement…",
+      "noResults": "Aucun résultat",
+      "maxReached": "Maximum {count} actions",
+      "invalidUrl": "Le lien doit être un chemin interne ou une URL http(s)"
+    }
   },
   "home": {
     "customize": "Personnaliser",
-    "customizeHint": "Réorganisez les cartes de votre tableau d’accueil",
+    "customizeHint": "Réorganisez les cartes de votre tableau d'accueil",
     "browseInsights": "Toutes les analyses",
-    "noBoard": "Aucun tableau d’accueil",
-    "noBoardBody": "Créez des cartes dans Analyses, disposez-les sur un tableau, puis définissez-le comme tableau d’accueil.",
+    "noBoard": "Aucun tableau d'accueil",
+    "noBoardBody": "Créez des cartes dans Analyses, disposez-les sur un tableau, puis définissez-le comme tableau d'accueil.",
     "openInsights": "Ouvrir Analyses",
     "personalBadge": "Votre tableau",
     "roleBadge": "Par défaut du rôle",
-    "systemBadge": "Par défaut de l’entreprise",
-    "ledgerBalanced": "Grand livre équilibré",
-    "ledgerOut": "Grand livre en écart de {amount}",
-    "parityOk": "Exécution en parallèle concordante",
-    "parityOff": "Écart d’exécution en parallèle"
-  },
-  "recentRuns": {
-    "title": "Synchronisations récentes",
-    "started": "Démarrée",
-    "source": "Source",
-    "trigger": "Déclencheur",
-    "new": "Nouvelles",
-    "reversed": "Contrepassées",
-    "unchanged": "Inchangées",
-    "tbVerification": "Vérification de la BV",
-    "empty": "Aucune synchronisation pour l’instant.",
-    "runStatus": {
-      "ok": "ok",
-      "failed": "échec",
-      "running": "en cours"
-    }
+    "systemBadge": "Par défaut de l'entreprise"
   }
 }

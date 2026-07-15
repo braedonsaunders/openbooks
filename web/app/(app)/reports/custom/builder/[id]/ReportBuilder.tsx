@@ -3,41 +3,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Play, Trash2, Plus } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
 import {
-  REPORT_AGG_FNS,
   REPORT_ENTITIES,
   REPORT_ENTITY_MAP,
-  REPORT_TEMPORAL_BINS,
   defaultColumnsFor,
   isOperationalColumn,
-  type ReportAggFn,
-  type ReportBreakout,
+  resolveReportLayout,
   type ReportCustomQuery,
   type ReportEntity,
-  type ReportMeasure,
-  type ReportRuleGroup,
+  type ReportLayoutConfig,
   type ReportRunResult,
-  type ReportTemporalBin,
 } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { FilterTree } from '../../FilterTree'
 import { ResultView } from '../../ResultView'
-
-/** Columns that can be temporally binned (date/timestamp). */
-function isTemporal(entity: ReportEntity, key: string): boolean {
-  const kind = entity.columns.find((c) => c.key === key)?.kind
-  return kind === 'date' || kind === 'timestamp'
-}
-
-/** Columns valid as an aggregate target for a given fn (numbers for sum/avg). */
-function measureColumns(entity: ReportEntity, fn: ReportAggFn) {
-  if (fn === 'sum' || fn === 'avg') return entity.columns.filter((c) => c.kind === 'number')
-  return entity.columns.filter((c) => c.kind !== 'uuid')
-}
+import { RowsConfig, SummarizeConfig } from '../../../query-config'
 
 export function ReportBuilder({
   definition,
@@ -48,6 +32,7 @@ export function ReportBuilder({
     name: string
     description: string | null
     query: ReportCustomQuery
+    layout?: Record<string, unknown> | null
   }
 }) {
   const t = useTranslations('reports.custom.builder')
@@ -58,6 +43,9 @@ export function ReportBuilder({
   const [name, setName] = useState(definition.name)
   const [description, setDescription] = useState(definition.description ?? '')
   const [query, setQuery] = useState<ReportCustomQuery>(definition.query)
+  const [layout, setLayout] = useState<ReportLayoutConfig>(
+    resolveReportLayout(definition.layout as Partial<ReportLayoutConfig> | null | undefined),
+  )
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [preview, setPreview] = useState<ReportRunResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -131,7 +119,7 @@ export function ReportBuilder({
       const res = await fetch(`/api/reports/definitions/${definition.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, query }),
+        body: JSON.stringify({ name, description, query, layout }),
       })
       if (res.ok) {
         setSaveState('saved')
@@ -143,7 +131,7 @@ export function ReportBuilder({
     }, 700)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, query])
+  }, [name, description, query, layout])
 
   const selectableColumns = useMemo(
     () => entity.columns.filter(isOperationalColumn),
@@ -306,6 +294,54 @@ export function ReportBuilder({
               {t('rowLimitHint', { previewRows: 200 })}
             </p>
           </div>
+
+          <div className={field}>
+            <Label>{t('pageSetup.title')}</Label>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('pageSetup.hint')}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">{t('pageSetup.paper')}</Label>
+                <Select
+                  value={layout.paperSize}
+                  onChange={(e) => setLayout((l) => ({ ...l, paperSize: e.target.value as ReportLayoutConfig['paperSize'] }))}
+                >
+                  <option value="letter">{t('pageSetup.paperLetter')}</option>
+                  <option value="a4">{t('pageSetup.paperA4')}</option>
+                  <option value="legal">{t('pageSetup.paperLegal')}</option>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t('pageSetup.orientation')}</Label>
+                <Select
+                  value={layout.orientation}
+                  onChange={(e) => setLayout((l) => ({ ...l, orientation: e.target.value as 'portrait' | 'landscape' }))}
+                >
+                  <option value="landscape">{t('pageSetup.landscape')}</option>
+                  <option value="portrait">{t('pageSetup.portrait')}</option>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t('pageSetup.density')}</Label>
+                <Select
+                  value={layout.density}
+                  onChange={(e) => setLayout((l) => ({ ...l, density: e.target.value as ReportLayoutConfig['density'] }))}
+                >
+                  <option value="standard">{t('pageSetup.densityStandard')}</option>
+                  <option value="compact">{t('pageSetup.densityCompact')}</option>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t('pageSetup.marginMm')}</Label>
+                <Input
+                  type="number"
+                  min={5}
+                  max={30}
+                  value={layout.marginMm}
+                  onChange={(e) => setLayout((l) => ({ ...l, marginMm: Math.min(Math.max(Number(e.target.value) || 15, 5), 30) }))}
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* --- live preview --- */}
@@ -334,240 +370,5 @@ export function ReportBuilder({
 }
 
 // --- rows-mode column picker -------------------------------------------------
-
-function RowsConfig({
-  entity,
-  query,
-  patch,
-  columns,
-}: {
-  entity: ReportEntity
-  query: ReportCustomQuery
-  patch: (n: Partial<ReportCustomQuery>) => void
-  columns: ReportEntity['columns']
-}) {
-  const t = useTranslations('reports.custom.builder')
-  const tReports = useTranslations('reports')
-  const selected = query.columns ?? []
-  const toggle = (key: string) => {
-    const next = selected.includes(key) ? selected.filter((c) => c !== key) : [...selected, key]
-    patch({ columns: next })
-  }
-  return (
-    <>
-      <div className="space-y-1.5">
-        <Label>{t('columns')}</Label>
-        <div className="flex flex-wrap gap-1.5">
-          {columns.map((c) => {
-            const on = selected.includes(c.key)
-            return (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => toggle(c.key)}
-                className={
-                  'rounded-full border px-2.5 py-1 text-xs transition-colors ' +
-                  (on
-                    ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
-                    : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300')
-                }
-              >
-                {tReports(`catalog.columns.${entity.key}.${c.key}`)}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label>{t('sectionBy')}</Label>
-        <Select
-          value={query.groupBy ?? ''}
-          onChange={(e) => patch({ groupBy: e.target.value || null })}
-        >
-          <option value="">{t('noSections')}</option>
-          {entity.columns.map((c) => (
-            <option key={c.key} value={c.key}>
-              {tReports(`catalog.columns.${entity.key}.${c.key}`)}
-            </option>
-          ))}
-        </Select>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t('sectionByHint')}
-        </p>
-      </div>
-    </>
-  )
-}
-
-// --- summarize-mode breakouts + measures ------------------------------------
-
-function SummarizeConfig({
-  entity,
-  query,
-  patch,
-}: {
-  entity: ReportEntity
-  query: ReportCustomQuery
-  patch: (n: Partial<ReportCustomQuery>) => void
-}) {
-  const t = useTranslations('reports.custom.builder')
-  const tc = useTranslations('common')
-  const tReports = useTranslations('reports')
-  const breakouts = query.breakouts ?? []
-  const measures = query.measures ?? []
-
-  const setBreakout = (i: number, b: ReportBreakout) => {
-    const next = [...breakouts]
-    next[i] = b
-    patch({ breakouts: next })
-  }
-  const setMeasure = (i: number, m: ReportMeasure) => {
-    const next = [...measures]
-    next[i] = m
-    patch({ measures: next })
-  }
-
-  return (
-    <>
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label>{t('groupBy')}</Label>
-          {breakouts.length < 6 ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                patch({ breakouts: [...breakouts, { column: entity.columns[0]?.key ?? '' }] })
-              }
-            >
-              <Plus size={14} /> {tc('actions.add')}
-            </Button>
-          ) : null}
-        </div>
-        {breakouts.length === 0 ? (
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            {t('noGroupsHint')}
-          </p>
-        ) : null}
-        {breakouts.map((b, i) => {
-          const temporal = isTemporal(entity, b.column)
-          return (
-            <div key={i} className="flex items-center gap-2">
-              <Select
-                className="h-8 flex-1"
-                value={b.column}
-                onChange={(e) => {
-                  const col = e.target.value
-                  setBreakout(i, { column: col, ...(isTemporal(entity, col) && b.bin ? { bin: b.bin } : {}) })
-                }}
-              >
-                {entity.columns.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {tReports(`catalog.columns.${entity.key}.${c.key}`)}
-                  </option>
-                ))}
-              </Select>
-              {temporal ? (
-                <Select
-                  className="h-8 w-28"
-                  value={b.bin ?? ''}
-                  onChange={(e) =>
-                    setBreakout(i, {
-                      column: b.column,
-                      ...(e.target.value ? { bin: e.target.value as ReportTemporalBin } : {}),
-                    })
-                  }
-                >
-                  <option value="">{t('noBin')}</option>
-                  {REPORT_TEMPORAL_BINS.map((bin) => (
-                    <option key={bin} value={bin}>
-                      {t(`bin.${bin}`)}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => patch({ breakouts: breakouts.filter((_, j) => j !== i) })}
-                aria-label={t('removeGroupAria')}
-              >
-                <Trash2 size={14} />
-              </Button>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label>{t('measures')}</Label>
-          {measures.length < 8 ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => patch({ measures: [...measures, { fn: 'count' }] })}
-            >
-              <Plus size={14} /> {tc('actions.add')}
-            </Button>
-          ) : null}
-        </div>
-        {measures.map((m, i) => {
-          const cols = measureColumns(entity, m.fn)
-          return (
-            <div key={i} className="flex items-center gap-2">
-              <Select
-                className="h-8 w-36"
-                value={m.fn}
-                onChange={(e) => {
-                  const fn = e.target.value as ReportAggFn
-                  const valid = measureColumns(entity, fn)
-                  setMeasure(i, {
-                    fn,
-                    ...(fn === 'count'
-                      ? {}
-                      : { column: m.column && valid.some((c) => c.key === m.column) ? m.column : valid[0]?.key }),
-                  })
-                }}
-              >
-                {REPORT_AGG_FNS.map((fn) => (
-                  <option key={fn} value={fn}>
-                    {tReports(`aggs.${fn}`)}
-                  </option>
-                ))}
-              </Select>
-              {m.fn !== 'count' ? (
-                <Select
-                  className="h-8 flex-1"
-                  value={m.column ?? ''}
-                  onChange={(e) => setMeasure(i, { ...m, column: e.target.value })}
-                >
-                  {cols.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {tReports(`catalog.columns.${entity.key}.${c.key}`)}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  patch({ measures: measures.length > 1 ? measures.filter((_, j) => j !== i) : measures })
-                }
-                aria-label={t('removeMeasureAria')}
-                disabled={measures.length <= 1}
-              >
-                <Trash2 size={14} />
-              </Button>
-            </div>
-          )
-        })}
-      </div>
-    </>
-  )
-}
+// RowsConfig + SummarizeConfig live in ../../../query-config and are shared
+// with the saved-search builder.

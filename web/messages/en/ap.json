@@ -1,43 +1,65 @@
 {
   "list": {
-    "title": "Accounts Payable",
-    "description": "Vendor bills entered in openbooks — draft → approval → posted through the kernel.",
-    "searchPlaceholder": "Search bills, vendors, refs…",
+    "title": "Bills",
+    "description": "Vendor bills and credit memos — your accounts payable: draft → approval → posted through the kernel.",
+    "searchPlaceholder": "Search bills, credits, vendors, refs…",
     "columns": {
+      "number": "Number",
       "bill": "Bill",
       "ref": "Ref"
     },
     "empty": {
       "title": "No bills yet",
-      "description": "Enter the first vendor bill to start the AP workflow."
+      "description": "Enter the first vendor bill or credit memo to start the AP workflow."
     }
   },
+  "kinds": {
+    "bill": "Bill",
+    "credit": "Credit"
+  },
   "actions": {
+    "new": "New",
     "newBill": "New bill",
+    "newCredit": "New vendor credit",
     "submitForApproval": "Submit for approval"
   },
   "drawer": {
-    "autosaveHint": "changes save automatically",
-    "vendorAutosaveHint": "{vendor} · changes save automatically",
+    "editingHint": "Editing — Save to apply changes",
     "viewGlImpact": "View GL impact",
-    "billDate": "Bill date",
+    "dateLabel": "Bill date",
     "dueDate": "Due date",
-    "vendorRef": "Vendor ref #",
-    "selectVendorPlaceholder": "Select vendor…",
+    "reference": "Vendor ref #",
+    "accountColumn": "Account",
     "accountPlaceholder": "Account…",
     "noTax": "No tax",
     "taxAmountColumn": "Tax amt",
+    "selectVendorPlaceholder": "Select vendor…",
+    "selectCustomerPlaceholder": "Select customer…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Tax {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Balance due {amount}",
     "saveState": {
       "saved": "All changes saved",
       "error": "Save failed — fix and retry",
       "dirty": "Unsaved changes…"
-    }
+    },
+    "deleteTitle": "Delete this document?",
+    "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
+    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone.",
+    "formLabel": "Form",
+    "formDefault": "Default form",
+    "formSetPreferred": "Set as my preferred",
+    "formSetPreferredDone": "Preferred form saved",
+    "formPreferredCleared": "Preferred form cleared",
+    "formPreferredFailed": "Could not save the preferred form"
   },
   "toasts": {
     "actionFailed": "Action failed",
     "submitted": "Submitted for approval",
     "posted": "Posted to the ledger",
-    "autosaveFailed": "Autosave failed",
-    "createDraftFailed": "Could not create a draft bill"
+    "createDraftFailed": "Could not create a draft",
+    "deleted": "Document deleted",
+    "deleteFailed": "Delete failed"
   }
 }

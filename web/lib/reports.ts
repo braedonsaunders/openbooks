@@ -405,19 +405,28 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter): Prom
   };
 }
 
-export async function accountRegister(accountId: string, limit = 100, offset = 0) {
+export async function accountRegister(
+  accountId: string,
+  limit = 100,
+  offset = 0,
+  period?: { from?: string; to?: string },
+) {
   const acct = (await db.execute(sql`select id, number, name, type from accounts where id = ${accountId}`)) as any;
+  const dateFilter =
+    period?.from || period?.to
+      ? sql` and e.posting_date >= ${period?.from ?? '0001-01-01'} and e.posting_date <= ${period?.to ?? '9999-12-31'}`
+      : sql``;
   const r = (await db.execute(sql`
     select e.id as entry_id, e.entry_number, e.posting_date, e.memo as entry_memo,
            l.line_number, l.amount, l.memo, p.display_name as party
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
       left join parties p on p.id = l.party_id
-     where l.account_id = ${accountId}
+     where l.account_id = ${accountId} ${dateFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
   `)) as any;
-  const c = (await db.execute(sql`select count(*) as n, coalesce(sum(amount),0) as bal from journal_lines where account_id = ${accountId}`)) as any;
+  const c = (await db.execute(sql`select count(*) as n, coalesce(sum(amount),0) as bal from journal_lines l join journal_entries e on e.id = l.entry_id where l.account_id = ${accountId} ${dateFilter}`)) as any;
   return { account: acct.rows[0], lines: r.rows, total: Number(c.rows[0].n), balance: c.rows[0].bal };
 }
 

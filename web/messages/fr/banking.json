@@ -51,6 +51,28 @@
       "upToDate": "à jour"
     }
   },
+  "accountsTitle": "Comptes",
+  "transactionsTitle": "Transactions",
+  "transactionsSearch": "Rechercher frais de carte, chèques, virements…",
+  "transactionsEmptyTitle": "Aucune transaction bancaire pour l’instant",
+  "transactionsEmptyDescription": "Émettez un chèque, enregistrez un frais de carte ou transférez des fonds entre comptes.",
+  "txKinds": {
+    "check": "Chèque",
+    "card_charge": "Frais de carte",
+    "card_refund": "Remboursement de carte",
+    "transfer": "Virement"
+  },
+  "actions": {
+    "new": "Nouveau"
+  },
+  "toasts": {
+    "actionFailed": "Échec de l’action",
+    "submitted": "Soumis pour approbation",
+    "posted": "Comptabilisé au grand livre",
+    "createDraftFailed": "Impossible de créer un brouillon",
+    "deleted": "Document supprimé",
+    "deleteFailed": "Échec de la suppression"
+  },
   "account": {
     "description": "{details} — importez les relevés, puis appariez et approuvez.",
     "stats": {
@@ -122,11 +144,39 @@
     "currentGlBalance": "Solde actuel au grand livre : <amt>{amount}</amt>"
   },
   "drawer": {
-    "title": "Relevé du {date}",
-    "description": "Importé le {date} · ouverture {opening} · clôture {closing}",
+    "title": "Relevé {date}",
+    "description": "Importé {date} · ouverture {opening} · clôture {closing}",
     "searchLines": "Rechercher des lignes…",
-    "matchColumn": "Appariement",
-    "noLines": "Aucune ligne ne correspond à cette recherche."
+    "matchColumn": "Apparier",
+    "noLines": "Aucune ligne ne correspond à cette recherche.",
+    "editingHint": "Modification — Enregistrer pour appliquer",
+    "viewGlImpact": "Voir l’impact au GL",
+    "dateLabel": "Date",
+    "dueDate": "Date d’échéance",
+    "reference": "N° de référence",
+    "card": "Carte",
+    "selectCardPlaceholder": "Sélectionner une carte…",
+    "toAccount": "Compte de destination",
+    "fromAccount": "Compte source",
+    "transferAmount": "Montant",
+    "accountColumn": "Compte",
+    "accountPlaceholder": "Compte…",
+    "noTax": "Sans taxe",
+    "taxAmountColumn": "Mt taxe",
+    "selectVendorPlaceholder": "Sélectionner un fournisseur…",
+    "selectCustomerPlaceholder": "Sélectionner un client…",
+    "subtotalAmount": "Sous-total {amount}",
+    "taxTotalAmount": "Taxe {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Solde dû {amount}",
+    "saveState": {
+      "saved": "Toutes les modifications sont enregistrées",
+      "error": "Échec de l’enregistrement — corrigez et réessayez",
+      "dirty": "Modifications non enregistrées…"
+    },
+    "deleteTitle": "Supprimer ce document ?",
+    "deleteDraftBody": "Cela supprime définitivement le brouillon. Cette action est irréversible.",
+    "deletePostedBody": "Cela supprime définitivement le document et son impact au grand livre. Cette action est irréversible."
   },
   "reconcile": {
     "title": "Rapprochement jusqu’au {date}",

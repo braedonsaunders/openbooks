@@ -1,0 +1,21 @@
+{
+  "metaTitle": "Documentation API",
+  "title": "Documentation de l'API",
+  "description": "L'API REST auto-documentée. Les types d'enregistrements, les champs et les permissions sont générés en direct depuis le schéma de la base de données — y compris vos enregistrements et champs personnalisés.",
+  "searchPlaceholder": "Rechercher des types d'enregistrement…",
+  "baseUrl": "/api/v1",
+  "auth": {
+    "title": "Authentification",
+    "description": "Transmettez votre clé API en tant que jeton bearer. Les clés sont à portée restreinte — une requête est autorisée uniquement lorsque les portées de la clé et les permissions du propriétaire la couvrent."
+  },
+  "customBadge": "personnalisé",
+  "requires": "lecture :",
+  "writesRequire": "écriture :",
+  "fields": {
+    "field": "Champ",
+    "type": "Type",
+    "required": "Requis",
+    "description": "Description",
+    "yes": "oui"
+  }
+}

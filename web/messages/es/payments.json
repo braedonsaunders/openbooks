@@ -9,16 +9,16 @@
     }
   },
   "list": {
-    "searchPlaceholder": "{side, select, ap {Buscar pagos, proveedores, refs…} other {Buscar cobros, clientes, refs…}}",
-    "newLabel": "{side, select, ap {Nuevo pago} other {Nuevo cobro}}",
+    "searchPlaceholder": "{side, select, ap {Buscar pagos, proveedores, refs…} other {Buscar pagos, clientes, refs…}}",
+    "newLabel": "{side, select, ap {Nuevo pago} other {Nuevo pago de cliente}}",
     "columns": {
-      "document": "{side, select, ap {Pago} other {Cobro}}",
+      "document": "{side, select, ap {Pago} other {Pago de cliente}}",
       "bankAccount": "Cuenta bancaria",
       "ref": "Ref."
     },
     "empty": {
-      "title": "{side, select, ap {Aún no hay pagos} other {Aún no hay cobros}}",
-      "description": "{side, select, ap {Registre el primer pago a proveedor para empezar a liquidar las facturas de compra pendientes.} other {Registre el primer cobro de cliente para empezar a liquidar las facturas pendientes.}}"
+      "title": "{side, select, ap {Aún no hay pagos} other {Aún no hay pagos de clientes}}",
+      "description": "{side, select, ap {Registre el primer pago a proveedor para empezar a liquidar las facturas de compra pendientes.} other {Registre el primer pago de cliente para empezar a liquidar las facturas pendientes.}}"
     }
   },
   "newButton": {
@@ -69,7 +69,7 @@
       "loadOpenItemsFailed": "No se pudieron cargar las partidas pendientes",
       "autosaveFailed": "El guardado automático falló",
       "postFailed": "La contabilización falló",
-      "posted": "{side, select, ap {Pago contabilizado y aplicado} other {Cobro contabilizado y aplicado}}"
+      "posted": "{side, select, ap {Pago contabilizado y aplicado} other {Pago de cliente contabilizado y aplicado}}"
     }
   },
   "eft": {

@@ -9,16 +9,16 @@
     }
   },
   "list": {
-    "searchPlaceholder": "{side, select, ap {Search payments, vendors, refs…} other {Search receipts, customers, refs…}}",
-    "newLabel": "{side, select, ap {New payment} other {New receipt}}",
+    "searchPlaceholder": "{side, select, ap {Search payments, vendors, refs…} other {Search payments, customers, refs…}}",
+    "newLabel": "{side, select, ap {New payment} other {New customer payment}}",
     "columns": {
-      "document": "{side, select, ap {Payment} other {Receipt}}",
+      "document": "{side, select, ap {Payment} other {Customer payment}}",
       "bankAccount": "Bank account",
       "ref": "Ref"
     },
     "empty": {
-      "title": "{side, select, ap {No payments yet} other {No receipts yet}}",
-      "description": "{side, select, ap {Record the first vendor payment to start settling open bills.} other {Record the first customer receipt to start settling open invoices.}}"
+      "title": "{side, select, ap {No payments yet} other {No customer payments yet}}",
+      "description": "{side, select, ap {Record the first vendor payment to start settling open bills.} other {Record the first customer payment to start settling open invoices.}}"
     }
   },
   "newButton": {
@@ -69,7 +69,7 @@
       "loadOpenItemsFailed": "Could not load open items",
       "autosaveFailed": "Autosave failed",
       "postFailed": "Posting failed",
-      "posted": "{side, select, ap {Payment posted and applied} other {Receipt posted and applied}}"
+      "posted": "{side, select, ap {Payment posted and applied} other {Customer payment posted and applied}}"
     }
   },
   "eft": {

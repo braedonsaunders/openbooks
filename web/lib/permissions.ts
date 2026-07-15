@@ -65,6 +65,9 @@ export const PERMISSION_CATALOGUE = [
   "sync.run",
   // User scripts (sandboxed automation)
   "scripts.manage",
+  // File Cabinet — document management (browse, upload, move, rename, version)
+  "documents.read",
+  "documents.manage",
   // Admin
   "parties.read",
   "parties.manage",
@@ -76,8 +79,10 @@ export const PERMISSION_CATALOGUE = [
   "admin.users.manage",
   "admin.roles.manage",
   "admin.nav.manage",
+  "admin.customization.manage",
   "admin.audit.read",
   "admin.ai.manage",
+  "api.keys.manage",
 ] as const;
 
 export type CataloguePermission = (typeof PERMISSION_CATALOGUE)[number];
@@ -217,6 +222,14 @@ export const PERMISSION_GROUPS: {
     permissions: [{ key: "scripts.manage", labelKey: permissionLabelKey("scripts.manage") }],
   },
   {
+    key: "documents",
+    labelKey: "permissions.groups.documents",
+    permissions: [
+      { key: "documents.read", labelKey: permissionLabelKey("documents.read") },
+      { key: "documents.manage", labelKey: permissionLabelKey("documents.manage") },
+    ],
+  },
+  {
     key: "admin",
     labelKey: "permissions.groups.admin",
     permissions: [
@@ -230,8 +243,10 @@ export const PERMISSION_GROUPS: {
       { key: "admin.users.manage", labelKey: permissionLabelKey("admin.users.manage") },
       { key: "admin.roles.manage", labelKey: permissionLabelKey("admin.roles.manage") },
       { key: "admin.nav.manage", labelKey: permissionLabelKey("admin.nav.manage") },
+      { key: "admin.customization.manage", labelKey: permissionLabelKey("admin.customization.manage") },
       { key: "admin.audit.read", labelKey: permissionLabelKey("admin.audit.read") },
       { key: "admin.ai.manage", labelKey: permissionLabelKey("admin.ai.manage") },
+      { key: "api.keys.manage", labelKey: permissionLabelKey("api.keys.manage") },
     ],
   },
 ];
@@ -297,6 +312,9 @@ export const BUILT_IN_ROLES: Record<
       "banking.reconcile",
       "expenses.read",
       "expenses.create",
+      "documents.read",
+      "documents.manage",
+      "admin.customization.manage",
       "admin.audit.read",
     ],
   },
@@ -330,6 +348,8 @@ export const BUILT_IN_ROLES: Record<
       "time.manage",
       "assistant.use",
       "assistant.write",
+      "documents.read",
+      "documents.manage",
     ],
   },
   approver: {
@@ -348,12 +368,13 @@ export const BUILT_IN_ROLES: Record<
       "time.read",
       "time.approve",
       "assistant.use",
+      "documents.read",
     ],
   },
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use"],
+    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read"],
   },
 };
 

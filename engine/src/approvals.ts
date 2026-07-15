@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { cmp } from "./money.ts";
+import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 
 /**
  * Approval engine runtime. A policy's rules declare ordered steps with
@@ -20,6 +21,34 @@ export async function submitForApproval(targetKind: string, targetId: string): P
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
   if (!doc) throw new Error("target document not found");
   if (doc.status !== "draft") throw new Error(`document is ${doc.status}, not draft`);
+
+  // -- user scripts: before_submit (veto / mutate) ------------------------
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
+  if (org) {
+    const lines = await db
+      .select()
+      .from(schema.documentLines)
+      .where(eq(schema.documentLines.documentId, targetId));
+    const scriptCtx: ScriptContext = {
+      trigger: "before_submit",
+      document: doc as unknown as Record<string, unknown>,
+      lines: lines as unknown as Record<string, unknown>[],
+      org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    };
+    const outcomes = await runTriggerScripts("before_submit", scriptCtx, doc.id);
+    const bad = outcomes.find((o) => o.status !== "ok");
+    if (bad) {
+      throw new Error(
+        bad.status === "aborted"
+          ? `submission vetoed by script "${bad.name}": ${bad.abortReason}`
+          : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
+      );
+    }
+    const mutations = Object.assign({}, ...outcomes.map((o) => o.set ?? {}));
+    if (Object.keys(mutations).length > 0) {
+      await db.update(schema.documents).set(mutations).where(eq(schema.documents.id, doc.id));
+    }
+  }
 
   const [policy] = await db
     .select()

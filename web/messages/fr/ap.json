@@ -1,43 +1,65 @@
 {
   "list": {
-    "title": "Comptes fournisseurs",
-    "description": "Factures fournisseurs saisies dans openbooks — brouillon → approbation → comptabilisées par le noyau.",
-    "searchPlaceholder": "Rechercher factures, fournisseurs, réf.…",
+    "title": "Factures fournisseurs",
+    "description": "Factures et notes de crédit fournisseurs — vos comptes fournisseurs : brouillon → approbation → comptabilisées par le noyau.",
+    "searchPlaceholder": "Rechercher factures, notes de crédit, fournisseurs, réf.…",
     "columns": {
+      "number": "Numéro",
       "bill": "Facture",
       "ref": "Réf."
     },
     "empty": {
-      "title": "Aucune facture pour l’instant",
-      "description": "Saisissez la première facture fournisseur pour lancer le flux des comptes fournisseurs."
+      "title": "Aucune facture fournisseur pour l’instant",
+      "description": "Saisissez la première facture ou note de crédit fournisseur pour lancer le flux des comptes fournisseurs."
     }
   },
+  "kinds": {
+    "bill": "Facture",
+    "credit": "Note de crédit"
+  },
   "actions": {
+    "new": "Nouveau",
     "newBill": "Nouvelle facture",
+    "newCredit": "Nouvelle note de crédit",
     "submitForApproval": "Soumettre pour approbation"
   },
   "drawer": {
-    "autosaveHint": "les modifications s’enregistrent automatiquement",
-    "vendorAutosaveHint": "{vendor} · les modifications s’enregistrent automatiquement",
+    "editingHint": "Modification — Enregistrer pour appliquer",
     "viewGlImpact": "Voir l’impact au GL",
-    "billDate": "Date de la facture",
+    "dateLabel": "Date de la facture",
     "dueDate": "Date d’échéance",
-    "vendorRef": "N° de réf. fournisseur",
-    "selectVendorPlaceholder": "Sélectionner un fournisseur…",
+    "reference": "N° de réf. fournisseur",
+    "accountColumn": "Compte",
     "accountPlaceholder": "Compte…",
     "noTax": "Sans taxe",
     "taxAmountColumn": "Mt taxe",
+    "selectVendorPlaceholder": "Sélectionner un fournisseur…",
+    "selectCustomerPlaceholder": "Sélectionner un client…",
+    "subtotalAmount": "Sous-total {amount}",
+    "taxTotalAmount": "Taxe {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Solde dû {amount}",
     "saveState": {
       "saved": "Toutes les modifications sont enregistrées",
       "error": "Échec de l’enregistrement — corrigez et réessayez",
       "dirty": "Modifications non enregistrées…"
-    }
+    },
+    "deleteTitle": "Supprimer ce document ?",
+    "deleteDraftBody": "Cela supprime définitivement le brouillon. Cette action est irréversible.",
+    "deletePostedBody": "Cela supprime définitivement le document et son impact au grand livre. Cette action est irréversible.",
+    "formLabel": "Formulaire",
+    "formDefault": "Formulaire par défaut",
+    "formSetPreferred": "Définir comme préféré",
+    "formSetPreferredDone": "Formulaire préféré enregistré",
+    "formPreferredCleared": "Formulaire préféré effacé",
+    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré"
   },
   "toasts": {
     "actionFailed": "Échec de l’action",
     "submitted": "Soumis pour approbation",
     "posted": "Comptabilisé au grand livre",
-    "autosaveFailed": "Échec de l’enregistrement automatique",
-    "createDraftFailed": "Impossible de créer une facture brouillon"
+    "createDraftFailed": "Impossible de créer un brouillon",
+    "deleted": "Document supprimé",
+    "deleteFailed": "Échec de la suppression"
   }
 }

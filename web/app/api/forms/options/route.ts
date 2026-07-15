@@ -73,5 +73,31 @@ export async function GET(req: Request) {
     })
   }
 
+  if (source === 'reference') {
+    const table = url.searchParams.get('table')
+    const allowed = ['parties', 'projects', 'accounts', 'items']
+    if (!table || !allowed.includes(table)) {
+      return NextResponse.json({ error: 'invalid reference table' }, { status: 400 })
+    }
+    let queryText: string
+    if (table === 'parties') {
+      queryText = `select id as value, display_name as label, short_code as hint from parties where org_id = $1 and is_active order by display_name limit 5000`
+    } else if (table === 'projects') {
+      queryText = `select id as value, name as label from projects where org_id = $1 and is_active order by name limit 5000`
+    } else if (table === 'accounts') {
+      queryText = `select id as value, (number || ' ' || name) as label from accounts where org_id = $1 and is_active and not is_summary order by number nulls last, name limit 5000`
+    } else {
+      queryText = `select id as value, name as label from items where org_id = $1 and is_active order by name limit 5000`
+    }
+    const pool = (await import('@openbooks/engine/src/db.ts')).pool
+    const client = await pool.connect()
+    try {
+      const res = await client.query(queryText, [orgId])
+      return NextResponse.json({ options: res.rows })
+    } finally {
+      client.release()
+    }
+  }
+
   return NextResponse.json({ error: 'unknown source' }, { status: 400 })
 }

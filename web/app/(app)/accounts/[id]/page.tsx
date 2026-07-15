@@ -15,15 +15,20 @@ export default async function Register({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; from?: string; to?: string }>
 }) {
   const t = await getTranslations('accounts')
   const tc = await getTranslations('common')
   const { id } = await params
-  const { page } = await searchParams
-  const p = Math.max(1, Number(page ?? 1))
-  const { account, lines, total, balance } = await accountRegister(id, PER_PAGE, (p - 1) * PER_PAGE)
+  const sp = await searchParams
+  const p = Math.max(1, Number(sp.page ?? 1))
+  const period = sp.from || sp.to ? { from: sp.from, to: sp.to } : undefined
+  const { account, lines, total, balance } = await accountRegister(id, PER_PAGE, (p - 1) * PER_PAGE, period)
   if (!account) return <PageContainer>{t('register.notFound')}</PageContainer>
+  const periodLabel = period?.from || period?.to ? `${period?.from ?? ''} → ${period?.to ?? ''}` : null
+  const pageParams: Record<string, string> = { page: String(p) }
+  if (sp.from) pageParams.from = sp.from
+  if (sp.to) pageParams.to = sp.to
 
   return (
     <PageContainer>
@@ -32,6 +37,11 @@ export default async function Register({
         subtitle={t('register.subtitle', { count: total, balance: money(balance) })}
         back={{ href: '/accounts', label: t('list.title') }}
       />
+      {periodLabel ? (
+        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {t('register.periodFilter', { label: periodLabel })}
+        </div>
+      ) : null}
       <div className="mt-6">
         <Table>
           <TableHeader>
@@ -67,7 +77,7 @@ export default async function Register({
           </TableBody>
         </Table>
         <div className="mt-4">
-          <Pagination basePath={`/accounts/${id}`} currentParams={{ page: String(p) }} page={p} perPage={PER_PAGE} total={total} />
+          <Pagination basePath={`/accounts/${id}`} currentParams={pageParams} page={p} perPage={PER_PAGE} total={total} />
         </div>
       </div>
     </PageContainer>

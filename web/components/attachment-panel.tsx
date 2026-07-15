@@ -10,18 +10,19 @@ import { dateTime } from '../lib/format'
 /**
  * Attachments section for a record drawer. Given a target (table + id), lists
  * existing files (metadata only) and provides a drag-and-drop / file-input
- * uploader. Bytes are stored in Postgres via /api/attachments; downloads open
- * the /download route in a new tab. Styling matches @openbooks/ui — dense and
- * calm, light + dark.
+ * uploader. Files are stored in the File Cabinet under an auto-created
+ * per-record folder; downloads open the download route in a new tab.
  */
 
-interface AttachmentMeta {
+interface AttachedFile {
   id: string
-  filename: string
+  name: string
+  fileType: string
   contentType: string
   sizeBytes: number
   createdAt: string
   createdBy: string | null
+  attachmentId: string
 }
 
 const MAX_BYTES = 25 * 1024 * 1024
@@ -48,7 +49,7 @@ export function AttachmentPanel({
 }) {
   const t = useTranslations('ui.attachments')
   const tCommon = useTranslations('common')
-  const [items, setItems] = useState<AttachmentMeta[]>([])
+  const [items, setItems] = useState<AttachedFile[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(0)
   const [dragOver, setDragOver] = useState(false)
@@ -57,10 +58,10 @@ export function AttachmentPanel({
 
   const load = useCallback(async () => {
     const res = await fetch(
-      `/api/attachments?targetTable=${encodeURIComponent(targetTable)}&targetId=${targetId}`,
+      `/api/file-cabinet/attachments?targetTable=${encodeURIComponent(targetTable)}&targetId=${targetId}`,
     )
     if (res.ok) {
-      const data = (await res.json()) as { attachments: AttachmentMeta[] }
+      const data = (await res.json()) as { attachments: AttachedFile[] }
       setItems(data.attachments)
     }
     setLoading(false)
@@ -82,9 +83,9 @@ export function AttachmentPanel({
       form.append('targetId', targetId)
       setUploading((n) => n + 1)
       try {
-        const res = await fetch('/api/attachments', { method: 'POST', body: form })
+        const res = await fetch('/api/file-cabinet/attachments', { method: 'POST', body: form })
         if (res.ok) {
-          const data = (await res.json()) as { attachment: AttachmentMeta }
+          const data = (await res.json()) as { attachment: AttachedFile }
           setItems((prev) => [data.attachment, ...prev])
           toast.success(t('attached', { name: file.name }))
         } else {
@@ -108,12 +109,12 @@ export function AttachmentPanel({
     [uploadOne],
   )
 
-  async function remove(id: string, name: string) {
-    setDeleting(id)
+  async function remove(attachmentId: string, name: string) {
+    setDeleting(attachmentId)
     try {
-      const res = await fetch(`/api/attachments/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/file-cabinet/attachments/${attachmentId}`, { method: 'DELETE' })
       if (res.ok) {
-        setItems((prev) => prev.filter((a) => a.id !== id))
+        setItems((prev) => prev.filter((a) => a.attachmentId !== attachmentId))
         toast.success(t('removed', { name }))
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
@@ -149,13 +150,13 @@ export function AttachmentPanel({
               <FileText className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
               <div className="min-w-0 flex-1">
                 <a
-                  href={`/api/attachments/${a.id}/download`}
+                  href={`/api/file-cabinet/files/${a.id}/download`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block truncate text-sm text-teal-700 hover:underline dark:text-teal-300"
-                  title={a.filename}
+                  title={a.name}
                 >
-                  {a.filename}
+                  {a.name}
                 </a>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {formatSize(a.sizeBytes)} · {dateTime(a.createdAt)}
@@ -163,10 +164,10 @@ export function AttachmentPanel({
               </div>
               <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                 <a
-                  href={`/api/attachments/${a.id}/download`}
+                  href={`/api/file-cabinet/files/${a.id}/download`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={t('downloadAria', { name: a.filename })}
+                  aria-label={t('downloadAria', { name: a.name })}
                 >
                   <Download className="h-4 w-4" />
                 </a>
@@ -176,11 +177,11 @@ export function AttachmentPanel({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-slate-500 hover:text-red-600 dark:hover:text-red-400"
-                  disabled={deleting === a.id}
-                  onClick={() => remove(a.id, a.filename)}
-                  aria-label={t('removeAria', { name: a.filename })}
+                  disabled={deleting === a.attachmentId}
+                  onClick={() => remove(a.attachmentId, a.name)}
+                  aria-label={t('removeAria', { name: a.name })}
                 >
-                  {deleting === a.id ? (
+                  {deleting === a.attachmentId ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Trash2 className="h-4 w-4" />

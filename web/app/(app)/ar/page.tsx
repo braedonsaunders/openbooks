@@ -9,17 +9,26 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../lib/list-params'
-import { requirePermission } from '../../../lib/authz'
 import { money } from '../../../lib/format'
-import { InvoiceActions } from './InvoiceActions'
-import { InvoiceDrawer } from './InvoiceDrawer'
-import { NewInvoiceButton } from './NewInvoiceButton'
-import { loadInvoice } from '../../../lib/invoices'
+import { requirePermission, can } from '../../../lib/authz'
+import {
+  AR_KINDS,
+  DOC_KINDS,
+  accountOptions,
+  dimensionOptions,
+  loadDocument,
+  partyOptions,
+  taxCodeOptions,
+} from '../../../lib/documents'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
+import { DocumentDrawer } from '../../../components/document-drawer'
+import { DocumentRowActions } from '../../../components/document-row-actions'
+import { NewDocumentButton } from '../../../components/new-document-button'
+import { DocTypeBadge } from '../../../components/doc-type-badge'
 
 export const dynamic = 'force-dynamic'
 
-/** Posted invoices resolve to open/paid buckets from the applications ledger. */
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
   open: 'default',
   paid: 'success',
@@ -31,7 +40,6 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
 
 const STATUS_ORDER = ['draft', 'pending_approval', 'approved', 'open', 'paid', 'voided']
 
-/** DB status/bucket value → `common.status.*` message key. Unknown values render verbatim. */
 const STATUS_KEYS: Record<string, string> = {
   draft: 'draft',
   pending_approval: 'pendingApproval',
@@ -47,7 +55,7 @@ const SORT_COLUMNS = {
   number: sql`d.document_number`,
   customer: sql`p.display_name`,
   total: sql`d.total`,
-  balance: sql`case when d.status = 'posted' then d.total - ap.applied end`,
+  balance: sql`case when d.status = 'posted' and d.kind = 'customer_invoice' then d.total - ap.applied end`,
   status: sql`d.status`,
 } as const
 
@@ -65,13 +73,14 @@ export default async function AR({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  await requirePermission('ar.read')
+  const authz = await requirePermission('ar.read')
+  const canCreate = can(authz, 'ar.create')
   const t = await getTranslations('ar')
   const tCommon = await getTranslations('common')
   const statusLabel = (bucket: string) =>
     STATUS_KEYS[bucket] ? tCommon(`status.${STATUS_KEYS[bucket]}`) : bucket.replace('_', ' ')
   const sp = await searchParams
-  const invoiceId = typeof sp.invoice === 'string' ? sp.invoice : undefined
+  const docId = typeof sp.doc === 'string' ? sp.doc : undefined
   const params = parseListParams(sp, {
     sort: 'date',
     dir: 'desc',
@@ -79,25 +88,29 @@ export default async function AR({
     allowedSorts: ['date', 'number', 'customer', 'total', 'balance', 'status'] as const,
   })
   const status = pickString(sp.status)
+  const kind = pickString(sp.kind)
 
+  // Only invoices resolve to open/paid buckets (credits' applied flows the
+  // opposite direction). The status filter honours both bucket and raw status.
   const statusFilter =
     status === 'open'
-      ? sql` and d.status = 'posted' and ap.applied < d.total`
+      ? sql` and d.status = 'posted' and d.kind = 'customer_invoice' and ap.applied < d.total`
       : status === 'paid'
-        ? sql` and d.status = 'posted' and ap.applied >= d.total`
+        ? sql` and d.status = 'posted' and d.kind = 'customer_invoice' and ap.applied >= d.total`
         : status
           ? sql` and d.status = ${status}`
           : sql``
-  const where = sql`d.kind = 'customer_invoice'
+  const where = sql`d.org_id = ${authz.user.orgId} and d.kind in ('customer_invoice','customer_credit')
+    ${kind ? sql` and d.kind = ${kind}` : sql``}
     ${statusFilter}
     ${params.q ? sql` and (d.document_number ilike ${'%' + params.q + '%'} or p.display_name ilike ${'%' + params.q + '%'} or d.reference_number ilike ${'%' + params.q + '%'})` : sql``}`
 
   const [invoices, counts] = await Promise.all([
     db.execute(sql`
-      select d.id, d.document_number, d.document_date, d.status, d.total,
+      select d.id, d.kind, d.document_number, d.document_date, d.status, d.total,
              d.reference_number, p.display_name as customer, e.id as entry_id,
-             case when d.status = 'posted' then d.total - ap.applied end as balance,
-             case when d.status = 'posted'
+             case when d.status = 'posted' and d.kind = 'customer_invoice' then d.total - ap.applied end as balance,
+             case when d.status = 'posted' and d.kind = 'customer_invoice'
                   then case when ap.applied >= d.total then 'paid' else 'open' end
                   else d.status end as bucket
         from documents d
@@ -109,18 +122,18 @@ export default async function AR({
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
     db.execute(sql`
-      select case when d.status = 'posted'
+      select case when d.status = 'posted' and d.kind = 'customer_invoice'
                   then case when ap.applied >= d.total then 'paid' else 'open' end
                   else d.status end as bucket,
              count(*) as n
         from documents d
         ${APPLIED_JOIN}
-       where d.kind = 'customer_invoice'
+       where d.org_id = ${authz.user.orgId} and d.kind in ('customer_invoice','customer_credit')
        group by 1
     `) as any,
   ])
   const total = counts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
-  const filteredTotal = status || params.q
+  const filteredTotal = status || params.q || kind
     ? Number(((await db.execute(sql`
         select count(*) as n from documents d
           left join parties p on p.id = d.party_id
@@ -128,32 +141,46 @@ export default async function AR({
          where ${where}`)) as any).rows[0].n)
     : total
 
-  const [openInvoice, pickers] = await Promise.all([
-    invoiceId ? loadInvoice(invoiceId) : null,
-    invoiceId
-      ? Promise.all([
-          db.execute(sql`
-            select id, display_name from parties
-             where (custom->>'nsKind' = 'customer'
-                    or exists (select 1 from customer_roles cr where cr.party_id = parties.id))
-               and is_active
-             order by display_name limit 2000`) as any,
-          db.execute(sql`select id, number, name from accounts where type in ('income','income_other') and is_active and not is_summary order by number nulls last`) as any,
-          db.execute(sql`
-            select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
-              from tax_codes tc
-              left join lateral (
-                select rate_percent from tax_rates
-                 where tax_code_id = tc.id and effective_from <= now()
-                 order by effective_from desc limit 1) tr on true
-             where tc.is_active order by tc.code`) as any,
-          db.execute(sql`select id, name from departments where is_active order by name`) as any,
-          db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
-          loadFieldDefs('documents', 'customer_invoice'),
-          loadFieldDefs('document_lines', 'customer_invoice'),
-        ])
-      : null,
-  ])
+  // Org guard: never render another tenant's document in the drawer.
+  const loadedDoc = docId ? await loadDocument(docId) : null
+  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null
+  const openKind = openDoc?.doc.kind as string | undefined
+  const drawerOpen = !!(openDoc && openKind && (AR_KINDS as readonly string[]).includes(openKind))
+  const pickers = drawerOpen
+    ? await Promise.all([
+        partyOptions('customer'),
+        accountOptions(DOC_KINDS[openKind! as 'customer_invoice']!),
+        taxCodeOptions(),
+        dimensionOptions().then((d) => d.departments),
+        dimensionOptions().then((d) => d.projects),
+        loadFieldDefs('documents', openKind!),
+        loadFieldDefs('document_lines', openKind!),
+      ])
+    : null
+  const resolvedForm = drawerOpen && pickers
+    ? await resolveFormLayout({
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        recordType: openKind!,
+        userRoles: [authz.user.role],
+        headerDefs: pickers[5] as any,
+        lineDefs: pickers[6] as any,
+        explicitLayoutId: pickString(sp.form),
+      })
+    : null
+
+  const kindOptions = [
+    { value: 'customer_invoice', label: t('kinds.invoice') },
+    { value: 'customer_credit', label: t('kinds.credit') },
+  ]
+  const kindCounts = (await db.execute(sql`
+    select kind, count(*) as n from documents
+     where org_id = ${authz.user.orgId} and kind in ('customer_invoice','customer_credit') group by kind
+  `)) as any
+  for (const r of kindCounts.rows as any[]) {
+    const opt = kindOptions.find((o) => o.value === r.kind)
+    if (opt) (opt as any).count = Number(r.n)
+  }
 
   const statusOptions = counts.rows
     .slice()
@@ -164,6 +191,11 @@ export default async function AR({
       count: Number(r.n),
     }))
 
+  const newItems = [
+    { kind: 'customer_invoice', label: t('actions.newInvoice') },
+    { kind: 'customer_credit', label: t('actions.newCredit') },
+  ]
+
   return (
     <ListPageLayout
       header={
@@ -171,10 +203,21 @@ export default async function AR({
           <PageHeader
             title={t('list.title')}
             description={t('list.description')}
-            actions={<NewInvoiceButton />}
+            actions={
+              canCreate ? (
+                <NewDocumentButton
+                  items={newItems}
+                  basePath="/ar"
+                  triggerLabel={t('actions.new')}
+                  creatingLabel={tCommon('actions.creating')}
+                  failedLabel={t('toasts.createDraftFailed')}
+                />
+              ) : undefined
+            }
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath="/ar" currentParams={sp} paramKey="kind" label={tCommon('labels.type')} options={kindOptions as any} />
             <FilterChips basePath="/ar" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>
         </>
@@ -184,14 +227,24 @@ export default async function AR({
         <EmptyState
           title={t('list.emptyTitle')}
           description={t('list.emptyDescription')}
-          action={<NewInvoiceButton />}
+          action={
+            canCreate ? (
+              <NewDocumentButton
+                items={newItems}
+                basePath="/ar"
+                triggerLabel={t('actions.new')}
+                creatingLabel={tCommon('actions.creating')}
+                failedLabel={t('toasts.createDraftFailed')}
+              />
+            ) : undefined
+          }
         />
       ) : (
         <>
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/ar" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{t('list.columns.invoice')}</SortTh>
+                <SortTh basePath="/ar" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{t('list.columns.number')}</SortTh>
                 <SortTh basePath="/ar" currentParams={sp} column="customer" sort={params.sort} dir={params.dir}>{tCommon('labels.customer')}</SortTh>
                 <SortTh basePath="/ar" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>{tCommon('labels.date')}</SortTh>
                 <TableHead>{t('list.columns.ref')}</TableHead>
@@ -204,10 +257,13 @@ export default async function AR({
             <TableBody>
               {invoices.rows.map((inv: any) => (
                 <TableRow key={inv.id}>
-                  <TableCell className="font-mono text-[13px] font-semibold">
-                    <Link href={`/ar?invoice=${inv.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
-                      {inv.document_number}
-                    </Link>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <DocTypeBadge kind={inv.kind} />
+                      <Link href={`/ar?doc=${inv.id}`} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">
+                        {inv.document_number}
+                      </Link>
+                    </div>
                   </TableCell>
                   <TableCell>{inv.customer}</TableCell>
                   <TableCell>{inv.document_date}</TableCell>
@@ -226,7 +282,7 @@ export default async function AR({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <InvoiceActions id={inv.id} status={inv.status} />
+                    <DocumentRowActions id={inv.id} status={inv.status} config={DOC_KINDS[inv.kind]} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -237,16 +293,25 @@ export default async function AR({
           </div>
         </>
       )}
-      {openInvoice && pickers ? (
-        <InvoiceDrawer
-          invoice={openInvoice as any}
-          customers={pickers[0].rows}
-          accounts={pickers[1].rows}
-          taxCodes={pickers[2].rows}
-          departments={pickers[3].rows}
-          projects={pickers[4].rows}
+      {openDoc && pickers && openDoc.doc.kind ? (
+        <DocumentDrawer
+          payload={openDoc as any}
+          config={DOC_KINDS[openDoc.doc.kind as string]!}
+          basePath="/ar"
+          parties={pickers[0] as any}
+          accounts={pickers[1] as any}
+          taxCodes={pickers[2] as any}
+          departments={pickers[3] as any}
+          projects={pickers[4] as any}
           headerDefs={pickers[5] as any}
           lineDefs={pickers[6] as any}
+          canCreate={canCreate}
+          canPost={can(authz, 'ar.post')}
+          layout={resolvedForm?.layout}
+          availableLayouts={resolvedForm?.available}
+          currentLayoutId={resolvedForm?.row?.id ?? null}
+          recordType={openKind}
+          canCustomize={can(authz, 'admin.customization.manage')}
         />
       ) : null}
     </ListPageLayout>

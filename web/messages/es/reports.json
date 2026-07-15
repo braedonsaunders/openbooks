@@ -193,6 +193,21 @@
       "ascending": "Ascendente",
       "rowLimit": "Límite de filas",
       "rowLimitHint": "Limitado a 10,000 filas. Las vistas previas muestran las primeras {previewRows}.",
+      "pageSetup": {
+        "title": "Configuración de página PDF",
+        "hint": "Controla cómo se imprime este informe en PDF (papel, orientación, densidad, márgenes).",
+        "paper": "Tamaño de papel",
+        "paperLetter": "Carta",
+        "paperA4": "A4",
+        "paperLegal": "Legal",
+        "orientation": "Orientación",
+        "landscape": "Horizontal",
+        "portrait": "Vertical",
+        "density": "Densidad",
+        "densityStandard": "Estándar",
+        "densityCompact": "Compacta (más filas por página)",
+        "marginMm": "Márgenes (mm)"
+      },
       "livePreview": "Vista previa en vivo",
       "previewFailed": "La vista previa falló",
       "runningPreview": "Ejecutando vista previa…",
@@ -221,7 +236,18 @@
         "avg": "Promedio",
         "min": "Mín",
         "max": "Máx"
-      }
+      },
+      "running": "Ejecutando…",
+      "selectedColumns": "Columnas seleccionadas",
+      "addColumn": "Agregar columna",
+      "labelOverridePlaceholder": "Renombrar…",
+      "moveUpAria": "Subir",
+      "moveDownAria": "Bajar",
+      "removeColumnAria": "Quitar columna",
+      "thenBy": "Luego por",
+      "addSortLevel": "Agregar nivel de orden",
+      "removeSortAria": "Quitar nivel de orden",
+      "noColumnsSelected": "No hay columnas seleccionadas: agregue al menos una."
     },
     "runner": {
       "downloadCsv": "Descargar CSV",
@@ -312,8 +338,8 @@
         "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento contabilizada (o en borrador)."
       },
       "documents": {
-        "label": "Documentos",
-        "description": "Documentos comerciales — facturas de proveedor, facturas de cliente, pagos, órdenes — con etiquetas de tercero y dimensiones."
+        "label": "Transacciones",
+        "description": "Todas las transacciones: facturas de proveedor y cliente, créditos, pagos, informes de gastos, cheques, cargos de tarjeta, asientos, órdenes y cotizaciones. Filtre el tipo para centrarse en una o varias."
       },
       "parties": {
         "label": "Terceros",
@@ -322,6 +348,34 @@
       "accounts": {
         "label": "Cuentas",
         "description": "El plan de cuentas — número, nombre, tipo e indicadores de contabilización."
+      },
+      "transaction_lines": {
+        "label": "Líneas de transacción",
+        "description": "Detalle de transacciones a nivel de línea para todos los tipos: artículo, cuenta, cantidades, importes, estado de facturación y dimensiones."
+      },
+      "journal_entries": {
+        "label": "Asientos de diario",
+        "description": "Encabezados de asientos: número, fecha de contabilización, estado, origen y nota."
+      },
+      "items": {
+        "label": "Artículos",
+        "description": "El catálogo de artículos y servicios: servicios, inventario, mano de obra, cargos y descuentos con tarifas y cuentas."
+      },
+      "projects": {
+        "label": "Proyectos",
+        "description": "Proyectos / obras: estado, cliente, método de facturación, calendario y n.º de OC."
+      },
+      "timesheets": {
+        "label": "Registros de tiempo",
+        "description": "Registros de hojas de horas: empleado, fecha, horas, facturable, proyecto y estado de aprobación."
+      },
+      "fixed_assets": {
+        "label": "Activos fijos",
+        "description": "El registro de activos fijos: estado, adquisición, costo, custodio y dimensiones."
+      },
+      "tax_codes": {
+        "label": "Códigos de impuesto",
+        "description": "Códigos de impuesto: jurisdicción, alcance y recuperabilidad."
       }
     },
     "columns": {
@@ -352,7 +406,7 @@
         "party_id": "Tercero (id)"
       },
       "documents": {
-        "kind": "Clase",
+        "kind": "Tipo",
         "document_number": "N.º de documento",
         "party_name": "Tercero",
         "document_date": "Fecha del documento",
@@ -371,8 +425,11 @@
         "project": "Proyecto",
         "memo": "Memo",
         "created_at": "Fecha de creación",
-        "id": "Documento (id)",
-        "party_id": "Tercero (id)"
+        "id": "Transacción (id)",
+        "party_id": "Tercero (id)",
+        "is_final_invoice": "Factura final",
+        "location": "Ubicación",
+        "class": "Clase"
       },
       "parties": {
         "display_name": "Nombre",
@@ -403,7 +460,162 @@
         "created_at": "Fecha de creación",
         "id": "Cuenta (id)",
         "parent_id": "Cuenta padre (id)"
+      },
+      "transaction_lines": {
+        "kind": "Tipo",
+        "document_number": "N.º de documento",
+        "document_date": "Fecha del documento",
+        "status": "Estado",
+        "party_name": "Tercero",
+        "line_number": "N.º de línea",
+        "item_name": "Artículo",
+        "account_number": "N.º de cuenta",
+        "account_name": "Cuenta",
+        "description": "Descripción",
+        "quantity": "Cantidad",
+        "unit": "Unidad",
+        "unit_price": "Precio unitario",
+        "amount": "Importe",
+        "tax_amount": "Importe de impuesto",
+        "is_billable": "Facturable",
+        "quantity_fulfilled": "Cant. entregada",
+        "quantity_billed": "Cant. facturada",
+        "employee_name": "Empleado",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "location": "Ubicación",
+        "class": "Clase",
+        "created_at": "Creado el",
+        "id": "Línea (id)",
+        "document_id": "Transacción (id)"
+      },
+      "journal_entries": {
+        "entry_number": "N.º de asiento",
+        "posting_date": "Fecha de contabilización",
+        "status": "Estado",
+        "origin": "Origen",
+        "memo": "Nota",
+        "created_at": "Creado el",
+        "id": "Asiento (id)",
+        "source_document_id": "Transacción de origen (id)"
+      },
+      "items": {
+        "code": "Código",
+        "name": "Nombre",
+        "kind": "Tipo",
+        "category": "Categoría",
+        "default_rate": "Tarifa predeterminada",
+        "unit": "Unidad",
+        "income_account": "Cuenta de ingresos",
+        "expense_account": "Cuenta de gastos",
+        "show_on_timesheet": "En hojas de horas",
+        "is_active": "Activo",
+        "created_at": "Creado el",
+        "id": "Artículo (id)"
+      },
+      "projects": {
+        "code": "Código",
+        "name": "Nombre",
+        "status": "Estado",
+        "customer_name": "Cliente",
+        "manager_name": "Gerente",
+        "billing_method": "Método de facturación",
+        "customer_po_number": "N.º OC cliente",
+        "starts_on": "Inicia el",
+        "ends_on": "Termina el",
+        "is_active": "Activo",
+        "created_at": "Creado el",
+        "id": "Proyecto (id)"
+      },
+      "timesheets": {
+        "employee_name": "Empleado",
+        "worked_on": "Trabajado el",
+        "hours": "Horas",
+        "status": "Estado",
+        "is_billable": "Facturable",
+        "project": "Proyecto",
+        "item_name": "Artículo de servicio",
+        "department": "Departamento",
+        "memo": "Nota",
+        "created_at": "Creado el",
+        "id": "Registro de tiempo (id)"
+      },
+      "fixed_assets": {
+        "asset_number": "N.º de activo",
+        "name": "Nombre",
+        "status": "Estado",
+        "category": "Categoría",
+        "acquired_on": "Adquirido el",
+        "in_service_on": "En servicio el",
+        "acquisition_cost": "Costo de adquisición",
+        "salvage_value": "Valor residual",
+        "serial_number": "N.º de serie",
+        "custodian_name": "Custodio",
+        "project": "Proyecto",
+        "department": "Departamento",
+        "created_at": "Creado el",
+        "id": "Activo (id)"
+      },
+      "tax_codes": {
+        "code": "Código",
+        "name": "Nombre",
+        "country": "País",
+        "region": "Región",
+        "applies_to": "Se aplica a",
+        "recoverable_percent": "% recuperable",
+        "is_active": "Activo",
+        "id": "Código de impuesto (id)"
       }
+    },
+    "enumValues": {
+      "vendor_bill": "Factura de proveedor",
+      "vendor_credit": "Crédito de proveedor",
+      "vendor_payment": "Pago a proveedor",
+      "customer_invoice": "Factura de cliente",
+      "customer_credit": "Nota de crédito",
+      "customer_payment": "Pago de cliente",
+      "expense_report": "Informe de gastos",
+      "check": "Cheque",
+      "card_charge": "Cargo de tarjeta",
+      "card_refund": "Reembolso de tarjeta",
+      "transfer": "Transferencia",
+      "journal": "Asiento de diario",
+      "purchase_order": "Orden de compra",
+      "sales_order": "Orden de venta",
+      "quote": "Cotización",
+      "draft": "Borrador",
+      "pending_approval": "Pendiente de aprobación",
+      "approved": "Aprobado",
+      "posted": "Contabilizado",
+      "voided": "Anulado",
+      "reversed": "Revertido",
+      "submitted": "Enviado",
+      "rejected": "Rechazado",
+      "time_and_materials": "Tiempo y materiales",
+      "fixed_price": "Precio fijo",
+      "cost_plus": "Costo más margen",
+      "service": "Servicio",
+      "non_inventory": "Sin inventario",
+      "inventory": "Inventario",
+      "assembly": "Ensamblaje",
+      "kit": "Kit",
+      "other_charge": "Otro cargo",
+      "labor": "Mano de obra",
+      "absence": "Ausencia",
+      "discount": "Descuento",
+      "quoted": "Cotizado",
+      "awarded": "Adjudicado",
+      "active": "Activo",
+      "substantially_complete": "Sustancialmente completo",
+      "closed": "Cerrado",
+      "cancelled": "Cancelado",
+      "in_service": "En servicio",
+      "fully_depreciated": "Totalmente depreciado",
+      "disposed": "Enajenado",
+      "written_off": "Dado de baja",
+      "sales": "Ventas",
+      "purchases": "Compras",
+      "both": "Ambos"
     }
   },
   "operators": {

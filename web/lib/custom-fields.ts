@@ -25,7 +25,20 @@ export interface CustomFieldDef {
     | 'boolean'
     | 'select'
     | 'multi_select'
-  config: { options?: string[] }
+    | 'reference'
+  config: {
+    options?: string[]
+    helpText?: string
+    placeholder?: string
+    defaultValue?: unknown
+    min?: number
+    max?: number
+    showInList?: boolean
+    displayMode?: string
+    allowedRoles?: string[]
+    referenceTable?: string
+    referenceFilter?: string
+  }
   isRequired: boolean
   sortOrder: number
 }
@@ -73,8 +86,19 @@ export function validateCustomValues(
       case 'number':
       case 'currency': {
         const n = Number(raw)
-        if (Number.isNaN(n)) errors[def.key] = `${def.label} must be a number`
-        else cleaned[def.key] = def.fieldType === 'currency' ? n.toFixed(2) : n
+        if (Number.isNaN(n)) {
+          errors[def.key] = `${def.label} must be a number`
+          break
+        }
+        if (def.config.min != null && n < def.config.min) {
+          errors[def.key] = `${def.label} must be ≥ ${def.config.min}`
+          break
+        }
+        if (def.config.max != null && n > def.config.max) {
+          errors[def.key] = `${def.label} must be ≤ ${def.config.max}`
+          break
+        }
+        cleaned[def.key] = def.fieldType === 'currency' ? n.toFixed(2) : n
         break
       }
       case 'date': {
@@ -96,6 +120,14 @@ export function validateCustomValues(
         const arr = Array.isArray(raw) ? raw.map(String) : [String(raw)]
         if (arr.some((v) => !opts.includes(v))) errors[def.key] = `${def.label}: invalid option`
         else cleaned[def.key] = arr
+        break
+      }
+      case 'reference': {
+        if (typeof raw !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+          errors[def.key] = `${def.label} must be a valid record reference`
+        } else {
+          cleaned[def.key] = raw
+        }
         break
       }
     }

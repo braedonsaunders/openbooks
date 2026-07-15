@@ -12,9 +12,12 @@ export const FIELD_TARGETS = [
   { table: 'parties', kinds: [] },
   { table: 'projects', kinds: [] },
   { table: 'accounts', kinds: [] },
+  { table: 'items', kinds: [] },
 ] as const
 
-const FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select']
+const FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select', 'reference']
+
+const REFERENCE_TABLES = ['parties', 'projects', 'accounts', 'items']
 
 function validateDef(body: Record<string, unknown>): string | null {
   const target = FIELD_TARGETS.find((t) => t.table === body.targetTable)
@@ -31,6 +34,12 @@ function validateDef(body: Record<string, unknown>): string | null {
     const opts = (body.config as { options?: unknown })?.options
     if (!Array.isArray(opts) || opts.length === 0 || opts.some((o) => typeof o !== 'string' || !o)) {
       return 'select fields need at least one option'
+    }
+  }
+  if (String(body.fieldType) === 'reference') {
+    const cfg = body.config as { referenceTable?: unknown } | undefined
+    if (!cfg?.referenceTable || !REFERENCE_TABLES.includes(String(cfg.referenceTable))) {
+      return 'reference fields need a valid referenceTable (parties, projects, accounts, items)'
     }
   }
   return null
@@ -68,9 +77,14 @@ export async function PATCH(req: Request) {
   const body = (await req.json()) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  // key/target are immutable once created (values already reference them)
   if (!body.label || !FIELD_TYPES.includes(String(body.fieldType))) {
     return NextResponse.json({ error: 'label and valid field type required' }, { status: 400 })
+  }
+  if (String(body.fieldType) === 'reference') {
+    const cfg = body.config as { referenceTable?: unknown } | undefined
+    if (!cfg?.referenceTable || !REFERENCE_TABLES.includes(String(cfg.referenceTable))) {
+      return NextResponse.json({ error: 'reference fields need a valid referenceTable' }, { status: 400 })
+    }
   }
   await db.execute(sql`
     update custom_field_defs set

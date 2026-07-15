@@ -36,6 +36,7 @@
   "register": {
     "notFound": "Cuenta no encontrada",
     "subtitle": "registro · {count, plural, one {# línea} other {# líneas}} · saldo acumulado {balance}",
+    "periodFilter": "Filtrado a {label}",
     "columns": {
       "entry": "Asiento",
       "debit": "Débito",

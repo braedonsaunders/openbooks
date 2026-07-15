@@ -1,18 +1,87 @@
 {
   "title": "Panel",
   "orgDescription": "{name} · {currency} · {book}",
-  "stats": {
+  "greeting": {
+    "morning": "Buenos días",
+    "afternoon": "Buenas tardes",
+    "evening": "Buenas noches"
+  },
+  "tenantSummary": "{entries} asientos · {parties} terceros",
+  "header": {
+    "customize": "Personalizar"
+  },
+  "widgets": {
     "journalEntries": "Asientos contables",
     "journalLines": "Líneas de asiento",
+    "activeAccounts": "Cuentas activas",
+    "parties": "Terceros",
+    "entriesToday": "Asientos hoy",
+    "pendingApprovals": "Aprobaciones pendientes",
     "ledgerBalance": "Saldo del libro mayor",
-    "ledgerBalanced": "Σ = 0.00",
-    "ledgerSum": "Σ = {amount}",
-    "parallelRun": "Ejecución paralela vs {source}",
-    "parityValue": "{matches}/{accounts} coinciden"
+    "recentEntries": "Asientos recientes",
+    "pendingApprovalsList": "Aprobaciones pendientes",
+    "myApprovals": "Mis aprobaciones",
+    "inProgress": "En curso"
   },
-  "syncCard": {
-    "body": "Hay un sistema contable externo conectado para verificación en ejecución paralela. La sincronización es manual; cada sincronización vuelve a verificar la balanza de comprobación por cuenta.",
-    "link": "Página de sincronización"
+  "grid": {
+    "customizing": "Personalizando tu panel",
+    "save": "Guardar",
+    "saved": "Diseño guardado",
+    "saveFailed": "Error al guardar el diseño",
+    "reset": "Restablecer",
+    "resetDone": "Diseño restablecido",
+    "resetFailed": "Error al restablecer",
+    "resetConfirm": "¿Restablecer al diseño predeterminado de tu rol? Tus personalizaciones se perderán.",
+    "addWidget": "Añadir widget",
+    "closePalette": "Cerrar",
+    "remove": "Quitar widget",
+    "cardMissing": "Tarjeta no disponible",
+    "unknownWidget": "Widget desconocido: {id}"
+  },
+  "palette": {
+    "title": "Widgets",
+    "subtitle": "Haz clic para añadir a tu panel",
+    "close": "Cerrar",
+    "added": "Añadido",
+    "libraryCards": "Tarjetas de análisis"
+  },
+  "customize": {
+    "title": "Personalizar panel",
+    "back": "Volver al panel",
+    "roleLabel": "Diseño predeterminado para: {role}"
+  },
+  "quickActions": {
+    "title": "Acciones rápidas",
+    "customize": "Personalizar",
+    "empty": "Sin acciones rápidas",
+    "addFirst": "Añade tu primera acción",
+    "editor": {
+      "title": "Personalizar acciones rápidas",
+      "description": "Añadir, reordenar y eliminar accesos directos.",
+      "addAction": "Añadir acción",
+      "edit": "Editar acción",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saved": "Acciones rápidas guardadas",
+      "saveFailed": "Error al guardar",
+      "loadFailed": "Error al cargar opciones",
+      "back": "Volver",
+      "common": "Comunes",
+      "customUrl": "URL personalizada",
+      "label": "Etiqueta",
+      "labelPlaceholder": "Nueva factura",
+      "link": "Enlace",
+      "linkHint": "Ruta interna (/ar) o URL https",
+      "icon": "Icono",
+      "color": "Color",
+      "preview": "Vista previa",
+      "unnamed": "Sin nombre",
+      "searchPlaceholder": "Buscar…",
+      "loading": "Cargando…",
+      "noResults": "Sin resultados",
+      "maxReached": "Máximo {count} acciones",
+      "invalidUrl": "El enlace debe ser una ruta interna o URL http(s)"
+    }
   },
   "home": {
     "customize": "Personalizar",
@@ -23,26 +92,6 @@
     "openInsights": "Abrir Análisis",
     "personalBadge": "Tu panel",
     "roleBadge": "Predeterminado del rol",
-    "systemBadge": "Predeterminado de la empresa",
-    "ledgerBalanced": "Libro mayor cuadrado",
-    "ledgerOut": "Libro mayor descuadrado en {amount}",
-    "parityOk": "Ejecución paralela coincide",
-    "parityOff": "Discrepancia en ejecución paralela"
-  },
-  "recentRuns": {
-    "title": "Sincronizaciones recientes",
-    "started": "Inicio",
-    "source": "Origen",
-    "trigger": "Disparador",
-    "new": "Nuevos",
-    "reversed": "Revertidos",
-    "unchanged": "Sin cambios",
-    "tbVerification": "Verificación de balanza",
-    "empty": "Aún no hay sincronizaciones.",
-    "runStatus": {
-      "ok": "ok",
-      "failed": "falló",
-      "running": "en ejecución"
-    }
+    "systemBadge": "Predeterminado de la empresa"
   }
 }

@@ -5,6 +5,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions, trialBalance } from '../../../../lib/reports'
 import { money } from '../../../../lib/format'
 import { DimensionFilter } from '../DimensionFilter'
+import { StatementExport } from '../StatementExport'
 import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
@@ -31,7 +32,7 @@ export default async function TrialBalance({
             title={t('trialBalance.title')}
             description={t('trialBalance.description', { date, count: rows.length })}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={<SaveViewButton />}
+            actions={<><SaveViewButton /><StatementExport kind="trial-balance" params={{ asOf: date, dept: sp.dept, project: sp.project }} /></>}
           />
           <DimensionFilter departments={opts.departments} projects={opts.projects} />
         </>

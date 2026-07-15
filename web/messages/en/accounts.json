@@ -36,6 +36,7 @@
   "register": {
     "notFound": "Account not found",
     "subtitle": "register · {count, plural, one {# line} other {# lines}} · running balance {balance}",
+    "periodFilter": "Filtered to {label}",
     "columns": {
       "entry": "Entry",
       "debit": "Debit",

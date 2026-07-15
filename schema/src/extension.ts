@@ -63,12 +63,20 @@ export const userScripts = pgTable(
     source: text("source").notNull(),
     /** For scheduled scripts. */
     cron: text("cron"),
+    /** Scheduled scripts: next due tick (polled by engine/src/scheduler.ts);
+     *  null = not scheduled. Set on create/update from the cron expression. */
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+    /** Denormalized last-execution stamp for the admin list view. */
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     timeoutMs: integer("timeout_ms").notNull().default(2000),
     sortOrder: integer("sort_order").notNull().default(100),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [index("user_scripts_trigger").on(t.orgId, t.triggerPoint, t.documentKind, t.isActive)],
+  (t) => [
+    index("user_scripts_trigger").on(t.orgId, t.triggerPoint, t.documentKind, t.isActive),
+    index("user_scripts_scheduled").on(t.orgId, t.triggerPoint, t.isActive, t.nextRunAt),
+  ],
 );
 
 /** Every script run is logged — success or failure, with console output. */
@@ -108,6 +116,9 @@ export const users = pgTable(
     /** UI language (BCP 47, e.g. "en", "fr"). Null = inherit the org default
      *  (orgs.settings.defaultLocale). Shipped locales: web/i18n/config.ts. */
     locale: text("locale"),
+    /** Navigation layout: 'sidebar' | 'topbar'. Null = org default
+     *  (orgs.settings.navMode). See web/lib/nav-mode.ts. */
+    navMode: text("nav_mode"),
     /**
      * The user's personal home dashboard (insight_dashboards.id). Null = fall
      * back to their role's default home, then the org's seeded system default.

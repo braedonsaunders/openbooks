@@ -8,13 +8,19 @@ import { getAuthz, can } from '../../lib/authz'
 import { resolveNav } from '../../lib/nav/resolve'
 import { orgInfo } from '../../lib/data'
 import { userLocalePreference } from '../../lib/locale'
+import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [org, localePreference] = await Promise.all([orgInfo(), userLocalePreference()])
+  const [org, localePreference, navMode, navModePreference] = await Promise.all([
+    orgInfo(),
+    userLocalePreference(),
+    resolveNavMode(),
+    userNavModePreference(),
+  ])
   const jar = await cookies()
   const defaultCollapsed = jar.get('sidebar_collapsed')?.value === '1'
 
@@ -43,9 +49,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             email: authz.user.email,
             role: authz.user.role,
             localePreference,
+            navModePreference,
           }}
           orgName={org ? `${org.name} · ${org.base_currency}` : 'openbooks'}
           groups={groups}
+          navMode={navMode}
           defaultCollapsed={defaultCollapsed}
           showAssistantLauncher={can(authz, 'assistant.use')}
         >

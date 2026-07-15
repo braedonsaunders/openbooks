@@ -6,6 +6,18 @@ import { useTranslations } from 'next-intl'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
+import { BUILT_IN_ROLE_KEYS, BUILT_IN_ROLES } from '@/lib/permissions'
+
+const DISPLAY_MODES = [
+  { value: 'always', labelKey: 'drawer.displayNormal' },
+  { value: 'readonly', labelKey: 'drawer.displayDisabled' },
+  { value: 'hidden', labelKey: 'drawer.displayHidden' },
+]
+
+const ROLE_OPTIONS = BUILT_IN_ROLE_KEYS.map((k) => ({
+  value: k,
+  label: BUILT_IN_ROLES[k]?.name ?? k,
+}))
 
 // The record types a custom field can extend, and the per-kind narrowing each
 // one supports. Header = the document itself; lines = each transaction line.
@@ -87,6 +99,8 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
   const [maxValue, setMaxValue] = useState<string>(config.max != null ? String(config.max) : '')
   const [isRequired, setIsRequired] = useState<boolean>(def?.is_required ?? false)
   const [showInList, setShowInList] = useState<boolean>(config.showInList ?? false)
+  const [displayMode, setDisplayMode] = useState<string>(config.displayMode ?? 'always')
+  const [allowedRoles, setAllowedRoles] = useState<string[]>(config.allowedRoles ?? [])
   const [isActive, setIsActive] = useState<boolean>(def?.is_active ?? true)
   const [busy, setBusy] = useState(false)
 
@@ -115,6 +129,8 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
     if (isNumeric && minValue !== '') c.min = Number(minValue)
     if (isNumeric && maxValue !== '') c.max = Number(maxValue)
     if (showInList) c.showInList = true
+    if (displayMode !== 'always') c.displayMode = displayMode
+    if (allowedRoles.length > 0) c.allowedRoles = allowedRoles
     return c
   }
 
@@ -406,6 +422,49 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
             />
             {t('drawer.showInList')}
           </label>
+        </div>
+
+        {/* Display mode & role access */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className={section}>
+            <Label>{t('drawer.displayMode')}</Label>
+            <Select value={displayMode} onChange={(e) => setDisplayMode(e.target.value)}>
+              {DISPLAY_MODES.map((dm) => (
+                <option key={dm.value} value={dm.value}>
+                  {t(dm.labelKey)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className={section}>
+            <Label>
+              {t('drawer.allowedRoles')}{' '}
+              <span className="font-normal text-slate-400">{t('drawer.optionalSuffix')}</span>
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {ROLE_OPTIONS.map((r) => (
+                <label
+                  key={r.value}
+                  className="flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-800"
+                >
+                  <input
+                    type="checkbox"
+                    checked={allowedRoles.includes(r.value)}
+                    onChange={(e) =>
+                      setAllowedRoles(
+                        e.target.checked
+                          ? [...allowedRoles, r.value]
+                          : allowedRoles.filter((x) => x !== r.value),
+                      )
+                    }
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  {r.label}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.allowedRolesHint')}</p>
+          </div>
         </div>
       </div>
     </UrlDrawer>

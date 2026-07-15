@@ -7,6 +7,7 @@ import { Pagination } from '../../../../components/pagination'
 import { parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
 import { money } from '../../../../lib/format'
+import { StatementExport } from '../StatementExport'
 
 export const dynamic = 'force-dynamic'
 const PER_PAGE = 50
@@ -37,6 +38,7 @@ export default async function Partners({
             title={k === 'payable' ? t('payablesTitle') : t('receivablesTitle')}
             description={t('description')}
             back={{ href: '/reports', label: tr('hub.title') }}
+            actions={<StatementExport kind="partners" params={{ side: k }} />}
           />
           <div className="flex items-center gap-2">
             <Link href="/reports/partners?kind=payable">

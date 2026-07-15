@@ -4,6 +4,7 @@
     "menuAriaLabel": "Account menu",
     "theme": "Theme",
     "language": "Language",
+    "menuLayout": "Menu layout",
     "signOut": "Sign out",
     "signingOut": "Signing out…",
     "roles": {
@@ -18,6 +19,18 @@
     "label": "Language",
     "orgDefault": "Organization default",
     "saveFailed": "Could not save your language preference"
+  },
+  "menuMode": {
+    "label": "Menu layout",
+    "orgDefault": "Organization default",
+    "saveFailed": "Could not save your menu layout preference",
+    "options": {
+      "sidebar": "Sidebar",
+      "topbar": "Top menu bar"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "Primary"
   },
   "meta": {
     "description": "The open business suite. Run on open books."

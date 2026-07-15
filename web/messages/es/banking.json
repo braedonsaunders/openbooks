@@ -51,6 +51,28 @@
       "upToDate": "al día"
     }
   },
+  "accountsTitle": "Cuentas",
+  "transactionsTitle": "Transacciones",
+  "transactionsSearch": "Buscar cargos de tarjeta, cheques, transferencias…",
+  "transactionsEmptyTitle": "Aún no hay transacciones bancarias",
+  "transactionsEmptyDescription": "Emita un cheque, registre un cargo de tarjeta o transfiera fondos entre cuentas.",
+  "txKinds": {
+    "check": "Cheque",
+    "card_charge": "Cargo de tarjeta",
+    "card_refund": "Reembolso de tarjeta",
+    "transfer": "Transferencia"
+  },
+  "actions": {
+    "new": "Nuevo"
+  },
+  "toasts": {
+    "actionFailed": "La acción falló",
+    "submitted": "Enviado para aprobación",
+    "posted": "Contabilizado en el libro mayor",
+    "createDraftFailed": "No se pudo crear un borrador",
+    "deleted": "Documento eliminado",
+    "deleteFailed": "Error al eliminar"
+  },
   "account": {
     "description": "{details} — importe extractos, luego concilie y apruebe.",
     "stats": {
@@ -126,7 +148,35 @@
     "description": "Importado {date} · inicial {opening} · final {closing}",
     "searchLines": "Buscar líneas…",
     "matchColumn": "Conciliación",
-    "noLines": "Ninguna línea coincide con esta búsqueda."
+    "noLines": "Ninguna línea coincide con esta búsqueda.",
+    "editingHint": "Editando — Guarde para aplicar los cambios",
+    "viewGlImpact": "Ver impacto en el libro mayor",
+    "dateLabel": "Fecha",
+    "dueDate": "Fecha de vencimiento",
+    "reference": "N.º de referencia",
+    "card": "Tarjeta",
+    "selectCardPlaceholder": "Seleccionar tarjeta…",
+    "toAccount": "Cuenta destino",
+    "fromAccount": "Cuenta origen",
+    "transferAmount": "Importe",
+    "accountColumn": "Cuenta",
+    "accountPlaceholder": "Cuenta…",
+    "noTax": "Sin impuesto",
+    "taxAmountColumn": "Impuesto",
+    "selectVendorPlaceholder": "Seleccionar proveedor…",
+    "selectCustomerPlaceholder": "Seleccionar cliente…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Impuesto {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Saldo pendiente {amount}",
+    "saveState": {
+      "saved": "Todos los cambios guardados",
+      "error": "Error al guardar — corrija y reintente",
+      "dirty": "Cambios sin guardar…"
+    },
+    "deleteTitle": "¿Eliminar este documento?",
+    "deleteDraftBody": "Esto elimina permanentemente el borrador. No se puede deshacer.",
+    "deletePostedBody": "Esto elimina permanentemente el documento y su impacto en el libro mayor. No se puede deshacer."
   },
   "reconcile": {
     "title": "Conciliar hasta {date}",

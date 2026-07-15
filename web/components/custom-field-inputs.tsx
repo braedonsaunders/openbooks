@@ -1,14 +1,13 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
-import { Input, Label, Select, Textarea } from '@openbooks/ui'
 import type { LineGridColumn, LineGridOption } from './line-grid'
+import { CustomFieldInput } from './custom-field-input'
 
 /** Client-safe shape of a custom field definition (see lib/custom-fields). */
 export interface CustomFieldDefClient {
   key: string
   label: string
-  fieldType: 'text' | 'long_text' | 'number' | 'currency' | 'date' | 'boolean' | 'select' | 'multi_select'
+  fieldType: 'text' | 'long_text' | 'number' | 'currency' | 'date' | 'boolean' | 'select' | 'multi_select' | 'reference'
   config: {
     options?: string[]
     helpText?: string
@@ -17,6 +16,10 @@ export interface CustomFieldDefClient {
     min?: number
     max?: number
     showInList?: boolean
+    referenceTable?: string
+    referenceFilter?: Record<string, string>
+    displayMode?: 'normal' | 'hidden' | 'disabled'
+    allowedRoles?: string[]
   }
   isRequired: boolean
 }
@@ -27,75 +30,32 @@ export function CustomFieldInputs({
   values,
   onChange,
   readOnly = false,
+  userRole,
 }: {
   defs: CustomFieldDefClient[]
   values: Record<string, unknown>
   onChange: (values: Record<string, unknown>) => void
   readOnly?: boolean
+  /** Current user's role key, used to filter by allowedRoles. */
+  userRole?: string
 }) {
-  const tLabels = useTranslations('common.labels')
-  if (defs.length === 0) return null
+  const visibleDefs = userRole
+    ? defs.filter((d) => !d.config.allowedRoles || d.config.allowedRoles.length === 0 || d.config.allowedRoles.includes(userRole) || userRole === 'admin')
+    : defs
+  if (visibleDefs.length === 0) return null
   const set = (key: string, v: unknown) => onChange({ ...values, [key]: v })
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {defs.map((def) => {
-        const v = values[def.key]
-        if (readOnly) {
-          return (
-            <div key={def.key} className="space-y-1.5">
-              <Label>{def.label}</Label>
-              <p className="text-sm">
-                {def.fieldType === 'boolean'
-                  ? v
-                    ? tLabels('yes')
-                    : tLabels('no')
-                  : Array.isArray(v)
-                    ? v.join(', ')
-                    : ((v as string) ?? '—')}
-              </p>
-            </div>
-          )
-        }
-        return (
-          <div key={def.key} className="space-y-1.5">
-            <Label>
-              {def.label}
-              {def.isRequired ? <span className="text-red-500"> *</span> : null}
-            </Label>
-            {def.fieldType === 'long_text' ? (
-              <Textarea value={(v as string) ?? ''} placeholder={def.config.placeholder} onChange={(e) => set(def.key, e.target.value)} rows={2} />
-            ) : def.fieldType === 'boolean' ? (
-              <Select value={v === true || v === 'true' ? 'true' : v === false || v === 'false' ? 'false' : ''} onChange={(e) => set(def.key, e.target.value === 'true')}>
-                <option value="">—</option>
-                <option value="true">{tLabels('yes')}</option>
-                <option value="false">{tLabels('no')}</option>
-              </Select>
-            ) : def.fieldType === 'select' ? (
-              <Select value={(v as string) ?? ''} onChange={(e) => set(def.key, e.target.value)}>
-                <option value="">—</option>
-                {(def.config.options ?? []).map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              <Input
-                type={def.fieldType === 'date' ? 'date' : 'text'}
-                inputMode={def.fieldType === 'number' || def.fieldType === 'currency' ? 'decimal' : undefined}
-                className={def.fieldType === 'number' || def.fieldType === 'currency' ? 'text-right tabular-nums' : undefined}
-                placeholder={def.config.placeholder}
-                value={(v as string) ?? ''}
-                onChange={(e) => set(def.key, e.target.value)}
-              />
-            )}
-            {def.config.helpText ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{def.config.helpText}</p>
-            ) : null}
-          </div>
-        )
-      })}
+      {visibleDefs.map((def) => (
+        <CustomFieldInput
+          key={def.key}
+          def={def}
+          value={values[def.key]}
+          onChange={(v) => set(def.key, v)}
+          readOnly={readOnly}
+        />
+      ))}
     </div>
   )
 }
@@ -104,23 +64,36 @@ export function CustomFieldInputs({
 export function customFieldColumns<Row extends Record<string, unknown>>(
   defs: CustomFieldDefClient[],
 ): LineGridColumn<Row>[] {
-  return defs.map((def) => {
-    const base = { key: `cf_${def.key}`, label: def.label, required: def.isRequired }
-    switch (def.fieldType) {
-      case 'select':
-        return {
-          ...base,
-          width: '130px',
-          type: 'select' as const,
-          options: [{ value: '', label: '—' }, ...(def.config.options ?? []).map((o): LineGridOption => ({ value: o, label: o }))],
-        }
-      case 'number':
-      case 'currency':
-        return { ...base, width: '110px', type: 'amount' as const, align: 'right' as const }
-      case 'date':
-        return { ...base, width: '130px', type: 'text' as const, placeholder: 'YYYY-MM-DD' }
-      default:
-        return { ...base, width: 'minmax(120px,1fr)', type: 'text' as const }
-    }
-  })
+  return defs
+    .filter((d) => d.config.displayMode !== 'hidden')
+    .map((def) => {
+      const base = { key: `cf_${def.key}`, label: def.label, required: def.isRequired }
+      switch (def.fieldType) {
+        case 'select':
+          return {
+            ...base,
+            width: '130px',
+            type: 'select' as const,
+            options: [{ value: '', label: '—' }, ...(def.config.options ?? []).map((o): LineGridOption => ({ value: o, label: o }))],
+          }
+        case 'multi_select':
+          return {
+            ...base,
+            width: '160px',
+            type: 'text' as const,
+            placeholder: def.label,
+          }
+        case 'number':
+        case 'currency':
+          return { ...base, width: '110px', type: 'amount' as const, align: 'right' as const }
+        case 'date':
+          return { ...base, width: '130px', type: 'text' as const, placeholder: 'YYYY-MM-DD' }
+        case 'boolean':
+          return { ...base, width: '70px', type: 'text' as const }
+        case 'reference':
+          return { ...base, width: '160px', type: 'text' as const }
+        default:
+          return { ...base, width: 'minmax(120px,1fr)', type: 'text' as const }
+      }
+    })
 }

@@ -1,45 +1,57 @@
 {
   "list": {
-    "title": "Comptes clients",
-    "description": "Factures clients saisies dans openbooks — brouillon → approbation → comptabilisées par le noyau.",
-    "searchPlaceholder": "Rechercher factures, clients, réf.…",
-    "emptyTitle": "Aucune facture pour l’instant",
-    "emptyDescription": "Saisissez la première facture client pour lancer le flux des comptes clients.",
+    "title": "Factures clients",
+    "description": "Factures et notes de crédit clients — vos comptes clients : brouillon → approbation → comptabilisées par le noyau.",
+    "searchPlaceholder": "Rechercher factures, notes de crédit, clients, réf.…",
+    "emptyTitle": "Aucune facture client pour l’instant",
+    "emptyDescription": "Saisissez la première facture ou note de crédit client pour lancer le flux des comptes clients.",
     "columns": {
+      "number": "Numéro",
       "invoice": "Facture",
       "ref": "Réf."
     }
   },
+  "kinds": {
+    "invoice": "Facture",
+    "credit": "Note de crédit"
+  },
   "actions": {
+    "new": "Nouveau",
     "newInvoice": "Nouvelle facture",
+    "newCredit": "Nouvelle note de crédit",
     "submitForApproval": "Soumettre pour approbation"
   },
   "drawer": {
-    "autosaveHint": "les modifications s’enregistrent automatiquement",
+    "editingHint": "Modification — Enregistrer pour appliquer",
     "viewGlImpact": "Voir l’impact au GL",
-    "allChangesSaved": "Toutes les modifications sont enregistrées",
-    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
-    "unsavedChanges": "Modifications non enregistrées…",
+    "dateLabel": "Date de la facture",
+    "dueDate": "Date d’échéance",
+    "reference": "N° de réf. client",
+    "accountColumn": "Compte de produits",
+    "accountPlaceholder": "Compte…",
+    "noTax": "Sans taxe",
+    "taxAmountColumn": "Mt taxe",
+    "selectCustomerPlaceholder": "Sélectionner un client…",
+    "selectVendorPlaceholder": "Sélectionner un fournisseur…",
     "subtotalAmount": "Sous-total {amount}",
     "taxTotalAmount": "Taxe {amount}",
     "totalAmount": "Total {amount}",
     "balanceDueAmount": "Solde dû {amount}",
-    "invoiceDate": "Date de la facture",
-    "dueDate": "Date d’échéance",
-    "customerRef": "N° de réf. client",
-    "selectCustomerPlaceholder": "Sélectionner un client…",
-    "columns": {
-      "incomeAccount": "Compte de produits",
-      "accountPlaceholder": "Compte…",
-      "taxAmount": "Mt taxe",
-      "noTax": "Sans taxe"
-    }
+    "saveState": {
+      "saved": "Toutes les modifications sont enregistrées",
+      "error": "Échec de l’enregistrement — corrigez et réessayez",
+      "dirty": "Modifications non enregistrées…"
+    },
+    "deleteTitle": "Supprimer ce document ?",
+    "deleteDraftBody": "Cela supprime définitivement le brouillon. Cette action est irréversible.",
+    "deletePostedBody": "Cela supprime définitivement le document et son impact au grand livre. Cette action est irréversible."
   },
   "toasts": {
     "actionFailed": "Échec de l’action",
     "submitted": "Soumis pour approbation",
     "posted": "Comptabilisé au grand livre",
-    "autosaveFailed": "Échec de l’enregistrement automatique",
-    "createDraftFailed": "Impossible de créer une facture brouillon"
+    "createDraftFailed": "Impossible de créer un brouillon",
+    "deleted": "Document supprimé",
+    "deleteFailed": "Échec de la suppression"
   }
 }

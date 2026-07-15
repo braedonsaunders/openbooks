@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * user-row checks happen server-side in pages/APIs via currentUser().
  */
 
-const PUBLIC = ["/login", "/api/login", "/favicon.ico"];
+const PUBLIC = ["/login", "/api/login", "/api/v1/", "/favicon.ico"];
 
 async function validSignature(token: string, secret: string): Promise<boolean> {
   const parts = token.split(".");

@@ -25,6 +25,7 @@ export default async function ReportBuilderPage({
         name: definition.name,
         description: definition.description,
         query: definition.query,
+        layout: definition.layout,
       }}
     />
   )

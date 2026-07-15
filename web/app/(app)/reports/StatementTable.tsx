@@ -7,11 +7,17 @@ import { money } from '../../../lib/format'
 export async function StatementTable({
   sections,
   grandTotal,
+  period,
 }: {
   sections: { title: string; types: string[]; rows: StatementRow[]; total: number }[]
   grandTotal?: { label: string; value: number }
+  /** Drilling into an account line filters its register to this period. */
+  period?: { from?: string; to?: string }
 }) {
   const t = await getTranslations('reports')
+  const periodQs = period?.from || period?.to
+    ? `?${new URLSearchParams({ ...(period.from ? { from: period.from } : {}), ...(period.to ? { to: period.to } : {}) }).toString()}`
+    : ''
   return (
     <Table>
       <TableBody>
@@ -31,6 +37,7 @@ export async function StatementTable({
               rows={rows}
               total={s.total}
               totalLabel={t('statement.sectionTotal', { section: s.title })}
+              periodQs={periodQs}
             />
           )
         })}
@@ -52,11 +59,13 @@ function SectionRows({
   rows,
   total,
   totalLabel,
+  periodQs = '',
 }: {
   title: string
   rows: StatementRow[]
   total: number
   totalLabel: string
+  periodQs?: string
 }) {
   return (
     <>
@@ -71,7 +80,7 @@ function SectionRows({
       {rows.map((r) => (
         <TableRow key={r.id}>
           <TableCell className={cn(r.depth === 1 && 'pl-8', r.depth >= 2 && 'pl-12', r.isSummary && 'font-semibold')}>
-            <Link href={`/accounts/${r.id}`} className="hover:text-teal-700 dark:hover:text-teal-300">
+            <Link href={`/accounts/${r.id}${periodQs}`} className="hover:text-teal-700 dark:hover:text-teal-300">
               <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{r.number}</span>
               {r.name}
             </Link>

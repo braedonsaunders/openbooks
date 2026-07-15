@@ -15,6 +15,29 @@ import type { ReportFilterOperator, ReportRuleGroup } from './types'
 
 export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number'
 
+/** Every transaction kind the documents table holds — the NetSuite
+ *  "Transaction Type" filter set. One source of truth for both the
+ *  transactions and transaction_lines entities. */
+export const TRANSACTION_KINDS = [
+  'vendor_bill',
+  'vendor_credit',
+  'vendor_payment',
+  'customer_invoice',
+  'customer_credit',
+  'customer_payment',
+  'expense_report',
+  'check',
+  'card_charge',
+  'card_refund',
+  'transfer',
+  'journal',
+  'purchase_order',
+  'sales_order',
+  'quote',
+] as const
+
+export const TRANSACTION_STATUSES = ['draft', 'pending_approval', 'approved', 'posted', 'voided'] as const
+
 export type ReportEntityColumn = {
   /** Public key used in stored query plans (snake_case). */
   key: string
@@ -26,6 +49,12 @@ export type ReportEntityColumn = {
    * never derived from user input.
    */
   expr: string
+  /**
+   * Enum columns: the known value set. Drives option pickers in the filter
+   * UI (NetSuite "type is any of Bill, Expense Report…"). Values are stored
+   * raw; display labels resolve through i18n with a humanized fallback.
+   */
+  options?: readonly string[]
 }
 
 export type ReportEntity = {
@@ -97,39 +126,235 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   },
   {
     key: 'documents',
-    label: 'Documents',
-    category: 'documents',
+    label: 'Transactions',
+    category: 'transactions',
     description:
-      'Business documents — bills, invoices, payments, orders — with party and dimension labels.',
+      'Every transaction — bills, invoices, credits, payments, expense reports, checks, card charges, journals, orders and quotes. Filter Type to focus on one or more kinds.',
     from: `documents d
       LEFT JOIN parties p ON p.id = d.party_id
       LEFT JOIN departments dep ON dep.id = d.department_id
-      LEFT JOIN projects prj ON prj.id = d.project_id`,
+      LEFT JOIN projects prj ON prj.id = d.project_id
+      LEFT JOIN locations loc ON loc.id = d.location_id
+      LEFT JOIN classes cls ON cls.id = d.class_id`,
     orgColumn: 'd.org_id',
     columns: [
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'd.kind' },
+      { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
       { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
       { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
       { key: 'document_date', label: 'Document date', kind: 'date', expr: 'd.document_date' },
       { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'd.posting_date' },
       { key: 'due_date', label: 'Due date', kind: 'date', expr: 'd.due_date' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
       { key: 'subtotal', label: 'Subtotal', kind: 'number', expr: 'd.subtotal' },
       { key: 'tax_total', label: 'Tax', kind: 'number', expr: 'd.tax_total' },
       { key: 'total', label: 'Total', kind: 'number', expr: 'd.total' },
       { key: 'reference_number', label: 'Reference #', kind: 'text', expr: 'd.reference_number' },
-      { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'd.billing_method' },
+      { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'd.billing_method', options: ['time_and_materials', 'fixed_price'] },
+      { key: 'is_final_invoice', label: 'Final invoice', kind: 'enum', expr: 'd.is_final_invoice' },
       { key: 'payment_hold_reason', label: 'Payment hold', kind: 'text', expr: 'd.payment_hold_reason' },
       { key: 'expected_pay_date', label: 'Expected pay date', kind: 'date', expr: 'd.expected_pay_date' },
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
+      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'memo', label: 'Memo', kind: 'text', expr: 'd.memo' },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'd.created_at' },
-      { key: 'id', label: 'Document (id)', kind: 'uuid', expr: 'd.id' },
+      { key: 'id', label: 'Transaction (id)', kind: 'uuid', expr: 'd.id' },
       { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
     ],
     defaultSort: { column: 'document_date', direction: 'desc' },
+  },
+  {
+    key: 'transaction_lines',
+    label: 'Transaction lines',
+    category: 'transactions',
+    description:
+      'Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions. The workhorse for job-costing and billing searches.',
+    from: `document_lines dl
+      JOIN documents d ON d.id = dl.document_id
+      LEFT JOIN parties p ON p.id = d.party_id
+      LEFT JOIN accounts a ON a.id = dl.account_id
+      LEFT JOIN items it ON it.id = dl.item_id
+      LEFT JOIN parties emp ON emp.id = dl.employee_id
+      LEFT JOIN departments dep ON dep.id = coalesce(dl.department_id, d.department_id)
+      LEFT JOIN projects prj ON prj.id = coalesce(dl.project_id, d.project_id)
+      LEFT JOIN locations loc ON loc.id = coalesce(dl.location_id, d.location_id)
+      LEFT JOIN classes cls ON cls.id = coalesce(dl.class_id, d.class_id)`,
+    orgColumn: 'dl.org_id',
+    columns: [
+      { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
+      { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
+      { key: 'document_date', label: 'Document date', kind: 'date', expr: 'd.document_date' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
+      { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
+      { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
+      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
+      { key: 'account_number', label: 'Account #', kind: 'text', expr: 'a.number' },
+      { key: 'account_name', label: 'Account', kind: 'text', expr: 'a.name' },
+      { key: 'description', label: 'Description', kind: 'text', expr: 'dl.description' },
+      { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'dl.quantity' },
+      { key: 'unit', label: 'Unit', kind: 'text', expr: 'dl.unit' },
+      { key: 'unit_price', label: 'Unit price', kind: 'number', expr: 'dl.unit_price' },
+      { key: 'amount', label: 'Amount', kind: 'number', expr: 'dl.amount' },
+      { key: 'tax_amount', label: 'Tax amount', kind: 'number', expr: 'dl.tax_amount' },
+      { key: 'is_billable', label: 'Billable', kind: 'enum', expr: 'dl.is_billable' },
+      { key: 'quantity_fulfilled', label: 'Qty fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
+      { key: 'quantity_billed', label: 'Qty billed', kind: 'number', expr: 'dl.quantity_billed' },
+      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
+      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'dl.created_at' },
+      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'dl.id' },
+      { key: 'document_id', label: 'Transaction (id)', kind: 'uuid', expr: 'dl.document_id' },
+    ],
+    defaultSort: { column: 'document_date', direction: 'desc' },
+  },
+  {
+    key: 'journal_entries',
+    label: 'Journal entries',
+    category: 'general_ledger',
+    description: 'Journal-entry headers — number, posting date, status, origin and memo. Use Ledger lines for line-level GL detail.',
+    from: `journal_entries je`,
+    orgColumn: 'je.org_id',
+    columns: [
+      { key: 'entry_number', label: 'Entry #', kind: 'text', expr: 'je.entry_number' },
+      { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'je.status', options: ['draft', 'posted', 'reversed'] },
+      { key: 'origin', label: 'Origin', kind: 'enum', expr: 'je.origin' },
+      { key: 'memo', label: 'Memo', kind: 'text', expr: 'je.memo' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'je.created_at' },
+      { key: 'id', label: 'Entry (id)', kind: 'uuid', expr: 'je.id' },
+      { key: 'source_document_id', label: 'Source transaction (id)', kind: 'uuid', expr: 'je.source_document_id' },
+    ],
+    defaultSort: { column: 'posting_date', direction: 'desc' },
+  },
+  {
+    key: 'items',
+    label: 'Items',
+    category: 'catalog',
+    description: 'The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts.',
+    from: `items it
+      LEFT JOIN accounts inc ON inc.id = it.income_account_id
+      LEFT JOIN accounts exp ON exp.id = it.expense_account_id`,
+    orgColumn: 'it.org_id',
+    columns: [
+      { key: 'code', label: 'Code', kind: 'text', expr: 'it.code' },
+      { key: 'name', label: 'Name', kind: 'text', expr: 'it.name' },
+      { key: 'kind', label: 'Type', kind: 'enum', expr: 'it.kind', options: ['service', 'non_inventory', 'inventory', 'assembly', 'kit', 'other_charge', 'labor', 'absence', 'discount'] },
+      { key: 'category', label: 'Category', kind: 'text', expr: 'it.category' },
+      { key: 'default_rate', label: 'Default rate', kind: 'number', expr: 'it.default_rate' },
+      { key: 'unit', label: 'Unit', kind: 'text', expr: 'it.unit' },
+      { key: 'income_account', label: 'Income account', kind: 'text', expr: 'inc.name' },
+      { key: 'expense_account', label: 'Expense account', kind: 'text', expr: 'exp.name' },
+      { key: 'show_on_timesheet', label: 'On timesheets', kind: 'enum', expr: 'it.show_on_timesheet' },
+      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'it.is_active' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'it.created_at' },
+      { key: 'id', label: 'Item (id)', kind: 'uuid', expr: 'it.id' },
+    ],
+    defaultSort: { column: 'name', direction: 'asc' },
+  },
+  {
+    key: 'projects',
+    label: 'Projects',
+    category: 'catalog',
+    description: 'Projects / jobs — status, customer, billing method, schedule and PO number.',
+    from: `projects prj
+      LEFT JOIN parties cust ON cust.id = prj.customer_id
+      LEFT JOIN parties mgr ON mgr.id = prj.manager_id`,
+    orgColumn: 'prj.org_id',
+    columns: [
+      { key: 'code', label: 'Code', kind: 'text', expr: 'prj.code' },
+      { key: 'name', label: 'Name', kind: 'text', expr: 'prj.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'prj.status', options: ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] },
+      { key: 'customer_name', label: 'Customer', kind: 'text', expr: 'cust.display_name' },
+      { key: 'manager_name', label: 'Manager', kind: 'text', expr: 'mgr.display_name' },
+      { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'prj.billing_method', options: ['time_and_materials', 'fixed_price', 'cost_plus'] },
+      { key: 'customer_po_number', label: 'Customer PO #', kind: 'text', expr: 'prj.customer_po_number' },
+      { key: 'starts_on', label: 'Starts on', kind: 'date', expr: 'prj.starts_on' },
+      { key: 'ends_on', label: 'Ends on', kind: 'date', expr: 'prj.ends_on' },
+      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'prj.is_active' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'prj.created_at' },
+      { key: 'id', label: 'Project (id)', kind: 'uuid', expr: 'prj.id' },
+    ],
+    defaultSort: { column: 'name', direction: 'asc' },
+  },
+  {
+    key: 'timesheets',
+    label: 'Time entries',
+    category: 'time',
+    description: 'Timesheet entries — employee, date, hours, billable state, project and approval status.',
+    from: `time_entries te
+      LEFT JOIN parties emp ON emp.id = te.employee_party_id
+      LEFT JOIN projects prj ON prj.id = te.project_id
+      LEFT JOIN items it ON it.id = te.item_id
+      LEFT JOIN departments dep ON dep.id = te.department_id`,
+    orgColumn: 'te.org_id',
+    columns: [
+      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
+      { key: 'worked_on', label: 'Worked on', kind: 'date', expr: 'te.worked_on' },
+      { key: 'hours', label: 'Hours', kind: 'number', expr: 'te.hours' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'te.status', options: ['draft', 'submitted', 'approved', 'rejected'] },
+      { key: 'is_billable', label: 'Billable', kind: 'enum', expr: 'te.is_billable' },
+      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'item_name', label: 'Service item', kind: 'text', expr: 'it.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      // Private memos stay private — the search engine never surfaces them.
+      { key: 'memo', label: 'Memo', kind: 'text', expr: "(case when te.memo_is_private then null else te.memo end)" },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'te.created_at' },
+      { key: 'id', label: 'Time entry (id)', kind: 'uuid', expr: 'te.id' },
+    ],
+    defaultSort: { column: 'worked_on', direction: 'desc' },
+  },
+  {
+    key: 'fixed_assets',
+    label: 'Fixed assets',
+    category: 'catalog',
+    description: 'The fixed-asset register — status, acquisition, cost, custodian and dimensions.',
+    from: `fixed_assets fa
+      LEFT JOIN asset_categories ac ON ac.id = fa.category_id
+      LEFT JOIN parties cust ON cust.id = fa.custodian_party_id
+      LEFT JOIN projects prj ON prj.id = fa.project_id
+      LEFT JOIN departments dep ON dep.id = fa.department_id`,
+    orgColumn: 'fa.org_id',
+    columns: [
+      { key: 'asset_number', label: 'Asset #', kind: 'text', expr: 'fa.asset_number' },
+      { key: 'name', label: 'Name', kind: 'text', expr: 'fa.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'fa.status', options: ['draft', 'in_service', 'fully_depreciated', 'disposed', 'written_off'] },
+      { key: 'category', label: 'Category', kind: 'text', expr: 'ac.name' },
+      { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'fa.acquired_on' },
+      { key: 'in_service_on', label: 'In service on', kind: 'date', expr: 'fa.in_service_on' },
+      { key: 'acquisition_cost', label: 'Acquisition cost', kind: 'number', expr: 'fa.acquisition_cost' },
+      { key: 'salvage_value', label: 'Salvage value', kind: 'number', expr: 'fa.salvage_value' },
+      { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'fa.serial_number' },
+      { key: 'custodian_name', label: 'Custodian', kind: 'text', expr: 'cust.display_name' },
+      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'fa.created_at' },
+      { key: 'id', label: 'Asset (id)', kind: 'uuid', expr: 'fa.id' },
+    ],
+    defaultSort: { column: 'asset_number', direction: 'asc' },
+  },
+  {
+    key: 'tax_codes',
+    label: 'Tax codes',
+    category: 'catalog',
+    description: 'Tax codes — jurisdiction, scope and recoverability.',
+    from: `tax_codes tc`,
+    orgColumn: 'tc.org_id',
+    columns: [
+      { key: 'code', label: 'Code', kind: 'text', expr: 'tc.code' },
+      { key: 'name', label: 'Name', kind: 'text', expr: 'tc.name' },
+      { key: 'country', label: 'Country', kind: 'text', expr: 'tc.country' },
+      { key: 'region', label: 'Region', kind: 'text', expr: 'tc.region' },
+      { key: 'applies_to', label: 'Applies to', kind: 'enum', expr: 'tc.applies_to', options: ['sales', 'purchases', 'both'] },
+      { key: 'recoverable_percent', label: 'Recoverable %', kind: 'number', expr: 'tc.recoverable_percent' },
+      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'tc.is_active' },
+      { key: 'id', label: 'Tax code (id)', kind: 'uuid', expr: 'tc.id' },
+    ],
+    defaultSort: { column: 'code', direction: 'asc' },
   },
   {
     key: 'parties',

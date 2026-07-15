@@ -51,6 +51,28 @@
       "upToDate": "up to date"
     }
   },
+  "accountsTitle": "Accounts",
+  "transactionsTitle": "Transactions",
+  "transactionsSearch": "Search card charges, checks, transfers…",
+  "transactionsEmptyTitle": "No banking transactions yet",
+  "transactionsEmptyDescription": "Write a check, record a card charge, or transfer funds between accounts.",
+  "txKinds": {
+    "check": "Check",
+    "card_charge": "Card charge",
+    "card_refund": "Card refund",
+    "transfer": "Transfer"
+  },
+  "actions": {
+    "new": "New"
+  },
+  "toasts": {
+    "actionFailed": "Action failed",
+    "submitted": "Submitted for approval",
+    "posted": "Posted to the ledger",
+    "createDraftFailed": "Could not create a draft",
+    "deleted": "Document deleted",
+    "deleteFailed": "Delete failed"
+  },
   "account": {
     "description": "{details} — import statements, then match and sign off.",
     "stats": {
@@ -126,7 +148,35 @@
     "description": "Imported {date} · opening {opening} · closing {closing}",
     "searchLines": "Search lines…",
     "matchColumn": "Match",
-    "noLines": "No lines match this search."
+    "noLines": "No lines match this search.",
+    "editingHint": "Editing — Save to apply changes",
+    "viewGlImpact": "View GL impact",
+    "dateLabel": "Date",
+    "dueDate": "Due date",
+    "reference": "Reference #",
+    "card": "Card",
+    "selectCardPlaceholder": "Select card…",
+    "toAccount": "To account",
+    "fromAccount": "From account",
+    "transferAmount": "Amount",
+    "accountColumn": "Account",
+    "accountPlaceholder": "Account…",
+    "noTax": "No tax",
+    "taxAmountColumn": "Tax amt",
+    "selectVendorPlaceholder": "Select vendor…",
+    "selectCustomerPlaceholder": "Select customer…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Tax {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Balance due {amount}",
+    "saveState": {
+      "saved": "All changes saved",
+      "error": "Save failed — fix and retry",
+      "dirty": "Unsaved changes…"
+    },
+    "deleteTitle": "Delete this document?",
+    "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
+    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone."
   },
   "reconcile": {
     "title": "Reconcile through {date}",

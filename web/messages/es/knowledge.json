@@ -1,0 +1,54 @@
+{
+  "savedSearches": {
+    "new": "Nueva búsqueda guardada",
+    "list": {
+      "title": "Búsquedas guardadas",
+      "description": "Consultas con nombre y compartibles sobre el libro mayor, documentos, terceros y cuentas — filas de detalle o resúmenes agrupados. Navega, exporta y reutilízalas.",
+      "scopeLabel": "Ámbito",
+      "searchPlaceholder": "Buscar búsquedas guardadas…",
+      "scopeAll": "Todas",
+      "scopeShared": "Compartidas",
+      "scopePrivate": "Privadas",
+      "emptyTitle": "Aún no hay búsquedas guardadas",
+      "emptyDescription": "Crea tu primera búsqueda para consultar el libro mayor y reutilizarla cuando quieras.",
+      "columns": {
+        "name": "Nombre",
+        "source": "Origen",
+        "scope": "Ámbito",
+        "updated": "Actualizada"
+      },
+      "scope": {
+        "shared": "Compartida",
+        "private": "Privada"
+      },
+      "runAction": "Ejecutar",
+      "editAction": "Editar"
+    },
+    "studio": {
+      "untitled": "Búsqueda sin título",
+      "autosaveHint": "Los cambios se guardan automáticamente.",
+      "scopeLabel": "Ámbito",
+      "scope": {
+        "private": "Privada — solo tú",
+        "shared": "Compartida — todos"
+      },
+      "exportPdf": "PDF",
+      "exportXlsx": "Excel",
+      "exportCsv": "CSV",
+      "deleteConfirm": "¿Eliminar esta búsqueda guardada?",
+      "viewResults": "Ver resultados"
+    },
+    "run": {
+      "editSearch": "Editar búsqueda",
+      "backToList": "Búsquedas guardadas",
+      "resultsTitle": "Resultados",
+      "rowsRange": "Mostrando {from}–{to} de {total} filas",
+      "lastUpdated": "Actualizado {when}",
+      "refreshHint": "Los resultados se ejecutan en vivo sobre los datos actuales.",
+      "emptyTitle": "Ninguna fila coincidió",
+      "emptyDescription": "Ajuste los criterios o filtros y vuelva a ejecutar.",
+      "notFoundTitle": "Búsqueda guardada no encontrada",
+      "notFoundDescription": "Puede que haya sido eliminada o que no tenga acceso."
+    }
+  }
+}

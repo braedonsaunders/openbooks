@@ -30,9 +30,17 @@
         "title": "Custom Fields",
         "description": "Add typed fields to records across the app"
       },
+      "customization": {
+        "title": "Forms & Views",
+        "description": "Customize transaction forms and saved list views per org and per user"
+      },
       "scripts": {
         "title": "Scripts",
         "description": "Sandboxed automation that runs on ledger events"
+      },
+      "apiKeys": {
+        "title": "API Keys",
+        "description": "Create scoped API keys for integrations and view usage logs"
       },
       "audit": {
         "title": "Audit Log",
@@ -113,6 +121,10 @@
       "accounts": {
         "label": "Accounts",
         "description": "Chart of accounts."
+      },
+      "items": {
+        "label": "Items & Services",
+        "description": "Products and services."
       }
     },
     "kinds": {
@@ -120,7 +132,7 @@
         "vendorBill": "Vendor bills",
         "customerInvoice": "Customer invoices",
         "vendorPayment": "Vendor payments",
-        "customerPayment": "Customer receipts",
+        "customerPayment": "Customer payments",
         "expenseReport": "Expense reports",
         "journal": "Journal entries"
       },
@@ -163,6 +175,10 @@
       "multiSelect": {
         "label": "Dropdown (multiple)",
         "help": "Choose any number from a list."
+      },
+      "reference": {
+        "label": "List / Record",
+        "help": "Link to another record (party, project, account, item)."
       }
     },
     "drawer": {
@@ -199,7 +215,20 @@
       "defaultValue": "Default value",
       "min": "Min",
       "max": "Max",
-      "showInList": "Show as a column in list views"
+      "showInList": "Show as a column in list views",
+      "referenceTable": "Referenced record type",
+      "referenceTableHint": "The field stores a link to a record of this type.",
+      "displayMode": "Display mode",
+      "displayNormal": "Normal (editable)",
+      "displayHidden": "Hidden (not shown on forms)",
+      "displayDisabled": "Disabled (shown read-only)",
+      "allowedRoles": "Visible to roles",
+      "allowedRolesHint": "Leave unchecked for all roles. Admins always see all fields.",
+      "roleAdmin": "Admin",
+      "roleController": "Controller",
+      "roleAccountant": "Accountant",
+      "roleApprover": "Approver",
+      "roleViewer": "Viewer"
     }
   },
   "navigation": {
@@ -297,7 +326,7 @@
     "drawer": {
       "newScript": "New script",
       "newTitle": "New script",
-      "description": "Sandboxed JavaScript (QuickJS) — no filesystem, network, or database access.",
+      "description": "Sandboxed JavaScript (QuickJS) — no filesystem or network. ob.query runs read-only SQL.",
       "createScript": "Create script",
       "saveScript": "Save script",
       "created": "Script created",
@@ -307,16 +336,70 @@
       "trigger": "Trigger",
       "documentKind": "Document kind",
       "allKindsOption": "All kinds",
+      "cron": "Cron schedule",
+      "cronHint": "— min hr dom mon dow (UTC)",
       "source": "Source",
       "sourceHint": "— must define function main(ctx)",
       "timeoutMs": "Timeout (ms)",
       "runOrder": "Run order",
       "recentRuns": "Recent runs",
+      "runNow": "Run now",
+      "runOk": "Ran in {ms} ms",
+      "runFailed": "Run failed",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this script? Its run history is kept for audit.",
+      "deleteFailed": "Could not delete the script",
+      "deleted": "Script deleted",
       "runStatus": {
         "ok": "ok",
         "aborted": "aborted",
-        "error": "error"
+        "error": "error",
+        "timeout": "timeout"
       }
+    }
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "description": "Scoped API keys for integrations and automation. Each key carries a subset of permissions — a request is allowed only when both the key's scopes and the owner's effective permissions cover it.",
+    "searchPlaceholder": "Search keys, owners…",
+    "empty": "No API keys yet — create one to start building integrations.",
+    "table": {
+      "name": "Name",
+      "key": "Key",
+      "owner": "Owner",
+      "scopes": "Scopes",
+      "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
+      "fullScope": "Full scope (inherits owner)",
+      "lastUsed": "Last used",
+      "status": "Status"
+    },
+    "statusActive": "active",
+    "statusRevoked": "revoked",
+    "drawer": {
+      "newKey": "New API key",
+      "newTitle": "New API key",
+      "description": "Create a scoped key for programmatic access to the REST API. The plaintext key is shown once — store it securely.",
+      "nameRequired": "A name is required",
+      "namePlaceholder": "Production sync integration",
+      "descriptionPlaceholder": "What is this key for?",
+      "saveFailed": "Could not save the key",
+      "created": "Key created",
+      "updated": "Key updated",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke this key? All integrations using it will stop working immediately. This cannot be undone.",
+      "revokeFailed": "Could not revoke the key",
+      "revoked": "Key revoked",
+      "revokedNotice": "This key has been revoked and can no longer authenticate requests.",
+      "keyCreated": "Copy your API key",
+      "keyCreatedHint": "This is the only time the full key will be shown. Store it securely — you won't be able to see it again.",
+      "copy": "Copy",
+      "copied": "Copied to clipboard",
+      "createKey": "Create key",
+      "saveChanges": "Save changes",
+      "scopesHeading": "Permission scopes",
+      "scopesHint": "Select the permissions this key grants. Leave empty to inherit the owner's full permission set. A key never grants more than its owner has.",
+      "fullScope": "Full scope (inherits owner permissions)",
+      "scopesCount": "{count, plural, one {# permission selected} other {# permissions selected}}"
     }
   },
   "settings": {
@@ -376,7 +459,7 @@
         },
         "bank": {
           "label": "Default bank",
-          "hint": "Default cash account for payments & receipts"
+          "hint": "Default cash account for vendor and customer payments"
         },
         "taxCollected": {
           "label": "Tax collected",
@@ -464,6 +547,7 @@
       "sql": "SQL workbench",
       "sync": "Sync",
       "scripts": "Scripting",
+      "documents": "File Cabinet",
       "admin": "Administration",
       "assets": "Fixed assets & depreciation"
     },
@@ -511,10 +595,14 @@
     "admin_users_manage": "Manage users and role assignments",
     "admin_roles_manage": "Manage roles and permissions",
     "admin_nav_manage": "Customize navigation",
+    "admin_customization_manage": "Customize transaction forms and list views",
     "admin_audit_read": "View the audit log",
     "admin_ai_manage": "Manage AI settings",
+    "api_keys_manage": "Manage API keys",
     "assets_read": "View fixed assets and depreciation",
-    "assets_manage": "Create and edit assets, run depreciation"
+    "assets_manage": "Create and edit assets, run depreciation",
+    "documents_read": "Browse the file cabinet",
+    "documents_manage": "Upload, move, rename, and delete files"
   },
   "ai": {
     "metaTitle": "AI settings",

@@ -4,6 +4,9 @@
     "saving": "Saving…",
     "cancel": "Cancel",
     "close": "Close",
+    "fullscreen": "Expand to full screen",
+    "exitFullscreen": "Exit full screen",
+    "customize": "Customize",
     "delete": "Delete",
     "deleting": "Deleting…",
     "edit": "Edit",
@@ -116,13 +119,15 @@
     "saveFailed": "Save failed",
     "deleted": "Deleted",
     "deleteFailed": "Delete failed",
+    "createFailed": "Create failed",
     "loadFailed": "Failed to load",
     "noResults": "No results",
     "noChanges": "No changes to save",
     "somethingWentWrong": "Something went wrong",
     "notFound": "Not found",
     "copied": "Copied",
-    "unsavedChanges": "You have unsaved changes"
+    "unsavedChanges": "You have unsaved changes",
+    "editingHint": "Editing — Save to apply changes."
   },
   "confirm": {
     "title": "Are you sure?",

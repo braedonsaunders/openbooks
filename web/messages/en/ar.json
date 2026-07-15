@@ -1,45 +1,57 @@
 {
   "list": {
-    "title": "Accounts Receivable",
-    "description": "Customer invoices entered in openbooks — draft → approval → posted through the kernel.",
-    "searchPlaceholder": "Search invoices, customers, refs…",
+    "title": "Invoices",
+    "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted through the kernel.",
+    "searchPlaceholder": "Search invoices, credits, customers, refs…",
     "emptyTitle": "No invoices yet",
-    "emptyDescription": "Enter the first customer invoice to start the AR workflow.",
+    "emptyDescription": "Enter the first customer invoice or credit memo to start the AR workflow.",
     "columns": {
+      "number": "Number",
       "invoice": "Invoice",
       "ref": "Ref"
     }
   },
+  "kinds": {
+    "invoice": "Invoice",
+    "credit": "Credit"
+  },
   "actions": {
+    "new": "New",
     "newInvoice": "New invoice",
+    "newCredit": "New customer credit",
     "submitForApproval": "Submit for approval"
   },
   "drawer": {
-    "autosaveHint": "changes save automatically",
+    "editingHint": "Editing — Save to apply changes",
     "viewGlImpact": "View GL impact",
-    "allChangesSaved": "All changes saved",
-    "saveFailedRetry": "Save failed — fix and retry",
-    "unsavedChanges": "Unsaved changes…",
+    "dateLabel": "Invoice date",
+    "dueDate": "Due date",
+    "reference": "Customer ref #",
+    "accountColumn": "Income account",
+    "accountPlaceholder": "Account…",
+    "noTax": "No tax",
+    "taxAmountColumn": "Tax amt",
+    "selectCustomerPlaceholder": "Select customer…",
+    "selectVendorPlaceholder": "Select vendor…",
     "subtotalAmount": "Subtotal {amount}",
     "taxTotalAmount": "Tax {amount}",
     "totalAmount": "Total {amount}",
     "balanceDueAmount": "Balance due {amount}",
-    "invoiceDate": "Invoice date",
-    "dueDate": "Due date",
-    "customerRef": "Customer ref #",
-    "selectCustomerPlaceholder": "Select customer…",
-    "columns": {
-      "incomeAccount": "Income account",
-      "accountPlaceholder": "Account…",
-      "taxAmount": "Tax amt",
-      "noTax": "No tax"
-    }
+    "saveState": {
+      "saved": "All changes saved",
+      "error": "Save failed — fix and retry",
+      "dirty": "Unsaved changes…"
+    },
+    "deleteTitle": "Delete this document?",
+    "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
+    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone."
   },
   "toasts": {
     "actionFailed": "Action failed",
     "submitted": "Submitted for approval",
     "posted": "Posted to the ledger",
-    "autosaveFailed": "Autosave failed",
-    "createDraftFailed": "Could not create a draft invoice"
+    "createDraftFailed": "Could not create a draft",
+    "deleted": "Document deleted",
+    "deleteFailed": "Delete failed"
   }
 }

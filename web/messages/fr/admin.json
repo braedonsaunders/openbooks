@@ -30,9 +30,17 @@
         "title": "Champs personnalisés",
         "description": "Ajoutez des champs typés aux enregistrements dans toute l’application"
       },
+      "customization": {
+        "title": "Formulaires & vues",
+        "description": "Personnalisez les formulaires de transaction et les vues de liste par organisation et par utilisateur"
+      },
       "scripts": {
         "title": "Scripts",
         "description": "Automatisation en environnement isolé exécutée sur les événements du grand livre"
+      },
+      "apiKeys": {
+        "title": "Clés API",
+        "description": "Créez des clés API à portée restreinte pour les intégrations et consultez les journaux d'utilisation"
       },
       "audit": {
         "title": "Journal d’audit",
@@ -113,6 +121,10 @@
       "accounts": {
         "label": "Comptes",
         "description": "Plan comptable."
+      },
+      "items": {
+        "label": "Articles et services",
+        "description": "Produits et services."
       }
     },
     "kinds": {
@@ -120,7 +132,7 @@
         "vendorBill": "Factures fournisseurs",
         "customerInvoice": "Factures clients",
         "vendorPayment": "Paiements fournisseurs",
-        "customerPayment": "Encaissements clients",
+        "customerPayment": "Paiements clients",
         "expenseReport": "Notes de frais",
         "journal": "Écritures de journal"
       },
@@ -163,6 +175,10 @@
       "multiSelect": {
         "label": "Liste déroulante (choix multiples)",
         "help": "Choisissez autant d’éléments que voulu dans une liste."
+      },
+      "reference": {
+        "label": "Liste / Enregistrement",
+        "help": "Lien vers un autre enregistrement (tiers, projet, compte, article)."
       }
     },
     "drawer": {
@@ -199,7 +215,20 @@
       "defaultValue": "Valeur par défaut",
       "min": "Min",
       "max": "Max",
-      "showInList": "Afficher comme colonne dans les vues de liste"
+      "showInList": "Afficher comme colonne dans les vues de liste",
+      "referenceTable": "Type d'enregistrement référencé",
+      "referenceTableHint": "Le champ stocke un lien vers un enregistrement de ce type.",
+      "displayMode": "Mode d'affichage",
+      "displayNormal": "Normal (modifiable)",
+      "displayHidden": "Masqué (non affiché sur les formulaires)",
+      "displayDisabled": "Désactivé (affiché en lecture seule)",
+      "allowedRoles": "Visible pour les rôles",
+      "allowedRolesHint": "Laissez décoché pour tous les rôles. Les administrateurs voient tous les champs.",
+      "roleAdmin": "Administrateur",
+      "roleController": "Contrôleur",
+      "roleAccountant": "Comptable",
+      "roleApprover": "Approbateur",
+      "roleViewer": "Lecteur"
     }
   },
   "navigation": {
@@ -297,26 +326,80 @@
     "drawer": {
       "newScript": "Nouveau script",
       "newTitle": "Nouveau script",
-      "description": "JavaScript en environnement isolé (QuickJS) — aucun accès au système de fichiers, au réseau ni à la base de données.",
+      "description": "JavaScript en environnement isolé (QuickJS) — aucun accès au système de fichiers ou au réseau. ob.query exécute du SQL en lecture seule.",
       "createScript": "Créer le script",
       "saveScript": "Enregistrer le script",
       "created": "Script créé",
       "saved": "Script enregistré",
-      "saveFailed": "Impossible d’enregistrer le script",
+      "saveFailed": "Impossible d'enregistrer le script",
       "namePlaceholder": "Politique comptes fournisseurs : les grosses factures exigent une note",
       "trigger": "Déclencheur",
       "documentKind": "Genre de document",
       "allKindsOption": "Tous les genres",
+      "cron": "Planification cron",
+      "cronHint": "— min heure dom mois dow (UTC)",
       "source": "Source",
       "sourceHint": "— doit définir function main(ctx)",
-      "timeoutMs": "Délai d’expiration (ms)",
-      "runOrder": "Ordre d’exécution",
+      "timeoutMs": "Délai d'expiration (ms)",
+      "runOrder": "Ordre d'exécution",
       "recentRuns": "Exécutions récentes",
+      "runNow": "Exécuter",
+      "runOk": "Exécuté en {ms} ms",
+      "runFailed": "Échec de l'exécution",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer ce script ? L'historique des exécutions est conservé pour l'audit.",
+      "deleteFailed": "Impossible de supprimer le script",
+      "deleted": "Script supprimé",
       "runStatus": {
         "ok": "ok",
         "aborted": "interrompue",
-        "error": "erreur"
+        "error": "erreur",
+        "timeout": "délai dépassé"
       }
+    }
+  },
+  "apiKeys": {
+    "title": "Clés API",
+    "description": "Clés API à portée restreinte pour les intégrations et l'automatisation. Chaque clé porte un sous-ensemble de permissions — une requête est autorisée uniquement lorsque les portées de la clé ET les permissions effectives du propriétaire la couvrent.",
+    "searchPlaceholder": "Rechercher des clés, des propriétaires…",
+    "empty": "Aucune clé API — créez-en une pour commencer à construire des intégrations.",
+    "table": {
+      "name": "Nom",
+      "key": "Clé",
+      "owner": "Propriétaire",
+      "scopes": "Portées",
+      "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
+      "fullScope": "Portée complète (hérite du propriétaire)",
+      "lastUsed": "Dernière utilisation",
+      "status": "Statut"
+    },
+    "statusActive": "active",
+    "statusRevoked": "révoquée",
+    "drawer": {
+      "newKey": "Nouvelle clé API",
+      "newTitle": "Nouvelle clé API",
+      "description": "Créez une clé à portée restreinte pour l'accès programmatique à l'API REST. La clé en clair est affichée une seule fois — stockez-la en toute sécurité.",
+      "nameRequired": "Un nom est requis",
+      "namePlaceholder": "Intégration de synchronisation production",
+      "descriptionPlaceholder": "À quoi sert cette clé ?",
+      "saveFailed": "Impossible d'enregistrer la clé",
+      "created": "Clé créée",
+      "updated": "Clé mise à jour",
+      "revoke": "Révoquer",
+      "revokeConfirm": "Révoquer cette clé ? Toutes les intégrations qui l'utilisent cesseront de fonctionner immédiatement. Cette action est irréversible.",
+      "revokeFailed": "Impossible de révoquer la clé",
+      "revoked": "Clé révoquée",
+      "revokedNotice": "Cette clé a été révoquée et ne peut plus authentifier de requêtes.",
+      "keyCreated": "Copiez votre clé API",
+      "keyCreatedHint": "C'est la seule fois où la clé complète sera affichée. Stockez-la en toute sécurité — vous ne pourrez plus la voir.",
+      "copy": "Copier",
+      "copied": "Copié dans le presse-papiers",
+      "createKey": "Créer la clé",
+      "saveChanges": "Enregistrer",
+      "scopesHeading": "Portées des permissions",
+      "scopesHint": "Sélectionnez les permissions accordées par cette clé. Laissez vide pour hériter de l'ensemble complet des permissions du propriétaire. Une clé n'accorde jamais plus que ce que son propriétaire possède.",
+      "fullScope": "Portée complète (hérite des permissions du propriétaire)",
+      "scopesCount": "{count, plural, one {# permission sélectionnée} other {# permissions sélectionnées}}"
     }
   },
   "settings": {
@@ -376,7 +459,7 @@
         },
         "bank": {
           "label": "Banque par défaut",
-          "hint": "Compte de trésorerie par défaut pour les paiements et encaissements"
+          "hint": "Compte de trésorerie par défaut pour les paiements fournisseurs et clients"
         },
         "taxCollected": {
           "label": "Taxes perçues",
@@ -464,6 +547,7 @@
       "sql": "Console SQL",
       "sync": "Synchronisation",
       "scripts": "Scripts",
+      "documents": "Gestion de documents",
       "admin": "Administration",
       "assets": "Immobilisations et amortissement"
     },
@@ -511,10 +595,14 @@
     "admin_users_manage": "Gérer les utilisateurs et l’attribution des rôles",
     "admin_roles_manage": "Gérer les rôles et les permissions",
     "admin_nav_manage": "Personnaliser la navigation",
+    "admin_customization_manage": "Personnaliser les formulaires et les vues de liste",
     "admin_audit_read": "Consulter le journal d’audit",
     "admin_ai_manage": "Gérer les paramètres d'IA",
+    "api_keys_manage": "Gérer les clés API",
     "assets_read": "Consulter les immobilisations et l’amortissement",
-    "assets_manage": "Créer et modifier des immobilisations, exécuter l’amortissement"
+    "assets_manage": "Créer et modifier des immobilisations, exécuter l’amortissement",
+    "documents_read": "Parcourir le gestionnaire de documents",
+    "documents_manage": "Téléverser, déplacer, renommer et supprimer des fichiers"
   },
   "ai": {
     "metaTitle": "Paramètres d'IA",

@@ -93,6 +93,14 @@ export type ReportCustomQuery = {
   groupBy?: string | null
   /** Defaults to the entity's default sort. */
   sort?: { column: string; direction: 'asc' | 'desc' } | null
+  /**
+   * Multi-level sort (NetSuite "then by"): when present and non-empty this
+   * wins over `sort`, which is kept for back-compat with stored plans.
+   * Engine caps at 3 levels.
+   */
+  sorts?: { column: string; direction: 'asc' | 'desc' }[] | null
+  /** Rows mode: per-column display-label overrides, keyed by column key. */
+  columnLabels?: Record<string, string> | null
   /** Hard cap on rows (engine clamps to 10 000). */
   limit?: number | null
 }

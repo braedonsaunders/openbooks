@@ -6,6 +6,7 @@ import { currentFiscalYearEnd, dimensionOptions, fiscalYearRange, profitAndLoss 
 import { layoutsFor, renderLayout, type RenderedLine } from '../../../../lib/layouts'
 import { money } from '../../../../lib/format'
 import { StatementTable } from '../StatementTable'
+import { StatementExport } from '../StatementExport'
 import { DimensionFilter } from '../DimensionFilter'
 import { SaveViewButton } from '../SaveViewButton'
 
@@ -71,7 +72,7 @@ export default async function PnL({
             title={t('pnl.title')}
             description={t('pnl.dateRange', { from, to })}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={<SaveViewButton />}
+            actions={<><SaveViewButton /><StatementExport kind="pnl" params={{ from, to, dept: sp.dept, project: sp.project }} /></>}
           />
           <div className="flex flex-wrap items-center gap-2">
             {fyPresets.map((r) => {
@@ -116,6 +117,7 @@ export default async function PnL({
             { title: t('pnl.expenses'), types: ['expense', 'expense_other', 'expense_deferred'], rows: pl.items, total: pl.expenses },
           ]}
           grandTotal={{ label: t('pnl.netIncome'), value: pl.netIncome }}
+          period={{ from, to }}
         />
       )}
     </ListPageLayout>

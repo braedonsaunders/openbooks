@@ -36,6 +36,7 @@
   "register": {
     "notFound": "Compte introuvable",
     "subtitle": "registre · {count, plural, one {# ligne} other {# lignes}} · solde courant {balance}",
+    "periodFilter": "Filtré sur {label}",
     "columns": {
       "entry": "Écriture",
       "debit": "Débit",
