@@ -37,7 +37,9 @@
     "customStudio": {
       "title": "Custom report builder",
       "description": "Build, save and schedule your own reports over the ledger"
-    }
+    },
+    "searchPlaceholder": "Search reports…",
+    "noMatches": "No reports match your search."
   },
   "statement": {
     "sectionTotal": "Total {section}",
