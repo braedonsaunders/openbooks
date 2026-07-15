@@ -7,6 +7,7 @@ import {
   type AllocationInput,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
+import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { can, getAuthz, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse, paymentPermission } from '../lib'
@@ -65,5 +66,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(payment)
   } catch (e) {
     return paymentErrorResponse(e)
+  }
+}
+
+/** Delete a payment/receipt (guarded: open period, no live applications). */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const gate = await gateForDocument(id, null)
+  if (gate instanceof NextResponse) return gate
+  try {
+    await deleteDocument(id, gate.authz.user.id)
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
+    throw e
   }
 }

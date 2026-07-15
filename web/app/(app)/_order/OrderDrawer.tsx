@@ -353,6 +353,28 @@ export function OrderDrawer({
     await setStatus('voided')
   }
 
+  async function remove() {
+    if (
+      !(await confirmDialog({
+        title: 'Delete this order?',
+        message: 'This permanently deletes the order and its lines. This cannot be undone.',
+        confirmLabel: 'Delete',
+        tone: 'danger',
+      }))
+    )
+      return
+    setBusy(true)
+    const res = await fetch(`${apiBase}/${doc.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('Order deleted')
+      router.push(meta.base)
+      router.refresh()
+    } else {
+      toast.error((await res.json()).error ?? t('actionFailed'))
+      setBusy(false)
+    }
+  }
+
   async function convert(targetKind: string, label: string) {
     setBusy(true)
     const res = await fetch(`${apiBase}/${doc.id}/convert`, {
@@ -492,6 +514,11 @@ export function OrderDrawer({
             {isApproved ? (
               <Button variant="outline" disabled={busy} onClick={voidOrder}>
                 {tCommon('actions.void')}
+              </Button>
+            ) : null}
+            {doc.status !== 'voided' ? (
+              <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+                Delete
               </Button>
             ) : null}
           </>
