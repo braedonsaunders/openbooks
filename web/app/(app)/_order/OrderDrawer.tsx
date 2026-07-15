@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
@@ -160,7 +161,13 @@ export function OrderDrawer({
   const meta = KIND_META[kind]
   const isDraft = doc.status === 'draft'
   const isApproved = doc.status === 'approved'
-  const editable = isDraft && canManage
+  // NetSuite-style record model: the flyout opens READ-ONLY (view mode) with an
+  // Edit button; a brand-new draft opens straight into edit. Only DRAFT orders
+  // are editable (Issue is terminal for the header). Save is EXPLICIT — one Save
+  // button, no per-field autosave.
+  const canEditStatus = isDraft && canManage
+  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -228,7 +235,7 @@ export function OrderDrawer({
     setRows(merged)
   }
 
-  // -- autosave (drafts only) ------------------------------------------------
+  // -- explicit save (no autosave) -------------------------------------------
   const payload = useMemo(
     () => ({
       partyId: partyId || null,
@@ -253,34 +260,58 @@ export function OrderDrawer({
     }),
     [partyId, documentDate, dueDate, memo, departmentId, projectId, rows],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!editable) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`${apiBase}/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        const data = (await res.json()) as OrderPayload
-        setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, editable])
+  }, [payload])
+
+  /** Reset every field back to the loaded document (used by Cancel). */
+  function resetForm() {
+    setPartyId(doc.party_id ?? '')
+    setDocumentDate(doc.document_date ?? '')
+    setDueDate(doc.due_date ?? '')
+    setMemo(doc.memo ?? '')
+    setDepartmentId(doc.department_id ?? '')
+    setProjectId(doc.project_id ?? '')
+    setRows(order.lines.length > 0 ? order.lines.map(toRow) : [emptyLine()])
+    setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`${apiBase}/${doc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      const data = (await res.json()) as OrderPayload
+      setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? t('actionFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function setStatus(status: 'approved' | 'voided') {
     setBusy(true)
@@ -407,6 +438,7 @@ export function OrderDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
+          <DocTypeBadge kind={kind} />
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {statusLabel(doc.status)}
@@ -423,10 +455,24 @@ export function OrderDrawer({
           ) : null}
         </span>
       }
-      description={editable ? t('draftAutosave') : (doc.party_name ?? undefined)}
+      description={mode === 'edit' ? 'Editing — Save to apply changes' : (doc.party_name ?? undefined)}
       headerActions={
-        canManage ? (
+        mode === 'edit' ? (
           <>
+            <Button disabled={busy} onClick={save}>
+              {busy ? 'Saving…' : 'Save'}
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={cancel}>
+              Cancel
+            </Button>
+          </>
+        ) : canManage ? (
+          <>
+            {canEditStatus ? (
+              <Button variant="outline" onClick={() => setMode('edit')}>
+                Edit
+              </Button>
+            ) : null}
             {isDraft ? (
               <Button disabled={busy || !canIssue} onClick={issue}>
                 {t('issue')}
@@ -459,14 +505,14 @@ export function OrderDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {editable
-              ? saveState === 'saved'
-                ? t('allChangesSaved')
-                : saveState === 'saving'
-                  ? tCommon('actions.saving')
-                  : saveState === 'error'
-                    ? t('saveFailedRetry')
-                    : t('unsavedChanges')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tCommon('actions.saving')
+                : saveState === 'error'
+                  ? t('saveFailedRetry')
+                  : dirty
+                    ? t('unsavedChanges')
+                    : null
               : null}
           </span>
           <span className="flex-1" />

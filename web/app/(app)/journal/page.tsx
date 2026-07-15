@@ -95,7 +95,8 @@ export default async function Journal({
     db.execute(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status, e.origin,
              count(l.id) as line_count,
-             sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
+             sum(case when l.amount > 0 then l.amount else 0 end) as total_debits,
+             (select d.id from documents d where d.posted_entry_id = e.id and d.kind = 'journal' limit 1) as source_document_id
         from journal_entries e
         join journal_lines l on l.entry_id = e.id
        where ${where}
@@ -196,7 +197,13 @@ export default async function Journal({
             <TableRow key={e.id}>
               <TableCell className="whitespace-nowrap">{e.posting_date}</TableCell>
               <TableCell className="font-mono text-[13px] font-semibold">
-                <Link href={`/journal/${e.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                {/* Resolve to the editable journal DOCUMENT (opens JournalDrawer via
+                    ?entry=); GL-native entries with no source document fall back to
+                    the read-only /journal/[id] GL-impact page. */}
+                <Link
+                  href={e.source_document_id ? `/journal?entry=${e.source_document_id}` : `/journal/${e.id}`}
+                  className="text-teal-700 hover:underline dark:text-teal-300"
+                >
                   {e.entry_number}
                 </Link>
               </TableCell>

@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { AttachmentPanel } from '../../../components/attachment-panel'
+import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { money } from '../../../lib/format'
 
 /**
@@ -92,6 +93,13 @@ export function PaymentDrawer({
   const router = useRouter()
   const doc = payment.doc
   const isDraft = doc.status === 'draft'
+  // NetSuite-style record model: the flyout opens READ-ONLY (view mode) with an
+  // Edit button; a brand-new draft opens straight into edit. Only DRAFT payments
+  // are editable (posting is terminal — applications become ledger state). Save
+  // is EXPLICIT — one Save button, no per-field autosave.
+  const canEditStatus = isDraft
+  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const editable = mode === 'edit' && canEditStatus
   const partyLabel = side === 'ap' ? tCommon('labels.vendor') : tCommon('labels.customer')
   const kindLabel = (kind: string | null) => {
     const key = KIND_KEY[kind ?? '']
@@ -163,7 +171,7 @@ export function PaymentDrawer({
   const hasInvalidRow = openItems.some((i) => !rowValid(i))
   const total = validAllocations.reduce((acc, a) => acc + Number(a.amount), 0)
 
-  // -- autosave (drafts only) ----------------------------------------------
+  // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
     () => ({
       partyId: partyId || null,
@@ -175,32 +183,54 @@ export function PaymentDrawer({
     }),
     [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!isDraft) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/payments/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('toasts.autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, isDraft])
+  }, [payload])
+
+  /** Reset every field back to the loaded document (used by Cancel). */
+  function resetForm() {
+    setPartyId(doc.party_id ?? '')
+    setBankAccountId(payment.bankAccountId ?? '')
+    setDocumentDate(doc.document_date ?? '')
+    setReferenceNumber(doc.reference_number ?? '')
+    setMemo(doc.memo ?? '')
+    setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, Number(a.amount).toFixed(2)])))
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/payments/${doc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? t('toasts.postFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function post() {
     setBusy(true)
@@ -230,7 +260,7 @@ export function PaymentDrawer({
     isDraft &&
     !busy &&
     !hasInvalidRow &&
-    saveState === 'saved' &&
+    !dirty &&
     !!partyId &&
     !!bankAccountId &&
     validAllocations.length > 0 &&
@@ -243,25 +273,44 @@ export function PaymentDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
+          <DocTypeBadge kind={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))} />
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {statusLabel(String(doc.status))}
           </Badge>
         </span>
       }
-      description={isDraft ? t('draftHint') : (doc.party_name ?? undefined)}
+      description={mode === 'edit' ? 'Editing — Save to apply changes' : (doc.party_name ?? undefined)}
       headerActions={
         <>
-          {isDraft ? (
-            <Button disabled={!canPost} onClick={post}>
-              {busy ? tCommon('actions.posting') : t('postAction', { side })}
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
-            </Button>
-          ) : null}
+          {mode === 'edit' ? (
+            <>
+              <Button disabled={busy} onClick={save}>
+                {busy ? 'Saving…' : 'Save'}
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {canEditStatus ? (
+                <Button variant="outline" onClick={() => setMode('edit')}>
+                  Edit
+                </Button>
+              ) : null}
+              {isDraft ? (
+                <Button disabled={!canPost} onClick={post}>
+                  {busy ? tCommon('actions.posting') : t('postAction', { side })}
+                </Button>
+              ) : null}
+              {doc.entry_id ? (
+                <Button variant="outline" asChild>
+                  <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
+                </Button>
+              ) : null}
+            </>
+          )}
         </>
       }
       footer={
@@ -272,14 +321,14 @@ export function PaymentDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {isDraft
-              ? saveState === 'saved'
-                ? t('saveState.saved')
-                : saveState === 'saving'
-                  ? tCommon('actions.saving')
-                  : saveState === 'error'
-                    ? t('saveState.error')
-                    : t('saveState.dirty')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tCommon('actions.saving')
+                : saveState === 'error'
+                  ? t('saveState.error')
+                  : dirty
+                    ? t('saveState.dirty')
+                    : null
               : null}
           </span>
           <span className="flex-1" />
@@ -306,9 +355,9 @@ export function PaymentDrawer({
           <div className={`${field} lg:col-span-2`}>
             <Label>
               {partyLabel}
-              {isDraft ? <span className="text-red-500"> *</span> : null}
+              {editable ? <span className="text-red-500"> *</span> : null}
             </Label>
-            {isDraft ? (
+            {editable ? (
               <SearchSelect
                 options={parties.map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
                 value={partyId}
@@ -322,9 +371,9 @@ export function PaymentDrawer({
           <div className={`${field} lg:col-span-2`}>
             <Label>
               {t('bankAccount')}
-              {isDraft ? <span className="text-red-500"> *</span> : null}
+              {editable ? <span className="text-red-500"> *</span> : null}
             </Label>
-            {isDraft ? (
+            {editable ? (
               <SearchSelect
                 options={bankAccounts.map((a) => ({
                   value: a.id,
@@ -342,7 +391,7 @@ export function PaymentDrawer({
           </div>
           <div className={field}>
             <Label>{tCommon('labels.date')}</Label>
-            {isDraft ? (
+            {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
@@ -350,7 +399,7 @@ export function PaymentDrawer({
           </div>
           <div className={field}>
             <Label>{tCommon('labels.reference')}</Label>
-            {isDraft ? (
+            {editable ? (
               <Input
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
@@ -362,7 +411,7 @@ export function PaymentDrawer({
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>{tCommon('labels.memo')}</Label>
-            {isDraft ? (
+            {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
               <p className="text-sm">{doc.memo ?? '—'}</p>
@@ -411,6 +460,7 @@ export function PaymentDrawer({
                               type="checkbox"
                               className="h-4 w-4 accent-teal-600"
                               checked={checked}
+                              disabled={!editable}
                               onChange={() => toggle(item)}
                               aria-label={t('applyAriaLabel', { document: item.documentNumber ?? item.entryNumber })}
                             />
@@ -439,6 +489,7 @@ export function PaymentDrawer({
                                   (invalid ? 'border-red-400 focus-visible:ring-red-400 dark:border-red-600' : '')
                                 }
                                 value={allocs[item.lineId]}
+                                disabled={!editable}
                                 onChange={(e) =>
                                   setAllocs((prev) => ({ ...prev, [item.lineId]: e.target.value }))
                                 }

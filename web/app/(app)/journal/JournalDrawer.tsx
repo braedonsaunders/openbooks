@@ -9,6 +9,7 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
+import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -96,10 +97,14 @@ export function JournalDrawer({
   const router = useRouter()
   const doc = journal.doc
   const isDraft = doc.status === 'draft'
-  // NetSuite-style edit-in-place: draft and POSTED journals are both editable.
-  // Saving a posted journal re-materializes its GL-Impact projection (the server
-  // blocks only GL changes into a closed period). voided journals are read-only.
-  const editable = doc.status === 'draft' || doc.status === 'posted'
+  // NetSuite-style record model: the flyout opens READ-ONLY (view mode) with an
+  // Edit button; a brand-new draft opens straight into edit. Draft and POSTED
+  // journals are both editable — saving a posted journal re-materializes its
+  // GL-Impact projection (the server blocks only GL changes into a closed
+  // period). voided journals are read-only. Save is EXPLICIT — no autosave.
+  const canEditStatus = doc.status === 'draft' || doc.status === 'posted'
+  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -136,7 +141,7 @@ export function JournalDrawer({
   }, [rows])
   const balanced = diff === 0 && debits > 0
 
-  // -- autosave (drafts only) ----------------------------------------------
+  // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
     () => ({
       partyId: partyId || null,
@@ -159,32 +164,54 @@ export function JournalDrawer({
     }),
     [partyId, documentDate, referenceNumber, memo, customValues, rows, lineDefs],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!editable) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/journals/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, editable])
+  }, [payload])
+
+  /** Reset every field back to the loaded document (used by Cancel). */
+  function resetForm() {
+    setPartyId(doc.party_id ?? '')
+    setDocumentDate(doc.document_date ?? '')
+    setReferenceNumber(doc.reference_number ?? '')
+    setMemo(doc.memo ?? '')
+    setCustomValues(doc.custom ?? {})
+    setRows(journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs)) : [emptyLine(), emptyLine()])
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/journals/${doc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? t('postFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function post() {
     setBusy(true)
@@ -244,33 +271,44 @@ export function JournalDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
+          <DocTypeBadge kind="journal" />
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {STATUS_KEYS[doc.status] ? tc(`status.${STATUS_KEYS[doc.status]}`) : String(doc.status).replace('_', ' ')}
           </Badge>
         </span>
       }
-      description={
-        isDraft
-          ? t('draftDescription')
-          : editable
-            ? doc.party_name
-              ? t('autosaveWithParty', { party: doc.party_name })
-              : t('autosave')
-            : (doc.party_name ?? undefined)
-      }
+      description={mode === 'edit' ? 'Editing — Save to apply changes' : (doc.party_name ?? undefined)}
       headerActions={
         <>
-          {isDraft ? (
-            <Button disabled={busy || !balanced || saveState !== 'saved'} onClick={post}>
-              {tc('actions.post')}
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
-            </Button>
-          ) : null}
+          {mode === 'edit' ? (
+            <>
+              <Button disabled={busy} onClick={save}>
+                {busy ? 'Saving…' : 'Save'}
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {canEditStatus ? (
+                <Button variant="outline" onClick={() => setMode('edit')}>
+                  Edit
+                </Button>
+              ) : null}
+              {isDraft ? (
+                <Button disabled={busy || !balanced || dirty} onClick={post}>
+                  {tc('actions.post')}
+                </Button>
+              ) : null}
+              {doc.entry_id ? (
+                <Button variant="outline" asChild>
+                  <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
+                </Button>
+              ) : null}
+            </>
+          )}
         </>
       }
       footer={
@@ -281,14 +319,14 @@ export function JournalDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {editable
-              ? saveState === 'saved'
-                ? t('allChangesSaved')
-                : saveState === 'saving'
-                  ? tc('actions.saving')
-                  : saveState === 'error'
-                    ? t('saveFailedRetry')
-                    : t('unsavedChanges')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tc('actions.saving')
+                : saveState === 'error'
+                  ? t('saveFailedRetry')
+                  : dirty
+                    ? t('unsavedChanges')
+                    : null
               : null}
           </span>
           <span className="flex-1" />

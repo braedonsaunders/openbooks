@@ -9,6 +9,7 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
+import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -105,11 +106,15 @@ export function InvoiceDrawer({
   const doc = invoice.doc
   const isDraft = doc.status === 'draft'
   const isPosted = doc.status === 'posted'
-  // NetSuite-style edit-in-place: draft, approved, and POSTED invoices are all
-  // editable. Saving a posted invoice re-materializes its GL-Impact projection
-  // (the server blocks only GL changes into a closed period). pending_approval
-  // and voided invoices are read-only.
-  const editable = doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted'
+  // NetSuite-style record model: the flyout opens READ-ONLY (view mode) with an
+  // Edit button; a brand-new draft opens straight into edit. Draft, approved,
+  // and POSTED invoices are all editable — saving a posted invoice
+  // re-materializes its GL-Impact projection (the server blocks only GL changes
+  // into a closed period). pending_approval and voided invoices are read-only.
+  // Save is EXPLICIT — one Save button, no per-field autosave.
+  const canEditStatus = doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted'
+  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const editable = mode === 'edit' && canEditStatus
   // Posted invoices resolve to open/paid from the applications ledger state.
   const displayStatus = isPosted ? (Number(doc.balance_due) > 0 ? 'open' : 'paid') : doc.status
 
@@ -134,7 +139,7 @@ export function InvoiceDrawer({
     return Math.round(amt * rate) / 100
   }
 
-  // -- autosave (drafts only) ----------------------------------------------
+  // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
     () => ({
       partyId: partyId || null,
@@ -161,34 +166,58 @@ export function InvoiceDrawer({
     }),
     [partyId, documentDate, dueDate, referenceNumber, memo, customValues, rows, lineDefs],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!editable) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/invoices/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        const data = (await res.json()) as InvoicePayload
-        setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('toasts.autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload, editable])
+  }, [payload])
+
+  /** Reset every field back to the loaded document (used by Cancel). */
+  function resetForm() {
+    setPartyId(doc.party_id ?? '')
+    setDocumentDate(doc.document_date ?? '')
+    setDueDate(doc.due_date ?? '')
+    setReferenceNumber(doc.reference_number ?? '')
+    setMemo(doc.memo ?? '')
+    setCustomValues(doc.custom ?? {})
+    setRows(invoice.lines.length > 0 ? invoice.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()])
+    setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/invoices/${doc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      const data = (await res.json()) as InvoicePayload
+      setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? t('toasts.actionFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function act(action: 'submit' | 'post') {
     setBusy(true)
@@ -269,6 +298,7 @@ export function InvoiceDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
+          <DocTypeBadge kind="customer_invoice" />
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[displayStatus] ?? 'secondary'}>
             {STATUS_KEYS[displayStatus]
@@ -277,28 +307,42 @@ export function InvoiceDrawer({
           </Badge>
         </span>
       }
-      description={
-        editable
-          ? `${doc.customer_name ? doc.customer_name + ' · ' : ''}${t('drawer.autosaveHint')}`
-          : (doc.customer_name ?? undefined)
-      }
+      description={mode === 'edit' ? 'Editing — Save to apply changes' : (doc.customer_name ?? undefined)}
       headerActions={
         <>
-          {isDraft ? (
-            <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
-              {t('actions.submitForApproval')}
-            </Button>
-          ) : null}
-          {doc.status === 'approved' ? (
-            <Button disabled={busy} onClick={() => act('post')}>
-              {tCommon('actions.post')}
-            </Button>
-          ) : null}
-          {doc.entry_id ? (
-            <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
-            </Button>
-          ) : null}
+          {mode === 'edit' ? (
+            <>
+              <Button disabled={busy} onClick={save}>
+                {busy ? 'Saving…' : 'Save'}
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {canEditStatus ? (
+                <Button variant="outline" onClick={() => setMode('edit')}>
+                  Edit
+                </Button>
+              ) : null}
+              {isDraft ? (
+                <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
+                  {t('actions.submitForApproval')}
+                </Button>
+              ) : null}
+              {doc.status === 'approved' ? (
+                <Button disabled={busy} onClick={() => act('post')}>
+                  {tCommon('actions.post')}
+                </Button>
+              ) : null}
+              {doc.entry_id ? (
+                <Button variant="outline" asChild>
+                  <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
+                </Button>
+              ) : null}
+            </>
+          )}
         </>
       }
       footer={
@@ -309,14 +353,14 @@ export function InvoiceDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {editable
-              ? saveState === 'saved'
-                ? t('drawer.allChangesSaved')
-                : saveState === 'saving'
-                  ? tCommon('actions.saving')
-                  : saveState === 'error'
-                    ? t('drawer.saveFailedRetry')
-                    : t('drawer.unsavedChanges')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tCommon('actions.saving')
+                : saveState === 'error'
+                  ? t('drawer.saveFailedRetry')
+                  : dirty
+                    ? t('drawer.unsavedChanges')
+                    : null
               : null}
           </span>
           <span className="flex-1" />
