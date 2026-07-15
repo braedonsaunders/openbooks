@@ -13,7 +13,11 @@
       "payablesTitle": "Cuentas por pagar por proveedor",
       "payablesDescription": "Posición pendiente de cuentas por pagar por tercero",
       "receivablesTitle": "Cuentas por cobrar por cliente",
-      "receivablesDescription": "Posición pendiente de cuentas por cobrar por tercero"
+      "receivablesDescription": "Posición pendiente de cuentas por cobrar por tercero",
+      "agingTitle": "Antigüedad de CxC / CxP",
+      "agingDescription": "Saldos de partidas abiertas por tercero, agrupados por antigüedad",
+      "cashFlowTitle": "Estado de flujo de efectivo",
+      "cashFlowDescription": "Método directo — operación, inversión y financiamiento, conciliado con movimientos bancarios"
     }
   },
   "statement": {
@@ -84,6 +88,42 @@
       "glLines": "Líneas del mayor"
     },
     "noPartyOnLines": "(sin tercero en las líneas)"
+  },
+  "aging": {
+    "receivablesTitle": "Antigüedad de CxC",
+    "payablesTitle": "Antigüedad de CxP",
+    "asOf": "partidas abiertas al {date}",
+    "receivables": "Cuentas por cobrar",
+    "payables": "Cuentas por pagar",
+    "noParty": "(sin tercero)",
+    "empty": "No hay partidas abiertas a esta fecha.",
+    "columns": {
+      "total": "Total"
+    },
+    "buckets": {
+      "current": "Corriente",
+      "b1": "1–30",
+      "b2": "31–60",
+      "b3": "61–90",
+      "b4": "90+"
+    }
+  },
+  "cashFlow": {
+    "title": "Estado de flujo de efectivo",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Efectivo inicial",
+    "closingCash": "Efectivo final",
+    "netChange": "Variación neta de efectivo",
+    "empty": "No hay movimientos de efectivo en este período.",
+    "sections": {
+      "operating": "Actividades de operación",
+      "investing": "Actividades de inversión",
+      "financing": "Actividades de financiamiento"
+    },
+    "subtotal": "Flujo neto de {section}",
+    "reconciliation": "Inicial + variación neta = final",
+    "reconciled": "conciliado",
+    "offBy": "descuadre de {amount}"
   },
   "custom": {
     "kind": {
