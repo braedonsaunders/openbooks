@@ -4,6 +4,7 @@
     "menuAriaLabel": "Menú de la cuenta",
     "theme": "Tema",
     "language": "Idioma",
+    "menuLayout": "Disposición del menú",
     "signOut": "Cerrar sesión",
     "signingOut": "Cerrando sesión…",
     "roles": {
@@ -18,6 +19,18 @@
     "label": "Idioma",
     "orgDefault": "Predeterminado de la organización",
     "saveFailed": "No se pudo guardar su preferencia de idioma"
+  },
+  "menuMode": {
+    "label": "Disposición del menú",
+    "orgDefault": "Predeterminado de la organización",
+    "saveFailed": "No se pudo guardar su preferencia de disposición del menú",
+    "options": {
+      "sidebar": "Barra lateral",
+      "topbar": "Barra de menú superior"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "Principal"
   },
   "meta": {
     "description": "La suite empresarial abierta. Opere con libros abiertos."

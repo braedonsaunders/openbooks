@@ -22,6 +22,8 @@ const MAX_DEPTH = 5
 const MAX_RULES = 60
 const MAX_BREAKOUTS = 6
 const MAX_MEASURES = 8
+const MAX_SORT_LEVELS = 3
+const MAX_LABEL_LEN = 80
 
 export function validateCustomQuery(
   raw: unknown,
@@ -122,17 +124,34 @@ export function validateCustomQuery(
   const filtersFinal = filters && filters.rules.length ? filters : null
 
   const groupBy = validColumn(q.groupBy) ? q.groupBy : null
-  const sort =
-    q.sort && typeof q.sort === 'object'
-      ? (() => {
-          const s = q.sort as Record<string, unknown>
-          if (!validColumn(s.column)) return null
-          return {
-            column: s.column,
-            direction: s.direction === 'asc' ? ('asc' as const) : ('desc' as const),
-          }
-        })()
-      : null
+  const sanitizeSort = (raw: unknown): { column: string; direction: 'asc' | 'desc' } | null => {
+    if (!raw || typeof raw !== 'object') return null
+    const s = raw as Record<string, unknown>
+    if (!validColumn(s.column)) return null
+    return {
+      column: s.column,
+      direction: s.direction === 'asc' ? ('asc' as const) : ('desc' as const),
+    }
+  }
+  const sort = sanitizeSort(q.sort)
+  // Multi-level sort: valid columns only, deduped, capped.
+  const seenSortCols = new Set<string>()
+  const sorts = Array.isArray(q.sorts)
+    ? (q.sorts as unknown[])
+        .map(sanitizeSort)
+        .filter((s): s is NonNullable<typeof s> => s !== null && !seenSortCols.has(s.column) && !!seenSortCols.add(s.column))
+        .slice(0, MAX_SORT_LEVELS)
+    : []
+  // Column-label overrides: only for columns actually selected, trimmed + capped.
+  const columnLabels: Record<string, string> = {}
+  if (q.columnLabels && typeof q.columnLabels === 'object' && !Array.isArray(q.columnLabels)) {
+    for (const [key, value] of Object.entries(q.columnLabels as Record<string, unknown>)) {
+      if (!columns.includes(key)) continue
+      if (typeof value !== 'string') continue
+      const trimmed = value.trim().slice(0, MAX_LABEL_LEN)
+      if (trimmed) columnLabels[key] = trimmed
+    }
+  }
   const limit = Number.isFinite(Number(q.limit))
     ? Math.min(Math.max(Number(q.limit), 1), 10_000)
     : 1000
@@ -146,6 +165,8 @@ export function validateCustomQuery(
     filters: filtersFinal,
     groupBy,
     sort,
+    ...(sorts.length ? { sorts } : {}),
+    ...(Object.keys(columnLabels).length ? { columnLabels } : {}),
     limit,
   }
 }

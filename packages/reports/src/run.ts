@@ -64,6 +64,9 @@ export type ReportRunLabels = {
   none?: () => string
   /** Boolean enum cell text (fallback: 'yes'/'no'). */
   bool?: (v: boolean) => string
+  /** Enum cell text (e.g. 'vendor_bill' → 'Bill'). Return null/undefined to
+   *  fall back to the humanized raw value. */
+  enumValue?: (v: string) => string | null | undefined
   /** Display label for the entity itself (the summary band's Source value). */
   entityLabel?: (entity: ReportEntity) => string
 }
@@ -95,7 +98,7 @@ export async function runCustomQuery(
   if (compiled.mode === 'summarize') {
     return shapeSummarizeResult(entity, compiled.breakouts, compiled.measures, rows, labels)
   }
-  return shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels)
+  return shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels, q.columnLabels ?? undefined)
 }
 
 // --- rows mode ---------------------------------------------------------------
@@ -106,9 +109,12 @@ function shapeRowsResult(
   groupBy: string | null,
   dataRows: Record<string, unknown>[],
   labels: ReportRunLabels,
+  overrides?: Record<string, string>,
 ): ReportRunResult {
   const groups: ReportGroup[] = []
-  const columnLabel = (c: string) => labels.column?.(entity, c) ?? labelFor(entity, c)
+  // A user-authored label override wins over the localized catalog heading.
+  const columnLabel = (c: string) =>
+    overrides?.[c]?.trim() || (labels.column?.(entity, c) ?? labelFor(entity, c))
   const columnLabels = requestedColumns.map(columnLabel)
   const resultsTitle = labels.resultsTitle?.() ?? 'Results'
   const rowCount = (n: number) => labels.rowCount?.(n) ?? `${n} row(s)`
@@ -255,7 +261,27 @@ function formatCellValue(
   const kind = entityColumn(entity, column)?.kind
   if (kind === 'enum') {
     if (typeof v === 'boolean') return labels.bool?.(v) ?? (v ? 'yes' : 'no')
-    if (typeof v === 'string') return formatLabel(v)
+    if (typeof v === 'string') return labels.enumValue?.(v) ?? formatLabel(v)
+  }
+  // Date columns come back as Date objects at LOCAL midnight (pg's date
+  // parser) — print local date parts; toISOString would shift a day east of
+  // UTC.
+  if (kind === 'date' && v != null) {
+    if (v instanceof Date) {
+      const mm = String(v.getMonth() + 1).padStart(2, '0')
+      const dd = String(v.getDate()).padStart(2, '0')
+      return `${v.getFullYear()}-${mm}-${dd}`
+    }
+    return String(v).slice(0, 10)
+  }
+  // Numeric columns: normalize trailing zeros ("2938.0000" → "2938.00") while
+  // preserving genuine precision (rates like 0.0625 pass through untouched).
+  if (kind === 'number' && v != null) {
+    const n = Number(v)
+    if (Number.isFinite(n)) {
+      const rounded = Math.round(n * 100) / 100
+      return Math.abs(n - rounded) < 1e-9 ? rounded.toFixed(2) : String(n)
+    }
   }
   return formatCustomValue(v)
 }

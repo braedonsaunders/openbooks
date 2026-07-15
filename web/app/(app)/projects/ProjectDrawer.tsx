@@ -124,6 +124,12 @@ export function ProjectDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
+  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // — even for drafts — with an Edit button in the header. Save is EXPLICIT —
+  // one Save button, no per-field autosave.
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const editable = mode === 'edit' && canManage
+
   const nameValid = name.trim().length > 0 && name.trim() !== 'New project'
 
   const partyOptions = useMemo(
@@ -135,7 +141,7 @@ export function ProjectDrawer({
     setTasks((rows) => rows.map((row, j) => (j === i ? { ...row, ...patch } : row)))
   }
 
-  // -- autosave (debounced PATCH) ------------------------------------------
+  // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
     () => ({
       name: name.trim() || (isActive ? name : 'New project'),
@@ -163,32 +169,70 @@ export function ProjectDrawer({
     }),
     [name, code, customerId, foremanId, managerId, status, billingMethod, customerPoNumber, startsOn, endsOn, contractValue, notes, tasks, isActive],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!canManage) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/projects/${pr.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(savePayload),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('drawer.autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savePayload, canManage])
+  }, [savePayload])
+
+  /** Reset every field back to the loaded project (used by Cancel). */
+  function resetForm() {
+    setName(isPlaceholderName ? '' : (pr.name ?? ''))
+    setCode(pr.code ?? '')
+    setCustomerId(pr.customer_id ?? '')
+    setForemanId(pr.foreman_id ?? '')
+    setManagerId(pr.manager_id ?? '')
+    setStatus(pr.status ?? 'active')
+    setBillingMethod(pr.billing_method ?? '')
+    setCustomerPoNumber(pr.customer_po_number ?? '')
+    setStartsOn(pr.starts_on ?? '')
+    setEndsOn(pr.ends_on ?? '')
+    setContractValue(payload.contractValue != null ? Number(payload.contractValue).toFixed(2) : '')
+    setNotes(pr.notes ?? '')
+    setTasks(
+      payload.tasks.map((t) => ({
+        id: t.id,
+        code: t.code ?? '',
+        name: t.name ?? '',
+        status: t.status ?? 'open',
+        estimatedHours: t.estimated_hours != null ? Number(t.estimated_hours).toString() : '',
+        estimatedCost: t.estimated_cost != null ? Number(t.estimated_cost).toFixed(2) : '',
+      })),
+    )
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/projects/${pr.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(savePayload),
+    })
+    if (res.ok) {
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? t('drawer.autosaveFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function setActiveState(next: boolean) {
     setBusy(true)
@@ -207,7 +251,7 @@ export function ProjectDrawer({
     router.refresh()
   }
 
-  const ro = !canManage
+  const ro = !editable
 
   return (
     <UrlDrawer
@@ -222,30 +266,48 @@ export function ProjectDrawer({
           </Badge>
         </span>
       }
-      description={canManage ? t('drawer.autosaveHint') : undefined}
+      description={mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
       headerActions={
         <>
-          <Link href={`/projects/${pr.id}`}>
-            <Button variant="outline">
-              <LayoutDashboard size={15} /> {t('drawer.openCockpit')}
-            </Button>
-          </Link>
-          {canManage ? (
-            isActive ? (
-              <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                {t('drawer.deactivate')}
+          {mode === 'edit' ? (
+            <>
+              <Button disabled={busy} onClick={save}>
+                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
               </Button>
-            ) : (
-              <>
-                {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
-                ) : null}
-                <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                  {t('drawer.activate')}
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                {tCommon('actions.cancel')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href={`/projects/${pr.id}`}>
+                <Button variant="outline">
+                  <LayoutDashboard size={15} /> {t('drawer.openCockpit')}
                 </Button>
-              </>
-            )
-          ) : null}
+              </Link>
+              {canManage ? (
+                <>
+                  <Button variant="outline" onClick={() => setMode('edit')}>
+                    {tCommon('actions.edit')}
+                  </Button>
+                  {isActive ? (
+                    <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
+                      {t('drawer.deactivate')}
+                    </Button>
+                  ) : (
+                    <>
+                      {!nameValid ? (
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
+                      ) : null}
+                      <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
+                        {t('drawer.activate')}
+                      </Button>
+                    </>
+                  )}
+                </>
+              ) : null}
+            </>
+          )}
         </>
       }
       footer={
@@ -256,14 +318,14 @@ export function ProjectDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {canManage
-              ? saveState === 'saved'
-                ? t('drawer.allSaved')
-                : saveState === 'saving'
-                  ? tCommon('actions.saving')
-                  : saveState === 'error'
-                    ? t('drawer.saveFailedRetry')
-                    : t('drawer.unsavedChanges')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tCommon('actions.saving')
+                : saveState === 'error'
+                  ? t('drawer.saveFailedRetry')
+                  : dirty
+                    ? t('drawer.unsavedChanges')
+                    : null
               : null}
           </span>
         </div>

@@ -1,45 +1,57 @@
 {
   "list": {
-    "title": "Cuentas por cobrar",
-    "description": "Facturas de cliente registradas en openbooks — borrador → aprobación → contabilizadas a través del kernel.",
-    "searchPlaceholder": "Buscar facturas, clientes, referencias…",
-    "emptyTitle": "Aún no hay facturas",
-    "emptyDescription": "Registre la primera factura de cliente para iniciar el flujo de cuentas por cobrar.",
+    "title": "Facturas de cliente",
+    "description": "Facturas y notas de crédito de cliente — sus cuentas por cobrar: borrador → aprobación → contabilizadas a través del kernel.",
+    "searchPlaceholder": "Buscar facturas, notas de crédito, clientes, referencias…",
+    "emptyTitle": "Aún no hay facturas de cliente",
+    "emptyDescription": "Registre la primera factura o nota de crédito de cliente para iniciar el flujo de cuentas por cobrar.",
     "columns": {
+      "number": "Número",
       "invoice": "Factura",
       "ref": "Ref."
     }
   },
+  "kinds": {
+    "invoice": "Factura",
+    "credit": "Nota de crédito"
+  },
   "actions": {
+    "new": "Nuevo",
     "newInvoice": "Nueva factura",
+    "newCredit": "Nueva nota de crédito",
     "submitForApproval": "Enviar para aprobación"
   },
   "drawer": {
-    "autosaveHint": "los cambios se guardan automáticamente",
+    "editingHint": "Editando — Guarde para aplicar los cambios",
     "viewGlImpact": "Ver impacto en el libro mayor",
-    "allChangesSaved": "Todos los cambios guardados",
-    "saveFailedRetry": "Error al guardar — corrija y reintente",
-    "unsavedChanges": "Cambios sin guardar…",
+    "dateLabel": "Fecha de la factura",
+    "dueDate": "Fecha de vencimiento",
+    "reference": "N.º de ref. del cliente",
+    "accountColumn": "Cuenta de ingresos",
+    "accountPlaceholder": "Cuenta…",
+    "noTax": "Sin impuesto",
+    "taxAmountColumn": "Impuesto",
+    "selectCustomerPlaceholder": "Seleccionar cliente…",
+    "selectVendorPlaceholder": "Seleccionar proveedor…",
     "subtotalAmount": "Subtotal {amount}",
     "taxTotalAmount": "Impuesto {amount}",
     "totalAmount": "Total {amount}",
     "balanceDueAmount": "Saldo pendiente {amount}",
-    "invoiceDate": "Fecha de la factura",
-    "dueDate": "Fecha de vencimiento",
-    "customerRef": "N.º de ref. del cliente",
-    "selectCustomerPlaceholder": "Seleccionar cliente…",
-    "columns": {
-      "incomeAccount": "Cuenta de ingresos",
-      "accountPlaceholder": "Cuenta…",
-      "taxAmount": "Impuesto",
-      "noTax": "Sin impuesto"
-    }
+    "saveState": {
+      "saved": "Todos los cambios guardados",
+      "error": "Error al guardar — corrija y reintente",
+      "dirty": "Cambios sin guardar…"
+    },
+    "deleteTitle": "¿Eliminar este documento?",
+    "deleteDraftBody": "Esto elimina permanentemente el borrador. No se puede deshacer.",
+    "deletePostedBody": "Esto elimina permanentemente el documento y su impacto en el libro mayor. No se puede deshacer."
   },
   "toasts": {
     "actionFailed": "La acción falló",
     "submitted": "Enviado para aprobación",
     "posted": "Contabilizado en el libro mayor",
-    "autosaveFailed": "Falló el guardado automático",
-    "createDraftFailed": "No se pudo crear un borrador de factura"
+    "createDraftFailed": "No se pudo crear un borrador",
+    "deleted": "Documento eliminado",
+    "deleteFailed": "Error al eliminar"
   }
 }

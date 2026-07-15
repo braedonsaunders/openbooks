@@ -145,9 +145,15 @@ export function PartyDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
+  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // — even for drafts — with an Edit button in the header. Save is EXPLICIT —
+  // one Save button, no per-field autosave.
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const editable = mode === 'edit' && canManage
+
   const nameValid = displayName.trim().length > 0 && displayName.trim() !== 'New party'
 
-  // -- autosave (debounced PATCH) ------------------------------------------
+  // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
     () => ({
       kind,
@@ -185,32 +191,90 @@ export function PartyDrawer({
     }),
     [kind, displayName, legalName, shortCode, email, phone, website, customValues, customer, vendor, employee, addresses, isActive],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!canManage) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/parties/${p.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(savePayload),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savePayload, canManage])
+  }, [savePayload])
+
+  /** Reset every field back to the loaded party (used by Cancel). */
+  function resetForm() {
+    setKind(p.kind ?? 'company')
+    setDisplayName(isPlaceholderName ? '' : (p.display_name ?? ''))
+    setLegalName(p.legal_name ?? '')
+    setShortCode(p.short_code ?? '')
+    setEmail(p.email ?? '')
+    setPhone(p.phone ?? '')
+    setWebsite(p.website ?? '')
+    setCustomValues(p.custom ?? {})
+    setCustomer({
+      enabled: !!payload.customer && payload.customer.is_active !== false,
+      paymentTermsId: payload.customer?.payment_terms_id ?? '',
+      creditLimit: payload.customer?.credit_limit != null ? Number(payload.customer.credit_limit).toFixed(2) : '',
+      currency: payload.customer?.currency ?? '',
+    })
+    setVendor({
+      enabled: !!payload.vendor && payload.vendor.is_active !== false,
+      paymentMethod: payload.vendor?.payment_method ?? '',
+      eftNotificationEmail: payload.vendor?.eft_notification_email ?? '',
+      paymentTermsId: payload.vendor?.payment_terms_id ?? '',
+      currency: payload.vendor?.currency ?? '',
+      is1099OrT4a: payload.vendor?.is_t4a === true,
+    })
+    setEmployee({
+      enabled: !!payload.employee && payload.employee.is_active !== false,
+      employeeNumber: payload.employee?.employee_number ?? '',
+      departmentId: payload.employee?.department_id ?? '',
+      tradeId: payload.employee?.trade_id ?? '',
+      hiredOn: payload.employee?.hired_on ?? '',
+    })
+    setAddresses(
+      payload.addresses.map((a) => ({
+        label: a.label ?? '',
+        line1: a.line1 ?? '',
+        line2: a.line2 ?? '',
+        city: a.city ?? '',
+        region: a.region ?? '',
+        postalCode: a.postal_code ?? '',
+        country: a.country ?? '',
+        isDefaultBilling: a.is_default_billing === true,
+        isDefaultShipping: a.is_default_shipping === true,
+      })),
+    )
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/parties/${p.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(savePayload),
+    })
+    if (res.ok) {
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? t('autosaveFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function setActiveState(next: boolean) {
     setBusy(true)
@@ -229,7 +293,7 @@ export function PartyDrawer({
     router.refresh()
   }
 
-  const ro = !canManage
+  const ro = !editable
 
   return (
     <UrlDrawer
@@ -242,24 +306,38 @@ export function PartyDrawer({
           <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? tc('status.active') : tc('status.inactive')}</Badge>
         </span>
       }
-      description={canManage ? t('autosaveNote') : undefined}
+      description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
       headerActions={
         <>
-          {canManage ? (
-            isActive ? (
-              <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                {t('deactivate')}
+          {mode === 'edit' ? (
+            <>
+              <Button disabled={busy} onClick={save}>
+                {busy ? tc('actions.saving') : tc('actions.save')}
               </Button>
-            ) : (
-              <>
-                {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('nameToActivate')}</span>
-                ) : null}
-                <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                  {t('activate')}
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                {tc('actions.cancel')}
+              </Button>
+            </>
+          ) : canManage ? (
+            <>
+              <Button variant="outline" onClick={() => setMode('edit')}>
+                {tc('actions.edit')}
+              </Button>
+              {isActive ? (
+                <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
+                  {t('deactivate')}
                 </Button>
-              </>
-            )
+              ) : (
+                <>
+                  {!nameValid ? (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('nameToActivate')}</span>
+                  ) : null}
+                  <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
+                    {t('activate')}
+                  </Button>
+                </>
+              )}
+            </>
           ) : null}
         </>
       }
@@ -271,14 +349,14 @@ export function PartyDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {canManage
-              ? saveState === 'saved'
-                ? t('allChangesSaved')
-                : saveState === 'saving'
-                  ? tc('actions.saving')
-                  : saveState === 'error'
-                    ? t('saveFailedRetry')
-                    : t('unsavedChanges')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tc('actions.saving')
+                : saveState === 'error'
+                  ? t('saveFailedRetry')
+                  : dirty
+                    ? t('unsavedChanges')
+                    : null
               : null}
           </span>
         </div>

@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, env, schema } from "./db.ts";
 import { cmp, isZero, sum, toUnits } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
+import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 
 /**
  * Payments: vendor payments and customer receipts with open-item application,
@@ -477,6 +478,31 @@ async function reversePostedEntry(
     .select()
     .from(schema.journalLines)
     .where(eq(schema.journalLines.entryId, entryId));
+
+  // -- user scripts: before_void (veto) -----------------------------------
+  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  if (doc && org) {
+    const docLines = await db
+      .select()
+      .from(schema.documentLines)
+      .where(eq(schema.documentLines.documentId, documentId));
+    const scriptCtx: ScriptContext = {
+      trigger: "before_void",
+      document: doc as unknown as Record<string, unknown>,
+      lines: docLines as unknown as Record<string, unknown>[],
+      org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    };
+    const outcomes = await runTriggerScripts("before_void", scriptCtx, documentId);
+    const bad = outcomes.find((o) => o.status !== "ok");
+    if (bad) {
+      throw new PaymentError(
+        bad.status === "aborted"
+          ? `voiding vetoed by script "${bad.name}": ${bad.abortReason}`
+          : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
+      );
+    }
+  }
 
   await db.transaction(async (tx) => {
     const [rev] = await tx

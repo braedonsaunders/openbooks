@@ -139,6 +139,11 @@ function RuleRow({
   const ops = column ? operatorsForKind(column.kind) : []
   const opMeta = ops.find((o) => o.key === rule.op) ?? ops[0]
   const needsValue = opMeta?.needsValue ?? 'none'
+  // Enum columns with a known value set get pickers instead of free text —
+  // the NetSuite "Type is any of Bill, Expense Report…" experience.
+  const options = column?.options
+  const enumLabel = (v: string) =>
+    tReports.has(`catalog.enumValues.${v}`) ? tReports(`catalog.enumValues.${v}`) : v.replace(/_/g, ' ')
 
   const changeField = (field: string) => {
     const col = entity.columns.find((c) => c.key === field)
@@ -174,7 +179,20 @@ function RuleRow({
           </option>
         ))}
       </Select>
-      {needsValue === 'one' ? (
+      {needsValue === 'one' && options?.length ? (
+        <Select
+          className="h-8 w-44"
+          value={typeof rule.value === 'string' ? rule.value : ''}
+          onChange={(e) => onChange({ ...rule, value: e.target.value })}
+        >
+          <option value="">{t('valuePlaceholder')}</option>
+          {options.map((v) => (
+            <option key={v} value={v}>
+              {enumLabel(v)}
+            </option>
+          ))}
+        </Select>
+      ) : needsValue === 'one' ? (
         <Input
           className="h-8 w-40"
           value={typeof rule.value === 'string' || typeof rule.value === 'number' ? String(rule.value) : ''}
@@ -182,6 +200,31 @@ function RuleRow({
           type={column?.kind === 'date' ? 'date' : column?.kind === 'number' ? 'number' : 'text'}
           onChange={(e) => onChange({ ...rule, value: e.target.value })}
         />
+      ) : needsValue === 'list' && options?.length ? (
+        <div className="flex max-w-md flex-wrap gap-1">
+          {options.map((v) => {
+            const selected = Array.isArray(rule.value) && (rule.value as string[]).includes(v)
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  const current = Array.isArray(rule.value) ? (rule.value as string[]) : []
+                  const next = selected ? current.filter((x) => x !== v) : [...current, v]
+                  onChange({ ...rule, value: next })
+                }}
+                className={
+                  'rounded-full border px-2 py-0.5 text-xs transition-colors ' +
+                  (selected
+                    ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
+                    : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300')
+                }
+              >
+                {enumLabel(v)}
+              </button>
+            )
+          })}
+        </div>
       ) : needsValue === 'list' ? (
         <Input
           className="h-8 w-52"

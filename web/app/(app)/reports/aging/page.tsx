@@ -5,6 +5,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { agingByParty, dimensionOptions, type AgingSide } from '../../../../lib/reports'
 import { money } from '../../../../lib/format'
 import { DimensionFilter } from '../DimensionFilter'
+import { StatementExport } from '../StatementExport'
 import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
@@ -42,7 +43,7 @@ export default async function Aging({
             title={side === 'ap' ? t('payablesTitle') : t('receivablesTitle')}
             description={t('asOf', { date: asOf })}
             back={{ href: '/reports', label: tr('hub.title') }}
-            actions={<SaveViewButton />}
+            actions={<><SaveViewButton /><StatementExport kind="aging" params={{ side, asOf, dept: sp.dept, project: sp.project }} /></>}
           />
           <div className="flex flex-wrap items-center gap-2">
             <Link href={`/reports/aging?side=ar&asof=${asOf}&${keepDims}`}>

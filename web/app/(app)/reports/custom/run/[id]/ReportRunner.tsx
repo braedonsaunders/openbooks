@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Download, Play } from 'lucide-react'
+import { FileText, Play, Sheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button } from '@openbooks/ui'
@@ -77,7 +77,6 @@ export function ReportRunner({
       ? tReports(`builtIns.${definition.slug}.description`)
       : definition.description
   const [result, setResult] = useState<ReportRunResult | null>(null)
-  const [lastRunId, setLastRunId] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
 
   async function runNow() {
@@ -95,7 +94,6 @@ export function ReportRunner({
       return
     }
     setResult(data.result)
-    setLastRunId(data.runId)
     toast.success(t('runComplete'))
     setRunning(false)
     router.refresh()
@@ -124,13 +122,16 @@ export function ReportRunner({
                 <Link href={`/reports/custom/builder/${definition.id}`}>{tc('actions.edit')}</Link>
               </Button>
             ) : null}
-            {lastRunId ? (
-              <Button variant="outline" asChild>
-                <a href={`/api/reports/runs/${lastRunId}/csv`}>
-                  <Download size={15} /> {t('downloadCsv')}
-                </a>
-              </Button>
-            ) : null}
+            <Button variant="outline" asChild>
+              <a href={`/api/reports/definitions/${definition.id}/export?format=pdf`}>
+                <FileText size={15} /> {t('downloadPdf')}
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href={`/api/reports/definitions/${definition.id}/export?format=xlsx`}>
+                <Sheet size={15} /> {t('downloadXlsx')}
+              </a>
+            </Button>
             <Button disabled={running} onClick={runNow}>
               <Play size={15} /> {running ? tk('running') : t('runNow')}
             </Button>

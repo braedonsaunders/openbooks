@@ -84,6 +84,9 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
   selects, tables, drawers, popovers, badges, page headers, skeletons.
 - `packages/analytics` — BHQL insight query engine (AST → SQL → viz spec).
 - `packages/reports` — custom report definitions/filters/schedules/runs.
+- `packages/pdf` — pure-JS PDF document renderer (pdfkit; no Chromium):
+  cover + summary band + grouped tables + repeating headers + page footers.
+- `packages/office` — Excel (ExcelJS) + CSV export (re-exports CSV from reports).
 - `packages/forms-core` — app-builder form schema, evaluator, field registry.
 - `extraction/`, `analysis/` — NetSuite extraction artifacts and spec docs.
 

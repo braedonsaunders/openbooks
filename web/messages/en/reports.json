@@ -193,6 +193,21 @@
       "ascending": "Ascending",
       "rowLimit": "Row limit",
       "rowLimitHint": "Capped at 10,000 rows. Previews show the first {previewRows}.",
+      "pageSetup": {
+        "title": "PDF page setup",
+        "hint": "Controls how this report prints to PDF (paper, orientation, density, margins).",
+        "paper": "Paper size",
+        "paperLetter": "Letter",
+        "paperA4": "A4",
+        "paperLegal": "Legal",
+        "orientation": "Orientation",
+        "landscape": "Landscape",
+        "portrait": "Portrait",
+        "density": "Density",
+        "densityStandard": "Standard",
+        "densityCompact": "Compact (more rows per page)",
+        "marginMm": "Margins (mm)"
+      },
       "livePreview": "Live preview",
       "previewFailed": "Preview failed",
       "runningPreview": "Running preview…",
@@ -221,10 +236,23 @@
         "avg": "Average",
         "min": "Min",
         "max": "Max"
-      }
+      },
+      "running": "Running…",
+      "selectedColumns": "Selected columns",
+      "addColumn": "Add column",
+      "labelOverridePlaceholder": "Rename…",
+      "moveUpAria": "Move up",
+      "moveDownAria": "Move down",
+      "removeColumnAria": "Remove column",
+      "thenBy": "Then by",
+      "addSortLevel": "Add sort level",
+      "removeSortAria": "Remove sort level",
+      "noColumnsSelected": "No columns selected — add at least one."
     },
     "runner": {
       "downloadCsv": "Download CSV",
+      "downloadPdf": "Download PDF",
+      "downloadXlsx": "Download Excel",
       "runNow": "Run now",
       "runFailed": "Report run failed",
       "runComplete": "Report run complete",
@@ -312,8 +340,8 @@
         "description": "Journal-line detail joined to entry, account, party and dimensions — the raw GL. One row per posted (or draft) journal line."
       },
       "documents": {
-        "label": "Documents",
-        "description": "Business documents — bills, invoices, payments, orders — with party and dimension labels."
+        "label": "Transactions",
+        "description": "Every transaction — bills, invoices, credits, payments, expense reports, checks, card charges, journals, orders and quotes. Filter Type to focus on one or more kinds."
       },
       "parties": {
         "label": "Parties",
@@ -322,6 +350,34 @@
       "accounts": {
         "label": "Accounts",
         "description": "The chart of accounts — number, name, type and posting flags."
+      },
+      "transaction_lines": {
+        "label": "Transaction lines",
+        "description": "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions."
+      },
+      "journal_entries": {
+        "label": "Journal entries",
+        "description": "Journal-entry headers — number, posting date, status, origin and memo."
+      },
+      "items": {
+        "label": "Items",
+        "description": "The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts."
+      },
+      "projects": {
+        "label": "Projects",
+        "description": "Projects / jobs — status, customer, billing method, schedule and PO number."
+      },
+      "timesheets": {
+        "label": "Time entries",
+        "description": "Timesheet entries — employee, date, hours, billable state, project and approval status."
+      },
+      "fixed_assets": {
+        "label": "Fixed assets",
+        "description": "The fixed-asset register — status, acquisition, cost, custodian and dimensions."
+      },
+      "tax_codes": {
+        "label": "Tax codes",
+        "description": "Tax codes — jurisdiction, scope and recoverability."
       }
     },
     "columns": {
@@ -352,7 +408,7 @@
         "party_id": "Party (id)"
       },
       "documents": {
-        "kind": "Kind",
+        "kind": "Type",
         "document_number": "Document #",
         "party_name": "Party",
         "document_date": "Document date",
@@ -371,8 +427,11 @@
         "project": "Project",
         "memo": "Memo",
         "created_at": "Created at",
-        "id": "Document (id)",
-        "party_id": "Party (id)"
+        "id": "Transaction (id)",
+        "party_id": "Party (id)",
+        "is_final_invoice": "Final invoice",
+        "location": "Location",
+        "class": "Class"
       },
       "parties": {
         "display_name": "Name",
@@ -403,7 +462,162 @@
         "created_at": "Created at",
         "id": "Account (id)",
         "parent_id": "Parent (id)"
+      },
+      "transaction_lines": {
+        "kind": "Type",
+        "document_number": "Document #",
+        "document_date": "Document date",
+        "status": "Status",
+        "party_name": "Party",
+        "line_number": "Line #",
+        "item_name": "Item",
+        "account_number": "Account #",
+        "account_name": "Account",
+        "description": "Description",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "unit_price": "Unit price",
+        "amount": "Amount",
+        "tax_amount": "Tax amount",
+        "is_billable": "Billable",
+        "quantity_fulfilled": "Qty fulfilled",
+        "quantity_billed": "Qty billed",
+        "employee_name": "Employee",
+        "department": "Department",
+        "project": "Project",
+        "location": "Location",
+        "class": "Class",
+        "created_at": "Created at",
+        "id": "Line (id)",
+        "document_id": "Transaction (id)"
+      },
+      "journal_entries": {
+        "entry_number": "Entry #",
+        "posting_date": "Posting date",
+        "status": "Status",
+        "origin": "Origin",
+        "memo": "Memo",
+        "created_at": "Created at",
+        "id": "Entry (id)",
+        "source_document_id": "Source transaction (id)"
+      },
+      "items": {
+        "code": "Code",
+        "name": "Name",
+        "kind": "Type",
+        "category": "Category",
+        "default_rate": "Default rate",
+        "unit": "Unit",
+        "income_account": "Income account",
+        "expense_account": "Expense account",
+        "show_on_timesheet": "On timesheets",
+        "is_active": "Active",
+        "created_at": "Created at",
+        "id": "Item (id)"
+      },
+      "projects": {
+        "code": "Code",
+        "name": "Name",
+        "status": "Status",
+        "customer_name": "Customer",
+        "manager_name": "Manager",
+        "billing_method": "Billing method",
+        "customer_po_number": "Customer PO #",
+        "starts_on": "Starts on",
+        "ends_on": "Ends on",
+        "is_active": "Active",
+        "created_at": "Created at",
+        "id": "Project (id)"
+      },
+      "timesheets": {
+        "employee_name": "Employee",
+        "worked_on": "Worked on",
+        "hours": "Hours",
+        "status": "Status",
+        "is_billable": "Billable",
+        "project": "Project",
+        "item_name": "Service item",
+        "department": "Department",
+        "memo": "Memo",
+        "created_at": "Created at",
+        "id": "Time entry (id)"
+      },
+      "fixed_assets": {
+        "asset_number": "Asset #",
+        "name": "Name",
+        "status": "Status",
+        "category": "Category",
+        "acquired_on": "Acquired on",
+        "in_service_on": "In service on",
+        "acquisition_cost": "Acquisition cost",
+        "salvage_value": "Salvage value",
+        "serial_number": "Serial #",
+        "custodian_name": "Custodian",
+        "project": "Project",
+        "department": "Department",
+        "created_at": "Created at",
+        "id": "Asset (id)"
+      },
+      "tax_codes": {
+        "code": "Code",
+        "name": "Name",
+        "country": "Country",
+        "region": "Region",
+        "applies_to": "Applies to",
+        "recoverable_percent": "Recoverable %",
+        "is_active": "Active",
+        "id": "Tax code (id)"
       }
+    },
+    "enumValues": {
+      "vendor_bill": "Bill",
+      "vendor_credit": "Vendor credit",
+      "vendor_payment": "Bill payment",
+      "customer_invoice": "Invoice",
+      "customer_credit": "Credit memo",
+      "customer_payment": "Customer payment",
+      "expense_report": "Expense report",
+      "check": "Check",
+      "card_charge": "Card charge",
+      "card_refund": "Card refund",
+      "transfer": "Transfer",
+      "journal": "Journal",
+      "purchase_order": "Purchase order",
+      "sales_order": "Sales order",
+      "quote": "Quote",
+      "draft": "Draft",
+      "pending_approval": "Pending approval",
+      "approved": "Approved",
+      "posted": "Posted",
+      "voided": "Voided",
+      "reversed": "Reversed",
+      "submitted": "Submitted",
+      "rejected": "Rejected",
+      "time_and_materials": "Time & materials",
+      "fixed_price": "Fixed price",
+      "cost_plus": "Cost plus",
+      "service": "Service",
+      "non_inventory": "Non-inventory",
+      "inventory": "Inventory",
+      "assembly": "Assembly",
+      "kit": "Kit",
+      "other_charge": "Other charge",
+      "labor": "Labor",
+      "absence": "Absence",
+      "discount": "Discount",
+      "quoted": "Quoted",
+      "awarded": "Awarded",
+      "active": "Active",
+      "substantially_complete": "Substantially complete",
+      "closed": "Closed",
+      "cancelled": "Cancelled",
+      "in_service": "In service",
+      "fully_depreciated": "Fully depreciated",
+      "disposed": "Disposed",
+      "written_off": "Written off",
+      "sales": "Sales",
+      "purchases": "Purchases",
+      "both": "Both"
     }
   },
   "operators": {
@@ -457,6 +671,20 @@
       "year": "year"
     },
     "csvSection": "Section"
+  },
+  "export": {
+    "pdf": "PDF",
+    "xlsx": "Excel",
+    "csv": "CSV",
+    "columns": {
+      "accountNumber": "Account #",
+      "accountName": "Account",
+      "amount": "Amount",
+      "balance": "Balance",
+      "type": "Type",
+      "party": "Party",
+      "latestDue": "Latest due"
+    }
   },
   "builtIns": {
     "ap-aging-by-vendor": {

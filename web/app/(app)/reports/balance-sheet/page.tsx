@@ -4,6 +4,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { balanceSheet } from '../../../../lib/reports'
 import { money } from '../../../../lib/format'
 import { StatementTable } from '../StatementTable'
+import { StatementExport } from '../StatementExport'
 import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,7 @@ export default async function BalanceSheet({ searchParams }: { searchParams: Pro
             title={t('balanceSheet.title')}
             description={t('balanceSheet.asOf', { date })}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={<SaveViewButton />}
+            actions={<><SaveViewButton /><StatementExport kind="balance-sheet" params={{ asOf: date }} /></>}
           />
           <div className="grid gap-3 sm:grid-cols-4">
             {[
@@ -67,6 +68,7 @@ export default async function BalanceSheet({ searchParams }: { searchParams: Pro
           { title: t('balanceSheet.liabilities'), types: LIAB_TYPES, rows: bs.liabilities, total: bs.totalLiabilities },
           { title: t('balanceSheet.equity'), types: ['equity'], rows: bs.equity, total: bs.totalEquity },
         ]}
+        period={{ to: date }}
       />
     </ListPageLayout>
   )

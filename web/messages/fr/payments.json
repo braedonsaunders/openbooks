@@ -9,16 +9,16 @@
     }
   },
   "list": {
-    "searchPlaceholder": "{side, select, ap {Rechercher des paiements, fournisseurs, réf…} other {Rechercher des encaissements, clients, réf…}}",
-    "newLabel": "{side, select, ap {Nouveau paiement} other {Nouvel encaissement}}",
+    "searchPlaceholder": "{side, select, ap {Rechercher des paiements, fournisseurs, réf…} other {Rechercher des paiements, clients, réf…}}",
+    "newLabel": "{side, select, ap {Nouveau paiement} other {Nouveau paiement client}}",
     "columns": {
-      "document": "{side, select, ap {Paiement} other {Encaissement}}",
+      "document": "{side, select, ap {Paiement} other {Paiement client}}",
       "bankAccount": "Compte bancaire",
       "ref": "Réf."
     },
     "empty": {
-      "title": "{side, select, ap {Aucun paiement pour l’instant} other {Aucun encaissement pour l’instant}}",
-      "description": "{side, select, ap {Enregistrez le premier paiement fournisseur pour commencer à régler les factures fournisseurs ouvertes.} other {Enregistrez le premier encaissement client pour commencer à régler les factures clients ouvertes.}}"
+      "title": "{side, select, ap {Aucun paiement pour l’instant} other {Aucun paiement client pour l’instant}}",
+      "description": "{side, select, ap {Enregistrez le premier paiement fournisseur pour commencer à régler les factures fournisseurs ouvertes.} other {Enregistrez le premier paiement client pour commencer à régler les factures clients ouvertes.}}"
     }
   },
   "newButton": {
@@ -69,7 +69,7 @@
       "loadOpenItemsFailed": "Impossible de charger les éléments ouverts",
       "autosaveFailed": "Échec de l’enregistrement automatique",
       "postFailed": "Échec de la comptabilisation",
-      "posted": "{side, select, ap {Paiement comptabilisé et appliqué} other {Encaissement comptabilisé et appliqué}}"
+      "posted": "{side, select, ap {Paiement comptabilisé et appliqué} other {Paiement client comptabilisé et appliqué}}"
     }
   },
   "eft": {

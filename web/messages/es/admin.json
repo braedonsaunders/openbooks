@@ -10,7 +10,51 @@
       "activity": "Actividad y datos"
     },
     "cards": {
-      "settings": {
+  "apiKeys": {
+    "title": "Claves API",
+    "description": "Claves API con permisos específicos para integraciones y automatización. Cada clave lleva un subconjunto de permisos — una solicitud se permite solo cuando los permisos de la clave Y los permisos efectivos del propietario la cubren.",
+    "searchPlaceholder": "Buscar claves, propietarios…",
+    "empty": "Aún no hay claves API — cree una para comenzar a crear integraciones.",
+    "table": {
+      "name": "Nombre",
+      "key": "Clave",
+      "owner": "Propietario",
+      "scopes": "Permisos",
+      "scopesCount": "{count, plural, one {# permiso} other {# permisos}}",
+      "fullScope": "Permiso completo (hereda del propietario)",
+      "lastUsed": "Último uso",
+      "status": "Estado"
+    },
+    "statusActive": "activa",
+    "statusRevoked": "revocada",
+    "drawer": {
+      "newKey": "Nueva clave API",
+      "newTitle": "Nueva clave API",
+      "description": "Cree una clave con permisos específicos para acceso programático a la API REST. La clave se muestra una sola vez — guárdela de forma segura.",
+      "nameRequired": "Se requiere un nombre",
+      "namePlaceholder": "Integración de sincronización de producción",
+      "descriptionPlaceholder": "¿Para qué sirve esta clave?",
+      "saveFailed": "No se pudo guardar la clave",
+      "created": "Clave creada",
+      "updated": "Clave actualizada",
+      "revoke": "Revocar",
+      "revokeConfirm": "¿Revocar esta clave? Todas las integraciones que la usen dejarán de funcionar inmediatamente. Esta acción no se puede deshacer.",
+      "revokeFailed": "No se pudo revocar la clave",
+      "revoked": "Clave revocada",
+      "revokedNotice": "Esta clave ha sido revocada y ya no puede autenticar solicitudes.",
+      "keyCreated": "Copie su clave API",
+      "keyCreatedHint": "Esta es la única vez que se mostrará la clave completa. Guárdela de forma segura — no podrá volver a verla.",
+      "copy": "Copiar",
+      "copied": "Copiado al portapapeles",
+      "createKey": "Crear clave",
+      "saveChanges": "Guardar cambios",
+      "scopesHeading": "Permisos de la clave",
+      "scopesHint": "Seleccione los permisos que otorga esta clave. Déjelo vacío para heredar el conjunto completo de permisos del propietario. Una clave nunca otorga más de lo que tiene su propietario.",
+      "fullScope": "Permiso completo (hereda los permisos del propietario)",
+      "scopesCount": "{count, plural, one {# permiso seleccionado} other {# permisos seleccionados}}"
+    }
+  },
+  "settings": {
         "title": "Empresa y contabilidad",
         "description": "Identidad de la organización, moneda base, ejercicio fiscal y cuentas de control"
       },
@@ -30,9 +74,17 @@
         "title": "Campos personalizados",
         "description": "Agregue campos tipados a los registros en toda la aplicación"
       },
+      "customization": {
+        "title": "Formularios y vistas",
+        "description": "Personalice los formularios de transacción y las vistas de lista por organización y por usuario"
+      },
       "scripts": {
         "title": "Scripts",
         "description": "Automatización aislada (sandbox) que se ejecuta con eventos del libro mayor"
+      },
+      "apiKeys": {
+        "title": "Claves API",
+        "description": "Cree claves API con permisos específicos para integraciones y consulte los registros de uso"
       },
       "audit": {
         "title": "Registro de auditoría",
@@ -113,6 +165,10 @@
       "accounts": {
         "label": "Cuentas",
         "description": "Plan de cuentas."
+      },
+      "items": {
+        "label": "Artículos y servicios",
+        "description": "Productos y servicios."
       }
     },
     "kinds": {
@@ -120,7 +176,7 @@
         "vendorBill": "Facturas de proveedor",
         "customerInvoice": "Facturas de cliente",
         "vendorPayment": "Pagos a proveedores",
-        "customerPayment": "Cobros de clientes",
+        "customerPayment": "Pagos de clientes",
         "expenseReport": "Informes de gastos",
         "journal": "Asientos contables"
       },
@@ -163,6 +219,10 @@
       "multiSelect": {
         "label": "Lista desplegable (múltiple)",
         "help": "Elija cualquier cantidad de opciones de una lista."
+      },
+      "reference": {
+        "label": "Lista / Registro",
+        "help": "Enlace a otro registro (tercero, proyecto, cuenta, artículo)."
       }
     },
     "drawer": {
@@ -199,7 +259,20 @@
       "defaultValue": "Valor predeterminado",
       "min": "Mín",
       "max": "Máx",
-      "showInList": "Mostrar como columna en las vistas de lista"
+      "showInList": "Mostrar como columna en las vistas de lista",
+      "referenceTable": "Tipo de registro referenciado",
+      "referenceTableHint": "El campo almacena un enlace a un registro de este tipo.",
+      "displayMode": "Modo de visualización",
+      "displayNormal": "Normal (editable)",
+      "displayHidden": "Oculto (no se muestra en formularios)",
+      "displayDisabled": "Deshabilitado (mostrado solo lectura)",
+      "allowedRoles": "Visible para roles",
+      "allowedRolesHint": "Dejar sin marcar para todos los roles. Los administradores siempre ven todos los campos.",
+      "roleAdmin": "Administrador",
+      "roleController": "Controlador",
+      "roleAccountant": "Contador",
+      "roleApprover": "Aprobador",
+      "roleViewer": "Visor"
     }
   },
   "navigation": {
@@ -290,14 +363,14 @@
       "vendorBill": "factura de proveedor",
       "customerInvoice": "factura de cliente",
       "vendorPayment": "pago a proveedor",
-      "customerPayment": "cobro de cliente",
+      "customerPayment": "pago de cliente",
       "expenseReport": "informe de gastos",
       "journal": "asiento contable"
     },
     "drawer": {
       "newScript": "Nuevo script",
       "newTitle": "Nuevo script",
-      "description": "JavaScript aislado (QuickJS): sin acceso al sistema de archivos, a la red ni a la base de datos.",
+      "description": "JavaScript aislado (QuickJS): sin acceso al sistema de archivos ni a la red. ob.query ejecuta SQL de solo lectura.",
       "createScript": "Crear script",
       "saveScript": "Guardar script",
       "created": "Script creado",
@@ -307,15 +380,25 @@
       "trigger": "Disparador",
       "documentKind": "Clase de documento",
       "allKindsOption": "Todas las clases",
+      "cron": "Programación cron",
+      "cronHint": "— min hora dom mes dow (UTC)",
       "source": "Código fuente",
       "sourceHint": "— debe definir function main(ctx)",
       "timeoutMs": "Tiempo de espera (ms)",
       "runOrder": "Orden de ejecución",
       "recentRuns": "Ejecuciones recientes",
+      "runNow": "Ejecutar",
+      "runOk": "Ejecutado en {ms} ms",
+      "runFailed": "Error de ejecución",
+      "delete": "Eliminar",
+      "deleteConfirm": "¿Eliminar este script? El historial de ejecuciones se conserva para auditoría.",
+      "deleteFailed": "No se pudo eliminar el script",
+      "deleted": "Script eliminado",
       "runStatus": {
         "ok": "correcto",
         "aborted": "abortado",
-        "error": "error"
+        "error": "error",
+        "timeout": "tiempo agotado"
       }
     }
   },
@@ -376,7 +459,7 @@
         },
         "bank": {
           "label": "Banco predeterminado",
-          "hint": "Cuenta de efectivo predeterminada para pagos y cobros"
+          "hint": "Cuenta de efectivo predeterminada para pagos de proveedores y clientes"
         },
         "taxCollected": {
           "label": "Impuesto cobrado",
@@ -396,7 +479,7 @@
       "vendorBill": "Factura de proveedor",
       "customerInvoice": "Factura de cliente",
       "vendorPayment": "Pago a proveedor",
-      "customerPayment": "Cobro de cliente",
+      "customerPayment": "Pago de cliente",
       "expenseReport": "Informe de gastos",
       "journal": "Asiento"
     },
@@ -464,6 +547,7 @@
       "sql": "Consola SQL",
       "sync": "Sincronización",
       "scripts": "Scripts",
+      "documents": "Gestor de documentos",
       "admin": "Administración",
       "assets": "Activos fijos y depreciación"
     },
@@ -479,7 +563,7 @@
     "ar_create": "Crear y enviar facturas",
     "ar_approve": "Aprobar o rechazar facturas",
     "ar_post": "Contabilizar facturas en el libro mayor",
-    "ar_pay": "Registrar cobros de clientes",
+    "ar_pay": "Registrar pagos de clientes",
     "reports_read": "Ver informes",
     "reports_create": "Crear y guardar informes",
     "reports_schedule": "Programar el envío de informes",
@@ -511,10 +595,14 @@
     "admin_users_manage": "Administrar usuarios y asignaciones de roles",
     "admin_roles_manage": "Administrar roles y permisos",
     "admin_nav_manage": "Personalizar la navegación",
+    "admin_customization_manage": "Personalizar formularios y vistas de lista",
     "admin_audit_read": "Ver el registro de auditoría",
     "admin_ai_manage": "Gestionar la configuración de IA",
+    "api_keys_manage": "Gestionar las claves API",
     "assets_read": "Ver activos fijos y depreciación",
-    "assets_manage": "Crear y editar activos, ejecutar depreciación"
+    "assets_manage": "Crear y editar activos, ejecutar depreciación",
+    "documents_read": "Explorar el gestor de documentos",
+    "documents_manage": "Subir, mover, renombrar y eliminar archivos"
   },
   "ai": {
     "metaTitle": "Configuración de IA",

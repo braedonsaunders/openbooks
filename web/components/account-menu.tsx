@@ -12,7 +12,9 @@ import { ChevronDown, LogOut } from 'lucide-react'
 import { Popover } from '@openbooks/ui'
 import { ThemeToggle } from './theme-toggle'
 import { LanguageSelect } from './language-select'
+import { MenuModeSelect } from './menu-mode-select'
 import type { Locale } from '../i18n/config'
+import type { NavMode } from '../lib/nav-mode'
 
 // Two-letter monogram from a display name, falling back to the email. Handles the
 // "Last, First" directory convention so the initials read First+Last either way.
@@ -41,11 +43,13 @@ export function AccountMenu({
   email,
   role,
   localePreference,
+  navModePreference,
 }: {
   name: string
   email: string
   role: string
   localePreference: Locale | null
+  navModePreference: NavMode | null
 }) {
   const t = useTranslations('shell.accountMenu')
   const router = useRouter()
@@ -110,6 +114,13 @@ export function AccountMenu({
           {t('language')}
         </div>
         <LanguageSelect preference={localePreference} />
+      </div>
+
+      <div className="border-t border-slate-100 px-3 py-2.5 dark:border-slate-800">
+        <div className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+          {t('menuLayout')}
+        </div>
+        <MenuModeSelect preference={navModePreference} />
       </div>
 
       <div className="border-t border-slate-100 p-1 dark:border-slate-800">

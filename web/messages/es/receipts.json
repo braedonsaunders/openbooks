@@ -1,7 +1,7 @@
 {
   "page": {
-    "title": "Cobros",
+    "title": "Pagos de clientes",
     "description": "Pagos de clientes recibidos y aplicados a facturas pendientes a través del núcleo contable.",
-    "newReceipt": "Nuevo cobro"
+    "newReceipt": "Nuevo pago de cliente"
   }
 }

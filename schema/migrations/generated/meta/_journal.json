@@ -78,6 +78,55 @@
       "when": 1784075154799,
       "tag": "0010_ai_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784087857611,
+      "tag": "0011_dashboard-layouts",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784087857612,
+      "tag": "0011_user-nav-mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784088311920,
+      "tag": "0012_file-cabinet",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784090669703,
+      "tag": "0013_saved-searches",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1784090669704,
+      "tag": "0013_script_scheduling",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784090669705,
+      "tag": "0014_customization",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784090669706,
+      "tag": "0015_api-keys",
+      "breakpoints": true
     }
   ]
 }

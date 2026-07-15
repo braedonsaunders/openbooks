@@ -11,9 +11,10 @@ import { cn } from './utils'
 //   sidebar      : z-10
 //   header       : z-20
 //   sticky-bars  : z-30
-//   dropdowns    : z-40
 //   drawer       : z-50
-//   modal/dialog : z-60
+//   floating UI  : z-[60]   — Popover, SearchSelect dropdown, confirm dialog.
+//                          Body-portaled so it always sits above the drawer
+//                          it was opened from (z-50) and below toasts (z-70).
 //   toast        : z-70
 
 export type DrawerSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
@@ -67,6 +68,15 @@ export function Drawer({
   const t = useTranslations('common.actions')
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
+
+  // Fullscreen toggle: every flyout can expand to the full viewport (NetSuite
+  // "expand" affordance). Width animates via the max-width transition below;
+  // height is already 100%. Resets when the drawer closes so the next open
+  // starts at its designed size.
+  const [fullscreen, setFullscreen] = React.useState(false)
+  React.useEffect(() => {
+    if (!open) setFullscreen(false)
+  }, [open])
 
   const panelRef = React.useRef<HTMLElement>(null)
 
@@ -168,9 +178,12 @@ export function Drawer({
             exit={{ x: side === 'left' ? '-100%' : '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
             className={cn(
-              'absolute top-0 flex h-full flex-col overflow-hidden border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900',
+              'absolute top-0 flex h-full flex-col overflow-hidden border-slate-200 bg-white shadow-2xl transition-[max-width] duration-300 ease-in-out dark:border-slate-800 dark:bg-slate-900',
               side === 'left' ? 'left-0 border-r' : 'right-0 border-l',
-              SIZE_CLASS[size],
+              // Full replacement, not an additional class: two sm:max-w-*
+              // utilities on one element resolve by stylesheet order, not
+              // class order, so stacking them makes the toggle a no-op.
+              fullscreen ? 'w-full sm:max-w-[100vw]' : SIZE_CLASS[size],
             )}
           >
             {title || description || headerActions ? (
@@ -189,6 +202,47 @@ export function Drawer({
                   {headerActions ? (
                     <div className="flex flex-wrap items-center justify-end gap-2">{headerActions}</div>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setFullscreen((f) => !f)}
+                    className="hidden rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 sm:block dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    aria-label={fullscreen ? t('exitFullscreen') : t('fullscreen')}
+                    title={fullscreen ? t('exitFullscreen') : t('fullscreen')}
+                  >
+                    {fullscreen ? (
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="4 14 10 14 10 20" />
+                        <polyline points="20 10 14 10 14 4" />
+                        <line x1="14" y1="10" x2="21" y2="3" />
+                        <line x1="3" y1="21" x2="10" y2="14" />
+                      </svg>
+                    ) : (
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="15 3 21 3 21 9" />
+                        <polyline points="9 21 3 21 3 15" />
+                        <line x1="21" y1="3" x2="14" y2="10" />
+                        <line x1="3" y1="21" x2="10" y2="14" />
+                      </svg>
+                    )}
+                  </button>
                   <button
                     type="button"
                     onClick={onClose}

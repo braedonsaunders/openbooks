@@ -4,6 +4,7 @@
     "menuAriaLabel": "Menu du compte",
     "theme": "Thème",
     "language": "Langue",
+    "menuLayout": "Disposition du menu",
     "signOut": "Fermer la session",
     "signingOut": "Fermeture de la session…",
     "roles": {
@@ -18,6 +19,18 @@
     "label": "Langue",
     "orgDefault": "Valeur par défaut de l’organisation",
     "saveFailed": "Impossible d’enregistrer votre préférence de langue"
+  },
+  "menuMode": {
+    "label": "Disposition du menu",
+    "orgDefault": "Valeur par défaut de l’organisation",
+    "saveFailed": "Impossible d’enregistrer votre préférence de disposition du menu",
+    "options": {
+      "sidebar": "Barre latérale",
+      "topbar": "Barre de menus supérieure"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "Principal"
   },
   "meta": {
     "description": "La suite de gestion ouverte. Menez vos affaires à livres ouverts."

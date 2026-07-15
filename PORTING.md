@@ -22,7 +22,7 @@ Standing rule: beaconhs is the boilerplate — copy, then adapt vendor-neutrally
 |---|---|---|---|
 | 1 | RBAC (iam schema, permission catalogue, can/assertCan, admin UI) | agent | landed; migrated (0004); roles seeded |
 | 2 | Insights/analytics (BHQL engine pkg, insight tables, card studio, dashboards) | agent | started |
-| 3 | Reports engine (definitions/schedules/runs schema, studio UI, manual run + CSV) | agent | started |
+| 3 | Reports engine (definitions/schedules/runs schema, studio UI, manual run + CSV) | agent | landed + PDF/Excel export + saved searches (Knowledge) |
 | 4 | App builder (forms-core pkg, form tables, designer + filler) | agent | landed; migrated (0004) |
 | 5 | Sidebar customization (nav registry/resolve/org overrides + admin editor) | integrator | DONE (0004; shell wiring pending RBAC integration) |
 | 6 | List-view framework wiring (search/sort/filter/pagination on AP/journal) | integrator | DONE + flyout-first/instant-draft pattern live on AP |

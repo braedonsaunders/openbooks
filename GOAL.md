@@ -90,7 +90,14 @@ accounts match NetSuite exactly**.
       auto-generated modules + dynamic sidebar
 - [x] Sidebar customization (/admin/navigation), user scripting admin
       (real JS), audit log viewer, parties directory
-- [ ] Insights (BHQL card studio) + custom reports engine — *in flight*
+- [x] Insights (BHQL card studio) + custom reports engine *(2026-07-15)*
+- [x] Reports: first-class PDF (pure-JS pdfkit engine), Excel (ExcelJS) + CSV
+      export for the financial statements and custom reports; drillable
+      statements (account lines carry the period into the register);
+      per-report PDF page setup (paper/orientation/density/margins) *(2026-07-15)*
+- [x] Saved Searches (NetSuite Saved Search analogue) — Knowledge menu: named,
+      shareable queries over the ledger/documents/parties/accounts catalog
+      (detail rows or grouped summaries), builder flyout, live preview, export *(2026-07-15)*
 
 ### M5 — Cutover
 - [ ] NetSuite → read-only; openbooks system of record

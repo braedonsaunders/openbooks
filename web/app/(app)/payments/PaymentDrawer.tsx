@@ -94,12 +94,12 @@ export function PaymentDrawer({
   const router = useRouter()
   const doc = payment.doc
   const isDraft = doc.status === 'draft'
-  // NetSuite-style record model: the flyout opens READ-ONLY (view mode) with an
-  // Edit button; a brand-new draft opens straight into edit. Only DRAFT payments
+  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // — even for drafts — with an Edit button in the header. Only DRAFT payments
   // are editable (posting is terminal — applications become ledger state). Save
   // is EXPLICIT — one Save button, no per-field autosave.
   const canEditStatus = isDraft
-  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canEditStatus
   const partyLabel = side === 'ap' ? tCommon('labels.vendor') : tCommon('labels.customer')
   const kindLabel = (kind: string | null) => {
@@ -306,7 +306,7 @@ export function PaymentDrawer({
           </Badge>
         </span>
       }
-      description={mode === 'edit' ? 'Editing — Save to apply changes' : (doc.party_name ?? undefined)}
+      description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
       headerActions={
         <>
           {mode === 'edit' ? (

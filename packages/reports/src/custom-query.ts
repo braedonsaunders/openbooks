@@ -99,15 +99,22 @@ function compileRows(
   if (groupBy && !selectKeys.includes(groupBy)) selectKeys.push(groupBy)
 
   const selectList = selectKeys.map((c) => `${columnRef(entity, c)} AS "${c}"`).join(', ')
-  const sortCol = q.sort?.column ? columnRef(entity, q.sort.column) : null
-  const sortDir = q.sort?.direction === 'asc' ? 'ASC' : 'DESC'
+  // Multi-level sort (`sorts`) wins over the single legacy `sort`. Every
+  // column resolves through the catalog; unknowns are dropped.
+  const sortSpecs = (q.sorts?.length ? q.sorts : q.sort ? [q.sort] : [])
+    .map((s) => {
+      const ref = s.column ? columnRef(entity, s.column) : null
+      return ref ? `${ref} ${s.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST` : null
+    })
+    .filter((s): s is string => s !== null)
+    .slice(0, 3)
   const limit = resolveLimit(q.limit, opts.maxRows)
 
   const text = [
     `SELECT ${selectList}`,
     `FROM ${entity.from}`,
     `WHERE ${whereParts.join(' AND ')}`,
-    sortCol ? `ORDER BY ${sortCol} ${sortDir} NULLS LAST` : '',
+    sortSpecs.length ? `ORDER BY ${sortSpecs.join(', ')}` : '',
     `LIMIT ${limit}`,
   ]
     .filter(Boolean)

@@ -20,10 +20,11 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
 type ApiError = { fieldId: string; message: string }
 
 /**
- * The custom-record flyout — instant draft, autosaving editor rendering every
- * field type via <RecordFields>, plus activate/deactivate. Records are master
- * data: they stay editable while ACTIVE (autosave keeps running); only
- * inactive records are read-only until reactivated.
+ * The custom-record flyout — NetSuite-style record model: ALWAYS opens
+ * READ-ONLY (view mode) — even for drafts — with an Edit button in the header;
+ * editing is an explicit Edit → Save/Cancel cycle. Records are master data:
+ * they stay editable while DRAFT or ACTIVE; only inactive records are
+ * read-only until reactivated.
  */
 export function RecordDrawer({
   typeKey,
@@ -47,39 +48,50 @@ export function RecordDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
   const [busy, setBusy] = useState(false)
 
-  const editable = canEdit && status !== 'inactive'
+  const canEditStatus = canEdit && status !== 'inactive'
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const editable = mode === 'edit' && canEditStatus
   const closeHref = `/records/${typeKey}`
 
-  // -- autosave (debounced PATCH; drafts AND active records) -------------------
+  // -- explicit save (no autosave) -------------------------------------------
   const first = useRef(true)
   useEffect(() => {
-    if (!editable) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: values }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setErrors({})
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('dirty')
-        setErrors(mapErrors(data.errors))
-        toast.error(data.error ?? t('autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setSaveState('dirty')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values, editable])
+  }, [values])
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: values }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setErrors({})
+      setSaveState('saved')
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('dirty')
+      setErrors(mapErrors(data.errors))
+      toast.error(data.error ?? t('autosaveFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    setValues(record.data ?? {})
+    setErrors({})
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function transition(next: 'active' | 'inactive') {
     setBusy(true)
@@ -162,37 +174,55 @@ export function RecordDrawer({
       }
       headerActions={
         <>
-          {canEdit && status === 'draft' ? (
+          {mode === 'edit' ? (
             <>
-              <Button variant="ghost" disabled={busy} onClick={destroy}>
-                <Trash2 size={14} /> {t('deleteDraft')}
+              <Button disabled={busy} onClick={save}>
+                {busy ? tc('actions.saving') : tc('actions.save')}
               </Button>
-              <Button disabled={busy || saveState === 'saving'} onClick={() => transition('active')}>
-                {t('activate')}
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                {tc('actions.cancel')}
               </Button>
             </>
-          ) : null}
-          {canEdit && status === 'active' ? (
-            <Button variant="outline" disabled={busy} onClick={() => transition('inactive')}>
-              {t('deactivate')}
-            </Button>
-          ) : null}
-          {canEdit && status === 'inactive' ? (
-            <Button disabled={busy} onClick={() => transition('active')}>
-              {t('reactivate')}
-            </Button>
-          ) : null}
+          ) : (
+            <>
+              {canEditStatus ? (
+                <Button variant="outline" onClick={() => setMode('edit')}>
+                  {tc('actions.edit')}
+                </Button>
+              ) : null}
+              {canEdit && status === 'draft' ? (
+                <>
+                  <Button variant="ghost" disabled={busy} onClick={destroy}>
+                    <Trash2 size={14} /> {t('deleteDraft')}
+                  </Button>
+                  <Button disabled={busy || saveState === 'saving'} onClick={() => transition('active')}>
+                    {t('activate')}
+                  </Button>
+                </>
+              ) : null}
+              {canEdit && status === 'active' ? (
+                <Button variant="outline" disabled={busy} onClick={() => transition('inactive')}>
+                  {t('deactivate')}
+                </Button>
+              ) : null}
+              {canEdit && status === 'inactive' ? (
+                <Button disabled={busy} onClick={() => transition('active')}>
+                  {t('reactivate')}
+                </Button>
+              ) : null}
+            </>
+          )}
         </>
       }
       footer={
         <div className="flex w-full items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {editable
-              ? saveState === 'saved'
-                ? t('allSaved')
-                : saveState === 'saving'
-                  ? tc('actions.saving')
-                  : t('unsaved')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tc('actions.saving')
+                : saveState === 'dirty'
+                  ? t('unsaved')
+                  : null
               : null}
           </span>
         </div>

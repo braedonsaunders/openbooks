@@ -1,0 +1,21 @@
+{
+  "metaTitle": "Documentación API",
+  "title": "Documentación de la API",
+  "description": "La API REST auto-documentada. Los tipos de registro, campos y permisos se generan en vivo desde el esquema de la base de datos — incluidos sus registros y campos personalizados.",
+  "searchPlaceholder": "Buscar tipos de registro…",
+  "baseUrl": "/api/v1",
+  "auth": {
+    "title": "Autenticación",
+    "description": "Pase su clave API como token bearer. Las claves tienen permisos específicos — una solicitud se permite solo cuando los permisos de la clave y los del propietario la cubren."
+  },
+  "customBadge": "personalizado",
+  "requires": "lectura:",
+  "writesRequire": "escritura:",
+  "fields": {
+    "field": "Campo",
+    "type": "Tipo",
+    "required": "Obligatorio",
+    "description": "Descripción",
+    "yes": "sí"
+  }
+}

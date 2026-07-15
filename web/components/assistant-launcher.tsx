@@ -9,7 +9,12 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { CornerDownLeft, Sparkles } from 'lucide-react'
 
-export function AssistantLauncher() {
+export function AssistantLauncher({
+  /** Icon-only trigger — used in topbar nav mode where header space is tight. */
+  compact = false,
+}: {
+  compact?: boolean
+} = {}) {
   const t = useTranslations('assistant.launcher')
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -52,10 +57,14 @@ export function AssistantLauncher() {
         aria-label={t('open')}
       >
         <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-        <span className="hidden lg:inline">{t('label')}</span>
-        <kbd className="hidden rounded border border-slate-200 bg-slate-50 px-1 text-[10px] font-medium text-slate-400 lg:inline dark:border-slate-700 dark:bg-slate-800">
-          ⌘K
-        </kbd>
+        {compact ? null : (
+          <>
+            <span className="hidden lg:inline">{t('label')}</span>
+            <kbd className="hidden rounded border border-slate-200 bg-slate-50 px-1 text-[10px] font-medium text-slate-400 lg:inline dark:border-slate-700 dark:bg-slate-800">
+              ⌘K
+            </kbd>
+          </>
+        )}
       </button>
 
       {open ? (

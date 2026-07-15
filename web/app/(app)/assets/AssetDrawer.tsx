@@ -64,11 +64,11 @@ export function AssetDrawer({
   const a = payload.asset
   const custom = (a.custom ?? {}) as Record<string, any>
   const isDraft = a.status === 'draft'
-  // NetSuite-style record model: flyout opens READ-ONLY with an Edit button; a
-  // brand-new draft opens straight into edit. Draft/in_service are editable;
+  // NetSuite-style record model: flyout ALWAYS opens READ-ONLY (view mode) —
+  // even for drafts — with an Edit button. Draft/in_service are editable;
   // disposed/written_off are not. Save is EXPLICIT — one Save button.
   const canEditStatus = a.status === 'draft' || a.status === 'in_service'
-  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canEditStatus && canManage
 
   const isPlaceholderName = a.name === 'New asset'

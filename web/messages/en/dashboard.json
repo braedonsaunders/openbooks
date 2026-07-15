@@ -1,18 +1,87 @@
 {
   "title": "Dashboard",
   "orgDescription": "{name} · {currency} · {book}",
-  "stats": {
+  "greeting": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "tenantSummary": "{entries} journal entries · {parties} parties",
+  "header": {
+    "customize": "Customize"
+  },
+  "widgets": {
     "journalEntries": "Journal entries",
     "journalLines": "Journal lines",
+    "activeAccounts": "Active accounts",
+    "parties": "Parties",
+    "entriesToday": "Entries today",
+    "pendingApprovals": "Pending approvals",
     "ledgerBalance": "Ledger balance",
-    "ledgerBalanced": "Σ = 0.00",
-    "ledgerSum": "Σ = {amount}",
-    "parallelRun": "Parallel-run vs {source}",
-    "parityValue": "{matches}/{accounts} match"
+    "recentEntries": "Recent journal entries",
+    "pendingApprovalsList": "Pending approvals",
+    "myApprovals": "My approvals",
+    "inProgress": "In progress"
   },
-  "syncCard": {
-    "body": "An external accounting system is connected for parallel-run verification. Sync is manual; every sync re-verifies the trial balance per account.",
-    "link": "Sync page"
+  "grid": {
+    "customizing": "Customizing your dashboard",
+    "save": "Save",
+    "saved": "Layout saved",
+    "saveFailed": "Failed to save layout",
+    "reset": "Reset",
+    "resetDone": "Layout reset to default",
+    "resetFailed": "Failed to reset layout",
+    "resetConfirm": "Reset to the default layout for your role? Your customisations will be lost.",
+    "addWidget": "Add widget",
+    "closePalette": "Close",
+    "remove": "Remove widget",
+    "cardMissing": "Card unavailable",
+    "unknownWidget": "Unknown widget: {id}"
+  },
+  "palette": {
+    "title": "Widgets",
+    "subtitle": "Click to add to your dashboard",
+    "close": "Close",
+    "added": "Added",
+    "libraryCards": "Insight cards"
+  },
+  "customize": {
+    "title": "Customize dashboard",
+    "back": "Back to dashboard",
+    "roleLabel": "Default layout for: {role}"
+  },
+  "quickActions": {
+    "title": "Quick actions",
+    "customize": "Customize",
+    "empty": "No quick actions yet",
+    "addFirst": "Add your first action",
+    "editor": {
+      "title": "Customize quick actions",
+      "description": "Add, reorder, and remove shortcut tiles.",
+      "addAction": "Add action",
+      "edit": "Edit action",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saved": "Quick actions saved",
+      "saveFailed": "Failed to save quick actions",
+      "loadFailed": "Failed to load options",
+      "back": "Back",
+      "common": "Common",
+      "customUrl": "Custom URL",
+      "label": "Label",
+      "labelPlaceholder": "New bill",
+      "link": "Link",
+      "linkHint": "Internal path (/ar) or https URL",
+      "icon": "Icon",
+      "color": "Color",
+      "preview": "Preview",
+      "unnamed": "Unnamed",
+      "searchPlaceholder": "Search actions…",
+      "loading": "Loading…",
+      "noResults": "No results",
+      "maxReached": "Maximum {count} actions",
+      "invalidUrl": "Link must be an internal path or http(s) URL"
+    }
   },
   "home": {
     "customize": "Customize",
@@ -23,26 +92,6 @@
     "openInsights": "Open Insights",
     "personalBadge": "Your board",
     "roleBadge": "Role default",
-    "systemBadge": "Company default",
-    "ledgerBalanced": "Ledger balanced",
-    "ledgerOut": "Ledger out by {amount}",
-    "parityOk": "Parallel-run matched",
-    "parityOff": "Parallel-run mismatch"
-  },
-  "recentRuns": {
-    "title": "Recent sync runs",
-    "started": "Started",
-    "source": "Source",
-    "trigger": "Trigger",
-    "new": "New",
-    "reversed": "Reversed",
-    "unchanged": "Unchanged",
-    "tbVerification": "TB verification",
-    "empty": "No syncs yet.",
-    "runStatus": {
-      "ok": "ok",
-      "failed": "failed",
-      "running": "running"
-    }
+    "systemBadge": "Company default"
   }
 }

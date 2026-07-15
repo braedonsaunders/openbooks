@@ -3,7 +3,6 @@ import { sql } from 'drizzle-orm'
 import { db, pool } from '@openbooks/engine/src/db.ts'
 import {
   REPORT_ENTITY_MAP,
-  reportResultToCsv,
   runCustomQuery,
   validateCustomQuery,
   type ReportCustomQuery,
@@ -11,6 +10,9 @@ import {
   type ReportRunLabels,
   type ReportRunResult,
 } from '@openbooks/reports'
+// The office wrapper applies the CSV formula-injection guard; never import the
+// raw serializer from @openbooks/reports for user-facing CSV.
+import { reportResultToCsv } from '@openbooks/office'
 import { reportCsvOptions, reportRunLabels } from './report-labels'
 
 /**

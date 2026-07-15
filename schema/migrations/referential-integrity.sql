@@ -284,10 +284,41 @@ alter table insight_cards add foreign key (org_id) references orgs(id);
 alter table insight_dashboards add foreign key (org_id) references orgs(id);
 alter table insight_dashboard_pins add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (dashboard_id) references insight_dashboards(id) on delete cascade;
 
--- attachments
-alter table attachments add foreign key (org_id) references orgs(id);
-alter table attachment_blobs add foreign key (attachment_id) references attachments(id) on delete cascade;
+-- saved searches (NetSuite Saved Search analogue — Knowledge menu)
+alter table saved_searches add foreign key (org_id) references orgs(id);
+alter table saved_searches add foreign key (owner_id) references users(id) on delete cascade;
+alter table saved_searches add foreign key (created_by) references users(id);
+alter table saved_searches add foreign key (updated_by) references users(id);
+
+-- file cabinet (replaced the legacy attachments tables — dropped in 0012_file-cabinet)
+alter table folders add foreign key (org_id) references orgs(id);
+alter table folders add foreign key (parent_folder_id) references folders(id) on delete restrict;
+alter table files add foreign key (org_id) references orgs(id);
+alter table files add foreign key (folder_id) references folders(id) on delete restrict;
+alter table files add foreign key (current_version_id) references file_versions(id) on delete set null;
+alter table file_versions add foreign key (file_id) references files(id) on delete cascade;
+alter table file_blobs add foreign key (version_id) references file_versions(id) on delete cascade;
+alter table file_attachments add foreign key (org_id) references orgs(id);
+alter table file_attachments add foreign key (file_id) references files(id) on delete cascade;
 
 -- ai assistant
 alter table ai_conversations add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade;
 alter table ai_messages add foreign key (org_id) references orgs(id), add foreign key (conversation_id) references ai_conversations(id) on delete cascade;
+
+-- dashboard layouts
+alter table user_dashboard_layouts add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade;
+alter table role_dashboard_layouts add foreign key (org_id) references orgs(id);
+
+-- api keys
+alter table api_keys add foreign key (org_id) references orgs(id) on delete cascade;
+alter table api_keys add foreign key (user_id) references users(id) on delete cascade;
+alter table api_keys add foreign key (created_by) references users(id);
+alter table api_keys add foreign key (updated_by) references users(id);
+alter table api_key_events add foreign key (org_id) references orgs(id) on delete cascade;
+alter table api_key_events add foreign key (key_id) references api_keys(id) on delete set null;
+
+-- customization (transaction form layouts + saved list views)
+alter table form_layouts add foreign key (org_id) references orgs(id);
+alter table user_form_preferences add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (layout_id) references form_layouts(id) on delete set null;
+alter table list_views add foreign key (org_id) references orgs(id), add foreign key (owner_id) references users(id) on delete cascade;
+alter table user_list_preferences add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (view_id) references list_views(id) on delete set null;

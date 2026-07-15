@@ -85,6 +85,12 @@ export function ItemDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
+  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // — even for drafts — with an Edit button in the header. Save is EXPLICIT —
+  // one Save button, no per-field autosave.
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const editable = mode === 'edit' && canManage
+
   const nameValid = name.trim().length > 0 && name.trim() !== 'New item'
 
   const accountOptions = useMemo(
@@ -92,7 +98,7 @@ export function ItemDrawer({
     [accounts],
   )
 
-  // -- autosave (debounced PATCH) ------------------------------------------
+  // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
     () => ({
       kind,
@@ -109,32 +115,59 @@ export function ItemDrawer({
     }),
     [kind, name, code, category, unit, defaultRate, incomeAccountId, expenseAccountId, taxCodeId, showOnTimesheet, customValues, isActive],
   )
+  // Track unsaved edits (no autosave — Save is an explicit button).
+  const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
-    if (!canManage) return
     if (first.current) {
       first.current = false
       return
     }
-    setSaveState('dirty')
-    const timer = setTimeout(async () => {
-      setSaveState('saving')
-      const res = await fetch(`/api/items/${it.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(savePayload),
-      })
-      if (res.ok) {
-        setSaveState('saved')
-        router.refresh()
-      } else {
-        setSaveState('error')
-        toast.error((await res.json()).error ?? t('drawer.autosaveFailed'))
-      }
-    }, 600)
-    return () => clearTimeout(timer)
+    if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savePayload, canManage])
+  }, [savePayload])
+
+  /** Reset every field back to the loaded item (used by Cancel). */
+  function resetForm() {
+    setKind(it.kind ?? 'service')
+    setName(isPlaceholderName ? '' : (it.name ?? ''))
+    setCode(it.code ?? '')
+    setCategory(it.category ?? '')
+    setUnit(it.unit ?? '')
+    setDefaultRate(it.default_rate != null ? Number(it.default_rate).toFixed(2) : '')
+    setIncomeAccountId(it.income_account_id ?? '')
+    setExpenseAccountId(it.expense_account_id ?? '')
+    setTaxCodeId(it.tax_code_id ?? '')
+    setShowOnTimesheet(it.show_on_timesheet === true)
+    setCustomValues(it.custom ?? {})
+  }
+
+  async function save() {
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch(`/api/items/${it.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(savePayload),
+    })
+    if (res.ok) {
+      setSaveState('saved')
+      setDirty(false)
+      setMode('view')
+      router.refresh()
+    } else {
+      setSaveState('error')
+      toast.error((await res.json()).error ?? t('drawer.autosaveFailed'))
+    }
+    setBusy(false)
+  }
+
+  function cancel() {
+    resetForm()
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
 
   async function setActiveState(next: boolean) {
     setBusy(true)
@@ -153,7 +186,7 @@ export function ItemDrawer({
     router.refresh()
   }
 
-  const ro = !canManage
+  const ro = !editable
 
   return (
     <UrlDrawer
@@ -168,24 +201,38 @@ export function ItemDrawer({
           </Badge>
         </span>
       }
-      description={canManage ? t('drawer.autosaveHint') : undefined}
+      description={mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
       headerActions={
         <>
-          {canManage ? (
-            isActive ? (
-              <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                {t('drawer.deactivate')}
+          {mode === 'edit' ? (
+            <>
+              <Button disabled={busy} onClick={save}>
+                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
               </Button>
-            ) : (
-              <>
-                {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
-                ) : null}
-                <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                  {t('drawer.activate')}
+              <Button variant="outline" disabled={busy} onClick={cancel}>
+                {tCommon('actions.cancel')}
+              </Button>
+            </>
+          ) : canManage ? (
+            <>
+              <Button variant="outline" onClick={() => setMode('edit')}>
+                {tCommon('actions.edit')}
+              </Button>
+              {isActive ? (
+                <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
+                  {t('drawer.deactivate')}
                 </Button>
-              </>
-            )
+              ) : (
+                <>
+                  {!nameValid ? (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
+                  ) : null}
+                  <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
+                    {t('drawer.activate')}
+                  </Button>
+                </>
+              )}
+            </>
           ) : null}
         </>
       }
@@ -197,14 +244,14 @@ export function ItemDrawer({
               (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
-            {canManage
-              ? saveState === 'saved'
-                ? t('drawer.allSaved')
-                : saveState === 'saving'
-                  ? tCommon('actions.saving')
-                  : saveState === 'error'
-                    ? t('drawer.saveFailedRetry')
-                    : t('drawer.unsavedChanges')
+            {mode === 'edit'
+              ? saveState === 'saving'
+                ? tCommon('actions.saving')
+                : saveState === 'error'
+                  ? t('drawer.saveFailedRetry')
+                  : dirty
+                    ? t('drawer.unsavedChanges')
+                    : null
               : null}
           </span>
         </div>
@@ -215,47 +262,69 @@ export function ItemDrawer({
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              {tCommon('labels.name')}<span className="text-red-500"> *</span>
+              {tCommon('labels.name')}{editable ? <span className="text-red-500"> *</span> : null}
             </Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} disabled={ro} />
+            {editable ? (
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} />
+            ) : (
+              <p className="text-sm">{name.trim() || t('drawer.newItem')}</p>
+            )}
           </div>
           <div className={field}>
             <Label>{t('labels.code')}</Label>
-            <Input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="font-mono"
-              placeholder={t('drawer.codePlaceholder')}
-              disabled={ro}
-            />
+            {editable ? (
+              <Input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="font-mono"
+                placeholder={t('drawer.codePlaceholder')}
+              />
+            ) : (
+              <p className="font-mono text-sm">{code || '—'}</p>
+            )}
           </div>
           <div className={field}>
             <Label>{t('labels.kind')}</Label>
-            <Select value={kind} onChange={(e) => setKind(e.target.value)} disabled={ro}>
-              {kindOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+            {editable ? (
+              <Select value={kind} onChange={(e) => setKind(e.target.value)}>
+                {kindOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <p className="text-sm">{kindOptions.find((o) => o.value === kind)?.label ?? kind}</p>
+            )}
           </div>
           <div className={field}>
             <Label>{t('labels.category')}</Label>
-            <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('drawer.categoryPlaceholder')} disabled={ro} />
+            {editable ? (
+              <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder={t('drawer.categoryPlaceholder')} />
+            ) : (
+              <p className="text-sm">{category || '—'}</p>
+            )}
           </div>
           <div className={field}>
             <Label>{t('labels.unit')}</Label>
-            <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t('drawer.unitPlaceholder')} disabled={ro} />
+            {editable ? (
+              <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t('drawer.unitPlaceholder')} />
+            ) : (
+              <p className="text-sm">{unit || '—'}</p>
+            )}
           </div>
           <div className={field}>
             <Label>{t('labels.defaultRate')}</Label>
-            <Input
-              inputMode="decimal"
-              className="text-right tabular-nums"
-              value={defaultRate}
-              onChange={(e) => setDefaultRate(e.target.value)}
-              disabled={ro}
-            />
+            {editable ? (
+              <Input
+                inputMode="decimal"
+                className="text-right tabular-nums"
+                value={defaultRate}
+                onChange={(e) => setDefaultRate(e.target.value)}
+              />
+            ) : (
+              <p className="text-right text-sm tabular-nums">{defaultRate || '—'}</p>
+            )}
           </div>
         </section>
 
@@ -263,42 +332,52 @@ export function ItemDrawer({
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className={field}>
             <Label>{t('labels.incomeAccount')}</Label>
-            <SearchSelect
-              value={incomeAccountId}
-              onChange={setIncomeAccountId}
-              options={accountOptions}
-              clearable
-              emptyLabel={t('drawer.noIncomeAccount')}
-              placeholder={t('drawer.selectAccount')}
-              sheetTitle={t('labels.incomeAccount')}
-              ariaLabel={t('labels.incomeAccount')}
-              disabled={ro}
-            />
+            {editable ? (
+              <SearchSelect
+                value={incomeAccountId}
+                onChange={setIncomeAccountId}
+                options={accountOptions}
+                clearable
+                emptyLabel={t('drawer.noIncomeAccount')}
+                placeholder={t('drawer.selectAccount')}
+                sheetTitle={t('labels.incomeAccount')}
+                ariaLabel={t('labels.incomeAccount')}
+              />
+            ) : (
+              <p className="text-sm">{payload.incomeAccountName ?? '—'}</p>
+            )}
           </div>
           <div className={field}>
             <Label>{t('labels.expenseAccount')}</Label>
-            <SearchSelect
-              value={expenseAccountId}
-              onChange={setExpenseAccountId}
-              options={accountOptions}
-              clearable
-              emptyLabel={t('drawer.noExpenseAccount')}
-              placeholder={t('drawer.selectAccount')}
-              sheetTitle={t('labels.expenseAccount')}
-              ariaLabel={t('labels.expenseAccount')}
-              disabled={ro}
-            />
+            {editable ? (
+              <SearchSelect
+                value={expenseAccountId}
+                onChange={setExpenseAccountId}
+                options={accountOptions}
+                clearable
+                emptyLabel={t('drawer.noExpenseAccount')}
+                placeholder={t('drawer.selectAccount')}
+                sheetTitle={t('labels.expenseAccount')}
+                ariaLabel={t('labels.expenseAccount')}
+              />
+            ) : (
+              <p className="text-sm">{payload.expenseAccountName ?? '—'}</p>
+            )}
           </div>
           <div className={field}>
             <Label>{t('labels.taxCode')}</Label>
-            <Select value={taxCodeId} onChange={(e) => setTaxCodeId(e.target.value)} disabled={ro}>
-              <option value="">—</option>
-              {taxCodes.map((tc) => (
-                <option key={tc.id} value={tc.id}>
-                  {tc.name}
-                </option>
-              ))}
-            </Select>
+            {editable ? (
+              <Select value={taxCodeId} onChange={(e) => setTaxCodeId(e.target.value)}>
+                <option value="">—</option>
+                {taxCodes.map((tc) => (
+                  <option key={tc.id} value={tc.id}>
+                    {tc.name}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <p className="text-sm">{payload.taxCodeName ?? '—'}</p>
+            )}
           </div>
         </section>
 

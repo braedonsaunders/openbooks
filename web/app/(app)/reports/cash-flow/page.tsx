@@ -5,6 +5,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { cashFlow, currentFiscalYearEnd, dimensionOptions, fiscalYearRange, type CashFlowSection } from '../../../../lib/reports'
 import { money } from '../../../../lib/format'
 import { DimensionFilter } from '../DimensionFilter'
+import { StatementExport } from '../StatementExport'
 import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +47,7 @@ export default async function CashFlow({
             title={t('title')}
             description={t('dateRange', { from, to })}
             back={{ href: '/reports', label: tr('hub.title') }}
-            actions={<SaveViewButton />}
+            actions={<><SaveViewButton /><StatementExport kind="cash-flow" params={{ from, to, dept: sp.dept, project: sp.project }} /></>}
           />
           <div className="flex flex-wrap items-center gap-2">
             {fyPresets.map((r) => {

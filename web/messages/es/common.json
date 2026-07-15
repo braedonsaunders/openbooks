@@ -4,6 +4,9 @@
     "saving": "Guardando…",
     "cancel": "Cancelar",
     "close": "Cerrar",
+    "fullscreen": "Expandir a pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa",
+    "customize": "Personalizar",
     "delete": "Eliminar",
     "deleting": "Eliminando…",
     "edit": "Editar",
@@ -116,13 +119,15 @@
     "saveFailed": "Error al guardar",
     "deleted": "Eliminado",
     "deleteFailed": "Error al eliminar",
+    "createFailed": "Error al crear",
     "loadFailed": "Error al cargar",
     "noResults": "Sin resultados",
     "noChanges": "No hay cambios para guardar",
     "somethingWentWrong": "Algo salió mal",
     "notFound": "No encontrado",
     "copied": "Copiado",
-    "unsavedChanges": "Tiene cambios sin guardar"
+    "unsavedChanges": "Tiene cambios sin guardar",
+    "editingHint": "Editando: guarde para aplicar los cambios."
   },
   "confirm": {
     "title": "¿Está seguro?",

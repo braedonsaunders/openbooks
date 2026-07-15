@@ -109,15 +109,15 @@ export function ExpenseDrawer({
   const doc = report.doc
   const statusKey = STATUS_LABEL_KEYS[String(doc.status)]
   const isDraft = doc.status === 'draft'
-  // NetSuite-style record model: the flyout opens READ-ONLY (view mode) with an
-  // Edit button; a brand-new draft opens straight into edit. Draft, approved,
+  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // — even for drafts — with an Edit button in the header. Draft, approved,
   // and POSTED reports are all editable (provided the viewer can enter
   // expenses) — saving a posted report re-materializes its GL-Impact projection
   // (the server blocks only GL changes into a closed period). pending_approval
   // and voided reports are read-only. Save is EXPLICIT — no per-field autosave.
   const canEditStatus =
     (doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted') && canSubmit
-  const [mode, setMode] = useState<'view' | 'edit'>(isDraft ? 'edit' : 'view')
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
@@ -326,7 +326,7 @@ export function ExpenseDrawer({
           </Badge>
         </span>
       }
-      description={mode === 'edit' ? 'Editing — Save to apply changes' : (doc.employee_name ?? undefined)}
+      description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.employee_name ?? undefined)}
       headerActions={
         <>
           {mode === 'edit' ? (

@@ -4,6 +4,9 @@
     "saving": "Enregistrement…",
     "cancel": "Annuler",
     "close": "Fermer",
+    "fullscreen": "Passer en plein écran",
+    "exitFullscreen": "Quitter le plein écran",
+    "customize": "Personnaliser",
     "delete": "Supprimer",
     "deleting": "Suppression…",
     "edit": "Modifier",
@@ -116,13 +119,15 @@
     "saveFailed": "Échec de l’enregistrement",
     "deleted": "Supprimé",
     "deleteFailed": "Échec de la suppression",
+    "createFailed": "Échec de la création",
     "loadFailed": "Échec du chargement",
     "noResults": "Aucun résultat",
     "noChanges": "Aucune modification à enregistrer",
     "somethingWentWrong": "Une erreur est survenue",
     "notFound": "Introuvable",
     "copied": "Copié",
-    "unsavedChanges": "Vous avez des modifications non enregistrées"
+    "unsavedChanges": "Vous avez des modifications non enregistrées",
+    "editingHint": "Modification — Enregistrez pour appliquer les changements."
   },
   "confirm": {
     "title": "Êtes-vous sûr?",
