@@ -8,7 +8,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
-import { RECORD_TYPES, RECORD_TYPE_BY_KEY } from '@openbooks/customization'
+import { RECORD_TYPES, RECORD_TYPE_BY_KEY, defaultFormLayout, type FormLayoutConfig } from '@openbooks/customization'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
@@ -64,6 +64,19 @@ export default async function CustomizationPage({
       ? ((await db.execute(sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and (scope = 'org' or owner_id = ${authz.user.id})`)) as any).rows[0] ?? null
       : null
 
+  // Copy source when creating a new form from an existing/standard baseline.
+  const fromParam = pickString(sp.from)
+  const typeLabel = t(`recordTypes.${recordType}` as never)
+  let duplicateFrom: { name: string; layout: FormLayoutConfig } | null = null
+  if (formId === 'new' && fromParam) {
+    if (fromParam === 'standard') {
+      duplicateFrom = { name: t('designer.forms.copyName', { name: t('designer.forms.standardName', { type: typeLabel }) }), layout: defaultFormLayout(recordType) }
+    } else {
+      const src = ((await db.execute(sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`)) as any).rows[0]
+      if (src) duplicateFrom = { name: t('designer.forms.copyName', { name: src.name }), layout: src.layout as FormLayoutConfig }
+    }
+  }
+
   // Live custom-field defs feed the designer palette (header + line).
   const [designerHeaderDefs, designerLineDefs] = formId || viewId
     ? await Promise.all([
@@ -116,45 +129,67 @@ export default async function CustomizationPage({
       }
     >
       {tab === 'forms' ? (
-        forms.rows.length === 0 ? (
-          <EmptyState title={t('designer.forms.newTitle')} description={t('designer.description')} action={<NewFormButton recordType={recordType} />} />
-        ) : (
-          <>
-            <div className="mb-3 flex justify-end">
-              <NewFormButton recordType={recordType} />
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('designer.forms.name')}</TableHead>
-                  <TableHead>{tCommon('labels.status')}</TableHead>
-                  <TableHead>{tCommon('labels.type')}</TableHead>
+        <>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('designer.forms.listHint', { type: typeLabel })}</p>
+            <NewFormButton recordType={recordType} />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('designer.forms.name')}</TableHead>
+                <TableHead>{tCommon('labels.status')}</TableHead>
+                <TableHead>{tCommon('labels.type')}</TableHead>
+                <TableHead className="text-right">{tCommon('labels.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Always-present read-only baseline: the system default for this type. */}
+              <TableRow>
+                <TableCell>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('designer.forms.standardName', { type: typeLabel })}</span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{t('designer.forms.systemDefault')}</Badge>
+                </TableCell>
+                <TableCell>
+                  {forms.rows.some((f: any) => f.isDefault) ? null : <Badge variant="default">{t('designer.forms.isDefault')}</Badge>}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link href={`/admin/customization?recordType=${recordType}&tab=forms&form=new&from=standard`} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
+                    {t('designer.forms.duplicate')}
+                  </Link>
+                </TableCell>
+              </TableRow>
+              {forms.rows.map((f: any) => (
+                <TableRow key={f.id}>
+                  <TableCell>
+                    <Link href={`/admin/customization?recordType=${recordType}&tab=forms&form=${f.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                      {f.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={f.isActive ? 'success' : 'outline'}>{f.isActive ? tCommon('labels.active') : tCommon('labels.inactive')}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {f.isDefault ? <Badge variant="default">{t('designer.forms.isDefault')}</Badge> : null}{' '}
+                    {f.allowedRoles && f.allowedRoles.length ? <span className="text-xs text-slate-400">{f.allowedRoles.join(', ')}</span> : null}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link href={`/admin/customization?recordType=${recordType}&tab=forms&form=new&from=${f.id}`} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
+                      {t('designer.forms.duplicate')}
+                    </Link>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {forms.rows.map((f: any) => (
-                  <TableRow key={f.id}>
-                    <TableCell>
-                      <Link href={`/admin/customization?recordType=${recordType}&tab=forms&form=${f.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
-                        {f.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={f.isActive ? 'success' : 'outline'}>{f.isActive ? tCommon('labels.active') : tCommon('labels.inactive')}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {f.isDefault ? <Badge variant="default">{t('designer.forms.isDefault')}</Badge> : null}{' '}
-                      {f.allowedRoles && f.allowedRoles.length ? <span className="text-xs text-slate-400">{f.allowedRoles.join(', ')}</span> : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+              ))}
+            </TableBody>
+          </Table>
+          {forms.rows.length > 0 ? (
             <div className="mt-3">
               <Pagination basePath="/admin/customization" currentParams={sp} total={forms.rows.length} page={params.page} perPage={params.perPage} />
             </div>
-          </>
-        )
+          ) : null}
+        </>
       ) : views.rows.length === 0 ? (
         <EmptyState title={t('designer.list.newTitle')} description={t('designer.description')} action={<NewViewButton recordType={recordType} />} />
       ) : (
@@ -197,7 +232,7 @@ export default async function CustomizationPage({
         </>
       )}
 
-      {formId ? <FormDesigner recordType={recordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} /> : null}
+      {formId ? <FormDesigner recordType={recordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} /> : null}
       {viewId ? <ListViewDesigner recordType={recordType} def={openView} canManageOrg={true} userId={authz.user.id} showInListDefs={viewShowInList as any} /> : null}
     </ListPageLayout>
   )
