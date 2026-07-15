@@ -463,7 +463,8 @@ function RowCells<Row extends Record<string, unknown>>({
                 value={(value as string) ?? ''}
                 onChange={(v) => setCell(i, c.key, v ?? '')}
                 placeholder={c.placeholder ?? '—'}
-                className="w-full border-0 bg-transparent shadow-none"
+                className="w-full"
+                triggerClassName="h-auto min-h-0 rounded-sm border-0 bg-transparent px-1.5 py-1 shadow-none focus:ring-0"
               />
             ) : c.type === 'select' ? (
               <Select

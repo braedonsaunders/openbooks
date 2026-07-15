@@ -91,6 +91,16 @@ export function SearchSelect({
   const [mounted, setMounted] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dropRef = useRef<HTMLDivElement>(null)
+  // Desktop dropdown is portaled to <body> and positioned from the trigger, so
+  // it floats above any `overflow` container (e.g. the line-grid table) instead
+  // of being clipped or expanding the row.
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  function place() {
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 6, left: r.left, width: r.width })
+  }
 
   useEffect(() => {
     setMounted(true)
@@ -138,6 +148,7 @@ export function SearchSelect({
         allOptions.findIndex((o) => o.value === value),
       ),
     )
+    place()
     setOpen(true)
     setTimeout(() => searchRef.current?.focus(), 60)
   }
@@ -146,14 +157,29 @@ export function SearchSelect({
     setOpen(false)
   }
 
-  // Click-outside (desktop).
+  // Click-outside (desktop) — the dropdown is portaled, so check it too.
   useEffect(() => {
     if (!open || !isDesktop) return
     function onDoc(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (wrapRef.current?.contains(t) || dropRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
+  }, [open, isDesktop])
+
+  // Keep the portaled dropdown anchored to the trigger while open (scroll/resize).
+  useEffect(() => {
+    if (!open || !isDesktop) return
+    place()
+    const onMove = () => place()
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
   }, [open, isDesktop])
 
   // Keyboard nav + scroll-lock on the mobile sheet.
@@ -302,6 +328,7 @@ export function SearchSelect({
   return (
     <div ref={wrapRef} className={cn('relative', className)}>
       <button
+        ref={triggerRef}
         type="button"
         id={id}
         onClick={() => (open ? setOpen(false) : openMenu())}
@@ -338,13 +365,22 @@ export function SearchSelect({
         />
       </button>
 
-      {/* Desktop dropdown */}
-      {open && isDesktop ? (
-        <div className="absolute top-full left-0 z-50 mt-1.5 w-full min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
-          {showSearch ? searchBox(false) : null}
-          <div className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>{optionList}</div>
-        </div>
-      ) : null}
+      {/* Desktop dropdown — portaled to <body> + fixed-positioned from the
+          trigger so it floats above any overflow container (e.g. the line grid)
+          rather than being clipped or expanding the row. */}
+      {mounted && open && isDesktop && pos
+        ? createPortal(
+            <div
+              ref={dropRef}
+              style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 208) }}
+              className="z-[60] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
+            >
+              {showSearch ? searchBox(false) : null}
+              <div className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>{optionList}</div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {/* Mobile bottom sheet */}
       {mounted && !isDesktop
