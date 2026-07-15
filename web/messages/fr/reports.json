@@ -13,7 +13,11 @@
       "payablesTitle": "Comptes fournisseurs par fournisseur",
       "payablesDescription": "Solde impayé des comptes fournisseurs par tiers",
       "receivablesTitle": "Comptes clients par client",
-      "receivablesDescription": "Solde à recevoir des comptes clients par tiers"
+      "receivablesDescription": "Solde à recevoir des comptes clients par tiers",
+      "agingTitle": "Balance âgée clients / fournisseurs",
+      "agingDescription": "Soldes des postes ouverts par tiers, ventilés par ancienneté",
+      "cashFlowTitle": "Tableau des flux de trésorerie",
+      "cashFlowDescription": "Méthode directe — exploitation, investissement et financement, rapproché aux mouvements bancaires"
     }
   },
   "statement": {
@@ -84,6 +88,42 @@
       "glLines": "Lignes du GL"
     },
     "noPartyOnLines": "(aucun tiers sur les lignes)"
+  },
+  "aging": {
+    "receivablesTitle": "Balance âgée clients",
+    "payablesTitle": "Balance âgée fournisseurs",
+    "asOf": "postes ouverts au {date}",
+    "receivables": "Comptes clients",
+    "payables": "Comptes fournisseurs",
+    "noParty": "(aucun tiers)",
+    "empty": "Aucun poste ouvert à cette date.",
+    "columns": {
+      "total": "Total"
+    },
+    "buckets": {
+      "current": "Courant",
+      "b1": "1–30",
+      "b2": "31–60",
+      "b3": "61–90",
+      "b4": "90+"
+    }
+  },
+  "cashFlow": {
+    "title": "Tableau des flux de trésorerie",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Trésorerie d’ouverture",
+    "closingCash": "Trésorerie de clôture",
+    "netChange": "Variation nette de trésorerie",
+    "empty": "Aucun mouvement de trésorerie sur cette période.",
+    "sections": {
+      "operating": "Activités d’exploitation",
+      "investing": "Activités d’investissement",
+      "financing": "Activités de financement"
+    },
+    "subtotal": "Flux net des {section}",
+    "reconciliation": "Ouverture + variation nette = clôture",
+    "reconciled": "rapproché",
+    "offBy": "écart de {amount}"
   },
   "custom": {
     "kind": {

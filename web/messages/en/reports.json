@@ -13,7 +13,11 @@
       "payablesTitle": "Payables by Vendor",
       "payablesDescription": "Outstanding AP position per party",
       "receivablesTitle": "Receivables by Customer",
-      "receivablesDescription": "Outstanding AR position per party"
+      "receivablesDescription": "Outstanding AR position per party",
+      "agingTitle": "AR / AP Aging",
+      "agingDescription": "Open-item balances per party, bucketed by age past due",
+      "cashFlowTitle": "Cash Flow Statement",
+      "cashFlowDescription": "Direct method — operating, investing and financing, tied to bank movements"
     }
   },
   "statement": {
@@ -84,6 +88,42 @@
       "glLines": "GL lines"
     },
     "noPartyOnLines": "(no party on lines)"
+  },
+  "aging": {
+    "receivablesTitle": "AR Aging",
+    "payablesTitle": "AP Aging",
+    "asOf": "open items as of {date}",
+    "receivables": "Receivables",
+    "payables": "Payables",
+    "noParty": "(no party)",
+    "empty": "No open items as of this date.",
+    "columns": {
+      "total": "Total"
+    },
+    "buckets": {
+      "current": "Current",
+      "b1": "1–30",
+      "b2": "31–60",
+      "b3": "61–90",
+      "b4": "90+"
+    }
+  },
+  "cashFlow": {
+    "title": "Cash Flow Statement",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Opening cash",
+    "closingCash": "Closing cash",
+    "netChange": "Net change in cash",
+    "empty": "No cash movements in this period.",
+    "sections": {
+      "operating": "Operating activities",
+      "investing": "Investing activities",
+      "financing": "Financing activities"
+    },
+    "subtotal": "Net cash from {section}",
+    "reconciliation": "Opening + net change = closing",
+    "reconciled": "reconciled",
+    "offBy": "off by {amount}"
   },
   "custom": {
     "kind": {

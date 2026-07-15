@@ -52,6 +52,8 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Ledger', requiredPermission: 'gl.close' },
 
   { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', group: 'Insight', requiredPermission: 'reports.read' },
+  { key: 'report-cashflow', href: '/reports/cash-flow', label: 'Cash Flow', iconKey: 'file', group: 'Insight', requiredPermission: 'reports.read' },
+  { key: 'report-aging', href: '/reports/aging', label: 'AR / AP Aging', iconKey: 'file', group: 'Insight', requiredPermission: 'reports.read' },
   { key: 'custom-reports', href: '/reports/custom', label: 'Custom Reports', iconKey: 'scroll', group: 'Insight', requiredPermission: 'reports.read' },
   { key: 'sql', href: '/query', label: 'SQL', iconKey: 'database', group: 'Insight', requiredPermission: 'sql.execute' },
 

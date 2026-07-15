@@ -27,6 +27,8 @@ export default async function Reports() {
     { href: `/reports/trial-balance?asof=${today}`, title: t('hub.cards.trialBalanceTitle'), desc: t('hub.cards.trialBalanceDescription') },
     { href: `/reports/partners?kind=payable`, title: t('hub.cards.payablesTitle'), desc: t('hub.cards.payablesDescription') },
     { href: `/reports/partners?kind=receivable`, title: t('hub.cards.receivablesTitle'), desc: t('hub.cards.receivablesDescription') },
+    { href: `/reports/aging?side=ar&asof=${today}`, title: t('hub.cards.agingTitle'), desc: t('hub.cards.agingDescription') },
+    { href: `/reports/cash-flow?from=${cur.from}&to=${cur.to}`, title: t('hub.cards.cashFlowTitle'), desc: t('hub.cards.cashFlowDescription') },
   ]
 
   return (
