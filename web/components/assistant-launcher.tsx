@@ -53,7 +53,10 @@ export function AssistantLauncher({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-500 shadow-sm transition-colors hover:border-teal-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-teal-800 dark:hover:text-slate-200"
+        className={
+          'inline-flex shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white text-sm text-slate-500 shadow-sm transition-colors hover:border-teal-300 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-teal-800 dark:hover:text-slate-200 ' +
+          (compact ? 'p-1.5' : 'px-2.5 py-1.5')
+        }
         aria-label={t('open')}
       >
         <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
