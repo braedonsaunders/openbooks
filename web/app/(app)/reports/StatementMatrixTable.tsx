@@ -1,24 +1,31 @@
 import Link from 'next/link'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
-import type { ReportScale } from '../../../lib/report-filters'
+import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-matrix'
+import { buildDrillHref, type ReportScale } from '../../../lib/report-filters'
 import { formatCell, isNegative } from '../../../lib/statement-format'
 
 /**
  * Renders a multi-column statement view (P&L, Balance Sheet, …) as a table:
  * account rows indented by depth and linked to their register, section headers,
  * subtotals with a top rule, and grand totals in bold with a double rule.
- * Column headers come pre-labelled and pre-translated from the view builder.
+ *
+ * When `drill` is supplied, EVERY amount value becomes a link to the journal
+ * lines behind it (account subtree or section types × the column's period /
+ * dimension / basis), carrying a `back` link to this exact report.
  */
 export function StatementMatrixTable({
   view,
   scale = 'actual',
   periodQs = '',
+  drill,
 }: {
   view: StatementView
   scale?: ReportScale
-  /** Query string appended to account drill-through links. */
+  /** Query string appended to account-name drill-through links. */
   periodQs?: string
+  /** Enables per-value drill-through to /reports/detail. */
+  drill?: { dims: StatementDimFilter; basis: StatementBasis; back: string; backLabel: string }
 }) {
   const cols = view.columns
   return (
@@ -79,16 +86,35 @@ export function StatementMatrixTable({
                 </TableCell>
                 {cols.map((c, ci) => {
                   const v = l.values?.[ci]
+                  const href =
+                    drill && v !== undefined
+                      ? buildDrillHref({
+                          accountId: l.accountId,
+                          drillTypes: l.drillTypes,
+                          column: c,
+                          mode: view.mode,
+                          reportDims: drill.dims,
+                          basis: drill.basis,
+                          back: drill.back,
+                          backLabel: drill.backLabel,
+                          label: `${l.label} · ${c.label}`,
+                        })
+                      : null
+                  const neg = v !== undefined && isNegative(v, c.kind)
                   return (
                     <TableCell
                       key={c.key}
-                      className={cn(
-                        'text-right whitespace-nowrap tabular-nums',
-                        weight,
-                        v !== undefined && isNegative(v, c.kind) && 'text-red-600 dark:text-red-400',
-                      )}
+                      className={cn('text-right whitespace-nowrap tabular-nums', weight, neg && 'text-red-600 dark:text-red-400')}
                     >
-                      {v === undefined ? '' : formatCell(v, c.kind, scale)}
+                      {v === undefined ? (
+                        ''
+                      ) : href ? (
+                        <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                          {formatCell(v, c.kind, scale)}
+                        </Link>
+                      ) : (
+                        formatCell(v, c.kind, scale)
+                      )}
                     </TableCell>
                   )
                 })}

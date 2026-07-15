@@ -45,6 +45,10 @@ export type StatementColumn = {
   /** Inclusive window the column covers (for headers/drill-through). */
   from?: string | null
   to?: string
+  /** Breakout dimension this column slices on (drill-through carries it). */
+  dimField?: 'department' | 'project' | 'location' | 'class'
+  /** The dimension value id for this column (null = the "Unassigned" bucket). */
+  dimValue?: string | null
 }
 
 export type MatrixRow = {
@@ -98,6 +102,8 @@ type AmountColumn = {
   to: string
   dimCol?: string
   dimVal?: string | null // null = the "Unassigned" bucket
+  /** Breakout dimension (drill-through metadata surfaced on StatementColumn). */
+  dimField?: 'department' | 'project' | 'location' | 'class'
 }
 
 function daysBetween(from: string, to: string): number {
@@ -180,6 +186,7 @@ async function buildAmountColumns(opts: {
        where ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} and ${dimFilterSql(dims)}
        limit 1
     `)) as unknown as { rows: unknown[] }
+    const dimField = breakout as 'department' | 'project' | 'location' | 'class'
     const cols: AmountColumn[] = rows.rows.map((r) => ({
       key: r.id,
       label: r.name,
@@ -187,9 +194,10 @@ async function buildAmountColumns(opts: {
       to: period.to,
       dimCol,
       dimVal: r.id,
+      dimField,
     }))
     if (unassigned.rows.length) {
-      cols.push({ key: 'unassigned', label: 'Unassigned', from: period.from, to: period.to, dimCol, dimVal: null })
+      cols.push({ key: 'unassigned', label: 'Unassigned', from: period.from, to: period.to, dimCol, dimVal: null, dimField })
     }
     const capped = cols.slice(0, MAX_MATRIX_COLUMNS)
     return { cols: capped, truncated: cols.length > capped.length }
@@ -363,6 +371,8 @@ export async function statementMatrix(opts: {
     kind: 'amount',
     from: c.from,
     to: c.to,
+    dimField: c.dimField,
+    dimValue: c.dimField ? c.dimVal : undefined,
   }))
   const wantVariance = (opts.variance ?? true) && compare !== 'none' && cols.length === 2
   if (wantVariance) {
@@ -439,6 +449,9 @@ export type StatementViewLine = {
   emphasis?: boolean
   /** Absent on section headers; reader-signed and column-aligned otherwise. */
   values?: number[]
+  /** Account types this row aggregates — drill-through for subtotal/total rows
+   *  (and computed rows like accumulated earnings) that have no single accountId. */
+  drillTypes?: string[]
 }
 
 export type StatementView = {
@@ -447,6 +460,8 @@ export type StatementView = {
   truncated: boolean
   /** Whether any comparison/variance columns are present. */
   hasVariance: boolean
+  /** 'flow' = period range, 'balance' = cumulative as-of — drives drill-through. */
+  mode: StatementMode
 }
 
 type MatrixOpts = {
@@ -501,15 +516,17 @@ export async function profitAndLossView(
   const section = (title: string, types: string[], total: number[]) => {
     lines.push({ kind: 'section', label: title, depth: 0 })
     lines.push(...accountLines(matrix, types))
-    lines.push({ kind: 'subtotal', label: labels.totalOf(title), depth: 0, values: total })
+    lines.push({ kind: 'subtotal', label: labels.totalOf(title), depth: 0, values: total, drillTypes: types })
   }
   section(labels.revenue, revenueTypes, revenue)
   section(labels.costOfGoodsSold, cogsTypes, cogs)
+  // Gross profit / net income are signed formulas (revenue − cogs − expenses),
+  // not a single transaction set — so they don't drill (their component rows do).
   lines.push({ kind: 'subtotal', label: labels.grossProfit, depth: 0, emphasis: true, values: grossProfit })
   section(labels.expenses, expenseTypes, expenses)
   lines.push({ kind: 'total', label: labels.netIncome, depth: 0, emphasis: true, values: netIncome })
 
-  return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount') }
+  return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount'), mode: 'flow' }
 }
 
 export type BalanceSheetLabels = {
@@ -563,18 +580,20 @@ export async function balanceSheetView(
   const lines: StatementViewLine[] = []
   lines.push({ kind: 'section', label: labels.assets, depth: 0 })
   lines.push(...accountLines(matrix, ASSET_TYPES))
-  lines.push({ kind: 'subtotal', label: labels.totalAssets, depth: 0, emphasis: true, values: assets })
+  lines.push({ kind: 'subtotal', label: labels.totalAssets, depth: 0, emphasis: true, values: assets, drillTypes: ASSET_TYPES })
 
   lines.push({ kind: 'section', label: labels.liabilities, depth: 0 })
   lines.push(...accountLines(matrix, LIABILITY_TYPES))
-  lines.push({ kind: 'subtotal', label: labels.totalLiabilities, depth: 0, values: liabilities })
+  lines.push({ kind: 'subtotal', label: labels.totalLiabilities, depth: 0, values: liabilities, drillTypes: LIABILITY_TYPES })
 
   lines.push({ kind: 'section', label: labels.equity, depth: 0 })
   lines.push(...accountLines(matrix, EQUITY_TYPES))
+  // Accumulated earnings (= lifetime net income) and the totals that include it
+  // are signed formulas, so they don't drill to a single transaction set.
   lines.push({ kind: 'account', label: labels.accumulatedEarnings, depth: 1, values: accumulated })
   lines.push({ kind: 'subtotal', label: labels.totalEquity, depth: 0, values: equityTotal })
 
   lines.push({ kind: 'total', label: labels.liabilitiesAndEquity, depth: 0, emphasis: true, values: liabAndEquity })
 
-  return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount') }
+  return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount'), mode: 'balance' }
 }

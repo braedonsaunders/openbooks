@@ -153,7 +153,9 @@ export async function budgetVsActualView(scenarioId: string, labels: BudgetLabel
   const treeRows = treeify(accounts.rows, leaf)
 
   const columns: StatementColumn[] = [
-    { key: 'actual', label: labels.actual, kind: 'amount' },
+    // Only the Actual column drills to ledger transactions (from/to = the FY);
+    // Budget comes from budget_lines, not the ledger, so it carries no window.
+    { key: 'actual', label: labels.actual, kind: 'amount', from: fy.from, to: fy.to },
     { key: 'budget', label: labels.budget, kind: 'amount' },
     { key: 'var_abs', label: labels.variance, kind: 'variance_abs' },
     { key: 'var_pct', label: labels.variancePct, kind: 'variance_pct' },
@@ -189,7 +191,7 @@ export async function budgetVsActualView(scenarioId: string, labels: BudgetLabel
   const section = (title: string, types: string[], total: number[]) => {
     lines.push({ kind: 'section', label: title, depth: 0 })
     lines.push(...accountLines(types))
-    lines.push({ kind: 'subtotal', label: labels.totalOf(title), depth: 0, values: total })
+    lines.push({ kind: 'subtotal', label: labels.totalOf(title), depth: 0, values: total, drillTypes: types })
   }
   section(labels.revenue, revenueTypes, revenue)
   section(labels.costOfGoodsSold, cogsTypes, cogs)
@@ -197,5 +199,5 @@ export async function budgetVsActualView(scenarioId: string, labels: BudgetLabel
   section(labels.expenses, expenseTypes, expenses)
   lines.push({ kind: 'total', label: labels.netIncome, depth: 0, emphasis: true, values: netIncome })
 
-  return { columns, lines, truncated: false, hasVariance: true }
+  return { columns, lines, truncated: false, hasVariance: true, mode: 'flow' }
 }

@@ -52,21 +52,28 @@ export default async function TrialBalance({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.id}>
-              <TableCell>
-                <Link href={`/accounts/${r.id}`} className="hover:text-teal-700 dark:hover:text-teal-300">
-                  <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{r.number}</span>
-                  {r.name}
-                </Link>
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{money(r.debits)}</TableCell>
-              <TableCell className="text-right tabular-nums">{money(r.credits)}</TableCell>
-              <TableCell className={cn('text-right tabular-nums', Number(r.balance) < 0 && 'text-red-600 dark:text-red-400')}>
-                {money(r.balance)}
-              </TableCell>
-            </TableRow>
-          ))}
+          {rows.map((r) => {
+            const drill = `/accounts/${r.id}?to=${date}`
+            return (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <Link href={drill} className="hover:text-teal-700 dark:hover:text-teal-300">
+                    <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{r.number}</span>
+                    {r.name}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  <Link href={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{money(r.debits)}</Link>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  <Link href={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{money(r.credits)}</Link>
+                </TableCell>
+                <TableCell className={cn('text-right tabular-nums', Number(r.balance) < 0 && 'text-red-600 dark:text-red-400')}>
+                  <Link href={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{money(r.balance)}</Link>
+                </TableCell>
+              </TableRow>
+            )
+          })}
           <TableRow>
             <TableCell className="font-bold">{t('trialBalance.totals')}</TableCell>
             <TableCell className="text-right font-bold tabular-nums">{money(totalDebits)}</TableCell>

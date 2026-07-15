@@ -29,12 +29,16 @@ const CREDIT_NORMAL = new Set([
 export interface DimFilter {
   departmentId?: string;
   projectId?: string;
+  locationId?: string;
+  classId?: string;
 }
 
 function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
   let w = sql`true`;
   if (dims?.departmentId) w = sql`${w} and ${alias}.department_id = ${dims.departmentId}`;
   if (dims?.projectId) w = sql`${w} and ${alias}.project_id = ${dims.projectId}`;
+  if (dims?.locationId) w = sql`${w} and ${alias}.location_id = ${dims.locationId}`;
+  if (dims?.classId) w = sql`${w} and ${alias}.class_id = ${dims.classId}`;
   return w;
 }
 
@@ -827,6 +831,130 @@ export async function partnerStatement(
     closing: p?.closing ?? 0,
     lines: p?.lines ?? [],
     aging: agingTotals,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Transaction detail — the journal lines behind any statement value (drill-down)
+// ---------------------------------------------------------------------------
+
+export interface TxnDetailLine {
+  entryId: string
+  entryNumber: string | null
+  date: string
+  accountNumber: string | null
+  accountName: string
+  accountType: string
+  party: string | null
+  memo: string | null
+  amount: number // debit-signed
+}
+
+export interface TxnDetailResult {
+  lines: TxnDetailLine[]
+  totalDebit: number
+  totalCredit: number
+  /** Reader-signed net (credit-normal types flipped) — ties to the clicked cell. */
+  net: number
+  count: number
+  truncated: boolean
+}
+
+/**
+ * The posted journal lines that make up a single statement value. `accountIds`
+ * drills a specific account AND its descendants (matching how the matrix rolls
+ * children into parents); `accountTypes` drills a section/subtotal (every
+ * account of those types). `mode: 'flow'` sums the [from,to] window; 'balance'
+ * is cumulative up to `to`. Basis/dims mirror the matrix engine so the `net`
+ * ties out to the cell the user clicked.
+ */
+export async function transactionDetail(opts: {
+  accountIds?: string[]
+  accountTypes?: string[]
+  from?: string | null
+  to: string
+  mode: "flow" | "balance"
+  dims?: DimFilter
+  basis?: "accrual" | "cash"
+  limit?: number
+}): Promise<TxnDetailResult> {
+  const limit = opts.limit ?? 2000
+  const acctFilter =
+    opts.accountIds && opts.accountIds.length
+      ? sql`a.id in (
+          with recursive sub as (
+            select id from accounts where id in ${opts.accountIds}
+            union all
+            select c.id from accounts c join sub on c.parent_id = sub.id
+          ) select id from sub
+        )`
+      : opts.accountTypes && opts.accountTypes.length
+        ? sql`a.type in ${opts.accountTypes}`
+        : sql`true`
+  const dateFilter =
+    opts.mode === "balance"
+      ? sql`e.posting_date <= ${opts.to}`
+      : sql`e.posting_date >= ${opts.from ?? "0001-01-01"} and e.posting_date <= ${opts.to}`
+  const cashFilter =
+    opts.basis === "cash"
+      ? sql` and e.id in (select l2.entry_id from journal_lines l2 join accounts a2 on a2.id = l2.account_id where a2.type = 'asset_bank')`
+      : sql``
+
+  const where = sql`${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}`
+
+  // Totals over the FULL set (independent of the display limit), so `net` ties
+  // out to the clicked cell even when the line list is truncated. `net` is
+  // reader-signed (credit-normal types flipped) — matches the matrix account/
+  // section value.
+  const creditNormal = [...CREDIT_NORMAL]
+  const agg = (await db.execute(sql`
+    select count(*)::int as n,
+           coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as debit,
+           coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as credit,
+           coalesce(sum(case when a.type in ${creditNormal} then -l.amount else l.amount end), 0) as net
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id
+     where ${where}
+  `)) as unknown as { rows: { n: number; debit: string; credit: string; net: string }[] }
+  const totals = agg.rows[0] ?? { n: 0, debit: '0', credit: '0', net: '0' }
+
+  const r = (await db.execute(sql`
+    select e.id as entry_id, e.entry_number, e.posting_date::text as date,
+           a.number as acct_number, a.name as acct_name, a.type as acct_type,
+           p.display_name as party, l.memo, l.amount
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id
+      left join parties p on p.id = l.party_id
+     where ${where}
+     order by e.posting_date, e.entry_number, l.line_number
+     limit ${limit}
+  `)) as unknown as {
+    rows: {
+      entry_id: string; entry_number: string | null; date: string
+      acct_number: string | null; acct_name: string; acct_type: string
+      party: string | null; memo: string | null; amount: string
+    }[]
+  }
+  const lines: TxnDetailLine[] = r.rows.map((x) => ({
+    entryId: x.entry_id,
+    entryNumber: x.entry_number,
+    date: x.date,
+    accountNumber: x.acct_number,
+    accountName: x.acct_name,
+    accountType: x.acct_type,
+    party: x.party,
+    memo: x.memo,
+    amount: Number(x.amount),
+  }))
+  return {
+    lines,
+    totalDebit: Number(totals.debit),
+    totalCredit: Number(totals.credit),
+    net: Number(totals.net),
+    count: totals.n,
+    truncated: totals.n > lines.length,
   }
 }
 

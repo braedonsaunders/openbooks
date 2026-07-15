@@ -113,7 +113,21 @@ export default async function BalanceSheet({
         </>
       }
     >
-      <StatementMatrixTable view={view} scale={q.scale} periodQs={`?to=${period.to}`} />
+      <StatementMatrixTable
+        view={view}
+        scale={q.scale}
+        periodQs={`?to=${period.to}`}
+        drill={{
+          dims: q.dims,
+          basis: q.basis,
+          back: (() => {
+            const bp = new URLSearchParams()
+            for (const [k, v] of Object.entries(sp)) if (v) bp.set(k, v)
+            return `/reports/balance-sheet${bp.toString() ? `?${bp}` : ''}`
+          })(),
+          backLabel: t('balanceSheet.title'),
+        }}
+      />
     </ListPageLayout>
   )
 }

@@ -789,5 +789,12 @@
     "title": "Relevé de compte",
     "opening": "Solde d'ouverture",
     "closing": "Solde de clôture"
+  },
+  "detail": {
+    "title": "Détail des transactions",
+    "netTotal": "Total net",
+    "truncated": "Affichage des 2 000 premières lignes — affinez le rapport pour tout voir.",
+    "empty": "Aucune transaction derrière cette valeur.",
+    "backTo": "Retour à {report}"
   }
 }
