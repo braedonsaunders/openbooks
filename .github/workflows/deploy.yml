@@ -4,14 +4,12 @@ name: CI + Deploy (dev)
 # point the Dokploy "openbooks" compose at the new tag and redeploy → wait for
 # the health endpoint to serve the new build.
 #
-# Secrets: DOKPLOY_URL (https://cloud.rassaun.com), DOKPLOY_TOKEN (x-api-key),
-#          DOKPLOY_COMPOSE_ID (the openbooks compose service).
+# Secrets: DOKPLOY_URL (http://dokploy:3000 — the panel is LAN-only, reached
+#          from the shared self-hosted runner over dokploy-network),
+#          DOKPLOY_TOKEN (x-api-key), DOKPLOY_COMPOSE_ID (openbooks compose).
 #
-# The deploy job runs on GitHub-hosted runners against the public panel URL.
-# To move it onto the shared Dokploy runner instead (an openbooks-runner
-# container already exists in the github-runners project, pending PAT access),
-# change its runs-on to [self-hosted, linux, x64, dokploy] and swap
-# DOKPLOY_URL for http://dokploy:3000.
+# The deploy job runs on the shared Dokploy runner (openbooks-runner in the
+# github-runners project); check/build stay on GitHub-hosted runners.
 
 on:
   push:
@@ -74,7 +72,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, dokploy]
     timeout-minutes: 20
     environment: dev
     steps:
