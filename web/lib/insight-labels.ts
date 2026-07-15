@@ -1,6 +1,6 @@
 import "server-only";
 import { getTranslations } from "next-intl/server";
-import type { InsightCompileError, InsightLabelResolver } from "@openbooks/analytics";
+import type { InsightCompileErrorCode, InsightLabelResolver } from "@openbooks/analytics";
 
 /**
  * Bridge between the request locale and the analytics engine's injectable
@@ -20,8 +20,11 @@ export async function insightLabelResolver(): Promise<InsightLabelResolver> {
   };
 }
 
-/** Localized studio-facing message for a coded compile failure. */
-export async function insightCompileErrorMessage(e: InsightCompileError): Promise<string> {
+/** Localized studio-facing message for a coded compile/validation failure. */
+export async function insightCompileErrorMessage(e: {
+  code: InsightCompileErrorCode;
+  subject?: string;
+}): Promise<string> {
   const t = await getTranslations("insights");
   return t(`compileErrors.${e.code}`, { subject: e.subject ?? "" });
 }
