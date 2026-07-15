@@ -44,7 +44,11 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   return (
     <nav
       aria-label={t('ariaLabel')}
-      className="hidden min-w-0 flex-1 items-center gap-0.5 lg:flex"
+      // flex-1 min-w-0 so the bar yields space to the right-hand cluster
+      // (assistant + account, both shrink-0); overflow-x-auto with a hidden
+      // scrollbar means a bar too wide to fit SCROLLS instead of overflowing
+      // its box and colliding with that cluster.
+      className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto lg:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {navGroups.map((group, i) => {
         const open = openIdx === i
@@ -65,7 +69,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
                 onMouseEnter={() => enterMenu(i)}
                 onMouseLeave={scheduleClose}
                 className={cn(
-                  'flex h-14 items-center gap-1 whitespace-nowrap px-2.5 text-sm font-medium transition-colors',
+                  'flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium transition-colors',
                   groupActive
                     ? 'text-teal-700 dark:text-teal-300'
                     : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
