@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useTranslations } from 'next-intl'
 import { buildVizSpec, formatCell } from '../viz'
-import type { QueryResult, VizSettings, VizType } from '../types'
+import type { QueryResult, ResultColumn, VizSettings, VizType } from '../types'
 import { InsightChart } from './InsightChart'
 
 /**
@@ -10,6 +11,10 @@ import { InsightChart } from './InsightChart'
  * viz type + settings, it draws a table or the appropriate ECharts chart. Used
  * by the card studio's live preview AND the dashboard/home card tiles, so a card
  * looks identical everywhere it appears.
+ *
+ * Localization: column labels arrive already localized (the API compiles them
+ * with the request locale); this component localizes the chrome (empty states)
+ * and fixed-vocabulary cell values (ResultColumn.valueKind) via insights.viz.*.
  */
 export function InsightResultView({
   result,
@@ -23,12 +28,30 @@ export function InsightResultView({
   /** Fixed chart height in px; omit to fill a sized parent. */
   chartHeight?: number
 }) {
-  const spec = useMemo(() => buildVizSpec(result, vizType, settings ?? {}), [result, vizType, settings])
+  const t = useTranslations('insights.viz')
+
+  // Localize fixed-vocabulary dimension values ('yes'/'active'/…) everywhere
+  // they surface: chart categories, pie names, and table cells.
+  const valueLabel = useMemo(() => {
+    return (col: ResultColumn, v: unknown): string | null => {
+      if (!col.valueKind || typeof v !== 'string') return null
+      const known =
+        col.valueKind === 'yesNo'
+          ? v === 'yes' || v === 'no'
+          : v === 'active' || v === 'inactive'
+      return known ? t(`values.${v}`) : null
+    }
+  }, [t])
+
+  const spec = useMemo(
+    () => buildVizSpec(result, vizType, settings ?? {}, valueLabel),
+    [result, vizType, settings, valueLabel],
+  )
 
   if (spec.kind === 'empty') {
     return (
       <div className="flex h-full min-h-[8rem] items-center justify-center px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-        {spec.message}
+        {t(`empty.${spec.reason}`)}
       </div>
     )
   }
@@ -63,7 +86,7 @@ export function InsightResultView({
                 colSpan={spec.columns.length}
                 className="px-3 py-8 text-center text-slate-500 dark:text-slate-400"
               >
-                No rows.
+                {t('noRows')}
               </td>
             </tr>
           ) : (
@@ -82,7 +105,7 @@ export function InsightResultView({
                         : 'text-left text-slate-700 dark:text-slate-300')
                     }
                   >
-                    {formatCell(row[c.key], c.type)}
+                    {valueLabel(c, row[c.key]) ?? formatCell(row[c.key], c.type)}
                   </td>
                 ))}
               </tr>

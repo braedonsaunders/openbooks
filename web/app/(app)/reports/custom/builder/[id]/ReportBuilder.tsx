@@ -27,16 +27,6 @@ import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { FilterTree } from '../../FilterTree'
 import { ResultView } from '../../ResultView'
 
-// Message keys under reports.custom.builder.agg — translated at render.
-const AGG_LABEL_KEY: Record<ReportAggFn, string> = {
-  count: 'agg.count',
-  count_distinct: 'agg.countDistinct',
-  sum: 'agg.sum',
-  avg: 'agg.avg',
-  min: 'agg.min',
-  max: 'agg.max',
-}
-
 /** Columns that can be temporally binned (date/timestamp). */
 function isTemporal(entity: ReportEntity, key: string): boolean {
   const kind = entity.columns.find((c) => c.key === key)?.kind
@@ -63,6 +53,7 @@ export function ReportBuilder({
   const t = useTranslations('reports.custom.builder')
   const tk = useTranslations('reports.custom')
   const tc = useTranslations('common')
+  const tReports = useTranslations('reports')
   const router = useRouter()
   const [name, setName] = useState(definition.name)
   const [description, setDescription] = useState(definition.description ?? '')
@@ -214,11 +205,13 @@ export function ReportBuilder({
             <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)}>
               {REPORT_ENTITIES.map((e) => (
                 <option key={e.key} value={e.key}>
-                  {e.label}
+                  {tReports(`catalog.entities.${e.key}.label`)}
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{entity.description}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {tReports(`catalog.entities.${entity.key}.description`)}
+            </p>
           </div>
 
           <div className={field}>
@@ -279,7 +272,7 @@ export function ReportBuilder({
                 <option value="">{t('sortDefault')}</option>
                 {entity.columns.map((c) => (
                   <option key={c.key} value={c.key}>
-                    {c.label}
+                    {tReports(`catalog.columns.${entity.key}.${c.key}`)}
                   </option>
                 ))}
               </Select>
@@ -354,6 +347,7 @@ function RowsConfig({
   columns: ReportEntity['columns']
 }) {
   const t = useTranslations('reports.custom.builder')
+  const tReports = useTranslations('reports')
   const selected = query.columns ?? []
   const toggle = (key: string) => {
     const next = selected.includes(key) ? selected.filter((c) => c !== key) : [...selected, key]
@@ -378,7 +372,7 @@ function RowsConfig({
                     : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300')
                 }
               >
-                {c.label}
+                {tReports(`catalog.columns.${entity.key}.${c.key}`)}
               </button>
             )
           })}
@@ -393,7 +387,7 @@ function RowsConfig({
           <option value="">{t('noSections')}</option>
           {entity.columns.map((c) => (
             <option key={c.key} value={c.key}>
-              {c.label}
+              {tReports(`catalog.columns.${entity.key}.${c.key}`)}
             </option>
           ))}
         </Select>
@@ -418,6 +412,7 @@ function SummarizeConfig({
 }) {
   const t = useTranslations('reports.custom.builder')
   const tc = useTranslations('common')
+  const tReports = useTranslations('reports')
   const breakouts = query.breakouts ?? []
   const measures = query.measures ?? []
 
@@ -469,7 +464,7 @@ function SummarizeConfig({
               >
                 {entity.columns.map((c) => (
                   <option key={c.key} value={c.key}>
-                    {c.label}
+                    {tReports(`catalog.columns.${entity.key}.${c.key}`)}
                   </option>
                 ))}
               </Select>
@@ -540,7 +535,7 @@ function SummarizeConfig({
               >
                 {REPORT_AGG_FNS.map((fn) => (
                   <option key={fn} value={fn}>
-                    {AGG_LABEL_KEY[fn] ? t(AGG_LABEL_KEY[fn]) : fn}
+                    {tReports(`aggs.${fn}`)}
                   </option>
                 ))}
               </Select>
@@ -552,7 +547,7 @@ function SummarizeConfig({
                 >
                   {cols.map((c) => (
                     <option key={c.key} value={c.key}>
-                      {c.label}
+                      {tReports(`catalog.columns.${entity.key}.${c.key}`)}
                     </option>
                   ))}
                 </Select>

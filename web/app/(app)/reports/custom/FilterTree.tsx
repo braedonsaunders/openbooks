@@ -18,8 +18,9 @@ import {
  * column's kind (operatorsForKind), then a value input whose shape follows the
  * operator's `needsValue` ('none' | 'one' | 'list').
  *
- * Column and operator labels come from packages/reports (server-defined
- * constants) and render verbatim.
+ * Column and operator options are catalog keys from packages/reports; their
+ * display labels resolve through the reports.catalog.* / reports.operators.*
+ * message catalogs at render time.
  */
 
 type Node = ReportRule | ReportRuleGroup
@@ -133,6 +134,7 @@ function RuleRow({
   onRemove: () => void
 }) {
   const t = useTranslations('reports.custom.filterTree')
+  const tReports = useTranslations('reports')
   const column = entity.columns.find((c) => c.key === rule.field) ?? entity.columns[0]
   const ops = column ? operatorsForKind(column.kind) : []
   const opMeta = ops.find((o) => o.key === rule.op) ?? ops[0]
@@ -157,7 +159,7 @@ function RuleRow({
       >
         {entity.columns.map((c) => (
           <option key={c.key} value={c.key}>
-            {c.label}
+            {tReports(`catalog.columns.${entity.key}.${c.key}`)}
           </option>
         ))}
       </Select>
@@ -168,7 +170,7 @@ function RuleRow({
       >
         {ops.map((o) => (
           <option key={o.key} value={o.key}>
-            {o.label}
+            {tReports(`operators.${o.key}`)}
           </option>
         ))}
       </Select>

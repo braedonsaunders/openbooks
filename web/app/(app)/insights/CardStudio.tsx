@@ -302,11 +302,15 @@ export function CardStudio({
               <Select value={sourceKey} onChange={(e) => changeSource(e.target.value)} disabled={ro}>
                 {INSIGHT_SOURCES.map((s) => (
                   <option key={s.key} value={s.key}>
-                    {s.label}
+                    {t(`catalog.sources.${s.key}.label`)}
                   </option>
                 ))}
               </Select>
-              {source ? <p className="text-xs text-slate-500 dark:text-slate-400">{source.description}</p> : null}
+              {source ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t(`catalog.sources.${source.key}.description`)}
+                </p>
+              ) : null}
             </div>
           </section>
 
@@ -336,7 +340,7 @@ export function CardStudio({
                   >
                     {AGG_FUNCTIONS.map((a) => (
                       <option key={a.key} value={a.key}>
-                        {a.label}
+                        {t(`aggs.${a.key}`)}
                       </option>
                     ))}
                   </Select>
@@ -350,7 +354,7 @@ export function CardStudio({
                       <option value="">{t('cardStudio.selectFieldPlaceholder')}</option>
                       {measureFields.map((f) => (
                         <option key={f.key} value={f.key}>
-                          {f.label}
+                          {t(`catalog.fields.${sourceKey}.${f.key}`)}
                         </option>
                       ))}
                     </Select>
@@ -396,7 +400,7 @@ export function CardStudio({
                     >
                       {dimensionFields.map((ff) => (
                         <option key={ff.key} value={ff.key}>
-                          {ff.label}
+                          {t(`catalog.fields.${sourceKey}.${ff.key}`)}
                         </option>
                       ))}
                     </Select>
@@ -466,7 +470,7 @@ export function CardStudio({
                       >
                         {allFields.map((ff) => (
                           <option key={ff.key} value={ff.key}>
-                            {ff.label}
+                            {t(`catalog.fields.${sourceKey}.${ff.key}`)}
                           </option>
                         ))}
                       </Select>
@@ -485,11 +489,27 @@ export function CardStudio({
                       >
                         {ops.map((o) => (
                           <option key={o.key} value={o.key}>
-                            {o.label}
+                            {t(`operators.${o.key}`)}
                           </option>
                         ))}
                       </Select>
-                      {needsValue ? (
+                      {needsValue && f?.valueKind && meta?.needsValue === 'one' ? (
+                        // Fixed-vocabulary fields store stable codes — offer them
+                        // as a localized select instead of free text.
+                        <Select
+                          value={flt.value}
+                          onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+                          disabled={ro}
+                          className="flex-1"
+                        >
+                          <option value="">{t('cardStudio.filterPlaceholderValue')}</option>
+                          {(f.valueKind === 'yesNo' ? ['yes', 'no'] : ['active', 'inactive']).map((v) => (
+                            <option key={v} value={v}>
+                              {t(`viz.values.${v}`)}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : needsValue ? (
                         <Input
                           value={flt.value}
                           onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}

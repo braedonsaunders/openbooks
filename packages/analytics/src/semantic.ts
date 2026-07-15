@@ -13,6 +13,8 @@ import type { AggFn, FilterOp, SemanticType } from './types'
 export type CatalogField = {
   /** Public key used in stored queries (snake_case). */
   key: string
+  /** English display label. The web layer translates by key
+   *  (insights.catalog.fields.<source>.<field>) and falls back to this. */
   label: string
   /**
    * Table-qualified SQL expression used VERBATIM as the field reference
@@ -25,7 +27,16 @@ export type CatalogField = {
    *  `number`/`currency` → measurable + dimensionable. Set explicitly to force
    *  a numeric id to be a dimension, etc. */
   role?: FieldRole
+  /**
+   * Marks a category field whose VALUES are a fixed code set the renderer
+   * localizes ('yes'/'no', 'active'/'inactive'). The SQL expr must emit those
+   * codes verbatim — never prose — so stored filters stay locale-proof.
+   */
+  valueKind?: ValueKind
 }
+
+/** Fixed value vocabularies a category field can emit (see CatalogField.valueKind). */
+export type ValueKind = 'yesNo' | 'activeInactive'
 
 export type FieldRole = 'dimension' | 'measure' | 'both'
 

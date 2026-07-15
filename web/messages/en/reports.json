@@ -249,6 +249,191 @@
     "recipientsHint": "Comma-separated email addresses. Delivery is queued for the worker (see below).",
     "saveSchedule": "Save schedule",
     "saved": "Schedule saved",
-    "saveFailed": "Could not save schedule"
+    "saveFailed": "Could not save schedule",
+    "describe": {
+      "daily": "Daily at {time} ({zone})",
+      "weekly": "Weekly on {day} at {time} ({zone})",
+      "monthly": "Monthly on day {dayOfMonth} at {time} ({zone})",
+      "weekdays": {
+        "sun": "Sunday",
+        "mon": "Monday",
+        "tue": "Tuesday",
+        "wed": "Wednesday",
+        "thu": "Thursday",
+        "fri": "Friday",
+        "sat": "Saturday"
+      }
+    }
+  },
+  "catalog": {
+    "entities": {
+      "ledger_lines": {
+        "label": "Ledger lines",
+        "description": "Journal-line detail joined to entry, account, party and dimensions — the raw GL. One row per posted (or draft) journal line."
+      },
+      "documents": {
+        "label": "Documents",
+        "description": "Business documents — bills, invoices, payments, orders — with party and dimension labels."
+      },
+      "parties": {
+        "label": "Parties",
+        "description": "Customers, vendors and employees — one row per party with its role flags and employee detail."
+      },
+      "accounts": {
+        "label": "Accounts",
+        "description": "The chart of accounts — number, name, type and posting flags."
+      }
+    },
+    "columns": {
+      "ledger_lines": {
+        "posting_date": "Posting date",
+        "entry_number": "Entry #",
+        "entry_status": "Entry status",
+        "origin": "Origin",
+        "account_number": "Account #",
+        "account_name": "Account",
+        "account_type": "Account type",
+        "party_name": "Party",
+        "department": "Department",
+        "project": "Project",
+        "location": "Location",
+        "class": "Class",
+        "memo": "Memo",
+        "amount": "Amount (base)",
+        "currency": "Currency",
+        "txn_amount": "Amount (txn)",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "due_date": "Due date",
+        "is_open_item": "Open item",
+        "reconciled_at": "Reconciled at",
+        "entry_id": "Entry (id)",
+        "account_id": "Account (id)",
+        "party_id": "Party (id)"
+      },
+      "documents": {
+        "kind": "Kind",
+        "document_number": "Document #",
+        "party_name": "Party",
+        "document_date": "Document date",
+        "posting_date": "Posting date",
+        "due_date": "Due date",
+        "status": "Status",
+        "currency": "Currency",
+        "subtotal": "Subtotal",
+        "tax_total": "Tax",
+        "total": "Total",
+        "reference_number": "Reference #",
+        "billing_method": "Billing method",
+        "payment_hold_reason": "Payment hold",
+        "expected_pay_date": "Expected pay date",
+        "department": "Department",
+        "project": "Project",
+        "memo": "Memo",
+        "created_at": "Created at",
+        "id": "Document (id)",
+        "party_id": "Party (id)"
+      },
+      "parties": {
+        "display_name": "Name",
+        "legal_name": "Legal name",
+        "kind": "Kind",
+        "short_code": "Short code",
+        "email": "Email",
+        "phone": "Phone",
+        "is_active": "Active",
+        "is_customer": "Customer",
+        "is_vendor": "Vendor",
+        "is_employee": "Employee",
+        "employee_number": "Employee #",
+        "hired_on": "Hired on",
+        "terminated_on": "Terminated on",
+        "created_at": "Created at",
+        "id": "Party (id)"
+      },
+      "accounts": {
+        "number": "Account #",
+        "name": "Name",
+        "type": "Type",
+        "description": "Description",
+        "is_summary": "Summary",
+        "is_active": "Active",
+        "reconcilable": "Reconcilable",
+        "currency_restriction": "Currency restriction",
+        "created_at": "Created at",
+        "id": "Account (id)",
+        "parent_id": "Parent (id)"
+      }
+    }
+  },
+  "operators": {
+    "eq": "equals",
+    "neq": "not equals",
+    "in": "is any of",
+    "not_in": "is none of",
+    "gte": "on or after / ≥",
+    "lte": "on or before / ≤",
+    "is_null": "is empty",
+    "is_not_null": "is set",
+    "is_true": "is yes",
+    "is_false": "is no",
+    "contains": "contains",
+    "between_days_ago": "within last N days",
+    "due_within_days": "due within next N days",
+    "since_today": "is today",
+    "this_week": "is this week",
+    "this_month": "is this month",
+    "this_year": "is this year",
+    "before_now": "is in the past (overdue)"
+  },
+  "aggs": {
+    "count": "Count",
+    "count_distinct": "Distinct count",
+    "sum": "Sum",
+    "avg": "Average",
+    "min": "Min",
+    "max": "Max"
+  },
+  "run": {
+    "results": "Results",
+    "summary": "Summary",
+    "section": "{label}: {value}",
+    "rowCount": "{count, plural, one {# row} other {# rows}}",
+    "groupCount": "{count, plural, one {# group} other {# groups}}",
+    "summaryRows": "Rows",
+    "summaryGroups": "Groups",
+    "summarySource": "Source",
+    "summaryTotal": "Total {measure}",
+    "none": "(none)",
+    "yes": "yes",
+    "no": "no",
+    "measureOf": "{fn} of {column}",
+    "breakoutBy": "{column} (by {bin})",
+    "bins": {
+      "day": "day",
+      "week": "week",
+      "month": "month",
+      "quarter": "quarter",
+      "year": "year"
+    },
+    "csvSection": "Section"
+  },
+  "builtIns": {
+    "ap-aging-by-vendor": {
+      "name": "AP aging by vendor",
+      "description": "Open payable ledger lines summed per vendor and due month. Negative totals are amounts owed (credit-normal payables)."
+    },
+    "open-ar-by-customer": {
+      "name": "Open AR by customer",
+      "description": "Outstanding receivable balance per customer from open ledger items. Positive totals are amounts owed to you."
+    },
+    "gl-activity-by-account-fy": {
+      "name": "GL activity by account (this FY)",
+      "description": "Posted journal activity this year, one row per account: net movement and line count. Uses the calendar year until fiscal-period operators land."
+    },
+    "expense-detail-by-department-fy": {
+      "name": "Expense detail by department (this FY)",
+      "description": "Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount."
+    }
   }
 }

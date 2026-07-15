@@ -44,6 +44,7 @@ export default async function CustomReports({
 }) {
   const t = await getTranslations('reports.custom')
   const tc = await getTranslations('common')
+  const tReports = await getTranslations('reports')
   const authz = await requirePermission('reports.read')
   const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
   const sp = await searchParams
@@ -56,10 +57,10 @@ export default async function CustomReports({
   const kind = pickString(sp.kind)
 
   /** One-line human summary of what a plan does, for the list. Entity labels
-   *  come from packages/reports (server-defined constants) and render verbatim. */
+   *  resolve through the reports.catalog.* message catalog at render time. */
   function summarizePlan(query: ReportCustomQuery): string {
     const entity = REPORT_ENTITY_MAP[query.entity]
-    const source = entity?.label ?? query.entity
+    const source = entity ? tReports(`catalog.entities.${entity.key}.label`) : query.entity
     if (query.mode === 'summarize') {
       return t('list.summarySummarize', {
         source,
@@ -68,6 +69,22 @@ export default async function CustomReports({
       })
     }
     return t('list.summaryRows', { source, columns: (query.columns ?? []).length })
+  }
+
+  /** Built-in definitions localize by slug; custom slugs fall back to stored text. */
+  function definitionName(d: { kind: string; slug: string; name: string }): string {
+    return d.kind === 'built_in' && tReports.has(`builtIns.${d.slug}.name`)
+      ? tReports(`builtIns.${d.slug}.name`)
+      : d.name
+  }
+  function definitionDescription(d: {
+    kind: string
+    slug: string
+    description: string | null
+  }): string | null {
+    return d.kind === 'built_in' && tReports.has(`builtIns.${d.slug}.description`)
+      ? tReports(`builtIns.${d.slug}.description`)
+      : d.description
   }
 
   const where = sql`org_id = ${authz.user.orgId}
@@ -153,14 +170,14 @@ export default async function CustomReports({
                       href={`/reports/custom/run/${d.id}`}
                       className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                     >
-                      {d.name}
+                      {definitionName(d)}
                     </Link>
                     <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                       {summarizePlan(d.query as ReportCustomQuery)}
                     </div>
                   </TableCell>
                   <TableCell className="max-w-md text-sm text-slate-600 dark:text-slate-300">
-                    {d.description ?? '—'}
+                    {definitionDescription(d) ?? '—'}
                   </TableCell>
                   <TableCell>
                     <Badge variant={KIND_VARIANT[d.kind] ?? 'outline'}>

@@ -8,8 +8,10 @@ import {
   validateCustomQuery,
   type ReportCustomQuery,
   type ReportRuleGroup,
+  type ReportRunLabels,
   type ReportRunResult,
 } from '@openbooks/reports'
+import { reportCsvOptions, reportRunLabels } from './report-labels'
 
 /**
  * Server helpers for the custom-report studio (list/builder/run/schedule). The
@@ -69,16 +71,21 @@ export function mergeReportFilters(
 /**
  * Execute a validated plan against the org, using the engine executor over the
  * shared pg pool (a PgQueryable). `maxRows` clamps under the engine's 10k cap.
+ * Shaped display strings (headings, group titles, summary labels) come out in
+ * the request locale; pass `labels` to override (e.g. a future scheduled
+ * pipeline pinning the org default outside a request).
  */
 export async function executeReport(
   orgId: string,
   query: ReportCustomQuery,
   maxRows: number = REPORT_MAX_ROWS,
+  labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
   return runCustomQuery(pool, query, {
     orgId,
     entityMap: REPORT_ENTITY_MAP,
     maxRows: Math.min(maxRows, REPORT_MAX_ROWS),
+    labels: labels ?? (await reportRunLabels()),
   })
 }
 
@@ -107,7 +114,8 @@ export async function recordReportRun(args: {
 
   try {
     const result = await executeReport(args.orgId, args.query, args.maxRows ?? REPORT_MAX_ROWS)
-    const csv = reportResultToCsv(result)
+    // The stored CSV artifact bakes the locale of whoever triggered the run.
+    const csv = reportResultToCsv(result, await reportCsvOptions())
     await db.execute(sql`
       update report_runs set status = 'succeeded', row_count = ${result.rowCount},
              result_csv = ${csv}, finished_at = now(), updated_at = now()

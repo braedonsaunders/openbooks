@@ -142,7 +142,9 @@ export default async function InsightsCards({
                         <div className="text-xs font-normal text-slate-500 dark:text-slate-400">{row.description}</div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-slate-500 dark:text-slate-400">{source?.label ?? '—'}</TableCell>
+                    <TableCell className="text-slate-500 dark:text-slate-400">
+                      {source ? t(`catalog.sources.${source.key}.label`) : '—'}
+                    </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                         {viz ? <viz.Icon size={15} /> : null}

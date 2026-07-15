@@ -39,6 +39,7 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
       definition={{
         id: definition.id,
         kind: definition.kind,
+        slug: definition.slug,
         name: definition.name,
         description: definition.description,
         query: definition.query,

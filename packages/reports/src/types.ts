@@ -147,6 +147,13 @@ export function resolveReportLayout(raw: Partial<ReportLayoutConfig> | null | un
 // future scheduled-document pipeline — one shape, one rendered report.
 
 export type ReportGroup = {
+  /**
+   * Structural role: 'results' = the single unsectioned result table (viewers
+   * may hide its title), 'section' = one groupBy bucket, 'summary' = the
+   * summarize-mode table. Render decisions key off this — never off the
+   * (localized) title text.
+   */
+  kind: 'results' | 'section' | 'summary'
   title: string
   /** Optional second line under the group title (e.g. count or status). */
   subtitle?: string

@@ -15,7 +15,13 @@ export type EChartsOption = Record<string, unknown>
 export type VizSpec =
   | { kind: 'table'; columns: ResultColumn[]; rows: Record<string, unknown>[] }
   | { kind: 'chart'; chartType: Exclude<VizType, 'table'>; option: EChartsOption }
-  | { kind: 'empty'; message: string }
+  /** `reason` is a stable code the renderer translates. */
+  | { kind: 'empty'; reason: 'noData' | 'pickFields' }
+
+/** Locale hook for dimension VALUES baked into a chart (category axis, pie
+ *  slice names): return a display string for fixed-vocabulary columns
+ *  (col.valueKind), or null to keep the raw value. */
+export type VizValueFormatter = (col: ResultColumn, value: unknown) => string | null
 
 const AXIS_TEXT = '#94a3b8' // slate-400 — legible on light + dark
 const SPLIT_LINE = 'rgba(148,163,184,0.18)'
@@ -49,20 +55,27 @@ function resolveFields(result: QueryResult, settings: VizSettings) {
   return { category, values }
 }
 
-export function buildVizSpec(result: QueryResult, vizType: VizType, settings: VizSettings = {}): VizSpec {
+export function buildVizSpec(
+  result: QueryResult,
+  vizType: VizType,
+  settings: VizSettings = {},
+  formatValue?: VizValueFormatter,
+): VizSpec {
   if (vizType === 'table') {
     return { kind: 'table', columns: result.columns, rows: result.rows }
   }
   if (result.rows.length === 0) {
-    return { kind: 'empty', message: 'No data for this query.' }
+    return { kind: 'empty', reason: 'noData' }
   }
 
   const { category, values } = resolveFields(result, settings)
   if (!category || values.length === 0) {
-    return { kind: 'empty', message: 'Pick a dimension and at least one measure to chart this.' }
+    return { kind: 'empty', reason: 'pickFields' }
   }
 
-  const categories = result.rows.map((r) => formatCategory(r[category.key]))
+  const categories = result.rows.map(
+    (r) => formatValue?.(category, r[category.key]) ?? formatCategory(r[category.key]),
+  )
 
   if (vizType === 'pie') {
     // Pie uses a single measure (the first) over the category.
