@@ -41,6 +41,10 @@
       "sync": {
         "title": "Sincronización",
         "description": "Importe desde fuentes externas y concilie migraciones"
+      },
+      "ai": {
+        "title": "IA",
+        "description": "Proveedor, modelos y clave API cifrada para el asistente"
       }
     }
   },
@@ -456,6 +460,7 @@
       "projects": "Proyectos y costeo de trabajos",
       "time": "Tiempo y hojas de horas",
       "records": "Registros personalizados",
+      "assistant": "Asistente de IA",
       "sql": "Consola SQL",
       "sync": "Sincronización",
       "scripts": "Scripts",
@@ -491,6 +496,8 @@
     "records_read": "Ver registros personalizados",
     "records_create": "Crear y editar registros personalizados",
     "records_manage_types": "Diseñar tipos de registros personalizados",
+    "assistant_use": "Usar el asistente de IA",
+    "assistant_write": "Permitir que el asistente redacte borradores",
     "sql_execute": "Ejecutar consultas SQL de solo lectura",
     "sync_run": "Ejecutar sincronizaciones de fuentes externas",
     "scripts_manage": "Administrar scripts de usuario",
@@ -505,7 +512,52 @@
     "admin_roles_manage": "Administrar roles y permisos",
     "admin_nav_manage": "Personalizar la navegación",
     "admin_audit_read": "Ver el registro de auditoría",
+    "admin_ai_manage": "Gestionar la configuración de IA",
     "assets_read": "Ver activos fijos y depreciación",
     "assets_manage": "Crear y editar activos, ejecutar depreciación"
+  },
+  "ai": {
+    "metaTitle": "Configuración de IA",
+    "title": "Configuración de IA",
+    "description": "Elija el proveedor de IA que usa el asistente. La clave API se guarda cifrada — nunca en un archivo ni en una variable de entorno.",
+    "enabledLabel": "Activar las funciones de IA",
+    "providerLabel": "Proveedor",
+    "baseUrlLabel": "URL base",
+    "baseUrlRequired": "(obligatoria)",
+    "baseUrlOptional": "(anulación opcional)",
+    "baseUrlDefault": "Déjela vacía para usar la predeterminada: {url}",
+    "baseUrlHint": "Un punto de conexión público HTTPS compatible con OpenAI.",
+    "keyLabel": "Clave API",
+    "keyPlaceholder": "Pegue la clave API de su proveedor",
+    "keySavedPlaceholder": "•••••••••••• (guardada — escriba para reemplazar)",
+    "keySavedHint": "Hay una clave guardada, cifrada en reposo. Escriba una nueva para reemplazarla.",
+    "keyHint": "Se guarda cifrada en reposo; nunca sale del servidor.",
+    "modelsLabel": "Modelos",
+    "fastModelLabel": "Modelo rápido",
+    "fastModelHint": "consultas rápidas",
+    "smartModelLabel": "Modelo avanzado",
+    "smartModelHint": "el asistente",
+    "save": "Guardar configuración",
+    "saved": "Configuración de IA guardada.",
+    "saveFailed": "No se pudo guardar la configuración.",
+    "keyCleared": "Clave API eliminada.",
+    "removeKey": "Eliminar la clave API",
+    "testConnection": "Probar la conexión",
+    "testFailed": "La solicitud de prueba falló.",
+    "models": {
+      "load": "Cargar modelos",
+      "reload": "Recargar modelos",
+      "loading": "Cargando…",
+      "loaded": "{count, plural, one {# modelo disponible} other {# modelos disponibles}}",
+      "loadError": "No se pudieron cargar los modelos.",
+      "none": "Sin modelos",
+      "pick": "Elija un modelo…",
+      "loadFirst": "Cargue primero los modelos, o escriba el id manualmente",
+      "pickFromList": "Elegir de la lista",
+      "typeManually": "Escribir manualmente",
+      "current": "{id} (actual)",
+      "hint": "Cargue la lista de modelos con su clave API, o escriba un id de modelo manualmente.",
+      "idPlaceholder": "id del modelo"
+    }
   }
 }

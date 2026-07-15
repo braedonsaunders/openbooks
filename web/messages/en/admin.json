@@ -41,6 +41,10 @@
       "sync": {
         "title": "Sync",
         "description": "Import from external sources and reconcile migrations"
+      },
+      "ai": {
+        "title": "AI",
+        "description": "Provider, models, and encrypted API key for the assistant"
       }
     }
   },
@@ -456,6 +460,7 @@
       "projects": "Projects & job costing",
       "time": "Time & timesheets",
       "records": "Custom records",
+      "assistant": "AI assistant",
       "sql": "SQL workbench",
       "sync": "Sync",
       "scripts": "Scripting",
@@ -491,6 +496,8 @@
     "records_read": "View custom records",
     "records_create": "Create and edit custom records",
     "records_manage_types": "Design custom record types",
+    "assistant_use": "Use the AI assistant",
+    "assistant_write": "Let the assistant draft records",
     "sql_execute": "Run read-only SQL queries",
     "sync_run": "Run external-source syncs",
     "scripts_manage": "Manage user scripts",
@@ -505,7 +512,52 @@
     "admin_roles_manage": "Manage roles and permissions",
     "admin_nav_manage": "Customize navigation",
     "admin_audit_read": "View the audit log",
+    "admin_ai_manage": "Manage AI settings",
     "assets_read": "View fixed assets and depreciation",
     "assets_manage": "Create and edit assets, run depreciation"
+  },
+  "ai": {
+    "metaTitle": "AI settings",
+    "title": "AI settings",
+    "description": "Choose the AI provider the assistant uses. The API key is stored encrypted — never in a file or environment variable.",
+    "enabledLabel": "Enable AI features",
+    "providerLabel": "Provider",
+    "baseUrlLabel": "Base URL",
+    "baseUrlRequired": "(required)",
+    "baseUrlOptional": "(optional override)",
+    "baseUrlDefault": "Leave blank to use the default: {url}",
+    "baseUrlHint": "A public HTTPS OpenAI-compatible endpoint.",
+    "keyLabel": "API key",
+    "keyPlaceholder": "Paste your provider API key",
+    "keySavedPlaceholder": "•••••••••••• (saved — type to replace)",
+    "keySavedHint": "A key is on file, encrypted at rest. Type a new one to replace it.",
+    "keyHint": "Stored encrypted at rest; it never leaves the server.",
+    "modelsLabel": "Models",
+    "fastModelLabel": "Fast model",
+    "fastModelHint": "quick lookups",
+    "smartModelLabel": "Smart model",
+    "smartModelHint": "the assistant",
+    "save": "Save settings",
+    "saved": "AI settings saved.",
+    "saveFailed": "The settings could not be saved.",
+    "keyCleared": "API key removed.",
+    "removeKey": "Remove API key",
+    "testConnection": "Test connection",
+    "testFailed": "The test request failed.",
+    "models": {
+      "load": "Load models",
+      "reload": "Reload models",
+      "loading": "Loading…",
+      "loaded": "{count, plural, one {# model available} other {# models available}}",
+      "loadError": "Could not load models.",
+      "none": "No models",
+      "pick": "Pick a model…",
+      "loadFirst": "Load models first, or type the id manually",
+      "pickFromList": "Pick from list",
+      "typeManually": "Type manually",
+      "current": "{id} (current)",
+      "hint": "Load the live model list with your API key, or type a model id manually.",
+      "idPlaceholder": "model id"
+    }
   }
 }

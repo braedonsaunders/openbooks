@@ -1,6 +1,7 @@
 {
   "modules": {
     "dashboard": "Tableau de bord",
+    "assistant": "Assistant",
     "approvals": "Approbations",
     "insights": "Analyses",
     "purchase-orders": "Bons de commande",
@@ -20,10 +21,10 @@
     "items": "Articles et services",
     "journal": "Journal",
     "accounts": "Plan comptable",
+    "assets": "Immobilisations",
     "banking": "Banque",
     "close": "Clôture de période",
     "reports": "Rapports",
-    "custom-reports": "Rapports personnalisés",
     "sql": "SQL",
     "apps": "Applications",
     "records": "Types d’enregistrement",

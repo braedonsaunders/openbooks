@@ -11,6 +11,7 @@ import accounts from './accounts.json'
 import admin from './admin.json'
 import ap from './ap.json'
 import approvals from './approvals.json'
+import assistant from './assistant.json'
 import ar from './ar.json'
 import banking from './banking.json'
 import close from './close.json'
@@ -43,6 +44,7 @@ export default {
   admin,
   ap,
   approvals,
+  assistant,
   ar,
   banking,
   close,

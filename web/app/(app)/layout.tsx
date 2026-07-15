@@ -47,6 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           orgName={org ? `${org.name} · ${org.base_currency}` : 'openbooks'}
           groups={groups}
           defaultCollapsed={defaultCollapsed}
+          showAssistantLauncher={can(authz, 'assistant.use')}
         >
           {children}
         </AppShell>

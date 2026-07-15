@@ -43,6 +43,7 @@ permission gates → build → verify in preview → commit.
 | Period close | integrator | web/app/(app)/close, web/app/api/close | started |
 | Scripts + audit admin | integrator | web/app/(app)/admin/scripts, /admin/audit | pending |
 | Custom record types | agent | web/app/(app)/records, web/app/api/records, web/app/api/forms/options, schema/src/custom-records.ts, web/lib/record{s,-schema}.ts, web/components/record-fields.tsx | landed; schema UNMIGRATED (custom_record_types + custom_records + FKs pending) |
+| AI assistant (agent loop + accounting tools + /assistant chat + ⌘K launcher + multi-provider admin UI) | integrator | web/app/(app)/assistant, web/app/api/assistant, web/lib/assistant, web/lib/ai-conversations.ts, web/components/assistant, web/components/assistant-launcher.tsx, web/app/(app)/admin/ai, web/app/api/admin/ai, web/lib/secrets.ts, schema/src/ai.ts | DONE (0010 applied; roles re-seeded; provider+key configured per-org under Admin → AI, encrypted at rest with OPENBOOKS_DATA_KEY — no AI keys in env) |
 
 Shared files are PRE-STAGED by the integrator (nav registry entries + permission
 keys already exist for every module above). Agents: do NOT edit registry.ts,

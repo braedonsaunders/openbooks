@@ -1,6 +1,7 @@
 {
   "modules": {
     "dashboard": "Panel",
+    "assistant": "Asistente",
     "approvals": "Aprobaciones",
     "insights": "Análisis",
     "purchase-orders": "Órdenes de compra",
@@ -20,6 +21,7 @@
     "items": "Artículos y servicios",
     "journal": "Diario",
     "accounts": "Plan de cuentas",
+    "assets": "Activos fijos",
     "banking": "Bancos",
     "close": "Cierre de período",
     "reports": "Informes",

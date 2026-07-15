@@ -1,0 +1,707 @@
+import "server-only";
+import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
+import { can, type Authz } from "../authz";
+import { accountsWithBalances, entryDetail } from "../data";
+import {
+  accountRegister,
+  agingByParty,
+  balanceSheet,
+  cashFlow,
+  profitAndLoss,
+  trialBalance,
+} from "../reports";
+import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
+
+/**
+ * Read/search tools for the agentic assistant — the openbooks replacement for
+ * beaconhs's incident/document/training tools. Every tool is permission-gated
+ * (same keys the pages use), returns capped result sets, and reuses the exact
+ * query layer the UI renders from (web/lib/data.ts, web/lib/reports.ts) so the
+ * assistant can never disagree with the screens.
+ */
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD");
+const uuidInput = z.string().regex(UUID_RE, "uuid");
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function num(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// whoami
+// ---------------------------------------------------------------------------
+
+const whoami: AssistantToolDef = {
+  name: "whoami",
+  description:
+    "The current user's name, role, and permissions, plus the org name and base currency. Call this when unsure what the user may see or do. Read-only.",
+  category: "read",
+  gate: { mode: "public" },
+  inputSchema: z.object({}),
+  execute: async (_raw, authz): Promise<ToolResult> => {
+    const org = (await db.execute(
+      sql`select name, base_currency from orgs where id = ${authz.user.orgId}`,
+    )) as unknown as { rows: { name: string; base_currency: string }[] };
+    return {
+      ok: true,
+      data: {
+        name: authz.user.name,
+        email: authz.user.email,
+        role: authz.user.role,
+        org: org.rows[0]?.name ?? null,
+        baseCurrency: org.rows[0]?.base_currency ?? null,
+        permissions: [...authz.permissions].sort(),
+        canDraft: can(authz, "assistant.write") && can(authz, "gl.post"),
+      },
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Chart of accounts
+// ---------------------------------------------------------------------------
+
+const findAccounts: AssistantToolDef = {
+  name: "find_accounts",
+  description:
+    "Search the chart of accounts by number, name, or type, with current balances (balance-sheet accounts cumulative, P&L accounts fiscal-year-to-date, natural sign). Returns a capped list. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["gl.read"] },
+  inputSchema: z.object({
+    query: z.string().max(100).optional().describe("Match against account number or name"),
+    type: z.string().max(40).optional().describe("Account type, e.g. asset_bank, expense, income"),
+    asOf: dateInput.optional(),
+    includeInactive: z.boolean().optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as {
+      query?: string;
+      type?: string;
+      asOf?: string;
+      includeInactive?: boolean;
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 25, 50);
+    const all = await accountsWithBalances(a.asOf);
+    const q = a.query?.trim().toLowerCase();
+    const matches = all.filter((r) => {
+      if (!a.includeInactive && !r.is_active) return false;
+      if (a.type && r.type !== a.type) return false;
+      if (q && !(`${r.number ?? ""} ${r.name}`.toLowerCase().includes(q))) return false;
+      return true;
+    });
+    return {
+      ok: true,
+      data: {
+        total: matches.length,
+        returned: Math.min(matches.length, limit),
+        truncated: matches.length > limit,
+        asOf: a.asOf ?? today(),
+        items: matches.slice(0, limit).map((r) => ({
+          id: r.id,
+          number: r.number,
+          name: r.name,
+          type: r.type,
+          isSummary: r.is_summary,
+          isActive: r.is_active,
+          balance: num(r.balance),
+        })),
+      },
+    };
+  },
+};
+
+const accountRegisterTool: AssistantToolDef = {
+  name: "account_register",
+  description:
+    "The journal-line register for one account (most recent first): posting date, entry number, memo, party, signed amount — plus the account's lifetime balance. Use find_accounts first to get the account id. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["gl.read"] },
+  inputSchema: z.object({
+    accountId: uuidInput,
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as { accountId: string; limit?: number };
+    const limit = Math.min(a.limit ?? 25, 50);
+    const r = await accountRegister(a.accountId, limit, 0);
+    if (!r.account) return { ok: false, error: "account_not_found" };
+    return {
+      ok: true,
+      data: {
+        account: r.account,
+        totalLines: r.total,
+        returned: r.lines.length,
+        truncated: r.total > r.lines.length,
+        balanceDebitSigned: num(r.balance),
+        lines: r.lines.map((l: any) => ({
+          entryId: l.entry_id,
+          entryNumber: l.entry_number,
+          postingDate: l.posting_date,
+          memo: truncateText(l.memo ?? l.entry_memo, 200),
+          party: l.party,
+          amount: num(l.amount),
+        })),
+      },
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Journal entries
+// ---------------------------------------------------------------------------
+
+const findJournalEntries: AssistantToolDef = {
+  name: "find_journal_entries",
+  description:
+    "List posted-ledger journal entries with optional filters (free-text on entry number/memo, status, origin, posting-date range). Returns a capped list plus the total match count. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["gl.read"] },
+  inputSchema: z.object({
+    query: z.string().max(100).optional(),
+    status: z.enum(["draft", "posted", "reversed"]).optional(),
+    origin: z.string().max(40).optional(),
+    fromDate: dateInput.optional(),
+    toDate: dateInput.optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as {
+      query?: string;
+      status?: string;
+      origin?: string;
+      fromDate?: string;
+      toDate?: string;
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 20, 50);
+    let where = sql`true`;
+    if (a.query) {
+      const like = `%${a.query}%`;
+      where = sql`${where} and (e.entry_number ilike ${like} or e.memo ilike ${like})`;
+    }
+    if (a.status) where = sql`${where} and e.status = ${a.status}`;
+    if (a.origin) where = sql`${where} and e.origin = ${a.origin}`;
+    if (a.fromDate) where = sql`${where} and e.posting_date >= ${a.fromDate}`;
+    if (a.toDate) where = sql`${where} and e.posting_date <= ${a.toDate}`;
+    const rows = (await db.execute(sql`
+      select e.id, e.entry_number, e.posting_date, e.memo, e.status, e.origin,
+             e.source_document_id,
+             count(l.id) as line_count,
+             sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
+        from journal_entries e
+        join journal_lines l on l.entry_id = e.id
+       where ${where}
+       group by e.id
+       order by e.posting_date desc, e.entry_number desc
+       limit ${limit}
+    `)) as unknown as { rows: any[] };
+    const c = (await db.execute(
+      sql`select count(*) as n from journal_entries e where ${where}`,
+    )) as unknown as { rows: { n: string }[] };
+    const total = Number(c.rows[0]?.n ?? 0);
+    return {
+      ok: true,
+      data: {
+        total,
+        returned: rows.rows.length,
+        truncated: total > rows.rows.length,
+        items: rows.rows.map((r) => ({
+          id: r.id,
+          entryNumber: r.entry_number,
+          postingDate: r.posting_date,
+          memo: truncateText(r.memo, 200),
+          status: r.status,
+          origin: r.origin,
+          sourceDocumentId: r.source_document_id,
+          lineCount: Number(r.line_count),
+          totalDebits: num(r.total_debits),
+        })),
+      },
+    };
+  },
+};
+
+const getJournalEntry: AssistantToolDef = {
+  name: "get_journal_entry",
+  description:
+    "One journal entry in full: header (entry number, posting date, memo, status, origin) plus every line with account, party, department, and signed amount. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["gl.read"] },
+  inputSchema: z.object({ entryId: uuidInput }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as { entryId: string };
+    const r = await entryDetail(a.entryId);
+    if (!r.entry) return { ok: false, error: "entry_not_found" };
+    const e = r.entry as any;
+    return {
+      ok: true,
+      data: {
+        id: e.id,
+        entryNumber: e.entry_number,
+        postingDate: e.posting_date,
+        memo: truncateText(e.memo, 500),
+        status: e.status,
+        origin: e.origin,
+        sourceDocumentId: e.source_document_id,
+        reversesEntryNumber: e.reverses_number,
+        lines: r.lines.map((l: any) => ({
+          lineNumber: l.line_number,
+          account: `${l.account_number ?? ""} ${l.account_name}`.trim(),
+          amount: num(l.amount),
+          memo: truncateText(l.memo, 200),
+          party: l.party,
+          department: l.department,
+          isOpenItem: l.is_open_item,
+        })),
+      },
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Documents (bills, invoices, expenses, payments…)
+// ---------------------------------------------------------------------------
+
+/** Which permission covers each document kind — mirrors the module pages. */
+const KIND_PERM: Record<string, string> = {
+  vendor_bill: "ap.read",
+  vendor_payment: "ap.read",
+  vendor_credit: "ap.read",
+  purchase_order: "ap.read",
+  check: "ap.read",
+  card_charge: "ap.read",
+  card_refund: "ap.read",
+  customer_invoice: "ar.read",
+  customer_credit: "ar.read",
+  sales_order: "ar.read",
+  estimate: "ar.read",
+  expense_report: "expenses.read",
+  journal: "gl.read",
+  transfer: "gl.read",
+};
+
+function allowedKinds(authz: Authz): string[] {
+  return Object.keys(KIND_PERM).filter((k) => can(authz, KIND_PERM[k]!));
+}
+
+const findDocuments: AssistantToolDef = {
+  name: "find_documents",
+  description:
+    "Search transaction documents — vendor bills, customer invoices, expense reports, payments, orders, journals — by kind, status, document number, party name, or date range. Returns a capped list plus the total match count. Read-only.",
+  category: "search",
+  gate: {
+    mode: "anyOf",
+    perms: ["ap.read", "ar.read", "gl.read", "expenses.read"],
+  },
+  inputSchema: z.object({
+    kind: z.string().max(40).optional()
+      .describe("e.g. vendor_bill, customer_invoice, expense_report, vendor_payment, journal"),
+    status: z.enum(["draft", "pending_approval", "approved", "posted", "voided"]).optional(),
+    query: z.string().max(100).optional().describe("Match document number, reference, or memo"),
+    partyQuery: z.string().max(100).optional().describe("Match the party (vendor/customer) name"),
+    fromDate: dateInput.optional(),
+    toDate: dateInput.optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as {
+      kind?: string;
+      status?: string;
+      query?: string;
+      partyQuery?: string;
+      fromDate?: string;
+      toDate?: string;
+      limit?: number;
+    };
+    const kinds = allowedKinds(authz);
+    if (a.kind && !kinds.includes(a.kind)) {
+      return {
+        ok: false,
+        error: KIND_PERM[a.kind] ? "forbidden" : `unknown kind; use one of: ${kinds.join(", ")}`,
+      };
+    }
+    const limit = Math.min(a.limit ?? 20, 50);
+    let where = a.kind
+      ? sql`d.kind = ${a.kind}`
+      : sql`d.kind in ${kinds}`;
+    if (a.status) where = sql`${where} and d.status = ${a.status}`;
+    if (a.query) {
+      const like = `%${a.query}%`;
+      where = sql`${where} and (d.document_number ilike ${like} or d.reference_number ilike ${like} or d.memo ilike ${like})`;
+    }
+    if (a.partyQuery) where = sql`${where} and p.display_name ilike ${`%${a.partyQuery}%`}`;
+    if (a.fromDate) where = sql`${where} and d.document_date >= ${a.fromDate}`;
+    if (a.toDate) where = sql`${where} and d.document_date <= ${a.toDate}`;
+    const rows = (await db.execute(sql`
+      select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
+             d.due_date, d.status, d.currency, d.total, d.memo, p.display_name as party
+        from documents d
+        left join parties p on p.id = d.party_id
+       where ${where}
+       order by d.document_date desc, d.document_number desc
+       limit ${limit}
+    `)) as unknown as { rows: any[] };
+    const c = (await db.execute(sql`
+      select count(*) as n
+        from documents d
+        left join parties p on p.id = d.party_id
+       where ${where}
+    `)) as unknown as { rows: { n: string }[] };
+    const total = Number(c.rows[0]?.n ?? 0);
+    return {
+      ok: true,
+      data: {
+        total,
+        returned: rows.rows.length,
+        truncated: total > rows.rows.length,
+        items: rows.rows.map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          documentNumber: r.document_number,
+          referenceNumber: r.reference_number,
+          documentDate: r.document_date,
+          dueDate: r.due_date,
+          status: r.status,
+          currency: r.currency,
+          total: num(r.total),
+          party: r.party,
+          memo: truncateText(r.memo, 160),
+        })),
+      },
+    };
+  },
+};
+
+const getDocument: AssistantToolDef = {
+  name: "get_document",
+  description:
+    "One transaction document in full: header (number, party, dates, status, totals) plus every line with account/item, description, quantity, and amount. Read-only.",
+  category: "read",
+  gate: {
+    mode: "anyOf",
+    perms: ["ap.read", "ar.read", "gl.read", "expenses.read"],
+  },
+  inputSchema: z.object({ documentId: uuidInput }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { documentId: string };
+    const doc = (await db.execute(sql`
+      select d.*, p.display_name as party
+        from documents d
+        left join parties p on p.id = d.party_id
+       where d.id = ${a.documentId}
+    `)) as unknown as { rows: any[] };
+    const d = doc.rows[0];
+    if (!d) return { ok: false, error: "document_not_found" };
+    const perm = KIND_PERM[d.kind];
+    if (!perm || !can(authz, perm)) return { ok: false, error: "forbidden" };
+    const lines = (await db.execute(sql`
+      select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount,
+             l.tax_amount, a.number as account_number, a.name as account_name,
+             i.name as item_name
+        from document_lines l
+        left join accounts a on a.id = l.account_id
+        left join items i on i.id = l.item_id
+       where l.document_id = ${a.documentId}
+       order by l.line_number
+    `)) as unknown as { rows: any[] };
+    return {
+      ok: true,
+      data: {
+        id: d.id,
+        kind: d.kind,
+        documentNumber: d.document_number,
+        referenceNumber: d.reference_number,
+        party: d.party,
+        documentDate: d.document_date,
+        postingDate: d.posting_date,
+        dueDate: d.due_date,
+        status: d.status,
+        currency: d.currency,
+        subtotal: num(d.subtotal),
+        taxTotal: num(d.tax_total),
+        total: num(d.total),
+        memo: truncateText(d.memo, 500),
+        postedEntryId: d.posted_entry_id,
+        lines: lines.rows.map((l) => ({
+          lineNumber: l.line_number,
+          account: l.account_name ? `${l.account_number ?? ""} ${l.account_name}`.trim() : null,
+          item: l.item_name,
+          description: truncateText(l.description, 200),
+          quantity: l.quantity === null ? null : num(l.quantity),
+          unit: l.unit,
+          unitPrice: l.unit_price === null ? null : num(l.unit_price),
+          amount: num(l.amount),
+          taxAmount: l.tax_amount === null ? null : num(l.tax_amount),
+        })),
+      },
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Parties
+// ---------------------------------------------------------------------------
+
+const findParties: AssistantToolDef = {
+  name: "find_parties",
+  description:
+    "Find vendors, customers, and other parties by name, short code, or email. Returns a capped list. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["parties.read"] },
+  inputSchema: z.object({
+    query: z.string().max(100).optional(),
+    includeInactive: z.boolean().optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as { query?: string; includeInactive?: boolean; limit?: number };
+    const limit = Math.min(a.limit ?? 20, 50);
+    let where = a.includeInactive ? sql`true` : sql`is_active`;
+    if (a.query) {
+      const like = `%${a.query}%`;
+      where = sql`${where} and (display_name ilike ${like} or short_code ilike ${like} or email ilike ${like})`;
+    }
+    const rows = (await db.execute(sql`
+      select id, kind, display_name, short_code, email, phone, is_active
+        from parties where ${where}
+       order by display_name
+       limit ${limit}
+    `)) as unknown as { rows: any[] };
+    const c = (await db.execute(
+      sql`select count(*) as n from parties where ${where}`,
+    )) as unknown as { rows: { n: string }[] };
+    const total = Number(c.rows[0]?.n ?? 0);
+    return {
+      ok: true,
+      data: {
+        total,
+        returned: rows.rows.length,
+        truncated: total > rows.rows.length,
+        items: rows.rows.map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          displayName: r.display_name,
+          shortCode: r.short_code,
+          email: r.email,
+          phone: r.phone,
+          isActive: r.is_active,
+        })),
+      },
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Financial statements
+// ---------------------------------------------------------------------------
+
+const MAX_STATEMENT_ROWS = 200;
+
+function capItems<T>(items: T[]): { items: T[]; truncated: boolean } {
+  return {
+    items: items.slice(0, MAX_STATEMENT_ROWS),
+    truncated: items.length > MAX_STATEMENT_ROWS,
+  };
+}
+
+const profitAndLossTool: AssistantToolDef = {
+  name: "profit_and_loss",
+  description:
+    "Profit & loss statement for a posting-date range, optionally filtered by department or project: per-account rows (reader-signed, hierarchical) plus revenue, COGS, gross profit, expenses, and net income totals. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  inputSchema: z.object({
+    fromDate: dateInput,
+    toDate: dateInput,
+    departmentId: uuidInput.optional(),
+    projectId: uuidInput.optional(),
+  }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as { fromDate: string; toDate: string; departmentId?: string; projectId?: string };
+    const r = await profitAndLoss(a.fromDate, a.toDate, {
+      departmentId: a.departmentId,
+      projectId: a.projectId,
+    });
+    const { items, truncated } = capItems(
+      r.items.map((i) => ({
+        number: i.number,
+        name: i.name,
+        type: i.type,
+        depth: i.depth,
+        isSummary: i.isSummary,
+        balance: num(i.balance),
+      })),
+    );
+    return {
+      ok: true,
+      data: {
+        fromDate: a.fromDate,
+        toDate: a.toDate,
+        revenue: num(r.revenue),
+        cogs: num(r.cogs),
+        grossProfit: num(r.grossProfit),
+        expenses: num(r.expenses),
+        netIncome: num(r.netIncome),
+        truncated,
+        items,
+      },
+    };
+  },
+};
+
+const balanceSheetTool: AssistantToolDef = {
+  name: "balance_sheet",
+  description:
+    "Balance sheet as of a date: assets, liabilities, and equity account rows (reader-signed, hierarchical, incl. computed accumulated earnings) with section totals. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  inputSchema: z.object({ asOf: dateInput }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as { asOf: string };
+    const r = await balanceSheet(a.asOf);
+    const section = (rows: typeof r.assets) =>
+      capItems(
+        rows.map((i) => ({
+          number: i.number,
+          name: i.name,
+          depth: i.depth,
+          isSummary: i.isSummary,
+          balance: num(i.balance),
+        })),
+      );
+    return {
+      ok: true,
+      data: {
+        asOf: a.asOf,
+        totalAssets: num(r.totalAssets),
+        totalLiabilities: num(r.totalLiabilities),
+        totalEquity: num(r.totalEquity),
+        assets: section(r.assets),
+        liabilities: section(r.liabilities),
+        equity: section(r.equity),
+      },
+    };
+  },
+};
+
+const trialBalanceTool: AssistantToolDef = {
+  name: "trial_balance",
+  description:
+    "Trial balance as of a date: every account with nonzero activity, with lifetime debits, credits, and the debit-signed balance. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  inputSchema: z.object({ asOf: dateInput }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as { asOf: string };
+    const rows = await trialBalance(a.asOf);
+    const { items, truncated } = capItems(
+      rows.map((r) => ({
+        number: r.number,
+        name: r.name,
+        type: r.type,
+        debits: num(r.debits),
+        credits: num(r.credits),
+        balance: num(r.balance),
+      })),
+    );
+    return { ok: true, data: { asOf: a.asOf, accounts: rows.length, truncated, items } };
+  },
+};
+
+const agingTool: AssistantToolDef = {
+  name: "aging",
+  description:
+    "AR or AP aging by customer/vendor as of a date: open-item balances bucketed into current, 1–30, 31–60, 61–90, and 90+ days past due, plus totals. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
+  inputSchema: z.object({
+    side: z.enum(["ar", "ap"]),
+    asOf: dateInput.optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { side: "ar" | "ap"; asOf?: string; limit?: number };
+    if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
+      return { ok: false, error: "forbidden" };
+    }
+    const limit = Math.min(a.limit ?? 30, 100);
+    const r = await agingByParty(a.side, a.asOf ?? today());
+    return {
+      ok: true,
+      data: {
+        side: a.side,
+        asOf: r.asOf,
+        totals: r.totals,
+        parties: r.rows.length,
+        returned: Math.min(r.rows.length, limit),
+        truncated: r.rows.length > limit,
+        rows: r.rows.slice(0, limit).map((row) => ({
+          party: row.partyName,
+          current: row.current,
+          days1to30: row.b1,
+          days31to60: row.b2,
+          days61to90: row.b3,
+          over90: row.b4,
+          total: row.total,
+        })),
+      },
+    };
+  },
+};
+
+const cashFlowTool: AssistantToolDef = {
+  name: "cash_flow",
+  description:
+    "Direct-method cash flow statement for a posting-date range: operating / investing / financing sections with per-account-type lines, net change in cash, and the opening/closing bank balances that prove it. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  inputSchema: z.object({ fromDate: dateInput, toDate: dateInput }),
+  execute: async (raw, _authz): Promise<ToolResult> => {
+    const a = raw as { fromDate: string; toDate: string };
+    const r = await cashFlow(a.fromDate, a.toDate);
+    return {
+      ok: true,
+      data: {
+        fromDate: a.fromDate,
+        toDate: a.toDate,
+        sections: r.sections.map((s) => ({
+          section: s.section,
+          subtotal: num(s.subtotal),
+          lines: s.lines.map((l) => ({ label: l.label, amount: num(l.amount) })),
+        })),
+        netChange: num(r.netChange),
+        openingCash: num(r.openingCash),
+        closingCash: num(r.closingCash),
+        reconciliationGap: num(r.reconciliationGap),
+      },
+    };
+  },
+};
+
+export const READ_TOOLS: AssistantToolDef[] = [
+  whoami,
+  findAccounts,
+  accountRegisterTool,
+  findJournalEntries,
+  getJournalEntry,
+  findDocuments,
+  getDocument,
+  findParties,
+  profitAndLossTool,
+  balanceSheetTool,
+  trialBalanceTool,
+  agingTool,
+  cashFlowTool,
+];

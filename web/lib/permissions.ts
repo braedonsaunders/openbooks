@@ -55,6 +55,10 @@ export const PERMISSION_CATALOGUE = [
   "records.read",
   "records.create",
   "records.manage_types",
+  // AI assistant — use is table stakes; write lets it DRAFT records (which the
+  // tool-level gates further restrict, e.g. gl.post for journal drafts)
+  "assistant.use",
+  "assistant.write",
   // SQL workbench — read-only ad hoc queries
   "sql.execute",
   // External-source sync/migration runs
@@ -73,6 +77,7 @@ export const PERMISSION_CATALOGUE = [
   "admin.roles.manage",
   "admin.nav.manage",
   "admin.audit.read",
+  "admin.ai.manage",
 ] as const;
 
 export type CataloguePermission = (typeof PERMISSION_CATALOGUE)[number];
@@ -189,6 +194,14 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "assistant",
+    labelKey: "permissions.groups.assistant",
+    permissions: [
+      { key: "assistant.use", labelKey: permissionLabelKey("assistant.use") },
+      { key: "assistant.write", labelKey: permissionLabelKey("assistant.write") },
+    ],
+  },
+  {
     key: "sql",
     labelKey: "permissions.groups.sql",
     permissions: [{ key: "sql.execute", labelKey: permissionLabelKey("sql.execute") }],
@@ -218,6 +231,7 @@ export const PERMISSION_GROUPS: {
       { key: "admin.roles.manage", labelKey: permissionLabelKey("admin.roles.manage") },
       { key: "admin.nav.manage", labelKey: permissionLabelKey("admin.nav.manage") },
       { key: "admin.audit.read", labelKey: permissionLabelKey("admin.audit.read") },
+      { key: "admin.ai.manage", labelKey: permissionLabelKey("admin.ai.manage") },
     ],
   },
 ];
@@ -273,6 +287,8 @@ export const BUILT_IN_ROLES: Record<
       "time.read",
       "time.manage",
       "time.approve",
+      "assistant.use",
+      "assistant.write",
       "sql.execute",
       "sync.run",
       "parties.read",
@@ -312,6 +328,8 @@ export const BUILT_IN_ROLES: Record<
       "assets.manage",
       "time.read",
       "time.manage",
+      "assistant.use",
+      "assistant.write",
     ],
   },
   approver: {
@@ -329,12 +347,13 @@ export const BUILT_IN_ROLES: Record<
       "records.read",
       "time.read",
       "time.approve",
+      "assistant.use",
     ],
   },
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read"],
+    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use"],
   },
 };
 
