@@ -134,13 +134,23 @@
         "vendorPayment": "Vendor payments",
         "customerPayment": "Customer payments",
         "expenseReport": "Expense reports",
-        "journal": "Journal entries"
+        "journal": "Journal entries",
+        "vendorCredit": "Vendor credits",
+        "customerCredit": "Customer credit memos",
+        "cardCharge": "Card charges",
+        "cardRefund": "Card refunds",
+        "check": "Checks"
       },
       "lines": {
         "vendorBill": "Vendor bill lines",
         "customerInvoice": "Customer invoice lines",
         "expenseReport": "Expense report lines",
-        "journal": "Journal entry lines"
+        "journal": "Journal entry lines",
+        "vendorCredit": "Vendor credit lines",
+        "customerCredit": "Customer credit memo lines",
+        "cardCharge": "Card charge lines",
+        "cardRefund": "Card refund lines",
+        "check": "Check lines"
       }
     },
     "types": {
