@@ -94,7 +94,8 @@
     "scaleThousands": "Miles",
     "scaleMillions": "Millones",
     "showZeros": "Mostrar ceros",
-    "truncated": "Se ocultaron algunas columnas de desglose para mantener el informe legible."
+    "truncated": "Se ocultaron algunas columnas de desglose para mantener el informe legible.",
+    "options": "Opciones"
   },
   "balanceSheet": {
     "title": "Balance general",
@@ -819,6 +820,7 @@
     "xlsx": "Excel",
     "csv": "CSV",
     "print": "Imprimir",
-    "printFailed": "No se pudo abrir el cuadro de impresión"
+    "printFailed": "No se pudo abrir el cuadro de impresión",
+    "export": "Exportar"
   }
 }

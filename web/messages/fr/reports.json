@@ -94,7 +94,8 @@
     "scaleThousands": "Milliers",
     "scaleMillions": "Millions",
     "showZeros": "Afficher les zéros",
-    "truncated": "Certaines colonnes de ventilation ont été masquées pour garder le rapport lisible."
+    "truncated": "Certaines colonnes de ventilation ont été masquées pour garder le rapport lisible.",
+    "options": "Options"
   },
   "balanceSheet": {
     "title": "Bilan",
@@ -819,6 +820,7 @@
     "xlsx": "Excel",
     "csv": "CSV",
     "print": "Imprimer",
-    "printFailed": "Impossible d'ouvrir la boîte d'impression"
+    "printFailed": "Impossible d'ouvrir la boîte d'impression",
+    "export": "Exporter"
   }
 }

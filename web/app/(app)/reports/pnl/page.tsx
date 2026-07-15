@@ -8,7 +8,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { StatementMatrixTable } from '../StatementMatrixTable'
 import { StatementPaper } from '../StatementPaper'
-import { StatementExport } from '../StatementExport'
+import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
 
@@ -41,7 +41,6 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
     orgInfo(),
   ])
 
-  const periodQs = new URLSearchParams({ from: period.from, to: period.to }).toString()
   const scale = scaleFactor(q.scale)
   const backParams = new URLSearchParams()
   for (const [k, v] of Object.entries(sp)) if (v) backParams.set(k, v)
@@ -55,12 +54,6 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
             title={t('pnl.title')}
             description={`${period.label}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={
-              <>
-                <SaveViewButton />
-                <StatementExport kind="pnl" params={sp} />
-              </>
-            }
           />
           <ReportFilterBar
             controls={{
@@ -73,6 +66,12 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
               scale: true,
             }}
             dimensions={opts}
+            actions={
+              <>
+                <SaveViewButton />
+                <ExportMenu kind="pnl" params={sp} />
+              </>
+            }
           />
           {view.truncated && (
             <p className="text-xs text-amber-600 dark:text-amber-400">{t('filterBar.truncated')}</p>
@@ -89,7 +88,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
         <StatementMatrixTable
           view={view}
           scale={q.scale}
-          periodQs={`?${periodQs}`}
+          currency={org?.base_currency}
           drill={{ dims: q.dims, basis: q.basis, back: backHref, backLabel: t('pnl.title') }}
         />
       </StatementPaper>

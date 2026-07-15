@@ -32,8 +32,8 @@ export function SaveViewButton() {
   }
 
   return (
-    <Button variant="outline" onClick={save}>
-      {saved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
+    <Button variant="outline" size="sm" onClick={save}>
+      {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
       {saved ? tc('feedback.saved') : t('save')}
     </Button>
   )

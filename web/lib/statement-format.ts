@@ -12,12 +12,24 @@ export function scaleDivisor(scale: ReportScale): number {
   return scale === 'thousands' ? 1000 : scale === 'millions' ? 1_000_000 : 1
 }
 
-/** Format a signed amount: parentheses for negatives, dash for ~zero. */
-export function formatAmount(value: number, scale: ReportScale = 'actual'): string {
+/** The symbol for a currency code (CAD/USD → $, EUR → €, …), via Intl. */
+export function currencySymbol(code: string | undefined): string {
+  if (!code) return '$'
+  try {
+    const parts = new Intl.NumberFormat('en', { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' }).formatToParts(0)
+    return parts.find((p) => p.type === 'currency')?.value ?? '$'
+  } catch {
+    return '$'
+  }
+}
+
+/** Format a signed amount: currency symbol, parentheses for negatives, dash for
+ *  zero. `symbol` is prefixed (inside the parens for negatives, GAAP-style). */
+export function formatAmount(value: number, scale: ReportScale = 'actual', symbol = ''): string {
   const scaled = value / scaleDivisor(scale)
   const digits = scale === 'actual' ? 2 : 0
   if (Math.abs(scaled) < (digits === 0 ? 0.5 : 0.005)) return DASH
-  const abs = Math.abs(scaled).toLocaleString('en-CA', {
+  const abs = symbol + Math.abs(scaled).toLocaleString('en-CA', {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   })
@@ -31,9 +43,9 @@ export function formatPercent(value: number): string {
 }
 
 /** Format one matrix cell by its column kind. */
-export function formatCell(value: number, kind: StatementColumnKind, scale: ReportScale = 'actual'): string {
+export function formatCell(value: number, kind: StatementColumnKind, scale: ReportScale = 'actual', symbol = ''): string {
   if (kind === 'variance_pct') return formatPercent(value)
-  return formatAmount(value, scale)
+  return formatAmount(value, scale, symbol)
 }
 
 /** Whether a cell should read as "negative" for red-text styling. */
