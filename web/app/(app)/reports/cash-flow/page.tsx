@@ -1,10 +1,11 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { cashFlow, currentFiscalYearEnd, dimensionOptions, fiscalYearRange, type CashFlowSection } from '../../../../lib/reports'
+import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
+import { resolvePeriod } from '../../../../lib/periods'
+import { parseReportQuery } from '../../../../lib/report-filters'
 import { money } from '../../../../lib/format'
-import { DimensionFilter } from '../DimensionFilter'
+import { ReportFilterBar } from '../ReportFilterBar'
 import { StatementExport } from '../StatementExport'
 import { SaveViewButton } from '../SaveViewButton'
 
@@ -15,21 +16,17 @@ const SECTION_ORDER: CashFlowSection[] = ['operating', 'investing', 'financing']
 export default async function CashFlow({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; dept?: string; project?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('reports.cashFlow')
   const tr = await getTranslations('reports')
   const sp = await searchParams
-  const fyNow = await currentFiscalYearEnd()
-  // Same FY presets as the P&L — driven by the org's configured fiscal-year
-  // start month, so the two statements always share a period.
-  const fyPresets = await Promise.all([fyNow, fyNow - 1, fyNow - 2].map((y) => fiscalYearRange(y)))
-  const def = fyPresets[0]
-  const from = sp.from ?? def.from
-  const to = sp.to ?? def.to
-  const dims = { departmentId: sp.dept || undefined, projectId: sp.project || undefined }
+  const q = parseReportQuery(sp)
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const from = period.from
+  const to = period.to
+  const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
   const [cf, opts] = await Promise.all([cashFlow(from, to, dims), dimensionOptions()])
-  const keepDims = `dept=${sp.dept ?? ''}&project=${sp.project ?? ''}`
 
   const sectionLabels: Record<CashFlowSection, string> = {
     operating: t('sections.operating'),
@@ -47,20 +44,9 @@ export default async function CashFlow({
             title={t('title')}
             description={t('dateRange', { from, to })}
             back={{ href: '/reports', label: tr('hub.title') }}
-            actions={<><SaveViewButton /><StatementExport kind="cash-flow" params={{ from, to, dept: sp.dept, project: sp.project }} /></>}
+            actions={<><SaveViewButton /><StatementExport kind="cash-flow" params={sp} /></>}
           />
-          <div className="flex flex-wrap items-center gap-2">
-            {fyPresets.map((r) => {
-              const active = from === r.from && to === r.to
-              return (
-                <Link key={r.label} href={`/reports/cash-flow?from=${r.from}&to=${r.to}&${keepDims}`}>
-                  <Badge variant={active ? 'default' : 'outline'}>{r.label}</Badge>
-                </Link>
-              )
-            })}
-            <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            <DimensionFilter departments={opts.departments} projects={opts.projects} />
-          </div>
+          <ReportFilterBar controls={{ period: true, dimensions: true }} dimensions={opts} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label={t('openingCash')} value={cf.openingCash} />
             <Stat label={t('netChange')} value={cf.netChange} tone={cf.netChange >= 0 ? 'good' : 'bad'} />

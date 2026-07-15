@@ -419,7 +419,11 @@
       "defaultLanguage": "Default language",
       "defaultLanguageHint": "The language the app renders in for everyone who hasn’t picked their own in the account menu.",
       "baseCurrency": "Base currency",
-      "baseCurrencyHint": "The reporting currency the ledger balances in. Add more currencies before switching."
+      "baseCurrencyHint": "The reporting currency the ledger balances in. Add more currencies before switching.",
+      "reportPdfStyle": "Financial report PDF style",
+      "reportPdfStyleModern": "Modern (branded)",
+      "reportPdfStyleFormal": "Formal (GAAP)",
+      "reportPdfStyleHint": "How exported financial statements look: Modern uses your brand accent and a sans-serif face; Formal is a classic serif, greyscale, audit-ready statement."
     },
     "fiscal": {
       "title": "Fiscal year",

@@ -5,3 +5,11 @@ export * from './types'
 export * from './page'
 export { drawTable, computeColumnWidths } from './table'
 export { renderPdfDocument } from './document'
+export { renderStatementPdf } from './statement'
+export type {
+  StatementPdfInput,
+  StatementPdfColumn,
+  StatementPdfColumnKind,
+  StatementPdfRow,
+  StatementPdfStyle,
+} from './statement'

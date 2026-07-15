@@ -3,13 +3,16 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   renderPdfDocument,
+  renderStatementPdf,
   resolvePdfPageSetup,
   type PdfBranding,
   type PdfColumnAlign,
   type PdfDocumentInput,
   type PdfPageSetup,
   type PdfTableGroup,
+  type StatementPdfStyle,
 } from '@openbooks/pdf'
+import type { StatementView } from './statement-matrix'
 import {
   reportResultToXlsx,
   reportResultToCsv,
@@ -44,16 +47,18 @@ export type ExportData = {
 
 // --- branding ---------------------------------------------------------------
 
-export async function orgBranding(): Promise<PdfBranding> {
+export async function orgBranding(): Promise<PdfBranding & { reportPdfStyle: StatementPdfStyle }> {
   const r = (await db.execute(sql`
     select name,
-           (select settings ->> 'brandPrimary' from orgs o2 limit 1) as brand_primary
+           settings ->> 'brandPrimary' as brand_primary,
+           settings ->> 'reportPdfStyle' as report_pdf_style
       from orgs limit 1
-  `)) as unknown as { rows: { name: string; brand_primary: string | null }[] }
+  `)) as unknown as { rows: { name: string; brand_primary: string | null; report_pdf_style: string | null }[] }
   const row = r.rows[0]
   return {
     orgName: row?.name ?? 'openbooks',
     primaryColor: row?.brand_primary || null,
+    reportPdfStyle: row?.report_pdf_style === 'formal' ? 'formal' : 'modern',
   }
 }
 
@@ -416,6 +421,176 @@ export function cashFlowExportData(
       { label: t('cashFlow.closingCash'), value: cf.closingCash },
     ],
     groups,
+  }
+}
+
+// --- multi-column statement view (P&L / Balance Sheet) ----------------------
+// The new matrix engine produces a StatementView (columns + typed lines). These
+// adapters render it as a professional statement PDF, and flatten it for the
+// existing XLSX/CSV pipeline.
+
+function scaleForExport(scale: 'actual' | 'thousands' | 'millions'): { divisor: number; note: string } {
+  if (scale === 'thousands') return { divisor: 1000, note: 'In thousands' }
+  if (scale === 'millions') return { divisor: 1_000_000, note: 'In millions' }
+  return { divisor: 1, note: '' }
+}
+
+/** Render a StatementView to a professional statement PDF Buffer. */
+export async function renderStatementViewPdf(
+  view: StatementView,
+  branding: PdfBranding & { reportPdfStyle: StatementPdfStyle },
+  page: PdfPageSetup,
+  opts: {
+    title: string
+    periodPhrase: string
+    scale: 'actual' | 'thousands' | 'millions'
+    generatedAt?: Date
+  },
+): Promise<Buffer> {
+  const { divisor, note } = scaleForExport(opts.scale)
+  return renderStatementPdf({
+    companyName: branding.orgName,
+    title: opts.title,
+    periodPhrase: opts.periodPhrase,
+    scaleNote: note || undefined,
+    decimals: divisor === 1 ? 2 : 0,
+    columns: view.columns.map((c) => ({ label: c.label, kind: c.kind })),
+    rows: view.lines.map((l) => ({
+      kind: l.kind,
+      label: l.label,
+      indent: l.kind === 'account' ? l.depth : 0,
+      values: l.values?.map((v, i) => (view.columns[i]!.kind === 'variance_pct' ? v : v / divisor)),
+    })),
+    style: branding.reportPdfStyle,
+    branding,
+    page,
+    generatedAt: opts.generatedAt ?? new Date(),
+    footnote: divisor !== 1 ? 'Amounts are rounded; columns may not sum exactly.' : undefined,
+  })
+}
+
+/** Flatten a StatementView into ExportData (one table) for XLSX/CSV. Amounts
+ *  stay numeric; the account column is indented to preserve hierarchy. */
+export function statementViewToExportData(
+  view: StatementView,
+  opts: { title: string; dateRangeLabel: string; accountLabel: string },
+): ExportData {
+  const columns = [opts.accountLabel, ...view.columns.map((c) => c.label)]
+  const rows: (string | number | null)[][] = view.lines.map((l) => {
+    const label = l.kind === 'account' ? `${indent(l.depth)}${l.label}` : l.label
+    if (!l.values) return [label, ...view.columns.map(() => null)]
+    return [label, ...l.values.map((v) => (Number.isFinite(v) ? v : null))]
+  })
+  return {
+    title: opts.title,
+    dateRangeLabel: opts.dateRangeLabel,
+    summary: [],
+    groups: [
+      {
+        kind: 'results',
+        title: opts.title,
+        columns,
+        rows,
+        align: ['left', ...view.columns.map(() => 'right' as PdfColumnAlign)],
+      },
+    ],
+  }
+}
+
+// --- detail-report adapters (General Ledger, Journal, Registers, Statement) --
+
+import type {
+  GeneralLedgerResult,
+  JournalReportResult,
+  RegisterResult,
+  PartnerStatementResult,
+} from './reports'
+
+const LEDGER_ALIGN: PdfColumnAlign[] = ['left', 'left', 'left', 'left', 'right', 'right', 'right']
+
+export function generalLedgerExportData(gl: GeneralLedgerResult, title: string, t: Translator): ExportData {
+  const columns = [
+    t('export.columns.accountName'),
+    t('generalLedger.columns.date'),
+    t('generalLedger.columns.entry'),
+    t('generalLedger.columns.detail'),
+    t('trialBalance.columns.debits'),
+    t('trialBalance.columns.credits'),
+    t('export.columns.balance'),
+  ]
+  const rows: (string | number | null)[][] = []
+  for (const a of gl.accounts) {
+    const acct = `${a.number ?? ''} ${a.name}`.trim()
+    rows.push([acct, '', '', t('generalLedger.opening'), null, null, a.opening])
+    for (const l of a.lines) {
+      rows.push([acct, l.date, l.entryNumber ?? '', [l.party, l.memo].filter(Boolean).join(' · '), l.debit || null, l.credit || null, l.balance])
+    }
+    rows.push([acct, '', '', t('generalLedger.closing'), null, null, a.closing])
+  }
+  return { title, dateRangeLabel: t('pnl.dateRange', { from: gl.from, to: gl.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: LEDGER_ALIGN }] }
+}
+
+export function journalExportData(j: JournalReportResult, title: string, t: Translator): ExportData {
+  const columns = [
+    t('generalLedger.columns.entry'),
+    t('generalLedger.columns.date'),
+    t('export.columns.accountName'),
+    t('journal.columns.detail'),
+    t('trialBalance.columns.debits'),
+    t('trialBalance.columns.credits'),
+  ]
+  const rows: (string | number | null)[][] = []
+  for (const e of j.entries) {
+    for (const l of e.lines) {
+      rows.push([e.entryNumber ?? '', e.date, `${l.accountNumber ?? ''} ${l.accountName}`.trim(), [l.party, l.memo].filter(Boolean).join(' · '), l.debit || null, l.credit || null])
+    }
+  }
+  return { title, dateRangeLabel: t('pnl.dateRange', { from: j.from, to: j.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'left', 'right', 'right'] }] }
+}
+
+export function registerExportData(reg: RegisterResult, title: string, t: Translator): ExportData {
+  const columns = [
+    t('export.columns.party'),
+    t('generalLedger.columns.date'),
+    t('generalLedger.columns.entry'),
+    t('trialBalance.columns.debits'),
+    t('trialBalance.columns.credits'),
+    t('export.columns.balance'),
+  ]
+  const rows: (string | number | null)[][] = []
+  for (const pt of reg.parties) {
+    const name = pt.partyName ?? '—'
+    rows.push([name, '', t('generalLedger.opening'), null, null, pt.opening])
+    for (const l of pt.lines) rows.push([name, l.date, l.entryNumber ?? '', l.debit || null, l.credit || null, l.balance])
+    rows.push([name, '', t('registers.closing'), null, null, pt.closing])
+  }
+  return { title, dateRangeLabel: t('pnl.dateRange', { from: reg.from, to: reg.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'right', 'right', 'right'] }] }
+}
+
+export function partnerStatementExportData(st: PartnerStatementResult, t: Translator): ExportData {
+  const title = st.party.name ?? t('statements.title')
+  const columns = [
+    t('generalLedger.columns.date'),
+    t('generalLedger.columns.entry'),
+    t('trialBalance.columns.debits'),
+    t('trialBalance.columns.credits'),
+    t('export.columns.balance'),
+  ]
+  const rows: (string | number | null)[][] = [['', t('statements.opening'), null, null, st.opening]]
+  for (const l of st.lines) rows.push([l.date, l.entryNumber ?? '', l.debit || null, l.credit || null, l.balance])
+  rows.push(['', t('statements.closing'), null, null, st.closing])
+  return {
+    title,
+    dateRangeLabel: t('pnl.dateRange', { from: st.from, to: st.to }),
+    summary: [
+      { label: t('aging.buckets.current'), value: st.aging.current },
+      { label: t('aging.buckets.b1'), value: st.aging.b1 },
+      { label: t('aging.buckets.b2'), value: st.aging.b2 },
+      { label: t('aging.buckets.b3'), value: st.aging.b3 },
+      { label: t('aging.buckets.b4'), value: st.aging.b4 },
+      { label: t('aging.columns.total'), value: st.aging.total },
+    ],
+    groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'right', 'right', 'right'] }],
   }
 }
 

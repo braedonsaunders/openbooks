@@ -5,11 +5,24 @@ import { useTranslations } from 'next-intl'
 import { Button, Input, Select } from '@openbooks/ui'
 import {
   operatorsForKind,
+  PERIOD_PRESETS,
+  PERIOD_PRESET_GROUP_LABELS,
+  type PeriodPresetGroup,
   type ReportEntity,
   type ReportFilterOperator,
   type ReportRule,
   type ReportRuleGroup,
 } from '@openbooks/reports'
+
+const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
+  'fiscal_year',
+  'fiscal_quarter',
+  'fiscal_half',
+  'period',
+  'calendar',
+  'rolling',
+  'days',
+]
 
 /**
  * Recursive nested and/or filter builder. Edits a ReportRuleGroup in place via
@@ -179,7 +192,23 @@ function RuleRow({
           </option>
         ))}
       </Select>
-      {needsValue === 'one' && options?.length ? (
+      {rule.op === 'period_preset' ? (
+        <Select
+          className="h-8 w-52"
+          value={typeof rule.value === 'string' ? rule.value : 'this_fiscal_year'}
+          onChange={(e) => onChange({ ...rule, value: e.target.value })}
+        >
+          {PRESET_GROUP_ORDER.map((g) => (
+            <optgroup key={g} label={PERIOD_PRESET_GROUP_LABELS[g]}>
+              {PERIOD_PRESETS.filter((pp) => pp.group === g).map((pp) => (
+                <option key={pp.id} value={pp.id}>
+                  {pp.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </Select>
+      ) : needsValue === 'one' && options?.length ? (
         <Select
           className="h-8 w-44"
           value={typeof rule.value === 'string' ? rule.value : ''}

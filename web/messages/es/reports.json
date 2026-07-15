@@ -17,7 +17,15 @@
       "agingTitle": "Antigüedad de CxC / CxP",
       "agingDescription": "Saldos de partidas abiertas por tercero, agrupados por antigüedad",
       "cashFlowTitle": "Estado de flujo de efectivo",
-      "cashFlowDescription": "Método directo — operación, inversión y financiamiento, conciliado con movimientos bancarios"
+      "cashFlowDescription": "Método directo — operación, inversión y financiamiento, conciliado con movimientos bancarios",
+      "generalLedgerTitle": "Libro mayor",
+      "generalLedgerDescription": "Actividad registrada por cuenta con saldo acumulado — el detalle listo para auditoría detrás de cada estado",
+      "journalTitle": "Libro diario",
+      "journalDescription": "Cada asiento registrado con sus líneas — el libro cronológico de entrada original",
+      "registersTitle": "Registros de CxC y CxP",
+      "registersDescription": "Registros de transacciones por cliente y proveedor con saldos acumulados",
+      "budgetTitle": "Presupuesto vs Real",
+      "budgetDescription": "Valores reales frente a un escenario de presupuesto, por cuenta, con variación $ y %"
     }
   },
   "statement": {
@@ -38,6 +46,43 @@
     "projectAria": "Filtro de proyecto",
     "allProjects": "Todos los proyectos"
   },
+  "filterBar": {
+    "period": "Período",
+    "asOf": "A fecha de",
+    "from": "Desde",
+    "to": "Hasta",
+    "breakout": "Desglose",
+    "breakoutNone": "Total",
+    "breakoutOpts": {
+      "department": "Departamento",
+      "project": "Proyecto",
+      "location": "Ubicación",
+      "class": "Clase",
+      "month": "Mes",
+      "quarter": "Trimestre"
+    },
+    "compare": "Comparar",
+    "compareNone": "Ninguno",
+    "comparePriorPeriod": "Período anterior",
+    "comparePriorYear": "Año anterior",
+    "basis": "Base",
+    "basisAccrual": "Devengo",
+    "basisCash": "Caja",
+    "department": "Filtro de departamento",
+    "project": "Filtro de proyecto",
+    "location": "Filtro de ubicación",
+    "class": "Filtro de clase",
+    "allDepartments": "Todos los departamentos",
+    "allProjects": "Todos los proyectos",
+    "allLocations": "Todas las ubicaciones",
+    "allClasses": "Todas las clases",
+    "scale": "Escala",
+    "scaleActual": "Real",
+    "scaleThousands": "Miles",
+    "scaleMillions": "Millones",
+    "showZeros": "Mostrar ceros",
+    "truncated": "Se ocultaron algunas columnas de desglose para mantener el informe legible."
+  },
   "balanceSheet": {
     "title": "Balance general",
     "asOf": "al {date}",
@@ -46,7 +91,8 @@
     "equity": "Capital",
     "equation": "A = P + C",
     "balanced": "cuadrado",
-    "offBy": "descuadre de {amount}"
+    "offBy": "descuadre de {amount}",
+    "liabilitiesAndEquity": "Total pasivo y patrimonio"
   },
   "pnl": {
     "title": "Estado de resultados",
@@ -98,7 +144,10 @@
     "noParty": "(sin tercero)",
     "empty": "No hay partidas abiertas a esta fecha.",
     "columns": {
-      "total": "Total"
+      "total": "Total",
+      "due": "Vence",
+      "age": "Antigüedad (días)",
+      "bucket": "Rango"
     },
     "buckets": {
       "current": "Corriente",
@@ -106,7 +155,9 @@
       "b2": "31–60",
       "b3": "61–90",
       "b4": "90+"
-    }
+    },
+    "summary": "Resumen",
+    "detail": "Detalle"
   },
   "cashFlow": {
     "title": "Estado de flujo de efectivo",
@@ -227,7 +278,10 @@
         "week": "por semana",
         "month": "por mes",
         "quarter": "por trimestre",
-        "year": "por año"
+        "year": "por año",
+        "fiscal_period": "por período fiscal",
+        "fiscal_quarter": "por trimestre fiscal",
+        "fiscal_year": "por ejercicio fiscal"
       },
       "agg": {
         "count": "Cantidad de filas",
@@ -636,7 +690,8 @@
     "this_week": "es esta semana",
     "this_month": "es este mes",
     "this_year": "es este año",
-    "before_now": "está en el pasado (vencido)"
+    "before_now": "está en el pasado (vencido)",
+    "period_preset": "en período fiscal"
   },
   "aggs": {
     "count": "Cantidad",
@@ -666,7 +721,10 @@
       "week": "semana",
       "month": "mes",
       "quarter": "trimestre",
-      "year": "año"
+      "year": "año",
+      "fiscal_period": "período fiscal",
+      "fiscal_quarter": "trimestre fiscal",
+      "fiscal_year": "ejercicio fiscal"
     },
     "csvSection": "Sección"
   },
@@ -687,5 +745,49 @@
       "name": "Detalle de gastos por departamento (este ejercicio fiscal)",
       "description": "Líneas de gastos y costo de ventas contabilizadas este año, seccionadas por departamento — fecha, asiento, cuenta, tercero, memo e importe."
     }
+  },
+  "generalLedger": {
+    "title": "Libro mayor",
+    "empty": "Sin actividad registrada en este período.",
+    "truncated": "Mostrando las primeras 5.000 líneas — reduzca el período o filtre por cuenta para ver todo.",
+    "opening": "Saldo inicial",
+    "closing": "Saldo final",
+    "columns": {
+      "date": "Fecha",
+      "entry": "Asiento",
+      "detail": "Tercero / nota"
+    }
+  },
+  "journal": {
+    "title": "Libro diario",
+    "empty": "Sin asientos registrados en este período.",
+    "truncated": "Mostrando las primeras 4.000 líneas — reduzca el período para ver todo.",
+    "columns": {
+      "detail": "Tercero / nota"
+    }
+  },
+  "registers": {
+    "arTitle": "Registro de CxC",
+    "apTitle": "Registro de CxP",
+    "receivables": "Cuentas por cobrar",
+    "payables": "Cuentas por pagar",
+    "truncated": "Mostrando las primeras 4.000 líneas — reduzca el período para ver todo.",
+    "empty": "Sin actividad en este período.",
+    "closing": "Cierre"
+  },
+  "budget": {
+    "title": "Presupuesto vs Real",
+    "description": "Actividad real del mayor frente a un escenario de presupuesto, por cuenta.",
+    "noScenarios": "Aún no hay escenarios de presupuesto. Cree uno para comparar con los valores reales.",
+    "scenario": "Escenario",
+    "actual": "Real",
+    "budget": "Presupuesto",
+    "variance": "Variación",
+    "variancePct": "Variación %"
+  },
+  "statements": {
+    "title": "Estado de cuenta",
+    "opening": "Saldo inicial",
+    "closing": "Saldo final"
   }
 }

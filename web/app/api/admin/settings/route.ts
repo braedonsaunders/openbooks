@@ -77,6 +77,7 @@ export async function GET() {
       fiscalYearStartMonth:
         typeof settings.fiscalYearStartMonth === "number" ? settings.fiscalYearStartMonth : 1,
       defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
+      reportPdfStyle: settings.reportPdfStyle === "formal" ? "formal" : "modern",
       controlAccounts: Object.fromEntries(
         CONTROL_ACCOUNT_KEYS.map((k) => [k, control[k] ?? ""]),
       ) as Record<ControlAccountKey, string>,
@@ -129,6 +130,7 @@ export async function PUT(req: Request) {
     fiscalYearStartMonth?: unknown;
     controlAccounts?: unknown;
     defaultLocale?: unknown;
+    reportPdfStyle?: unknown;
   };
 
   const existing = (await db.execute(sql`
@@ -287,6 +289,16 @@ export async function PUT(req: Request) {
     nextSettings.defaultLocale = nextDefaultLocale;
     changes.defaultLocale = [curDefaultLocale, nextDefaultLocale];
     settingsChanged = true;
+  }
+  // --- financial report PDF style (formal GAAP / modern branded) ---
+  if (body.reportPdfStyle !== undefined) {
+    const style = body.reportPdfStyle === "formal" ? "formal" : "modern";
+    const curStyle = settings.reportPdfStyle === "formal" ? "formal" : "modern";
+    if (style !== curStyle) {
+      nextSettings.reportPdfStyle = style;
+      changes.reportPdfStyle = [curStyle, style];
+      settingsChanged = true;
+    }
   }
   if (settingsChanged) {
     sets.push(sql`settings = ${JSON.stringify(nextSettings)}::jsonb`);

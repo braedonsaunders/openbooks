@@ -17,7 +17,15 @@
       "agingTitle": "Balance âgée clients / fournisseurs",
       "agingDescription": "Soldes des postes ouverts par tiers, ventilés par ancienneté",
       "cashFlowTitle": "Tableau des flux de trésorerie",
-      "cashFlowDescription": "Méthode directe — exploitation, investissement et financement, rapproché aux mouvements bancaires"
+      "cashFlowDescription": "Méthode directe — exploitation, investissement et financement, rapproché aux mouvements bancaires",
+      "generalLedgerTitle": "Grand livre",
+      "generalLedgerDescription": "Activité comptabilisée par compte avec solde progressif — le détail prêt pour l'audit derrière chaque état",
+      "journalTitle": "Journal",
+      "journalDescription": "Chaque écriture comptabilisée avec ses lignes — le livre chronologique des écritures d'origine",
+      "registersTitle": "Registres clients et fournisseurs",
+      "registersDescription": "Registres de transactions par client et par fournisseur avec soldes progressifs",
+      "budgetTitle": "Budget vs Réel",
+      "budgetDescription": "Réels par rapport à un scénario budgétaire, par compte, avec écart $ et %"
     }
   },
   "statement": {
@@ -38,6 +46,43 @@
     "projectAria": "Filtre de projet",
     "allProjects": "Tous les projets"
   },
+  "filterBar": {
+    "period": "Période",
+    "asOf": "Au",
+    "from": "Du",
+    "to": "Au",
+    "breakout": "Ventilation",
+    "breakoutNone": "Total",
+    "breakoutOpts": {
+      "department": "Département",
+      "project": "Projet",
+      "location": "Emplacement",
+      "class": "Classe",
+      "month": "Mois",
+      "quarter": "Trimestre"
+    },
+    "compare": "Comparer",
+    "compareNone": "Aucun",
+    "comparePriorPeriod": "Période précédente",
+    "comparePriorYear": "Année précédente",
+    "basis": "Base",
+    "basisAccrual": "Comptabilité d'engagement",
+    "basisCash": "Comptabilité de caisse",
+    "department": "Filtre de département",
+    "project": "Filtre de projet",
+    "location": "Filtre d'emplacement",
+    "class": "Filtre de classe",
+    "allDepartments": "Tous les départements",
+    "allProjects": "Tous les projets",
+    "allLocations": "Tous les emplacements",
+    "allClasses": "Toutes les classes",
+    "scale": "Échelle",
+    "scaleActual": "Réel",
+    "scaleThousands": "Milliers",
+    "scaleMillions": "Millions",
+    "showZeros": "Afficher les zéros",
+    "truncated": "Certaines colonnes de ventilation ont été masquées pour garder le rapport lisible."
+  },
   "balanceSheet": {
     "title": "Bilan",
     "asOf": "au {date}",
@@ -46,7 +91,8 @@
     "equity": "Capitaux propres",
     "equation": "A = P + CP",
     "balanced": "équilibré",
-    "offBy": "écart de {amount}"
+    "offBy": "écart de {amount}",
+    "liabilitiesAndEquity": "Total passif et capitaux propres"
   },
   "pnl": {
     "title": "État des résultats",
@@ -98,7 +144,10 @@
     "noParty": "(aucun tiers)",
     "empty": "Aucun poste ouvert à cette date.",
     "columns": {
-      "total": "Total"
+      "total": "Total",
+      "due": "Échéance",
+      "age": "Ancienneté (jours)",
+      "bucket": "Tranche"
     },
     "buckets": {
       "current": "Courant",
@@ -106,7 +155,9 @@
       "b2": "31–60",
       "b3": "61–90",
       "b4": "90+"
-    }
+    },
+    "summary": "Résumé",
+    "detail": "Détail"
   },
   "cashFlow": {
     "title": "Tableau des flux de trésorerie",
@@ -227,7 +278,10 @@
         "week": "par semaine",
         "month": "par mois",
         "quarter": "par trimestre",
-        "year": "par année"
+        "year": "par année",
+        "fiscal_period": "par période fiscale",
+        "fiscal_quarter": "par trimestre fiscal",
+        "fiscal_year": "par exercice fiscal"
       },
       "agg": {
         "count": "Nombre de lignes",
@@ -636,7 +690,8 @@
     "this_week": "est cette semaine",
     "this_month": "est ce mois-ci",
     "this_year": "est cette année",
-    "before_now": "est dans le passé (en retard)"
+    "before_now": "est dans le passé (en retard)",
+    "period_preset": "dans la période fiscale"
   },
   "aggs": {
     "count": "Nombre",
@@ -666,7 +721,10 @@
       "week": "semaine",
       "month": "mois",
       "quarter": "trimestre",
-      "year": "année"
+      "year": "année",
+      "fiscal_period": "période fiscale",
+      "fiscal_quarter": "trimestre fiscal",
+      "fiscal_year": "exercice fiscal"
     },
     "csvSection": "Section"
   },
@@ -687,5 +745,49 @@
       "name": "Détail des charges par département (exercice courant)",
       "description": "Lignes de charges et de coût des marchandises vendues comptabilisées cette année, sectionnées par département — date, écriture, compte, tiers, note et montant."
     }
+  },
+  "generalLedger": {
+    "title": "Grand livre",
+    "empty": "Aucune activité comptabilisée sur cette période.",
+    "truncated": "Affichage des 5 000 premières lignes — réduisez la période ou filtrez par compte pour tout voir.",
+    "opening": "Solde d'ouverture",
+    "closing": "Solde de clôture",
+    "columns": {
+      "date": "Date",
+      "entry": "Écriture",
+      "detail": "Tiers / mémo"
+    }
+  },
+  "journal": {
+    "title": "Journal",
+    "empty": "Aucune écriture comptabilisée sur cette période.",
+    "truncated": "Affichage des 4 000 premières lignes — réduisez la période pour tout voir.",
+    "columns": {
+      "detail": "Tiers / mémo"
+    }
+  },
+  "registers": {
+    "arTitle": "Registre clients",
+    "apTitle": "Registre fournisseurs",
+    "receivables": "Clients",
+    "payables": "Fournisseurs",
+    "truncated": "Affichage des 4 000 premières lignes — réduisez la période pour tout voir.",
+    "empty": "Aucune activité sur cette période.",
+    "closing": "Clôture"
+  },
+  "budget": {
+    "title": "Budget vs Réel",
+    "description": "Activité réelle du grand livre par rapport à un scénario budgétaire, par compte.",
+    "noScenarios": "Aucun scénario budgétaire pour le moment. Créez-en un pour comparer aux réels.",
+    "scenario": "Scénario",
+    "actual": "Réel",
+    "budget": "Budget",
+    "variance": "Écart",
+    "variancePct": "Écart %"
+  },
+  "statements": {
+    "title": "Relevé de compte",
+    "opening": "Solde d'ouverture",
+    "closing": "Solde de clôture"
   }
 }

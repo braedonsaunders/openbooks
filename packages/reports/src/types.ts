@@ -32,6 +32,12 @@ export const REPORT_FILTER_OPERATORS = [
   'this_month',
   'this_year',
   'before_now',
+  // Fiscal-aware period preset (value = a PERIOD_PRESETS id, e.g.
+  // 'this_fiscal_year'). Unlike the calendar-only ops above, this respects the
+  // org's fiscal start month. It is RESOLVED to concrete gte/lte bounds by the
+  // web executor before the plan reaches the (DB-free) compiler; if it ever
+  // reaches compileRule unresolved it is a safe no-op.
+  'period_preset',
 ] as const
 export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number]
 
@@ -56,8 +62,19 @@ export type ReportRuleGroup = {
 export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max'] as const
 export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
 
-/** Temporal buckets for a Summarize-mode breakout on a date/timestamp column. */
-export const REPORT_TEMPORAL_BINS = ['day', 'week', 'month', 'quarter', 'year'] as const
+/** Temporal buckets for a Summarize-mode breakout on a date/timestamp column.
+ *  The `fiscal_*` bins bucket by the org's fiscal calendar (start month passed
+ *  into the compiler) rather than the calendar year. */
+export const REPORT_TEMPORAL_BINS = [
+  'day',
+  'week',
+  'month',
+  'quarter',
+  'year',
+  'fiscal_period',
+  'fiscal_quarter',
+  'fiscal_year',
+] as const
 export type ReportTemporalBin = (typeof REPORT_TEMPORAL_BINS)[number]
 
 /** A group-by dimension in Summarize mode. A date/timestamp column can be

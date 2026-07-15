@@ -430,13 +430,420 @@ export async function accountRegister(
   return { account: acct.rows[0], lines: r.rows, total: Number(c.rows[0].n), balance: c.rows[0].bal };
 }
 
+// ---------------------------------------------------------------------------
+// General Ledger — per-account transaction listing with a running balance
+// ---------------------------------------------------------------------------
+
+export interface GeneralLedgerLine {
+  entryId: string
+  entryNumber: string | null
+  date: string
+  memo: string | null
+  party: string | null
+  debit: number
+  credit: number
+  balance: number // running (debit-signed) within the account
+}
+
+export interface GeneralLedgerAccount {
+  id: string
+  number: string | null
+  name: string
+  type: string
+  opening: number
+  closing: number
+  lines: GeneralLedgerLine[]
+}
+
+export interface GeneralLedgerResult {
+  accounts: GeneralLedgerAccount[]
+  from: string
+  to: string
+  truncated: boolean
+}
+
+/**
+ * General Ledger: for each account with activity in the period, its opening
+ * balance (all posted lines before `from`), every posted line in the period in
+ * date order with a running balance, and the closing balance. Balances are
+ * debit-signed (matches the account register). Capped at `maxLines` posted
+ * lines overall so a full-ledger run stays bounded.
+ */
+export async function generalLedger(
+  from: string,
+  to: string,
+  opts: { accountId?: string; dims?: DimFilter; maxLines?: number } = {},
+): Promise<GeneralLedgerResult> {
+  const maxLines = opts.maxLines ?? 5000
+  const acctFilter = opts.accountId ? sql` and l.account_id = ${opts.accountId}` : sql``
+
+  // Opening balances (debit-signed) per account before the period.
+  const opening = (await db.execute(sql`
+    select l.account_id, coalesce(sum(l.amount), 0) as bal
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+     where e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
+     group by l.account_id
+  `)) as unknown as { rows: { account_id: string; bal: string }[] }
+  const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, Number(r.bal)]))
+
+  const lines = (await db.execute(sql`
+    select l.account_id, a.number, a.name, a.type,
+           e.id as entry_id, e.entry_number, e.posting_date::text as date,
+           l.memo, p.display_name as party, l.amount
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id
+      left join parties p on p.id = l.party_id
+     where e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}
+     order by a.number nulls last, a.name, e.posting_date, e.entry_number, l.line_number
+     limit ${maxLines + 1}
+  `)) as unknown as {
+    rows: {
+      account_id: string; number: string | null; name: string; type: string
+      entry_id: string; entry_number: string | null; date: string
+      memo: string | null; party: string | null; amount: string
+    }[]
+  }
+  const truncated = lines.rows.length > maxLines
+  const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows
+
+  const accounts: GeneralLedgerAccount[] = []
+  let current: GeneralLedgerAccount | null = null
+  for (const r of rows) {
+    if (!current || current.id !== r.account_id) {
+      const open = openingByAcct.get(r.account_id) ?? 0
+      current = { id: r.account_id, number: r.number, name: r.name, type: r.type, opening: open, closing: open, lines: [] }
+      accounts.push(current)
+    }
+    const amt = Number(r.amount)
+    current.closing += amt
+    current.lines.push({
+      entryId: r.entry_id,
+      entryNumber: r.entry_number,
+      date: r.date,
+      memo: r.memo,
+      party: r.party,
+      debit: amt > 0 ? amt : 0,
+      credit: amt < 0 ? -amt : 0,
+      balance: current.closing,
+    })
+  }
+  return { accounts, from, to, truncated }
+}
+
+// ---------------------------------------------------------------------------
+// Journal report — posted journal entries with their lines, over a period
+// ---------------------------------------------------------------------------
+
+export interface JournalReportLine {
+  accountNumber: string | null
+  accountName: string
+  party: string | null
+  memo: string | null
+  debit: number
+  credit: number
+}
+export interface JournalReportEntry {
+  id: string
+  entryNumber: string | null
+  date: string
+  memo: string | null
+  origin: string
+  lines: JournalReportLine[]
+  totalDebit: number
+}
+export interface JournalReportResult {
+  entries: JournalReportEntry[]
+  from: string
+  to: string
+  truncated: boolean
+}
+
+/**
+ * Journal report: every posted entry in the period with its lines (debit/credit
+ * split), newest first. Capped at `maxLines` journal lines overall so a wide
+ * range stays bounded.
+ */
+export async function journalReport(
+  from: string,
+  to: string,
+  opts: { dims?: DimFilter; maxLines?: number } = {},
+): Promise<JournalReportResult> {
+  const maxLines = opts.maxLines ?? 4000
+  const r = (await db.execute(sql`
+    select e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
+           a.number as acct_number, a.name as acct_name, p.display_name as party,
+           l.memo as line_memo, l.amount
+      from journal_entries e
+      join journal_lines l on l.entry_id = e.id
+      join accounts a on a.id = l.account_id
+      left join parties p on p.id = l.party_id
+     where e.status = 'posted' and e.posting_date >= ${from} and e.posting_date <= ${to}
+       and ${dimWhere(opts.dims)}
+     order by e.posting_date desc, e.entry_number desc, l.line_number
+     limit ${maxLines + 1}
+  `)) as unknown as {
+    rows: {
+      id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
+      acct_number: string | null; acct_name: string; party: string | null; line_memo: string | null; amount: string
+    }[]
+  }
+  const truncated = r.rows.length > maxLines
+  const rows = truncated ? r.rows.slice(0, maxLines) : r.rows
+
+  const entries: JournalReportEntry[] = []
+  let current: JournalReportEntry | null = null
+  for (const x of rows) {
+    if (!current || current.id !== x.id) {
+      current = { id: x.id, entryNumber: x.entry_number, date: x.date, memo: x.entry_memo, origin: x.origin, lines: [], totalDebit: 0 }
+      entries.push(current)
+    }
+    const amt = Number(x.amount)
+    current.lines.push({
+      accountNumber: x.acct_number,
+      accountName: x.acct_name,
+      party: x.party,
+      memo: x.line_memo,
+      debit: amt > 0 ? amt : 0,
+      credit: amt < 0 ? -amt : 0,
+    })
+    if (amt > 0) current.totalDebit += amt
+  }
+  return { entries, from, to, truncated }
+}
+
+// ---------------------------------------------------------------------------
+// AR / AP Aging Detail — one row per open item (invoice/bill), bucketed
+// ---------------------------------------------------------------------------
+
+export type AgingBucket = "current" | "b1" | "b2" | "b3" | "b4"
+
+export interface AgingDetailRow {
+  partyId: string | null
+  partyName: string | null
+  reference: string | null
+  dueDate: string | null
+  ageDays: number
+  bucket: AgingBucket
+  open: number
+}
+export interface AgingDetailResult {
+  rows: AgingDetailRow[]
+  totals: Record<AgingBucket, number> & { total: number }
+  asOf: string
+}
+
+function bucketOf(age: number): AgingBucket {
+  if (age <= 0) return "current"
+  if (age <= 30) return "b1"
+  if (age <= 60) return "b2"
+  if (age <= 90) return "b3"
+  return "b4"
+}
+
+/**
+ * Per-open-item aging: the same netted open-item logic as `agingByParty`, but
+ * one row per invoice/bill (its entry reference, due date, age and bucket)
+ * rather than aggregated per party. Ordered party then oldest-first.
+ */
+export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilter): Promise<AgingDetailResult> {
+  const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`
+  const r = (await db.execute(sql`
+    with open_items as (
+      select jl.party_id, je.entry_number,
+             coalesce(jl.due_date, je.posting_date)::text as due,
+             abs(jl.amount) - coalesce(ap.applied, 0) as open,
+             (${asOf}::date - coalesce(jl.due_date, je.posting_date))::int as age_days
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        left join lateral (
+          select sum(a.amount) as applied
+            from applications a
+           where a.to_line_id = jl.id and a.unapplied_at is null
+        ) ap on true
+       where jl.is_open_item and ${signFilter}
+         and je.posting_date <= ${asOf} and ${dimWhere(dims, sql`jl`)}
+    )
+    select oi.party_id, p.display_name as party_name, oi.entry_number as reference,
+           oi.due as due_date, oi.age_days, oi.open
+      from open_items oi
+      left join parties p on p.id = oi.party_id
+     where oi.open > 0.005
+     order by p.display_name nulls last, oi.age_days desc
+  `)) as unknown as {
+    rows: {
+      party_id: string | null; party_name: string | null; reference: string | null
+      due_date: string | null; age_days: number; open: string
+    }[]
+  }
+  const totals: Record<AgingBucket, number> & { total: number } = { current: 0, b1: 0, b2: 0, b3: 0, b4: 0, total: 0 }
+  const rows: AgingDetailRow[] = r.rows.map((x) => {
+    const open = Number(x.open)
+    const bucket = bucketOf(x.age_days)
+    totals[bucket] += open
+    totals.total += open
+    return { partyId: x.party_id, partyName: x.party_name, reference: x.reference, dueDate: x.due_date, ageDays: x.age_days, bucket, open }
+  })
+  return { rows, totals, asOf }
+}
+
+// ---------------------------------------------------------------------------
+// AR / AP Register — per-party transaction register on the control account
+// ---------------------------------------------------------------------------
+
+export interface RegisterLine {
+  entryId: string
+  entryNumber: string | null
+  date: string
+  memo: string | null
+  debit: number
+  credit: number
+  balance: number
+}
+export interface RegisterParty {
+  partyId: string | null
+  partyName: string | null
+  opening: number
+  closing: number
+  lines: RegisterLine[]
+}
+export interface RegisterResult {
+  parties: RegisterParty[]
+  from: string
+  to: string
+  side: AgingSide
+  truncated: boolean
+}
+
+/**
+ * AR/AP register: for each party, its opening balance on the control account
+ * (all posted lines before `from`), every posted line in the period with a
+ * running balance, and the closing balance. Balances are debit-signed. AR uses
+ * the `asset_receivable` control accounts, AP `liability_payable`.
+ */
+export async function partyRegister(
+  side: AgingSide,
+  opts: { from: string; to: string; partyId?: string; dims?: DimFilter; maxLines?: number },
+): Promise<RegisterResult> {
+  const acctType = side === "ap" ? "liability_payable" : "asset_receivable"
+  const maxLines = opts.maxLines ?? 4000
+  const partyFilter = opts.partyId ? sql` and l.party_id = ${opts.partyId}` : sql``
+
+  const opening = (await db.execute(sql`
+    select l.party_id, coalesce(sum(l.amount), 0) as bal
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id
+     where a.type = ${acctType} and e.posting_date < ${opts.from}
+       and ${dimWhere(opts.dims)}${partyFilter}
+     group by l.party_id
+  `)) as unknown as { rows: { party_id: string | null; bal: string }[] }
+  const openingByParty = new Map(opening.rows.map((r) => [r.party_id, Number(r.bal)]))
+
+  const lines = (await db.execute(sql`
+    select l.party_id, pt.display_name as party_name,
+           e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id
+      left join parties pt on pt.id = l.party_id
+     where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
+       and ${dimWhere(opts.dims)}${partyFilter}
+     order by pt.display_name nulls last, e.posting_date, e.entry_number, l.line_number
+     limit ${maxLines + 1}
+  `)) as unknown as {
+    rows: {
+      party_id: string | null; party_name: string | null
+      entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
+    }[]
+  }
+  const truncated = lines.rows.length > maxLines
+  const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows
+
+  const parties: RegisterParty[] = []
+  let current: RegisterParty | null = null
+  for (const x of rows) {
+    if (!current || current.partyId !== x.party_id) {
+      const open = openingByParty.get(x.party_id) ?? 0
+      current = { partyId: x.party_id, partyName: x.party_name, opening: open, closing: open, lines: [] }
+      parties.push(current)
+    }
+    const amt = Number(x.amount)
+    current.closing += amt
+    current.lines.push({
+      entryId: x.entry_id,
+      entryNumber: x.entry_number,
+      date: x.date,
+      memo: x.memo,
+      debit: amt > 0 ? amt : 0,
+      credit: amt < 0 ? -amt : 0,
+      balance: current.closing,
+    })
+  }
+  return { parties, from: opts.from, to: opts.to, side, truncated }
+}
+
+// ---------------------------------------------------------------------------
+// Partner statement — one party: opening, dated activity, closing + aged summary
+// ---------------------------------------------------------------------------
+
+export interface PartnerStatementResult {
+  party: { id: string; name: string | null }
+  side: AgingSide
+  from: string
+  to: string
+  opening: number
+  closing: number
+  lines: RegisterLine[]
+  aging: Record<AgingBucket, number> & { total: number }
+}
+
+/** Account statement for a single party: opening balance on the control
+ *  account, dated activity with a running balance, closing balance, and an
+ *  aged-summary footer as of `to` (reusing the open-item aging logic). */
+export async function partnerStatement(
+  partyId: string,
+  opts: { from: string; to: string; side: AgingSide },
+): Promise<PartnerStatementResult> {
+  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId })
+  const p = reg.parties[0]
+  const nameRow = (await db.execute(sql`select display_name from parties where id = ${partyId}`)) as unknown as {
+    rows: { display_name: string | null }[]
+  }
+  const aging = await agingDetail(opts.side, opts.to)
+  const agingTotals: Record<AgingBucket, number> & { total: number } = { current: 0, b1: 0, b2: 0, b3: 0, b4: 0, total: 0 }
+  for (const row of aging.rows) {
+    if (row.partyId !== partyId) continue
+    agingTotals[row.bucket] += row.open
+    agingTotals.total += row.open
+  }
+  return {
+    party: { id: partyId, name: nameRow.rows[0]?.display_name ?? p?.partyName ?? null },
+    side: opts.side,
+    from: opts.from,
+    to: opts.to,
+    opening: p?.opening ?? 0,
+    closing: p?.closing ?? 0,
+    lines: p?.lines ?? [],
+    aging: agingTotals,
+  }
+}
+
 export async function dimensionOptions() {
   const depts = (await db.execute(sql`select id, name from departments where is_active order by name`)) as any;
   const projects = (await db.execute(sql`
     select p.id, p.name from projects p
      where exists (select 1 from journal_lines l where l.project_id = p.id)
      order by p.name limit 500`)) as any;
-  return { departments: depts.rows, projects: projects.rows };
+  const locations = (await db.execute(sql`select id, name from locations where is_active order by name`)) as any;
+  const classes = (await db.execute(sql`select id, name from classes where is_active order by name`)) as any;
+  return {
+    departments: depts.rows as { id: string; name: string }[],
+    projects: projects.rows as { id: string; name: string }[],
+    locations: locations.rows as { id: string; name: string }[],
+    classes: classes.rows as { id: string; name: string }[],
+  };
 }
 
 /**

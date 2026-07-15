@@ -419,7 +419,11 @@
       "defaultLanguage": "Langue par défaut",
       "defaultLanguageHint": "La langue dans laquelle l’application s’affiche pour toute personne qui n’a pas choisi la sienne dans le menu du compte.",
       "baseCurrency": "Devise de base",
-      "baseCurrencyHint": "La devise de présentation dans laquelle le grand livre s’équilibre. Ajoutez d’autres devises avant d’en changer."
+      "baseCurrencyHint": "La devise de présentation dans laquelle le grand livre s’équilibre. Ajoutez d’autres devises avant d’en changer.",
+      "reportPdfStyle": "Style PDF des rapports financiers",
+      "reportPdfStyleModern": "Moderne (avec marque)",
+      "reportPdfStyleFormal": "Formel (PCGR)",
+      "reportPdfStyleHint": "Apparence des états financiers exportés : Moderne utilise la couleur de votre marque et une police sans-serif ; Formel est un état classique en serif, en niveaux de gris, prêt pour l’audit."
     },
     "fiscal": {
       "title": "Exercice financier",

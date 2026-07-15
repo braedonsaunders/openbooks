@@ -6,6 +6,7 @@ import {
   runCustomQuery,
   validateCustomQuery,
   type ReportCustomQuery,
+  type ReportRule,
   type ReportRuleGroup,
   type ReportRunLabels,
   type ReportRunResult,
@@ -14,6 +15,8 @@ import {
 // raw serializer from @openbooks/reports for user-facing CSV.
 import { reportResultToCsv } from '@openbooks/office'
 import { reportCsvOptions, reportRunLabels } from './report-labels'
+import { resolvePeriod } from './periods'
+import { fiscalStartMonth } from './fiscal'
 
 /**
  * Server helpers for the custom-report studio (list/builder/run/schedule). The
@@ -83,12 +86,56 @@ export async function executeReport(
   maxRows: number = REPORT_MAX_ROWS,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
-  return runCustomQuery(pool, query, {
+  const resolved = await resolvePeriodPresets(query)
+  return runCustomQuery(pool, resolved, {
     orgId,
     entityMap: REPORT_ENTITY_MAP,
     maxRows: Math.min(maxRows, REPORT_MAX_ROWS),
+    fiscalStartMonth: await fiscalStartMonth(),
     labels: labels ?? (await reportRunLabels()),
   })
+}
+
+/**
+ * Rewrite every `period_preset` filter leaf into concrete `gte`/`lte` bounds
+ * using the fiscal-aware period engine (web/lib/periods.ts). This keeps the
+ * DB-free @openbooks/reports compiler unaware of fiscal config while giving the
+ * studio the SAME ~50 presets as the financial statements — fixing the old
+ * calendar-year-only relative-date behaviour. Resolution is done once here so
+ * both interactive and scheduled runs share it.
+ */
+async function resolvePeriodPresets(query: ReportCustomQuery): Promise<ReportCustomQuery> {
+  if (!query.filters) return query
+  let touched = false
+
+  const walk = async (node: ReportRuleGroup): Promise<ReportRuleGroup> => {
+    const rules: (ReportRule | ReportRuleGroup)[] = []
+    for (const r of node.rules ?? []) {
+      if (r && typeof r === 'object' && Array.isArray((r as ReportRuleGroup).rules)) {
+        rules.push(await walk(r as ReportRuleGroup))
+        continue
+      }
+      const leaf = r as ReportRule
+      if (leaf.op === 'period_preset') {
+        touched = true
+        const presetId = typeof leaf.value === 'string' ? leaf.value : String(leaf.value ?? '')
+        const period = await resolvePeriod(presetId)
+        rules.push({
+          combinator: 'and',
+          rules: [
+            { field: leaf.field, op: 'gte', value: period.from },
+            { field: leaf.field, op: 'lte', value: period.to },
+          ],
+        })
+      } else {
+        rules.push(leaf)
+      }
+    }
+    return { ...node, rules }
+  }
+
+  const filters = await walk(query.filters)
+  return touched ? { ...query, filters } : query
 }
 
 /**

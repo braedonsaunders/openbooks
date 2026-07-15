@@ -482,6 +482,14 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
     needsValue: 'none',
     applicableKinds: ['date', 'timestamp'],
   },
+  {
+    // Fiscal-aware relative period (value = a PERIOD_PRESETS id). The web
+    // executor resolves it to gte/lte bounds before compiling.
+    key: 'period_preset',
+    label: 'in fiscal period',
+    needsValue: 'one',
+    applicableKinds: ['date', 'timestamp'],
+  },
 ]
 
 export function operatorsForKind(kind: ReportColumnKind): ReportOperatorMeta[] {
