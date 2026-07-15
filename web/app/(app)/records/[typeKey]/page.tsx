@@ -71,12 +71,12 @@ export default async function RecordModule({
   }
   const lint = lintRecordFields(type.fields, type.name)
   if (!lint.success) notFound()
-  const fields = lint.fields
+  const sections = lint.sections
   const canCreate = can(authz, 'records.create')
 
   const basePath = `/records/${typeKey}`
-  const columns = listableFields(fields).slice(0, 5)
-  const filterFields = fields
+  const columns = listableFields(sections).slice(0, 5)
+  const filterFields = columns
     .filter((f) => (f.type === 'select' || f.type === 'radio') && (f.validation?.options?.length ?? 0) > 0)
     .slice(0, 3)
 
@@ -146,7 +146,7 @@ export default async function RecordModule({
     : total
 
   const labels = await resolveEntityLabels(
-    columns,
+    sections,
     rows.rows.map((r: any) => r.data),
   )
 
@@ -297,7 +297,7 @@ export default async function RecordModule({
           key={openRecord.id} // remount when deep-linking straight to another record
           typeKey={typeKey}
           typeName={type.name}
-          fields={fields}
+          sections={sections}
           record={{
             id: openRecord.id,
             recordNumber: openRecord.record_number,

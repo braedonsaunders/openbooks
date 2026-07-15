@@ -47,7 +47,14 @@
     "loadPartiesFailed": "Impossible de charger les tiers — rechargez pour réessayer.",
     "selectAccount": "Sélectionner un compte…",
     "selectParty": "Sélectionner un tiers…",
-    "noFields": "Aucun champ à afficher — ce type d’enregistrement n’a aucun champ visible."
+    "noFields": "Aucun champ à afficher — ce type d’enregistrement n’a aucun champ visible.",
+    "lineItems": "Lignes",
+    "rowCount": "{count, plural, one {# ligne} other {# lignes}}",
+    "noRows": "Aucune ligne pour l’instant.",
+    "rowActions": "Actions de ligne",
+    "removeRow": "Retirer la ligne",
+    "addRow": "Ajouter une ligne",
+    "maxRowsReached": "Maximum de {count} lignes atteint."
   },
   "lineGrid": {
     "addLine": "Ajouter une ligne",

@@ -67,7 +67,9 @@ export default async function RecordTypes({
   const [types, counts, openType, roles] = await Promise.all([
     db.execute(sql`
       select t.id, t.key, t.name, t.plural_name, t.icon_key, t.status, t.show_in_nav,
-             t.updated_at, jsonb_array_length(t.fields) as field_count,
+             t.updated_at,
+             (select coalesce(sum(coalesce(jsonb_array_length(elem->'fields'), 1)), 0)
+                from jsonb_array_elements(t.fields) elem) as field_count,
              (select count(*) from custom_records cr where cr.type_id = t.id) as record_count
         from custom_record_types t
        where ${where}

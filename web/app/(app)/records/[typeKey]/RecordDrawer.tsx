@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { FieldValueMap, FormField } from '@openbooks/forms-core'
+import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import { Badge, Button, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { RecordFields } from '../../../../components/record-fields'
@@ -29,13 +29,13 @@ type ApiError = { fieldId: string; message: string }
 export function RecordDrawer({
   typeKey,
   typeName,
-  fields,
+  sections,
   record,
   canEdit,
 }: {
   typeKey: string
   typeName: string
-  fields: FormField[]
+  sections: FormSection[]
   record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus }
   canEdit: boolean
 }) {
@@ -230,7 +230,7 @@ export function RecordDrawer({
     >
       <div className="p-1">
         <RecordFields
-          fields={fields}
+          sections={sections}
           values={values}
           onChange={onChange}
           disabled={!editable}

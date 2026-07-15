@@ -47,7 +47,14 @@
     "loadPartiesFailed": "Could not load parties — reload to retry.",
     "selectAccount": "Select account…",
     "selectParty": "Select party…",
-    "noFields": "No fields to show — the record type has no visible fields."
+    "noFields": "No fields to show — the record type has no visible fields.",
+    "lineItems": "Line items",
+    "rowCount": "{count, plural, one {# row} other {# rows}}",
+    "noRows": "No rows yet.",
+    "rowActions": "Row actions",
+    "removeRow": "Remove row",
+    "addRow": "Add row",
+    "maxRowsReached": "Maximum of {count} rows reached."
   },
   "lineGrid": {
     "addLine": "Add line",

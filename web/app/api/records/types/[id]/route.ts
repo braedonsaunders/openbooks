@@ -28,8 +28,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * Builder autosave. Saves partial edits even while the definition is
  * incomplete (a select with no options yet, an unfinished formula) and
  * returns the current lint `issues` — publishing is the gate that requires a
- * clean definition. Structurally invalid payloads (not FormField[]) are
- * rejected outright.
+ * clean definition. The `fields` body carries the full FormSection[]
+ * structure; structurally invalid payloads are rejected outright.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('records.manage_types')
@@ -118,7 +118,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         { status: 422 },
       )
     }
-    fieldsJson = JSON.stringify(lint.fields)
+    // Persist the validated SECTION structure (not the flattened field list).
+    fieldsJson = JSON.stringify(lint.sections)
     issues = lint.issues
   } else {
     // Re-lint the stored fields so a rename etc. still refreshes the issue list.

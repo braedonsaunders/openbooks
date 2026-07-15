@@ -47,7 +47,14 @@
     "loadPartiesFailed": "No se pudieron cargar los terceros — recargue para reintentar.",
     "selectAccount": "Seleccionar cuenta…",
     "selectParty": "Seleccionar tercero…",
-    "noFields": "No hay campos para mostrar — el tipo de registro no tiene campos visibles."
+    "noFields": "No hay campos para mostrar — el tipo de registro no tiene campos visibles.",
+    "lineItems": "Partidas",
+    "rowCount": "{count, plural, one {# fila} other {# filas}}",
+    "noRows": "Aún no hay filas.",
+    "rowActions": "Acciones de fila",
+    "removeRow": "Quitar fila",
+    "addRow": "Agregar fila",
+    "maxRowsReached": "Se alcanzó el máximo de {count} filas."
   },
   "lineGrid": {
     "addLine": "Agregar línea",
