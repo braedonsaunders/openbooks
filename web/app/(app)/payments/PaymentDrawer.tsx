@@ -9,6 +9,7 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { AttachmentPanel } from '../../../components/attachment-panel'
 import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { money } from '../../../lib/format'
+import { confirmDialog } from '../../../lib/confirm'
 
 /**
  * Shared payment/receipt flyout. side='ap' → vendor payment applying open
@@ -246,6 +247,31 @@ export function PaymentDrawer({
     router.refresh()
   }
 
+  async function remove() {
+    const posted = doc.status !== 'draft'
+    if (
+      !(await confirmDialog({
+        title: 'Delete this payment?',
+        message: posted
+          ? 'This permanently deletes the payment, removes its ledger impact, and reopens any items it applied to. This cannot be undone.'
+          : 'This permanently deletes the draft payment. This cannot be undone.',
+        confirmLabel: 'Delete',
+        tone: 'danger',
+      }))
+    )
+      return
+    setBusy(true)
+    const res = await fetch(`/api/payments/${doc.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('Payment deleted')
+      router.push(basePath)
+      router.refresh()
+    } else {
+      toast.error((await res.json()).error ?? 'Delete failed')
+      setBusy(false)
+    }
+  }
+
   function toggle(item: OpenItemClient) {
     setAllocs((prev) => {
       const next = { ...prev }
@@ -307,6 +333,11 @@ export function PaymentDrawer({
               {doc.entry_id ? (
                 <Button variant="outline" asChild>
                   <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
+                </Button>
+              ) : null}
+              {doc.status !== 'voided' ? (
+                <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+                  Delete
                 </Button>
               ) : null}
             </>

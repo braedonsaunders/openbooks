@@ -1,4 +1,4 @@
-import { makeGET, makePATCH } from '../../_order/handlers'
+import { makeGET, makePATCH, makeDELETE } from '../../_order/handlers'
 
 export const runtime = 'nodejs'
 
@@ -6,3 +6,4 @@ const cfg = { kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' } as c
 
 export const GET = makeGET(cfg)
 export const PATCH = makePATCH(cfg)
+export const DELETE = makeDELETE(cfg)

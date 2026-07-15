@@ -77,6 +77,9 @@ export async function deleteDocument(documentId: string, userId: string): Promis
         delete from reconciliation_matches
          where journal_line_id in (select id from journal_lines where entry_id = ${entryId})`);
       await tx.execute(sql`delete from journal_lines where entry_id = ${entryId}`);
+      // Drop the document's back-reference before removing the entry, else the
+      // still-live documents.posted_entry_id FK blocks the entry delete.
+      await tx.execute(sql`update documents set posted_entry_id = null where id = ${documentId}`);
       await tx.execute(sql`delete from journal_entries where id = ${entryId}`);
     }
 

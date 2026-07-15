@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { guardPermission } from '../../../lib/authz'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, loadOrder, orderTaxRateMap, type OrderLineInput } from './lib'
@@ -138,6 +139,31 @@ export function makePATCH(cfg: OrderHandlerConfig) {
 
     const order = await loadOrder(id, user.orgId, cfg.kind)
     return NextResponse.json(order)
+  }
+}
+
+/**
+ * DELETE: remove a non-posting order (doc/lines/links). deleteDocument throws
+ * DeleteError → 422 if the order was converted downstream (has a document_link
+ * to a posted doc).
+ */
+export function makeDELETE(cfg: OrderHandlerConfig) {
+  return async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const gate = await guardPermission(cfg.createPerm)
+    if (gate instanceof NextResponse) return gate
+    const { user } = gate
+    const { id } = await params
+    const owned = (await db.execute(
+      sql`select 1 from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    )) as unknown as { rows: unknown[] }
+    if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    try {
+      await deleteDocument(id, user.id)
+      return NextResponse.json({ ok: true })
+    } catch (e) {
+      if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
+      throw e
+    }
   }
 }
 

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { sum } from '@openbooks/engine/src/money.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
+import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { loadJournalDoc } from '../../../../lib/journals'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
@@ -180,4 +181,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const journal = await loadJournalDoc(id)
   return NextResponse.json(journal)
+}
+
+/** Delete a journal (guarded: open period, no applied payments, no downstream conversion). */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('gl.post')
+  if (gate instanceof NextResponse) return gate
+  const { id } = await params
+  const owned = (await db.execute(
+    sql`select 1 from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
+  )) as unknown as { rows: unknown[] }
+  if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  try {
+    await deleteDocument(id, gate.user.id)
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
+    throw e
+  }
 }

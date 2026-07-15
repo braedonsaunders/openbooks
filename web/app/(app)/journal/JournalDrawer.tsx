@@ -11,6 +11,7 @@ import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from
 import { AttachmentPanel } from '../../../components/attachment-panel'
 import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { money } from '../../../lib/format'
+import { confirmDialog } from '../../../lib/confirm'
 
 interface Opt {
   id: string
@@ -227,6 +228,31 @@ export function JournalDrawer({
     router.refresh()
   }
 
+  async function remove() {
+    const posted = doc.status === 'posted'
+    if (
+      !(await confirmDialog({
+        title: 'Delete this journal?',
+        message: posted
+          ? 'This permanently deletes the journal and removes its ledger impact. This cannot be undone.'
+          : 'This permanently deletes the draft journal. This cannot be undone.',
+        confirmLabel: 'Delete',
+        tone: 'danger',
+      }))
+    )
+      return
+    setBusy(true)
+    const res = await fetch(`/api/journals/${doc.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('Journal deleted')
+      router.push('/journal')
+      router.refresh()
+    } else {
+      toast.error((await res.json()).error ?? 'Delete failed')
+      setBusy(false)
+    }
+  }
+
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => [
@@ -305,6 +331,11 @@ export function JournalDrawer({
               {doc.entry_id ? (
                 <Button variant="outline" asChild>
                   <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
+                </Button>
+              ) : null}
+              {doc.status !== 'voided' ? (
+                <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+                  Delete
                 </Button>
               ) : null}
             </>

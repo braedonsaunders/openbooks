@@ -11,6 +11,7 @@ import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from
 import { AttachmentPanel } from '../../../components/attachment-panel'
 import { DocTypeBadge } from '../../../components/doc-type-badge'
 import { money } from '../../../lib/format'
+import { confirmDialog } from '../../../lib/confirm'
 
 interface Opt {
   id: string
@@ -228,6 +229,31 @@ export function ExpenseDrawer({
     router.refresh()
   }
 
+  async function remove() {
+    const posted = doc.status === 'posted'
+    if (
+      !(await confirmDialog({
+        title: 'Delete this expense report?',
+        message: posted
+          ? 'This permanently deletes the expense report and removes its ledger impact. This cannot be undone.'
+          : 'This permanently deletes the draft expense report. This cannot be undone.',
+        confirmLabel: 'Delete',
+        tone: 'danger',
+      }))
+    )
+      return
+    setBusy(true)
+    const res = await fetch(`/api/expenses/${doc.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('Expense report deleted')
+      router.push('/expenses')
+      router.refresh()
+    } else {
+      toast.error((await res.json()).error ?? 'Delete failed')
+      setBusy(false)
+    }
+  }
+
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => [
@@ -332,6 +358,11 @@ export function ExpenseDrawer({
               {doc.entry_id ? (
                 <Button variant="outline" asChild>
                   <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
+                </Button>
+              ) : null}
+              {doc.status !== 'voided' && canSubmit ? (
+                <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+                  Delete
                 </Button>
               ) : null}
             </>
