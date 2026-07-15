@@ -2,12 +2,15 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 
 /** Instant-into-draft: creates a real draft dashboard, opens its builder. */
 export function NewDashboardButton() {
+  const t = useTranslations('insights.dashboards')
+  const tCommon = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -16,7 +19,7 @@ export function NewDashboardButton() {
     const res = await fetch('/api/insights/dashboards/draft', { method: 'POST' })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not create a draft dashboard')
+      toast.error(data.error ?? t('createDraftFailed'))
       setBusy(false)
       return
     }
@@ -27,7 +30,7 @@ export function NewDashboardButton() {
 
   return (
     <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? 'Creating…' : 'New dashboard'}
+      <Plus size={15} /> {busy ? tCommon('actions.creating') : t('newButton')}
     </Button>
   )
 }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 
@@ -20,6 +21,8 @@ export function CustomReportActions({
   kind: 'built_in' | 'custom'
   canCreate: boolean
 }) {
+  const t = useTranslations('reports.custom.actions')
+  const tc = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -28,7 +31,7 @@ export function CustomReportActions({
     const res = await fetch(`/api/reports/definitions/${id}`)
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not load report')
+      toast.error(data.error ?? t('loadFailed'))
       setBusy(false)
       return
     }
@@ -37,7 +40,7 @@ export function CustomReportActions({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: `${def.name} (copy)`,
+        name: t('copyName', { name: def.name }),
         description: def.description,
         query: def.query,
         layout: def.layout,
@@ -45,11 +48,11 @@ export function CustomReportActions({
     })
     const createdData = await created.json()
     if (!created.ok) {
-      toast.error(createdData.error ?? 'Could not clone report')
+      toast.error(createdData.error ?? t('cloneFailed'))
       setBusy(false)
       return
     }
-    toast.success('Report cloned')
+    toast.success(t('cloned'))
     router.push(`/reports/custom/builder/${createdData.definition.id}`)
     router.refresh()
     setBusy(false)
@@ -57,15 +60,15 @@ export function CustomReportActions({
 
   async function remove() {
     const ok = await confirmDialog({
-      message: 'Delete this report? Its schedules and run history are removed too.',
+      message: t('deleteConfirm'),
       tone: 'danger',
     })
     if (!ok) return
     setBusy(true)
     const res = await fetch(`/api/reports/definitions/${id}`, { method: 'DELETE' })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? 'Could not delete report')
-    else toast.success('Report deleted')
+    if (!res.ok) toast.error(data.error ?? t('deleteFailed'))
+    else toast.success(t('deleted'))
     setBusy(false)
     router.refresh()
   }
@@ -73,19 +76,19 @@ export function CustomReportActions({
   return (
     <div className="flex items-center justify-end gap-1.5">
       <Button variant="outline" size="sm" asChild>
-        <Link href={`/reports/custom/run/${id}`}>Run</Link>
+        <Link href={`/reports/custom/run/${id}`}>{t('run')}</Link>
       </Button>
       {canCreate ? (
         <>
           <Button variant="ghost" size="sm" asChild>
-            <Link href={`/reports/custom/builder/${id}`}>Edit</Link>
+            <Link href={`/reports/custom/builder/${id}`}>{tc('actions.edit')}</Link>
           </Button>
           <Button variant="ghost" size="sm" disabled={busy} onClick={clone}>
-            Clone
+            {t('clone')}
           </Button>
           {kind === 'custom' ? (
             <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
-              Delete
+              {tc('actions.delete')}
             </Button>
           ) : null}
         </>

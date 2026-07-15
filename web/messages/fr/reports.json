@@ -1,1 +1,254 @@
-{}
+{
+  "hub": {
+    "title": "Rapports",
+    "description": "Les états sont calculés en direct à partir du grand livre — jamais des instantanés en cache.",
+    "savedViews": "Vues enregistrées",
+    "cards": {
+      "pnlTitle": "État des résultats",
+      "pnlDescription": "État des résultats — {fyLabel} à ce jour, préréglages par exercice financier, comparatifs, mises en page personnalisées",
+      "balanceSheetTitle": "Bilan",
+      "balanceSheetDescription": "Situation financière à toute date, bénéfices non répartis calculés",
+      "trialBalanceTitle": "Balance de vérification",
+      "trialBalanceDescription": "Chaque compte avec débits, crédits et solde net",
+      "payablesTitle": "Comptes fournisseurs par fournisseur",
+      "payablesDescription": "Solde impayé des comptes fournisseurs par tiers",
+      "receivablesTitle": "Comptes clients par client",
+      "receivablesDescription": "Solde à recevoir des comptes clients par tiers"
+    }
+  },
+  "statement": {
+    "sectionTotal": "Total {section}",
+    "other": "Autres",
+    "otherTotal": "Total Autres",
+    "accumulatedEarnings": "Bénéfices accumulés (calculés)"
+  },
+  "saveView": {
+    "namePrompt": "Nommez cette vue :",
+    "save": "Enregistrer la vue",
+    "savedToast": "« {name} » enregistrée",
+    "saveFailed": "Impossible d’enregistrer cette vue"
+  },
+  "dimensionFilter": {
+    "departmentAria": "Filtre de département",
+    "allDepartments": "Tous les départements",
+    "projectAria": "Filtre de projet",
+    "allProjects": "Tous les projets"
+  },
+  "balanceSheet": {
+    "title": "Bilan",
+    "asOf": "au {date}",
+    "assets": "Actif",
+    "liabilities": "Passif",
+    "equity": "Capitaux propres",
+    "equation": "A = P + CP",
+    "balanced": "équilibré",
+    "offBy": "écart de {amount}"
+  },
+  "pnl": {
+    "title": "État des résultats",
+    "dateRange": "{from} → {to}",
+    "vsPriorYear": "vs exercice précédent",
+    "revenue": "Produits",
+    "grossProfit": "Bénéfice brut",
+    "netIncome": "Bénéfice net",
+    "costOfGoodsSold": "Coût des marchandises vendues",
+    "expenses": "Charges",
+    "totalRevenue": "Total des produits",
+    "columns": {
+      "current": "Période courante",
+      "priorYear": "Exercice précédent",
+      "delta": "Δ",
+      "deltaPct": "Δ%"
+    }
+  },
+  "trialBalance": {
+    "title": "Balance de vérification",
+    "description": "au {date} · {count, plural, one {# compte} other {# comptes}} avec activité",
+    "columns": {
+      "debits": "Débits",
+      "credits": "Crédits"
+    },
+    "totals": "Totaux"
+  },
+  "partners": {
+    "payablesTitle": "Comptes fournisseurs par fournisseur",
+    "receivablesTitle": "Comptes clients par client",
+    "description": "Position nette par tiers, à partir des lignes ouvertes du grand livre.",
+    "payables": "Comptes fournisseurs",
+    "receivables": "Comptes clients",
+    "searchPlaceholder": "Rechercher un tiers…",
+    "totalOutstanding": "Total impayé",
+    "partiesWithBalance": "Tiers avec solde",
+    "columns": {
+      "outstanding": "Impayé",
+      "glLines": "Lignes du GL"
+    },
+    "noPartyOnLines": "(aucun tiers sur les lignes)"
+  },
+  "custom": {
+    "kind": {
+      "builtIn": "Intégré",
+      "custom": "Personnalisé"
+    },
+    "running": "Exécution en cours…",
+    "list": {
+      "title": "Rapports personnalisés",
+      "description": "Créez, enregistrez, exécutez et planifiez des rapports sur le grand livre — lignes détaillées ou sommaires groupés, avec filtres, ventilations et mesures.",
+      "searchPlaceholder": "Rechercher des rapports…",
+      "kindFilterLabel": "Genre",
+      "emptyTitle": "Aucun rapport pour l’instant",
+      "emptyDescription": "Amorcez les rapports intégrés ou créez votre premier rapport personnalisé pour commencer.",
+      "columns": {
+        "report": "Rapport",
+        "kind": "Genre"
+      },
+      "summarySummarize": "Sommaire de {source} · {groups, plural, one {# groupe} other {# groupes}}, {measures, plural, one {# mesure} other {# mesures}}",
+      "summaryRows": "Détail de {source} · {columns, plural, one {# colonne} other {# colonnes}}"
+    },
+    "actions": {
+      "run": "Exécuter",
+      "clone": "Dupliquer",
+      "loadFailed": "Impossible de charger le rapport",
+      "cloneFailed": "Impossible de dupliquer le rapport",
+      "cloned": "Rapport dupliqué",
+      "copyName": "{name} (copie)",
+      "deleteConfirm": "Supprimer ce rapport? Ses planifications et son historique d’exécution seront aussi supprimés.",
+      "deleteFailed": "Impossible de supprimer le rapport",
+      "deleted": "Rapport supprimé"
+    },
+    "newButton": {
+      "label": "Nouveau rapport",
+      "untitledName": "Rapport sans titre",
+      "createFailed": "Impossible de créer un rapport"
+    },
+    "filterTree": {
+      "match": "Correspondance",
+      "allOfFollowing": "TOUTES les conditions suivantes",
+      "anyOfFollowing": "AU MOINS UNE des conditions suivantes",
+      "noConditions": "Aucune condition — le rapport retourne toutes les lignes.",
+      "addCondition": "Condition",
+      "addGroup": "Groupe",
+      "noValue": "(aucune valeur)",
+      "valuePlaceholder": "valeur",
+      "listPlaceholder": "valeurs séparées par des virgules",
+      "removeConditionAria": "Retirer la condition"
+    },
+    "resultView": {
+      "noRows": "Aucune ligne ne correspond à ce rapport."
+    },
+    "builder": {
+      "namePlaceholder": "Nom du rapport",
+      "descriptionPlaceholder": "Description (facultative)",
+      "allChangesSaved": "Toutes les modifications sont enregistrées",
+      "unsavedChanges": "Modifications non enregistrées…",
+      "runAndSchedule": "Exécuter et planifier",
+      "source": "Source",
+      "mode": "Mode",
+      "detailRows": "Lignes détaillées",
+      "summarize": "Sommariser",
+      "sortBy": "Trier par",
+      "sortDefault": "Par défaut",
+      "direction": "Sens",
+      "descending": "Décroissant",
+      "ascending": "Croissant",
+      "rowLimit": "Limite de lignes",
+      "rowLimitHint": "Plafonnée à 10 000 lignes. Les aperçus affichent les {previewRows} premières.",
+      "livePreview": "Aperçu en direct",
+      "previewFailed": "Échec de l’aperçu",
+      "runningPreview": "Génération de l’aperçu…",
+      "previewEmptyHint": "Ajustez le rapport pour voir un aperçu en direct.",
+      "columns": "Colonnes",
+      "sectionBy": "Sectionner par (facultatif)",
+      "noSections": "Aucune section",
+      "sectionByHint": "Regroupe les lignes détaillées en sections titrées selon cette colonne.",
+      "groupBy": "Grouper par",
+      "noGroupsHint": "Aucun groupe — les mesures se cumulent en un seul total général.",
+      "measures": "Mesures",
+      "noBin": "Aucun intervalle",
+      "removeGroupAria": "Retirer le groupe",
+      "removeMeasureAria": "Retirer la mesure",
+      "bin": {
+        "day": "par jour",
+        "week": "par semaine",
+        "month": "par mois",
+        "quarter": "par trimestre",
+        "year": "par année"
+      },
+      "agg": {
+        "count": "Nombre de lignes",
+        "countDistinct": "Nombre distinct",
+        "sum": "Somme",
+        "avg": "Moyenne",
+        "min": "Min",
+        "max": "Max"
+      }
+    },
+    "runner": {
+      "downloadCsv": "Télécharger le CSV",
+      "runNow": "Exécuter maintenant",
+      "runFailed": "L’exécution du rapport a échoué",
+      "runComplete": "Exécution du rapport terminée",
+      "emptyHint": "Exécutez le rapport pour voir les résultats ici. Les exécutions sont enregistrées et téléchargeables en CSV.",
+      "scheduledDelivery": "Envoi planifié",
+      "recentRuns": "Exécutions récentes",
+      "columns": {
+        "trigger": "Déclencheur",
+        "rows": "Lignes",
+        "finished": "Terminée"
+      },
+      "status": {
+        "succeeded": "Réussie",
+        "running": "En cours",
+        "queued": "En file d’attente",
+        "failed": "Échouée"
+      },
+      "trigger": {
+        "manual": "Manuelle",
+        "scheduled": "Planifiée"
+      },
+      "csv": "CSV"
+    }
+  },
+  "schedule": {
+    "updateFailed": "La mise à jour a échoué",
+    "paused": "Planification mise en pause",
+    "resumed": "Planification reprise",
+    "deleteConfirm": "Supprimer cette planification?",
+    "deleted": "Planification supprimée",
+    "noScheduleYet": "Aucune planification d’envoi pour l’instant.",
+    "addOneHint": "Ajoutez-en une pour envoyer ce rapport par courriel à intervalle régulier.",
+    "pausedBadge": "En pause",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "deleteAria": "Supprimer la planification",
+    "recipientsTo": "À {emails}",
+    "noRecipients": "Aucun destinataire défini",
+    "nextRun": "Prochaine exécution {time}",
+    "addSchedule": "Ajouter une planification",
+    "cadence": "Fréquence",
+    "cadences": {
+      "daily": "Quotidienne",
+      "weekly": "Hebdomadaire",
+      "monthly": "Mensuelle"
+    },
+    "dayOfWeek": "Jour de la semaine",
+    "weekdays": {
+      "sunday": "Dimanche",
+      "monday": "Lundi",
+      "tuesday": "Mardi",
+      "wednesday": "Mercredi",
+      "thursday": "Jeudi",
+      "friday": "Vendredi",
+      "saturday": "Samedi"
+    },
+    "dayOfMonth": "Jour du mois",
+    "time": "Heure",
+    "timezone": "Fuseau horaire",
+    "recipients": "Destinataires",
+    "recipientsPlaceholder": "finance@example.com, cfo@example.com",
+    "recipientsHint": "Adresses courriel séparées par des virgules. L’envoi est mis en file pour le processus de traitement (voir ci-dessous).",
+    "saveSchedule": "Enregistrer la planification",
+    "saved": "Planification enregistrée",
+    "saveFailed": "Impossible d’enregistrer la planification"
+  }
+}

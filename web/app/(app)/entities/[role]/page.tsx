@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -18,11 +19,12 @@ import { PartyDrawer } from '../../parties/PartyDrawer'
 
 export const dynamic = 'force-dynamic'
 
-// URL slug (plural) → role key (singular) + display metadata.
+// URL slug (plural) → role key (singular) + badge variant. Display copy lives
+// in the `entities` catalog under roles.<slug>.* and is translated at render.
 const ROLES = {
-  customers: { role: 'customer', title: 'Customers', desc: 'Companies and people you invoice.', badge: 'default' as const },
-  vendors: { role: 'vendor', title: 'Vendors', desc: 'Suppliers you buy from and pay.', badge: 'secondary' as const },
-  employees: { role: 'employee', title: 'Employees', desc: 'People on payroll and expense reports.', badge: 'outline' as const },
+  customers: { role: 'customer', badge: 'default' as const },
+  vendors: { role: 'vendor', badge: 'secondary' as const },
+  employees: { role: 'employee', badge: 'outline' as const },
 } as const
 
 const ROLE_CONDITION = (role: string) =>
@@ -42,6 +44,9 @@ export default async function EntityRole({
   if (!meta) notFound()
   const role = meta.role
   const basePath = `/entities/${slug}`
+  const t = await getTranslations('entities')
+  const tc = await getTranslations('common')
+  const newLabel = t(`roles.${slug}.newLabel`)
 
   const authz = await requirePermission('parties.read')
   const canManage = can(authz, 'parties.manage')
@@ -91,8 +96,8 @@ export default async function EntityRole({
   ])
 
   const statusOptions = [
-    { value: 'active', label: 'Active', count: Number(c.active) },
-    { value: 'inactive', label: 'Inactive', count: Number(c.inactive) },
+    { value: 'active', label: tc('status.active'), count: Number(c.active) },
+    { value: 'inactive', label: tc('status.inactive'), count: Number(c.inactive) },
   ]
 
   return (
@@ -100,33 +105,33 @@ export default async function EntityRole({
       header={
         <>
           <PageHeader
-            title={meta.title}
-            description={meta.desc}
-            actions={canManage ? <NewPartyButton basePath={basePath} role={role} label={`New ${role}`} /> : undefined}
+            title={t(`roles.${slug}.title`)}
+            description={t(`roles.${slug}.description`)}
+            actions={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search name, code, email…" />
-            <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tc('labels.status')} options={statusOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title={`No ${meta.title.toLowerCase()} yet`}
-          description={`Add the first ${role} to start the directory.`}
-          action={canManage ? <NewPartyButton basePath={basePath} role={role} label={`New ${role}`} /> : undefined}
+          title={t(`roles.${slug}.emptyTitle`)}
+          description={t(`roles.${slug}.emptyDescription`)}
+          action={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
         />
       ) : (
         <>
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath={basePath} currentParams={sp} column="name" sort={listParams.sort} dir={listParams.dir}>Name</SortTh>
-                <SortTh basePath={basePath} currentParams={sp} column="code" sort={listParams.sort} dir={listParams.dir}>Short code</SortTh>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Status</TableHead>
+                <SortTh basePath={basePath} currentParams={sp} column="name" sort={listParams.sort} dir={listParams.dir}>{tc('labels.name')}</SortTh>
+                <SortTh basePath={basePath} currentParams={sp} column="code" sort={listParams.sort} dir={listParams.dir}>{t('list.shortCode')}</SortTh>
+                <TableHead>{tc('labels.email')}</TableHead>
+                <TableHead>{t('list.phone')}</TableHead>
+                <TableHead>{tc('labels.status')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -141,7 +146,7 @@ export default async function EntityRole({
                   <TableCell className="text-slate-500 dark:text-slate-400">{p.email}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{p.phone}</TableCell>
                   <TableCell>
-                    <Badge variant={p.is_active ? 'success' : 'outline'}>{p.is_active ? 'Active' : 'Inactive'}</Badge>
+                    <Badge variant={p.is_active ? 'success' : 'outline'}>{p.is_active ? tc('status.active') : tc('status.inactive')}</Badge>
                   </TableCell>
                 </TableRow>
               ))}

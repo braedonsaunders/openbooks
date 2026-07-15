@@ -2,10 +2,13 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Button, Card, CardContent, Input, Label } from '@openbooks/ui'
 import { Logo } from '../../components/brand-logo'
 
 function LoginForm() {
+  const t = useTranslations('login')
+  const tCommon = useTranslations('common')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -26,7 +29,7 @@ function LoginForm() {
       router.push(params.get('next') ?? '/')
       router.refresh()
     } else {
-      setError('Invalid email or password')
+      setError(t('invalidCredentials'))
       setBusy(false)
     }
   }
@@ -36,11 +39,11 @@ function LoginForm() {
       <CardContent className="p-7">
         <div className="mb-6 space-y-1">
           <Logo />
-          <p className="text-sm text-slate-500 dark:text-slate-400">run on open books</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('tagline')}</p>
         </div>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{tCommon('labels.email')}</Label>
             <Input
               id="email"
               type="email"
@@ -52,7 +55,7 @@ function LoginForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t('password')}</Label>
             <Input
               id="password"
               type="password"
@@ -64,7 +67,7 @@ function LoginForm() {
           </div>
           {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? t('signingIn') : t('signIn')}
           </Button>
         </form>
       </CardContent>

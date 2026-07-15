@@ -1,1 +1,43 @@
-{}
+{
+  "list": {
+    "title": "Cuentas por pagar",
+    "description": "Facturas de proveedor registradas en openbooks — borrador → aprobación → contabilizadas a través del kernel.",
+    "searchPlaceholder": "Buscar facturas, proveedores, referencias…",
+    "columns": {
+      "bill": "Factura",
+      "ref": "Ref."
+    },
+    "empty": {
+      "title": "Aún no hay facturas",
+      "description": "Registre la primera factura de proveedor para iniciar el flujo de cuentas por pagar."
+    }
+  },
+  "actions": {
+    "newBill": "Nueva factura",
+    "submitForApproval": "Enviar para aprobación"
+  },
+  "drawer": {
+    "autosaveHint": "los cambios se guardan automáticamente",
+    "vendorAutosaveHint": "{vendor} · los cambios se guardan automáticamente",
+    "viewGlImpact": "Ver impacto en el libro mayor",
+    "billDate": "Fecha de la factura",
+    "dueDate": "Fecha de vencimiento",
+    "vendorRef": "N.º de ref. del proveedor",
+    "selectVendorPlaceholder": "Seleccionar proveedor…",
+    "accountPlaceholder": "Cuenta…",
+    "noTax": "Sin impuesto",
+    "taxAmountColumn": "Impuesto",
+    "saveState": {
+      "saved": "Todos los cambios guardados",
+      "error": "Error al guardar — corrija y reintente",
+      "dirty": "Cambios sin guardar…"
+    }
+  },
+  "toasts": {
+    "actionFailed": "La acción falló",
+    "submitted": "Enviado para aprobación",
+    "posted": "Contabilizado en el libro mayor",
+    "autosaveFailed": "Falló el guardado automático",
+    "createDraftFailed": "No se pudo crear un borrador de factura"
+  }
+}

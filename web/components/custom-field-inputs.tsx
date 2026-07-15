@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { Input, Label, Select, Textarea } from '@openbooks/ui'
 import type { LineGridColumn, LineGridOption } from './line-grid'
 
@@ -32,6 +33,7 @@ export function CustomFieldInputs({
   onChange: (values: Record<string, unknown>) => void
   readOnly?: boolean
 }) {
+  const tLabels = useTranslations('common.labels')
   if (defs.length === 0) return null
   const set = (key: string, v: unknown) => onChange({ ...values, [key]: v })
 
@@ -46,8 +48,8 @@ export function CustomFieldInputs({
               <p className="text-sm">
                 {def.fieldType === 'boolean'
                   ? v
-                    ? 'Yes'
-                    : 'No'
+                    ? tLabels('yes')
+                    : tLabels('no')
                   : Array.isArray(v)
                     ? v.join(', ')
                     : ((v as string) ?? '—')}
@@ -66,8 +68,8 @@ export function CustomFieldInputs({
             ) : def.fieldType === 'boolean' ? (
               <Select value={v === true || v === 'true' ? 'true' : v === false || v === 'false' ? 'false' : ''} onChange={(e) => set(def.key, e.target.value === 'true')}>
                 <option value="">—</option>
-                <option value="true">Yes</option>
-                <option value="false">No</option>
+                <option value="true">{tLabels('yes')}</option>
+                <option value="false">{tLabels('no')}</option>
               </Select>
             ) : def.fieldType === 'select' ? (
               <Select value={(v as string) ?? ''} onChange={(e) => set(def.key, e.target.value)}>

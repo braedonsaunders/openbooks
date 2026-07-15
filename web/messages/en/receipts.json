@@ -1,1 +1,7 @@
-{}
+{
+  "page": {
+    "title": "Receipts",
+    "description": "Customer payments received and applied to open invoices through the kernel.",
+    "newReceipt": "New receipt"
+  }
+}

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
@@ -15,6 +16,9 @@ export default async function Partners({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const t = await getTranslations('reports.partners')
+  const tr = await getTranslations('reports')
+  const tc = await getTranslations('common')
   const sp = await searchParams
   const k = sp.kind === 'receivable' ? 'receivable' : 'payable'
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
@@ -30,24 +34,24 @@ export default async function Partners({
       header={
         <>
           <PageHeader
-            title={k === 'payable' ? 'Payables by Vendor' : 'Receivables by Customer'}
-            description="Net position per party, from open-item ledger lines."
-            back={{ href: '/reports', label: 'Reports' }}
+            title={k === 'payable' ? t('payablesTitle') : t('receivablesTitle')}
+            description={t('description')}
+            back={{ href: '/reports', label: tr('hub.title') }}
           />
           <div className="flex items-center gap-2">
             <Link href="/reports/partners?kind=payable">
-              <Badge variant={k === 'payable' ? 'default' : 'outline'}>Payables</Badge>
+              <Badge variant={k === 'payable' ? 'default' : 'outline'}>{t('payables')}</Badge>
             </Link>
             <Link href="/reports/partners?kind=receivable">
-              <Badge variant={k === 'receivable' ? 'default' : 'outline'}>Receivables</Badge>
+              <Badge variant={k === 'receivable' ? 'default' : 'outline'}>{t('receivables')}</Badge>
             </Link>
           </div>
-          <SearchInput placeholder="Search party…" />
+          <SearchInput placeholder={t('searchPlaceholder')} />
           <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
             <Card>
               <CardContent className="p-4">
                 <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  Total outstanding
+                  {t('totalOutstanding')}
                 </span>
                 <span className="block text-xl font-semibold tabular-nums">{money(flip * total)}</span>
               </CardContent>
@@ -55,7 +59,7 @@ export default async function Partners({
             <Card>
               <CardContent className="p-4">
                 <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  Parties with balance
+                  {t('partiesWithBalance')}
                 </span>
                 <span className="block text-xl font-semibold tabular-nums">{rows.length}</span>
               </CardContent>
@@ -67,16 +71,16 @@ export default async function Partners({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Party</TableHead>
-            <TableHead className="text-right">Outstanding</TableHead>
-            <TableHead className="text-right">GL lines</TableHead>
+            <TableHead>{tc('labels.party')}</TableHead>
+            <TableHead className="text-right">{t('columns.outstanding')}</TableHead>
+            <TableHead className="text-right">{t('columns.glLines')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((r, i) => (
             <TableRow key={r.id ?? `none-${i}`}>
               <TableCell>
-                {r.display_name ?? <span className="text-slate-400 italic">(no party on lines)</span>}
+                {r.display_name ?? <span className="text-slate-400 italic">{t('noPartyOnLines')}</span>}
               </TableCell>
               <TableCell
                 className={cn('text-right tabular-nums', flip * Number(r.balance) < 0 && 'text-red-600 dark:text-red-400')}

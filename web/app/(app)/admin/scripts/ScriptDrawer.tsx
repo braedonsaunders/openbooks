@@ -2,13 +2,31 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { dateTime } from '../../../../lib/format'
 
-const TRIGGERS = ['before_submit', 'before_post', 'after_post', 'before_void', 'scheduled']
-const KINDS = ['', 'vendor_bill', 'customer_invoice', 'vendor_payment', 'customer_payment', 'expense_report', 'journal']
+// Enum values with their message keys under admin.scripts, translated at render.
+const TRIGGERS: { value: string; labelKey: string }[] = [
+  { value: 'before_submit', labelKey: 'triggers.beforeSubmit' },
+  { value: 'before_post', labelKey: 'triggers.beforePost' },
+  { value: 'after_post', labelKey: 'triggers.afterPost' },
+  { value: 'before_void', labelKey: 'triggers.beforeVoid' },
+  { value: 'scheduled', labelKey: 'triggers.scheduled' },
+]
+const KINDS: { value: string; labelKey: string }[] = [
+  { value: '', labelKey: 'drawer.allKindsOption' },
+  { value: 'vendor_bill', labelKey: 'kinds.vendorBill' },
+  { value: 'customer_invoice', labelKey: 'kinds.customerInvoice' },
+  { value: 'vendor_payment', labelKey: 'kinds.vendorPayment' },
+  { value: 'customer_payment', labelKey: 'kinds.customerPayment' },
+  { value: 'expense_report', labelKey: 'kinds.expenseReport' },
+  { value: 'journal', labelKey: 'kinds.journal' },
+]
+
+const RUN_STATUSES = new Set(['ok', 'aborted', 'error'])
 
 const TEMPLATE = `// ctx = { trigger, document, lines, org } — deep-frozen.
 // ob.log(...) records to the run log; ob.abort('reason') vetoes.
@@ -23,15 +41,18 @@ function main(ctx) {
 `
 
 export function NewScriptButton() {
+  const t = useTranslations('admin.scripts')
   const router = useRouter()
   return (
     <Button onClick={() => router.push('/admin/scripts?script=new')}>
-      <Plus size={15} /> New script
+      <Plus size={15} /> {t('drawer.newScript')}
     </Button>
   )
 }
 
 export function ScriptDrawer({ script, runs }: { script: Record<string, any> | null; runs: Record<string, any>[] }) {
+  const t = useTranslations('admin.scripts')
+  const tCommon = useTranslations('common')
   const creating = !script
   const router = useRouter()
   const [name, setName] = useState<string>(script?.name ?? '')
@@ -61,11 +82,11 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not save the script')
+      toast.error(data.error ?? t('drawer.saveFailed'))
       setBusy(false)
       return
     }
-    toast.success(creating ? 'Script created' : 'Script saved')
+    toast.success(creating ? t('drawer.created') : t('drawer.saved'))
     router.push('/admin/scripts')
     router.refresh()
   }
@@ -75,12 +96,16 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
       open
       closeHref="/admin/scripts"
       size="xl"
-      title={creating ? 'New script' : script!.name}
-      description="Sandboxed JavaScript (QuickJS) — no filesystem, network, or database access."
+      title={creating ? t('drawer.newTitle') : script!.name}
+      description={t('drawer.description')}
       headerActions={
         <>
           <Button disabled={busy || !name || !source.includes('function main')} onClick={save}>
-            {busy ? 'Saving…' : creating ? 'Create script' : 'Save script'}
+            {busy
+              ? tCommon('actions.saving')
+              : creating
+                ? t('drawer.createScript')
+                : t('drawer.saveScript')}
           </Button>
         </>
       }
@@ -93,7 +118,7 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
               onChange={(e) => setIsActive(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            Active
+            {tCommon('labels.active')}
           </label>
         </div>
       }
@@ -101,25 +126,25 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
       <div className="space-y-4 p-1">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5 lg:col-span-2">
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="AP policy: big bills need a memo" />
+            <Label>{tCommon('labels.name')}</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} />
           </div>
           <div className="space-y-1.5">
-            <Label>Trigger</Label>
+            <Label>{t('drawer.trigger')}</Label>
             <Select value={triggerPoint} onChange={(e) => setTriggerPoint(e.target.value)}>
-              {TRIGGERS.map((t) => (
-                <option key={t} value={t}>
-                  {t.replace('_', ' ')}
+              {TRIGGERS.map((tr) => (
+                <option key={tr.value} value={tr.value}>
+                  {t(tr.labelKey)}
                 </option>
               ))}
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Document kind</Label>
+            <Label>{t('drawer.documentKind')}</Label>
             <Select value={documentKind} onChange={(e) => setDocumentKind(e.target.value)}>
               {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k === '' ? 'All kinds' : k.replace('_', ' ')}
+                <option key={k.value} value={k.value}>
+                  {t(k.labelKey)}
                 </option>
               ))}
             </Select>
@@ -128,7 +153,8 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
 
         <div className="space-y-1.5">
           <Label>
-            Source <span className="font-normal text-slate-400">— must define function main(ctx)</span>
+            {t('drawer.source')}{' '}
+            <span className="font-normal text-slate-400">{t('drawer.sourceHint')}</span>
           </Label>
           <textarea
             value={source}
@@ -141,23 +167,23 @@ export function ScriptDrawer({ script, runs }: { script: Record<string, any> | n
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Timeout (ms)</Label>
+            <Label>{t('drawer.timeoutMs')}</Label>
             <Input inputMode="numeric" value={timeoutMs} onChange={(e) => setTimeoutMs(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Run order</Label>
+            <Label>{t('drawer.runOrder')}</Label>
             <Input inputMode="numeric" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
           </div>
         </div>
 
         {runs.length > 0 ? (
           <div className="space-y-2">
-            <Label>Recent runs</Label>
+            <Label>{t('drawer.recentRuns')}</Label>
             <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
               {runs.map((r, i) => (
                 <div key={i} className="flex items-start gap-3 px-3 py-2 text-sm">
                   <Badge variant={r.status === 'ok' ? 'success' : r.status === 'aborted' ? 'warning' : 'destructive'}>
-                    {r.status}
+                    {RUN_STATUSES.has(r.status) ? t(`drawer.runStatus.${r.status}`) : r.status}
                   </Badge>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-slate-500 dark:text-slate-400">

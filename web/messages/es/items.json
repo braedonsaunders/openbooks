@@ -1,1 +1,55 @@
-{}
+{
+  "list": {
+    "title": "Artículos y servicios",
+    "description": "El catálogo detrás de cada línea de documento — servicios, mano de obra, cargos y descuentos.",
+    "searchPlaceholder": "Buscar por nombre, código, categoría…",
+    "kindFilter": "Tipo",
+    "emptyTitle": "Aún no hay artículos",
+    "emptyDescription": "Agregue el primer servicio, mano de obra o cargo para iniciar el catálogo.",
+    "newButton": "Nuevo artículo",
+    "createDraftFailed": "No se pudo crear un borrador de artículo"
+  },
+  "labels": {
+    "code": "Código",
+    "kind": "Tipo",
+    "category": "Categoría",
+    "unit": "Unidad",
+    "defaultRate": "Tarifa predeterminada",
+    "incomeAccount": "Cuenta de ingresos",
+    "expenseAccount": "Cuenta de gastos",
+    "taxCode": "Código de impuesto"
+  },
+  "kinds": {
+    "service": "Servicio",
+    "non_inventory": "Sin inventario",
+    "inventory": "Inventario",
+    "assembly": "Ensamblaje",
+    "kit": "Kit",
+    "other_charge": "Otro cargo",
+    "labor": "Mano de obra",
+    "absence": "Ausencia",
+    "discount": "Descuento"
+  },
+  "drawer": {
+    "newItem": "Nuevo artículo",
+    "autosaveHint": "Los cambios se guardan automáticamente.",
+    "activate": "Activar",
+    "deactivate": "Desactivar",
+    "nameToActivate": "Asigne un nombre al artículo para activarlo",
+    "activated": "Artículo activado",
+    "deactivated": "Artículo desactivado",
+    "updateFailed": "Error al actualizar",
+    "autosaveFailed": "Falló el guardado automático",
+    "allSaved": "Todos los cambios guardados",
+    "saveFailedRetry": "Error al guardar — corrija y reintente",
+    "unsavedChanges": "Cambios sin guardar…",
+    "namePlaceholder": "Nombre del artículo o servicio…",
+    "codePlaceholder": "SVC-01",
+    "categoryPlaceholder": "Servicios",
+    "unitPlaceholder": "h",
+    "noIncomeAccount": "Sin cuenta de ingresos",
+    "noExpenseAccount": "Sin cuenta de gastos",
+    "selectAccount": "Seleccionar cuenta…",
+    "showOnTimesheet": "Mostrar en la hoja de horas"
+  }
+}

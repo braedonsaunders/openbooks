@@ -1,1 +1,190 @@
-{}
+{
+  "types": {
+    "asset_bank": "Banque",
+    "liability_card": "Carte"
+  },
+  "reconStatus": {
+    "signed_off": "approuvé",
+    "balanced": "équilibré",
+    "in_progress": "en cours"
+  },
+  "matchStatus": {
+    "matched": "apparié",
+    "unmatched": "non apparié",
+    "excluded": "exclu"
+  },
+  "matchedBy": {
+    "auto": "auto",
+    "manual": "manuel",
+    "rule": "règle"
+  },
+  "labels": {
+    "never": "jamais",
+    "ref": "Réf.",
+    "entry": "Écriture",
+    "reconcileThrough": "Rapprocher jusqu’au",
+    "statementBalance": "Solde du relevé",
+    "statementDate": "Date du relevé",
+    "openingBalance": "Solde d’ouverture",
+    "closingBalance": "Solde de clôture",
+    "source": "Source"
+  },
+  "errors": {
+    "requestFailed": "Échec de la requête",
+    "startFailed": "Impossible de démarrer le rapprochement bancaire",
+    "fileReadFailed": "Impossible de lire {name}"
+  },
+  "list": {
+    "title": "Banque",
+    "description": "Comptes à rapprocher — importez les relevés bancaires, appariez l’activité au grand livre et approuvez les rapprochements bancaires.",
+    "searchPlaceholder": "Rechercher des comptes…",
+    "emptyTitle": "Aucun compte à rapprocher",
+    "emptyDescription": "Marquez vos comptes de banque, de carte et de compensation comme rapprochables dans le plan comptable pour commencer à les rapprocher ici.",
+    "columns": {
+      "glBalance": "Solde au grand livre",
+      "reconciledThrough": "Rapproché jusqu’au",
+      "unmatchedLines": "Lignes non appariées"
+    },
+    "badges": {
+      "reconciling": "rapprochement en cours",
+      "linesToMatch": "lignes à apparier",
+      "upToDate": "à jour"
+    }
+  },
+  "account": {
+    "description": "{details} — importez les relevés, puis appariez et approuvez.",
+    "stats": {
+      "glBalance": "Solde au grand livre (comptabilisé)",
+      "reconciledThrough": "Rapproché jusqu’au",
+      "unmatchedLines": "Lignes de relevé non appariées",
+      "reconciliation": "Rapprochement bancaire"
+    },
+    "badges": {
+      "inProgress": "en cours",
+      "noneOpen": "aucun ouvert"
+    },
+    "statementsTitle": "Relevés",
+    "searchStatements": "Rechercher des relevés…",
+    "statementsEmptyTitle": "Aucun relevé importé",
+    "statementsEmptyDescription": "Importez un relevé OFX ou CSV pour intégrer l’activité bancaire de ce compte.",
+    "columns": {
+      "unmatched": "Non apparié",
+      "opening": "Ouverture",
+      "closing": "Clôture",
+      "imported": "Importé",
+      "throughDate": "Date limite",
+      "started": "Démarré",
+      "signedOff": "Approuvé"
+    },
+    "reconciliationsTitle": "Rapprochements bancaires",
+    "searchReconciliations": "Rechercher par date ou solde…",
+    "reconciliationsEmptyTitle": "Aucun rapprochement pour l’instant",
+    "reconciliationsEmptyDescription": "Démarrez un rapprochement avec la date de clôture et le solde de clôture du relevé bancaire.",
+    "openWorkspace": "Ouvrir l’espace de travail"
+  },
+  "import": {
+    "button": "Importer un relevé",
+    "title": "Importer un relevé bancaire",
+    "description": "Collez du texte OFX ou CSV, ou choisissez un fichier — il est lu dans votre navigateur et importé sous forme de lignes analysées.",
+    "preview": "Aperçu",
+    "importAction": "Importer",
+    "importCount": "Importer {count, plural, one {# ligne} other {# lignes}}",
+    "importedToast": "{imported, plural, one {# ligne importée} other {# lignes importées}}{duplicates, plural, =0 {} one { — # doublon ignoré} other { — # doublons ignorés}}",
+    "previewSummary": "{imported, plural, one {# nouvelle ligne} other {# nouvelles lignes}}{duplicates, plural, =0 {} one { · # doublon ignoré} other { · # doublons ignorés}}",
+    "format": "Format",
+    "formatOfx": "OFX / QFX",
+    "formatCsv": "CSV",
+    "file": "Fichier",
+    "chooseFile": "Choisir un fichier…",
+    "orPasteBelow": "ou collez ci-dessous",
+    "statementText": "Texte du relevé",
+    "pastePlaceholderOfx": "'<OFX>…<STMTTRN>…'",
+    "pastePlaceholderCsv": "Date,Description,Montant\n2026-07-02,Traitement de la paie,-18250.00",
+    "columnMapping": "Correspondance des colonnes",
+    "selectColumn": "Sélectionner une colonne…",
+    "columnN": "Colonne {n}",
+    "debitColumn": "Colonne des débits (si distincte)",
+    "bankTransactionId": "Identifiant d’opération bancaire",
+    "mappingHelp": "Lorsqu’une colonne de débits est mappée, la colonne Montant est traitée comme la colonne des crédits (entrées de fonds) et les débits sont importés en négatif. Les dates numériques ambiguës sont lues au format MM/DD/YYYY.",
+    "detectColumns": "Détecter les colonnes",
+    "optionalPlaceholder": "facultatif",
+    "nothingNew": "Chaque ligne analysée existe déjà dans ce compte — rien de nouveau à importer.",
+    "moreLines": "…et {count, plural, one {# autre ligne} other {# autres lignes}}",
+    "totalBadge": "{count, number} au total"
+  },
+  "start": {
+    "resume": "Reprendre le rapprochement",
+    "button": "Démarrer le rapprochement",
+    "title": "Démarrer un rapprochement bancaire",
+    "description": "Saisissez la date de clôture du relevé bancaire et son solde de clôture — l’espace de travail apparie tout jusqu’à cette date.",
+    "start": "Démarrer",
+    "starting": "Démarrage…",
+    "currentGlBalance": "Solde actuel au grand livre : <amt>{amount}</amt>"
+  },
+  "drawer": {
+    "title": "Relevé du {date}",
+    "description": "Importé le {date} · ouverture {opening} · clôture {closing}",
+    "searchLines": "Rechercher des lignes…",
+    "matchColumn": "Appariement",
+    "noLines": "Aucune ligne ne correspond à cette recherche."
+  },
+  "reconcile": {
+    "title": "Rapprochement jusqu’au {date}",
+    "signedOffDescription": "Approuvé le {date}.",
+    "signedOffByDescription": "Approuvé le {date} par {name}.",
+    "description": "Appariez les lignes du relevé bancaire aux lignes de journal comptabilisées jusqu’à ce que l’écart soit de 0,00, puis approuvez.",
+    "stats": {
+      "clearedGlBalance": "Solde compensé au grand livre",
+      "difference": "Écart",
+      "matched": "Apparié"
+    },
+    "matchedCounts": "{bank, number} banque · {gl, number} GL"
+  },
+  "workspace": {
+    "signedOffAlert": "Ce rapprochement bancaire est approuvé — les lignes de journal appariées ci-dessous sont marquées définitivement comme rapprochées.",
+    "autoMatch": "Appariement automatique",
+    "adjust": "Ajuster",
+    "discardSession": "Abandonner la session",
+    "matchSelected": "Apparier la sélection",
+    "signOff": "Approuver",
+    "signOffDisabledTitle": "L’écart doit être de 0,00 pour approuver",
+    "selectionSummary": "Sélection : banque {bank} c. GL {gl}",
+    "noAutoMatches": "Aucun appariement automatique trouvé",
+    "autoMatchedToast": "{count, plural, one {# ligne appariée automatiquement} other {# lignes appariées automatiquement}} ({high} à confiance élevée, {medium} à confiance moyenne)",
+    "matchedToast": "Apparié",
+    "unmatchedToast": "Appariement annulé",
+    "signOffConfirm": "Approuver ce rapprochement bancaire? Les lignes de journal appariées seront marquées comme rapprochées — cette action est irréversible.",
+    "signedOffToast": "Approuvé — {count, plural, one {# ligne de journal rapprochée} other {# lignes de journal rapprochées}}",
+    "discardConfirm": "Abandonner cette session de rapprochement? Ses appariements seront annulés et les lignes de relevé libérées.",
+    "discardedToast": "Rapprochement abandonné",
+    "updatedToast": "Rapprochement mis à jour",
+    "bankLinesTitle": "Lignes du relevé bancaire",
+    "bankLinesCount": "({count, number} non appariées)",
+    "searchBankLines": "Rechercher des lignes bancaires…",
+    "noBankLinesSearch": "Aucune ligne bancaire ne correspond à cette recherche.",
+    "allBankLinesMatched": "Toutes les lignes de relevé jusqu’à la date limite sont appariées.",
+    "selectBankLineAria": "Sélectionner la ligne bancaire du {date} de {amount}",
+    "ledgerLinesTitle": "Lignes du grand livre",
+    "ledgerLinesCount": "({count, number} non rapprochées)",
+    "searchGlLines": "Rechercher des lignes du GL…",
+    "noGlLinesSearch": "Aucune ligne du grand livre ne correspond à cette recherche.",
+    "allGlLinesReconciled": "Toutes les lignes comptabilisées jusqu’à la date limite sont rapprochées ou appariées.",
+    "selectGlLineAria": "Sélectionner la ligne du grand livre {entry} de {amount}",
+    "matchedTitle": "Appariées",
+    "matchedCount": "({count, plural, one {# paire} other {# paires}})",
+    "searchMatches": "Rechercher des appariements…",
+    "noMatchesSearch": "Aucun appariement trouvé pour cette recherche.",
+    "noMatchesYet": "Rien d’apparié pour l’instant — lancez l’appariement automatique ou appariez des lignes manuellement ci-dessus.",
+    "columns": {
+      "bankDate": "Date banque",
+      "bankDescription": "Description banque",
+      "bankAmount": "Montant banque",
+      "glMemo": "Note GL",
+      "glAmount": "Montant GL",
+      "matchedBy": "Apparié par"
+    },
+    "unmatch": "Annuler l’appariement",
+    "adjustTitle": "Ajuster le rapprochement",
+    "adjustDescription": "Modifiez la date limite ou le solde du relevé bancaire pour cette session."
+  }
+}

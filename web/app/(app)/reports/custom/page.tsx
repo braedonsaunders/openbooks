@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   Badge,
-  Button,
   EmptyState,
   PageHeader,
   Table,
@@ -37,24 +37,13 @@ const KIND_VARIANT: Record<string, 'secondary' | 'outline'> = {
   custom: 'outline',
 }
 
-/** One-line human summary of what a plan does, for the list. */
-function summarizePlan(query: ReportCustomQuery): string {
-  const entity = REPORT_ENTITY_MAP[query.entity]
-  const source = entity?.label ?? query.entity
-  if (query.mode === 'summarize') {
-    const dims = (query.breakouts ?? []).length
-    const measures = (query.measures ?? []).length || 1
-    return `Summary of ${source} · ${dims} group${dims === 1 ? '' : 's'}, ${measures} measure${measures === 1 ? '' : 's'}`
-  }
-  const cols = (query.columns ?? []).length
-  return `${source} detail · ${cols} column${cols === 1 ? '' : 's'}`
-}
-
 export default async function CustomReports({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const t = await getTranslations('reports.custom')
+  const tc = await getTranslations('common')
   const authz = await requirePermission('reports.read')
   const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
   const sp = await searchParams
@@ -65,6 +54,21 @@ export default async function CustomReports({
     allowedSorts: ['name', 'kind', 'updated'] as const,
   })
   const kind = pickString(sp.kind)
+
+  /** One-line human summary of what a plan does, for the list. Entity labels
+   *  come from packages/reports (server-defined constants) and render verbatim. */
+  function summarizePlan(query: ReportCustomQuery): string {
+    const entity = REPORT_ENTITY_MAP[query.entity]
+    const source = entity?.label ?? query.entity
+    if (query.mode === 'summarize') {
+      return t('list.summarySummarize', {
+        source,
+        groups: (query.breakouts ?? []).length,
+        measures: (query.measures ?? []).length || 1,
+      })
+    }
+    return t('list.summaryRows', { source, columns: (query.columns ?? []).length })
+  }
 
   const where = sql`org_id = ${authz.user.orgId}
     ${kind && kind !== 'all' ? sql` and kind = ${kind}` : sql``}
@@ -91,7 +95,7 @@ export default async function CustomReports({
   const filteredTotal = Number(filtered.rows[0]?.n ?? 0)
   const kindOptions = counts.rows.map((r) => ({
     value: r.kind,
-    label: r.kind === 'built_in' ? 'Built-in' : 'Custom',
+    label: r.kind === 'built_in' ? t('kind.builtIn') : t('kind.custom'),
     count: Number(r.n),
   }))
 
@@ -100,17 +104,17 @@ export default async function CustomReports({
       header={
         <>
           <PageHeader
-            title="Custom Reports"
-            description="Build, save, run and schedule reports over the ledger — detail rows or grouped summaries, with filters, breakouts and measures."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={canCreate ? <NewReportButton /> : undefined}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search reports…" />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
             <FilterChips
               basePath="/reports/custom"
               currentParams={sp}
               paramKey="kind"
-              label="Kind"
+              label={t('list.kindFilterLabel')}
               options={kindOptions}
             />
           </div>
@@ -119,8 +123,8 @@ export default async function CustomReports({
     >
       {total === 0 ? (
         <EmptyState
-          title="No reports yet"
-          description="Seed the built-in reports or build your first custom report to get started."
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
           action={canCreate ? <NewReportButton /> : undefined}
         />
       ) : (
@@ -129,16 +133,16 @@ export default async function CustomReports({
             <TableHeader>
               <TableRow>
                 <SortTh basePath="/reports/custom" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>
-                  Report
+                  {t('list.columns.report')}
                 </SortTh>
-                <TableHead>Description</TableHead>
+                <TableHead>{tc('labels.description')}</TableHead>
                 <SortTh basePath="/reports/custom" currentParams={sp} column="kind" sort={params.sort} dir={params.dir}>
-                  Kind
+                  {t('list.columns.kind')}
                 </SortTh>
                 <SortTh basePath="/reports/custom" currentParams={sp} column="updated" sort={params.sort} dir={params.dir}>
-                  Updated
+                  {tc('labels.updated')}
                 </SortTh>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right">{tc('labels.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -160,7 +164,7 @@ export default async function CustomReports({
                   </TableCell>
                   <TableCell>
                     <Badge variant={KIND_VARIANT[d.kind] ?? 'outline'}>
-                      {d.kind === 'built_in' ? 'Built-in' : 'Custom'}
+                      {d.kind === 'built_in' ? t('kind.builtIn') : t('kind.custom')}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-slate-500 tabular-nums dark:text-slate-400">

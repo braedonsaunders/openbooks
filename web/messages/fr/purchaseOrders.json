@@ -1,1 +1,57 @@
-{}
+{
+  "list": {
+    "title": "Bons de commande",
+    "description": "Engagements fournisseurs sans comptabilisation — émettez-les, puis convertissez-les en facture à la réception.",
+    "searchPlaceholder": "Rechercher bons de commande, fournisseurs, mémo…",
+    "converted": "Converti",
+    "emptyTitle": "Aucun bon de commande pour l’instant",
+    "emptyDescription": "Créez le premier bon de commande pour lancer le flux approvisionnement-paiement.",
+    "newButton": "Nouveau bon de commande",
+    "createDraftFailed": "Impossible de créer un bon de commande brouillon"
+  },
+  "shared": {
+    "kinds": {
+      "salesOrder": "Commande client",
+      "invoice": "Facture",
+      "bill": "Facture fournisseur"
+    },
+    "docKind": "{kind, select, quote {Soumission} sales_order {Commande client} purchase_order {Bon de commande} customer_invoice {Facture} vendor_bill {Facture fournisseur} other {{kind}}}",
+    "partyLabel": "{kind, select, purchase_order {Fournisseur} other {Client}}",
+    "selectPartyPlaceholder": "{kind, select, purchase_order {Sélectionner un fournisseur…} other {Sélectionner un client…}}",
+    "dateLabel": "{kind, select, quote {Date de la soumission} other {Date de la commande}}",
+    "expiryLabel": "{kind, select, quote {Date d’expiration} sales_order {Date d’expédition / d’échéance} purchase_order {Date prévue} other {Date}}",
+    "draftAutosave": "Brouillon — les modifications s’enregistrent automatiquement.",
+    "issue": "Émettre",
+    "convertTo": "Convertir en {target}",
+    "convertCreated": "Création de {target} {number}",
+    "convertFailed": "Échec de la conversion",
+    "actionFailed": "Échec de l’action",
+    "autosaveFailed": "Échec de l’enregistrement automatique",
+    "toastIssued": "Émis",
+    "toastVoided": "Annulé",
+    "voidConfirmTitle": "Annuler ce document?",
+    "voidConfirmMessage": "L’annulation rend la commande caduque. Cette action est irréversible.",
+    "convertedProgress": "Converti {billed}/{ordered}",
+    "fullyConverted": "Entièrement converti",
+    "allChangesSaved": "Toutes les modifications sont enregistrées",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "unsavedChanges": "Modifications non enregistrées…",
+    "totals": {
+      "subtotal": "Sous-total {amount}",
+      "tax": "Taxe {amount}",
+      "total": "Total {amount}"
+    },
+    "columns": {
+      "item": "Article",
+      "account": "{kind, select, purchase_order {Compte} other {Compte de produits}}",
+      "accountPlaceholder": "Compte…",
+      "qty": "Qté",
+      "unitPrice": "Prix unitaire",
+      "taxAmount": "Mt taxe",
+      "noTax": "Sans taxe"
+    },
+    "linksTitle": "Origine / Converti en",
+    "linkCreatedFrom": "Créé à partir de",
+    "linkConvertedInto": "Converti en"
+  }
+}

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions, trialBalance } from '../../../../lib/reports'
@@ -13,6 +14,8 @@ export default async function TrialBalance({
 }: {
   searchParams: Promise<{ asof?: string; dept?: string; project?: string }>
 }) {
+  const t = await getTranslations('reports')
+  const tc = await getTranslations('common')
   const sp = await searchParams
   const date = sp.asof ?? new Date().toISOString().slice(0, 10)
   const dims = { departmentId: sp.dept || undefined, projectId: sp.project || undefined }
@@ -25,9 +28,9 @@ export default async function TrialBalance({
       header={
         <>
           <PageHeader
-            title="Trial Balance"
-            description={`as of ${date} · ${rows.length} accounts with activity`}
-            back={{ href: '/reports', label: 'Reports' }}
+            title={t('trialBalance.title')}
+            description={t('trialBalance.description', { date, count: rows.length })}
+            back={{ href: '/reports', label: t('hub.title') }}
             actions={<SaveViewButton />}
           />
           <DimensionFilter departments={opts.departments} projects={opts.projects} />
@@ -37,10 +40,10 @@ export default async function TrialBalance({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Account</TableHead>
-            <TableHead className="text-right">Debits</TableHead>
-            <TableHead className="text-right">Credits</TableHead>
-            <TableHead className="text-right">Balance</TableHead>
+            <TableHead>{tc('labels.account')}</TableHead>
+            <TableHead className="text-right">{t('trialBalance.columns.debits')}</TableHead>
+            <TableHead className="text-right">{t('trialBalance.columns.credits')}</TableHead>
+            <TableHead className="text-right">{tc('labels.balance')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -60,7 +63,7 @@ export default async function TrialBalance({
             </TableRow>
           ))}
           <TableRow>
-            <TableCell className="font-bold">Totals</TableCell>
+            <TableCell className="font-bold">{t('trialBalance.totals')}</TableCell>
             <TableCell className="text-right font-bold tabular-nums">{money(totalDebits)}</TableCell>
             <TableCell className="text-right font-bold tabular-nums">{money(totalCredits)}</TableCell>
             <TableCell

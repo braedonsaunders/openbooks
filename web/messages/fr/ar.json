@@ -1,1 +1,45 @@
-{}
+{
+  "list": {
+    "title": "Comptes clients",
+    "description": "Factures clients saisies dans openbooks — brouillon → approbation → comptabilisées par le noyau.",
+    "searchPlaceholder": "Rechercher factures, clients, réf.…",
+    "emptyTitle": "Aucune facture pour l’instant",
+    "emptyDescription": "Saisissez la première facture client pour lancer le flux des comptes clients.",
+    "columns": {
+      "invoice": "Facture",
+      "ref": "Réf."
+    }
+  },
+  "actions": {
+    "newInvoice": "Nouvelle facture",
+    "submitForApproval": "Soumettre pour approbation"
+  },
+  "drawer": {
+    "autosaveHint": "les modifications s’enregistrent automatiquement",
+    "viewGlImpact": "Voir l’impact au GL",
+    "allChangesSaved": "Toutes les modifications sont enregistrées",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "unsavedChanges": "Modifications non enregistrées…",
+    "subtotalAmount": "Sous-total {amount}",
+    "taxTotalAmount": "Taxe {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Solde dû {amount}",
+    "invoiceDate": "Date de la facture",
+    "dueDate": "Date d’échéance",
+    "customerRef": "N° de réf. client",
+    "selectCustomerPlaceholder": "Sélectionner un client…",
+    "columns": {
+      "incomeAccount": "Compte de produits",
+      "accountPlaceholder": "Compte…",
+      "taxAmount": "Mt taxe",
+      "noTax": "Sans taxe"
+    }
+  },
+  "toasts": {
+    "actionFailed": "Échec de l’action",
+    "submitted": "Soumis pour approbation",
+    "posted": "Comptabilisé au grand livre",
+    "autosaveFailed": "Échec de l’enregistrement automatique",
+    "createDraftFailed": "Impossible de créer une facture brouillon"
+  }
+}

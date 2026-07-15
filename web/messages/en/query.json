@@ -1,1 +1,7 @@
-{}
+{
+  "title": "SQL",
+  "description": "Real PostgreSQL — not a query dialect. Runs read-only under a SELECT-only role with a 10-second timeout. ⌘⏎ to run.",
+  "run": "Run query",
+  "running": "Running…",
+  "resultSummary": "{count, plural, one {# row} other {# rows}}{truncated, select, true { (truncated)} other {}} · {duration}ms"
+}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { LayoutDashboard, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@openbooks/ui'
@@ -35,27 +36,6 @@ interface ProjectPayload {
   }[]
 }
 
-const STATUS_OPTIONS = [
-  { value: 'quoted', label: 'Quoted' },
-  { value: 'awarded', label: 'Awarded' },
-  { value: 'active', label: 'Active' },
-  { value: 'substantially_complete', label: 'Substantially complete' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
-const BILLING_OPTIONS = [
-  { value: 'time_and_materials', label: 'Time & materials' },
-  { value: 'fixed_price', label: 'Fixed price' },
-  { value: 'cost_plus', label: 'Cost plus' },
-]
-
-const TASK_STATUS_OPTIONS = [
-  { value: 'open', label: 'Open' },
-  { value: 'complete', label: 'Complete' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
 const field = 'space-y-1.5'
 
 const emptyTask = (): TaskRow => ({
@@ -78,9 +58,42 @@ export function ProjectDrawer({
   canManage: boolean
   basePath?: string
 }) {
+  const t = useTranslations('projects')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const pr = payload.project
+  // 'New project' is the server-side draft sentinel stored in the DB — compared
+  // and saved verbatim; only its *display* goes through the catalog.
   const isPlaceholderName = pr.name === 'New project'
+
+  // Enum option lists — values are API codes, labels come from the catalogs.
+  const statusOptions = useMemo(
+    () => [
+      { value: 'quoted', label: t('status.quoted') },
+      { value: 'awarded', label: t('status.awarded') },
+      { value: 'active', label: tCommon('status.active') },
+      { value: 'substantially_complete', label: t('status.substantially_complete') },
+      { value: 'closed', label: tCommon('status.closed') },
+      { value: 'cancelled', label: tCommon('status.cancelled') },
+    ],
+    [t, tCommon],
+  )
+  const billingOptions = useMemo(
+    () => [
+      { value: 'time_and_materials', label: t('billing.time_and_materials') },
+      { value: 'fixed_price', label: t('billing.fixed_price') },
+      { value: 'cost_plus', label: t('billing.cost_plus') },
+    ],
+    [t],
+  )
+  const taskStatusOptions = useMemo(
+    () => [
+      { value: 'open', label: tCommon('status.open') },
+      { value: 'complete', label: t('taskStatus.complete') },
+      { value: 'cancelled', label: tCommon('status.cancelled') },
+    ],
+    [t, tCommon],
+  )
 
   const [name, setName] = useState<string>(isPlaceholderName ? '' : (pr.name ?? ''))
   const [code, setCode] = useState<string>(pr.code ?? '')
@@ -158,7 +171,7 @@ export function ProjectDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/projects/${pr.id}`, {
         method: 'PATCH',
@@ -170,10 +183,10 @@ export function ProjectDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('drawer.autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload, canManage])
 
@@ -185,10 +198,10 @@ export function ProjectDrawer({
       body: JSON.stringify({ isActive: next }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Update failed')
+    if (!res.ok) toast.error(data.error ?? t('drawer.updateFailed'))
     else {
       setIsActive(next)
-      toast.success(next ? 'Project activated' : 'Project deactivated')
+      toast.success(next ? t('drawer.activated') : t('drawer.deactivated'))
     }
     setBusy(false)
     router.refresh()
@@ -203,30 +216,32 @@ export function ProjectDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span>{name.trim() || 'New project'}</span>
-          <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? 'Active' : 'Inactive'}</Badge>
+          <span>{name.trim() || t('drawer.newProject')}</span>
+          <Badge variant={isActive ? 'success' : 'outline'}>
+            {isActive ? tCommon('status.active') : tCommon('status.inactive')}
+          </Badge>
         </span>
       }
-      description={canManage ? 'Changes save automatically.' : undefined}
+      description={canManage ? t('drawer.autosaveHint') : undefined}
       headerActions={
         <>
           <Link href={`/projects/${pr.id}`}>
             <Button variant="outline">
-              <LayoutDashboard size={15} /> Open cockpit
+              <LayoutDashboard size={15} /> {t('drawer.openCockpit')}
             </Button>
           </Link>
           {canManage ? (
             isActive ? (
               <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                Deactivate
+                {t('drawer.deactivate')}
               </Button>
             ) : (
               <>
                 {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Name the project to activate it</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
                 ) : null}
                 <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                  Activate
+                  {t('drawer.activate')}
                 </Button>
               </>
             )
@@ -243,12 +258,12 @@ export function ProjectDrawer({
           >
             {canManage
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('drawer.allSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('drawer.saveFailedRetry')
+                    : t('drawer.unsavedChanges')
               : null}
           </span>
         </div>
@@ -259,18 +274,18 @@ export function ProjectDrawer({
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              Name<span className="text-red-500"> *</span>
+              {tCommon('labels.name')}<span className="text-red-500"> *</span>
             </Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Project or job name…" disabled={ro} />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Code</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder="JOB-01" disabled={ro} />
+            <Label>{t('labels.code')}</Label>
+            <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder={t('drawer.codePlaceholder')} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Status</Label>
+            <Label>{tCommon('labels.status')}</Label>
             <Select value={status} onChange={(e) => setStatus(e.target.value)} disabled={ro}>
-              {STATUS_OPTIONS.map((o) => (
+              {statusOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -278,24 +293,24 @@ export function ProjectDrawer({
             </Select>
           </div>
           <div className={`${field} lg:col-span-2`}>
-            <Label>Customer</Label>
+            <Label>{tCommon('labels.customer')}</Label>
             <SearchSelect
               value={customerId}
               onChange={setCustomerId}
               options={partyOptions}
               clearable
-              emptyLabel="No customer"
-              placeholder="Select customer…"
-              sheetTitle="Customer"
-              ariaLabel="Customer"
+              emptyLabel={t('drawer.noCustomer')}
+              placeholder={t('drawer.selectCustomer')}
+              sheetTitle={tCommon('labels.customer')}
+              ariaLabel={tCommon('labels.customer')}
               disabled={ro}
             />
           </div>
           <div className={field}>
-            <Label>Billing method</Label>
+            <Label>{t('labels.billingMethod')}</Label>
             <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)} disabled={ro}>
               <option value="">—</option>
-              {BILLING_OPTIONS.map((o) => (
+              {billingOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -303,7 +318,7 @@ export function ProjectDrawer({
             </Select>
           </div>
           <div className={field}>
-            <Label>Contract value</Label>
+            <Label>{t('labels.contractValue')}</Label>
             <Input
               inputMode="decimal"
               className="text-right tabular-nums"
@@ -317,43 +332,43 @@ export function ProjectDrawer({
         {/* -- assignment / schedule ----------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
-            <Label>Foreman</Label>
+            <Label>{t('labels.foreman')}</Label>
             <SearchSelect
               value={foremanId}
               onChange={setForemanId}
               options={partyOptions}
               clearable
-              emptyLabel="No foreman"
-              placeholder="Select foreman…"
-              sheetTitle="Foreman"
-              ariaLabel="Foreman"
+              emptyLabel={t('drawer.noForeman')}
+              placeholder={t('drawer.selectForeman')}
+              sheetTitle={t('labels.foreman')}
+              ariaLabel={t('labels.foreman')}
               disabled={ro}
             />
           </div>
           <div className={field}>
-            <Label>Manager</Label>
+            <Label>{t('labels.manager')}</Label>
             <SearchSelect
               value={managerId}
               onChange={setManagerId}
               options={partyOptions}
               clearable
-              emptyLabel="No manager"
-              placeholder="Select manager…"
-              sheetTitle="Manager"
-              ariaLabel="Manager"
+              emptyLabel={t('drawer.noManager')}
+              placeholder={t('drawer.selectManager')}
+              sheetTitle={t('labels.manager')}
+              ariaLabel={t('labels.manager')}
               disabled={ro}
             />
           </div>
           <div className={field}>
-            <Label>Customer PO #</Label>
+            <Label>{t('labels.customerPo')}</Label>
             <Input value={customerPoNumber} onChange={(e) => setCustomerPoNumber(e.target.value)} className="font-mono" disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Start date</Label>
+            <Label>{t('labels.startDate')}</Label>
             <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>End date</Label>
+            <Label>{t('labels.endDate')}</Label>
             <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} disabled={ro} />
           </div>
         </section>
@@ -362,55 +377,55 @@ export function ProjectDrawer({
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Work breakdown & cost budget</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.wbsTitle')}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Tasks and their estimated hours / cost. The cost budget is the sum of these estimates.
+                {t('drawer.wbsDescription')}
               </p>
             </div>
             {!ro ? (
               <Button variant="outline" size="sm" onClick={() => setTasks([...tasks, emptyTask()])}>
-                <Plus size={14} /> Add task
+                <Plus size={14} /> {t('drawer.addTask')}
               </Button>
             ) : null}
           </div>
           {tasks.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">No tasks yet.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('drawer.noTasks')}</p>
           ) : (
             <div className="space-y-2">
-              {tasks.map((t, i) => (
-                <div key={t.id ?? `new-${i}`} className="grid items-end gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-12 dark:border-slate-800">
+              {tasks.map((task, i) => (
+                <div key={task.id ?? `new-${i}`} className="grid items-end gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-12 dark:border-slate-800">
                   <div className={`${field} sm:col-span-2`}>
-                    <Label>Code</Label>
-                    <Input value={t.code} onChange={(e) => setTask(i, { code: e.target.value })} className="font-mono" disabled={ro} />
+                    <Label>{t('labels.code')}</Label>
+                    <Input value={task.code} onChange={(e) => setTask(i, { code: e.target.value })} className="font-mono" disabled={ro} />
                   </div>
                   <div className={`${field} sm:col-span-4`}>
-                    <Label>Task</Label>
-                    <Input value={t.name} onChange={(e) => setTask(i, { name: e.target.value })} placeholder="Task name…" disabled={ro} />
+                    <Label>{t('labels.task')}</Label>
+                    <Input value={task.name} onChange={(e) => setTask(i, { name: e.target.value })} placeholder={t('drawer.taskNamePlaceholder')} disabled={ro} />
                   </div>
                   <div className={`${field} sm:col-span-2`}>
-                    <Label>Est. hours</Label>
+                    <Label>{t('labels.estHours')}</Label>
                     <Input
                       inputMode="decimal"
                       className="text-right tabular-nums"
-                      value={t.estimatedHours}
+                      value={task.estimatedHours}
                       onChange={(e) => setTask(i, { estimatedHours: e.target.value })}
                       disabled={ro}
                     />
                   </div>
                   <div className={`${field} sm:col-span-2`}>
-                    <Label>Est. cost</Label>
+                    <Label>{t('labels.estCost')}</Label>
                     <Input
                       inputMode="decimal"
                       className="text-right tabular-nums"
-                      value={t.estimatedCost}
+                      value={task.estimatedCost}
                       onChange={(e) => setTask(i, { estimatedCost: e.target.value })}
                       disabled={ro}
                     />
                   </div>
                   <div className={`${field} sm:col-span-2`}>
-                    <Label>Status</Label>
-                    <Select value={t.status} onChange={(e) => setTask(i, { status: e.target.value })} disabled={ro}>
-                      {TASK_STATUS_OPTIONS.map((o) => (
+                    <Label>{tCommon('labels.status')}</Label>
+                    <Select value={task.status} onChange={(e) => setTask(i, { status: e.target.value })} disabled={ro}>
+                      {taskStatusOptions.map((o) => (
                         <option key={o.value} value={o.value}>
                           {o.label}
                         </option>
@@ -423,9 +438,9 @@ export function ProjectDrawer({
                         variant="ghost"
                         size="sm"
                         onClick={() => setTasks(tasks.filter((_, j) => j !== i))}
-                        aria-label="Remove task"
+                        aria-label={t('drawer.removeTaskAria')}
                       >
-                        <Trash2 size={14} /> Remove
+                        <Trash2 size={14} /> {tCommon('actions.remove')}
                       </Button>
                     </div>
                   ) : null}
@@ -437,7 +452,7 @@ export function ProjectDrawer({
 
         {/* -- notes --------------------------------------------------- */}
         <section className={field}>
-          <Label>Notes</Label>
+          <Label>{tCommon('labels.notes')}</Label>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={ro} />
         </section>
       </div>

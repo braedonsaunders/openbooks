@@ -1,1 +1,43 @@
-{}
+{
+  "list": {
+    "title": "Accounts Payable",
+    "description": "Vendor bills entered in openbooks — draft → approval → posted through the kernel.",
+    "searchPlaceholder": "Search bills, vendors, refs…",
+    "columns": {
+      "bill": "Bill",
+      "ref": "Ref"
+    },
+    "empty": {
+      "title": "No bills yet",
+      "description": "Enter the first vendor bill to start the AP workflow."
+    }
+  },
+  "actions": {
+    "newBill": "New bill",
+    "submitForApproval": "Submit for approval"
+  },
+  "drawer": {
+    "autosaveHint": "changes save automatically",
+    "vendorAutosaveHint": "{vendor} · changes save automatically",
+    "viewGlImpact": "View GL impact",
+    "billDate": "Bill date",
+    "dueDate": "Due date",
+    "vendorRef": "Vendor ref #",
+    "selectVendorPlaceholder": "Select vendor…",
+    "accountPlaceholder": "Account…",
+    "noTax": "No tax",
+    "taxAmountColumn": "Tax amt",
+    "saveState": {
+      "saved": "All changes saved",
+      "error": "Save failed — fix and retry",
+      "dirty": "Unsaved changes…"
+    }
+  },
+  "toasts": {
+    "actionFailed": "Action failed",
+    "submitted": "Submitted for approval",
+    "posted": "Posted to the ledger",
+    "autosaveFailed": "Autosave failed",
+    "createDraftFailed": "Could not create a draft bill"
+  }
+}

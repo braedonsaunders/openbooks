@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Check, ChevronDown } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { cn, Popover } from '@openbooks/ui'
 import { mergeHref } from '@/lib/list-params'
 
@@ -21,7 +22,7 @@ export function FilterChips({
   paramKey,
   label,
   options,
-  allLabel = 'All',
+  allLabel,
   defaultValue,
   pageParamKey = 'page',
   hideAll = false,
@@ -44,6 +45,7 @@ export function FilterChips({
   /** Hide the generic All option for controls such as sort selectors. */
   hideAll?: boolean
 }) {
+  const tLabels = useTranslations('common.labels')
   const [open, setOpen] = useState(false)
   const raw =
     typeof currentParams[paramKey] === 'string' ? (currentParams[paramKey] as string) : undefined
@@ -97,7 +99,7 @@ export function FilterChips({
       <div className="max-h-72 overflow-auto" role="listbox">
         {!hideAll ? (
           <FilterItem href={allHref} active={allActive} onSelect={() => setOpen(false)}>
-            {allLabel}
+            {allLabel ?? tLabels('all')}
           </FilterItem>
         ) : null}
         {options.map((opt) => (

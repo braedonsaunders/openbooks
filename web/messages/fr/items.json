@@ -1,1 +1,55 @@
-{}
+{
+  "list": {
+    "title": "Articles et services",
+    "description": "Le catalogue derrière chaque ligne de document — services, main-d’œuvre, frais et remises.",
+    "searchPlaceholder": "Rechercher nom, code, catégorie…",
+    "kindFilter": "Type",
+    "emptyTitle": "Aucun article pour l’instant",
+    "emptyDescription": "Ajoutez un premier service, poste de main-d’œuvre ou frais pour démarrer le catalogue.",
+    "newButton": "Nouvel article",
+    "createDraftFailed": "Impossible de créer un article brouillon"
+  },
+  "labels": {
+    "code": "Code",
+    "kind": "Type",
+    "category": "Catégorie",
+    "unit": "Unité",
+    "defaultRate": "Taux par défaut",
+    "incomeAccount": "Compte de produits",
+    "expenseAccount": "Compte de charges",
+    "taxCode": "Code de taxe"
+  },
+  "kinds": {
+    "service": "Service",
+    "non_inventory": "Hors inventaire",
+    "inventory": "Inventaire",
+    "assembly": "Assemblage",
+    "kit": "Trousse",
+    "other_charge": "Autres frais",
+    "labor": "Main-d’œuvre",
+    "absence": "Absence",
+    "discount": "Remise"
+  },
+  "drawer": {
+    "newItem": "Nouvel article",
+    "autosaveHint": "Les modifications s’enregistrent automatiquement.",
+    "activate": "Activer",
+    "deactivate": "Désactiver",
+    "nameToActivate": "Nommez l’article pour l’activer",
+    "activated": "Article activé",
+    "deactivated": "Article désactivé",
+    "updateFailed": "Échec de la mise à jour",
+    "autosaveFailed": "Échec de l’enregistrement automatique",
+    "allSaved": "Toutes les modifications sont enregistrées",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "unsavedChanges": "Modifications non enregistrées…",
+    "namePlaceholder": "Nom de l’article ou du service…",
+    "codePlaceholder": "SVC-01",
+    "categoryPlaceholder": "Services",
+    "unitPlaceholder": "h",
+    "noIncomeAccount": "Aucun compte de produits",
+    "noExpenseAccount": "Aucun compte de charges",
+    "selectAccount": "Sélectionner un compte…",
+    "showOnTimesheet": "Afficher sur la feuille de temps"
+  }
+}

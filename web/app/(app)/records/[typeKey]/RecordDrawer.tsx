@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { FieldValueMap, FormField } from '@openbooks/forms-core'
@@ -38,6 +39,8 @@ export function RecordDrawer({
   canEdit: boolean
 }) {
   const router = useRouter()
+  const t = useTranslations('records.recordDrawer')
+  const tc = useTranslations('common')
   const [status, setStatus] = useState<RecordStatus>(record.status)
   const [values, setValues] = useState<FieldValueMap>(record.data ?? {})
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -56,7 +59,7 @@ export function RecordDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
         method: 'PATCH',
@@ -71,10 +74,10 @@ export function RecordDrawer({
       } else {
         setSaveState('dirty')
         setErrors(mapErrors(data.errors))
-        toast.error(data.error ?? 'Autosave failed')
+        toast.error(data.error ?? t('autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, editable])
 
@@ -90,7 +93,7 @@ export function RecordDrawer({
     const data = await res.json()
     if (!res.ok) {
       setErrors(mapErrors(data.errors))
-      toast.error(data.error ?? 'Action failed')
+      toast.error(data.error ?? t('actionFailed'))
     } else {
       setErrors({})
       setStatus(next)
@@ -98,9 +101,9 @@ export function RecordDrawer({
       toast.success(
         next === 'active'
           ? status === 'draft'
-            ? `${record.recordNumber} is now active`
-            : `${record.recordNumber} reactivated`
-          : `${record.recordNumber} deactivated`,
+            ? t('activatedToast', { number: record.recordNumber })
+            : t('reactivatedToast', { number: record.recordNumber })
+          : t('deactivatedToast', { number: record.recordNumber }),
       )
     }
     setBusy(false)
@@ -109,7 +112,7 @@ export function RecordDrawer({
 
   async function destroy() {
     const ok = await confirmDialog({
-      message: `Delete draft ${record.recordNumber}? This cannot be undone.`,
+      message: t('deleteConfirm', { number: record.recordNumber }),
       tone: 'danger',
     })
     if (!ok) return
@@ -117,11 +120,11 @@ export function RecordDrawer({
     const res = await fetch(`/api/records/${typeKey}/${record.id}`, { method: 'DELETE' })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Delete failed')
+      toast.error(data.error ?? tc('feedback.deleteFailed'))
       setBusy(false)
       return
     }
-    toast.success('Draft deleted')
+    toast.success(t('draftDeleted'))
     router.push(closeHref)
     router.refresh()
   }
@@ -145,38 +148,38 @@ export function RecordDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{record.recordNumber}</span>
-          <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{status}</Badge>
+          <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{tc(`status.${status}`)}</Badge>
         </span>
       }
       description={
         !canEdit
           ? typeName
           : status === 'draft'
-            ? 'Draft — changes save automatically. Activate when it’s ready.'
+            ? t('descriptionDraft')
             : status === 'active'
-              ? 'Active — still editable; changes save automatically.'
-              : 'Inactive — read-only until reactivated.'
+              ? t('descriptionActive')
+              : t('descriptionInactive')
       }
       headerActions={
         <>
           {canEdit && status === 'draft' ? (
             <>
               <Button variant="ghost" disabled={busy} onClick={destroy}>
-                <Trash2 size={14} /> Delete draft
+                <Trash2 size={14} /> {t('deleteDraft')}
               </Button>
               <Button disabled={busy || saveState === 'saving'} onClick={() => transition('active')}>
-                Activate
+                {t('activate')}
               </Button>
             </>
           ) : null}
           {canEdit && status === 'active' ? (
             <Button variant="outline" disabled={busy} onClick={() => transition('inactive')}>
-              Deactivate
+              {t('deactivate')}
             </Button>
           ) : null}
           {canEdit && status === 'inactive' ? (
             <Button disabled={busy} onClick={() => transition('active')}>
-              Reactivate
+              {t('reactivate')}
             </Button>
           ) : null}
         </>
@@ -186,10 +189,10 @@ export function RecordDrawer({
           <span className="text-xs text-slate-500 dark:text-slate-400">
             {editable
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('allSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
-                  : 'Unsaved changes…'
+                  ? tc('actions.saving')
+                  : t('unsaved')
               : null}
           </span>
         </div>

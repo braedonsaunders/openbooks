@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import type { InsightQuery, QueryResult, VizSettings, VizType } from '@openbooks/analytics'
 import { InsightResultView } from '@openbooks/analytics/viz'
 import { Skeleton } from '@openbooks/ui'
@@ -29,6 +30,7 @@ export function CardTile({
   header?: React.ReactNode
   className?: string
 }) {
+  const t = useTranslations('insights')
   const [result, setResult] = useState<QueryResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const seq = useRef(0)
@@ -45,12 +47,13 @@ export function CardTile({
       .then(async (res) => {
         const data = await res.json()
         if (mySeq !== seq.current) return
-        if (!res.ok) setError(data.error ?? 'Query failed')
+        if (!res.ok) setError(data.error ?? t('errors.queryFailed'))
         else setResult(data as QueryResult)
       })
       .catch(() => {
-        if (mySeq === seq.current) setError('Could not load this card')
+        if (mySeq === seq.current) setError(t('cardTile.loadFailed'))
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.query])
 
   return (

@@ -1,1 +1,57 @@
-{}
+{
+  "list": {
+    "title": "Hojas de horas semanales",
+    "description": "Tiempo de los empleados por semana — registre, envíe y apruebe horas en todas las obras.",
+    "newButton": "Nueva hoja de horas",
+    "emptyTitle": "Aún no hay hojas de horas",
+    "emptyDescription": "Las entradas de tiempo se consolidan aquí en hojas de horas semanales. Cree una para registrar horas contra una obra.",
+    "week": "Semana",
+    "unnamed": "(sin nombre)"
+  },
+  "labels": {
+    "totalHours": "Horas totales",
+    "billableHours": "Horas facturables",
+    "serviceItem": "Artículo de servicio",
+    "timeType": "Tipo de tiempo",
+    "bill": "Facturar",
+    "billable": "Facturable",
+    "dailyTotals": "Totales diarios"
+  },
+  "status": {
+    "submitted": "Enviada",
+    "empty": "Sin horas"
+  },
+  "days": {
+    "sun": "Dom",
+    "mon": "Lun",
+    "tue": "Mar",
+    "wed": "Mié",
+    "thu": "Jue",
+    "fri": "Vie",
+    "sat": "Sáb"
+  },
+  "grid": {
+    "title": "Hoja de horas semanal",
+    "selectEmployee": "Seleccionar empleado…",
+    "submitForApproval": "Enviar para aprobación",
+    "prev": "Ant.",
+    "thisWeek": "Esta semana",
+    "weekOf": "Semana del {from} – {to}",
+    "approvedReadOnly": "Las hojas de horas aprobadas son de solo lectura.",
+    "viewOnly": "Tiene acceso de solo lectura.",
+    "noEmployee": "No hay empleado seleccionado. Elija un empleado arriba para registrar tiempo.",
+    "discardConfirm": "¿Descartar los cambios sin guardar?",
+    "networkError": "Error de red",
+    "saved": "Hoja de horas guardada",
+    "saveBeforeSubmit": "Guarde sus cambios antes de enviar",
+    "submittedToast": "Enviada para aprobación",
+    "approvedToast": "Hoja de horas aprobada",
+    "addLine": "Agregar línea",
+    "projectPlaceholder": "Proyecto…",
+    "lineProjectAria": "Proyecto de la línea {line}",
+    "lineItemAria": "Artículo de la línea {line}",
+    "lineBillableAria": "Facturable de la línea {line}",
+    "lineHoursAria": "Horas de {day} de la línea {line}",
+    "removeLineAria": "Quitar línea {line}"
+  }
+}

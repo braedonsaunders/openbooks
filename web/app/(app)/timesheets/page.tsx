@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -14,12 +15,8 @@ export const dynamic = 'force-dynamic'
 //   all approved → approved · any submitted → submitted · any rejected →
 //   rejected · else draft. Ordered so "most locked wins".
 const STATUSES = ['draft', 'submitted', 'approved', 'rejected'] as const
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  approved: 'Approved',
-  rejected: 'Rejected',
-}
+/** Statuses whose label lives in common.status; 'submitted' lives in timesheets.status. */
+const COMMON_STATUS_KEYS = new Set(['draft', 'approved', 'rejected'])
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'outline' | 'destructive'> = {
   draft: 'secondary',
   submitted: 'warning',
@@ -52,6 +49,10 @@ export default async function Timesheets({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const [t, tCommon] = await Promise.all([getTranslations('timesheets'), getTranslations('common')])
+  const statusLabel = (s: string) =>
+    COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : s === 'submitted' ? t('status.submitted') : s
+
   const authz = await requirePermission('time.read')
   const canManage = can(authz, 'time.manage')
   const orgId = authz.user.orgId
@@ -85,7 +86,7 @@ export default async function Timesheets({
       w.week_start,
       w.total_hours,
       coalesce(w.billable_hours, 0) as billable_hours,
-      coalesce(p.display_name, '(unnamed)') as employee_name,
+      p.display_name as employee_name,
       case
         when w.all_approved then 'approved'
         when w.any_submitted then 'submitted'
@@ -107,7 +108,7 @@ export default async function Timesheets({
       week_start: string
       total_hours: string
       billable_hours: string
-      employee_name: string
+      employee_name: string | null
       status: string
     }[]
   }
@@ -140,21 +141,21 @@ export default async function Timesheets({
 
   // Employee filter — the same active-employee set the editor uses.
   const employees = (await db.execute(sql`
-    select p.id, coalesce(p.display_name, '(unnamed)') as name
+    select p.id, p.display_name as name
       from parties p
      where p.org_id = ${orgId} and p.is_active
        and (
          p.custom->>'nsKind' = 'employee'
          or exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = ${orgId} and r.is_active)
        )
-     order by p.display_name`)) as unknown as { rows: { id: string; name: string }[] }
+     order by p.display_name`)) as unknown as { rows: { id: string; name: string | null }[] }
 
   const statusOptions = (STATUSES as readonly string[]).map((s) => ({
     value: s,
-    label: STATUS_LABELS[s] ?? s,
+    label: statusLabel(s),
     count: counts.get(s) ?? 0,
   }))
-  const employeeOptions = employees.rows.map((e) => ({ value: e.id, label: e.name }))
+  const employeeOptions = employees.rows.map((e) => ({ value: e.id, label: e.name ?? t('list.unnamed') }))
 
   // "New timesheet" targets the current user's linked employee (or the first
   // active employee as a fallback picker seed) and the current week.
@@ -169,7 +170,7 @@ export default async function Timesheets({
       href={newHref}
       className="inline-flex h-8 items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
     >
-      New timesheet
+      {t('list.newButton')}
     </Link>
   ) : undefined
 
@@ -178,32 +179,32 @@ export default async function Timesheets({
       header={
         <>
           <PageHeader
-            title="Weekly timesheets"
-            description="Employee time by the week — enter, submit, and approve hours across every job."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={NewButton}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <FilterChips basePath="/timesheets" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
-            <FilterChips basePath="/timesheets" currentParams={sp} paramKey="employee" label="Employee" options={employeeOptions} />
+            <FilterChips basePath="/timesheets" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+            <FilterChips basePath="/timesheets" currentParams={sp} paramKey="employee" label={tCommon('labels.employee')} options={employeeOptions} />
           </div>
         </>
       }
     >
       {rows.rows.length === 0 ? (
         <EmptyState
-          title="No timesheets yet"
-          description="Time entries roll up into weekly timesheets here. Create one to log hours against a job."
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
           action={NewButton}
         />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Employee</TableHead>
-              <TableHead>Week</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead align="right" className="text-right">Total hours</TableHead>
-              <TableHead align="right" className="text-right">Billable hours</TableHead>
+              <TableHead>{tCommon('labels.employee')}</TableHead>
+              <TableHead>{t('list.week')}</TableHead>
+              <TableHead>{tCommon('labels.status')}</TableHead>
+              <TableHead align="right" className="text-right">{t('labels.totalHours')}</TableHead>
+              <TableHead align="right" className="text-right">{t('labels.billableHours')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -214,12 +215,12 @@ export default async function Timesheets({
                     href={`/timesheets/entry?employee=${r.employee_party_id}&week=${r.week_start}`}
                     className="text-teal-700 hover:underline dark:text-teal-300"
                   >
-                    {r.employee_name}
+                    {r.employee_name ?? t('list.unnamed')}
                   </Link>
                 </TableCell>
                 <TableCell className="text-slate-500 dark:text-slate-400">{weekLabel(r.week_start)}</TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>{STATUS_LABELS[r.status] ?? r.status}</Badge>
+                  <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>{statusLabel(r.status)}</Badge>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{hours(r.total_hours)}</TableCell>
                 <TableCell className="text-right tabular-nums">{hours(r.billable_hours)}</TableCell>

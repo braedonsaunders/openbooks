@@ -1,1 +1,190 @@
-{}
+{
+  "types": {
+    "asset_bank": "Bank",
+    "liability_card": "Card"
+  },
+  "reconStatus": {
+    "signed_off": "signed off",
+    "balanced": "balanced",
+    "in_progress": "in progress"
+  },
+  "matchStatus": {
+    "matched": "matched",
+    "unmatched": "unmatched",
+    "excluded": "excluded"
+  },
+  "matchedBy": {
+    "auto": "auto",
+    "manual": "manual",
+    "rule": "rule"
+  },
+  "labels": {
+    "never": "never",
+    "ref": "Ref",
+    "entry": "Entry",
+    "reconcileThrough": "Reconcile through",
+    "statementBalance": "Statement balance",
+    "statementDate": "Statement date",
+    "openingBalance": "Opening balance",
+    "closingBalance": "Closing balance",
+    "source": "Source"
+  },
+  "errors": {
+    "requestFailed": "Request failed",
+    "startFailed": "Could not start the reconciliation",
+    "fileReadFailed": "Could not read {name}"
+  },
+  "list": {
+    "title": "Banking",
+    "description": "Reconcilable accounts — import bank statements, match activity against the ledger, and sign off reconciliations.",
+    "searchPlaceholder": "Search accounts…",
+    "emptyTitle": "No reconcilable accounts",
+    "emptyDescription": "Mark your bank, card, and clearing accounts as reconcilable in the chart of accounts to start reconciling them here.",
+    "columns": {
+      "glBalance": "GL balance",
+      "reconciledThrough": "Reconciled through",
+      "unmatchedLines": "Unmatched lines"
+    },
+    "badges": {
+      "reconciling": "reconciling",
+      "linesToMatch": "lines to match",
+      "upToDate": "up to date"
+    }
+  },
+  "account": {
+    "description": "{details} — import statements, then match and sign off.",
+    "stats": {
+      "glBalance": "GL balance (posted)",
+      "reconciledThrough": "Reconciled through",
+      "unmatchedLines": "Unmatched statement lines",
+      "reconciliation": "Reconciliation"
+    },
+    "badges": {
+      "inProgress": "in progress",
+      "noneOpen": "none open"
+    },
+    "statementsTitle": "Statements",
+    "searchStatements": "Search statements…",
+    "statementsEmptyTitle": "No statements imported",
+    "statementsEmptyDescription": "Import an OFX or CSV statement to bring this account's bank activity in.",
+    "columns": {
+      "unmatched": "Unmatched",
+      "opening": "Opening",
+      "closing": "Closing",
+      "imported": "Imported",
+      "throughDate": "Through date",
+      "started": "Started",
+      "signedOff": "Signed off"
+    },
+    "reconciliationsTitle": "Reconciliations",
+    "searchReconciliations": "Search by date or balance…",
+    "reconciliationsEmptyTitle": "No reconciliations yet",
+    "reconciliationsEmptyDescription": "Start a reconciliation with the bank statement's cutoff date and closing balance.",
+    "openWorkspace": "Open workspace"
+  },
+  "import": {
+    "button": "Import statement",
+    "title": "Import bank statement",
+    "description": "Paste OFX or CSV text, or pick a file — it is read in your browser and imported as parsed lines.",
+    "preview": "Preview",
+    "importAction": "Import",
+    "importCount": "Import {count, plural, one {# line} other {# lines}}",
+    "importedToast": "{imported, plural, one {Imported # line} other {Imported # lines}}{duplicates, plural, =0 {} one { — # duplicate skipped} other { — # duplicates skipped}}",
+    "previewSummary": "{imported, plural, one {# new line} other {# new lines}}{duplicates, plural, =0 {} one { · # duplicate skipped} other { · # duplicates skipped}}",
+    "format": "Format",
+    "formatOfx": "OFX / QFX",
+    "formatCsv": "CSV",
+    "file": "File",
+    "chooseFile": "Choose file…",
+    "orPasteBelow": "or paste below",
+    "statementText": "Statement text",
+    "pastePlaceholderOfx": "'<OFX>…<STMTTRN>…'",
+    "pastePlaceholderCsv": "Date,Description,Amount\n2026-07-02,Payroll run,-18250.00",
+    "columnMapping": "Column mapping",
+    "selectColumn": "Select column…",
+    "columnN": "Column {n}",
+    "debitColumn": "Debit column (if split)",
+    "bankTransactionId": "Bank transaction id",
+    "mappingHelp": "With a debit column mapped, Amount is treated as the credit (money-in) column and debits import negated. Ambiguous numeric dates are read as MM/DD/YYYY.",
+    "detectColumns": "Detect columns",
+    "optionalPlaceholder": "optional",
+    "nothingNew": "Every parsed line already exists on this account — nothing new to import.",
+    "moreLines": "…and {count, plural, one {# more line} other {# more lines}}",
+    "totalBadge": "{count, number} total"
+  },
+  "start": {
+    "resume": "Resume reconciliation",
+    "button": "Start reconciliation",
+    "title": "Start reconciliation",
+    "description": "Enter the bank statement's cutoff date and its closing balance — the workspace matches everything up to that date.",
+    "start": "Start",
+    "starting": "Starting…",
+    "currentGlBalance": "Current GL balance: <amt>{amount}</amt>"
+  },
+  "drawer": {
+    "title": "Statement {date}",
+    "description": "Imported {date} · opening {opening} · closing {closing}",
+    "searchLines": "Search lines…",
+    "matchColumn": "Match",
+    "noLines": "No lines match this search."
+  },
+  "reconcile": {
+    "title": "Reconcile through {date}",
+    "signedOffDescription": "Signed off {date}.",
+    "signedOffByDescription": "Signed off {date} by {name}.",
+    "description": "Match bank statement lines to posted journal lines until the difference is 0.00, then sign off.",
+    "stats": {
+      "clearedGlBalance": "Cleared GL balance",
+      "difference": "Difference",
+      "matched": "Matched"
+    },
+    "matchedCounts": "{bank, number} bank · {gl, number} GL"
+  },
+  "workspace": {
+    "signedOffAlert": "This reconciliation is signed off — the matched journal lines below are permanently stamped as reconciled.",
+    "autoMatch": "Auto-match",
+    "adjust": "Adjust",
+    "discardSession": "Discard session",
+    "matchSelected": "Match selected",
+    "signOff": "Sign off",
+    "signOffDisabledTitle": "Difference must be 0.00 to sign off",
+    "selectionSummary": "Bank {bank} vs GL {gl} selected",
+    "noAutoMatches": "No automatic matches found",
+    "autoMatchedToast": "{count, plural, one {Auto-matched # line} other {Auto-matched # lines}} ({high} high, {medium} medium confidence)",
+    "matchedToast": "Matched",
+    "unmatchedToast": "Unmatched",
+    "signOffConfirm": "Sign off this reconciliation? Matched journal lines are stamped as reconciled — this cannot be undone.",
+    "signedOffToast": "Signed off — {count, plural, one {# journal line reconciled} other {# journal lines reconciled}}",
+    "discardConfirm": "Discard this reconciliation session? Its matches are undone and statement lines released.",
+    "discardedToast": "Reconciliation discarded",
+    "updatedToast": "Reconciliation updated",
+    "bankLinesTitle": "Bank statement lines",
+    "bankLinesCount": "({count, number} unmatched)",
+    "searchBankLines": "Search bank lines…",
+    "noBankLinesSearch": "No bank lines match this search.",
+    "allBankLinesMatched": "Every statement line up to the cutoff is matched.",
+    "selectBankLineAria": "Select bank line of {date} for {amount}",
+    "ledgerLinesTitle": "Ledger lines",
+    "ledgerLinesCount": "({count, number} unreconciled)",
+    "searchGlLines": "Search GL lines…",
+    "noGlLinesSearch": "No ledger lines match this search.",
+    "allGlLinesReconciled": "Every posted line up to the cutoff is reconciled or matched.",
+    "selectGlLineAria": "Select ledger line {entry} for {amount}",
+    "matchedTitle": "Matched",
+    "matchedCount": "({count, plural, one {# pair} other {# pairs}})",
+    "searchMatches": "Search matches…",
+    "noMatchesSearch": "No matches found for this search.",
+    "noMatchesYet": "Nothing matched yet — run Auto-match or pair lines manually above.",
+    "columns": {
+      "bankDate": "Bank date",
+      "bankDescription": "Bank description",
+      "bankAmount": "Bank amount",
+      "glMemo": "GL memo",
+      "glAmount": "GL amount",
+      "matchedBy": "Matched by"
+    },
+    "unmatch": "Unmatch",
+    "adjustTitle": "Adjust reconciliation",
+    "adjustDescription": "Change the cutoff date or the bank statement balance for this session."
+  }
+}

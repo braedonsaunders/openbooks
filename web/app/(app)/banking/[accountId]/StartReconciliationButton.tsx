@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Play, Scale } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
@@ -21,6 +22,9 @@ export function StartReconciliationButton({
   openReconciliationId: string | null
   glBalance: string
 }) {
+  const t = useTranslations('banking.start')
+  const tBanking = useTranslations('banking')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -31,7 +35,7 @@ export function StartReconciliationButton({
     return (
       <Button asChild>
         <Link href={`/banking/${accountId}/reconcile/${openReconciliationId}` as any}>
-          <Play size={15} /> Resume reconciliation
+          <Play size={15} /> {t('resume')}
         </Link>
       </Button>
     )
@@ -46,7 +50,7 @@ export function StartReconciliationButton({
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not start the reconciliation')
+      toast.error(data.error ?? tBanking('errors.startFailed'))
       setBusy(false)
       return
     }
@@ -57,21 +61,21 @@ export function StartReconciliationButton({
   return (
     <>
       <Button onClick={() => setOpen(true)}>
-        <Scale size={15} /> Start reconciliation
+        <Scale size={15} /> {t('button')}
       </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
         size="sm"
-        title="Start reconciliation"
-        description="Enter the bank statement's cutoff date and its closing balance — the workspace matches everything up to that date."
+        title={t('title')}
+        description={t('description')}
         headerActions={
           <>
             <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {tCommon('actions.cancel')}
             </Button>
             <Button disabled={busy || !throughDate || statementBalance.trim() === '' || Number.isNaN(Number(statementBalance))} onClick={start}>
-              {busy ? 'Starting…' : 'Start'}
+              {busy ? t('starting') : t('start')}
             </Button>
           </>
         }
@@ -79,13 +83,13 @@ export function StartReconciliationButton({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>
-              Reconcile through<span className="text-red-500"> *</span>
+              {tBanking('labels.reconcileThrough')}<span className="text-red-500"> *</span>
             </Label>
             <Input type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>
-              Statement balance<span className="text-red-500"> *</span>
+              {tBanking('labels.statementBalance')}<span className="text-red-500"> *</span>
             </Label>
             <Input
               inputMode="decimal"
@@ -95,7 +99,10 @@ export function StartReconciliationButton({
               className="text-right tabular-nums"
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Current GL balance: <span className="tabular-nums">{money(glBalance)}</span>
+              {t.rich('currentGlBalance', {
+                amount: money(glBalance),
+                amt: (chunks) => <span className="tabular-nums">{chunks}</span>,
+              })}
             </p>
           </div>
         </div>

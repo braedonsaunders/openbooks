@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -30,6 +31,17 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
 
 const STATUS_ORDER = ['draft', 'pending_approval', 'approved', 'open', 'paid', 'voided']
 
+/** DB status/bucket value → `common.status.*` message key. Unknown values render verbatim. */
+const STATUS_KEYS: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  posted: 'posted',
+  open: 'open',
+  paid: 'paid',
+  voided: 'voided',
+}
+
 const SORT_COLUMNS = {
   date: sql`d.document_date`,
   number: sql`d.document_number`,
@@ -54,6 +66,10 @@ export default async function AR({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requirePermission('ar.read')
+  const t = await getTranslations('ar')
+  const tCommon = await getTranslations('common')
+  const statusLabel = (bucket: string) =>
+    STATUS_KEYS[bucket] ? tCommon(`status.${STATUS_KEYS[bucket]}`) : bucket.replace('_', ' ')
   const sp = await searchParams
   const invoiceId = typeof sp.invoice === 'string' ? sp.invoice : undefined
   const params = parseListParams(sp, {
@@ -144,7 +160,7 @@ export default async function AR({
     .sort((a: any, b: any) => STATUS_ORDER.indexOf(a.bucket) - STATUS_ORDER.indexOf(b.bucket))
     .map((r: any) => ({
       value: r.bucket,
-      label: String(r.bucket).replace('_', ' '),
+      label: statusLabel(String(r.bucket)),
       count: Number(r.n),
     }))
 
@@ -153,21 +169,21 @@ export default async function AR({
       header={
         <>
           <PageHeader
-            title="Accounts Receivable"
-            description="Customer invoices entered in openbooks — draft → approval → posted through the kernel."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={<NewInvoiceButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search invoices, customers, refs…" />
-            <FilterChips basePath="/ar" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath="/ar" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No invoices yet"
-          description="Enter the first customer invoice to start the AR workflow."
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
           action={<NewInvoiceButton />}
         />
       ) : (
@@ -175,14 +191,14 @@ export default async function AR({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/ar" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>Invoice</SortTh>
-                <SortTh basePath="/ar" currentParams={sp} column="customer" sort={params.sort} dir={params.dir}>Customer</SortTh>
-                <SortTh basePath="/ar" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>Date</SortTh>
-                <TableHead>Ref</TableHead>
-                <SortTh basePath="/ar" currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">Total</SortTh>
-                <SortTh basePath="/ar" currentParams={sp} column="balance" sort={params.sort} dir={params.dir} align="right">Balance</SortTh>
-                <SortTh basePath="/ar" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>Status</SortTh>
-                <TableHead>Actions</TableHead>
+                <SortTh basePath="/ar" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{t('list.columns.invoice')}</SortTh>
+                <SortTh basePath="/ar" currentParams={sp} column="customer" sort={params.sort} dir={params.dir}>{tCommon('labels.customer')}</SortTh>
+                <SortTh basePath="/ar" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>{tCommon('labels.date')}</SortTh>
+                <TableHead>{t('list.columns.ref')}</TableHead>
+                <SortTh basePath="/ar" currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">{tCommon('labels.total')}</SortTh>
+                <SortTh basePath="/ar" currentParams={sp} column="balance" sort={params.sort} dir={params.dir} align="right">{tCommon('labels.balance')}</SortTh>
+                <SortTh basePath="/ar" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>{tCommon('labels.status')}</SortTh>
+                <TableHead>{tCommon('labels.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -206,7 +222,7 @@ export default async function AR({
                   </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[inv.bucket] ?? 'secondary'}>
-                      {String(inv.bucket).replace('_', ' ')}
+                      {statusLabel(String(inv.bucket))}
                     </Badge>
                   </TableCell>
                   <TableCell>

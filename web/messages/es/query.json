@@ -1,1 +1,7 @@
-{}
+{
+  "title": "SQL",
+  "description": "PostgreSQL real — no un dialecto de consulta. Se ejecuta en modo de solo lectura con un rol limitado a SELECT y un tiempo máximo de 10 segundos. ⌘⏎ para ejecutar.",
+  "run": "Ejecutar consulta",
+  "running": "Ejecutando…",
+  "resultSummary": "{count, plural, one {# fila} other {# filas}}{truncated, select, true { (truncado)} other {}} · {duration} ms"
+}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, FileText, Loader2, Paperclip, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { dateTime } from '../lib/format'
 
@@ -45,6 +46,8 @@ export function AttachmentPanel({
   targetId: string
   canEdit: boolean
 }) {
+  const t = useTranslations('ui.attachments')
+  const tCommon = useTranslations('common')
   const [items, setItems] = useState<AttachmentMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(0)
@@ -70,7 +73,7 @@ export function AttachmentPanel({
   const uploadOne = useCallback(
     async (file: File) => {
       if (file.size > MAX_BYTES) {
-        toast.error(`${file.name} exceeds the 25 MB limit`)
+        toast.error(t('tooLarge', { name: file.name }))
         return
       }
       const form = new FormData()
@@ -83,18 +86,18 @@ export function AttachmentPanel({
         if (res.ok) {
           const data = (await res.json()) as { attachment: AttachmentMeta }
           setItems((prev) => [data.attachment, ...prev])
-          toast.success(`Attached ${file.name}`)
+          toast.success(t('attached', { name: file.name }))
         } else {
           const err = (await res.json().catch(() => ({}))) as { error?: string }
-          toast.error(err.error ?? `Could not attach ${file.name}`)
+          toast.error(err.error ?? t('attachFailed', { name: file.name }))
         }
       } catch {
-        toast.error(`Could not attach ${file.name}`)
+        toast.error(t('attachFailed', { name: file.name }))
       } finally {
         setUploading((n) => n - 1)
       }
     },
-    [targetTable, targetId],
+    [targetTable, targetId, t],
   )
 
   const handleFiles = useCallback(
@@ -111,10 +114,10 @@ export function AttachmentPanel({
       const res = await fetch(`/api/attachments/${id}`, { method: 'DELETE' })
       if (res.ok) {
         setItems((prev) => prev.filter((a) => a.id !== id))
-        toast.success(`Removed ${name}`)
+        toast.success(t('removed', { name }))
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? 'Could not remove attachment')
+        toast.error(err.error ?? t('removeFailed'))
       }
     } finally {
       setDeleting(null)
@@ -125,7 +128,9 @@ export function AttachmentPanel({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Paperclip className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Attachments</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          {tCommon('labels.attachments')}
+        </span>
         {items.length > 0 ? (
           <span className="text-xs text-slate-500 dark:text-slate-400">{items.length}</span>
         ) : null}
@@ -134,10 +139,10 @@ export function AttachmentPanel({
       <div className="divide-y divide-slate-100 rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
         {loading ? (
           <div className="flex items-center gap-2 px-3 py-3 text-sm text-slate-500 dark:text-slate-400">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            <Loader2 className="h-4 w-4 animate-spin" /> {tCommon('feedback.loading')}
           </div>
         ) : items.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">No files attached yet.</p>
+          <p className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>
         ) : (
           items.map((a) => (
             <div key={a.id} className="flex items-center gap-3 px-3 py-2">
@@ -161,7 +166,7 @@ export function AttachmentPanel({
                   href={`/api/attachments/${a.id}/download`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`Download ${a.filename}`}
+                  aria-label={t('downloadAria', { name: a.filename })}
                 >
                   <Download className="h-4 w-4" />
                 </a>
@@ -173,7 +178,7 @@ export function AttachmentPanel({
                   className="h-8 w-8 text-slate-500 hover:text-red-600 dark:hover:text-red-400"
                   disabled={deleting === a.id}
                   onClick={() => remove(a.id, a.filename)}
-                  aria-label={`Remove ${a.filename}`}
+                  aria-label={t('removeAria', { name: a.filename })}
                 >
                   {deleting === a.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -218,18 +223,19 @@ export function AttachmentPanel({
         >
           {uploading > 0 ? (
             <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-              <Loader2 className="h-4 w-4 animate-spin" /> Uploading {uploading} file
-              {uploading > 1 ? 's' : ''}…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t('uploading', { count: uploading })}
             </span>
           ) : (
             <>
               <UploadCloud className="h-5 w-5 text-slate-400 dark:text-slate-500" />
               <span className="text-slate-600 dark:text-slate-300">
-                Drop files here or <span className="text-teal-700 dark:text-teal-300">browse</span>
+                {t.rich('dropFiles', {
+                  browse: (chunks) => (
+                    <span className="text-teal-700 dark:text-teal-300">{chunks}</span>
+                  ),
+                })}
               </span>
-              <span className="text-xs text-slate-400 dark:text-slate-500">
-                PDF, images, CSV, XLSX, DOCX, TXT · up to 25 MB
-              </span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">{t('acceptHint')}</span>
             </>
           )}
           <input

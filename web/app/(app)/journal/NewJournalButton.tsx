@@ -2,12 +2,15 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 
 /** Instant-into-draft: creates the draft manual journal server-side, opens its flyout. */
 export function NewJournalButton() {
+  const t = useTranslations('journal.newButton')
+  const tc = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -16,7 +19,7 @@ export function NewJournalButton() {
     const res = await fetch('/api/journals/draft', { method: 'POST' })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not create a draft journal')
+      toast.error(data.error ?? t('createFailed'))
       setBusy(false)
       return
     }
@@ -27,7 +30,7 @@ export function NewJournalButton() {
 
   return (
     <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? 'Creating…' : 'New journal'}
+      <Plus size={15} /> {busy ? tc('actions.creating') : t('label')}
     </Button>
   )
 }

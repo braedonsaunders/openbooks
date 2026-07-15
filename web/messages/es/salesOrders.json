@@ -1,1 +1,12 @@
-{}
+{
+  "list": {
+    "title": "Órdenes de venta",
+    "description": "Pedidos de clientes confirmados — emítalos y luego conviértalos en factura a medida que factura.",
+    "searchPlaceholder": "Buscar órdenes de venta, clientes, notas…",
+    "converted": "Convertida",
+    "emptyTitle": "Aún no hay órdenes de venta",
+    "emptyDescription": "Cree una orden de venta o convierta una desde una cotización.",
+    "newButton": "Nueva orden de venta",
+    "createDraftFailed": "No se pudo crear un borrador de orden de venta"
+  }
+}

@@ -1,1 +1,152 @@
-{}
+{
+  "page": {
+    "title": "Payments",
+    "description": "Vendor payments applied to open bills, and EFT payment runs exported as CPA-005 files.",
+    "newPayment": "New payment",
+    "tabs": {
+      "payments": "Payments",
+      "runs": "Payment runs"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {Search payments, vendors, refs…} other {Search receipts, customers, refs…}}",
+    "newLabel": "{side, select, ap {New payment} other {New receipt}}",
+    "columns": {
+      "document": "{side, select, ap {Payment} other {Receipt}}",
+      "bankAccount": "Bank account",
+      "ref": "Ref"
+    },
+    "empty": {
+      "title": "{side, select, ap {No payments yet} other {No receipts yet}}",
+      "description": "{side, select, ap {Record the first vendor payment to start settling open bills.} other {Record the first customer receipt to start settling open invoices.}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "Could not create a draft"
+  },
+  "drawer": {
+    "draftHint": "Draft — changes save automatically.",
+    "viewGlImpact": "View GL impact",
+    "postAction": "{side, select, ap {Pay & post} other {Receive & post}}",
+    "bankAccount": "Bank account",
+    "selectPartyPlaceholder": "{side, select, ap {Select vendor…} other {Select customer…}}",
+    "selectBankAccountPlaceholder": "Select bank account…",
+    "referencePlaceholder": "Cheque / EFT ref…",
+    "openItems": "{side, select, ap {Open bills} other {Open invoices}}",
+    "selectPartyHint": "{side, select, ap {Select a vendor to list their open items.} other {Select a customer to list their open items.}}",
+    "loadingOpenItems": "Loading open items…",
+    "noOpenItems": "{side, select, ap {No open bills for this vendor.} other {No open invoices for this customer.}}",
+    "columns": {
+      "apply": "Apply",
+      "document": "Document",
+      "due": "Due",
+      "original": "Original",
+      "appliedToDate": "Applied to date",
+      "open": "Open",
+      "appliedOn": "Applied on",
+      "applied": "Applied"
+    },
+    "applyAriaLabel": "Apply to {document}",
+    "invalidAllocation": "Each applied amount must be greater than zero and no more than the item’s open balance.",
+    "appliedTo": "Applied to",
+    "voidedNote": "This payment was voided; its posting was reversed.",
+    "noLiveApplications": "No live applications.",
+    "kind": {
+      "vendorBill": "Bill",
+      "customerInvoice": "Invoice",
+      "expenseReport": "Expense report",
+      "journal": "Journal",
+      "entry": "Entry"
+    },
+    "saveState": {
+      "saved": "All changes saved",
+      "error": "Save failed — fix and retry",
+      "dirty": "Unsaved changes…"
+    },
+    "applyingSummary": "{count, plural, one {Applying # item} other {Applying # items}} · <total>Total {amount}</total>",
+    "totalAmount": "Total {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "Could not load open items",
+      "autosaveFailed": "Autosave failed",
+      "postFailed": "Posting failed",
+      "posted": "{side, select, ap {Payment posted and applied} other {Receipt posted and applied}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "EFT origination is not configured",
+    "notConfiguredListDescription": "Payment runs can be assembled, but the CPA-005 file cannot be generated until an administrator sets <code>orgs.settings.eft</code> — missing: {missing}. Seed placeholders with <code>engine/src/seed-eft-settings.ts</code>, then fill in the originator details assigned by the bank.",
+    "notConfiguredDrawerDescription": "The CPA-005 file cannot be generated until an administrator sets <code>orgs.settings.eft</code> — missing: {missing}. Placeholders can be seeded with <code>engine/src/seed-eft-settings.ts</code>, then filled with the bank-assigned originator details."
+  },
+  "runBuilder": {
+    "noOpenBills": "No posted bills with an open balance match.",
+    "selectAllAriaLabel": "Select all bills on this page",
+    "selectAriaLabel": "Select {document}",
+    "columns": {
+      "bill": "Bill",
+      "due": "Due",
+      "ref": "Ref",
+      "bankDetails": "Bank details",
+      "openBalance": "Open balance"
+    },
+    "bankApproved": "approved",
+    "bankMissing": "missing",
+    "payFromBankAccount": "Pay from bank account",
+    "selectBankAccountPlaceholder": "Select bank account…",
+    "fundsDate": "Funds date",
+    "selectionSummary": "{count, plural, one {# bill} other {# bills}} · <total>{amount}</total>",
+    "createRun": "Create payment run",
+    "toasts": {
+      "createFailed": "Could not create the payment run",
+      "created": "Payment run {number} created"
+    }
+  },
+  "runs": {
+    "openBillsHeading": "Open bills to pay",
+    "billsSearchPlaceholder": "Search bills, vendors, refs…",
+    "runsHeading": "Payment runs",
+    "noRunsYet": "No payment runs yet — select bills above to create the first one.",
+    "columns": {
+      "run": "Run",
+      "bankAccount": "Bank account",
+      "fundsDate": "Funds date",
+      "payments": "Payments"
+    },
+    "status": {
+      "confirmed": "Confirmed",
+      "exported": "Exported"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "EFT from {bank}",
+    "descriptionEftWithDate": "EFT from {bank} · funds {date}",
+    "bankAccountFallback": "bank account",
+    "cancelRun": "Cancel run",
+    "downloadFile": "Download CPA-005 file",
+    "downloadBlockedTitle": "Resolve the EFT configuration / bank-detail issues first",
+    "postPayments": "Post payments",
+    "paymentsSummary": "{count, plural, one {# payment} other {# payments}} · <total>Total {amount}</total>",
+    "payeesMissingBankDetails": "Payees missing approved bank details",
+    "columns": {
+      "payee": "Payee",
+      "payment": "Payment",
+      "bankDetails": "Bank details"
+    },
+    "bankApproved": "approved",
+    "instructionStatus": {
+      "pending": "pending",
+      "sent": "sent",
+      "settled": "settled",
+      "returned": "returned",
+      "cancelled": "cancelled"
+    },
+    "confirmPost": "{count, plural, one {Post # payment} other {Post # payments}} totalling {total} to the ledger and apply them to the selected bills?",
+    "confirmCancel": "Cancel run {number}? Its draft payments are deleted; nothing has posted.",
+    "toasts": {
+      "postFailed": "Posting failed",
+      "postedWithFailures": "{count} posted; failed: {failures}",
+      "posted": "{count, plural, one {# payment posted and applied} other {# payments posted and applied}}",
+      "cancelFailed": "Could not cancel the run",
+      "cancelled": "Run cancelled"
+    }
+  }
+}

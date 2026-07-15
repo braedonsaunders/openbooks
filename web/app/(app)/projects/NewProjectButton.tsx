@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
@@ -9,7 +10,9 @@ import { Button } from '@openbooks/ui'
 /**
  * Instant-into-draft: creates the inactive project server-side, opens its flyout.
  */
-export function NewProjectButton({ label = 'New project' }: { label?: string } = {}) {
+export function NewProjectButton({ label }: { label?: string } = {}) {
+  const t = useTranslations('projects')
+  const tCommon = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -22,7 +25,7 @@ export function NewProjectButton({ label = 'New project' }: { label?: string } =
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Could not create a draft project')
+      toast.error(data.error ?? t('list.createDraftFailed'))
       setBusy(false)
       return
     }
@@ -33,7 +36,7 @@ export function NewProjectButton({ label = 'New project' }: { label?: string } =
 
   return (
     <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? 'Creating…' : label}
+      <Plus size={15} /> {busy ? tCommon('actions.creating') : (label ?? t('list.newButton'))}
     </Button>
   )
 }

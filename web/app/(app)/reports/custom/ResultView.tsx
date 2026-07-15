@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import type { ReportRunResult } from '@openbooks/reports'
 
@@ -17,6 +18,7 @@ function isNumericCell(v: string | number | null | undefined): boolean {
  * and the run/view page.
  */
 export function ResultView({ result }: { result: ReportRunResult }) {
+  const t = useTranslations('reports.custom.resultView')
   return (
     <div className="space-y-5">
       {result.summary.length > 0 ? (
@@ -47,7 +49,7 @@ export function ResultView({ result }: { result: ReportRunResult }) {
           ) : null}
           {group.isEmpty ? (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              No rows match this report.
+              {t('noRows')}
             </div>
           ) : (
             <div className="overflow-x-auto">

@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  FIELD_TYPES,
   type FieldType,
   type FormField,
   type FormulaExpression,
@@ -70,6 +70,8 @@ export function TypeBuilderDrawer({
   roles: { key: string; name: string }[]
 }) {
   const router = useRouter()
+  const t = useTranslations('records')
+  const tc = useTranslations('common')
   const isDraft = type.status === 'draft'
 
   const [name, setName] = useState(type.name)
@@ -118,7 +120,7 @@ export function TypeBuilderDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/records/types/${type.id}`, {
         method: 'PATCH',
@@ -132,10 +134,10 @@ export function TypeBuilderDrawer({
         router.refresh()
       } else {
         setSaveState('dirty')
-        toast.error(data.error ?? 'Autosave failed')
+        toast.error(data.error ?? t('typeBuilder.autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload])
 
@@ -148,14 +150,13 @@ export function TypeBuilderDrawer({
   }
 
   function addField(fieldType: FieldType) {
-    const meta = FIELD_TYPES[fieldType]
-    const label = meta.label
+    const label = t(`fieldTypes.${fieldType}.label`)
     const next: FormField = {
       id: uniqueFieldId(slugifyFieldId(label)),
       type: fieldType,
       label,
       ...(fieldType === 'select' || fieldType === 'multi_select' || fieldType === 'radio'
-        ? { validation: { options: [{ value: 'option_1', label: 'Option 1' }] } }
+        ? { validation: { options: [{ value: 'option_1', label: t('typeBuilder.optionPlaceholder', { n: 1 }) }] } }
         : {}),
       ...(fieldType === 'formula'
         ? { formula: { kind: 'sum', of: [] } as FormulaExpression, config: { format: 'number' } }
@@ -180,7 +181,7 @@ export function TypeBuilderDrawer({
 
   async function removeField(f: FormField) {
     const ok = await confirmDialog({
-      message: `Remove the "${f.label}" field? Values already saved under it stop appearing on records.`,
+      message: t('typeBuilder.removeFieldConfirm', { label: f.label }),
       tone: 'danger',
     })
     if (ok) setFields((fs) => fs.filter((x) => x.id !== f.id))
@@ -190,7 +191,7 @@ export function TypeBuilderDrawer({
   async function lifecycle(action: 'publish' | 'archive') {
     if (action === 'archive') {
       const ok = await confirmDialog({
-        message: `Archive "${name}"? Its module and nav entry disappear; records are kept and it can be published again later.`,
+        message: t('typeBuilder.archiveConfirm', { name }),
         tone: 'danger',
       })
       if (!ok) return
@@ -203,10 +204,14 @@ export function TypeBuilderDrawer({
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Action failed')
+      toast.error(data.error ?? t('typeBuilder.actionFailed'))
       if (data.issues) setIssues(data.issues)
     } else {
-      toast.success(action === 'publish' ? `${name} is live at /records/${key}` : 'Record type archived')
+      toast.success(
+        action === 'publish'
+          ? t('typeBuilder.publishedToast', { name, key })
+          : t('typeBuilder.archivedToast'),
+      )
     }
     setBusy(false)
     router.refresh()
@@ -214,7 +219,7 @@ export function TypeBuilderDrawer({
 
   async function destroy() {
     const ok = await confirmDialog({
-      message: `Delete the draft "${name}"? This cannot be undone.`,
+      message: t('typeBuilder.deleteConfirm', { name }),
       tone: 'danger',
     })
     if (!ok) return
@@ -222,11 +227,11 @@ export function TypeBuilderDrawer({
     const res = await fetch(`/api/records/types/${type.id}`, { method: 'DELETE' })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Delete failed')
+      toast.error(data.error ?? tc('feedback.deleteFailed'))
       setBusy(false)
       return
     }
-    toast.success('Draft deleted')
+    toast.success(t('typeBuilder.draftDeleted'))
     router.push('/records/types')
     router.refresh()
   }
@@ -241,38 +246,40 @@ export function TypeBuilderDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <NavIcon iconKey={iconKey} size={16} className="text-slate-500 dark:text-slate-400" />
-          <span>{name || 'Record type'}</span>
-          <Badge variant={STATUS_VARIANT[type.status] ?? 'secondary'}>{type.status}</Badge>
+          <span>{name || t('typeBuilder.fallbackTitle')}</span>
+          <Badge variant={STATUS_VARIANT[type.status] ?? 'secondary'}>
+            {t(`typeStatus.${type.status}`)}
+          </Badge>
         </span>
       }
       description={
         isDraft
-          ? 'Draft — changes save automatically. Publish to generate the module.'
+          ? t('typeBuilder.descriptionDraft')
           : type.status === 'published'
-            ? 'Live — edits apply to the module immediately.'
-            : 'Archived — publish again to restore the module.'
+            ? t('typeBuilder.descriptionPublished')
+            : t('typeBuilder.descriptionArchived')
       }
       headerActions={
         <>
           {isDraft ? (
             <Button variant="ghost" disabled={busy} onClick={destroy}>
-              <Trash2 size={14} /> Delete draft
+              <Trash2 size={14} /> {t('typeBuilder.deleteDraft')}
             </Button>
           ) : null}
           {type.status === 'published' ? (
             <>
               <Button variant="outline" asChild>
                 <Link href={`/records/${key}` as any}>
-                  <ExternalLink size={14} /> Open module
+                  <ExternalLink size={14} /> {t('typeBuilder.openModule')}
                 </Link>
               </Button>
               <Button variant="outline" disabled={busy} onClick={() => lifecycle('archive')}>
-                Archive
+                {t('typeBuilder.archive')}
               </Button>
             </>
           ) : (
             <Button disabled={!canPublish} onClick={() => lifecycle('publish')}>
-              {type.status === 'archived' ? 'Publish again' : 'Publish'}
+              {type.status === 'archived' ? t('typeBuilder.publishAgain') : t('typeBuilder.publish')}
             </Button>
           )}
         </>
@@ -280,7 +287,11 @@ export function TypeBuilderDrawer({
       footer={
         <div className="flex w-full items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {saveState === 'saved' ? 'All changes saved' : saveState === 'saving' ? 'Saving…' : 'Unsaved changes…'}
+            {saveState === 'saved'
+              ? t('typeBuilder.allSaved')
+              : saveState === 'saving'
+                ? tc('actions.saving')
+                : t('typeBuilder.unsaved')}
           </span>
         </div>
       }
@@ -289,35 +300,37 @@ export function TypeBuilderDrawer({
         {issues.length > 0 ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
             <p className="font-medium">
-              Resolve {issues.length} issue{issues.length === 1 ? '' : 's'} before publishing
+              {t('typeBuilder.resolveIssues', { count: issues.length })}
             </p>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               {issues.slice(0, 6).map((issue, i) => (
                 <li key={i}>{describeIssue(issue)}</li>
               ))}
-              {issues.length > 6 ? <li>… and {issues.length - 6} more</li> : null}
+              {issues.length > 6 ? (
+                <li>{t('typeBuilder.moreIssues', { count: issues.length - 6 })}</li>
+              ) : null}
             </ul>
           </div>
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className={field}>
-            <Label>Name (singular)</Label>
-            <Input value={name} onChange={(e) => rename(e.target.value)} placeholder="Equipment item" />
+            <Label>{t('typeBuilder.nameLabel')}</Label>
+            <Input value={name} onChange={(e) => rename(e.target.value)} placeholder={t('typeBuilder.namePlaceholder')} />
           </div>
           <div className={field}>
-            <Label>Plural name</Label>
+            <Label>{t('typeBuilder.pluralLabel')}</Label>
             <Input
               value={pluralName}
               onChange={(e) => {
                 setPluralTouched(true)
                 setPluralName(e.target.value)
               }}
-              placeholder="Equipment items"
+              placeholder={t('typeBuilder.pluralPlaceholder')}
             />
           </div>
           <div className={field}>
-            <Label>Key</Label>
+            <Label>{t('typeBuilder.keyLabel')}</Label>
             <Input
               value={key}
               disabled={!isDraft}
@@ -329,20 +342,20 @@ export function TypeBuilderDrawer({
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {isDraft
-                ? `Module URL: /records/${key || '…'} — pinned once published.`
-                : `Pinned — records and numbering reference /records/${key}.`}
+                ? t('typeBuilder.keyHelpDraft', { key: key || '…' })
+                : t('typeBuilder.keyHelpPinned', { key })}
             </p>
           </div>
           <div className={field}>
-            <Label>Icon</Label>
+            <Label>{t('typeBuilder.iconLabel')}</Label>
             <IconPicker value={iconKey} onChange={setIconKey} />
           </div>
           <div className={cn(field, 'sm:col-span-2')}>
-            <Label>Description</Label>
+            <Label>{tc('labels.description')}</Label>
             <Textarea
               value={description}
               rows={2}
-              placeholder="What this record type tracks and who maintains it."
+              placeholder={t('typeBuilder.descriptionPlaceholder')}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
@@ -357,11 +370,11 @@ export function TypeBuilderDrawer({
                 onChange={(e) => setShowInNav(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
               />
-              Show in sidebar (Records group)
+              {t('typeBuilder.showInNav')}
             </label>
             {showInNav ? (
               <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                Nav order
+                {t('typeBuilder.navOrder')}
                 <Input
                   type="number"
                   value={String(sortOrder)}
@@ -372,7 +385,7 @@ export function TypeBuilderDrawer({
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <Label>Who can use this module</Label>
+            <Label>{t('typeBuilder.audienceLabel')}</Label>
             <div className="flex flex-wrap gap-1.5">
               {roles.map((r) => {
                 const on = allowedRoles.includes(r.key)
@@ -399,20 +412,20 @@ export function TypeBuilderDrawer({
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {allowedRoles.length === 0
-                ? 'No restriction — everyone with the custom-records permission can use it.'
-                : 'Only the selected roles (plus administrators) can use it.'}
+                ? t('typeBuilder.audienceOpen')
+                : t('typeBuilder.audienceRestricted')}
             </p>
           </div>
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Fields</Label>
+            <Label>{t('typeBuilder.fieldsLabel')}</Label>
             <AddFieldButton onAdd={addField} />
           </div>
           {fields.length === 0 ? (
             <p className="rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              No fields yet — add the first field to shape this record.
+              {t('typeBuilder.noFields')}
             </p>
           ) : (
             <div className="space-y-1.5">
@@ -488,6 +501,7 @@ function IconPicker({ value, onChange }: { value: string; onChange: (v: string) 
 // --- Add-field palette ------------------------------------------------------------
 
 function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
+  const t = useTranslations('records')
   const [open, setOpen] = useState(false)
   return (
     <Popover
@@ -497,28 +511,29 @@ function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
       className="w-72 p-1"
       trigger={
         <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
-          <Plus size={14} /> Add field
+          <Plus size={14} /> {t('typeBuilder.addField')}
         </Button>
       }
     >
       <div className="max-h-80 overflow-auto">
-        {RECORD_FIELD_TYPES.map((t) => {
-          const meta = FIELD_TYPES[t]
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => {
-                onAdd(t)
-                setOpen(false)
-              }}
-              className="flex w-full flex-col items-start rounded px-2 py-1.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
-            >
-              <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{meta.label}</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">{meta.description}</span>
-            </button>
-          )
-        })}
+        {RECORD_FIELD_TYPES.map((fieldType) => (
+          <button
+            key={fieldType}
+            type="button"
+            onClick={() => {
+              onAdd(fieldType)
+              setOpen(false)
+            }}
+            className="flex w-full flex-col items-start rounded px-2 py-1.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+          >
+            <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+              {t(`fieldTypes.${fieldType}.label`)}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {t(`fieldTypes.${fieldType}.description`)}
+            </span>
+          </button>
+        ))}
       </div>
     </Popover>
   )
@@ -547,7 +562,7 @@ function FieldRow({
   onMove: (dir: -1 | 1) => void
   onRemove: () => void
 }) {
-  const meta = FIELD_TYPES[f.type]
+  const t = useTranslations('records')
   return (
     <div className="rounded-md border border-slate-200 dark:border-slate-800">
       <div className="flex items-center gap-2 px-2.5 py-2">
@@ -565,22 +580,22 @@ function FieldRow({
             {f.label}
             {f.required || f.validation?.required ? <span className="ml-0.5 text-red-500">*</span> : null}
           </span>
-          <Badge variant="outline">{meta.label}</Badge>
+          <Badge variant="outline">{t(`fieldTypes.${f.type}.label`)}</Badge>
         </button>
-        <Button type="button" variant="ghost" size="icon" aria-label="Move up" disabled={index === 0} onClick={() => onMove(-1)}>
+        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.moveUp')} disabled={index === 0} onClick={() => onMove(-1)}>
           <ArrowUp size={14} />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          aria-label="Move down"
+          aria-label={t('typeBuilder.moveDown')}
           disabled={index === count - 1}
           onClick={() => onMove(1)}
         >
           <ArrowDown size={14} />
         </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label="Remove field" onClick={onRemove}>
+        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.removeField')} onClick={onRemove}>
           <Trash2 size={14} />
         </Button>
       </div>
@@ -588,21 +603,21 @@ function FieldRow({
         <div className="space-y-3 border-t border-slate-100 px-3 py-3 dark:border-slate-800">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className={field}>
-              <Label>Label</Label>
+              <Label>{t('typeBuilder.fieldLabel')}</Label>
               <Input value={f.label} onChange={(e) => onChange({ label: e.target.value })} />
             </div>
             <div className={field}>
-              <Label>Field ID</Label>
+              <Label>{t('typeBuilder.fieldId')}</Label>
               <Input value={f.id} disabled className="font-mono text-[13px]" />
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Stable data key — set when the field was added.
+                {t('typeBuilder.fieldIdHelp')}
               </p>
             </div>
             <div className={cn(field, 'sm:col-span-2')}>
-              <Label>Help text</Label>
+              <Label>{t('typeBuilder.helpText')}</Label>
               <Input
                 value={f.helpText ?? ''}
-                placeholder="Shown under the input."
+                placeholder={t('typeBuilder.helpTextPlaceholder')}
                 onChange={(e) => onChange({ helpText: e.target.value || undefined })}
               />
             </div>
@@ -615,7 +630,7 @@ function FieldRow({
                 onChange={(e) => onChange({ required: e.target.checked || undefined })}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
               />
-              Required to activate a record
+              {t('typeBuilder.requiredToActivate')}
             </label>
           ) : null}
           <TypeSpecificConfig field={f} allFields={allFields} onChange={onChange} />
@@ -634,6 +649,7 @@ function TypeSpecificConfig({
   allFields: FormField[]
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const t = useTranslations('records.typeBuilder')
   const setConfig = (patch: Record<string, unknown>) => {
     const next = { ...(f.config ?? {}), ...patch }
     for (const [k, v] of Object.entries(patch)) if (v === undefined) delete next[k]
@@ -656,7 +672,7 @@ function TypeSpecificConfig({
       return (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className={field}>
-            <Label>Minimum</Label>
+            <Label>{t('minimum')}</Label>
             <Input
               inputMode="decimal"
               defaultValue={num(f.config?.min)}
@@ -664,7 +680,7 @@ function TypeSpecificConfig({
             />
           </div>
           <div className={field}>
-            <Label>Maximum</Label>
+            <Label>{t('maximum')}</Label>
             <Input
               inputMode="decimal"
               defaultValue={num(f.config?.max)}
@@ -673,10 +689,10 @@ function TypeSpecificConfig({
           </div>
           {f.type === 'number' ? (
             <div className={field}>
-              <Label>Unit</Label>
+              <Label>{t('unit')}</Label>
               <Input
                 defaultValue={typeof f.config?.unit === 'string' ? f.config.unit : ''}
-                placeholder="kg, hrs, km…"
+                placeholder={t('unitPlaceholder')}
                 onChange={(e) => setConfig({ unit: e.target.value || undefined })}
               />
             </div>
@@ -689,7 +705,7 @@ function TypeSpecificConfig({
         typeof f.config?.max === 'number' && Number.isInteger(f.config.max) ? f.config.max : 5
       return (
         <div className={cn(field, 'max-w-40')}>
-          <Label>Scale (1–10)</Label>
+          <Label>{t('ratingScale')}</Label>
           <Input
             type="number"
             min={1}
@@ -707,17 +723,17 @@ function TypeSpecificConfig({
       const kind = typeof f.config?.partyKind === 'string' ? f.config.partyKind : 'any'
       return (
         <div className={cn(field, 'max-w-60')}>
-          <Label>Party kind</Label>
+          <Label>{t('partyKind')}</Label>
           <SearchSelect
             options={[
-              { value: 'any', label: 'Any party' },
-              { value: 'customer', label: 'Customers' },
-              { value: 'vendor', label: 'Vendors' },
-              { value: 'employee', label: 'Employees' },
+              { value: 'any', label: t('partyAny') },
+              { value: 'customer', label: t('partyCustomers') },
+              { value: 'vendor', label: t('partyVendors') },
+              { value: 'employee', label: t('partyEmployees') },
             ]}
             value={kind}
             onChange={(v) => setConfig({ partyKind: v === 'any' ? undefined : v })}
-            ariaLabel="Party kind"
+            ariaLabel={t('partyKind')}
           />
         </div>
       )
@@ -738,18 +754,19 @@ function ChoiceOptionsEditor({
   field: FormField
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const t = useTranslations('records.typeBuilder')
   const options = f.validation?.options ?? []
   const setOptions = (next: { value: string; label: string }[]) =>
     onChange({ validation: { ...(f.validation ?? {}), options: next } })
 
   return (
     <div className="space-y-1.5">
-      <Label>Options</Label>
+      <Label>{t('options')}</Label>
       {options.map((o, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
             value={o.label}
-            placeholder={`Option ${i + 1}`}
+            placeholder={t('optionPlaceholder', { n: i + 1 })}
             onChange={(e) => {
               const next = [...options]
               next[i] = { ...o, label: e.target.value }
@@ -763,7 +780,7 @@ function ChoiceOptionsEditor({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Remove option"
+            aria-label={t('removeOption')}
             disabled={options.length === 1}
             onClick={() => setOptions(options.filter((_, j) => j !== i))}
           >
@@ -782,10 +799,10 @@ function ChoiceOptionsEditor({
           setOptions([...options, { value, label: '' }])
         }}
       >
-        <Plus size={14} /> Add option
+        <Plus size={14} /> {t('addOption')}
       </Button>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Stored values (right) stay stable so saved records keep meaning their labels.
+        {t('optionsHelp')}
       </p>
     </div>
   )
@@ -802,15 +819,8 @@ function ChoiceOptionsEditor({
 type SimpleOp = 'sum' | 'product' | 'subtract' | 'divide' | 'min' | 'max' | 'concat'
 type Operand = { kind: 'field'; fieldKey: string } | { kind: 'literal'; value: string }
 
-const OP_OPTIONS: { value: SimpleOp; label: string }[] = [
-  { value: 'sum', label: 'Add (sum)' },
-  { value: 'subtract', label: 'Subtract' },
-  { value: 'product', label: 'Multiply' },
-  { value: 'divide', label: 'Divide' },
-  { value: 'min', label: 'Minimum' },
-  { value: 'max', label: 'Maximum' },
-  { value: 'concat', label: 'Join text' },
-]
+// Operation values only — labels come from records.typeBuilder.formula.ops.<value>.
+const OP_VALUES: SimpleOp[] = ['sum', 'subtract', 'product', 'divide', 'min', 'max', 'concat']
 
 function decompose(expr: FormulaExpression | undefined): { op: SimpleOp; operands: Operand[] } | null {
   if (!expr) return { op: 'sum', operands: [] }
@@ -864,6 +874,7 @@ function FormulaBuilder({
   onChange: (patch: Partial<FormField>) => void
   setConfig: (patch: Record<string, unknown>) => void
 }) {
+  const t = useTranslations('records.typeBuilder.formula')
   const decomposed = useMemo(() => decompose(f.formula), [f.formula])
   const [advancedReplaced, setAdvancedReplaced] = useState(false)
   const state = decomposed ?? { op: 'sum' as SimpleOp, operands: [] }
@@ -896,46 +907,46 @@ function FormulaBuilder({
     <div className="space-y-2 rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/30">
       {!decomposed && !advancedReplaced ? (
         <p className="text-xs text-amber-700 dark:text-amber-300">
-          This formula uses nesting beyond the inline builder — changing anything below replaces it.
+          {t('advancedWarning')}
         </p>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className={field}>
-          <Label>Operation</Label>
+          <Label>{t('operation')}</Label>
           <SearchSelect
-            options={OP_OPTIONS}
+            options={OP_VALUES.map((op) => ({ value: op, label: t(`ops.${op}`) }))}
             value={state.op}
             onChange={(v) => {
               setAdvancedReplaced(true)
               commit(v as SimpleOp, state.operands)
             }}
-            ariaLabel="Formula operation"
+            ariaLabel={t('operationAria')}
           />
         </div>
         <div className={field}>
-          <Label>Display as</Label>
+          <Label>{t('displayAs')}</Label>
           <SearchSelect
             options={[
-              { value: 'number', label: 'Number' },
-              { value: 'currency', label: 'Currency' },
-              { value: 'percentage', label: 'Percentage' },
-              { value: 'text', label: 'Text' },
+              { value: 'number', label: t('formatNumber') },
+              { value: 'currency', label: t('formatCurrency') },
+              { value: 'percentage', label: t('formatPercentage') },
+              { value: 'text', label: t('formatText') },
             ]}
             value={format}
             onChange={(v) => setConfig({ format: v })}
-            ariaLabel="Formula format"
+            ariaLabel={t('formatAria')}
           />
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label>{state.op === 'subtract' || state.op === 'divide' ? 'Left / right' : 'Operands'}</Label>
+        <Label>{state.op === 'subtract' || state.op === 'divide' ? t('leftRight') : t('operands')}</Label>
         {state.operands.map((o, i) => (
           <div key={i} className="flex items-center gap-2">
             <SearchSelect
               className="w-40 shrink-0"
               options={[
-                { value: 'field', label: 'Field' },
-                { value: 'literal', label: 'Constant' },
+                { value: 'field', label: t('operandField') },
+                { value: 'literal', label: t('operandConstant') },
               ]}
               value={o.kind}
               onChange={(v) => {
@@ -947,7 +958,7 @@ function FormulaBuilder({
                 setAdvancedReplaced(true)
                 commit(state.op, next)
               }}
-              ariaLabel="Operand kind"
+              ariaLabel={t('operandKindAria')}
             />
             {o.kind === 'field' ? (
               <SearchSelect
@@ -960,15 +971,15 @@ function FormulaBuilder({
                   setAdvancedReplaced(true)
                   commit(state.op, next)
                 }}
-                placeholder="Pick a field…"
-                ariaLabel="Operand field"
+                placeholder={t('pickFieldPlaceholder')}
+                ariaLabel={t('operandFieldAria')}
               />
             ) : (
               <Input
                 className="flex-1"
                 inputMode={state.op === 'concat' ? 'text' : 'decimal'}
                 value={o.value}
-                placeholder={state.op === 'concat' ? 'Text…' : '0'}
+                placeholder={state.op === 'concat' ? t('textPlaceholder') : '0'}
                 onChange={(e) => {
                   const next = [...state.operands]
                   next[i] = { kind: 'literal', value: e.target.value }
@@ -981,7 +992,7 @@ function FormulaBuilder({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label="Remove operand"
+              aria-label={t('removeOperand')}
               onClick={() => {
                 setAdvancedReplaced(true)
                 commit(state.op, state.operands.filter((_, j) => j !== i))
@@ -1002,7 +1013,7 @@ function FormulaBuilder({
                 commit(state.op, [...state.operands, { kind: 'field', fieldKey: referencable[0]?.id ?? '' }])
               }}
             >
-              <Plus size={14} /> Add operand
+              <Plus size={14} /> {t('addOperand')}
             </Button>
           ) : null
         ) : (
@@ -1015,12 +1026,12 @@ function FormulaBuilder({
               commit(state.op, [...state.operands, { kind: 'field', fieldKey: referencable[0]?.id ?? '' }])
             }}
           >
-            <Plus size={14} /> Add operand
+            <Plus size={14} /> {t('addOperand')}
           </Button>
         )}
         {state.operands.length === 0 ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Add operands — fields to reference or constants to mix in.
+            {t('operandsHelp')}
           </p>
         ) : null}
       </div>

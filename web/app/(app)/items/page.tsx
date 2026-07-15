@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -36,23 +37,15 @@ const ITEM_KINDS = [
   'discount',
 ] as const
 
-const KIND_LABELS: Record<string, string> = {
-  service: 'Service',
-  non_inventory: 'Non-inventory',
-  inventory: 'Inventory',
-  assembly: 'Assembly',
-  kit: 'Kit',
-  other_charge: 'Other charge',
-  labor: 'Labor',
-  absence: 'Absence',
-  discount: 'Discount',
-}
-
 export default async function Items({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const [t, tCommon] = await Promise.all([getTranslations('items'), getTranslations('common')])
+  const kindLabel = (k: string) =>
+    (ITEM_KINDS as readonly string[]).includes(k) ? t(`kinds.${k}`) : k
+
   const authz = await requirePermission('items.read')
   const canManage = can(authz, 'items.manage')
   const orgId = authz.user.orgId
@@ -127,12 +120,12 @@ export default async function Items({
 
   const kindOptions = (ITEM_KINDS as readonly string[]).map((k) => ({
     value: k,
-    label: KIND_LABELS[k] ?? k,
+    label: kindLabel(k),
     count: kindCounts.get(k) ?? 0,
   }))
   const statusOptions = [
-    { value: 'active', label: 'Active', count: Number(grand.active) },
-    { value: 'inactive', label: 'Inactive', count: Number(grand.inactive) },
+    { value: 'active', label: tCommon('status.active'), count: Number(grand.active) },
+    { value: 'inactive', label: tCommon('status.inactive'), count: Number(grand.inactive) },
   ]
 
   return (
@@ -140,22 +133,22 @@ export default async function Items({
       header={
         <>
           <PageHeader
-            title="Items & Services"
-            description="The catalog behind every document line — services, labor, charges, and discounts."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={canManage ? <NewItemButton /> : undefined}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search name, code, category…" />
-            <FilterChips basePath="/items" currentParams={sp} paramKey="kind" label="Kind" options={kindOptions} />
-            <FilterChips basePath="/items" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath="/items" currentParams={sp} paramKey="kind" label={t('list.kindFilter')} options={kindOptions} />
+            <FilterChips basePath="/items" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No items yet"
-          description="Add the first service, labor, or charge to start the catalog."
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
           action={canManage ? <NewItemButton /> : undefined}
         />
       ) : (
@@ -163,13 +156,13 @@ export default async function Items({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/items" currentParams={sp} column="code" sort={params.sort} dir={params.dir}>Code</SortTh>
-                <SortTh basePath="/items" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>Name</SortTh>
-                <TableHead>Kind</TableHead>
-                <TableHead>Category</TableHead>
-                <SortTh basePath="/items" currentParams={sp} column="rate" sort={params.sort} dir={params.dir} align="right" className="text-right">Default rate</SortTh>
-                <TableHead>Unit</TableHead>
-                <TableHead>Status</TableHead>
+                <SortTh basePath="/items" currentParams={sp} column="code" sort={params.sort} dir={params.dir}>{t('labels.code')}</SortTh>
+                <SortTh basePath="/items" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>{tCommon('labels.name')}</SortTh>
+                <TableHead>{t('labels.kind')}</TableHead>
+                <TableHead>{t('labels.category')}</TableHead>
+                <SortTh basePath="/items" currentParams={sp} column="rate" sort={params.sort} dir={params.dir} align="right" className="text-right">{t('labels.defaultRate')}</SortTh>
+                <TableHead>{t('labels.unit')}</TableHead>
+                <TableHead>{tCommon('labels.status')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -182,13 +175,15 @@ export default async function Items({
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{KIND_LABELS[i.kind] ?? i.kind}</Badge>
+                    <Badge variant="secondary">{kindLabel(i.kind)}</Badge>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{i.category}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(i.default_rate)}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{i.unit}</TableCell>
                   <TableCell>
-                    <Badge variant={i.is_active ? 'success' : 'outline'}>{i.is_active ? 'Active' : 'Inactive'}</Badge>
+                    <Badge variant={i.is_active ? 'success' : 'outline'}>
+                      {i.is_active ? tCommon('status.active') : tCommon('status.inactive')}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}

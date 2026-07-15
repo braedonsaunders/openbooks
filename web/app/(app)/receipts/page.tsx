@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { requirePermission } from '../../../lib/authz'
@@ -16,15 +17,18 @@ export default async function Receipts({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('ar.pay')
+  const t = await getTranslations('receipts')
   const sp = await searchParams
 
   return (
     <ListPageLayout
       header={
         <PageHeader
-          title="Receipts"
-          description="Customer payments received and applied to open invoices through the kernel."
-          actions={<NewPaymentButton kind="customer_payment" basePath="/receipts" label="New receipt" />}
+          title={t('page.title')}
+          description={t('page.description')}
+          actions={
+            <NewPaymentButton kind="customer_payment" basePath="/receipts" label={t('page.newReceipt')} />
+          }
         />
       }
     >

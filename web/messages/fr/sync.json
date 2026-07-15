@@ -1,1 +1,35 @@
-{}
+{
+  "title": "Synchronisation",
+  "description": "Passerelle manuelle vers un système comptable connecté pendant l’exploitation en parallèle. Les transactions modifiées sont contrepassées et recomptabilisées — piste d’audit complète, aucune mutation. Chaque synchronisation revérifie la balance de vérification compte par compte par rapport à la source en direct.",
+  "noSource": {
+    "title": "Aucune source externe configurée",
+    "description": "Connectez-en une en ajoutant un adaptateur de source et ses identifiants; elle apparaîtra ici automatiquement."
+  },
+  "connectedSources": "Sources connectées",
+  "mismatchesHeading": "Écarts de balance de vérification (dernière synchronisation)",
+  "allRuns": "Toutes les exécutions",
+  "columns": {
+    "sourceAccount": "Compte source",
+    "ours": "openbooks",
+    "theirs": "source",
+    "started": "Démarrée",
+    "finished": "Terminée",
+    "trigger": "Déclencheur",
+    "detail": "Détail"
+  },
+  "runStatus": {
+    "ok": "OK",
+    "failed": "Échec",
+    "running": "En cours"
+  },
+  "runStats": "{newEntries} nouvelles · {reversedEntries} contrepassées · {unchanged} inchangées · BV {matches}/{accounts}",
+  "button": {
+    "syncing": "Synchronisation depuis {source}…",
+    "sync": "Synchroniser depuis {source}"
+  },
+  "toast": {
+    "summary": "{newEntries} nouvelles · {reversedEntries} contrepassées · {unchanged} inchangées — BV {matches}/{accounts}{mismatches, plural, =0 { exacte} one { (# ÉCART)} other { (# ÉCARTS)}}",
+    "synced": "Synchronisé en {seconds} s — {summary}",
+    "syncFailed": "Échec de la synchronisation : {detail}"
+  }
+}

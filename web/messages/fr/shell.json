@@ -1,1 +1,44 @@
-{}
+{
+  "accountMenu": {
+    "account": "Compte",
+    "menuAriaLabel": "Menu du compte",
+    "theme": "Thème",
+    "language": "Langue",
+    "signOut": "Fermer la session",
+    "signingOut": "Fermeture de la session…",
+    "roles": {
+      "admin": "Administrateur",
+      "controller": "Contrôleur",
+      "accountant": "Comptable",
+      "approver": "Approbateur",
+      "viewer": "Lecteur"
+    }
+  },
+  "language": {
+    "label": "Langue",
+    "orgDefault": "Valeur par défaut de l’organisation",
+    "saveFailed": "Impossible d’enregistrer votre préférence de langue"
+  },
+  "meta": {
+    "description": "La suite de gestion ouverte. Menez vos affaires à livres ouverts."
+  },
+  "sidebar": {
+    "expand": "Déployer la barre latérale",
+    "collapse": "Réduire la barre latérale"
+  },
+  "mobileNav": {
+    "openMenu": "Ouvrir le menu",
+    "menu": "Menu",
+    "primaryAriaLabel": "Principal"
+  },
+  "themeToggle": {
+    "label": "Thème",
+    "options": {
+      "light": "Clair",
+      "system": "Système",
+      "dark": "Sombre"
+    },
+    "current": "Thème : {theme}",
+    "currentHint": "Thème : {theme} (cliquez pour changer)"
+  }
+}

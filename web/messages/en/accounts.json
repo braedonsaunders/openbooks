@@ -1,1 +1,45 @@
-{}
+{
+  "list": {
+    "title": "Chart of Accounts",
+    "description": "Natural-sign current balances (balance-sheet cumulative, P&L this fiscal year), rolled up through summary accounts.",
+    "searchPlaceholder": "Search number or name…",
+    "badges": {
+      "inactive": "inactive",
+      "summary": "summary"
+    }
+  },
+  "types": {
+    "assetBank": "Bank",
+    "assetReceivable": "Accounts Receivable",
+    "assetCurrentOther": "Other Current Assets",
+    "assetFixed": "Fixed Assets",
+    "assetOther": "Other Assets",
+    "liabilityPayable": "Accounts Payable",
+    "liabilityCard": "Corporate Cards",
+    "liabilityCurrentOther": "Other Current Liabilities",
+    "liabilityLongTerm": "Long-Term Liabilities",
+    "equity": "Equity",
+    "income": "Income",
+    "incomeOther": "Other Income",
+    "cogs": "Cost of Goods Sold",
+    "expense": "Expenses",
+    "expenseOther": "Other Expenses",
+    "expenseDeferred": "Deferred Expenses"
+  },
+  "classes": {
+    "asset": "Assets",
+    "liability": "Liabilities",
+    "equity": "Equity",
+    "income": "Income",
+    "expense": "Expenses"
+  },
+  "register": {
+    "notFound": "Account not found",
+    "subtitle": "register · {count, plural, one {# line} other {# lines}} · running balance {balance}",
+    "columns": {
+      "entry": "Entry",
+      "debit": "Debit",
+      "credit": "Credit"
+    }
+  }
+}

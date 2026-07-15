@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { FileUp, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
@@ -60,6 +61,9 @@ const PREVIEW_CAP = 100
  * preview the parsed + deduped lines, then import.
  */
 export function ImportStatementButton({ accountId }: { accountId: string }) {
+  const t = useTranslations('banking.import')
+  const tBanking = useTranslations('banking')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
@@ -100,7 +104,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       if (lower.endsWith('.csv') || lower.endsWith('.txt')) setSource('csv')
       else if (lower.endsWith('.ofx') || lower.endsWith('.qfx')) setSource('ofx')
     }
-    reader.onerror = () => toast.error(`Could not read ${file.name}`)
+    reader.onerror = () => toast.error(tBanking('errors.fileReadFailed', { name: file.name }))
     reader.readAsText(file)
   }
 
@@ -111,7 +115,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       body: JSON.stringify(body),
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error ?? 'Request failed')
+    if (!res.ok) throw new Error(data.error ?? tBanking('errors.requestFailed'))
     return data
   }
 
@@ -169,10 +173,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         closingBalance: closingBalance || null,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
-      toast.success(
-        `Imported ${data.imported} line${data.imported === 1 ? '' : 's'}` +
-          (data.duplicates > 0 ? ` — ${data.duplicates} duplicate${data.duplicates === 1 ? '' : 's'} skipped` : ''),
-      )
+      toast.success(t('importedToast', { imported: data.imported, duplicates: data.duplicates }))
       setOpen(false)
       reset()
       router.refresh()
@@ -197,10 +198,10 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             setPreview(null)
           }}
         >
-          <option value="">{required ? 'Select column…' : '—'}</option>
+          <option value="">{required ? t('selectColumn') : '—'}</option>
           {header.map((h, i) => (
             <option key={i} value={String(i)}>
-              {h.trim() || `Column ${i + 1}`}
+              {h.trim() || t('columnN', { n: i + 1 })}
             </option>
           ))}
         </Select>
@@ -210,21 +211,22 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        <FileUp size={15} /> Import statement
+        <FileUp size={15} /> {t('button')}
       </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
         size="lg"
-        title="Import bank statement"
-        description="Paste OFX or CSV text, or pick a file — it is read in your browser and imported as parsed lines."
+        title={t('title')}
+        description={t('description')}
         headerActions={
           <>
             <Button variant="outline" disabled={busy || !text.trim() || !csvReady} onClick={runPreview}>
-              Preview
+              {t('preview')}
             </Button>
             <Button disabled={busy || !preview || preview.imported === 0} onClick={runImport}>
-              <Upload size={15} /> Import {preview && preview.imported > 0 ? `${preview.imported} lines` : ''}
+              <Upload size={15} />{' '}
+              {preview && preview.imported > 0 ? t('importCount', { count: preview.imported }) : t('importAction')}
             </Button>
           </>
         }
@@ -232,8 +234,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           <div className="flex w-full items-center gap-3">
             {preview ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {preview.imported} new line{preview.imported === 1 ? '' : 's'}
-                {preview.duplicates > 0 ? ` · ${preview.duplicates} duplicate${preview.duplicates === 1 ? '' : 's'} skipped` : ''}
+                {t('previewSummary', { imported: preview.imported, duplicates: preview.duplicates })}
               </span>
             ) : null}
             <span className="flex-1" />
@@ -243,7 +244,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         <div className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
-              <Label>Format</Label>
+              <Label>{t('format')}</Label>
               <Select
                 value={source}
                 onChange={(e) => {
@@ -252,12 +253,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   setPreview(null)
                 }}
               >
-                <option value="ofx">OFX / QFX</option>
-                <option value="csv">CSV</option>
+                <option value="ofx">{t('formatOfx')}</option>
+                <option value="csv">{t('formatCsv')}</option>
               </Select>
             </div>
             <div className={field}>
-              <Label>File</Label>
+              <Label>{t('file')}</Label>
               <div className="flex items-center gap-2">
                 <input
                   ref={fileRef}
@@ -271,45 +272,42 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   }}
                 />
                 <Button variant="outline" onClick={() => fileRef.current?.click()}>
-                  Choose file…
+                  {t('chooseFile')}
                 </Button>
-                <span className="truncate text-sm text-slate-500 dark:text-slate-400">{fileName ?? 'or paste below'}</span>
+                <span className="truncate text-sm text-slate-500 dark:text-slate-400">{fileName ?? t('orPasteBelow')}</span>
               </div>
             </div>
           </div>
 
           <div className={field}>
-            <Label>Statement text</Label>
+            <Label>{t('statementText')}</Label>
             <Textarea
               value={text}
               onChange={(e) => onTextChanged(e.target.value)}
               rows={8}
               spellCheck={false}
               className="font-mono text-xs"
-              placeholder={source === 'ofx' ? '<OFX>…<STMTTRN>…' : 'Date,Description,Amount\n2026-07-02,Payroll run,-18250.00'}
+              placeholder={source === 'ofx' ? t('pastePlaceholderOfx') : t('pastePlaceholderCsv')}
             />
           </div>
 
           {source === 'csv' ? (
             header ? (
               <div className="space-y-3">
-                <Label>Column mapping</Label>
+                <Label>{t('columnMapping')}</Label>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  {mappingSelect('date', 'Date', true)}
-                  {mappingSelect('amount', 'Amount', true)}
-                  {mappingSelect('description', 'Description', true)}
-                  {mappingSelect('debitAmount', 'Debit column (if split)', false)}
-                  {mappingSelect('counterpartyRef', 'Reference', false)}
-                  {mappingSelect('bankTransactionId', 'Bank transaction id', false)}
+                  {mappingSelect('date', tCommon('labels.date'), true)}
+                  {mappingSelect('amount', tCommon('labels.amount'), true)}
+                  {mappingSelect('description', tCommon('labels.description'), true)}
+                  {mappingSelect('debitAmount', t('debitColumn'), false)}
+                  {mappingSelect('counterpartyRef', tCommon('labels.reference'), false)}
+                  {mappingSelect('bankTransactionId', t('bankTransactionId'), false)}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  With a debit column mapped, Amount is treated as the credit (money-in) column and debits import negated.
-                  Ambiguous numeric dates are read as MM/DD/YYYY.
-                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mappingHelp')}</p>
               </div>
             ) : (
               <Button variant="outline" disabled={busy || !text.trim()} onClick={detectColumns}>
-                Detect columns
+                {t('detectColumns')}
               </Button>
             )
           ) : null}
@@ -318,26 +316,26 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={field}>
-                  <Label>Statement date</Label>
+                  <Label>{tBanking('labels.statementDate')}</Label>
                   <Input type="date" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} />
                 </div>
                 <div className={field}>
-                  <Label>Opening balance</Label>
+                  <Label>{tBanking('labels.openingBalance')}</Label>
                   <Input
                     inputMode="decimal"
                     value={openingBalance}
                     onChange={(e) => setOpeningBalance(e.target.value)}
-                    placeholder="optional"
+                    placeholder={t('optionalPlaceholder')}
                     className="text-right tabular-nums"
                   />
                 </div>
                 <div className={field}>
-                  <Label>Closing balance</Label>
+                  <Label>{tBanking('labels.closingBalance')}</Label>
                   <Input
                     inputMode="decimal"
                     value={closingBalance}
                     onChange={(e) => setClosingBalance(e.target.value)}
-                    placeholder="optional"
+                    placeholder={t('optionalPlaceholder')}
                     className="text-right tabular-nums"
                   />
                 </div>
@@ -345,17 +343,17 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
 
               {preview.imported === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
-                  Every parsed line already exists on this account — nothing new to import.
+                  {t('nothingNew')}
                 </p>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                       <tr>
-                        <th className="px-3 py-2">Date</th>
-                        <th className="px-3 py-2">Description</th>
-                        <th className="px-3 py-2">Ref</th>
-                        <th className="px-3 py-2 text-right">Amount</th>
+                        <th className="px-3 py-2">{tCommon('labels.date')}</th>
+                        <th className="px-3 py-2">{tCommon('labels.description')}</th>
+                        <th className="px-3 py-2">{tBanking('labels.ref')}</th>
+                        <th className="px-3 py-2 text-right">{tCommon('labels.amount')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -371,9 +369,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   </table>
                   {preview.lines.length > PREVIEW_CAP ? (
                     <div className="border-t border-slate-200 px-3 py-1.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      …and {(preview.lines.length - PREVIEW_CAP).toLocaleString()} more lines
+                      {t('moreLines', { count: preview.lines.length - PREVIEW_CAP })}
                       <Badge variant="secondary" className="ml-2">
-                        {preview.lines.length.toLocaleString()} total
+                        {t('totalBadge', { count: preview.lines.length })}
                       </Badge>
                     </div>
                   ) : null}

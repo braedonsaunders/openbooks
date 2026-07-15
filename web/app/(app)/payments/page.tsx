@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { requirePermission } from '../../../lib/authz'
@@ -20,6 +21,7 @@ export default async function Payments({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('ap.pay')
+  const t = await getTranslations('payments')
   const sp = await searchParams
   const view = pickString(sp.view) === 'runs' ? 'runs' : 'payments'
 
@@ -28,15 +30,18 @@ export default async function Payments({
       header={
         <>
           <PageHeader
-            title="Payments"
-            description="Vendor payments applied to open bills, and EFT payment runs exported as CPA-005 files."
+            title={t('page.title')}
+            description={t('page.description')}
             actions={
               view === 'payments' ? (
-                <NewPaymentButton kind="vendor_payment" basePath="/payments" label="New payment" />
+                <NewPaymentButton kind="vendor_payment" basePath="/payments" label={t('page.newPayment')} />
               ) : undefined
             }
           />
-          <ViewTabs view={view} />
+          <ViewTabs
+            view={view}
+            labels={{ payments: t('page.tabs.payments'), runs: t('page.tabs.runs') }}
+          />
         </>
       }
     >
@@ -49,7 +54,13 @@ export default async function Payments({
   )
 }
 
-function ViewTabs({ view }: { view: 'payments' | 'runs' }) {
+function ViewTabs({
+  view,
+  labels,
+}: {
+  view: 'payments' | 'runs'
+  labels: { payments: string; runs: string }
+}) {
   const tab = (active: boolean) =>
     cn(
       'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
@@ -60,10 +71,10 @@ function ViewTabs({ view }: { view: 'payments' | 'runs' }) {
   return (
     <div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
       <Link href="/payments" className={tab(view === 'payments')}>
-        Payments
+        {labels.payments}
       </Link>
       <Link href={'/payments?view=runs' as any} className={tab(view === 'runs')}>
-        Payment runs
+        {labels.runs}
       </Link>
     </div>
   )

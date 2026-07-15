@@ -1,1 +1,190 @@
-{}
+{
+  "types": {
+    "asset_bank": "Banco",
+    "liability_card": "Tarjeta"
+  },
+  "reconStatus": {
+    "signed_off": "aprobada",
+    "balanced": "cuadrada",
+    "in_progress": "en curso"
+  },
+  "matchStatus": {
+    "matched": "conciliado",
+    "unmatched": "sin conciliar",
+    "excluded": "excluido"
+  },
+  "matchedBy": {
+    "auto": "automático",
+    "manual": "manual",
+    "rule": "regla"
+  },
+  "labels": {
+    "never": "nunca",
+    "ref": "Ref.",
+    "entry": "Asiento",
+    "reconcileThrough": "Conciliar hasta",
+    "statementBalance": "Saldo del extracto",
+    "statementDate": "Fecha del extracto",
+    "openingBalance": "Saldo inicial",
+    "closingBalance": "Saldo final",
+    "source": "Origen"
+  },
+  "errors": {
+    "requestFailed": "La solicitud falló",
+    "startFailed": "No se pudo iniciar la conciliación",
+    "fileReadFailed": "No se pudo leer {name}"
+  },
+  "list": {
+    "title": "Bancos",
+    "description": "Cuentas conciliables — importe extractos bancarios, concilie los movimientos contra el libro mayor y apruebe las conciliaciones.",
+    "searchPlaceholder": "Buscar cuentas…",
+    "emptyTitle": "No hay cuentas conciliables",
+    "emptyDescription": "Marque sus cuentas bancarias, de tarjeta y transitorias como conciliables en el plan de cuentas para empezar a conciliarlas aquí.",
+    "columns": {
+      "glBalance": "Saldo contable",
+      "reconciledThrough": "Conciliado hasta",
+      "unmatchedLines": "Líneas sin conciliar"
+    },
+    "badges": {
+      "reconciling": "en conciliación",
+      "linesToMatch": "líneas por conciliar",
+      "upToDate": "al día"
+    }
+  },
+  "account": {
+    "description": "{details} — importe extractos, luego concilie y apruebe.",
+    "stats": {
+      "glBalance": "Saldo contable (contabilizado)",
+      "reconciledThrough": "Conciliado hasta",
+      "unmatchedLines": "Líneas de extracto sin conciliar",
+      "reconciliation": "Conciliación"
+    },
+    "badges": {
+      "inProgress": "en curso",
+      "noneOpen": "ninguna abierta"
+    },
+    "statementsTitle": "Extractos",
+    "searchStatements": "Buscar extractos…",
+    "statementsEmptyTitle": "No hay extractos importados",
+    "statementsEmptyDescription": "Importe un extracto OFX o CSV para incorporar la actividad bancaria de esta cuenta.",
+    "columns": {
+      "unmatched": "Sin conciliar",
+      "opening": "Inicial",
+      "closing": "Final",
+      "imported": "Importado",
+      "throughDate": "Fecha de corte",
+      "started": "Iniciada",
+      "signedOff": "Aprobada"
+    },
+    "reconciliationsTitle": "Conciliaciones",
+    "searchReconciliations": "Buscar por fecha o saldo…",
+    "reconciliationsEmptyTitle": "Aún no hay conciliaciones",
+    "reconciliationsEmptyDescription": "Inicie una conciliación con la fecha de corte y el saldo final del extracto bancario.",
+    "openWorkspace": "Abrir espacio de trabajo"
+  },
+  "import": {
+    "button": "Importar extracto",
+    "title": "Importar extracto bancario",
+    "description": "Pegue texto OFX o CSV, o elija un archivo — se lee en su navegador y se importa como líneas analizadas.",
+    "preview": "Vista previa",
+    "importAction": "Importar",
+    "importCount": "Importar {count, plural, one {# línea} other {# líneas}}",
+    "importedToast": "{imported, plural, one {Se importó # línea} other {Se importaron # líneas}}{duplicates, plural, =0 {} one { — # duplicado omitido} other { — # duplicados omitidos}}",
+    "previewSummary": "{imported, plural, one {# línea nueva} other {# líneas nuevas}}{duplicates, plural, =0 {} one { · # duplicado omitido} other { · # duplicados omitidos}}",
+    "format": "Formato",
+    "formatOfx": "OFX / QFX",
+    "formatCsv": "CSV",
+    "file": "Archivo",
+    "chooseFile": "Elegir archivo…",
+    "orPasteBelow": "o pegue abajo",
+    "statementText": "Texto del extracto",
+    "pastePlaceholderOfx": "'<OFX>…<STMTTRN>…'",
+    "pastePlaceholderCsv": "Date,Description,Amount\n2026-07-02,Payroll run,-18250.00",
+    "columnMapping": "Asignación de columnas",
+    "selectColumn": "Seleccionar columna…",
+    "columnN": "Columna {n}",
+    "debitColumn": "Columna de débitos (si está separada)",
+    "bankTransactionId": "Id. de transacción bancaria",
+    "mappingHelp": "Con una columna de débitos asignada, Importe se trata como la columna de créditos (entradas de dinero) y los débitos se importan con signo negativo. Las fechas numéricas ambiguas se leen como MM/DD/AAAA.",
+    "detectColumns": "Detectar columnas",
+    "optionalPlaceholder": "opcional",
+    "nothingNew": "Todas las líneas analizadas ya existen en esta cuenta — no hay nada nuevo que importar.",
+    "moreLines": "…y {count, plural, one {# línea más} other {# líneas más}}",
+    "totalBadge": "{count, number} en total"
+  },
+  "start": {
+    "resume": "Reanudar conciliación",
+    "button": "Iniciar conciliación",
+    "title": "Iniciar conciliación",
+    "description": "Introduzca la fecha de corte del extracto bancario y su saldo final — el espacio de trabajo concilia todo hasta esa fecha.",
+    "start": "Iniciar",
+    "starting": "Iniciando…",
+    "currentGlBalance": "Saldo contable actual: <amt>{amount}</amt>"
+  },
+  "drawer": {
+    "title": "Extracto {date}",
+    "description": "Importado {date} · inicial {opening} · final {closing}",
+    "searchLines": "Buscar líneas…",
+    "matchColumn": "Conciliación",
+    "noLines": "Ninguna línea coincide con esta búsqueda."
+  },
+  "reconcile": {
+    "title": "Conciliar hasta {date}",
+    "signedOffDescription": "Aprobada el {date}.",
+    "signedOffByDescription": "Aprobada el {date} por {name}.",
+    "description": "Concilie las líneas del extracto bancario con las líneas de diario contabilizadas hasta que la diferencia sea 0.00 y luego apruebe.",
+    "stats": {
+      "clearedGlBalance": "Saldo contable compensado",
+      "difference": "Diferencia",
+      "matched": "Conciliado"
+    },
+    "matchedCounts": "{bank, number} banco · {gl, number} mayor"
+  },
+  "workspace": {
+    "signedOffAlert": "Esta conciliación está aprobada — las líneas de diario conciliadas a continuación quedan marcadas de forma permanente como conciliadas.",
+    "autoMatch": "Conciliación automática",
+    "adjust": "Ajustar",
+    "discardSession": "Descartar sesión",
+    "matchSelected": "Conciliar selección",
+    "signOff": "Aprobar",
+    "signOffDisabledTitle": "La diferencia debe ser 0.00 para aprobar",
+    "selectionSummary": "Seleccionado: banco {bank} vs. mayor {gl}",
+    "noAutoMatches": "No se encontraron coincidencias automáticas",
+    "autoMatchedToast": "{count, plural, one {Se concilió automáticamente # línea} other {Se conciliaron automáticamente # líneas}} ({high} con confianza alta, {medium} con confianza media)",
+    "matchedToast": "Conciliado",
+    "unmatchedToast": "Conciliación deshecha",
+    "signOffConfirm": "¿Aprobar esta conciliación? Las líneas de diario conciliadas quedan marcadas como conciliadas — esto no se puede deshacer.",
+    "signedOffToast": "Aprobada — {count, plural, one {# línea de diario conciliada} other {# líneas de diario conciliadas}}",
+    "discardConfirm": "¿Descartar esta sesión de conciliación? Sus coincidencias se deshacen y las líneas del extracto quedan liberadas.",
+    "discardedToast": "Conciliación descartada",
+    "updatedToast": "Conciliación actualizada",
+    "bankLinesTitle": "Líneas del extracto bancario",
+    "bankLinesCount": "({count, number} sin conciliar)",
+    "searchBankLines": "Buscar líneas bancarias…",
+    "noBankLinesSearch": "Ninguna línea bancaria coincide con esta búsqueda.",
+    "allBankLinesMatched": "Todas las líneas del extracto hasta la fecha de corte están conciliadas.",
+    "selectBankLineAria": "Seleccionar la línea bancaria del {date} por {amount}",
+    "ledgerLinesTitle": "Líneas del mayor",
+    "ledgerLinesCount": "({count, number} sin conciliar)",
+    "searchGlLines": "Buscar líneas del mayor…",
+    "noGlLinesSearch": "Ninguna línea del mayor coincide con esta búsqueda.",
+    "allGlLinesReconciled": "Todas las líneas contabilizadas hasta la fecha de corte están conciliadas o emparejadas.",
+    "selectGlLineAria": "Seleccionar la línea del mayor {entry} por {amount}",
+    "matchedTitle": "Conciliado",
+    "matchedCount": "({count, plural, one {# par} other {# pares}})",
+    "searchMatches": "Buscar coincidencias…",
+    "noMatchesSearch": "No se encontraron coincidencias para esta búsqueda.",
+    "noMatchesYet": "Aún no hay nada conciliado — ejecute la conciliación automática o empareje líneas manualmente arriba.",
+    "columns": {
+      "bankDate": "Fecha banco",
+      "bankDescription": "Descripción banco",
+      "bankAmount": "Importe banco",
+      "glMemo": "Nota del mayor",
+      "glAmount": "Importe mayor",
+      "matchedBy": "Conciliado por"
+    },
+    "unmatch": "Deshacer conciliación",
+    "adjustTitle": "Ajustar conciliación",
+    "adjustDescription": "Cambie la fecha de corte o el saldo del extracto bancario para esta sesión."
+  }
+}

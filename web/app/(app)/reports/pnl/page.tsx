@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { currentFiscalYearEnd, dimensionOptions, fiscalYearRange, profitAndLoss } from '../../../../lib/reports'
@@ -40,6 +41,7 @@ export default async function PnL({
 }: {
   searchParams: Promise<{ from?: string; to?: string; dept?: string; project?: string; compare?: string; layout?: string }>
 }) {
+  const t = await getTranslations('reports')
   const sp = await searchParams
   const fyNow = await currentFiscalYearEnd()
   // Resolve the three FY presets (current + two prior) once — the range reads
@@ -66,9 +68,9 @@ export default async function PnL({
       header={
         <>
           <PageHeader
-            title="Profit & Loss"
-            description={`${from} → ${to}`}
-            back={{ href: '/reports', label: 'Reports' }}
+            title={t('pnl.title')}
+            description={t('pnl.dateRange', { from, to })}
+            back={{ href: '/reports', label: t('hub.title') }}
             actions={<SaveViewButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -81,7 +83,7 @@ export default async function PnL({
               )
             })}
             <Link href={`/reports/pnl?from=${from}&to=${to}&${keepDims}${comparing ? '' : '&compare=1'}`}>
-              <Badge variant={comparing ? 'default' : 'outline'}>vs prior year</Badge>
+              <Badge variant={comparing ? 'default' : 'outline'}>{t('pnl.vsPriorYear')}</Badge>
             </Link>
             {layouts.map((l) => (
               <Link
@@ -95,9 +97,9 @@ export default async function PnL({
             <DimensionFilter departments={opts.departments} projects={opts.projects} />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Stat label="Revenue" value={pl.revenue} />
-            <Stat label="Gross profit" value={pl.grossProfit} />
-            <Stat label="Net income" value={pl.netIncome} tone={pl.netIncome >= 0 ? 'good' : 'bad'} />
+            <Stat label={t('pnl.revenue')} value={pl.revenue} />
+            <Stat label={t('pnl.grossProfit')} value={pl.grossProfit} />
+            <Stat label={t('pnl.netIncome')} value={pl.netIncome} tone={pl.netIncome >= 0 ? 'good' : 'bad'} />
           </div>
         </>
       }
@@ -109,18 +111,27 @@ export default async function PnL({
       ) : (
         <StatementTable
           sections={[
-            { title: 'Revenue', types: ['income', 'income_other'], rows: pl.items, total: pl.revenue },
-            { title: 'Cost of Goods Sold', types: ['cogs'], rows: pl.items, total: pl.cogs },
-            { title: 'Expenses', types: ['expense', 'expense_other', 'expense_deferred'], rows: pl.items, total: pl.expenses },
+            { title: t('pnl.revenue'), types: ['income', 'income_other'], rows: pl.items, total: pl.revenue },
+            { title: t('pnl.costOfGoodsSold'), types: ['cogs'], rows: pl.items, total: pl.cogs },
+            { title: t('pnl.expenses'), types: ['expense', 'expense_other', 'expense_deferred'], rows: pl.items, total: pl.expenses },
           ]}
-          grandTotal={{ label: 'Net income', value: pl.netIncome }}
+          grandTotal={{ label: t('pnl.netIncome'), value: pl.netIncome }}
         />
       )}
     </ListPageLayout>
   )
 }
 
-function LayoutTable({ lines }: { lines: RenderedLine[] }) {
+async function LayoutTable({ lines }: { lines: RenderedLine[] }) {
+  const t = await getTranslations('reports')
+  // User-authored layout labels (statement_layouts.rows) render verbatim; only
+  // code-generated lines (auto totals, the leftover "Other" group) translate.
+  const labelFor = (l: RenderedLine): string => {
+    if (l.auto === 'other') return t('statement.other')
+    if (l.auto === 'otherTotal') return t('statement.otherTotal')
+    if (l.auto === 'groupTotal') return t('statement.sectionTotal', { section: l.section ?? l.label })
+    return l.label
+  }
   return (
     <Table>
       <TableBody>
@@ -139,7 +150,7 @@ function LayoutTable({ lines }: { lines: RenderedLine[] }) {
                   colSpan={2}
                   className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:bg-slate-900 dark:text-slate-300"
                 >
-                  {l.label}
+                  {labelFor(l)}
                 </TableCell>
               </TableRow>
             )
@@ -161,7 +172,7 @@ function LayoutTable({ lines }: { lines: RenderedLine[] }) {
           }
           return (
             <TableRow key={i}>
-              <TableCell className={l.emphasis ? 'font-bold' : 'font-semibold'}>{l.label}</TableCell>
+              <TableCell className={l.emphasis ? 'font-bold' : 'font-semibold'}>{labelFor(l)}</TableCell>
               <TableCell
                 className={cn(
                   'text-right tabular-nums',
@@ -179,13 +190,15 @@ function LayoutTable({ lines }: { lines: RenderedLine[] }) {
   )
 }
 
-function ComparativeTable({
+async function ComparativeTable({
   current,
   prior,
 }: {
   current: Awaited<ReturnType<typeof profitAndLoss>>
   prior: Awaited<ReturnType<typeof profitAndLoss>>
 }) {
+  const t = await getTranslations('reports')
+  const tc = await getTranslations('common')
   const priorById = new Map(prior.items.map((r) => [r.id, r.balance]))
   const seen = new Set(current.items.map((r) => r.id))
   const rows = [
@@ -193,19 +206,19 @@ function ComparativeTable({
     ...prior.items.filter((r) => !seen.has(r.id)).map((r) => ({ ...r, balance: 0, prior: r.balance })),
   ]
   const totals = [
-    { label: 'Total Revenue', cur: current.revenue, pri: prior.revenue },
-    { label: 'Gross profit', cur: current.grossProfit, pri: prior.grossProfit },
-    { label: 'Net income', cur: current.netIncome, pri: prior.netIncome },
+    { label: t('pnl.totalRevenue'), cur: current.revenue, pri: prior.revenue },
+    { label: t('pnl.grossProfit'), cur: current.grossProfit, pri: prior.grossProfit },
+    { label: t('pnl.netIncome'), cur: current.netIncome, pri: prior.netIncome },
   ]
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Account</TableHead>
-          <TableHead className="text-right">Current</TableHead>
-          <TableHead className="text-right">Prior year</TableHead>
-          <TableHead className="text-right">Δ</TableHead>
-          <TableHead className="text-right">Δ%</TableHead>
+          <TableHead>{tc('labels.account')}</TableHead>
+          <TableHead className="text-right">{t('pnl.columns.current')}</TableHead>
+          <TableHead className="text-right">{t('pnl.columns.priorYear')}</TableHead>
+          <TableHead className="text-right">{t('pnl.columns.delta')}</TableHead>
+          <TableHead className="text-right">{t('pnl.columns.deltaPct')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -229,16 +242,16 @@ function ComparativeTable({
             </TableRow>
           )
         })}
-        {totals.map((t) => (
-          <TableRow key={t.label}>
-            <TableCell className="font-bold">{t.label}</TableCell>
-            <TableCell className="text-right font-bold tabular-nums">{money(t.cur)}</TableCell>
-            <TableCell className="text-right font-bold tabular-nums">{money(t.pri)}</TableCell>
-            <TableCell className={cn('text-right font-bold tabular-nums', t.cur - t.pri < 0 && 'text-red-600 dark:text-red-400')}>
-              {money(t.cur - t.pri)}
+        {totals.map((row) => (
+          <TableRow key={row.label}>
+            <TableCell className="font-bold">{row.label}</TableCell>
+            <TableCell className="text-right font-bold tabular-nums">{money(row.cur)}</TableCell>
+            <TableCell className="text-right font-bold tabular-nums">{money(row.pri)}</TableCell>
+            <TableCell className={cn('text-right font-bold tabular-nums', row.cur - row.pri < 0 && 'text-red-600 dark:text-red-400')}>
+              {money(row.cur - row.pri)}
             </TableCell>
             <TableCell className="text-right font-bold tabular-nums">
-              {t.pri !== 0 ? `${(((t.cur - t.pri) / Math.abs(t.pri)) * 100).toFixed(1)}%` : ''}
+              {row.pri !== 0 ? `${(((row.cur - row.pri) / Math.abs(row.pri)) * 100).toFixed(1)}%` : ''}
             </TableCell>
           </TableRow>
         ))}

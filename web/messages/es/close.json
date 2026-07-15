@@ -1,1 +1,31 @@
-{}
+{
+  "title": "Cierre de período",
+  "description": "Cierre los módulos por período: CxC y CxP bloquean sus submayores; el cierre del libro mayor bloquea por completo el período para contabilizar (aplicado por el kernel — un período cerrado rechaza contabilizaciones en la base de datos).",
+  "filters": {
+    "fiscalYear": "Ejercicio fiscal",
+    "fyOption": "EF {year}"
+  },
+  "table": {
+    "range": "Rango",
+    "entries": "Asientos",
+    "debits": "Débitos",
+    "rangeValue": "{start} → {end}"
+  },
+  "modules": {
+    "ar": "CxC",
+    "ap": "CxP",
+    "gl": "LM"
+  },
+  "status": {
+    "closed": "cerrado",
+    "open": "abierto"
+  },
+  "buttons": {
+    "close": "Cerrar",
+    "reopen": "Reabrir",
+    "reopenConfirm": "¿Reabrir {module} para este período?",
+    "actionFailed": "La acción falló",
+    "closedToast": "{module} cerrado",
+    "reopenedToast": "{module} reabierto"
+  }
+}

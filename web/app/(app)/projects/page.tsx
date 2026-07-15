@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -26,14 +27,9 @@ const SORT_COLUMNS = {
 } as const
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
-const STATUS_LABELS: Record<string, string> = {
-  quoted: 'Quoted',
-  awarded: 'Awarded',
-  active: 'Active',
-  substantially_complete: 'Substantially complete',
-  closed: 'Closed',
-  cancelled: 'Cancelled',
-}
+/** Statuses whose label lives in common.status; the rest live in projects.status. */
+const COMMON_STATUS_KEYS = new Set(['active', 'closed', 'cancelled'])
+const PROJECT_STATUS_KEYS = new Set(['quoted', 'awarded', 'substantially_complete'])
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'outline' | 'destructive'> = {
   quoted: 'secondary',
   awarded: 'warning',
@@ -44,17 +40,18 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warn
 }
 
 const BILLING_METHODS = ['time_and_materials', 'fixed_price', 'cost_plus'] as const
-const BILLING_LABELS: Record<string, string> = {
-  time_and_materials: 'Time & materials',
-  fixed_price: 'Fixed price',
-  cost_plus: 'Cost plus',
-}
 
 export default async function Projects({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const [t, tCommon] = await Promise.all([getTranslations('projects'), getTranslations('common')])
+  const statusLabel = (s: string) =>
+    COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : PROJECT_STATUS_KEYS.has(s) ? t(`status.${s}`) : s
+  const billingLabel = (b: string) =>
+    (BILLING_METHODS as readonly string[]).includes(b) ? t(`billing.${b}`) : b
+
   const authz = await requirePermission('projects.read')
   const canManage = can(authz, 'projects.manage')
   const orgId = authz.user.orgId
@@ -145,12 +142,12 @@ export default async function Projects({
 
   const statusOptions = (STATUSES as readonly string[]).map((s) => ({
     value: s,
-    label: STATUS_LABELS[s] ?? s,
+    label: statusLabel(s),
     count: statusCounts.get(s) ?? 0,
   }))
   const billingOptions = (BILLING_METHODS as readonly string[]).map((b) => ({
     value: b,
-    label: BILLING_LABELS[b] ?? b,
+    label: billingLabel(b),
   }))
 
   return (
@@ -158,22 +155,22 @@ export default async function Projects({
       header={
         <>
           <PageHeader
-            title="Projects"
-            description="Jobs, their contracts, and the cost budget behind every dollar posted to them."
+            title={t('list.title')}
+            description={t('list.description')}
             actions={canManage ? <NewProjectButton /> : undefined}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search name, code, customer…" />
-            <FilterChips basePath="/projects" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
-            <FilterChips basePath="/projects" currentParams={sp} paramKey="billing" label="Billing" options={billingOptions} />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
+            <FilterChips basePath="/projects" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+            <FilterChips basePath="/projects" currentParams={sp} paramKey="billing" label={t('list.billingFilter')} options={billingOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No projects yet"
-          description="Create the first job to start tracking its contract, budget, and costs."
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
           action={canManage ? <NewProjectButton /> : undefined}
         />
       ) : (
@@ -181,13 +178,13 @@ export default async function Projects({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortTh basePath="/projects" currentParams={sp} column="code" sort={params.sort} dir={params.dir}>Code</SortTh>
-                <SortTh basePath="/projects" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>Name</SortTh>
-                <SortTh basePath="/projects" currentParams={sp} column="customer" sort={params.sort} dir={params.dir}>Customer</SortTh>
-                <TableHead>Status</TableHead>
-                <TableHead>Billing</TableHead>
-                <SortTh basePath="/projects" currentParams={sp} column="contract" sort={params.sort} dir={params.dir} align="right" className="text-right">Contract value</SortTh>
-                <SortTh basePath="/projects" currentParams={sp} column="actual" sort={params.sort} dir={params.dir} align="right" className="text-right">Actual cost</SortTh>
+                <SortTh basePath="/projects" currentParams={sp} column="code" sort={params.sort} dir={params.dir}>{t('labels.code')}</SortTh>
+                <SortTh basePath="/projects" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>{tCommon('labels.name')}</SortTh>
+                <SortTh basePath="/projects" currentParams={sp} column="customer" sort={params.sort} dir={params.dir}>{tCommon('labels.customer')}</SortTh>
+                <TableHead>{tCommon('labels.status')}</TableHead>
+                <TableHead>{t('labels.billing')}</TableHead>
+                <SortTh basePath="/projects" currentParams={sp} column="contract" sort={params.sort} dir={params.dir} align="right" className="text-right">{t('labels.contractValue')}</SortTh>
+                <SortTh basePath="/projects" currentParams={sp} column="actual" sort={params.sort} dir={params.dir} align="right" className="text-right">{t('labels.actualCost')}</SortTh>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -201,10 +198,10 @@ export default async function Projects({
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{p.customer_name}</TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_VARIANT[p.status] ?? 'secondary'}>{STATUS_LABELS[p.status] ?? p.status}</Badge>
+                    <Badge variant={STATUS_VARIANT[p.status] ?? 'secondary'}>{statusLabel(p.status)}</Badge>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">
-                    {p.billing_method ? (BILLING_LABELS[p.billing_method] ?? p.billing_method) : '—'}
+                    {p.billing_method ? billingLabel(p.billing_method) : '—'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{money(p.contract_value)}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(p.actual_cost)}</TableCell>

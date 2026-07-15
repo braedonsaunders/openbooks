@@ -27,6 +27,16 @@ export interface RenderedLine {
   accountId?: string;
   number?: string | null;
   emphasis?: boolean;
+  /**
+   * i18n marker for code-generated labels. `label` keeps the English fallback;
+   * render sites translate: "groupTotal" is the automatic "Total X" line
+   * (`section` carries the raw group label, which is user layout data),
+   * "other"/"otherTotal" mark the automatic leftover group. Rows without
+   * `auto` carry user-authored labels from statement_layouts and render
+   * verbatim.
+   */
+  auto?: "groupTotal" | "other" | "otherTotal";
+  section?: string;
 }
 
 const CREDIT_NORMAL = new Set([
@@ -79,15 +89,19 @@ export async function renderLayout(
   const computed = new Map<string, number>();
   const lines: RenderedLine[] = [];
 
-  const emitGroup = (label: string, members: Acct[], collapsed: boolean) => {
+  const emitGroup = (label: string, members: Acct[], collapsed: boolean, leftover = false) => {
     const total = members.reduce((a, m) => a + m.value, 0);
-    lines.push({ kind: "header", label });
+    lines.push(leftover ? { kind: "header", label, auto: "other" } : { kind: "header", label });
     if (!collapsed) {
       for (const m of members) {
         lines.push({ kind: "account", label: m.name, number: m.number, accountId: m.id, amount: m.value });
       }
     }
-    lines.push({ kind: "total", label: `Total ${label}`, amount: total });
+    lines.push(
+      leftover
+        ? { kind: "total", label: `Total ${label}`, amount: total, auto: "otherTotal" }
+        : { kind: "total", label: `Total ${label}`, amount: total, auto: "groupTotal", section: label },
+    );
     computed.set(label, total);
   };
 
@@ -120,7 +134,7 @@ export async function renderLayout(
   }
 
   const leftovers = accounts.filter((a) => !claimed.has(a.id));
-  if (leftovers.length > 0) emitGroup("Other", leftovers, false);
+  if (leftovers.length > 0) emitGroup("Other", leftovers, false, true);
 
   return { name: lay.rows[0].name, lines };
 }

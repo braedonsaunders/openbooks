@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { DetailHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { PageContainer } from '../../../../components/page-layout'
 import { Pagination } from '../../../../components/pagination'
@@ -16,29 +17,31 @@ export default async function Register({
   params: Promise<{ id: string }>
   searchParams: Promise<{ page?: string }>
 }) {
+  const t = await getTranslations('accounts')
+  const tc = await getTranslations('common')
   const { id } = await params
   const { page } = await searchParams
   const p = Math.max(1, Number(page ?? 1))
   const { account, lines, total, balance } = await accountRegister(id, PER_PAGE, (p - 1) * PER_PAGE)
-  if (!account) return <PageContainer>Account not found</PageContainer>
+  if (!account) return <PageContainer>{t('register.notFound')}</PageContainer>
 
   return (
     <PageContainer>
       <DetailHeader
         title={`${account.number ?? ''} ${account.name}`.trim()}
-        subtitle={`register · ${total.toLocaleString()} lines · running balance ${money(balance)}`}
-        back={{ href: '/accounts', label: 'Chart of Accounts' }}
+        subtitle={t('register.subtitle', { count: total, balance: money(balance) })}
+        back={{ href: '/accounts', label: t('list.title') }}
       />
       <div className="mt-6">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Entry</TableHead>
-              <TableHead>Party</TableHead>
-              <TableHead>Memo</TableHead>
-              <TableHead className="text-right">Debit</TableHead>
-              <TableHead className="text-right">Credit</TableHead>
+              <TableHead>{tc('labels.date')}</TableHead>
+              <TableHead>{t('register.columns.entry')}</TableHead>
+              <TableHead>{tc('labels.party')}</TableHead>
+              <TableHead>{tc('labels.memo')}</TableHead>
+              <TableHead className="text-right">{t('register.columns.debit')}</TableHead>
+              <TableHead className="text-right">{t('register.columns.credit')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

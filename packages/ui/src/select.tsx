@@ -14,6 +14,7 @@
 // (or SearchSelect / PersonSelectField for fully-custom cases) everywhere.
 
 import * as React from 'react'
+import { useTranslations } from 'next-intl'
 import { SearchSelect, type SelectOption } from './search-select'
 import { cn } from './utils'
 
@@ -47,8 +48,10 @@ type Parsed = {
 
 // Flatten <option>/<optgroup> children into a SelectOption[] for the typeahead.
 // A leading <option value=""> becomes the placeholder (greyed); if it isn't
-// disabled it also makes the field clearable back to "".
-function parseChildren(children: React.ReactNode): Parsed {
+// disabled it also makes the field clearable back to "". `noneLabel` is the
+// translated fallback label for an empty-labelled leading option (hooks can't
+// run here, so the component passes it in).
+function parseChildren(children: React.ReactNode, noneLabel: string): Parsed {
   const options: SelectOption[] = []
   let placeholder: string | undefined
   let emptyLabel: string | undefined
@@ -67,7 +70,7 @@ function parseChildren(children: React.ReactNode): Parsed {
     if (value === '' && !seenAny) {
       // Leading empty option = placeholder.
       placeholder = label || undefined
-      emptyLabel = label || 'None'
+      emptyLabel = label || noneLabel
       clearable = !p.disabled
       seenAny = true
       return
@@ -134,7 +137,9 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
   )
   const current = isControlled ? String(value ?? '') : uncontrolled
 
-  const parsed = React.useMemo(() => parseChildren(children), [children])
+  const tLabels = useTranslations('common.labels')
+  const noneLabel = tLabels('none')
+  const parsed = React.useMemo(() => parseChildren(children, noneLabel), [children, noneLabel])
 
   function handleNativeChange(e: React.ChangeEvent<HTMLSelectElement>) {
     if (!isControlled) setUncontrolled(e.currentTarget.value)

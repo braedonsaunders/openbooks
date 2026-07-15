@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -11,11 +12,26 @@ import { FieldDrawer, NewFieldButton } from './FieldDrawer'
 
 export const dynamic = 'force-dynamic'
 
+// field_type enum value → admin.customFields.types.* message key. Unknown
+// values (shouldn't happen) render the raw code.
+const TYPE_KEYS: Record<string, string> = {
+  text: 'text',
+  long_text: 'longText',
+  number: 'number',
+  currency: 'currency',
+  date: 'date',
+  boolean: 'boolean',
+  select: 'select',
+  multi_select: 'multiSelect',
+}
+
 export default async function CustomFields({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const t = await getTranslations('admin.customFields')
+  const tCommon = await getTranslations('common')
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'target', allowedSorts: ['target'] as const, perPage: 100 })
   const target = pickString(sp.target)
@@ -44,17 +60,17 @@ export default async function CustomFields({
       header={
         <>
           <PageHeader
-            title="Custom Fields"
-            description="Extend any module — document headers, transaction lines, parties, projects, accounts. Fields render everywhere the record does: drawers, line grids, and reporting."
+            title={t('title')}
+            description={t('description')}
             actions={<NewFieldButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search fields…" />
+            <SearchInput placeholder={t('searchPlaceholder')} />
             <FilterChips
               basePath="/admin/custom-fields"
               currentParams={sp}
               paramKey="target"
-              label="Target"
+              label={t('targetFilter')}
               options={counts.rows.map((r: any) => ({ value: r.target_table, label: r.target_table, count: Number(r.n) }))}
             />
           </div>
@@ -64,19 +80,19 @@ export default async function CustomFields({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Field</TableHead>
-            <TableHead>Key</TableHead>
-            <TableHead>Target</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Required</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>{t('table.field')}</TableHead>
+            <TableHead>{t('table.key')}</TableHead>
+            <TableHead>{t('table.target')}</TableHead>
+            <TableHead>{t('table.type')}</TableHead>
+            <TableHead>{t('table.required')}</TableHead>
+            <TableHead>{t('table.status')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {defs.rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={6} className="text-slate-500 dark:text-slate-400">
-                No custom fields yet.
+                {t('empty')}
               </TableCell>
             </TableRow>
           ) : null}
@@ -93,11 +109,15 @@ export default async function CustomFields({
                 {d.target_kind ? <span className="text-slate-400">:{d.target_kind}</span> : null}
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{d.field_type}</Badge>
+                <Badge variant="secondary">
+                  {TYPE_KEYS[d.field_type] ? t(`types.${TYPE_KEYS[d.field_type]}.label`) : d.field_type}
+                </Badge>
               </TableCell>
-              <TableCell>{d.is_required ? 'Yes' : ''}</TableCell>
+              <TableCell>{d.is_required ? tCommon('labels.yes') : ''}</TableCell>
               <TableCell>
-                <Badge variant={d.is_active ? 'success' : 'outline'}>{d.is_active ? 'active' : 'archived'}</Badge>
+                <Badge variant={d.is_active ? 'success' : 'outline'}>
+                  {d.is_active ? t('statusActive') : t('statusArchived')}
+                </Badge>
               </TableCell>
             </TableRow>
           ))}

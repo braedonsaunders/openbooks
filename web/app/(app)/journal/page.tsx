@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -24,11 +25,35 @@ const SORT_COLUMNS = {
   debits: sql`total_debits`,
 } as const
 
+// journal_entries.origin enum → message key under journal.origins.*
+// (unknown/custom origins render verbatim).
+const ORIGIN_KEYS: Record<string, string> = {
+  manual: 'manual',
+  closing: 'closing',
+  allocation: 'allocation',
+  revaluation: 'revaluation',
+  labor_burden: 'laborBurden',
+  depreciation: 'depreciation',
+  revenue_recognition: 'revenueRecognition',
+  fx_settlement: 'fxSettlement',
+  translation: 'translation',
+}
+
+// journal_entries.status enum → common.status.* key (unknown values render verbatim).
+const STATUS_KEYS: Record<string, string> = {
+  posted: 'posted',
+  reversed: 'reversed',
+  draft: 'draft',
+  voided: 'voided',
+}
+
 export default async function Journal({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const t = await getTranslations('journal')
+  const tc = await getTranslations('common')
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'date',
@@ -110,18 +135,22 @@ export default async function Journal({
       header={
         <>
           <PageHeader
-            title="Journal"
-            description={`${total.toLocaleString()} posted entries · immutable, append-only.`}
+            title={t('list.title')}
+            description={t('list.description', { count: total })}
             actions={<NewJournalButton />}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search entry number or memo…" />
+            <SearchInput placeholder={t('list.searchPlaceholder')} />
             <FilterChips
               basePath="/journal"
               currentParams={sp}
               paramKey="origin"
-              label="Origin"
-              options={origins.rows.map((r: any) => ({ value: r.origin, label: r.origin, count: Number(r.n) }))}
+              label={t('list.originFilter')}
+              options={origins.rows.map((r: any) => ({
+                value: r.origin,
+                label: ORIGIN_KEYS[r.origin] ? t(`origins.${ORIGIN_KEYS[r.origin]}`) : r.origin,
+                count: Number(r.n),
+              }))}
             />
           </div>
         </>
@@ -130,7 +159,7 @@ export default async function Journal({
       {draftDocs.rows.length > 0 ? (
         <div className="mb-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-900/40">
           <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            Draft journals — not yet posted
+            {t('list.draftsHeading')}
           </p>
           <div className="flex flex-col gap-0.5">
             {draftDocs.rows.map((d: any) => (
@@ -153,13 +182,13 @@ export default async function Journal({
       <Table>
         <TableHeader>
           <TableRow>
-            <SortTh basePath="/journal" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>Date</SortTh>
-            <SortTh basePath="/journal" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>Entry</SortTh>
-            <TableHead>Memo</TableHead>
-            <TableHead>Origin</TableHead>
-            <TableHead className="text-right">Lines</TableHead>
-            <SortTh basePath="/journal" currentParams={sp} column="debits" sort={params.sort} dir={params.dir} align="right">Debits</SortTh>
-            <TableHead>Status</TableHead>
+            <SortTh basePath="/journal" currentParams={sp} column="date" sort={params.sort} dir={params.dir}>{tc('labels.date')}</SortTh>
+            <SortTh basePath="/journal" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{t('list.columns.entry')}</SortTh>
+            <TableHead>{tc('labels.memo')}</TableHead>
+            <TableHead>{t('list.columns.origin')}</TableHead>
+            <TableHead className="text-right">{tc('labels.lines')}</TableHead>
+            <SortTh basePath="/journal" currentParams={sp} column="debits" sort={params.sort} dir={params.dir} align="right">{t('list.columns.debits')}</SortTh>
+            <TableHead>{tc('labels.status')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -173,13 +202,15 @@ export default async function Journal({
               </TableCell>
               <TableCell className="max-w-md truncate text-slate-500 dark:text-slate-400">{e.memo}</TableCell>
               <TableCell>
-                <Badge variant="secondary">{e.origin}</Badge>
+                <Badge variant="secondary">
+                  {ORIGIN_KEYS[e.origin] ? t(`origins.${ORIGIN_KEYS[e.origin]}`) : e.origin}
+                </Badge>
               </TableCell>
               <TableCell className="text-right tabular-nums">{e.line_count}</TableCell>
               <TableCell className="text-right tabular-nums">{money(e.total_debits)}</TableCell>
               <TableCell>
                 <Badge variant={e.status === 'posted' ? 'success' : e.status === 'reversed' ? 'destructive' : 'secondary'}>
-                  {e.status}
+                  {STATUS_KEYS[e.status] ? tc(`status.${STATUS_KEYS[e.status]}`) : e.status}
                 </Badge>
               </TableCell>
             </TableRow>

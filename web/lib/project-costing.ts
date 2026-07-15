@@ -36,6 +36,7 @@ export interface ProjectCostSummary {
   /** Budget vs (actual + committed). */
   forecast: { projectedCost: number; remainingBudget: number; percentSpent: number | null }
   costByAccount: { accountId: string; number: string | null; name: string; type: string; amount: number }[]
+  /** `category` is a stable code ('cogs' | 'operating_expense') — render sites translate it. */
   costByCategory: { category: string; amount: number }[]
   documents: {
     id: string
@@ -123,7 +124,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
   }))
   const catMap = new Map<string, number>()
   for (const r of costByAccount) {
-    const cat = r.type === 'cogs' ? 'Cost of goods sold' : 'Operating expense'
+    const cat = r.type === 'cogs' ? 'cogs' : 'operating_expense'
     catMap.set(cat, (catMap.get(cat) ?? 0) + r.amount)
   }
   const costByCategory = [...catMap.entries()].map(([category, amount]) => ({ category, amount }))

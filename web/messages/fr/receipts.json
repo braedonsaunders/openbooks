@@ -1,1 +1,7 @@
-{}
+{
+  "page": {
+    "title": "Encaissements",
+    "description": "Paiements clients reçus et appliqués aux factures clients ouvertes via le noyau.",
+    "newReceipt": "Nouvel encaissement"
+  }
+}

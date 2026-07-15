@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
@@ -54,12 +55,29 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
   voided: 'outline',
 }
 
-/** Per-kind wording + the base list route/param for the flyout close href. */
-const KIND_META: Record<OrderKind, { partyLabel: string; dateLabel: string; expiryLabel: string; base: string; param: string }> = {
-  quote: { partyLabel: 'Customer', dateLabel: 'Estimate date', expiryLabel: 'Expiry date', base: '/estimates', param: 'estimate' },
-  sales_order: { partyLabel: 'Customer', dateLabel: 'Order date', expiryLabel: 'Ship / due date', base: '/sales-orders', param: 'order' },
-  purchase_order: { partyLabel: 'Vendor', dateLabel: 'Order date', expiryLabel: 'Expected date', base: '/purchase-orders', param: 'order' },
+/** Per-kind base list route/param for the flyout close href (wording lives in the catalog, keyed by kind). */
+const KIND_META: Record<OrderKind, { base: string; param: string }> = {
+  quote: { base: '/estimates', param: 'estimate' },
+  sales_order: { base: '/sales-orders', param: 'order' },
+  purchase_order: { base: '/purchase-orders', param: 'order' },
 }
+
+/** documents.status values with a generic label in common.status (camelCased key). */
+const STATUS_LABEL_KEYS = new Set([
+  'draft',
+  'pendingApproval',
+  'approved',
+  'rejected',
+  'posted',
+  'paid',
+  'partiallyPaid',
+  'open',
+  'closed',
+  'voided',
+  'reversed',
+  'cancelled',
+])
+const toStatusKey = (status: string) => status.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
 
 /** Where a freshly-created document opens (drawer deep-link per kind). */
 function targetHref(kind: string, id: string): string {
@@ -131,6 +149,12 @@ export function OrderDrawer({
   projects: Opt[]
   canManage: boolean
 }) {
+  const t = useTranslations('purchaseOrders.shared')
+  const tCommon = useTranslations('common')
+  const statusLabel = (status: string) => {
+    const key = toStatusKey(String(status))
+    return STATUS_LABEL_KEYS.has(key) ? tCommon(`status.${key}`) : String(status).replace('_', ' ')
+  }
   const router = useRouter()
   const doc = order.doc
   const meta = KIND_META[kind]
@@ -237,7 +261,7 @@ export function OrderDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`${apiBase}/${doc.id}`, {
         method: 'PATCH',
@@ -251,10 +275,10 @@ export function OrderDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, editable])
 
@@ -268,10 +292,10 @@ export function OrderDrawer({
     const data = await res.json()
     setBusy(false)
     if (!res.ok) {
-      toast.error(data.error ?? 'Action failed')
+      toast.error(data.error ?? t('actionFailed'))
       return
     }
-    toast.success(status === 'approved' ? 'Issued' : 'Voided')
+    toast.success(status === 'approved' ? t('toastIssued') : t('toastVoided'))
     router.refresh()
   }
 
@@ -288,9 +312,9 @@ export function OrderDrawer({
   async function voidOrder() {
     if (
       !(await confirmDialog({
-        title: 'Void this document?',
-        message: 'Voiding cancels the order. This cannot be undone.',
-        confirmLabel: 'Void',
+        title: t('voidConfirmTitle'),
+        message: t('voidConfirmMessage'),
+        confirmLabel: tCommon('actions.void'),
         tone: 'danger',
       }))
     )
@@ -308,10 +332,10 @@ export function OrderDrawer({
     const data = await res.json()
     setBusy(false)
     if (!res.ok) {
-      toast.error(data.error ?? 'Conversion failed')
+      toast.error(data.error ?? t('convertFailed'))
       return
     }
-    toast.success(`${label} ${data.documentNumber} created`)
+    toast.success(t('convertCreated', { target: label, number: data.documentNumber }))
     router.push(targetHref(data.kind, data.id))
     router.refresh()
   }
@@ -321,7 +345,7 @@ export function OrderDrawer({
     () => [
       {
         key: 'itemId',
-        label: 'Item',
+        label: t('columns.item'),
         width: 'minmax(170px,1.6fr)',
         type: 'search-select',
         options: items.map((i) => ({ value: i.id, label: `${i.code ? i.code + ' · ' : ''}${i.name ?? ''}`.trim() })),
@@ -329,25 +353,25 @@ export function OrderDrawer({
       },
       {
         key: 'accountId',
-        label: kind === 'purchase_order' ? 'Account' : 'Income account',
+        label: t('columns.account', { kind }),
         width: 'minmax(180px,1.8fr)',
         type: 'search-select',
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
-        placeholder: 'Account…',
+        placeholder: t('columns.accountPlaceholder'),
       },
-      { key: 'description', label: 'Description', width: 'minmax(150px,1.6fr)', type: 'text' },
-      { key: 'quantity', label: 'Qty', width: '90px', type: 'amount', align: 'right', required: true },
-      { key: 'unitPrice', label: 'Unit price', width: '110px', type: 'amount', align: 'right', required: true },
+      { key: 'description', label: tCommon('labels.description'), width: 'minmax(150px,1.6fr)', type: 'text' },
+      { key: 'quantity', label: t('columns.qty'), width: '90px', type: 'amount', align: 'right', required: true },
+      { key: 'unitPrice', label: t('columns.unitPrice'), width: '110px', type: 'amount', align: 'right', required: true },
       {
         key: 'taxCodeId',
-        label: 'Tax',
+        label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: 'No tax' }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
+        options: [{ value: '', label: t('columns.noTax') }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
       },
       {
         key: '_amount',
-        label: 'Amount',
+        label: tCommon('labels.amount'),
         width: '120px',
         type: 'readonly',
         align: 'right',
@@ -358,7 +382,7 @@ export function OrderDrawer({
       },
       {
         key: '_tax',
-        label: 'Tax amt',
+        label: t('columns.taxAmount'),
         width: '100px',
         type: 'readonly',
         align: 'right',
@@ -369,7 +393,7 @@ export function OrderDrawer({
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxCodes, kind],
+    [accounts, items, taxCodes, kind, t, tCommon],
   )
 
   const field = 'space-y-1.5'
@@ -385,37 +409,43 @@ export function OrderDrawer({
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
-            {String(doc.status).replace('_', ' ')}
+            {statusLabel(doc.status)}
           </Badge>
           {converted.partial ? (
             <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
-              Converted {converted.billed % 1 === 0 ? converted.billed : converted.billed.toFixed(2)}/
-              {converted.ordered % 1 === 0 ? converted.ordered : converted.ordered.toFixed(2)}
+              {t('convertedProgress', {
+                billed: converted.billed % 1 === 0 ? String(converted.billed) : converted.billed.toFixed(2),
+                ordered: converted.ordered % 1 === 0 ? String(converted.ordered) : converted.ordered.toFixed(2),
+              })}
             </span>
           ) : converted.full ? (
-            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">Fully converted</span>
+            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">{t('fullyConverted')}</span>
           ) : null}
         </span>
       }
-      description={editable ? 'Draft — changes save automatically.' : (doc.party_name ?? undefined)}
+      description={editable ? t('draftAutosave') : (doc.party_name ?? undefined)}
       headerActions={
         canManage ? (
           <>
             {isDraft ? (
               <Button disabled={busy || !canIssue} onClick={issue}>
-                Issue
+                {t('issue')}
               </Button>
             ) : null}
             {isApproved
-              ? convertTargets.map((t) => (
-                  <Button key={t.kind} disabled={busy} onClick={() => convert(t.kind, t.label)}>
-                    Convert to {t.label}
+              ? convertTargets.map((target) => (
+                  <Button
+                    key={target.kind}
+                    disabled={busy}
+                    onClick={() => convert(target.kind, t(target.labelKey))}
+                  >
+                    {t('convertTo', { target: t(target.labelKey) })}
                   </Button>
                 ))
               : null}
             {isApproved ? (
               <Button variant="outline" disabled={busy} onClick={voidOrder}>
-                Void
+                {tCommon('actions.void')}
               </Button>
             ) : null}
           </>
@@ -431,18 +461,21 @@ export function OrderDrawer({
           >
             {editable
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('allChangesSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('saveFailedRetry')
+                    : t('unsavedChanges')
               : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            Subtotal {money(totals.subtotal)} · Tax {money(totals.taxTotal)} ·{' '}
-            <strong className="text-slate-900 dark:text-slate-100">Total {money(totals.total)}</strong>
+            {t('totals.subtotal', { amount: money(totals.subtotal) })} ·{' '}
+            {t('totals.tax', { amount: money(totals.taxTotal) })} ·{' '}
+            <strong className="text-slate-900 dark:text-slate-100">
+              {t('totals.total', { amount: money(totals.total) })}
+            </strong>
           </span>
         </div>
       }
@@ -451,7 +484,7 @@ export function OrderDrawer({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              {meta.partyLabel}
+              {t('partyLabel', { kind })}
               {editable ? <span className="text-red-500"> *</span> : null}
             </Label>
             {editable ? (
@@ -459,14 +492,14 @@ export function OrderDrawer({
                 options={parties.map((c) => ({ value: c.id, label: c.display_name ?? '' }))}
                 value={partyId}
                 onChange={(v) => setPartyId(v ?? '')}
-                placeholder={`Select ${meta.partyLabel.toLowerCase()}…`}
+                placeholder={t('selectPartyPlaceholder', { kind })}
               />
             ) : (
               <p className="text-sm">{doc.party_name ?? '—'}</p>
             )}
           </div>
           <div className={field}>
-            <Label>{meta.dateLabel}</Label>
+            <Label>{t('dateLabel', { kind })}</Label>
             {editable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
@@ -474,7 +507,7 @@ export function OrderDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>{meta.expiryLabel}</Label>
+            <Label>{t('expiryLabel', { kind })}</Label>
             {editable ? (
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             ) : (
@@ -482,7 +515,7 @@ export function OrderDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Department</Label>
+            <Label>{tCommon('labels.department')}</Label>
             {editable ? (
               <SearchSelect
                 options={[{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))]}
@@ -495,7 +528,7 @@ export function OrderDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Project</Label>
+            <Label>{tCommon('labels.project')}</Label>
             {editable ? (
               <SearchSelect
                 options={[{ value: '', label: '—' }, ...projects.map((p) => ({ value: p.id, label: p.name ?? '' }))]}
@@ -508,7 +541,7 @@ export function OrderDrawer({
             )}
           </div>
           <div className={`${field} lg:col-span-2`}>
-            <Label>Memo</Label>
+            <Label>{tCommon('labels.memo')}</Label>
             {editable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
@@ -518,7 +551,7 @@ export function OrderDrawer({
         </div>
 
         <div className="space-y-2">
-          <Label>Lines</Label>
+          <Label>{tCommon('labels.lines')}</Label>
           <LineGrid<LineRow>
             columns={columns}
             rows={rows}
@@ -530,12 +563,12 @@ export function OrderDrawer({
 
         {order.links.length > 0 ? (
           <div className="space-y-2">
-            <Label>Origin / Converted into</Label>
+            <Label>{t('linksTitle')}</Label>
             <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
               {order.links.map((l) => (
                 <div key={`${l.direction}-${l.id}`} className="flex items-center gap-3 px-3 py-2 text-sm">
                   <span className="w-28 shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {l.direction === 'from' ? 'Created from' : 'Converted into'}
+                    {l.direction === 'from' ? t('linkCreatedFrom') : t('linkConvertedInto')}
                   </span>
                   <Link
                     href={docHref(l.kind, l.id)}
@@ -543,10 +576,10 @@ export function OrderDrawer({
                   >
                     {l.document_number}
                   </Link>
-                  <span className="text-slate-400 dark:text-slate-500">{l.kind.replace('_', ' ')}</span>
+                  <span className="text-slate-400 dark:text-slate-500">{t('docKind', { kind: l.kind })}</span>
                   <span className="flex-1" />
                   <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
-                    {String(l.status).replace('_', ' ')}
+                    {statusLabel(l.status)}
                   </Badge>
                 </div>
               ))}

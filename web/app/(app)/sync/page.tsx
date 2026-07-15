@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server'
 import { configuredSources } from '@openbooks/engine/src/sync/registry.ts'
 import { Alert, AlertDescription, AlertTitle, Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { PageContainer } from '../../../components/page-layout'
@@ -7,7 +8,12 @@ import { SyncButton } from './SyncButton'
 
 export const dynamic = 'force-dynamic'
 
+// Run statuses we have display labels for — anything else renders verbatim.
+const RUN_STATUS_KEYS = ['ok', 'failed', 'running'] as const
+
 export default async function SyncPage() {
+  const t = await getTranslations('sync')
+  const tc = await getTranslations('common')
   const { runs } = await dashboardData()
   const sources = configuredSources()
   const lastOk = runs.find((r: any) => r.status === 'ok')
@@ -15,23 +21,17 @@ export default async function SyncPage() {
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Sync"
-        description="Manual bridge to a connected accounting system while running in parallel. Changed transactions are reversed and re-posted — full audit trail, no mutation. Every sync re-verifies the trial balance per account against the live source."
-      />
+      <PageHeader title={t('title')} description={t('description')} />
 
       <div className="mt-6 space-y-6">
         {sources.length === 0 ? (
           <Alert>
-            <AlertTitle>No external source configured</AlertTitle>
-            <AlertDescription>
-              Connect one by adding a source adapter and its credentials; it will appear here
-              automatically.
-            </AlertDescription>
+            <AlertTitle>{t('noSource.title')}</AlertTitle>
+            <AlertDescription>{t('noSource.description')}</AlertDescription>
           </Alert>
         ) : (
           <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Connected sources</h2>
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('connectedSources')}</h2>
             {sources.map((s) => (
               <div key={s.name} className="flex items-center gap-3">
                 <Badge variant="success">{s.displayName}</Badge>
@@ -44,14 +44,14 @@ export default async function SyncPage() {
         {mismatches.length > 0 ? (
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-red-600 dark:text-red-400">
-              Trial-balance mismatches (last sync)
+              {t('mismatchesHeading')}
             </h2>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Source account</TableHead>
-                  <TableHead className="text-right">openbooks</TableHead>
-                  <TableHead className="text-right">source</TableHead>
+                  <TableHead>{t('columns.sourceAccount')}</TableHead>
+                  <TableHead className="text-right">{t('columns.ours')}</TableHead>
+                  <TableHead className="text-right">{t('columns.theirs')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -68,15 +68,15 @@ export default async function SyncPage() {
         ) : null}
 
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">All runs</h2>
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('allRuns')}</h2>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Started</TableHead>
-                <TableHead>Finished</TableHead>
-                <TableHead>Trigger</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Detail</TableHead>
+                <TableHead>{t('columns.started')}</TableHead>
+                <TableHead>{t('columns.finished')}</TableHead>
+                <TableHead>{t('columns.trigger')}</TableHead>
+                <TableHead>{tc('labels.status')}</TableHead>
+                <TableHead>{t('columns.detail')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -87,12 +87,20 @@ export default async function SyncPage() {
                   <TableCell>{r.triggered_by}</TableCell>
                   <TableCell>
                     <Badge variant={r.status === 'ok' ? 'success' : r.status === 'failed' ? 'destructive' : 'secondary'}>
-                      {r.status}
+                      {(RUN_STATUS_KEYS as readonly string[]).includes(r.status)
+                        ? t(`runStatus.${r.status}`)
+                        : r.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">
                     {r.status === 'ok' && r.stats
-                      ? `${r.stats.newEntries} new · ${r.stats.reversedEntries} reversed · ${r.stats.unchanged} unchanged · TB ${r.stats.tb?.matches}/${r.stats.tb?.accounts}`
+                      ? t('runStats', {
+                          newEntries: r.stats.newEntries,
+                          reversedEntries: r.stats.reversedEntries,
+                          unchanged: r.stats.unchanged,
+                          matches: r.stats.tb?.matches,
+                          accounts: r.stats.tb?.accounts,
+                        })
                       : (r.error_message ?? '')}
                   </TableCell>
                 </TableRow>

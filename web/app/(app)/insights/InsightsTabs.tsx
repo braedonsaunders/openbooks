@@ -1,10 +1,12 @@
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 
 /** Sub-navigation between the Cards library and the Dashboards grid. */
 export function InsightsTabs({ active }: { active: 'cards' | 'dashboards' }) {
+  const t = useTranslations('insights.tabs')
   const tabs = [
-    { key: 'cards', label: 'Cards', href: '/insights' },
-    { key: 'dashboards', label: 'Dashboards', href: '/insights/dashboards' },
+    { key: 'cards', label: t('cards'), href: '/insights' },
+    { key: 'dashboards', label: t('dashboards'), href: '/insights/dashboards' },
   ] as const
   return (
     <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">

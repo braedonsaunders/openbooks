@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { AttachmentPanel } from '../../../components/attachment-panel'
@@ -49,11 +50,26 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   voided: 'outline',
 }
 
-const KIND_LABEL: Record<string, string> = {
-  vendor_bill: 'Bill',
-  customer_invoice: 'Invoice',
-  expense_report: 'Expense report',
-  journal: 'Journal',
+// document kind enum → payments.drawer.kind.* message keys (fallback: 'entry').
+const KIND_KEY: Record<string, string> = {
+  vendor_bill: 'vendorBill',
+  customer_invoice: 'customerInvoice',
+  expense_report: 'expenseReport',
+  journal: 'journal',
+}
+
+// documents.status enum → common.status.* message keys (fallback: raw value).
+const STATUS_LABEL_KEY: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  rejected: 'rejected',
+  posted: 'posted',
+  paid: 'paid',
+  partially_paid: 'partiallyPaid',
+  voided: 'voided',
+  reversed: 'reversed',
+  cancelled: 'cancelled',
 }
 
 export function PaymentDrawer({
@@ -71,13 +87,20 @@ export function PaymentDrawer({
   side: 'ap' | 'ar'
   basePath: string
 }) {
+  const t = useTranslations('payments.drawer')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const doc = payment.doc
   const isDraft = doc.status === 'draft'
-  const L =
-    side === 'ap'
-      ? { party: 'Vendor', items: 'Open bills', post: 'Pay & post', empty: 'No open bills for this vendor.' }
-      : { party: 'Customer', items: 'Open invoices', post: 'Receive & post', empty: 'No open invoices for this customer.' }
+  const partyLabel = side === 'ap' ? tCommon('labels.vendor') : tCommon('labels.customer')
+  const kindLabel = (kind: string | null) => {
+    const key = KIND_KEY[kind ?? '']
+    return key ? t(`kind.${key}`) : t('kind.entry')
+  }
+  const statusLabel = (status: string) => {
+    const key = STATUS_LABEL_KEY[status]
+    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
+  }
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [bankAccountId, setBankAccountId] = useState<string>(payment.bankAccountId ?? '')
@@ -111,7 +134,7 @@ export function PaymentDrawer({
       .then(async (res) => {
         const data = await res.json()
         if (cancelled) return
-        if (!res.ok) toast.error(data.error ?? 'Could not load open items')
+        if (!res.ok) toast.error(data.error ?? t('toasts.loadOpenItemsFailed'))
         else setOpenItems(data.items ?? [])
       })
       .finally(() => {
@@ -160,7 +183,7 @@ export function PaymentDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/payments/${doc.id}`, {
         method: 'PATCH',
@@ -172,10 +195,10 @@ export function PaymentDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('toasts.autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, isDraft])
 
@@ -187,8 +210,8 @@ export function PaymentDrawer({
       body: JSON.stringify({ documentId: doc.id, allocations: validAllocations }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Posting failed')
-    else toast.success(side === 'ap' ? 'Payment posted and applied' : 'Receipt posted and applied')
+    if (!res.ok) toast.error(data.error ?? t('toasts.postFailed'))
+    else toast.success(t('toasts.posted', { side }))
     setBusy(false)
     router.refresh()
   }
@@ -222,21 +245,21 @@ export function PaymentDrawer({
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{doc.document_number}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
-            {String(doc.status).replace('_', ' ')}
+            {statusLabel(String(doc.status))}
           </Badge>
         </span>
       }
-      description={isDraft ? 'Draft — changes save automatically.' : (doc.party_name ?? undefined)}
+      description={isDraft ? t('draftHint') : (doc.party_name ?? undefined)}
       headerActions={
         <>
           {isDraft ? (
             <Button disabled={!canPost} onClick={post}>
-              {busy ? 'Posting…' : L.post}
+              {busy ? tCommon('actions.posting') : t('postAction', { side })}
             </Button>
           ) : null}
           {doc.entry_id ? (
             <Button variant="outline" asChild>
-              <Link href={`/journal/${doc.entry_id}`}>View GL impact</Link>
+              <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
             </Button>
           ) : null}
         </>
@@ -251,23 +274,28 @@ export function PaymentDrawer({
           >
             {isDraft
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('saveState.saved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tCommon('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('saveState.error')
+                    : t('saveState.dirty')
               : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
             {isDraft ? (
-              <>
-                Applying {validAllocations.length} item{validAllocations.length === 1 ? '' : 's'} ·{' '}
-                <strong className="text-slate-900 dark:text-slate-100">Total {money(total)}</strong>
-              </>
+              t.rich('applyingSummary', {
+                count: validAllocations.length,
+                amount: money(total),
+                total: (chunks) => (
+                  <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>
+                ),
+              })
             ) : (
-              <strong className="text-slate-900 dark:text-slate-100">Total {money(doc.total)}</strong>
+              <strong className="text-slate-900 dark:text-slate-100">
+                {t('totalAmount', { amount: money(doc.total) })}
+              </strong>
             )}
           </span>
         </div>
@@ -277,7 +305,7 @@ export function PaymentDrawer({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              {L.party}
+              {partyLabel}
               {isDraft ? <span className="text-red-500"> *</span> : null}
             </Label>
             {isDraft ? (
@@ -285,7 +313,7 @@ export function PaymentDrawer({
                 options={parties.map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
                 value={partyId}
                 onChange={(v) => setPartyId(v ?? '')}
-                placeholder={`Select ${L.party.toLowerCase()}…`}
+                placeholder={t('selectPartyPlaceholder', { side })}
               />
             ) : (
               <p className="text-sm">{doc.party_name}</p>
@@ -293,7 +321,8 @@ export function PaymentDrawer({
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              Bank account{isDraft ? <span className="text-red-500"> *</span> : null}
+              {t('bankAccount')}
+              {isDraft ? <span className="text-red-500"> *</span> : null}
             </Label>
             {isDraft ? (
               <SearchSelect
@@ -303,7 +332,7 @@ export function PaymentDrawer({
                 }))}
                 value={bankAccountId}
                 onChange={(v) => setBankAccountId(v ?? '')}
-                placeholder="Select bank account…"
+                placeholder={t('selectBankAccountPlaceholder')}
               />
             ) : (
               <p className="text-sm">
@@ -312,7 +341,7 @@ export function PaymentDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Date</Label>
+            <Label>{tCommon('labels.date')}</Label>
             {isDraft ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (
@@ -320,19 +349,19 @@ export function PaymentDrawer({
             )}
           </div>
           <div className={field}>
-            <Label>Reference</Label>
+            <Label>{tCommon('labels.reference')}</Label>
             {isDraft ? (
               <Input
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
-                placeholder="Cheque / EFT ref…"
+                placeholder={t('referencePlaceholder')}
               />
             ) : (
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
             )}
           </div>
           <div className={`${field} lg:col-span-2`}>
-            <Label>Memo</Label>
+            <Label>{tCommon('labels.memo')}</Label>
             {isDraft ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (
@@ -343,29 +372,29 @@ export function PaymentDrawer({
 
         {isDraft ? (
           <div className="space-y-2">
-            <Label>{L.items}</Label>
+            <Label>{t('openItems', { side })}</Label>
             {!partyId ? (
               <p className="rounded-md border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Select a {L.party.toLowerCase()} to list their open items.
+                {t('selectPartyHint', { side })}
               </p>
             ) : loadingItems ? (
-              <p className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Loading open items…</p>
+              <p className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('loadingOpenItems')}</p>
             ) : openItems.length === 0 ? (
               <p className="rounded-md border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                {L.empty}
+                {t('noOpenItems', { side })}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      <th className="w-10 px-3 py-2" aria-label="Apply" />
-                      <th className="px-3 py-2">Document</th>
-                      <th className="px-3 py-2">Due</th>
-                      <th className="px-3 py-2 text-right">Original</th>
-                      <th className="px-3 py-2 text-right">Applied to date</th>
-                      <th className="px-3 py-2 text-right">Open</th>
-                      <th className="w-36 px-3 py-2 text-right">Apply</th>
+                      <th className="w-10 px-3 py-2" aria-label={t('columns.apply')} />
+                      <th className="px-3 py-2">{t('columns.document')}</th>
+                      <th className="px-3 py-2">{t('columns.due')}</th>
+                      <th className="px-3 py-2 text-right">{t('columns.original')}</th>
+                      <th className="px-3 py-2 text-right">{t('columns.appliedToDate')}</th>
+                      <th className="px-3 py-2 text-right">{t('columns.open')}</th>
+                      <th className="w-36 px-3 py-2 text-right">{t('columns.apply')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -383,7 +412,7 @@ export function PaymentDrawer({
                               className="h-4 w-4 accent-teal-600"
                               checked={checked}
                               onChange={() => toggle(item)}
-                              aria-label={`Apply to ${item.documentNumber ?? item.entryNumber}`}
+                              aria-label={t('applyAriaLabel', { document: item.documentNumber ?? item.entryNumber })}
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -391,7 +420,7 @@ export function PaymentDrawer({
                               {item.documentNumber ?? item.entryNumber}
                             </span>
                             <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                              {KIND_LABEL[item.documentKind ?? ''] ?? 'Entry'}
+                              {kindLabel(item.documentKind)}
                               {item.referenceNumber ? ` · ${item.referenceNumber}` : ''}
                             </span>
                           </td>
@@ -425,30 +454,26 @@ export function PaymentDrawer({
               </div>
             )}
             {hasInvalidRow ? (
-              <p className="text-xs text-red-600 dark:text-red-400">
-                Each applied amount must be greater than zero and no more than the item&apos;s open balance.
-              </p>
+              <p className="text-xs text-red-600 dark:text-red-400">{t('invalidAllocation')}</p>
             ) : null}
           </div>
         ) : (
           <div className="space-y-2">
-            <Label>Applied to</Label>
+            <Label>{t('appliedTo')}</Label>
             {payment.applied.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {doc.status === 'voided'
-                  ? 'This payment was voided; its posting was reversed.'
-                  : 'No live applications.'}
+                {doc.status === 'voided' ? t('voidedNote') : t('noLiveApplications')}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      <th className="px-3 py-2">Document</th>
-                      <th className="px-3 py-2">Due</th>
-                      <th className="px-3 py-2">Applied on</th>
-                      <th className="px-3 py-2 text-right">Original</th>
-                      <th className="px-3 py-2 text-right">Applied</th>
+                      <th className="px-3 py-2">{t('columns.document')}</th>
+                      <th className="px-3 py-2">{t('columns.due')}</th>
+                      <th className="px-3 py-2">{t('columns.appliedOn')}</th>
+                      <th className="px-3 py-2 text-right">{t('columns.original')}</th>
+                      <th className="px-3 py-2 text-right">{t('columns.applied')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -459,7 +484,7 @@ export function PaymentDrawer({
                             {a.target_document_number ?? a.target_entry_number}
                           </span>
                           <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                            {KIND_LABEL[a.target_document_kind ?? ''] ?? 'Entry'}
+                            {kindLabel(a.target_document_kind)}
                             {a.target_reference_number ? ` · ${a.target_reference_number}` : ''}
                           </span>
                         </td>

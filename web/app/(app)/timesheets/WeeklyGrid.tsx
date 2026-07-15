@@ -14,6 +14,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, SearchSelect, Select, cn } from '@openbooks/ui'
@@ -26,15 +27,12 @@ import type {
   WeekRow,
 } from '../../api/timesheets/_lib'
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+// Day-of-week catalog keys, Sunday-first to match the grid columns.
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  empty: 'No hours',
-}
+/** Statuses whose label lives in common.status; the rest live in timesheets.status. */
+const COMMON_STATUS_KEYS = new Set(['draft', 'approved', 'rejected'])
+const LOCAL_STATUS_KEYS = new Set(['submitted', 'empty'])
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'outline' | 'destructive'> = {
   draft: 'secondary',
   submitted: 'warning',
@@ -89,14 +87,13 @@ function fmt(n: number): string {
   return n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-/** Format a day's ISO date as "Sun 13". */
-function dayHeader(iso: string, i: number): string {
-  const d = Number(iso.split('-')[2])
-  return `${DAY_LABELS[i]} ${d}`
+/** Day-of-month from a day's ISO date ("2026-07-13" → 13). */
+function dayOfMonth(iso: string): number {
+  return Number(iso.split('-')[2])
 }
 
-/** "Sun Jul 13 – Sat Jul 19, 2026" from the week's Sunday. */
-function weekTitle(sundayIso: string): string {
+/** Formatted week endpoints from the week's Sunday, for the "Week of …" title. */
+function weekRange(sundayIso: string): { from: string; to: string } {
   const [y, m, d] = sundayIso.split('-').map(Number)
   const sun = new Date(Date.UTC(y, m - 1, d, 12))
   const sat = new Date(sun)
@@ -108,7 +105,7 @@ function weekTitle(sundayIso: string): string {
       timeZone: 'UTC',
       ...(withYear ? { year: 'numeric' } : {}),
     })
-  return `Week of ${fmtDate(sun, false)} – ${fmtDate(sat, true)}`
+  return { from: fmtDate(sun, false), to: fmtDate(sat, true) }
 }
 
 /** Shift an ISO Sunday by ±7 days, returning the new Sunday ISO. */
@@ -141,6 +138,10 @@ export function WeeklyGrid({
   canManage: boolean
   canApprove: boolean
 }) {
+  const t = useTranslations('timesheets')
+  const tCommon = useTranslations('common')
+  const statusLabel = (s: string) =>
+    COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : LOCAL_STATUS_KEYS.has(s) ? t(`status.${s}`) : s
   const router = useRouter()
   const [rows, setRows] = useState<GridRow[]>(() => fromPayload(payload.rows, pickers.timeTypes))
   const [status, setStatus] = useState(payload.status)
@@ -196,7 +197,7 @@ export function WeeklyGrid({
 
   // ---- navigation (URL is the source of truth; no full reload) -------------
   const go = (nextEmployee: string | null, nextWeek: string) => {
-    if (dirty && !confirm('Discard unsaved changes?')) return
+    if (dirty && !confirm(t('grid.discardConfirm'))) return
     const emp = nextEmployee ?? employeeId
     if (!emp) return
     router.push(`/timesheets/entry?employee=${emp}&week=${nextWeek}`)
@@ -216,12 +217,12 @@ export function WeeklyGrid({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(data?.error ?? 'Something went wrong')
+        toast.error(data?.error ?? tCommon('feedback.somethingWentWrong'))
         return null
       }
       return data as WeekPayload
     } catch {
-      toast.error('Network error')
+      toast.error(t('grid.networkError'))
       return null
     } finally {
       setBusy(false)
@@ -252,20 +253,20 @@ export function WeeklyGrid({
     }, 'PUT')
     if (data) {
       applyPayload(data)
-      toast.success('Timesheet saved')
+      toast.success(t('grid.saved'))
     }
   }
 
   const onSubmit = async () => {
     if (!employeeId) return
     if (dirty) {
-      toast.error('Save your changes before submitting')
+      toast.error(t('grid.saveBeforeSubmit'))
       return
     }
     const data = await post('/api/timesheets/submit', { employee: employeeId, week })
     if (data) {
       applyPayload(data)
-      toast.success('Submitted for approval')
+      toast.success(t('grid.submittedToast'))
     }
   }
 
@@ -274,7 +275,7 @@ export function WeeklyGrid({
     const data = await post('/api/timesheets/approve', { employee: employeeId, week })
     if (data) {
       applyPayload(data)
-      toast.success('Timesheet approved')
+      toast.success(t('grid.approvedToast'))
     }
   }
 
@@ -295,16 +296,16 @@ export function WeeklyGrid({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Weekly timesheet</h1>
-                <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{STATUS_LABELS[status] ?? status}</Badge>
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('grid.title')}</h1>
+                <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{statusLabel(status)}</Badge>
               </div>
               <div className="w-72">
                 <SearchSelect
                   value={employeeId ?? ''}
                   onChange={onEmployee}
                   options={pickers.employees}
-                  placeholder="Select employee…"
-                  ariaLabel="Employee"
+                  placeholder={t('grid.selectEmployee')}
+                  ariaLabel={tCommon('labels.employee')}
                 />
               </div>
             </div>
@@ -313,17 +314,17 @@ export function WeeklyGrid({
             <div className="flex flex-wrap items-center gap-2">
               {canSave ? (
                 <Button size="sm" onClick={onSave} disabled={busy || !dirty}>
-                  Save
+                  {tCommon('actions.save')}
                 </Button>
               ) : null}
               {canSubmit ? (
                 <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy || dirty}>
-                  Submit for approval
+                  {t('grid.submitForApproval')}
                 </Button>
               ) : null}
               {canDoApprove ? (
                 <Button size="sm" variant="outline" onClick={onApprove} disabled={busy}>
-                  Approve
+                  {tCommon('actions.approve')}
                 </Button>
               ) : null}
             </div>
@@ -332,21 +333,21 @@ export function WeeklyGrid({
           {/* Week navigator. */}
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, -1))} disabled={!employeeId}>
-              <ChevronLeft size={15} /> Prev
+              <ChevronLeft size={15} /> {t('grid.prev')}
             </Button>
             <span className="min-w-[220px] text-center text-sm font-medium text-slate-700 dark:text-slate-200">
-              {weekTitle(week)}
+              {t('grid.weekOf', weekRange(week))}
             </span>
             <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, 1))} disabled={!employeeId}>
-              Next <ChevronRight size={15} />
+              {tCommon('actions.next')} <ChevronRight size={15} />
             </Button>
             <Button size="sm" variant="ghost" onClick={() => go(employeeId, thisWeekSunday())} disabled={!employeeId}>
-              This week
+              {t('grid.thisWeek')}
             </Button>
             {readOnly && status === 'approved' ? (
-              <span className="text-xs text-slate-400 dark:text-slate-500">Approved timesheets are read-only.</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.approvedReadOnly')}</span>
             ) : !canManage ? (
-              <span className="text-xs text-slate-400 dark:text-slate-500">You have view-only access.</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.viewOnly')}</span>
             ) : null}
           </div>
         </div>
@@ -354,19 +355,26 @@ export function WeeklyGrid({
     >
       {!employeeId ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          No employee selected. Pick an employee above to enter time.
+          {t('grid.noEmployee')}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
             {/* header */}
-            {['Project', 'Service item', 'Time type', 'Department', 'Bill', 'Memo'].map((h) => (
+            {[
+              { id: 'project', label: tCommon('labels.project'), required: true },
+              { id: 'item', label: t('labels.serviceItem') },
+              { id: 'timeType', label: t('labels.timeType') },
+              { id: 'department', label: tCommon('labels.department') },
+              { id: 'bill', label: t('labels.bill') },
+              { id: 'memo', label: tCommon('labels.memo') },
+            ].map((h) => (
               <div
-                key={h}
+                key={h.id}
                 className="border-b border-slate-200 px-2.5 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400"
               >
-                {h}
-                {h === 'Project' && !readOnly ? <span className="text-red-500"> *</span> : null}
+                {h.label}
+                {h.required && !readOnly ? <span className="text-red-500"> *</span> : null}
               </div>
             ))}
             {payload.days.map((iso, i) => (
@@ -374,11 +382,11 @@ export function WeeklyGrid({
                 key={iso}
                 className="border-b border-slate-200 px-1 py-2 text-center text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400"
               >
-                {dayHeader(iso, i)}
+                {t(`days.${DAY_KEYS[i]}`)} {dayOfMonth(iso)}
               </div>
             ))}
             <div className="border-b border-slate-200 px-2 py-2 text-right text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-              Total
+              {tCommon('labels.total')}
             </div>
             <div className="border-b border-slate-200 dark:border-slate-800" />
 
@@ -408,17 +416,17 @@ export function WeeklyGrid({
 
             {/* footer totals */}
             <div className="col-span-6 border-t border-slate-200 px-2.5 py-2 text-right text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              Daily totals
+              {t('labels.dailyTotals')}
             </div>
-            {dayTotals.map((t, d) => (
+            {dayTotals.map((tot, d) => (
               <div
                 key={d}
                 className={cn(
                   'border-t border-slate-200 px-1 py-2 text-center text-sm tabular-nums dark:border-slate-700',
-                  t > 0 ? 'font-semibold text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500',
+                  tot > 0 ? 'font-semibold text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500',
                 )}
               >
-                {t > 0 ? fmt(t) : '—'}
+                {tot > 0 ? fmt(tot) : '—'}
               </div>
             ))}
             <div className="border-t border-slate-200 px-2 py-2 text-right text-sm font-bold tabular-nums text-teal-700 dark:border-slate-700 dark:text-teal-300">
@@ -433,17 +441,17 @@ export function WeeklyGrid({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           {!readOnly ? (
             <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={busy}>
-              <Plus size={14} /> Add line
+              <Plus size={14} /> {t('grid.addLine')}
             </Button>
           ) : (
             <span />
           )}
           <div className="flex items-center gap-5 text-sm">
             <span className="text-slate-500 dark:text-slate-400">
-              Billable <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmt(billableTotal)}</span>
+              {t('labels.billable')} <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmt(billableTotal)}</span>
             </span>
             <span className="text-slate-500 dark:text-slate-400">
-              Total hours <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-300">{fmt(grandTotal)}</span>
+              {t('labels.totalHours')} <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-300">{fmt(grandTotal)}</span>
             </span>
           </div>
         </div>
@@ -483,6 +491,8 @@ function RowFragment({
   onCell: (day: number, value: string) => void
   onRemove: () => void
 }) {
+  const t = useTranslations('timesheets')
+  const tCommon = useTranslations('common')
   const cell = 'flex min-h-[42px] items-center border-b border-slate-100 px-1 dark:border-slate-800'
   const label = (opts: PickerOption[], v: string) => opts.find((o) => o.value === v)?.label ?? '—'
 
@@ -496,8 +506,8 @@ function RowFragment({
             value={r.projectId}
             onChange={onProject}
             options={pickers.projects}
-            placeholder="Project…"
-            ariaLabel={`Line ${i + 1} project`}
+            placeholder={t('grid.projectPlaceholder')}
+            ariaLabel={t('grid.lineProjectAria', { line: i + 1 })}
             className="w-full border-0 bg-transparent shadow-none"
           />
         )}
@@ -512,7 +522,7 @@ function RowFragment({
             options={pickers.items}
             placeholder="—"
             clearable
-            ariaLabel={`Line ${i + 1} item`}
+            ariaLabel={t('grid.lineItemAria', { line: i + 1 })}
             className="w-full border-0 bg-transparent shadow-none"
           />
         )}
@@ -558,7 +568,7 @@ function RowFragment({
           checked={r.isBillable}
           disabled={readOnly}
           onChange={(e) => onBillable(e.target.checked)}
-          aria-label={`Line ${i + 1} billable`}
+          aria-label={t('grid.lineBillableAria', { line: i + 1 })}
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
         />
       </div>
@@ -569,7 +579,7 @@ function RowFragment({
           <input
             value={r.memo}
             onChange={(e) => onMemo(e.target.value)}
-            placeholder="Memo"
+            placeholder={tCommon('labels.memo')}
             className={cellInput}
           />
         )}
@@ -588,7 +598,7 @@ function RowFragment({
               step={0.25}
               value={h}
               onChange={(e) => onCell(d, e.target.value)}
-              aria-label={`Line ${i + 1} ${DAY_LABELS[d]} hours`}
+              aria-label={t('grid.lineHoursAria', { line: i + 1, day: t(`days.${DAY_KEYS[d]}`) })}
               className={cn(cellInput, 'text-center tabular-nums')}
               placeholder="0"
             />
@@ -603,7 +613,7 @@ function RowFragment({
           <button
             type="button"
             onClick={onRemove}
-            aria-label={`Remove line ${i + 1}`}
+            aria-label={t('grid.removeLineAria', { line: i + 1 })}
             className="flex h-7 w-7 items-center justify-center rounded text-slate-300 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40"
           >
             <Trash2 size={14} />

@@ -1,1 +1,28 @@
-{}
+{
+  "title": "Approbations",
+  "description": "Éléments en attente assignés à votre rôle ({role}).",
+  "empty": {
+    "title": "Rien n’attend votre intervention",
+    "description": "Les demandes d’approbation acheminées à votre rôle apparaîtront ici."
+  },
+  "table": {
+    "document": "Document",
+    "kind": "Type",
+    "step": "Étape",
+    "decision": "Décision",
+    "stepNumber": "étape {number}"
+  },
+  "kinds": {
+    "vendor_bill": "facture fournisseur",
+    "customer_invoice": "facture client",
+    "expense_report": "note de frais",
+    "journal": "écriture de journal",
+    "purchase_order": "bon de commande",
+    "sales_order": "commande client",
+    "quote": "soumission"
+  },
+  "decide": {
+    "rejectionReason": "Motif du rejet :",
+    "decisionFailed": "Échec de la décision"
+  }
+}

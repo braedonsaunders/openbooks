@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Download, Play, Trash2 } from 'lucide-react'
+import { Download, Play } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { Badge, Button } from '@openbooks/ui'
 import type { ReportCustomQuery, ReportRunResult } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../components/page-layout'
@@ -28,6 +29,18 @@ const RUN_VARIANT: Record<string, 'success' | 'warning' | 'secondary' | 'outline
   failed: 'outline',
 }
 
+// Message keys under reports.custom.runner — unknown enum values render verbatim.
+const RUN_STATUS_KEY: Record<string, string> = {
+  succeeded: 'status.succeeded',
+  running: 'status.running',
+  queued: 'status.queued',
+  failed: 'status.failed',
+}
+const RUN_TRIGGER_KEY: Record<string, string> = {
+  manual: 'trigger.manual',
+  scheduled: 'trigger.scheduled',
+}
+
 export function ReportRunner({
   definition,
   schedules,
@@ -47,6 +60,9 @@ export function ReportRunner({
   canCreate: boolean
   canSchedule: boolean
 }) {
+  const t = useTranslations('reports.custom.runner')
+  const tk = useTranslations('reports.custom')
+  const tc = useTranslations('common')
   const router = useRouter()
   const [result, setResult] = useState<ReportRunResult | null>(null)
   const [lastRunId, setLastRunId] = useState<string | null>(null)
@@ -61,14 +77,14 @@ export function ReportRunner({
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? 'Report run failed')
+      toast.error(data.error ?? t('runFailed'))
       setRunning(false)
       router.refresh()
       return
     }
     setResult(data.result)
     setLastRunId(data.runId)
-    toast.success('Report run complete')
+    toast.success(t('runComplete'))
     setRunning(false)
     router.refresh()
   }
@@ -82,7 +98,7 @@ export function ReportRunner({
               <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
                 {definition.name}
               </h1>
-              {definition.kind === 'built_in' ? <Badge variant="secondary">Built-in</Badge> : null}
+              {definition.kind === 'built_in' ? <Badge variant="secondary">{tk('kind.builtIn')}</Badge> : null}
             </div>
             {definition.description ? (
               <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
@@ -93,18 +109,18 @@ export function ReportRunner({
           <div className="flex items-center gap-2">
             {canCreate ? (
               <Button variant="outline" asChild>
-                <Link href={`/reports/custom/builder/${definition.id}`}>Edit</Link>
+                <Link href={`/reports/custom/builder/${definition.id}`}>{tc('actions.edit')}</Link>
               </Button>
             ) : null}
             {lastRunId ? (
               <Button variant="outline" asChild>
                 <a href={`/api/reports/runs/${lastRunId}/csv`}>
-                  <Download size={15} /> Download CSV
+                  <Download size={15} /> {t('downloadCsv')}
                 </a>
               </Button>
             ) : null}
             <Button disabled={running} onClick={runNow}>
-              <Play size={15} /> {running ? 'Running…' : 'Run now'}
+              <Play size={15} /> {running ? tk('running') : t('runNow')}
             </Button>
           </div>
         </div>
@@ -117,14 +133,14 @@ export function ReportRunner({
             <ResultView result={result} />
           ) : (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              Run the report to see results here. Runs are saved and downloadable as CSV.
+              {t('emptyHint')}
             </div>
           )}
         </section>
 
         {/* --- schedules --- */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Scheduled delivery</h2>
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('scheduledDelivery')}</h2>
           <ScheduleEditor
             definitionId={definition.id}
             schedules={schedules}
@@ -135,28 +151,32 @@ export function ReportRunner({
         {/* --- recent runs --- */}
         {recentRuns.length > 0 ? (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Recent runs</h2>
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('recentRuns')}</h2>
             <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                   <tr>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Trigger</th>
-                    <th className="px-3 py-2 font-medium">Rows</th>
-                    <th className="px-3 py-2 font-medium">Finished</th>
-                    <th className="px-3 py-2 font-medium">Download</th>
+                    <th className="px-3 py-2 font-medium">{tc('labels.status')}</th>
+                    <th className="px-3 py-2 font-medium">{t('columns.trigger')}</th>
+                    <th className="px-3 py-2 font-medium">{t('columns.rows')}</th>
+                    <th className="px-3 py-2 font-medium">{t('columns.finished')}</th>
+                    <th className="px-3 py-2 font-medium">{tc('actions.download')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentRuns.map((run) => (
                     <tr key={run.id} className="border-t border-slate-100 dark:border-slate-800">
                       <td className="px-3 py-2">
-                        <Badge variant={RUN_VARIANT[run.status] ?? 'secondary'}>{run.status}</Badge>
+                        <Badge variant={RUN_VARIANT[run.status] ?? 'secondary'}>
+                          {RUN_STATUS_KEY[run.status] ? t(RUN_STATUS_KEY[run.status]) : run.status}
+                        </Badge>
                         {run.error ? (
                           <span className="ml-2 text-xs text-red-600 dark:text-red-400">{run.error}</span>
                         ) : null}
                       </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{run.trigger}</td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                        {RUN_TRIGGER_KEY[run.trigger] ? t(RUN_TRIGGER_KEY[run.trigger]) : run.trigger}
+                      </td>
                       <td className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-300">
                         {run.row_count ?? '—'}
                       </td>
@@ -169,7 +189,7 @@ export function ReportRunner({
                             href={`/api/reports/runs/${run.id}/csv`}
                             className="text-teal-700 hover:underline dark:text-teal-300"
                           >
-                            CSV
+                            {t('csv')}
                           </a>
                         ) : (
                           '—'

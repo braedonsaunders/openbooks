@@ -8,6 +8,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Menu } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { useMobileNav } from './mobile-nav'
@@ -26,6 +27,7 @@ const tabClass = (active: boolean) =>
   )
 
 export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
+  const t = useTranslations('shell.mobileNav')
   const pathname = usePathname()
   const { setOpen } = useMobileNav()
   const navGroups = useNavGroups(groups)
@@ -40,7 +42,7 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
 
   return (
     <nav
-      aria-label="Primary"
+      aria-label={t('primaryAriaLabel')}
       className="flex shrink-0 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden dark:border-slate-800 dark:bg-slate-900"
     >
       {tabs.map((t) => {
@@ -54,7 +56,7 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
       })}
       <button type="button" onClick={() => setOpen(true)} className={tabClass(false)}>
         <Menu size={20} />
-        <span className="w-full truncate text-center">Menu</span>
+        <span className="w-full truncate text-center">{t('menu')}</span>
       </button>
     </nav>
   )

@@ -1,1 +1,45 @@
-{}
+{
+  "list": {
+    "title": "Plan comptable",
+    "description": "Soldes courants en signe naturel (bilan en cumulatif, résultats de l’exercice en cours), consolidés dans les comptes sommaires.",
+    "searchPlaceholder": "Rechercher un numéro ou un nom…",
+    "badges": {
+      "inactive": "inactif",
+      "summary": "sommaire"
+    }
+  },
+  "types": {
+    "assetBank": "Banque",
+    "assetReceivable": "Comptes clients",
+    "assetCurrentOther": "Autres actifs à court terme",
+    "assetFixed": "Immobilisations",
+    "assetOther": "Autres actifs",
+    "liabilityPayable": "Comptes fournisseurs",
+    "liabilityCard": "Cartes de crédit d’entreprise",
+    "liabilityCurrentOther": "Autres passifs à court terme",
+    "liabilityLongTerm": "Passifs à long terme",
+    "equity": "Capitaux propres",
+    "income": "Produits",
+    "incomeOther": "Autres produits",
+    "cogs": "Coût des marchandises vendues",
+    "expense": "Charges",
+    "expenseOther": "Autres charges",
+    "expenseDeferred": "Charges reportées"
+  },
+  "classes": {
+    "asset": "Actifs",
+    "liability": "Passifs",
+    "equity": "Capitaux propres",
+    "income": "Produits",
+    "expense": "Charges"
+  },
+  "register": {
+    "notFound": "Compte introuvable",
+    "subtitle": "registre · {count, plural, one {# ligne} other {# lignes}} · solde courant {balance}",
+    "columns": {
+      "entry": "Écriture",
+      "debit": "Débit",
+      "credit": "Crédit"
+    }
+  }
+}

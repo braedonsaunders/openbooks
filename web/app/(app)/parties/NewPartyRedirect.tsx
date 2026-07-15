@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 
 /**
@@ -17,6 +18,7 @@ export function NewPartyRedirect({
   basePath?: string
   role?: 'customer' | 'vendor' | 'employee'
 } = {}) {
+  const t = useTranslations('parties.newParty')
   const router = useRouter()
   const started = useRef(false)
 
@@ -31,14 +33,14 @@ export function NewPartyRedirect({
       })
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.error ?? 'Could not create a draft party')
+        toast.error(data.error ?? t('createFailed'))
         router.replace(basePath)
         return
       }
       router.replace(`${basePath}?party=${data.id}`)
       router.refresh()
     })()
-  }, [router, basePath, role])
+  }, [router, basePath, role, t])
 
   return null
 }

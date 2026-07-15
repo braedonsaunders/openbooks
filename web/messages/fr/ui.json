@@ -1,1 +1,69 @@
-{}
+{
+  "pagination": {
+    "outOfRange": "La page {page} dépasse la fin de ces résultats.",
+    "showing": "Affichage de <strong>{from}</strong> à <strong>{to}</strong> sur <strong>{total}</strong>",
+    "goToLastPageAria": "Aller à la dernière page, page {page}",
+    "goToPage": "Aller à la page {page}",
+    "previousPageAria": "Page précédente",
+    "nextPageAria": "Page suivante",
+    "prev": "Préc.",
+    "pageOf": "Page {page} sur {pages}"
+  },
+  "search": {
+    "placeholder": "Rechercher…",
+    "clearAria": "Effacer la recherche"
+  },
+  "confirm": {
+    "defaultTitle": "Confirmer"
+  },
+  "select": {
+    "placeholder": "Sélectionner…",
+    "searchPlaceholder": "Rechercher…",
+    "noMatches": "Aucune correspondance",
+    "searching": "Recherche…"
+  },
+  "sparkline": {
+    "noTrend": "Aucune donnée de tendance",
+    "trend": "Tendance : {count} points de {first} à {last}"
+  },
+  "attachments": {
+    "tooLarge": "{name} dépasse la limite de 25 Mo",
+    "attached": "{name} joint",
+    "attachFailed": "Impossible de joindre {name}",
+    "removed": "{name} retiré",
+    "removeFailed": "Impossible de retirer la pièce jointe",
+    "empty": "Aucun fichier joint pour l’instant.",
+    "downloadAria": "Télécharger {name}",
+    "removeAria": "Retirer {name}",
+    "uploading": "{count, plural, one {Téléversement de # fichier…} other {Téléversement de # fichiers…}}",
+    "dropFiles": "Déposez les fichiers ici ou <browse>parcourez</browse>",
+    "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · jusqu’à 25 Mo"
+  },
+  "recordFields": {
+    "inactiveSelected": "(actuellement sélectionné — inactif)",
+    "ratingAria": "Note sur {max}",
+    "ratingValueAria": "{value} sur {max}",
+    "loadAccountsFailed": "Impossible de charger les comptes — rechargez pour réessayer.",
+    "loadPartiesFailed": "Impossible de charger les tiers — rechargez pour réessayer.",
+    "selectAccount": "Sélectionner un compte…",
+    "selectParty": "Sélectionner un tiers…",
+    "noFields": "Aucun champ à afficher — ce type d’enregistrement n’a aucun champ visible."
+  },
+  "lineGrid": {
+    "addLine": "Ajouter une ligne",
+    "keyboardHint": "Entrée ajoute/descend · Alt+↑/↓ réordonne · ⌘D duplique · ⌘⌫ retire",
+    "lineActionsAria": "Actions de la ligne {number}",
+    "insertAbove": "Insérer au-dessus",
+    "insertBelow": "Insérer en dessous",
+    "removeLine": "Retirer la ligne",
+    "clearLine": "Effacer la ligne",
+    "tax": {
+      "overriddenAria": "Taxe remplacée manuellement",
+      "overriddenTitle": "Taxe remplacée manuellement — diffère du taux calculé",
+      "overriddenShortTitle": "Taxe remplacée manuellement",
+      "computedOverriddenTitle": "Calculée {amount} · remplacée",
+      "resetAria": "Rétablir la taxe calculée",
+      "resetTitle": "Rétablir la valeur calculée {amount}"
+    }
+  }
+}

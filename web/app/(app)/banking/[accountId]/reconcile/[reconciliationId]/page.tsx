@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { reconciliationTotals } from '@openbooks/engine/src/banking.ts'
@@ -30,6 +31,10 @@ const M_SORTS = {
   by: sql`m.matched_by`,
 } as const
 
+// Known reconciliation statuses — unknown values render as the raw code with
+// underscores spaced out.
+const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
+
 export default async function ReconcilePage({
   params,
   searchParams,
@@ -39,6 +44,7 @@ export default async function ReconcilePage({
 }) {
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
+  const t = await getTranslations('banking')
   const { accountId, reconciliationId } = await params
   if (!isUuid(accountId) || !isUuid(reconciliationId)) notFound()
   const sp = await searchParams
@@ -160,35 +166,47 @@ export default async function ReconcilePage({
         <>
           <PageHeader
             back={{ href: `/banking/${accountId}`, label: [recon.account_number, recon.account_name].filter(Boolean).join(' · ') }}
-            title={`Reconcile through ${recon.through_date}`}
+            title={t('reconcile.title', { date: recon.through_date })}
             description={
               signedOff
-                ? `Signed off ${new Date(recon.signed_off_at).toLocaleDateString('en-CA')}${recon.signed_off_by_name ? ` by ${recon.signed_off_by_name}` : ''}.`
-                : 'Match bank statement lines to posted journal lines until the difference is 0.00, then sign off.'
+                ? recon.signed_off_by_name
+                  ? t('reconcile.signedOffByDescription', {
+                      date: new Date(recon.signed_off_at).toLocaleDateString('en-CA'),
+                      name: recon.signed_off_by_name,
+                    })
+                  : t('reconcile.signedOffDescription', {
+                      date: new Date(recon.signed_off_at).toLocaleDateString('en-CA'),
+                    })
+                : t('reconcile.description')
             }
             actions={
               <Badge variant={signedOff ? 'success' : recon.status === 'balanced' ? 'warning' : 'secondary'}>
-                {String(recon.status).replace(/_/g, ' ')}
+                {RECON_STATUS_KEYS.includes(recon.status)
+                  ? t(`reconStatus.${recon.status}`)
+                  : String(recon.status).replace(/_/g, ' ')}
               </Badge>
             }
           />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className={stat}>
-              <div className={statLabel}>Statement balance</div>
+              <div className={statLabel}>{t('labels.statementBalance')}</div>
               <div className="text-sm font-semibold tabular-nums">{money(totals.statementBalance)}</div>
             </div>
             <div className={stat}>
-              <div className={statLabel}>Cleared GL balance</div>
+              <div className={statLabel}>{t('reconcile.stats.clearedGlBalance')}</div>
               <div className="text-sm font-semibold tabular-nums">{money(totals.clearedBalance)}</div>
             </div>
             <div className={stat}>
-              <div className={statLabel}>Difference</div>
+              <div className={statLabel}>{t('reconcile.stats.difference')}</div>
               <DifferenceBadge difference={totals.difference} />
             </div>
             <div className={stat}>
-              <div className={statLabel}>Matched</div>
+              <div className={statLabel}>{t('reconcile.stats.matched')}</div>
               <div className="text-sm font-semibold tabular-nums">
-                {totals.matchedStatementLines.toLocaleString()} bank · {totals.matchedJournalLines.toLocaleString()} GL
+                {t('reconcile.matchedCounts', {
+                  bank: totals.matchedStatementLines,
+                  gl: totals.matchedJournalLines,
+                })}
               </div>
             </div>
           </div>

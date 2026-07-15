@@ -1,1 +1,47 @@
-{}
+{
+  "modules": {
+    "dashboard": "Tableau de bord",
+    "approvals": "Approbations",
+    "insights": "Analyses",
+    "purchase-orders": "Bons de commande",
+    "ap": "Comptes fournisseurs",
+    "payments": "Paiements",
+    "expenses": "Notes de frais",
+    "timesheets": "Feuilles de temps",
+    "estimates": "Soumissions",
+    "sales-orders": "Commandes clients",
+    "ar": "Comptes clients",
+    "receipts": "Encaissements",
+    "customers": "Clients",
+    "vendors": "Fournisseurs",
+    "employees": "Employés",
+    "projects": "Projets",
+    "parties": "Tous les tiers",
+    "items": "Articles et services",
+    "journal": "Journal",
+    "accounts": "Plan comptable",
+    "banking": "Banque",
+    "close": "Clôture de période",
+    "reports": "Rapports",
+    "custom-reports": "Rapports personnalisés",
+    "sql": "SQL",
+    "apps": "Applications",
+    "records": "Types d’enregistrement",
+    "admin-custom-fields": "Champs personnalisés",
+    "admin-scripts": "Scripts",
+    "admin": "Administration"
+  },
+  "groups": {
+    "overview": "Aperçu",
+    "money-out": "Sorties de fonds",
+    "time-billing": "Temps et facturation",
+    "money-in": "Entrées de fonds",
+    "entities": "Entités",
+    "catalog": "Catalogue",
+    "ledger": "Grand livre",
+    "insight": "Analyse",
+    "build": "Développement",
+    "administration": "Administration",
+    "records": "Enregistrements"
+  }
+}

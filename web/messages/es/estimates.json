@@ -1,1 +1,12 @@
-{}
+{
+  "list": {
+    "title": "Cotizaciones",
+    "description": "Cotizaciones de clientes sin contabilización — emítalas y luego conviértalas en una orden de venta o una factura.",
+    "searchPlaceholder": "Buscar cotizaciones, clientes, notas…",
+    "converted": "Convertida",
+    "emptyTitle": "Aún no hay cotizaciones",
+    "emptyDescription": "Cree la primera cotización para iniciar el flujo de pedido a cobro.",
+    "newButton": "Nueva cotización",
+    "createDraftFailed": "No se pudo crear un borrador de cotización"
+  }
+}

@@ -1,1 +1,44 @@
-{}
+{
+  "accountMenu": {
+    "account": "Cuenta",
+    "menuAriaLabel": "Menú de la cuenta",
+    "theme": "Tema",
+    "language": "Idioma",
+    "signOut": "Cerrar sesión",
+    "signingOut": "Cerrando sesión…",
+    "roles": {
+      "admin": "Administrador",
+      "controller": "Contralor",
+      "accountant": "Contador",
+      "approver": "Aprobador",
+      "viewer": "Visor"
+    }
+  },
+  "language": {
+    "label": "Idioma",
+    "orgDefault": "Predeterminado de la organización",
+    "saveFailed": "No se pudo guardar su preferencia de idioma"
+  },
+  "meta": {
+    "description": "La suite empresarial abierta. Opere con libros abiertos."
+  },
+  "sidebar": {
+    "expand": "Expandir la barra lateral",
+    "collapse": "Contraer la barra lateral"
+  },
+  "mobileNav": {
+    "openMenu": "Abrir menú",
+    "menu": "Menú",
+    "primaryAriaLabel": "Principal"
+  },
+  "themeToggle": {
+    "label": "Tema",
+    "options": {
+      "light": "Claro",
+      "system": "Sistema",
+      "dark": "Oscuro"
+    },
+    "current": "Tema: {theme}",
+    "currentHint": "Tema: {theme} (haga clic para cambiar)"
+  }
+}

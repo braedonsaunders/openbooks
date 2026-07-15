@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
@@ -10,23 +11,24 @@ import { money } from '../../../lib/format'
 
 export const dynamic = 'force-dynamic'
 
-const TYPE_LABELS: Record<string, string> = {
-  asset_bank: 'Bank',
-  asset_receivable: 'Accounts Receivable',
-  asset_current_other: 'Other Current Assets',
-  asset_fixed: 'Fixed Assets',
-  asset_other: 'Other Assets',
-  liability_payable: 'Accounts Payable',
-  liability_card: 'Corporate Cards',
-  liability_current_other: 'Other Current Liabilities',
-  liability_long_term: 'Long-Term Liabilities',
-  equity: 'Equity',
-  income: 'Income',
-  income_other: 'Other Income',
-  cogs: 'Cost of Goods Sold',
-  expense: 'Expenses',
-  expense_other: 'Other Expenses',
-  expense_deferred: 'Deferred Expenses',
+// accounts.type enum → message key under accounts.types.* (unknown values render verbatim).
+const TYPE_KEYS: Record<string, string> = {
+  asset_bank: 'assetBank',
+  asset_receivable: 'assetReceivable',
+  asset_current_other: 'assetCurrentOther',
+  asset_fixed: 'assetFixed',
+  asset_other: 'assetOther',
+  liability_payable: 'liabilityPayable',
+  liability_card: 'liabilityCard',
+  liability_current_other: 'liabilityCurrentOther',
+  liability_long_term: 'liabilityLongTerm',
+  equity: 'equity',
+  income: 'income',
+  income_other: 'incomeOther',
+  cogs: 'cogs',
+  expense: 'expense',
+  expense_other: 'expenseOther',
+  expense_deferred: 'expenseDeferred',
 }
 // Group the 16 detailed types into the 5 statement classes for the filter.
 const CLASS_OF: Record<string, string> = {
@@ -36,7 +38,8 @@ const CLASS_OF: Record<string, string> = {
   income: 'income', income_other: 'income',
   cogs: 'expense', expense: 'expense', expense_other: 'expense', expense_deferred: 'expense',
 }
-const CLASS_LABEL: Record<string, string> = { asset: 'Assets', liability: 'Liabilities', equity: 'Equity', income: 'Income', expense: 'Expenses' }
+// statement class → message key under accounts.classes.* (unknown values render verbatim).
+const CLASS_KEYS: Record<string, string> = { asset: 'asset', liability: 'liability', equity: 'equity', income: 'income', expense: 'expense' }
 const FLAT_PER_PAGE = 50
 
 export default async function Accounts({
@@ -44,6 +47,9 @@ export default async function Accounts({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const t = await getTranslations('accounts')
+  const tc = await getTranslations('common')
+  const typeLabel = (type: string) => (TYPE_KEYS[type] ? t(`types.${TYPE_KEYS[type]}`) : type)
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'number', allowedSorts: ['number'] as const, perPage: FLAT_PER_PAGE })
   const q = params.q?.toLowerCase()
@@ -74,17 +80,17 @@ export default async function Accounts({
       m[c] = (m[c] ?? 0) + 1
       return m
     }, {}),
-  ).map(([value, count]) => ({ value, label: CLASS_LABEL[value] ?? value, count }))
+  ).map(([value, count]) => ({ value, label: CLASS_KEYS[value] ? t(`classes.${CLASS_KEYS[value]}`) : value, count }))
 
   const header = (
     <>
       <PageHeader
-        title="Chart of Accounts"
-        description="Natural-sign current balances (balance-sheet cumulative, P&L this fiscal year), rolled up through summary accounts."
+        title={t('list.title')}
+        description={t('list.description')}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput placeholder="Search number or name…" />
-        <FilterChips basePath="/accounts" currentParams={sp} paramKey="class" label="Class" options={classCounts} />
+        <SearchInput placeholder={t('list.searchPlaceholder')} />
+        <FilterChips basePath="/accounts" currentParams={sp} paramKey="class" label={tc('labels.class')} options={classCounts} />
       </div>
     </>
   )
@@ -101,10 +107,10 @@ export default async function Accounts({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-24">Number</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-right">Balance</TableHead>
+              <TableHead className="w-24">{tc('labels.number')}</TableHead>
+              <TableHead>{tc('labels.account')}</TableHead>
+              <TableHead>{tc('labels.type')}</TableHead>
+              <TableHead className="text-right">{tc('labels.balance')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -117,9 +123,9 @@ export default async function Accounts({
                     <Link href={`/accounts/${a.id}`} className={cn('hover:text-teal-700 dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
                       {a.name}
                     </Link>
-                    {!a.is_active ? <Badge variant="outline" className="ml-2">inactive</Badge> : null}
+                    {!a.is_active ? <Badge variant="outline" className="ml-2">{t('list.badges.inactive')}</Badge> : null}
                   </TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{TYPE_LABELS[a.type] ?? a.type}</TableCell>
+                  <TableCell className="text-slate-500 dark:text-slate-400">{typeLabel(a.type)}</TableCell>
                   <TableCell className={cn('text-right tabular-nums', bal < 0 && 'text-red-600 dark:text-red-400')}>{money(bal)}</TableCell>
                 </TableRow>
               )
@@ -151,9 +157,9 @@ export default async function Accounts({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-24">Number</TableHead>
-            <TableHead>Account</TableHead>
-            <TableHead className="text-right">Balance</TableHead>
+            <TableHead className="w-24">{tc('labels.number')}</TableHead>
+            <TableHead>{tc('labels.account')}</TableHead>
+            <TableHead className="text-right">{tc('labels.balance')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -166,7 +172,7 @@ export default async function Accounts({
               showHeader ? (
                 <TableRow key={`${a.id}-h`}>
                   <TableCell colSpan={3} className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:bg-slate-900 dark:text-slate-300">
-                    {TYPE_LABELS[a.type] ?? a.type}
+                    {typeLabel(a.type)}
                   </TableCell>
                 </TableRow>
               ) : null,
@@ -176,8 +182,8 @@ export default async function Accounts({
                   <Link href={`/accounts/${a.id}`} className={cn('hover:text-teal-700 dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
                     {a.name}
                   </Link>
-                  {!a.is_active ? <Badge variant="outline" className="ml-2">inactive</Badge> : null}
-                  {a.is_summary ? <Badge variant="secondary" className="ml-2">summary</Badge> : null}
+                  {!a.is_active ? <Badge variant="outline" className="ml-2">{t('list.badges.inactive')}</Badge> : null}
+                  {a.is_summary ? <Badge variant="secondary" className="ml-2">{t('list.badges.summary')}</Badge> : null}
                 </TableCell>
                 <TableCell className={cn('text-right tabular-nums', bal < 0 && 'text-red-600 dark:text-red-400')}>{money(bal)}</TableCell>
               </TableRow>,

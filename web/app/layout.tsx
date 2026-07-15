@@ -1,16 +1,19 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
-import { getLocale, getMessages } from 'next-intl/server'
+import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import { Toaster } from 'sonner'
 import { AppLinkProvider } from '../components/app-link-provider'
 import { SplashScreen } from '../components/brand-splash'
 import { ConfirmRoot } from '../lib/confirm'
 
-export const metadata: Metadata = {
-  title: { default: 'openbooks', template: '%s · openbooks' },
-  description: 'The open business suite. Run on open books.',
-  applicationName: 'openbooks',
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('shell')
+  return {
+    title: { default: 'openbooks', template: '%s · openbooks' },
+    description: t('meta.description'),
+    applicationName: 'openbooks',
+  }
 }
 
 export const viewport: Viewport = {

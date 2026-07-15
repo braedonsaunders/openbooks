@@ -1,1 +1,55 @@
-{}
+{
+  "list": {
+    "title": "Items & Services",
+    "description": "The catalog behind every document line — services, labor, charges, and discounts.",
+    "searchPlaceholder": "Search name, code, category…",
+    "kindFilter": "Kind",
+    "emptyTitle": "No items yet",
+    "emptyDescription": "Add the first service, labor, or charge to start the catalog.",
+    "newButton": "New item",
+    "createDraftFailed": "Could not create a draft item"
+  },
+  "labels": {
+    "code": "Code",
+    "kind": "Kind",
+    "category": "Category",
+    "unit": "Unit",
+    "defaultRate": "Default rate",
+    "incomeAccount": "Income account",
+    "expenseAccount": "Expense account",
+    "taxCode": "Tax code"
+  },
+  "kinds": {
+    "service": "Service",
+    "non_inventory": "Non-inventory",
+    "inventory": "Inventory",
+    "assembly": "Assembly",
+    "kit": "Kit",
+    "other_charge": "Other charge",
+    "labor": "Labor",
+    "absence": "Absence",
+    "discount": "Discount"
+  },
+  "drawer": {
+    "newItem": "New item",
+    "autosaveHint": "Changes save automatically.",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "nameToActivate": "Name the item to activate it",
+    "activated": "Item activated",
+    "deactivated": "Item deactivated",
+    "updateFailed": "Update failed",
+    "autosaveFailed": "Autosave failed",
+    "allSaved": "All changes saved",
+    "saveFailedRetry": "Save failed — fix and retry",
+    "unsavedChanges": "Unsaved changes…",
+    "namePlaceholder": "Item or service name…",
+    "codePlaceholder": "SVC-01",
+    "categoryPlaceholder": "Services",
+    "unitPlaceholder": "hr",
+    "noIncomeAccount": "No income account",
+    "noExpenseAccount": "No expense account",
+    "selectAccount": "Select account…",
+    "showOnTimesheet": "Show on timesheet"
+  }
+}

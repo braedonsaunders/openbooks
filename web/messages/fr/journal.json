@@ -1,1 +1,63 @@
-{}
+{
+  "list": {
+    "title": "Journal",
+    "description": "{count, plural, one {# écriture comptabilisée} other {# écritures comptabilisées}} · immuable, en ajout seul.",
+    "searchPlaceholder": "Rechercher un numéro d’écriture ou un mémo…",
+    "originFilter": "Origine",
+    "draftsHeading": "Écritures brouillons — pas encore comptabilisées",
+    "columns": {
+      "entry": "Écriture",
+      "origin": "Origine",
+      "debits": "Débits"
+    }
+  },
+  "origins": {
+    "manual": "Manuelle",
+    "closing": "Clôture",
+    "allocation": "Répartition",
+    "revaluation": "Réévaluation",
+    "laborBurden": "Charges de main-d’œuvre",
+    "depreciation": "Amortissement",
+    "revenueRecognition": "Constatation des produits",
+    "fxSettlement": "Règlement de change",
+    "translation": "Conversion"
+  },
+  "detail": {
+    "notFound": "Écriture introuvable",
+    "origin": "origine : {origin}",
+    "reverses": "contrepasse {number}",
+    "openItemBadge": "poste non soldé",
+    "totals": "Totaux",
+    "columns": {
+      "debit": "Débit",
+      "credit": "Crédit",
+      "openItem": "Poste non soldé"
+    }
+  },
+  "newButton": {
+    "label": "Nouvelle écriture",
+    "createFailed": "Impossible de créer une écriture brouillon"
+  },
+  "drawer": {
+    "draftDescription": "Brouillon — les modifications s’enregistrent automatiquement. Les débits et les crédits doivent s’équilibrer pour comptabiliser.",
+    "autosaveWithParty": "{party} · les modifications s’enregistrent automatiquement",
+    "autosave": "les modifications s’enregistrent automatiquement",
+    "postFailed": "Échec de la comptabilisation",
+    "postedToast": "Comptabilisé au grand livre",
+    "autosaveFailed": "Échec de l’enregistrement automatique",
+    "viewGlImpact": "Voir l’impact au GL",
+    "allChangesSaved": "Toutes les modifications sont enregistrées",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "unsavedChanges": "Modifications non enregistrées…",
+    "totals": "Débits <strong>{debits}</strong> · Crédits <strong>{credits}</strong>",
+    "outOfBalance": "Non équilibré · {amount}",
+    "balanced": "Équilibré",
+    "referenceNumber": "N° de référence",
+    "noParty": "Aucun tiers",
+    "accountPlaceholder": "Compte…",
+    "columns": {
+      "debit": "Débit",
+      "credit": "Crédit"
+    }
+  }
+}

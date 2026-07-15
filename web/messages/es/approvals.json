@@ -1,1 +1,28 @@
-{}
+{
+  "title": "Aprobaciones",
+  "description": "Elementos pendientes asignados a su rol ({role}).",
+  "empty": {
+    "title": "No hay nada pendiente de usted",
+    "description": "Las solicitudes de aprobación dirigidas a su rol aparecerán aquí."
+  },
+  "table": {
+    "document": "Documento",
+    "kind": "Tipo",
+    "step": "Paso",
+    "decision": "Decisión",
+    "stepNumber": "paso {number}"
+  },
+  "kinds": {
+    "vendor_bill": "factura de proveedor",
+    "customer_invoice": "factura de cliente",
+    "expense_report": "informe de gastos",
+    "journal": "asiento contable",
+    "purchase_order": "orden de compra",
+    "sales_order": "orden de venta",
+    "quote": "cotización"
+  },
+  "decide": {
+    "rejectionReason": "Motivo del rechazo:",
+    "decisionFailed": "La decisión falló"
+  }
+}

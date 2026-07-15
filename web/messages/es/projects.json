@@ -1,1 +1,111 @@
-{}
+{
+  "list": {
+    "title": "Proyectos",
+    "description": "Obras, sus contratos y el presupuesto de costos detrás de cada monto contabilizado en ellas.",
+    "searchPlaceholder": "Buscar por nombre, código, cliente…",
+    "billingFilter": "Facturación",
+    "emptyTitle": "Aún no hay proyectos",
+    "emptyDescription": "Cree la primera obra para empezar a dar seguimiento a su contrato, presupuesto y costos.",
+    "newButton": "Nuevo proyecto",
+    "createDraftFailed": "No se pudo crear un borrador de proyecto"
+  },
+  "labels": {
+    "code": "Código",
+    "billing": "Facturación",
+    "billingMethod": "Método de facturación",
+    "contractValue": "Valor del contrato",
+    "actualCost": "Costo real",
+    "foreman": "Capataz",
+    "manager": "Gerente",
+    "customerPo": "N.º de OC del cliente",
+    "startDate": "Fecha de inicio",
+    "endDate": "Fecha de fin",
+    "task": "Tarea",
+    "estHours": "Horas est.",
+    "estCost": "Costo est.",
+    "kind": "Tipo"
+  },
+  "status": {
+    "quoted": "Cotizado",
+    "awarded": "Adjudicado",
+    "substantially_complete": "Sustancialmente completo"
+  },
+  "billing": {
+    "time_and_materials": "Tiempo y materiales",
+    "fixed_price": "Precio fijo",
+    "cost_plus": "Costo más margen"
+  },
+  "taskStatus": {
+    "complete": "Completada"
+  },
+  "docKinds": {
+    "bill": "Factura de proveedor",
+    "invoice": "Factura",
+    "expense": "Gasto",
+    "purchaseOrder": "Orden de compra",
+    "salesOrder": "Orden de venta",
+    "journal": "Asiento"
+  },
+  "drawer": {
+    "newProject": "Nuevo proyecto",
+    "autosaveHint": "Los cambios se guardan automáticamente.",
+    "openCockpit": "Abrir panel de control",
+    "activate": "Activar",
+    "deactivate": "Desactivar",
+    "nameToActivate": "Asigne un nombre al proyecto para activarlo",
+    "activated": "Proyecto activado",
+    "deactivated": "Proyecto desactivado",
+    "updateFailed": "Error al actualizar",
+    "autosaveFailed": "Falló el guardado automático",
+    "allSaved": "Todos los cambios guardados",
+    "saveFailedRetry": "Error al guardar — corrija y reintente",
+    "unsavedChanges": "Cambios sin guardar…",
+    "namePlaceholder": "Nombre del proyecto u obra…",
+    "codePlaceholder": "JOB-01",
+    "noCustomer": "Sin cliente",
+    "selectCustomer": "Seleccionar cliente…",
+    "noForeman": "Sin capataz",
+    "selectForeman": "Seleccionar capataz…",
+    "noManager": "Sin gerente",
+    "selectManager": "Seleccionar gerente…",
+    "wbsTitle": "Desglose del trabajo y presupuesto de costos",
+    "wbsDescription": "Tareas con sus horas y costos estimados. El presupuesto de costos es la suma de estas estimaciones.",
+    "addTask": "Agregar tarea",
+    "noTasks": "Aún no hay tareas.",
+    "taskNamePlaceholder": "Nombre de la tarea…",
+    "removeTaskAria": "Quitar tarea"
+  },
+  "cockpit": {
+    "subtitle": "Panel de control de costos de obra",
+    "starts": "Inicia {date}",
+    "ends": "Termina {date}",
+    "allProjects": "Todos los proyectos",
+    "costBudget": "Presupuesto de costos",
+    "committedCost": "Costo comprometido",
+    "projectedCost": "Costo proyectado",
+    "remainingBudget": "Presupuesto restante",
+    "actualRevenue": "Ingresos reales",
+    "margin": "Margen",
+    "percentSpent": "% gastado",
+    "budgetBarTitle": "Presupuesto vs real vs comprometido",
+    "overBudget": "{amount} por encima del presupuesto",
+    "underBudget": "{amount} por debajo del presupuesto",
+    "noCostBudget": "Sin presupuesto de costos definido",
+    "actualAmount": "Real {amount}",
+    "committedAmount": "Comprometido {amount}",
+    "costBudgetAmount": "Presupuesto de costos {amount}",
+    "costByCategory": "Costos por categoría",
+    "costByAccount": "Costos por cuenta",
+    "noPostedCosts": "Aún no hay costos contabilizados.",
+    "category": "Categoría",
+    "categories": {
+      "cogs": "Costo de ventas",
+      "operating_expense": "Gasto operativo"
+    },
+    "wbsTitle": "Estructura de desglose del trabajo",
+    "noWbsTasks": "No hay tareas de EDT. Agréguelas desde el editor del proyecto.",
+    "transactions": "Transacciones",
+    "noTransactionsTitle": "No hay transacciones etiquetadas a esta obra",
+    "noTransactionsDescription": "Las facturas de proveedor, facturas, gastos, órdenes y asientos con una línea etiquetada a este proyecto aparecerán aquí."
+  }
+}

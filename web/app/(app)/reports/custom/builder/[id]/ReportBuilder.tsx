@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Play, Trash2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
 import {
   REPORT_AGG_FNS,
@@ -26,13 +27,14 @@ import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { FilterTree } from '../../FilterTree'
 import { ResultView } from '../../ResultView'
 
-const AGG_LABEL: Record<ReportAggFn, string> = {
-  count: 'Count of rows',
-  count_distinct: 'Distinct count',
-  sum: 'Sum',
-  avg: 'Average',
-  min: 'Min',
-  max: 'Max',
+// Message keys under reports.custom.builder.agg — translated at render.
+const AGG_LABEL_KEY: Record<ReportAggFn, string> = {
+  count: 'agg.count',
+  count_distinct: 'agg.countDistinct',
+  sum: 'agg.sum',
+  avg: 'agg.avg',
+  min: 'agg.min',
+  max: 'agg.max',
 }
 
 /** Columns that can be temporally binned (date/timestamp). */
@@ -58,6 +60,9 @@ export function ReportBuilder({
     query: ReportCustomQuery
   }
 }) {
+  const t = useTranslations('reports.custom.builder')
+  const tk = useTranslations('reports.custom')
+  const tc = useTranslations('common')
   const router = useRouter()
   const [name, setName] = useState(definition.name)
   const [description, setDescription] = useState(definition.description ?? '')
@@ -106,18 +111,19 @@ export function ReportBuilder({
         setPreviewError(null)
       } else {
         setPreview(null)
-        setPreviewError(data.error ?? 'Preview failed')
+        setPreviewError(data.error ?? t('previewFailed'))
       }
       setPreviewing(false)
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
   const firstPreview = useRef(true)
   useEffect(() => {
-    const t = setTimeout(() => runPreview(query), firstPreview.current ? 0 : 500)
+    const timer = setTimeout(() => runPreview(query), firstPreview.current ? 0 : 500)
     firstPreview.current = false
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
@@ -129,7 +135,7 @@ export function ReportBuilder({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/reports/definitions/${definition.id}`, {
         method: 'PATCH',
@@ -141,10 +147,10 @@ export function ReportBuilder({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Save failed')
+        toast.error((await res.json()).error ?? tc('feedback.saveFailed'))
       }
     }, 700)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, description, query])
 
@@ -165,15 +171,15 @@ export function ReportBuilder({
                 className="h-9 w-72 text-base font-semibold"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Report name"
+                placeholder={t('namePlaceholder')}
               />
-              {definition.kind === 'built_in' ? <Badge variant="secondary">Built-in</Badge> : null}
+              {definition.kind === 'built_in' ? <Badge variant="secondary">{tk('kind.builtIn')}</Badge> : null}
             </div>
             <Input
               className="h-8 w-full max-w-xl text-sm"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Description (optional)"
+              placeholder={t('descriptionPlaceholder')}
             />
           </div>
           <div className="flex items-center gap-3">
@@ -186,15 +192,15 @@ export function ReportBuilder({
               }
             >
               {saveState === 'saved'
-                ? 'All changes saved'
+                ? t('allChangesSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tc('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed'
-                    : 'Unsaved changes…'}
+                    ? tc('feedback.saveFailed')
+                    : t('unsavedChanges')}
             </span>
             <Button variant="outline" asChild>
-              <Link href={`/reports/custom/run/${definition.id}`}>Run &amp; schedule</Link>
+              <Link href={`/reports/custom/run/${definition.id}`}>{t('runAndSchedule')}</Link>
             </Button>
           </div>
         </div>
@@ -204,7 +210,7 @@ export function ReportBuilder({
         {/* --- configuration panel --- */}
         <div className="space-y-5">
           <div className={field}>
-            <Label>Source</Label>
+            <Label>{t('source')}</Label>
             <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)}>
               {REPORT_ENTITIES.map((e) => (
                 <option key={e.key} value={e.key}>
@@ -216,7 +222,7 @@ export function ReportBuilder({
           </div>
 
           <div className={field}>
-            <Label>Mode</Label>
+            <Label>{t('mode')}</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -224,7 +230,7 @@ export function ReportBuilder({
                 size="sm"
                 onClick={() => patch({ mode: 'rows' })}
               >
-                Detail rows
+                {t('detailRows')}
               </Button>
               <Button
                 type="button"
@@ -237,7 +243,7 @@ export function ReportBuilder({
                   })
                 }
               >
-                Summarize
+                {t('summarize')}
               </Button>
             </div>
           </div>
@@ -249,7 +255,7 @@ export function ReportBuilder({
           )}
 
           <div className={field}>
-            <Label>Filters</Label>
+            <Label>{tc('labels.filters')}</Label>
             <FilterTree
               entity={entity}
               group={query.filters ?? { combinator: 'and', rules: [] }}
@@ -259,7 +265,7 @@ export function ReportBuilder({
 
           <div className="grid grid-cols-2 gap-3">
             <div className={field}>
-              <Label>Sort by</Label>
+              <Label>{t('sortBy')}</Label>
               <Select
                 value={query.sort?.column ?? ''}
                 onChange={(e) =>
@@ -270,7 +276,7 @@ export function ReportBuilder({
                   })
                 }
               >
-                <option value="">Default</option>
+                <option value="">{t('sortDefault')}</option>
                 {entity.columns.map((c) => (
                   <option key={c.key} value={c.key}>
                     {c.label}
@@ -279,7 +285,7 @@ export function ReportBuilder({
               </Select>
             </div>
             <div className={field}>
-              <Label>Direction</Label>
+              <Label>{t('direction')}</Label>
               <Select
                 value={query.sort?.direction ?? 'desc'}
                 disabled={!query.sort?.column}
@@ -288,14 +294,14 @@ export function ReportBuilder({
                   patch({ sort: { column: query.sort.column, direction: e.target.value as 'asc' | 'desc' } })
                 }
               >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
+                <option value="desc">{t('descending')}</option>
+                <option value="asc">{t('ascending')}</option>
               </Select>
             </div>
           </div>
 
           <div className={field}>
-            <Label>Row limit</Label>
+            <Label>{t('rowLimit')}</Label>
             <Input
               type="number"
               min={1}
@@ -304,7 +310,7 @@ export function ReportBuilder({
               onChange={(e) => patch({ limit: Math.min(Math.max(Number(e.target.value) || 1, 1), 10000) })}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Capped at 10,000 rows. Previews show the first {200}.
+              {t('rowLimitHint', { previewRows: 200 })}
             </p>
           </div>
         </div>
@@ -312,9 +318,9 @@ export function ReportBuilder({
         {/* --- live preview --- */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Live preview</h2>
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('livePreview')}</h2>
             <Button variant="outline" size="sm" disabled={previewing} onClick={() => runPreview(query)}>
-              <Play size={14} /> {previewing ? 'Running…' : 'Refresh'}
+              <Play size={14} /> {previewing ? tk('running') : tc('actions.refresh')}
             </Button>
           </div>
           {previewError ? (
@@ -325,7 +331,7 @@ export function ReportBuilder({
             <ResultView result={preview} />
           ) : (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {previewing ? 'Running preview…' : 'Adjust the report to see a live preview.'}
+              {previewing ? t('runningPreview') : t('previewEmptyHint')}
             </div>
           )}
         </div>
@@ -347,6 +353,7 @@ function RowsConfig({
   patch: (n: Partial<ReportCustomQuery>) => void
   columns: ReportEntity['columns']
 }) {
+  const t = useTranslations('reports.custom.builder')
   const selected = query.columns ?? []
   const toggle = (key: string) => {
     const next = selected.includes(key) ? selected.filter((c) => c !== key) : [...selected, key]
@@ -355,7 +362,7 @@ function RowsConfig({
   return (
     <>
       <div className="space-y-1.5">
-        <Label>Columns</Label>
+        <Label>{t('columns')}</Label>
         <div className="flex flex-wrap gap-1.5">
           {columns.map((c) => {
             const on = selected.includes(c.key)
@@ -378,12 +385,12 @@ function RowsConfig({
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label>Section by (optional)</Label>
+        <Label>{t('sectionBy')}</Label>
         <Select
           value={query.groupBy ?? ''}
           onChange={(e) => patch({ groupBy: e.target.value || null })}
         >
-          <option value="">No sections</option>
+          <option value="">{t('noSections')}</option>
           {entity.columns.map((c) => (
             <option key={c.key} value={c.key}>
               {c.label}
@@ -391,7 +398,7 @@ function RowsConfig({
           ))}
         </Select>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Buckets detail rows into titled sections by this column.
+          {t('sectionByHint')}
         </p>
       </div>
     </>
@@ -409,6 +416,8 @@ function SummarizeConfig({
   query: ReportCustomQuery
   patch: (n: Partial<ReportCustomQuery>) => void
 }) {
+  const t = useTranslations('reports.custom.builder')
+  const tc = useTranslations('common')
   const breakouts = query.breakouts ?? []
   const measures = query.measures ?? []
 
@@ -427,7 +436,7 @@ function SummarizeConfig({
     <>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label>Group by</Label>
+          <Label>{t('groupBy')}</Label>
           {breakouts.length < 6 ? (
             <Button
               type="button"
@@ -437,13 +446,13 @@ function SummarizeConfig({
                 patch({ breakouts: [...breakouts, { column: entity.columns[0]?.key ?? '' }] })
               }
             >
-              <Plus size={14} /> Add
+              <Plus size={14} /> {tc('actions.add')}
             </Button>
           ) : null}
         </div>
         {breakouts.length === 0 ? (
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            No groups — measures roll up to a single grand total.
+            {t('noGroupsHint')}
           </p>
         ) : null}
         {breakouts.map((b, i) => {
@@ -475,10 +484,10 @@ function SummarizeConfig({
                     })
                   }
                 >
-                  <option value="">No bin</option>
-                  {REPORT_TEMPORAL_BINS.map((t) => (
-                    <option key={t} value={t}>
-                      by {t}
+                  <option value="">{t('noBin')}</option>
+                  {REPORT_TEMPORAL_BINS.map((bin) => (
+                    <option key={bin} value={bin}>
+                      {t(`bin.${bin}`)}
                     </option>
                   ))}
                 </Select>
@@ -488,7 +497,7 @@ function SummarizeConfig({
                 variant="ghost"
                 size="sm"
                 onClick={() => patch({ breakouts: breakouts.filter((_, j) => j !== i) })}
-                aria-label="Remove group"
+                aria-label={t('removeGroupAria')}
               >
                 <Trash2 size={14} />
               </Button>
@@ -499,7 +508,7 @@ function SummarizeConfig({
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label>Measures</Label>
+          <Label>{t('measures')}</Label>
           {measures.length < 8 ? (
             <Button
               type="button"
@@ -507,7 +516,7 @@ function SummarizeConfig({
               size="sm"
               onClick={() => patch({ measures: [...measures, { fn: 'count' }] })}
             >
-              <Plus size={14} /> Add
+              <Plus size={14} /> {tc('actions.add')}
             </Button>
           ) : null}
         </div>
@@ -531,7 +540,7 @@ function SummarizeConfig({
               >
                 {REPORT_AGG_FNS.map((fn) => (
                   <option key={fn} value={fn}>
-                    {AGG_LABEL[fn]}
+                    {AGG_LABEL_KEY[fn] ? t(AGG_LABEL_KEY[fn]) : fn}
                   </option>
                 ))}
               </Select>
@@ -555,7 +564,7 @@ function SummarizeConfig({
                 onClick={() =>
                   patch({ measures: measures.length > 1 ? measures.filter((_, j) => j !== i) : measures })
                 }
-                aria-label="Remove measure"
+                aria-label={t('removeMeasureAria')}
                 disabled={measures.length <= 1}
               >
                 <Trash2 size={14} />

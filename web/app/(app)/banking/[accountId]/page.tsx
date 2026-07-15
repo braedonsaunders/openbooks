@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -22,6 +23,11 @@ const RECON_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
   balanced: 'warning',
   in_progress: 'secondary',
 }
+
+// Enum values with translated labels — unknown values render as the raw code
+// with underscores spaced out.
+const TYPE_KEYS = ['asset_bank', 'liability_card']
+const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
 
 const STMT_SORTS = {
   date: sql`s.statement_date`,
@@ -46,6 +52,10 @@ export default async function BankingAccount({
 }) {
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
+  const t = await getTranslations('banking')
+  const tCommon = await getTranslations('common')
+  const reconStatusLabel = (status: string) =>
+    RECON_STATUS_KEYS.includes(status) ? t(`reconStatus.${status}`) : String(status).replace(/_/g, ' ')
   const { accountId } = await params
   if (!isUuid(accountId)) notFound()
   const sp = await searchParams
@@ -160,9 +170,16 @@ export default async function BankingAccount({
   const sourceOptions = sourceCounts.rows.map((r: any) => ({ value: r.source, label: r.source, count: Number(r.n) }))
   const reconStatusOptions = reconStatusCounts.rows.map((r: any) => ({
     value: r.status,
-    label: String(r.status).replace(/_/g, ' '),
+    label: reconStatusLabel(r.status),
     count: Number(r.n),
   }))
+
+  const typeLabel = TYPE_KEYS.includes(account.type)
+    ? t(`types.${account.type}`)
+    : String(account.type).replace(/_/g, ' ')
+  const accountDetails = account.currency_restriction
+    ? `${typeLabel} · ${account.currency_restriction}`
+    : typeLabel
 
   const stat = 'rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900'
   const statLabel = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'
@@ -172,9 +189,9 @@ export default async function BankingAccount({
       header={
         <>
           <PageHeader
-            back={{ href: '/banking', label: 'Banking' }}
+            back={{ href: '/banking', label: t('list.title') }}
             title={[account.number, account.name].filter(Boolean).join(' · ')}
-            description={`${String(account.type).replace(/_/g, ' ')}${account.currency_restriction ? ` · ${account.currency_restriction}` : ''} — import statements, then match and sign off.`}
+            description={t('account.description', { details: accountDetails })}
             actions={
               canReconcile ? (
                 <div className="flex items-center gap-2">
@@ -190,26 +207,26 @@ export default async function BankingAccount({
           />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className={stat}>
-              <div className={statLabel}>GL balance (posted)</div>
+              <div className={statLabel}>{t('account.stats.glBalance')}</div>
               <div className="text-sm font-semibold tabular-nums">{money(account.balance)}</div>
             </div>
             <div className={stat}>
-              <div className={statLabel}>Reconciled through</div>
+              <div className={statLabel}>{t('account.stats.reconciledThrough')}</div>
               <div className="text-sm font-semibold">
-                {account.reconciled_through ?? <span className="font-normal text-slate-400 dark:text-slate-500">never</span>}
+                {account.reconciled_through ?? <span className="font-normal text-slate-400 dark:text-slate-500">{t('labels.never')}</span>}
               </div>
             </div>
             <div className={stat}>
-              <div className={statLabel}>Unmatched statement lines</div>
+              <div className={statLabel}>{t('account.stats.unmatchedLines')}</div>
               <div className="text-sm font-semibold tabular-nums">{Number(account.unmatched_lines).toLocaleString()}</div>
             </div>
             <div className={stat}>
-              <div className={statLabel}>Reconciliation</div>
+              <div className={statLabel}>{t('account.stats.reconciliation')}</div>
               <div className="text-sm font-semibold">
                 {account.open_reconciliation_id ? (
-                  <Badge variant="warning">in progress</Badge>
+                  <Badge variant="warning">{t('account.badges.inProgress')}</Badge>
                 ) : (
-                  <Badge variant="secondary">none open</Badge>
+                  <Badge variant="secondary">{t('account.badges.noneOpen')}</Badge>
                 )}
               </div>
             </div>
@@ -220,14 +237,14 @@ export default async function BankingAccount({
       <div className="space-y-8">
         <section className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">Statements</h2>
-            <SearchInput placeholder="Search statements…" paramKey="stmtQ" pageParamKey="stmtPage" />
-            <FilterChips basePath={basePath} currentParams={sp} paramKey="source" label="Source" options={sourceOptions} pageParamKey="stmtPage" />
+            <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{t('account.statementsTitle')}</h2>
+            <SearchInput placeholder={t('account.searchStatements')} paramKey="stmtQ" pageParamKey="stmtPage" />
+            <FilterChips basePath={basePath} currentParams={sp} paramKey="source" label={t('labels.source')} options={sourceOptions} pageParamKey="stmtPage" />
           </div>
           {Number(stmtCount.rows[0].n) === 0 && !stmtParams.q && !source ? (
             <EmptyState
-              title="No statements imported"
-              description="Import an OFX or CSV statement to bring this account's bank activity in."
+              title={t('account.statementsEmptyTitle')}
+              description={t('account.statementsEmptyDescription')}
               action={canReconcile ? <ImportStatementButton accountId={account.id} /> : undefined}
             />
           ) : (
@@ -235,13 +252,13 @@ export default async function BankingAccount({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <SortTh basePath={basePath} currentParams={sp} column="date" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">Statement date</SortTh>
-                    <SortTh basePath={basePath} currentParams={sp} column="source" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">Source</SortTh>
-                    <SortTh basePath={basePath} currentParams={sp} column="lines" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">Lines</SortTh>
-                    <TableHead className="text-right">Unmatched</TableHead>
-                    <TableHead className="text-right">Opening</TableHead>
-                    <TableHead className="text-right">Closing</TableHead>
-                    <SortTh basePath={basePath} currentParams={sp} column="imported" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">Imported</SortTh>
+                    <SortTh basePath={basePath} currentParams={sp} column="date" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{t('labels.statementDate')}</SortTh>
+                    <SortTh basePath={basePath} currentParams={sp} column="source" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{t('labels.source')}</SortTh>
+                    <SortTh basePath={basePath} currentParams={sp} column="lines" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">{tCommon('labels.lines')}</SortTh>
+                    <TableHead className="text-right">{t('account.columns.unmatched')}</TableHead>
+                    <TableHead className="text-right">{t('account.columns.opening')}</TableHead>
+                    <TableHead className="text-right">{t('account.columns.closing')}</TableHead>
+                    <SortTh basePath={basePath} currentParams={sp} column="imported" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{t('account.columns.imported')}</SortTh>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -282,14 +299,14 @@ export default async function BankingAccount({
 
         <section className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">Reconciliations</h2>
-            <SearchInput placeholder="Search by date or balance…" paramKey="reconQ" pageParamKey="reconPage" />
-            <FilterChips basePath={basePath} currentParams={sp} paramKey="reconStatus" label="Status" options={reconStatusOptions} pageParamKey="reconPage" />
+            <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{t('account.reconciliationsTitle')}</h2>
+            <SearchInput placeholder={t('account.searchReconciliations')} paramKey="reconQ" pageParamKey="reconPage" />
+            <FilterChips basePath={basePath} currentParams={sp} paramKey="reconStatus" label={tCommon('labels.status')} options={reconStatusOptions} pageParamKey="reconPage" />
           </div>
           {Number(reconCount.rows[0].n) === 0 && !reconParams.q && !reconStatus ? (
             <EmptyState
-              title="No reconciliations yet"
-              description="Start a reconciliation with the bank statement's cutoff date and closing balance."
+              title={t('account.reconciliationsEmptyTitle')}
+              description={t('account.reconciliationsEmptyDescription')}
               action={
                 canReconcile ? (
                   <StartReconciliationButton
@@ -305,11 +322,11 @@ export default async function BankingAccount({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <SortTh basePath={basePath} currentParams={sp} column="through" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage">Through date</SortTh>
-                    <SortTh basePath={basePath} currentParams={sp} column="balance" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage" align="right">Statement balance</SortTh>
-                    <SortTh basePath={basePath} currentParams={sp} column="status" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage">Status</SortTh>
-                    <SortTh basePath={basePath} currentParams={sp} column="created" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage">Started</SortTh>
-                    <TableHead>Signed off</TableHead>
+                    <SortTh basePath={basePath} currentParams={sp} column="through" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage">{t('account.columns.throughDate')}</SortTh>
+                    <SortTh basePath={basePath} currentParams={sp} column="balance" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage" align="right">{t('labels.statementBalance')}</SortTh>
+                    <SortTh basePath={basePath} currentParams={sp} column="status" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage">{tCommon('labels.status')}</SortTh>
+                    <SortTh basePath={basePath} currentParams={sp} column="created" sort={reconParams.sort} dir={reconParams.dir} sortParamKey="reconSort" dirParamKey="reconDir" pageParamKey="reconPage">{t('account.columns.started')}</SortTh>
+                    <TableHead>{t('account.columns.signedOff')}</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -319,7 +336,7 @@ export default async function BankingAccount({
                       <TableCell className="font-medium">{r.through_date}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(r.statement_balance)}</TableCell>
                       <TableCell>
-                        <Badge variant={RECON_VARIANT[r.status] ?? 'secondary'}>{String(r.status).replace(/_/g, ' ')}</Badge>
+                        <Badge variant={RECON_VARIANT[r.status] ?? 'secondary'}>{reconStatusLabel(r.status)}</Badge>
                       </TableCell>
                       <TableCell className="text-slate-500 dark:text-slate-400">
                         {new Date(r.created_at).toLocaleDateString('en-CA')}
@@ -330,7 +347,7 @@ export default async function BankingAccount({
                       <TableCell>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`${basePath}/reconcile/${r.id}` as any}>
-                            {r.status === 'signed_off' ? 'View' : 'Open workspace'}
+                            {r.status === 'signed_off' ? tCommon('actions.view') : t('account.openWorkspace')}
                           </Link>
                         </Button>
                       </TableCell>

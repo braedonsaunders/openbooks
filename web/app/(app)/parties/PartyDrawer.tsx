@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
@@ -31,13 +32,14 @@ interface AddressRow {
   isDefaultShipping: boolean
 }
 
+// Values are the API enum; labels are message keys resolved at render time.
 const PAYMENT_METHOD_OPTIONS = [
-  { value: 'eft', label: 'EFT' },
-  { value: 'cheque', label: 'Cheque' },
-  { value: 'card', label: 'Card' },
-  { value: 'cash', label: 'Cash' },
-  { value: 'other', label: 'Other' },
-]
+  { value: 'eft', labelKey: 'paymentMethods.eft' },
+  { value: 'cheque', labelKey: 'paymentMethods.cheque' },
+  { value: 'card', labelKey: 'paymentMethods.card' },
+  { value: 'cash', labelKey: 'paymentMethods.cash' },
+  { value: 'other', labelKey: 'paymentMethods.other' },
+] as const
 
 const emptyAddress = (): AddressRow => ({
   label: '',
@@ -71,8 +73,12 @@ export function PartyDrawer({
   canManage: boolean
   basePath?: string
 }) {
+  const t = useTranslations('parties.drawer')
+  const tc = useTranslations('common')
   const router = useRouter()
   const p = payload.party
+  // 'New party' is the server-side draft sentinel stored in the DB — compare
+  // and persist it verbatim; only the *displayed* fallback is translated.
   const isPlaceholderName = p.display_name === 'New party'
 
   // -- identity --------------------------------------------------------------
@@ -187,7 +193,7 @@ export function PartyDrawer({
       return
     }
     setSaveState('dirty')
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       setSaveState('saving')
       const res = await fetch(`/api/parties/${p.id}`, {
         method: 'PATCH',
@@ -199,10 +205,10 @@ export function PartyDrawer({
         router.refresh()
       } else {
         setSaveState('error')
-        toast.error((await res.json()).error ?? 'Autosave failed')
+        toast.error((await res.json()).error ?? t('autosaveFailed'))
       }
     }, 600)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload, canManage])
 
@@ -214,10 +220,10 @@ export function PartyDrawer({
       body: JSON.stringify({ isActive: next }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Update failed')
+    if (!res.ok) toast.error(data.error ?? t('updateFailed'))
     else {
       setIsActive(next)
-      toast.success(next ? 'Party activated' : 'Party deactivated')
+      toast.success(next ? t('activated') : t('deactivated'))
     }
     setBusy(false)
     router.refresh()
@@ -232,25 +238,25 @@ export function PartyDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span>{displayName.trim() || 'New party'}</span>
-          <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? 'Active' : 'Inactive'}</Badge>
+          <span>{displayName.trim() || t('newPartyFallback')}</span>
+          <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? tc('status.active') : tc('status.inactive')}</Badge>
         </span>
       }
-      description={canManage ? 'Changes save automatically.' : undefined}
+      description={canManage ? t('autosaveNote') : undefined}
       headerActions={
         <>
           {canManage ? (
             isActive ? (
               <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                Deactivate
+                {t('deactivate')}
               </Button>
             ) : (
               <>
                 {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Name the party to activate it</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('nameToActivate')}</span>
                 ) : null}
                 <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                  Activate
+                  {t('activate')}
                 </Button>
               </>
             )
@@ -267,12 +273,12 @@ export function PartyDrawer({
           >
             {canManage
               ? saveState === 'saved'
-                ? 'All changes saved'
+                ? t('allChangesSaved')
                 : saveState === 'saving'
-                  ? 'Saving…'
+                  ? tc('actions.saving')
                   : saveState === 'error'
-                    ? 'Save failed — fix and retry'
-                    : 'Unsaved changes…'
+                    ? t('saveFailedRetry')
+                    : t('unsavedChanges')
               : null}
           </span>
         </div>
@@ -282,48 +288,48 @@ export function PartyDrawer({
         {/* -- identity ------------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
-            <Label>Kind</Label>
+            <Label>{t('kind')}</Label>
             <Select value={kind} onChange={(e) => setKind(e.target.value)} disabled={ro}>
-              <option value="company">Company</option>
-              <option value="person">Person</option>
+              <option value="company">{t('kindCompany')}</option>
+              <option value="person">{t('kindPerson')}</option>
             </Select>
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              Display name<span className="text-red-500"> *</span>
+              {t('displayName')}<span className="text-red-500"> *</span>
             </Label>
             <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder={kind === 'person' ? 'Full name…' : 'Company name…'}
+              placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')}
               disabled={ro}
             />
           </div>
           <div className={field}>
-            <Label>Short code</Label>
+            <Label>{t('shortCode')}</Label>
             <Input
               value={shortCode}
               onChange={(e) => setShortCode(e.target.value)}
               className="font-mono"
-              placeholder="ACME"
+              placeholder={t('shortCodePlaceholder')}
               disabled={ro}
             />
           </div>
           <div className={`${field} lg:col-span-2`}>
-            <Label>Legal name</Label>
+            <Label>{t('legalName')}</Label>
             <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Email</Label>
+            <Label>{tc('labels.email')}</Label>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={ro} />
           </div>
           <div className={field}>
-            <Label>Phone</Label>
+            <Label>{t('phone')}</Label>
             <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={ro} />
           </div>
           <div className={`${field} lg:col-span-2`}>
-            <Label>Website</Label>
-            <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" disabled={ro} />
+            <Label>{t('website')}</Label>
+            <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('websitePlaceholder')} disabled={ro} />
           </div>
         </section>
 
@@ -331,7 +337,7 @@ export function PartyDrawer({
 
         {/* -- roles ------------------------------------------------------ */}
         <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Roles</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('rolesHeading')}</h3>
 
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <label className="flex items-center gap-2">
@@ -342,27 +348,27 @@ export function PartyDrawer({
                 disabled={ro}
                 className={checkboxClass}
               />
-              <span className="text-sm font-medium">Customer</span>
+              <span className="text-sm font-medium">{tc('labels.customer')}</span>
             </label>
             {customer.enabled ? (
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div className={field}>
-                  <Label>Payment terms</Label>
+                  <Label>{t('paymentTerms')}</Label>
                   <Select
                     value={customer.paymentTermsId}
                     onChange={(e) => setCustomer({ ...customer, paymentTermsId: e.target.value })}
                     disabled={ro}
                   >
                     <option value="">—</option>
-                    {paymentTerms.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    {paymentTerms.map((term) => (
+                      <option key={term.id} value={term.id}>
+                        {term.name}
                       </option>
                     ))}
                   </Select>
                 </div>
                 <div className={field}>
-                  <Label>Credit limit</Label>
+                  <Label>{t('creditLimit')}</Label>
                   <Input
                     inputMode="decimal"
                     className="text-right tabular-nums"
@@ -372,11 +378,11 @@ export function PartyDrawer({
                   />
                 </div>
                 <div className={field}>
-                  <Label>Currency</Label>
+                  <Label>{tc('labels.currency')}</Label>
                   <Input
                     maxLength={3}
                     className="font-mono uppercase"
-                    placeholder="CAD"
+                    placeholder={t('currencyPlaceholder')}
                     value={customer.currency}
                     onChange={(e) => setCustomer({ ...customer, currency: e.target.value.toUpperCase() })}
                     disabled={ro}
@@ -395,12 +401,12 @@ export function PartyDrawer({
                 disabled={ro}
                 className={checkboxClass}
               />
-              <span className="text-sm font-medium">Vendor</span>
+              <span className="text-sm font-medium">{tc('labels.vendor')}</span>
             </label>
             {vendor.enabled ? (
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div className={field}>
-                  <Label>Payment method</Label>
+                  <Label>{t('paymentMethod')}</Label>
                   <Select
                     value={vendor.paymentMethod}
                     onChange={(e) => setVendor({ ...vendor, paymentMethod: e.target.value })}
@@ -409,13 +415,13 @@ export function PartyDrawer({
                     <option value="">—</option>
                     {PAYMENT_METHOD_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {t(o.labelKey)}
                       </option>
                     ))}
                   </Select>
                 </div>
                 <div className={`${field} sm:col-span-2`}>
-                  <Label>EFT notification email</Label>
+                  <Label>{t('eftNotificationEmail')}</Label>
                   <Input
                     type="email"
                     value={vendor.eftNotificationEmail}
@@ -424,26 +430,26 @@ export function PartyDrawer({
                   />
                 </div>
                 <div className={field}>
-                  <Label>Payment terms</Label>
+                  <Label>{t('paymentTerms')}</Label>
                   <Select
                     value={vendor.paymentTermsId}
                     onChange={(e) => setVendor({ ...vendor, paymentTermsId: e.target.value })}
                     disabled={ro}
                   >
                     <option value="">—</option>
-                    {paymentTerms.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    {paymentTerms.map((term) => (
+                      <option key={term.id} value={term.id}>
+                        {term.name}
                       </option>
                     ))}
                   </Select>
                 </div>
                 <div className={field}>
-                  <Label>Currency</Label>
+                  <Label>{tc('labels.currency')}</Label>
                   <Input
                     maxLength={3}
                     className="font-mono uppercase"
-                    placeholder="CAD"
+                    placeholder={t('currencyPlaceholder')}
                     value={vendor.currency}
                     onChange={(e) => setVendor({ ...vendor, currency: e.target.value.toUpperCase() })}
                     disabled={ro}
@@ -457,7 +463,7 @@ export function PartyDrawer({
                     disabled={ro}
                     className={checkboxClass}
                   />
-                  <span className="text-sm">1099 / T4A reportable</span>
+                  <span className="text-sm">{t('t4aReportable')}</span>
                 </label>
               </div>
             ) : null}
@@ -472,12 +478,12 @@ export function PartyDrawer({
                 disabled={ro}
                 className={checkboxClass}
               />
-              <span className="text-sm font-medium">Employee</span>
+              <span className="text-sm font-medium">{tc('labels.employee')}</span>
             </label>
             {employee.enabled ? (
               <div className="mt-3 grid gap-3 sm:grid-cols-4">
                 <div className={field}>
-                  <Label>Employee #</Label>
+                  <Label>{t('employeeNumber')}</Label>
                   <Input
                     className="font-mono"
                     value={employee.employeeNumber}
@@ -486,7 +492,7 @@ export function PartyDrawer({
                   />
                 </div>
                 <div className={field}>
-                  <Label>Department</Label>
+                  <Label>{tc('labels.department')}</Label>
                   <Select
                     value={employee.departmentId}
                     onChange={(e) => setEmployee({ ...employee, departmentId: e.target.value })}
@@ -501,22 +507,22 @@ export function PartyDrawer({
                   </Select>
                 </div>
                 <div className={field}>
-                  <Label>Trade</Label>
+                  <Label>{t('trade')}</Label>
                   <Select
                     value={employee.tradeId}
                     onChange={(e) => setEmployee({ ...employee, tradeId: e.target.value })}
                     disabled={ro}
                   >
                     <option value="">—</option>
-                    {trades.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    {trades.map((trade) => (
+                      <option key={trade.id} value={trade.id}>
+                        {trade.name}
                       </option>
                     ))}
                   </Select>
                 </div>
                 <div className={field}>
-                  <Label>Hired on</Label>
+                  <Label>{t('hiredOn')}</Label>
                   <Input
                     type="date"
                     value={employee.hiredOn}
@@ -532,46 +538,46 @@ export function PartyDrawer({
         {/* -- addresses ----------------------------------------------- */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Addresses</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('addressesHeading')}</h3>
             {!ro ? (
               <Button variant="outline" size="sm" onClick={() => setAddresses([...addresses, emptyAddress()])}>
-                <Plus size={14} /> Add address
+                <Plus size={14} /> {t('addAddress')}
               </Button>
             ) : null}
           </div>
           {addresses.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">No addresses on file.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('noAddresses')}</p>
           ) : (
             addresses.map((a, i) => (
               <div key={i} className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className={field}>
-                    <Label>Label</Label>
+                    <Label>{t('addressLabel')}</Label>
                     <Input
-                      placeholder="Head office"
+                      placeholder={t('addressLabelPlaceholder')}
                       value={a.label}
                       onChange={(e) => setAddress(i, { label: e.target.value })}
                       disabled={ro}
                     />
                   </div>
                   <div className={`${field} sm:col-span-2`}>
-                    <Label>Line 1</Label>
+                    <Label>{t('line1')}</Label>
                     <Input value={a.line1} onChange={(e) => setAddress(i, { line1: e.target.value })} disabled={ro} />
                   </div>
                   <div className={`${field} sm:col-span-3`}>
-                    <Label>Line 2</Label>
+                    <Label>{t('line2')}</Label>
                     <Input value={a.line2} onChange={(e) => setAddress(i, { line2: e.target.value })} disabled={ro} />
                   </div>
                   <div className={field}>
-                    <Label>City</Label>
+                    <Label>{t('city')}</Label>
                     <Input value={a.city} onChange={(e) => setAddress(i, { city: e.target.value })} disabled={ro} />
                   </div>
                   <div className={field}>
-                    <Label>Province / state</Label>
+                    <Label>{t('region')}</Label>
                     <Input value={a.region} onChange={(e) => setAddress(i, { region: e.target.value })} disabled={ro} />
                   </div>
                   <div className={field}>
-                    <Label>Postal code</Label>
+                    <Label>{t('postalCode')}</Label>
                     <Input
                       value={a.postalCode}
                       onChange={(e) => setAddress(i, { postalCode: e.target.value })}
@@ -579,7 +585,7 @@ export function PartyDrawer({
                     />
                   </div>
                   <div className={field}>
-                    <Label>Country</Label>
+                    <Label>{t('country')}</Label>
                     <Input value={a.country} onChange={(e) => setAddress(i, { country: e.target.value })} disabled={ro} />
                   </div>
                 </div>
@@ -592,7 +598,7 @@ export function PartyDrawer({
                       disabled={ro}
                       className={checkboxClass}
                     />
-                    <span className="text-sm">Default billing</span>
+                    <span className="text-sm">{t('defaultBilling')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -602,7 +608,7 @@ export function PartyDrawer({
                       disabled={ro}
                       className={checkboxClass}
                     />
-                    <span className="text-sm">Default shipping</span>
+                    <span className="text-sm">{t('defaultShipping')}</span>
                   </label>
                   <span className="flex-1" />
                   {!ro ? (
@@ -610,9 +616,9 @@ export function PartyDrawer({
                       variant="ghost"
                       size="sm"
                       onClick={() => setAddresses(addresses.filter((_, j) => j !== i))}
-                      aria-label="Remove address"
+                      aria-label={t('removeAddress')}
                     >
-                      <Trash2 size={14} /> Remove
+                      <Trash2 size={14} /> {tc('actions.remove')}
                     </Button>
                   ) : null}
                 </div>
@@ -623,9 +629,9 @@ export function PartyDrawer({
 
         {/* -- bank accounts (read-only in the directory) ---------------- */}
         <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bank accounts</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('bankAccountsHeading')}</h3>
           {payload.bankAccounts.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">No bank accounts on file.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('noBankAccounts')}</p>
           ) : (
             <div className="space-y-2">
               {payload.bankAccounts.map((b) => (
@@ -633,7 +639,7 @@ export function PartyDrawer({
                   key={String(b.id)}
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"
                 >
-                  <span className="text-sm font-medium">{b.bank_name ?? 'Bank account'}</span>
+                  <span className="text-sm font-medium">{b.bank_name ?? t('bankAccountFallback')}</span>
                   {b.account_last_four ? (
                     <span className="font-mono text-sm text-slate-500 dark:text-slate-400">
                       ····{String(b.account_last_four)}
@@ -644,17 +650,17 @@ export function PartyDrawer({
                   ) : null}
                   <span className="flex-1" />
                   {b.approved_at ? (
-                    <Badge variant="success">Approved {String(b.approved_at)}</Badge>
+                    <Badge variant="success">{t('approvedOn', { date: String(b.approved_at) })}</Badge>
                   ) : (
-                    <Badge variant="warning">Pending approval</Badge>
+                    <Badge variant="warning">{tc('status.pendingApproval')}</Badge>
                   )}
-                  {b.is_active === false ? <Badge variant="outline">Inactive</Badge> : null}
+                  {b.is_active === false ? <Badge variant="outline">{tc('status.inactive')}</Badge> : null}
                 </div>
               ))}
             </div>
           )}
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Bank accounts are added and approved in the Payments module.
+            {t('bankAccountsNote')}
           </p>
         </section>
       </div>

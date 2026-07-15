@@ -1,1 +1,152 @@
-{}
+{
+  "page": {
+    "title": "Pagos",
+    "description": "Pagos a proveedores aplicados a facturas de compra pendientes, y lotes de pagos EFT exportados como archivos CPA-005.",
+    "newPayment": "Nuevo pago",
+    "tabs": {
+      "payments": "Pagos",
+      "runs": "Lotes de pagos"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {Buscar pagos, proveedores, refs…} other {Buscar cobros, clientes, refs…}}",
+    "newLabel": "{side, select, ap {Nuevo pago} other {Nuevo cobro}}",
+    "columns": {
+      "document": "{side, select, ap {Pago} other {Cobro}}",
+      "bankAccount": "Cuenta bancaria",
+      "ref": "Ref."
+    },
+    "empty": {
+      "title": "{side, select, ap {Aún no hay pagos} other {Aún no hay cobros}}",
+      "description": "{side, select, ap {Registre el primer pago a proveedor para empezar a liquidar las facturas de compra pendientes.} other {Registre el primer cobro de cliente para empezar a liquidar las facturas pendientes.}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "No se pudo crear un borrador"
+  },
+  "drawer": {
+    "draftHint": "Borrador — los cambios se guardan automáticamente.",
+    "viewGlImpact": "Ver impacto contable",
+    "postAction": "{side, select, ap {Pagar y contabilizar} other {Cobrar y contabilizar}}",
+    "bankAccount": "Cuenta bancaria",
+    "selectPartyPlaceholder": "{side, select, ap {Seleccionar proveedor…} other {Seleccionar cliente…}}",
+    "selectBankAccountPlaceholder": "Seleccionar cuenta bancaria…",
+    "referencePlaceholder": "Ref. de cheque / EFT…",
+    "openItems": "{side, select, ap {Facturas de compra pendientes} other {Facturas pendientes}}",
+    "selectPartyHint": "{side, select, ap {Seleccione un proveedor para listar sus partidas pendientes.} other {Seleccione un cliente para listar sus partidas pendientes.}}",
+    "loadingOpenItems": "Cargando partidas pendientes…",
+    "noOpenItems": "{side, select, ap {No hay facturas de compra pendientes para este proveedor.} other {No hay facturas pendientes para este cliente.}}",
+    "columns": {
+      "apply": "Aplicar",
+      "document": "Documento",
+      "due": "Vencimiento",
+      "original": "Original",
+      "appliedToDate": "Aplicado a la fecha",
+      "open": "Pendiente",
+      "appliedOn": "Aplicado el",
+      "applied": "Aplicado"
+    },
+    "applyAriaLabel": "Aplicar a {document}",
+    "invalidAllocation": "Cada importe aplicado debe ser mayor que cero y no superar el saldo pendiente de la partida.",
+    "appliedTo": "Aplicado a",
+    "voidedNote": "Este pago fue anulado; su contabilización se revirtió.",
+    "noLiveApplications": "No hay aplicaciones vigentes.",
+    "kind": {
+      "vendorBill": "Factura de compra",
+      "customerInvoice": "Factura",
+      "expenseReport": "Informe de gastos",
+      "journal": "Diario",
+      "entry": "Asiento"
+    },
+    "saveState": {
+      "saved": "Todos los cambios guardados",
+      "error": "El guardado falló — corrija y reintente",
+      "dirty": "Cambios sin guardar…"
+    },
+    "applyingSummary": "{count, plural, one {Aplicando # partida} other {Aplicando # partidas}} · <total>Total {amount}</total>",
+    "totalAmount": "Total {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "No se pudieron cargar las partidas pendientes",
+      "autosaveFailed": "El guardado automático falló",
+      "postFailed": "La contabilización falló",
+      "posted": "{side, select, ap {Pago contabilizado y aplicado} other {Cobro contabilizado y aplicado}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "La emisión EFT no está configurada",
+    "notConfiguredListDescription": "Los lotes de pagos pueden armarse, pero el archivo CPA-005 no puede generarse hasta que un administrador configure <code>orgs.settings.eft</code> — falta: {missing}. Genere valores provisionales con <code>engine/src/seed-eft-settings.ts</code> y luego complete los datos del ordenante asignados por el banco.",
+    "notConfiguredDrawerDescription": "El archivo CPA-005 no puede generarse hasta que un administrador configure <code>orgs.settings.eft</code> — falta: {missing}. Los valores provisionales pueden generarse con <code>engine/src/seed-eft-settings.ts</code> y luego completarse con los datos del ordenante asignados por el banco."
+  },
+  "runBuilder": {
+    "noOpenBills": "Ninguna factura de compra contabilizada con saldo pendiente coincide.",
+    "selectAllAriaLabel": "Seleccionar todas las facturas de compra de esta página",
+    "selectAriaLabel": "Seleccionar {document}",
+    "columns": {
+      "bill": "Factura de compra",
+      "due": "Vencimiento",
+      "ref": "Ref.",
+      "bankDetails": "Datos bancarios",
+      "openBalance": "Saldo pendiente"
+    },
+    "bankApproved": "aprobados",
+    "bankMissing": "faltantes",
+    "payFromBankAccount": "Pagar desde la cuenta bancaria",
+    "selectBankAccountPlaceholder": "Seleccionar cuenta bancaria…",
+    "fundsDate": "Fecha de fondos",
+    "selectionSummary": "{count, plural, one {# factura de compra} other {# facturas de compra}} · <total>{amount}</total>",
+    "createRun": "Crear lote de pagos",
+    "toasts": {
+      "createFailed": "No se pudo crear el lote de pagos",
+      "created": "Lote de pagos {number} creado"
+    }
+  },
+  "runs": {
+    "openBillsHeading": "Facturas de compra pendientes por pagar",
+    "billsSearchPlaceholder": "Buscar facturas de compra, proveedores, refs…",
+    "runsHeading": "Lotes de pagos",
+    "noRunsYet": "Aún no hay lotes de pagos — seleccione facturas de compra arriba para crear el primero.",
+    "columns": {
+      "run": "Lote",
+      "bankAccount": "Cuenta bancaria",
+      "fundsDate": "Fecha de fondos",
+      "payments": "Pagos"
+    },
+    "status": {
+      "confirmed": "Confirmado",
+      "exported": "Exportado"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "EFT desde {bank}",
+    "descriptionEftWithDate": "EFT desde {bank} · fondos {date}",
+    "bankAccountFallback": "cuenta bancaria",
+    "cancelRun": "Cancelar lote",
+    "downloadFile": "Descargar archivo CPA-005",
+    "downloadBlockedTitle": "Resuelva primero los problemas de configuración EFT / datos bancarios",
+    "postPayments": "Contabilizar pagos",
+    "paymentsSummary": "{count, plural, one {# pago} other {# pagos}} · <total>Total {amount}</total>",
+    "payeesMissingBankDetails": "Beneficiarios sin datos bancarios aprobados",
+    "columns": {
+      "payee": "Beneficiario",
+      "payment": "Pago",
+      "bankDetails": "Datos bancarios"
+    },
+    "bankApproved": "aprobados",
+    "instructionStatus": {
+      "pending": "pendiente",
+      "sent": "enviado",
+      "settled": "liquidado",
+      "returned": "devuelto",
+      "cancelled": "cancelado"
+    },
+    "confirmPost": "¿{count, plural, one {Contabilizar # pago} other {Contabilizar # pagos}} por un total de {total} en el libro mayor y aplicarlos a las facturas de compra seleccionadas?",
+    "confirmCancel": "¿Cancelar el lote {number}? Sus pagos en borrador se eliminan; nada se ha contabilizado.",
+    "toasts": {
+      "postFailed": "La contabilización falló",
+      "postedWithFailures": "{count} contabilizados; fallaron: {failures}",
+      "posted": "{count, plural, one {# pago contabilizado y aplicado} other {# pagos contabilizados y aplicados}}",
+      "cancelFailed": "No se pudo cancelar el lote",
+      "cancelled": "Lote cancelado"
+    }
+  }
+}

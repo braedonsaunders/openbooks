@@ -1,1 +1,141 @@
-{}
+{
+  "title": "Análisis",
+  "tabs": {
+    "cards": "Tarjetas",
+    "dashboards": "Paneles"
+  },
+  "viz": {
+    "table": "Tabla",
+    "bar": "Barras",
+    "line": "Líneas",
+    "area": "Área",
+    "pie": "Circular"
+  },
+  "status": {
+    "published": "Publicado"
+  },
+  "actions": {
+    "publish": "Publicar",
+    "unpublish": "Retirar publicación"
+  },
+  "autosave": {
+    "saved": "Todos los cambios guardados",
+    "unsaved": "Cambios sin guardar…",
+    "failed": "El guardado automático falló"
+  },
+  "errors": {
+    "queryFailed": "La consulta falló",
+    "updateFailed": "La actualización falló"
+  },
+  "empty": {
+    "dashboardNoCards": "Este panel aún no tiene tarjetas."
+  },
+  "cards": {
+    "description": "Construya tarjetas de gráficos y tablas a partir de una consulta sobre el libro mayor y luego organícelas en paneles.",
+    "searchPlaceholder": "Buscar tarjetas…",
+    "emptyTitle": "Aún no hay tarjetas",
+    "emptyDescription": "Construya su primera tarjeta — elija un origen, defina qué medir y por qué agrupar, y seleccione un gráfico.",
+    "sourceColumn": "Origen",
+    "chartColumn": "Gráfico",
+    "newButton": "Nueva tarjeta",
+    "createDraftFailed": "No se pudo crear un borrador de tarjeta"
+  },
+  "dashboards": {
+    "description": "Organice las tarjetas publicadas en paneles compartidos.",
+    "searchPlaceholder": "Buscar paneles…",
+    "emptyTitle": "Aún no hay paneles",
+    "emptyDescription": "Cree un panel y luego coloque en él sus tarjetas publicadas.",
+    "cardsColumn": "Tarjetas",
+    "newButton": "Nuevo panel",
+    "createDraftFailed": "No se pudo crear un borrador de panel"
+  },
+  "cardStudio": {
+    "untitled": "Tarjeta sin título",
+    "autosaveHint": "Los cambios se guardan automáticamente. La vista previa se actualiza en vivo.",
+    "nameRequiredToPublish": "Asigne un nombre a la tarjeta para publicarla",
+    "saveFailedRetry": "El guardado falló — corrija y reintente",
+    "namePlaceholder": "Gasto mensual por departamento",
+    "sourceLabel": "Origen",
+    "measuresTitle": "Medidas",
+    "measuresEmpty": "Agregue una medida para agregar datos (o déjelo vacío para una tabla de detalle).",
+    "ofRows": "de filas",
+    "selectFieldPlaceholder": "Seleccionar campo…",
+    "removeMeasure": "Quitar medida",
+    "groupByTitle": "Agrupar por",
+    "groupByEmpty": "Agrupe las filas por una dimensión para resumirlas.",
+    "binExact": "Exacto",
+    "bins": {
+      "day": "por día",
+      "week": "por semana",
+      "month": "por mes",
+      "quarter": "por trimestre",
+      "year": "por año"
+    },
+    "removeDimension": "Quitar dimensión",
+    "filtersTitle": "Filtros",
+    "filtersEmpty": "Sin filtros — la tarjeta abarca todas las filas.",
+    "removeFilter": "Quitar filtro",
+    "filterPlaceholderList": "a, b, c",
+    "filterPlaceholderNumber": "30",
+    "filterPlaceholderDate": "AAAA-MM-DD",
+    "filterPlaceholderValue": "Valor",
+    "previewRequestFailed": "La solicitud de vista previa falló",
+    "runningPreview": "Generando vista previa…",
+    "buildToPreview": "Construya una consulta para ver la vista previa.",
+    "rowCount": "{count, plural, one {# fila} other {# filas}}",
+    "capped": "(limitado a 10 000)",
+    "duration": "{ms} ms",
+    "publishedToast": "Tarjeta publicada",
+    "draftToast": "La tarjeta volvió a borrador",
+    "deleteConfirm": "¿Eliminar esta tarjeta? Se quitará de todos los paneles.",
+    "deleteFailed": "No se pudo eliminar la tarjeta",
+    "deletedToast": "Tarjeta eliminada"
+  },
+  "vizSettings": {
+    "category": "Categoría",
+    "auto": "Automático",
+    "value": "Valor",
+    "allMeasures": "Todas las medidas",
+    "stacked": "Apilado",
+    "horizontal": "Horizontal",
+    "smooth": "Suavizado",
+    "showValues": "Valores",
+    "hideLegend": "Ocultar leyenda"
+  },
+  "cardTile": {
+    "loadFailed": "No se pudo cargar esta tarjeta"
+  },
+  "builder": {
+    "back": "Paneles",
+    "untitled": "Panel sin título",
+    "pinToHome": "Fijar en inicio",
+    "unpin": "Desfijar",
+    "namePlaceholder": "Resumen ejecutivo",
+    "addCard": "Agregar una tarjeta:",
+    "noPublishedCards": "Aún no hay tarjetas publicadas. <link>Construya y publique una tarjeta</link> para colocarla aquí.",
+    "emptyEditor": "Agregue tarjetas publicadas arriba para construir este panel.",
+    "widths": {
+      "third": "Un tercio",
+      "half": "Mitad",
+      "twoThirds": "Dos tercios",
+      "full": "Completo"
+    },
+    "heights": {
+      "short": "Baja",
+      "medium": "Media",
+      "tall": "Alta"
+    },
+    "cardWidth": "Ancho de la tarjeta",
+    "cardHeight": "Alto de la tarjeta",
+    "removeCard": "Quitar tarjeta",
+    "unavailableCard": "Esta tarjeta no está disponible (eliminada o sin publicar).",
+    "pinnedToast": "Fijado en su inicio",
+    "unpinnedToast": "Desfijado",
+    "pinFailed": "No se pudo actualizar el fijado",
+    "publishedToast": "Panel publicado",
+    "draftToast": "El panel volvió a borrador",
+    "deleteConfirm": "¿Eliminar este panel?",
+    "deletedToast": "Panel eliminado",
+    "deleteFailed": "No se pudo eliminar el panel"
+  }
+}

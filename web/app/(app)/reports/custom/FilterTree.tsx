@@ -1,6 +1,7 @@
 'use client'
 
 import { Plus, Trash2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Button, Input, Select } from '@openbooks/ui'
 import {
   operatorsForKind,
@@ -16,6 +17,9 @@ import {
  * (filters.ts). Each leaf picks a column, then an operator scoped to that
  * column's kind (operatorsForKind), then a value input whose shape follows the
  * operator's `needsValue` ('none' | 'one' | 'list').
+ *
+ * Column and operator labels come from packages/reports (server-defined
+ * constants) and render verbatim.
  */
 
 type Node = ReportRule | ReportRuleGroup
@@ -35,6 +39,7 @@ export function FilterTree({
   onChange: (g: ReportRuleGroup) => void
   depth?: number
 }) {
+  const t = useTranslations('reports.custom.filterTree')
   const setRule = (i: number, rule: Node) => {
     const rules = [...group.rules]
     rules[i] = rule
@@ -64,16 +69,15 @@ export function FilterTree({
       }
     >
       <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-500 dark:text-slate-400">Match</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">{t('match')}</span>
         <Select
-          className="h-8 w-24"
+          className="h-8 w-48"
           value={group.combinator}
           onChange={(e) => onChange({ ...group, combinator: e.target.value as 'and' | 'or' })}
         >
-          <option value="and">ALL of</option>
-          <option value="or">ANY of</option>
+          <option value="and">{t('allOfFollowing')}</option>
+          <option value="or">{t('anyOfFollowing')}</option>
         </Select>
-        <span className="text-xs text-slate-500 dark:text-slate-400">the following:</span>
       </div>
 
       <div className="space-y-2">
@@ -98,18 +102,18 @@ export function FilterTree({
         )}
         {group.rules.length === 0 ? (
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            No conditions — the report returns every row.
+            {t('noConditions')}
           </p>
         ) : null}
       </div>
 
       <div className="flex gap-2">
         <Button type="button" variant="outline" size="sm" onClick={addRule}>
-          <Plus size={14} /> Condition
+          <Plus size={14} /> {t('addCondition')}
         </Button>
         {depth < 3 ? (
           <Button type="button" variant="ghost" size="sm" onClick={addGroup}>
-            <Plus size={14} /> Group
+            <Plus size={14} /> {t('addGroup')}
           </Button>
         ) : null}
       </div>
@@ -128,6 +132,7 @@ function RuleRow({
   onChange: (r: ReportRule) => void
   onRemove: () => void
 }) {
+  const t = useTranslations('reports.custom.filterTree')
   const column = entity.columns.find((c) => c.key === rule.field) ?? entity.columns[0]
   const ops = column ? operatorsForKind(column.kind) : []
   const opMeta = ops.find((o) => o.key === rule.op) ?? ops[0]
@@ -171,7 +176,7 @@ function RuleRow({
         <Input
           className="h-8 w-40"
           value={typeof rule.value === 'string' || typeof rule.value === 'number' ? String(rule.value) : ''}
-          placeholder={column?.kind === 'date' ? 'YYYY-MM-DD' : 'value'}
+          placeholder={column?.kind === 'date' ? 'YYYY-MM-DD' : t('valuePlaceholder')}
           type={column?.kind === 'date' ? 'date' : column?.kind === 'number' ? 'number' : 'text'}
           onChange={(e) => onChange({ ...rule, value: e.target.value })}
         />
@@ -179,7 +184,7 @@ function RuleRow({
         <Input
           className="h-8 w-52"
           value={Array.isArray(rule.value) ? rule.value.join(', ') : ''}
-          placeholder="comma-separated values"
+          placeholder={t('listPlaceholder')}
           onChange={(e) =>
             onChange({
               ...rule,
@@ -191,9 +196,9 @@ function RuleRow({
           }
         />
       ) : (
-        <span className="text-xs text-slate-400 dark:text-slate-500">(no value)</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500">{t('noValue')}</span>
       )}
-      <Button type="button" variant="ghost" size="sm" onClick={onRemove} aria-label="Remove condition">
+      <Button type="button" variant="ghost" size="sm" onClick={onRemove} aria-label={t('removeConditionAria')}>
         <Trash2 size={14} />
       </Button>
     </div>

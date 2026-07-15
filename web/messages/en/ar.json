@@ -1,1 +1,45 @@
-{}
+{
+  "list": {
+    "title": "Accounts Receivable",
+    "description": "Customer invoices entered in openbooks — draft → approval → posted through the kernel.",
+    "searchPlaceholder": "Search invoices, customers, refs…",
+    "emptyTitle": "No invoices yet",
+    "emptyDescription": "Enter the first customer invoice to start the AR workflow.",
+    "columns": {
+      "invoice": "Invoice",
+      "ref": "Ref"
+    }
+  },
+  "actions": {
+    "newInvoice": "New invoice",
+    "submitForApproval": "Submit for approval"
+  },
+  "drawer": {
+    "autosaveHint": "changes save automatically",
+    "viewGlImpact": "View GL impact",
+    "allChangesSaved": "All changes saved",
+    "saveFailedRetry": "Save failed — fix and retry",
+    "unsavedChanges": "Unsaved changes…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Tax {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Balance due {amount}",
+    "invoiceDate": "Invoice date",
+    "dueDate": "Due date",
+    "customerRef": "Customer ref #",
+    "selectCustomerPlaceholder": "Select customer…",
+    "columns": {
+      "incomeAccount": "Income account",
+      "accountPlaceholder": "Account…",
+      "taxAmount": "Tax amt",
+      "noTax": "No tax"
+    }
+  },
+  "toasts": {
+    "actionFailed": "Action failed",
+    "submitted": "Submitted for approval",
+    "posted": "Posted to the ledger",
+    "autosaveFailed": "Autosave failed",
+    "createDraftFailed": "Could not create a draft invoice"
+  }
+}

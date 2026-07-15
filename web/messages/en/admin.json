@@ -1,1 +1,511 @@
-{}
+{
+  "hub": {
+    "metaTitle": "Administration",
+    "title": "Administration",
+    "subtitle": "Everything that configures this workspace — company setup, people, and system.",
+    "groups": {
+      "company": "Company",
+      "people": "People & access",
+      "workspace": "Workspace",
+      "activity": "Activity & data"
+    },
+    "cards": {
+      "settings": {
+        "title": "Company & Accounting",
+        "description": "Organization identity, base currency, fiscal year & control accounts"
+      },
+      "users": {
+        "title": "Users",
+        "description": "Invite people, assign roles & permission overrides"
+      },
+      "roles": {
+        "title": "Roles",
+        "description": "Define roles and exactly what each one grants"
+      },
+      "navigation": {
+        "title": "Navigation",
+        "description": "Reorder the sidebar and rename modules per org"
+      },
+      "customFields": {
+        "title": "Custom Fields",
+        "description": "Add typed fields to records across the app"
+      },
+      "scripts": {
+        "title": "Scripts",
+        "description": "Sandboxed automation that runs on ledger events"
+      },
+      "audit": {
+        "title": "Audit Log",
+        "description": "Every write captured with actor and before/after diffs"
+      },
+      "sync": {
+        "title": "Sync",
+        "description": "Import from external sources and reconcile migrations"
+      }
+    }
+  },
+  "audit": {
+    "title": "Audit Log",
+    "description": "Field-level history of business-layer changes. The ledger needs no audit trail — it is append-only by construction.",
+    "searchPlaceholder": "Search table, actor, or row id…",
+    "actionFilter": "Action",
+    "empty": {
+      "title": "No audit entries yet",
+      "description": "Business-layer mutations will appear here as modules record their changes."
+    },
+    "table": {
+      "when": "When",
+      "actor": "Actor",
+      "action": "Action",
+      "tableName": "Table",
+      "row": "Row",
+      "changes": "Changes"
+    },
+    "systemActor": "system",
+    "actions": {
+      "insert": "insert",
+      "update": "update",
+      "delete": "delete",
+      "post": "post",
+      "void": "void",
+      "approve": "approve",
+      "reject": "reject"
+    }
+  },
+  "customFields": {
+    "title": "Custom Fields",
+    "description": "Extend any module — document headers, transaction lines, parties, projects, accounts. Fields render everywhere the record does: drawers, line grids, and reporting.",
+    "searchPlaceholder": "Search fields…",
+    "targetFilter": "Target",
+    "table": {
+      "field": "Field",
+      "key": "Key",
+      "target": "Target",
+      "type": "Type",
+      "required": "Required",
+      "status": "Status"
+    },
+    "empty": "No custom fields yet.",
+    "statusActive": "active",
+    "statusArchived": "archived",
+    "newField": "New field",
+    "targets": {
+      "documents": {
+        "label": "Transaction header",
+        "description": "One value per transaction (bill, invoice, payment, expense report, journal)."
+      },
+      "documentLines": {
+        "label": "Transaction lines",
+        "description": "A column on every line of the chosen transaction type."
+      },
+      "parties": {
+        "label": "Parties",
+        "description": "Vendors, customers, and employees."
+      },
+      "projects": {
+        "label": "Projects",
+        "description": "Jobs / projects."
+      },
+      "accounts": {
+        "label": "Accounts",
+        "description": "Chart of accounts."
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "Vendor bills",
+        "customerInvoice": "Customer invoices",
+        "vendorPayment": "Vendor payments",
+        "customerPayment": "Customer receipts",
+        "expenseReport": "Expense reports",
+        "journal": "Journal entries"
+      },
+      "lines": {
+        "vendorBill": "Vendor bill lines",
+        "customerInvoice": "Customer invoice lines",
+        "expenseReport": "Expense report lines",
+        "journal": "Journal entry lines"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "Text",
+        "help": "Single line of text."
+      },
+      "longText": {
+        "label": "Text area",
+        "help": "Multiple lines of text."
+      },
+      "number": {
+        "label": "Number",
+        "help": "A numeric value."
+      },
+      "currency": {
+        "label": "Currency",
+        "help": "A money amount (2 decimals)."
+      },
+      "date": {
+        "label": "Date",
+        "help": "A calendar date."
+      },
+      "boolean": {
+        "label": "Checkbox",
+        "help": "Yes / no."
+      },
+      "select": {
+        "label": "Dropdown (single)",
+        "help": "Choose one from a list."
+      },
+      "multiSelect": {
+        "label": "Dropdown (multiple)",
+        "help": "Choose any number from a list."
+      }
+    },
+    "drawer": {
+      "newTitle": "New custom field",
+      "editTitle": "Edit “{label}”",
+      "newDescription": "Extend a record type with your own field.",
+      "createField": "Create field",
+      "saveChanges": "Save changes",
+      "created": "Field created",
+      "updated": "Field updated",
+      "saveFailed": "Could not save the field",
+      "appliesTo": "Applies to",
+      "recordType": "Record type",
+      "whichTransactions": "Which transactions",
+      "allTypes": "All types",
+      "allTypesHint": "Leave as “All types” to apply the field to every kind.",
+      "allKindsSuffix": "all kinds",
+      "lockedAfterCreation": "· locked after creation (values already reference it)",
+      "label": "Label",
+      "labelPlaceholder": "PO Number",
+      "fieldKey": "Field key",
+      "permanent": "(permanent)",
+      "keyPlaceholder": "po_number",
+      "keyHint": "Auto-filled from the label; snake_case.",
+      "type": "Type",
+      "options": "Options",
+      "noOptions": "No options yet — add at least one.",
+      "addOptionPlaceholder": "Add an option…",
+      "removeOption": "Remove {option}",
+      "helpText": "Help text",
+      "optionalSuffix": "(optional)",
+      "helpTextPlaceholder": "Shown under the field",
+      "placeholder": "Placeholder",
+      "defaultValue": "Default value",
+      "min": "Min",
+      "max": "Max",
+      "showInList": "Show as a column in list views"
+    }
+  },
+  "navigation": {
+    "title": "Navigation",
+    "description": "Customize the sidebar for everyone in the organization: rename, reorder, hide modules, or add links. Permission gates still apply on top.",
+    "groupLabelAria": "Group label",
+    "moveGroupUp": "Move group up",
+    "moveGroupDown": "Move group down",
+    "itemLabelAria": "Item label",
+    "showItem": "Show item",
+    "hideItem": "Hide item",
+    "moveItemUp": "Move item up",
+    "moveItemDown": "Move item down",
+    "linkUrlPrompt": "Link URL (internal route or https://…):",
+    "linkLabelPrompt": "Label:",
+    "addLink": "Add link",
+    "save": "Save navigation",
+    "saved": "Navigation saved",
+    "saveFailed": "Could not save",
+    "resetDefaults": "Reset to defaults"
+  },
+  "roles": {
+    "metaTitle": "Roles",
+    "title": "Roles",
+    "description": "Bundles of permissions you assign to users. Built-in roles ship with the app; create custom roles for anything finer-grained.",
+    "manageUsers": "Manage users",
+    "searchPlaceholder": "Search role name, key, or description…",
+    "typeFilter": "Type",
+    "builtIn": "Built-in",
+    "custom": "Custom",
+    "emptyTitle": "No roles yet",
+    "emptyDescription": "Run the role seed script (engine/src/seed-roles.ts) to create the built-in roles, or create a custom role.",
+    "noMatchTitle": "No matching roles",
+    "noMatchDescription": "Adjust the search or type filter.",
+    "table": {
+      "key": "Key",
+      "permissions": "Permissions",
+      "members": "Members"
+    },
+    "newRole": "New role",
+    "drawer": {
+      "newTitle": "New role",
+      "lockedDescription": "The Administrator role always carries every permission and cannot be edited.",
+      "builtInDescription": "Built-in role: the name and key are fixed, but you can adjust its permissions.",
+      "newDescription": "Name the role, then pick the permissions it grants.",
+      "deleteRole": "Delete role",
+      "createRole": "Create role",
+      "saveChanges": "Save changes",
+      "nameRequired": "Role name is required",
+      "saveFailed": "Saving the role failed",
+      "created": "Role created",
+      "updated": "Role updated",
+      "deleteConfirm": "Delete the “{name}” role? Users holding it lose its permissions immediately.",
+      "deleteFailed": "Deleting the role failed",
+      "deleted": "Role deleted",
+      "namePlaceholder": "AP clerk",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "What is this role for?",
+      "permissionsHeading": "Permissions",
+      "selectedCount": "{count} selected"
+    }
+  },
+  "scripts": {
+    "title": "Scripts",
+    "description": "Real JavaScript, run in a sandbox at document trigger points — validate, mutate whitelisted fields, or veto with ob.abort(). Every run is recorded.",
+    "searchPlaceholder": "Search scripts…",
+    "triggerFilter": "Trigger",
+    "table": {
+      "script": "Script",
+      "trigger": "Trigger",
+      "kind": "Kind",
+      "runs": "Runs",
+      "lastRun": "Last run",
+      "status": "Status"
+    },
+    "empty": "No scripts yet — automate a document workflow.",
+    "allKinds": "all",
+    "statusActive": "active",
+    "statusDisabled": "disabled",
+    "triggers": {
+      "beforeSubmit": "before submit",
+      "beforePost": "before post",
+      "afterPost": "after post",
+      "beforeVoid": "before void",
+      "scheduled": "scheduled"
+    },
+    "kinds": {
+      "vendorBill": "vendor bill",
+      "customerInvoice": "customer invoice",
+      "vendorPayment": "vendor payment",
+      "customerPayment": "customer payment",
+      "expenseReport": "expense report",
+      "journal": "journal"
+    },
+    "drawer": {
+      "newScript": "New script",
+      "newTitle": "New script",
+      "description": "Sandboxed JavaScript (QuickJS) — no filesystem, network, or database access.",
+      "createScript": "Create script",
+      "saveScript": "Save script",
+      "created": "Script created",
+      "saved": "Script saved",
+      "saveFailed": "Could not save the script",
+      "namePlaceholder": "AP policy: big bills need a memo",
+      "trigger": "Trigger",
+      "documentKind": "Document kind",
+      "allKindsOption": "All kinds",
+      "source": "Source",
+      "sourceHint": "— must define function main(ctx)",
+      "timeoutMs": "Timeout (ms)",
+      "runOrder": "Run order",
+      "recentRuns": "Recent runs",
+      "runStatus": {
+        "ok": "ok",
+        "aborted": "aborted",
+        "error": "error"
+      }
+    }
+  },
+  "settings": {
+    "metaTitle": "Company & Accounting",
+    "title": "Company & Accounting",
+    "description": "Organization identity, base currency, fiscal calendar and the control accounts the ledger posts through.",
+    "organization": {
+      "title": "Organization",
+      "description": "How this company is identified across the app.",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "legalName": "Legal name",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "country": "Country",
+      "countryPlaceholder": "CA",
+      "countryHint": "Two-letter ISO code (e.g. CA, US, GB).",
+      "defaultLanguage": "Default language",
+      "defaultLanguageHint": "The language the app renders in for everyone who hasn’t picked their own in the account menu.",
+      "baseCurrency": "Base currency",
+      "baseCurrencyHint": "The reporting currency the ledger balances in. Add more currencies before switching."
+    },
+    "fiscal": {
+      "title": "Fiscal year",
+      "description": "The month your financial year begins. Everything fiscal-year-aware — reports, period close, presets — reads this.",
+      "startsIn": "Fiscal year starts in",
+      "runs": "Fiscal year runs",
+      "range": "{start} → {end}",
+      "warning": "Changing the start month re-labels <strong>every accounting period</strong> — their fiscal year, period number and name are re-derived from each period’s start date the moment you save. Journal entries and dates are untouched, but reports and period-close groupings will shift to the new calendar."
+    },
+    "months": {
+      "january": "January",
+      "february": "February",
+      "march": "March",
+      "april": "April",
+      "may": "May",
+      "june": "June",
+      "july": "July",
+      "august": "August",
+      "september": "September",
+      "october": "October",
+      "november": "November",
+      "december": "December"
+    },
+    "controlAccounts": {
+      "title": "Control accounts",
+      "description": "The general-ledger accounts subledgers and tax post through. Only postable (non-summary) accounts appear.",
+      "selectPlaceholder": "Select an account…",
+      "searchPlaceholder": "Search accounts…",
+      "fields": {
+        "ar": {
+          "label": "Accounts receivable",
+          "hint": "Customer balances post here"
+        },
+        "ap": {
+          "label": "Accounts payable",
+          "hint": "Vendor balances post here"
+        },
+        "bank": {
+          "label": "Default bank",
+          "hint": "Default cash account for payments & receipts"
+        },
+        "taxCollected": {
+          "label": "Tax collected",
+          "hint": "Sales tax owed on invoices"
+        },
+        "taxPaid": {
+          "label": "Tax paid",
+          "hint": "Recoverable tax on bills"
+        },
+        "employeePayable": {
+          "label": "Employee payable",
+          "hint": "Expense reimbursements owed to staff"
+        }
+      }
+    },
+    "documentKinds": {
+      "vendorBill": "Vendor bill",
+      "customerInvoice": "Customer invoice",
+      "vendorPayment": "Vendor payment",
+      "customerPayment": "Customer payment",
+      "expenseReport": "Expense report",
+      "journal": "Journal"
+    },
+    "numbering": {
+      "title": "Document numbering",
+      "description": "Sequences that generate document numbers. Prefix and padding shown for each kind.",
+      "empty": "No sequences configured yet.",
+      "table": {
+        "document": "Document",
+        "prefix": "Prefix",
+        "next": "Next #",
+        "padding": "Padding",
+        "example": "Example"
+      }
+    },
+    "validation": {
+      "nameRequired": "Display name is required",
+      "countryRequired": "Country is required"
+    },
+    "saved": "Settings saved",
+    "savedPeriodsRederived": "Settings saved — accounting periods re-labelled to the new fiscal year",
+    "saveSettings": "Save settings"
+  },
+  "users": {
+    "metaTitle": "Users",
+    "title": "Users",
+    "description": "Who can sign in, and which roles they hold. A user’s access is the union of their assigned roles; users with no assignment fall back to their legacy role.",
+    "manageRoles": "Manage roles",
+    "searchPlaceholder": "Search name or email…",
+    "statusFilter": "Status",
+    "emptyTitle": "No users match",
+    "emptySearchDescription": "No users match your search. Try a different term or status filter.",
+    "emptyFilterDescription": "Try a different status filter.",
+    "table": {
+      "roles": "Roles",
+      "lastSignIn": "Last sign-in"
+    },
+    "you": "you",
+    "legacyRole": "legacy: {role}",
+    "statusActive": "active",
+    "statusInactive": "inactive",
+    "requestFailed": "Request failed",
+    "editRolesFor": "Edit roles for {name}",
+    "rolesFor": "Roles — {name}",
+    "noRoles": "No roles yet — seed the built-in roles or create one under Manage roles.",
+    "builtInBadge": "built-in",
+    "deactivateConfirm": "Deactivate {name}? They will be signed out and unable to sign in until reactivated.",
+    "deactivate": "Deactivate",
+    "reactivate": "Reactivate",
+    "deactivated": "{name} deactivated",
+    "reactivated": "{name} reactivated"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "General ledger",
+      "ap": "Accounts payable",
+      "ar": "Accounts receivable",
+      "reports": "Reports",
+      "insights": "Insights",
+      "items": "Items & services",
+      "projects": "Projects & job costing",
+      "time": "Time & timesheets",
+      "records": "Custom records",
+      "sql": "SQL workbench",
+      "sync": "Sync",
+      "scripts": "Scripting",
+      "admin": "Administration",
+      "assets": "Fixed assets & depreciation"
+    },
+    "gl_read": "View journals and balances",
+    "gl_post": "Post journal entries",
+    "gl_close": "Close accounting periods",
+    "ap_read": "View bills",
+    "ap_create": "Create and submit bills",
+    "ap_approve": "Approve or reject bills",
+    "ap_post": "Post bills to the ledger",
+    "ap_pay": "Pay bills",
+    "ar_read": "View invoices",
+    "ar_create": "Create and submit invoices",
+    "ar_approve": "Approve or reject invoices",
+    "ar_post": "Post invoices to the ledger",
+    "ar_pay": "Record customer payments",
+    "reports_read": "View reports",
+    "reports_create": "Create and save reports",
+    "reports_schedule": "Schedule report delivery",
+    "insights_read": "View insights and the library",
+    "insights_create": "Build cards and dashboards",
+    "insights_publish": "Publish to the shared library",
+    "items_read": "View items and services",
+    "items_manage": "Create and edit items",
+    "projects_read": "View projects and job costing",
+    "projects_manage": "Create and edit projects",
+    "time_read": "View timesheets",
+    "time_manage": "Enter and edit time",
+    "time_approve": "Approve timesheets",
+    "records_read": "View custom records",
+    "records_create": "Create and edit custom records",
+    "records_manage_types": "Design custom record types",
+    "sql_execute": "Run read-only SQL queries",
+    "sync_run": "Run external-source syncs",
+    "scripts_manage": "Manage user scripts",
+    "parties_read": "View parties",
+    "parties_manage": "Manage parties",
+    "banking_read": "View banking",
+    "banking_reconcile": "Reconcile bank accounts",
+    "expenses_read": "View expense reports",
+    "expenses_create": "Enter expense reports",
+    "admin_custom_fields_manage": "Manage custom fields",
+    "admin_users_manage": "Manage users and role assignments",
+    "admin_roles_manage": "Manage roles and permissions",
+    "admin_nav_manage": "Customize navigation",
+    "admin_audit_read": "View the audit log",
+    "assets_read": "View fixed assets and depreciation",
+    "assets_manage": "Create and edit assets, run depreciation"
+  }
+}

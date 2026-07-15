@@ -3,9 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 
 export function InvoiceActions({ id, status }: { id: string; status: string }) {
+  const t = useTranslations('ar')
+  const tCommon = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -17,8 +20,8 @@ export function InvoiceActions({ id, status }: { id: string; status: string }) {
       body: JSON.stringify({ action, documentId: id }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? 'Action failed')
-    else toast.success(action === 'submit' ? 'Submitted for approval' : 'Posted to the ledger')
+    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
     setBusy(false)
     router.refresh()
   }
@@ -26,14 +29,14 @@ export function InvoiceActions({ id, status }: { id: string; status: string }) {
   if (status === 'draft') {
     return (
       <Button variant="outline" size="sm" disabled={busy} onClick={() => act('submit')}>
-        Submit for approval
+        {t('actions.submitForApproval')}
       </Button>
     )
   }
   if (status === 'approved') {
     return (
       <Button size="sm" disabled={busy} onClick={() => act('post')}>
-        Post
+        {tCommon('actions.post')}
       </Button>
     )
   }

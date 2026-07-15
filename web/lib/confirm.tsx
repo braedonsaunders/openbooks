@@ -15,6 +15,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, HelpCircle } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 
 export type ConfirmTone = 'default' | 'danger'
@@ -72,6 +73,8 @@ function subscribe(cb: () => void) {
 
 /** Mounted once in the app layout. Renders the active confirm request (if any). */
 export function ConfirmRoot() {
+  const t = useTranslations('ui.confirm')
+  const tConfirm = useTranslations('common.confirm')
   const req = React.useSyncExternalStore(
     subscribe,
     () => current,
@@ -96,9 +99,9 @@ export function ConfirmRoot() {
   if (typeof document === 'undefined') return null
 
   const danger = req?.tone === 'danger'
-  const title = req?.title ?? (danger ? 'Are you sure?' : 'Confirm')
-  const confirmLabel = req?.confirmLabel ?? 'Confirm'
-  const cancelLabel = req?.cancelLabel ?? 'Cancel'
+  const title = req?.title ?? (danger ? tConfirm('title') : t('defaultTitle'))
+  const confirmLabel = req?.confirmLabel ?? tConfirm('confirm')
+  const cancelLabel = req?.cancelLabel ?? tConfirm('cancel')
 
   return createPortal(
     <AnimatePresence>

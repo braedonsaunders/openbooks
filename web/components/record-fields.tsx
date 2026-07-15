@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Star } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import {
   evaluateLogicRule,
   type FieldValueMap,
@@ -127,16 +128,17 @@ function RatingInput({
   onCommit: (v: number | undefined) => void
   disabled: boolean
 }) {
+  const t = useTranslations('ui.recordFields')
   const current = typeof value === 'number' ? value : 0
   return (
-    <div className="flex items-center gap-1" role="radiogroup" aria-label={`Rating out of ${max}`}>
+    <div className="flex items-center gap-1" role="radiogroup" aria-label={t('ratingAria', { max })}>
       {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
         <button
           key={n}
           type="button"
           role="radio"
           aria-checked={current === n}
-          aria-label={`${n} of ${max}`}
+          aria-label={t('ratingValueAria', { value: n, max })}
           disabled={disabled}
           onClick={() => onCommit(current === n ? undefined : n)}
           className={cn(
@@ -170,6 +172,8 @@ function EntityPicker({
   disabled: boolean
   invalid: boolean
 }) {
+  const t = useTranslations('ui.recordFields')
+  const tCommon = useTranslations('common')
   const source = field.type === 'gl_account' ? 'gl_accounts' : 'parties'
   const partyKind =
     field.type === 'party' && typeof field.config?.partyKind === 'string'
@@ -182,14 +186,14 @@ function EntityPicker({
     if (current && !options.some((o) => o.value === current)) {
       // Stored ref to a row the feed no longer returns (deactivated since) —
       // keep it selectable so opening the drawer doesn't silently blank it.
-      return [{ value: current, label: '(currently selected — inactive)' }, ...options]
+      return [{ value: current, label: t('inactiveSelected') }, ...options]
     }
     return options
-  }, [options, current])
+  }, [options, current, t])
   if (failed) {
     return (
       <p className="text-sm text-red-600 dark:text-red-400">
-        Could not load {field.type === 'gl_account' ? 'accounts' : 'parties'} — reload to retry.
+        {field.type === 'gl_account' ? t('loadAccountsFailed') : t('loadPartiesFailed')}
       </p>
     )
   }
@@ -198,10 +202,16 @@ function EntityPicker({
       options={withSelected}
       value={current}
       onChange={(v) => onCommit(v || undefined)}
-      placeholder={options ? `Select ${field.type === 'gl_account' ? 'account' : 'party'}…` : 'Loading…'}
+      placeholder={
+        options
+          ? field.type === 'gl_account'
+            ? t('selectAccount')
+            : t('selectParty')
+          : tCommon('feedback.loading')
+      }
       disabled={disabled || !options}
       clearable={!field.required && !field.validation?.required}
-      emptyLabel="None"
+      emptyLabel={tCommon('labels.none')}
       loading={!options}
       invalid={invalid}
       ariaLabel={field.label}
@@ -227,6 +237,7 @@ export function RecordFields({
   /** fieldId → message, e.g. the PATCH route's validation errors. */
   errors?: Record<string, string>
 }) {
+  const t = useTranslations('ui.recordFields')
   // Formula values recompute live so dependent fields update as you type;
   // showIf visibility evaluates against the same computed context.
   const computed = useMemo(() => withComputedFormulas(fields, values), [fields, values])
@@ -234,11 +245,7 @@ export function RecordFields({
 
   const visibleFields = fields.filter((f) => !f.showIf || evaluateLogicRule(f.showIf, ctx))
   if (visibleFields.length === 0) {
-    return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        No fields to show — the record type has no visible fields.
-      </p>
-    )
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('noFields')}</p>
   }
 
   return (
@@ -285,6 +292,7 @@ function FieldInput({
   disabled: boolean
   invalid: boolean
 }) {
+  const tCommon = useTranslations('common.labels')
   const invalidClass = invalid ? 'border-red-400 dark:border-red-700' : undefined
   switch (field.type) {
     case 'text':
@@ -366,7 +374,7 @@ function FieldInput({
           onChange={(v) => onCommit(v || undefined)}
           disabled={disabled}
           clearable={!field.required && !field.validation?.required}
-          emptyLabel="None"
+          emptyLabel={tCommon('none')}
           invalid={invalid}
           ariaLabel={field.label}
         />

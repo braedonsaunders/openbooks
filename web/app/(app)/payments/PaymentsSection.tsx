@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
@@ -29,6 +30,20 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   voided: 'outline',
 }
 
+// documents.status enum → common.status.* message keys (fallback: raw value).
+const STATUS_LABEL_KEY: Record<string, string> = {
+  draft: 'draft',
+  pending_approval: 'pendingApproval',
+  approved: 'approved',
+  rejected: 'rejected',
+  posted: 'posted',
+  paid: 'paid',
+  partially_paid: 'partiallyPaid',
+  voided: 'voided',
+  reversed: 'reversed',
+  cancelled: 'cancelled',
+}
+
 const SORT_COLUMNS = {
   date: sql`d.document_date`,
   number: sql`d.document_number`,
@@ -48,9 +63,15 @@ export async function PaymentsSection({
   kind: PaymentKind
   orgId: string
 }) {
+  const t = await getTranslations('payments')
+  const tCommon = await getTranslations('common')
+  const statusLabel = (status: string) => {
+    const key = STATUS_LABEL_KEY[status]
+    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
+  }
   const side = PAYMENT_KIND_SIDE[kind]
-  const partyLabel = side === 'ap' ? 'Vendor' : 'Customer'
-  const newLabel = side === 'ap' ? 'New payment' : 'New receipt'
+  const partyLabel = side === 'ap' ? tCommon('labels.vendor') : tCommon('labels.customer')
+  const newLabel = t('list.newLabel', { side })
 
   const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
   const params = parseListParams(sp, {
@@ -131,25 +152,21 @@ export async function PaymentsSection({
 
   const statusOptions = counts.rows.map((r: any) => ({
     value: r.status,
-    label: String(r.status).replace('_', ' '),
+    label: statusLabel(String(r.status)),
     count: Number(r.n),
   }))
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput placeholder={`Search ${side === 'ap' ? 'payments' : 'receipts'}, ${partyLabel.toLowerCase()}s, refs…`} />
-        <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+        <SearchInput placeholder={t('list.searchPlaceholder', { side })} />
+        <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
       </div>
       {total === 0 ? (
         <div className="mt-4">
           <EmptyState
-            title={side === 'ap' ? 'No payments yet' : 'No receipts yet'}
-            description={
-              side === 'ap'
-                ? 'Record the first vendor payment to start settling open bills.'
-                : 'Record the first customer receipt to start settling open invoices.'
-            }
+            title={t('list.empty.title', { side })}
+            description={t('list.empty.description', { side })}
             action={<NewPaymentButton kind={kind} basePath={basePath} label={newLabel} />}
           />
         </div>
@@ -159,21 +176,21 @@ export async function PaymentsSection({
             <TableHeader>
               <TableRow>
                 <SortTh basePath={basePath} currentParams={sp} column="number" sort={params.sort} dir={params.dir}>
-                  {side === 'ap' ? 'Payment' : 'Receipt'}
+                  {t('list.columns.document', { side })}
                 </SortTh>
                 <SortTh basePath={basePath} currentParams={sp} column="party" sort={params.sort} dir={params.dir}>
                   {partyLabel}
                 </SortTh>
                 <SortTh basePath={basePath} currentParams={sp} column="date" sort={params.sort} dir={params.dir}>
-                  Date
+                  {tCommon('labels.date')}
                 </SortTh>
-                <TableHead>Bank account</TableHead>
-                <TableHead>Ref</TableHead>
+                <TableHead>{t('list.columns.bankAccount')}</TableHead>
+                <TableHead>{t('list.columns.ref')}</TableHead>
                 <SortTh basePath={basePath} currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">
-                  Total
+                  {tCommon('labels.total')}
                 </SortTh>
                 <SortTh basePath={basePath} currentParams={sp} column="status" sort={params.sort} dir={params.dir}>
-                  Status
+                  {tCommon('labels.status')}
                 </SortTh>
               </TableRow>
             </TableHeader>
@@ -197,7 +214,7 @@ export async function PaymentsSection({
                   <TableCell className="text-right tabular-nums">{money(p.total)}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[p.status] ?? 'secondary'}>
-                      {String(p.status).replace('_', ' ')}
+                      {statusLabel(String(p.status))}
                     </Badge>
                   </TableCell>
                 </TableRow>

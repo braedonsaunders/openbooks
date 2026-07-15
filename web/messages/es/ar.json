@@ -1,1 +1,45 @@
-{}
+{
+  "list": {
+    "title": "Cuentas por cobrar",
+    "description": "Facturas de cliente registradas en openbooks — borrador → aprobación → contabilizadas a través del kernel.",
+    "searchPlaceholder": "Buscar facturas, clientes, referencias…",
+    "emptyTitle": "Aún no hay facturas",
+    "emptyDescription": "Registre la primera factura de cliente para iniciar el flujo de cuentas por cobrar.",
+    "columns": {
+      "invoice": "Factura",
+      "ref": "Ref."
+    }
+  },
+  "actions": {
+    "newInvoice": "Nueva factura",
+    "submitForApproval": "Enviar para aprobación"
+  },
+  "drawer": {
+    "autosaveHint": "los cambios se guardan automáticamente",
+    "viewGlImpact": "Ver impacto en el libro mayor",
+    "allChangesSaved": "Todos los cambios guardados",
+    "saveFailedRetry": "Error al guardar — corrija y reintente",
+    "unsavedChanges": "Cambios sin guardar…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Impuesto {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Saldo pendiente {amount}",
+    "invoiceDate": "Fecha de la factura",
+    "dueDate": "Fecha de vencimiento",
+    "customerRef": "N.º de ref. del cliente",
+    "selectCustomerPlaceholder": "Seleccionar cliente…",
+    "columns": {
+      "incomeAccount": "Cuenta de ingresos",
+      "accountPlaceholder": "Cuenta…",
+      "taxAmount": "Impuesto",
+      "noTax": "Sin impuesto"
+    }
+  },
+  "toasts": {
+    "actionFailed": "La acción falló",
+    "submitted": "Enviado para aprobación",
+    "posted": "Contabilizado en el libro mayor",
+    "autosaveFailed": "Falló el guardado automático",
+    "createDraftFailed": "No se pudo crear un borrador de factura"
+  }
+}

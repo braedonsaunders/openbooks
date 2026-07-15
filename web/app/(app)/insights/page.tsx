@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { getSource } from '@openbooks/analytics'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -38,6 +39,7 @@ export default async function InsightsCards({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const [t, tCommon] = await Promise.all([getTranslations('insights'), getTranslations('common')])
   const authz = await requirePermission('insights.read')
   const canCreate = can(authz, 'insights.create')
   const canPublish = can(authz, 'insights.publish')
@@ -83,8 +85,8 @@ export default async function InsightsCards({
   const openCard = cardId && cardId !== 'new' && isUuid(cardId) ? await loadCard(cardId, orgId) : null
 
   const statusOptions = [
-    { value: 'draft', label: 'Draft', count: Number(c.drafts) },
-    { value: 'published', label: 'Published', count: Number(c.published) },
+    { value: 'draft', label: tCommon('status.draft'), count: Number(c.drafts) },
+    { value: 'published', label: t('status.published'), count: Number(c.published) },
   ]
 
   return (
@@ -92,22 +94,22 @@ export default async function InsightsCards({
       header={
         <>
           <PageHeader
-            title="Insights"
-            description="Build chart and table cards from a query over the ledger, then arrange them on dashboards."
+            title={t('title')}
+            description={t('cards.description')}
             actions={canCreate ? <NewCardButton /> : undefined}
           />
           <InsightsTabs active="cards" />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search cards…" />
-            <FilterChips basePath="/insights" currentParams={sp} paramKey="status" label="Status" options={statusOptions} />
+            <SearchInput placeholder={t('cards.searchPlaceholder')} />
+            <FilterChips basePath="/insights" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>
         </>
       }
     >
       {total === 0 ? (
         <EmptyState
-          title="No cards yet"
-          description="Build your first card — pick a source, choose what to measure and group by, and pick a chart."
+          title={t('cards.emptyTitle')}
+          description={t('cards.emptyDescription')}
           action={canCreate ? <NewCardButton /> : undefined}
         />
       ) : (
@@ -116,13 +118,13 @@ export default async function InsightsCards({
             <TableHeader>
               <TableRow>
                 <SortTh basePath="/insights" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>
-                  Name
+                  {tCommon('labels.name')}
                 </SortTh>
-                <TableHead>Source</TableHead>
-                <TableHead>Chart</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t('cards.sourceColumn')}</TableHead>
+                <TableHead>{t('cards.chartColumn')}</TableHead>
+                <TableHead>{tCommon('labels.status')}</TableHead>
                 <SortTh basePath="/insights" currentParams={sp} column="updated" sort={params.sort} dir={params.dir}>
-                  Updated
+                  {tCommon('labels.updated')}
                 </SortTh>
               </TableRow>
             </TableHeader>
@@ -144,12 +146,12 @@ export default async function InsightsCards({
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                         {viz ? <viz.Icon size={15} /> : null}
-                        {viz?.label ?? row.viz_type}
+                        {viz ? t(viz.labelKey) : row.viz_type}
                       </span>
                     </TableCell>
                     <TableCell>
                       <Badge variant={row.status === 'published' ? 'success' : 'outline'}>
-                        {row.status === 'published' ? 'Published' : 'Draft'}
+                        {row.status === 'published' ? t('status.published') : tCommon('status.draft')}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-slate-500 dark:text-slate-400">

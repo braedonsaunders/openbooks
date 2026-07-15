@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
@@ -9,19 +10,23 @@ import { Button } from '@openbooks/ui'
 /**
  * Instant-into-draft: creates the draft order server-side, opens its flyout.
  * `apiPath` = /api/estimates|sales-orders|purchase-orders, `base`/`param` build
- * the list route deep-link (e.g. /estimates?estimate=<id>).
+ * the list route deep-link (e.g. /estimates?estimate=<id>). `label` and
+ * `createFailedMessage` arrive pre-translated from the owning list page.
  */
 export function NewOrderButton({
   apiPath,
   base,
   param,
   label,
+  createFailedMessage,
 }: {
   apiPath: string
   base: string
   param: string
   label: string
+  createFailedMessage: string
 }) {
+  const tCommon = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -30,7 +35,7 @@ export function NewOrderButton({
     const res = await fetch(`${apiPath}/draft`, { method: 'POST' })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? `Could not create a draft ${label.toLowerCase()}`)
+      toast.error(data.error ?? createFailedMessage)
       setBusy(false)
       return
     }
@@ -41,7 +46,7 @@ export function NewOrderButton({
 
   return (
     <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? 'Creating…' : `New ${label.toLowerCase()}`}
+      <Plus size={15} /> {busy ? tCommon('actions.creating') : label}
     </Button>
   )
 }

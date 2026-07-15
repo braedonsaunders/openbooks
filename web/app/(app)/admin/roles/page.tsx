@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { sql, type SQL } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader } from '@openbooks/ui'
 import { ShieldCheck } from 'lucide-react'
@@ -12,7 +13,10 @@ import { requirePermission } from '../../../../lib/authz'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { EditRoleButton, NewRoleButton, type RoleRow } from './RoleEditor'
 
-export const metadata = { title: 'Roles' }
+export async function generateMetadata() {
+  const t = await getTranslations('admin.roles')
+  return { title: t('metaTitle') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/admin/roles'
@@ -29,6 +33,8 @@ export default async function AdminRolesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('admin.roles.manage')
+  const t = await getTranslations('admin.roles')
+  const tCommon = await getTranslations('common')
   const orgId = authz.user.orgId
   const sp = await searchParams
   const listParams = parseListParams(sp, {
@@ -93,27 +99,27 @@ export default async function AdminRolesPage({
       header={
         <>
           <PageHeader
-            title="Roles"
-            description="Bundles of permissions you assign to users. Built-in roles ship with the app; create custom roles for anything finer-grained."
+            title={t('title')}
+            description={t('description')}
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/admin/users">
-                  <Button variant="outline">Manage users</Button>
+                  <Button variant="outline">{t('manageUsers')}</Button>
                 </Link>
                 <NewRoleButton />
               </div>
             }
           />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <SearchInput placeholder="Search role name, key, or description…" />
+            <SearchInput placeholder={t('searchPlaceholder')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="type"
-              label="Type"
+              label={t('typeFilter')}
               options={[
-                { value: 'built_in', label: 'Built-in', count: typeCounts.built_in ?? 0 },
-                { value: 'custom', label: 'Custom', count: typeCounts.custom ?? 0 },
+                { value: 'built_in', label: t('builtIn'), count: typeCounts.built_in ?? 0 },
+                { value: 'custom', label: t('custom'), count: typeCounts.custom ?? 0 },
               ]}
             />
           </div>
@@ -123,12 +129,8 @@ export default async function AdminRolesPage({
       {roles.length === 0 ? (
         <EmptyState
           icon={<ShieldCheck />}
-          title={!listParams.q && !type ? 'No roles yet' : 'No matching roles'}
-          description={
-            !listParams.q && !type
-              ? 'Run the role seed script (engine/src/seed-roles.ts) to create the built-in roles, or create a custom role.'
-              : 'Adjust the search or type filter.'
-          }
+          title={!listParams.q && !type ? t('emptyTitle') : t('noMatchTitle')}
+          description={!listParams.q && !type ? t('emptyDescription') : t('noMatchDescription')}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -136,18 +138,18 @@ export default async function AdminRolesPage({
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
                 <SortTh column="name" {...sortProps}>
-                  Name
+                  {tCommon('labels.name')}
                 </SortTh>
-                <th className="px-3 py-2">Key</th>
-                <th className="px-3 py-2">Description</th>
+                <th className="px-3 py-2">{t('table.key')}</th>
+                <th className="px-3 py-2">{tCommon('labels.description')}</th>
                 <SortTh column="permissions" {...sortProps}>
-                  Permissions
+                  {t('table.permissions')}
                 </SortTh>
                 <SortTh column="members" {...sortProps}>
-                  Members
+                  {t('table.members')}
                 </SortTh>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2 text-right">Actions</th>
+                <th className="px-3 py-2">{tCommon('labels.type')}</th>
+                <th className="px-3 py-2 text-right">{tCommon('labels.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -170,9 +172,9 @@ export default async function AdminRolesPage({
                   </td>
                   <td className="px-3 py-2">
                     {r.isBuiltIn ? (
-                      <Badge variant="secondary">Built-in</Badge>
+                      <Badge variant="secondary">{t('builtIn')}</Badge>
                     ) : (
-                      <Badge variant="outline">Custom</Badge>
+                      <Badge variant="outline">{t('custom')}</Badge>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
