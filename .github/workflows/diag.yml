@@ -1,0 +1,21 @@
+name: Cluster diag
+on:
+  workflow_dispatch:
+jobs:
+  diag:
+    runs-on: [self-hosted, linux, x64, dokploy]
+    timeout-minutes: 5
+    steps:
+      - name: Probe Traefik + app from inside dokploy-network
+        run: |
+          set +e
+          echo "=== resolve app host ==="
+          getent hosts openbooks.cloud.rassaun.com || true
+          echo "=== curl app directly by compose service DNS (container network) ==="
+          curl -s -m 8 -o /dev/null -w "web:3000 direct = %{http_code}\n" http://compose-bypass-open-source-driver-miu7hf-web-1:3000/api/v1/health
+          echo "=== traefik api routers (grep openbooks) ==="
+          curl -s -m 8 http://traefik:8080/api/http/routers 2>/dev/null | tr ',' '\n' | grep -iA1 -E "openbook|Host" | head -40
+          echo "=== traefik api services (grep openbooks) ==="
+          curl -s -m 8 http://traefik:8080/api/http/services 2>/dev/null | tr ',' '\n' | grep -i openbook | head -20
+          echo "=== via ingress ==="
+          curl -s -m 8 -o /dev/null -w "https ingress = %{http_code}\n" https://openbooks.cloud.rassaun.com/api/v1/health
