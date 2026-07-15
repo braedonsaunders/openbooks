@@ -29,6 +29,14 @@ export async function POST(req: Request) {
   try {
     query = normalizeQuery((body as any)?.query)
   } catch (e) {
+    // Catalog-referencing validation failures carry a code — translate them;
+    // structural corruption stays technical detail verbatim.
+    if (e instanceof InsightValidationError && e.code) {
+      return NextResponse.json(
+        { error: await insightCompileErrorMessage({ code: e.code, subject: e.subject }) },
+        { status: 422 },
+      )
+    }
     const msg = e instanceof Error ? e.message : 'invalid query'
     return NextResponse.json({ error: msg }, { status: 422 })
   }
@@ -42,8 +50,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: await insightCompileErrorMessage(e) }, { status: 422 })
     }
     if (e instanceof InsightValidationError) {
-      // Structural plan corruption (the studio can't produce this) — technical detail verbatim.
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      // Catalog-referencing failures carry a compile-error code — translate
+      // those; pure structural corruption (the studio can't produce it) stays
+      // technical detail verbatim.
+      const error = e.code
+        ? await insightCompileErrorMessage({ code: e.code, subject: e.subject })
+        : e.message
+      return NextResponse.json({ error }, { status: 422 })
     }
     const msg = e instanceof Error ? e.message : 'query failed'
     // Postgres statement_timeout / cancel surfaces as a friendly 400.
