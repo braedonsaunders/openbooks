@@ -71,6 +71,9 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
 
   const periodQs = new URLSearchParams({ from: period.from, to: period.to }).toString()
   const scale = scaleFactor(q.scale)
+  const backParams = new URLSearchParams()
+  for (const [k, v] of Object.entries(sp)) if (v) backParams.set(k, v)
+  const backHref = `/reports/pnl${backParams.toString() ? `?${backParams}` : ''}`
 
   return (
     <ListPageLayout
@@ -110,7 +113,12 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
         </>
       }
     >
-      <StatementMatrixTable view={view} scale={q.scale} periodQs={`?${periodQs}`} />
+      <StatementMatrixTable
+        view={view}
+        scale={q.scale}
+        periodQs={`?${periodQs}`}
+        drill={{ dims: q.dims, basis: q.basis, back: backHref, backLabel: t('pnl.title') }}
+      />
     </ListPageLayout>
   )
 }

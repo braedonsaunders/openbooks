@@ -805,5 +805,12 @@
     "title": "Account Statement",
     "opening": "Opening balance",
     "closing": "Closing balance"
+  },
+  "detail": {
+    "title": "Transaction Detail",
+    "netTotal": "Net total",
+    "truncated": "Showing the first 2,000 lines — narrow the report to see everything.",
+    "empty": "No transactions behind this value.",
+    "backTo": "Back to {report}"
   }
 }

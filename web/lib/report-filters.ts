@@ -9,8 +9,10 @@ import { DEFAULT_PERIOD_PRESET, isPeriodPreset } from '@openbooks/reports'
 import type {
   StatementBasis,
   StatementBreakout,
+  StatementColumnKind,
   StatementCompare,
   StatementDimFilter,
+  StatementMode,
 } from './statement-matrix'
 
 export type ReportScale = 'actual' | 'thousands' | 'millions'
@@ -107,4 +109,108 @@ export function scaleFactor(scale: ReportScale): { divisor: number; note: string
   if (scale === 'thousands') return { divisor: 1000, note: 'In thousands' }
   if (scale === 'millions') return { divisor: 1_000_000, note: 'In millions' }
   return { divisor: 1, note: '' }
+}
+
+// --- drill-through -----------------------------------------------------------
+// Every statement value can drill to the journal lines behind it. The URL
+// carries the account scope (a single account + its subtree, OR a set of
+// account types for a subtotal), the column's date window + dimension slice,
+// the report basis, and a `back` link to the exact report.
+
+const DIM_PARAM: Record<'department' | 'project' | 'location' | 'class', keyof typeof REPORT_PARAM_KEYS> = {
+  department: 'dept',
+  project: 'project',
+  location: 'location',
+  class: 'class',
+}
+
+export type DrillColumn = {
+  kind: StatementColumnKind
+  from?: string | null
+  to?: string
+  dimField?: 'department' | 'project' | 'location' | 'class'
+  dimValue?: string | null
+}
+
+/** Build the `/reports/detail` href for one statement cell, or null if the cell
+ *  isn't drillable (variance column, no date window, Unassigned bucket, or a row
+ *  with no account scope). */
+export function buildDrillHref(args: {
+  accountId?: string
+  drillTypes?: string[]
+  column: DrillColumn
+  mode: StatementMode
+  reportDims: StatementDimFilter
+  basis: StatementBasis
+  back: string
+  backLabel: string
+  label: string
+}): string | null {
+  const { column } = args
+  if (column.kind !== 'amount') return null
+  if (!column.to) return null
+  // Unassigned breakout bucket needs an "is null" filter we don't express in URLs.
+  if (column.dimField && (column.dimValue === null || column.dimValue === undefined)) return null
+  if (!args.accountId && !(args.drillTypes && args.drillTypes.length)) return null
+
+  const p = new URLSearchParams()
+  if (args.accountId) p.set('accounts', args.accountId)
+  else p.set('types', args.drillTypes!.join(','))
+  p.set('mode', args.mode)
+  p.set('to', column.to)
+  if (args.mode === 'flow' && column.from) p.set('from', column.from)
+
+  const dims: StatementDimFilter = { ...args.reportDims }
+  if (column.dimField && column.dimValue) {
+    const key = column.dimField
+    if (key === 'department') dims.departmentId = column.dimValue
+    else if (key === 'project') dims.projectId = column.dimValue
+    else if (key === 'location') dims.locationId = column.dimValue
+    else if (key === 'class') dims.classId = column.dimValue
+  }
+  if (dims.departmentId) p.set('dept', dims.departmentId)
+  if (dims.projectId) p.set('project', dims.projectId)
+  if (dims.locationId) p.set('location', dims.locationId)
+  if (dims.classId) p.set('class', dims.classId)
+  if (args.basis !== 'accrual') p.set('basis', args.basis)
+  p.set('label', args.label)
+  p.set('backLabel', args.backLabel)
+  p.set('back', args.back)
+  return `/reports/detail?${p.toString()}`
+}
+
+export type DrillQuery = {
+  accountIds: string[]
+  accountTypes: string[]
+  from?: string
+  to: string
+  mode: StatementMode
+  dims: StatementDimFilter
+  basis: StatementBasis
+  label: string
+  backLabel: string
+  /** Safe internal back link (only /reports… is honored). */
+  back: string
+}
+
+/** Parse the drill params on the detail page. */
+export function parseDrillQuery(sp: ParamSource): DrillQuery {
+  const back = read(sp, 'back') || '/reports'
+  return {
+    accountIds: (read(sp, 'accounts') || '').split(',').filter(Boolean),
+    accountTypes: (read(sp, 'types') || '').split(',').filter(Boolean),
+    from: read(sp, 'from') || undefined,
+    to: read(sp, 'to') || new Date().toISOString().slice(0, 10),
+    mode: read(sp, 'mode') === 'balance' ? 'balance' : 'flow',
+    dims: {
+      departmentId: read(sp, 'dept') || undefined,
+      projectId: read(sp, 'project') || undefined,
+      locationId: read(sp, 'location') || undefined,
+      classId: read(sp, 'class') || undefined,
+    },
+    basis: read(sp, 'basis') === 'cash' ? 'cash' : 'accrual',
+    label: read(sp, 'label') || '',
+    backLabel: read(sp, 'backLabel') || '',
+    back: back.startsWith('/reports') ? back : '/reports',
+  }
 }

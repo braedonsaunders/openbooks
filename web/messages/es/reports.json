@@ -789,5 +789,12 @@
     "title": "Estado de cuenta",
     "opening": "Saldo inicial",
     "closing": "Saldo final"
+  },
+  "detail": {
+    "title": "Detalle de transacciones",
+    "netTotal": "Total neto",
+    "truncated": "Mostrando las primeras 2.000 líneas — acote el informe para ver todo.",
+    "empty": "No hay transacciones detrás de este valor.",
+    "backTo": "Volver a {report}"
   }
 }

@@ -64,7 +64,10 @@ export default async function BudgetPage({
       }
     >
       {view ? (
-        <StatementMatrixTable view={view} />
+        <StatementMatrixTable
+          view={view}
+          drill={{ dims: {}, basis: 'accrual', back: `/reports/budget?scenario=${scenarioId}`, backLabel: t('budget.title') }}
+        />
       ) : (
         <p className="py-8 text-center text-slate-400 italic">{t('budget.noScenarios')}</p>
       )}
