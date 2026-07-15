@@ -14,6 +14,21 @@
     "body": "Hay un sistema contable externo conectado para verificación en ejecución paralela. La sincronización es manual; cada sincronización vuelve a verificar la balanza de comprobación por cuenta.",
     "link": "Página de sincronización"
   },
+  "home": {
+    "customize": "Personalizar",
+    "customizeHint": "Reorganiza las tarjetas de tu panel de inicio",
+    "browseInsights": "Todos los análisis",
+    "noBoard": "Aún no hay panel de inicio",
+    "noBoardBody": "Crea tarjetas en Análisis, organízalas en un panel y luego márcalo como panel de inicio.",
+    "openInsights": "Abrir Análisis",
+    "personalBadge": "Tu panel",
+    "roleBadge": "Predeterminado del rol",
+    "systemBadge": "Predeterminado de la empresa",
+    "ledgerBalanced": "Libro mayor cuadrado",
+    "ledgerOut": "Libro mayor descuadrado en {amount}",
+    "parityOk": "Ejecución paralela coincide",
+    "parityOff": "Discrepancia en ejecución paralela"
+  },
   "recentRuns": {
     "title": "Sincronizaciones recientes",
     "started": "Inicio",

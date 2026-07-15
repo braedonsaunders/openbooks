@@ -111,13 +111,67 @@ export async function loadDashboardEmbed(
   const res = (await db.execute(sql`
     select id, name, description, query, viz_type, viz_settings, status
       from insight_cards
-     where org_id = ${orgId} and id = any(${cardIds})
+     where org_id = ${orgId} and id = any(${sql.param(cardIds)})
        ${publishedOnly ? sql`and status = 'published'` : sql``}
   `)) as unknown as { rows: DashboardCard[] }
 
   const present = new Set(res.rows.map((r) => r.id))
   const layout = dashboard.layout.filter((w) => present.has(w.cardId))
   return { dashboard, cards: res.rows, layout }
+}
+
+/**
+ * Resolve the home dashboard for a given user, honoring the three-tier pointer
+ * model (see schema/src/insights.ts + extension.ts):
+ *
+ *   1. the user's personal home       (users.home_dashboard_id)
+ *   2. their role's default home       (insight_dashboards.home_for_role = <role>)
+ *   3. the org's seeded system default (insight_dashboards.is_home = true)
+ *
+ * Every pointer is tolerated as dangling: a personal/role board that was deleted
+ * or unpublished simply falls through to the next tier, so a bad pointer can
+ * never lock a user out of their home. Returns the dashboard id + which tier it
+ * came from (the home page uses `source` to label the Customize control), or
+ * null when the org has seeded no home board at all.
+ */
+export type HomeResolution = { dashboardId: string; source: 'personal' | 'role' | 'system' }
+
+export async function resolveHomeDashboard(
+  orgId: string,
+  userId: string,
+  role: string,
+): Promise<HomeResolution | null> {
+  // One query resolves all three tiers: the user's personal pointer, their role
+  // default, and the system default — restricted to PUBLISHED boards so a draft
+  // can't become someone's home. We keep the highest-priority present.
+  const res = (await db.execute(sql`
+    with u as (select home_dashboard_id from users where id = ${userId} and org_id = ${orgId})
+    select d.id,
+           case
+             when d.id = (select home_dashboard_id from u) then 'personal'
+             when d.home_for_role = ${role} then 'role'
+             else 'system'
+           end as source,
+           case
+             when d.id = (select home_dashboard_id from u) then 1
+             when d.home_for_role = ${role} then 2
+             when d.is_home then 3
+             else 9
+           end as priority
+      from insight_dashboards d
+     where d.org_id = ${orgId}
+       and d.status = 'published'
+       and (
+         d.id = (select home_dashboard_id from u)
+         or d.home_for_role = ${role}
+         or d.is_home = true
+       )
+     order by priority asc
+     limit 1
+  `)) as unknown as { rows: { id: string; source: HomeResolution['source'] }[] }
+
+  const row = res.rows[0]
+  return row ? { dashboardId: row.id, source: row.source } : null
 }
 
 /** Normalize a dashboard layout array — clamp geometry, drop malformed entries. */

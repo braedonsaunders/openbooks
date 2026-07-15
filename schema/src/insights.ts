@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -63,11 +63,24 @@ export const insightDashboards = pgTable(
     >().notNull().default([]),
     status: text("status", { enum: INSIGHT_STATUSES }).notNull().default("draft"),
     allowedRoles: jsonb("allowed_roles").$type<string[]>(),
+    /**
+     * Home-surface resolution (see web/app/(app)/page.tsx). A dashboard can be:
+     *   - the org's seeded system default home  (`isHome = true`, at most one),
+     *   - a role's default home                 (`homeForRole = <role key>`),
+     * and, orthogonally, a user's personal home (users.homeDashboardId → this id).
+     * Resolution order for a given user: personal → their role's → the system
+     * default. All three are just pointers at a normal dashboard, so a home board
+     * is edited with the same builder as any other.
+     */
+    isHome: boolean("is_home").notNull().default(false),
+    homeForRole: text("home_for_role"),
     ...auditColumns,
   },
   (t) => [
     index("insight_dashboards_org_status").on(t.orgId, t.status),
     index("insight_dashboards_org_name").on(t.orgId, t.name),
+    index("insight_dashboards_org_home").on(t.orgId, t.isHome),
+    index("insight_dashboards_org_role_home").on(t.orgId, t.homeForRole),
   ],
 );
 
