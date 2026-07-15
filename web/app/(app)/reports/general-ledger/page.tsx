@@ -7,6 +7,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { money } from '../../../../lib/format'
 import { ReportFilterBar } from '../ReportFilterBar'
+import { TxnLink } from '../TxnLink'
 import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
@@ -76,9 +77,9 @@ export default async function GeneralLedgerPage({
                     <TableRow key={`${l.entryId}-${i}`}>
                       <TableCell className="tabular-nums">{l.date}</TableCell>
                       <TableCell>
-                        <Link href={`/journal/${l.entryId}`} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
+                        <TxnLink entryId={l.entryId} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
                           {l.entryNumber}
-                        </Link>
+                        </TxnLink>
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">
                         {[l.party, l.memo].filter(Boolean).join(' · ')}

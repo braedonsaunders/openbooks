@@ -1,10 +1,10 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { transactionDetail } from '../../../../lib/reports'
 import { parseDrillQuery } from '../../../../lib/report-filters'
 import { money } from '../../../../lib/format'
+import { TxnLink } from '../TxnLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,27 +39,19 @@ export default async function DrillDetail({
             description={periodLabel}
             back={{ href: q.back, label: q.backLabel ? t('detail.backTo', { report: q.backLabel }) : t('hub.title') }}
           />
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('detail.netTotal')}</span>
-                <span className={cn('block text-xl font-semibold tabular-nums', result.net < 0 && 'text-red-600 dark:text-red-400')}>
-                  {money(result.net)}
-                </span>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('trialBalance.columns.debits')}</span>
-                <span className="block text-xl font-semibold tabular-nums">{money(result.totalDebit)}</span>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('trialBalance.columns.credits')}</span>
-                <span className="block text-xl font-semibold tabular-nums">{money(result.totalCredit)}</span>
-              </CardContent>
-            </Card>
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+            <span className="flex items-baseline gap-1.5 font-semibold">
+              <span className="text-xs text-slate-500 dark:text-slate-400">{t('detail.netTotal')}</span>
+              <span className={cn('tabular-nums', result.net < 0 && 'text-red-600 dark:text-red-400')}>{money(result.net)}</span>
+            </span>
+            <span className="flex items-baseline gap-1.5 text-slate-500 dark:text-slate-400">
+              <span className="text-xs">{t('trialBalance.columns.debits')}</span>
+              <span className="tabular-nums">{money(result.totalDebit)}</span>
+            </span>
+            <span className="flex items-baseline gap-1.5 text-slate-500 dark:text-slate-400">
+              <span className="text-xs">{t('trialBalance.columns.credits')}</span>
+              <span className="tabular-nums">{money(result.totalCredit)}</span>
+            </span>
           </div>
           {result.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('detail.truncated')}</p>}
         </>
@@ -84,9 +76,9 @@ export default async function DrillDetail({
               <TableRow key={`${l.entryId}-${i}`}>
                 <TableCell className="tabular-nums">{l.date}</TableCell>
                 <TableCell>
-                  <Link href={`/journal/${l.entryId}`} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
+                  <TxnLink entryId={l.entryId} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
                     {l.entryNumber}
-                  </Link>
+                  </TxnLink>
                 </TableCell>
                 <TableCell>
                   <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{l.accountNumber}</span>

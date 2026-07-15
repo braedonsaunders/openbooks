@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -6,6 +5,7 @@ import { dimensionOptions, journalReport } from '../../../../lib/reports'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { money } from '../../../../lib/format'
+import { TxnLink } from '../TxnLink'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
 import { StatementExport } from '../StatementExport'
@@ -47,9 +47,9 @@ export default async function JournalPage({
           {journal.entries.map((e) => (
             <div key={e.id}>
               <div className="mb-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm">
-                <Link href={`/journal/${e.id}`} className="font-mono font-semibold hover:text-teal-700 dark:hover:text-teal-300">
+                <TxnLink entryId={e.id} className="font-mono font-semibold hover:text-teal-700 dark:hover:text-teal-300">
                   {e.entryNumber}
-                </Link>
+                </TxnLink>
                 <span className="tabular-nums text-slate-500 dark:text-slate-400">{e.date}</span>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {t.has(`journal.origins.${e.origin}`) ? t(`journal.origins.${e.origin}`) : e.origin}

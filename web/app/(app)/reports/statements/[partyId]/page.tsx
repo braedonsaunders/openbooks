@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../components/page-layout'
 import { partnerStatement, type AgingSide } from '../../../../../lib/reports'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../../lib/report-filters'
 import { money } from '../../../../../lib/format'
 import { ReportFilterBar } from '../../ReportFilterBar'
+import { TxnLink } from '../../TxnLink'
 import { SaveViewButton } from '../../SaveViewButton'
 import { StatementExport } from '../../StatementExport'
 
@@ -59,21 +60,17 @@ export default async function PartnerStatementPage({
             <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
             <ReportFilterBar controls={{ period: true }} />
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-slate-200 px-4 py-2 text-sm dark:border-slate-800">
             {BUCKETS.map((b) => (
-              <Card key={b}>
-                <CardContent className="p-4">
-                  <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{bucketLabels[b]}</span>
-                  <span className="block text-lg font-semibold tabular-nums">{money(st.aging[b])}</span>
-                </CardContent>
-              </Card>
+              <span key={b} className="flex items-baseline gap-1.5">
+                <span className="text-xs text-slate-500 dark:text-slate-400">{bucketLabels[b]}</span>
+                <span className="tabular-nums">{money(st.aging[b])}</span>
+              </span>
             ))}
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('aging.columns.total')}</span>
-                <span className="block text-lg font-semibold tabular-nums">{money(st.aging.total)}</span>
-              </CardContent>
-            </Card>
+            <span className="flex items-baseline gap-1.5 font-semibold">
+              <span className="text-xs text-slate-500 dark:text-slate-400">{t('aging.columns.total')}</span>
+              <span className="tabular-nums">{money(st.aging.total)}</span>
+            </span>
           </div>
         </>
       }
@@ -100,9 +97,9 @@ export default async function PartnerStatementPage({
             <TableRow key={`${l.entryId}-${i}`}>
               <TableCell className="tabular-nums">{l.date}</TableCell>
               <TableCell>
-                <Link href={`/journal/${l.entryId}`} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
+                <TxnLink entryId={l.entryId} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
                   {l.entryNumber}
-                </Link>
+                </TxnLink>
               </TableCell>
               <TableCell className="text-slate-600 dark:text-slate-300">{l.memo}</TableCell>
               <TableCell className="text-right tabular-nums">{l.debit ? money(l.debit) : ''}</TableCell>

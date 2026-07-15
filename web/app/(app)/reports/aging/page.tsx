@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { agingByParty, agingDetail, dimensionOptions, type AgingSide } from '../../../../lib/reports'
 import { resolvePeriod } from '../../../../lib/periods'
@@ -34,7 +34,6 @@ export default async function Aging({
     detail ? agingDetail(side, asOf, dims) : null,
     dimensionOptions(),
   ])
-  const totals = detailResult ? detailResult.totals : summary.totals
   const keep = toSearchParams(q).toString()
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
@@ -71,22 +70,6 @@ export default async function Aging({
             </Link>
             <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
             <ReportFilterBar controls={{ period: true, asOf: true, dimensions: true }} dimensions={opts} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('columns.total')}</span>
-                <span className="block text-xl font-semibold tabular-nums">{money(totals.total)}</span>
-              </CardContent>
-            </Card>
-            {BUCKETS.map((b) => (
-              <Card key={b}>
-                <CardContent className="p-4">
-                  <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{bucketLabels[b]}</span>
-                  <span className="block text-xl font-semibold tabular-nums">{money(totals[b])}</span>
-                </CardContent>
-              </Card>
-            ))}
           </div>
         </>
       }

@@ -197,12 +197,13 @@ export default async function Journal({
             <TableRow key={e.id}>
               <TableCell className="whitespace-nowrap">{e.posting_date}</TableCell>
               <TableCell className="font-mono text-[13px] font-semibold">
-                {/* Resolve to the editable journal DOCUMENT (opens JournalDrawer via
-                    ?entry=); GL-native entries with no source document fall back to
-                    the read-only /journal/[id] GL-impact page. */}
+                {/* Manual journals open the editable JournalDrawer (?entry=<docId>);
+                    GL-native entries with no source document open the read-only
+                    entry flyout (?txn=<entryId>) — never the bare full page. */}
                 <Link
-                  href={e.source_document_id ? `/journal?entry=${e.source_document_id}` : `/journal/${e.id}`}
+                  href={e.source_document_id ? `/journal?entry=${e.source_document_id}` : `/journal?txn=${e.id}`}
                   className="text-teal-700 hover:underline dark:text-teal-300"
+                  scroll={false}
                 >
                   {e.entry_number}
                 </Link>

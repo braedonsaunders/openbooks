@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { Badge, Card, CardContent, PageHeader, Table, TableBody, TableCell, TableRow, cn } from '@openbooks/ui'
+import { Badge, PageHeader, Table, TableBody, TableCell, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
 import { resolvePeriod } from '../../../../lib/periods'
@@ -47,22 +47,11 @@ export default async function CashFlow({
             actions={<><SaveViewButton /><StatementExport kind="cash-flow" params={sp} /></>}
           />
           <ReportFilterBar controls={{ period: true, dimensions: true }} dimensions={opts} />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label={t('openingCash')} value={cf.openingCash} />
-            <Stat label={t('netChange')} value={cf.netChange} tone={cf.netChange >= 0 ? 'good' : 'bad'} />
-            <Stat label={t('closingCash')} value={cf.closingCash} />
-            <Card>
-              <CardContent className="p-4">
-                <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  {t('reconciliation')}
-                </span>
-                <span className="mt-1 inline-block">
-                  <Badge variant={reconciled ? 'success' : 'destructive'}>
-                    {reconciled ? t('reconciled') : t('offBy', { amount: money(cf.reconciliationGap) })}
-                  </Badge>
-                </span>
-              </CardContent>
-            </Card>
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span>{t('reconciliation')}</span>
+            <Badge variant={reconciled ? 'success' : 'destructive'}>
+              {reconciled ? t('reconciled') : t('offBy', { amount: money(cf.reconciliationGap) })}
+            </Badge>
           </div>
         </>
       }
@@ -112,25 +101,6 @@ export default async function CashFlow({
         </TableBody>
       </Table>
     </ListPageLayout>
-  )
-}
-
-function Stat({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'bad' }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</span>
-        <span
-          className={cn(
-            'block text-xl font-semibold tabular-nums',
-            tone === 'good' && 'text-teal-700 dark:text-teal-300',
-            tone === 'bad' && 'text-red-600 dark:text-red-400',
-          )}
-        >
-          {money(value)}
-        </span>
-      </CardContent>
-    </Card>
   )
 }
 
