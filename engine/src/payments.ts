@@ -1,9 +1,11 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { db, env, schema } from "./db.ts";
-import { cmp, isZero, sum, toUnits } from "./money.ts";
+import { cmp, fromUnits, isZero, sum, toUnits } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
+import { assertNotSandbox } from "./sandbox/guard.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
+import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 
 /**
  * Payments: vendor payments and customer receipts with open-item application,
@@ -247,6 +249,66 @@ export interface OpenItem {
   applied: string;
   /** amount − applied. Only items with open > 0 are returned. */
   open: string;
+}
+
+export interface SuggestedApplication {
+  allocations: AllocationInput[];
+  /** Total allocated across the open items. */
+  applied: string;
+  /** amount − applied: unapplied overpayment / on-account credit. */
+  remaining: string;
+  /** How the suggestion was reached. */
+  strategy: "reference" | "exact" | "fifo" | "none";
+}
+
+/**
+ * Automated cash application: propose how an incoming amount settles a party's
+ * open items. Prefers a reference-number hit, then an exact single-item match,
+ * then oldest-first (FIFO) allocation. Pure over `openItemsForParty`, so the
+ * caller confirms and posts via `postPaymentWithApplications`.
+ */
+export async function suggestApplications(
+  partyId: string,
+  amount: string,
+  side: OpenItemSide = "ar",
+  opts?: { reference?: string | null },
+): Promise<SuggestedApplication> {
+  const items = await openItemsForParty(partyId, side);
+  const target = toUnits(amount);
+  if (target <= 0n || items.length === 0) {
+    return { allocations: [], applied: "0", remaining: fromUnits(target < 0n ? 0n : target), strategy: "none" };
+  }
+
+  // 1) reference match — the payment memo/ref names a specific invoice
+  const ref = opts?.reference?.trim().toLowerCase();
+  if (ref) {
+    const m = items.find(
+      (i) => (i.documentNumber ?? "").toLowerCase() === ref || (i.referenceNumber ?? "").toLowerCase() === ref,
+    );
+    if (m) {
+      const take = toUnits(m.open) <= target ? toUnits(m.open) : target;
+      return { allocations: [{ openLineId: m.lineId, amount: fromUnits(take) }], applied: fromUnits(take), remaining: fromUnits(target - take), strategy: "reference" };
+    }
+  }
+
+  // 2) exact single-item match — paid one invoice to the cent
+  const exact = items.find((i) => toUnits(i.open) === target);
+  if (exact) {
+    return { allocations: [{ openLineId: exact.lineId, amount: amount }], applied: amount, remaining: "0", strategy: "exact" };
+  }
+
+  // 3) FIFO oldest-first (openItemsForParty is ordered by due/posting date)
+  const allocations: AllocationInput[] = [];
+  let remaining = target;
+  for (const i of items) {
+    if (remaining <= 0n) break;
+    const take = toUnits(i.open) <= remaining ? toUnits(i.open) : remaining;
+    if (take > 0n) {
+      allocations.push({ openLineId: i.lineId, amount: fromUnits(take) });
+      remaining -= take;
+    }
+  }
+  return { allocations, applied: fromUnits(target - remaining), remaining: fromUnits(remaining), strategy: allocations.length ? "fifo" : "none" };
 }
 
 /**
@@ -502,6 +564,9 @@ async function reversePostedEntry(
           : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
       );
     }
+
+    // -- flows: before_void (automation only, never a veto) ----------------
+    await runRecordFlows({ kind: "before_void" }, doc.kind, documentId, { orgId });
   }
 
   await db.transaction(async (tx) => {
@@ -554,6 +619,11 @@ async function reversePostedEntry(
       update documents set status = 'voided', voided_at = now() where id = ${documentId}
     `);
   });
+
+  // -- flows: the posted → voided status transition (never throws) ----------
+  if (doc) {
+    await emitStatusChange(doc.kind, documentId, { from: doc.status, to: "voided" }, { orgId });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1113,6 +1183,7 @@ export async function loadCpa005RunFile(
   runId: string,
   orgId: string,
 ): Promise<{ filename: string; content: string; runNumber: string }> {
+  await assertNotSandbox(orgId, "generate EFT payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
   if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
@@ -1178,4 +1249,296 @@ export async function loadCpa005RunFile(
     payments,
   });
   return { filename: `CPA005-${run.runNumber}.txt`, content, runNumber: run.runNumber };
+}
+
+// ---------------------------------------------------------------------------
+// NACHA (US ACH) — orgs.settings.nacha
+// ---------------------------------------------------------------------------
+
+export interface NachaSettings {
+  /** ODFI 9-digit routing/ABA number (the originating bank). */
+  odfiRouting: string;
+  /** 10-char immediate destination (usually " " + destination routing 9). */
+  immediateDestination: string;
+  /** 10-char immediate origin (usually company id / " " + routing 9). */
+  immediateOrigin: string;
+  destinationName: string;
+  originName: string;
+  /** Company name on the batch (≤16). */
+  companyName: string;
+  /** Company id (10) — commonly "1" + 9-digit EIN. */
+  companyId: string;
+  /** PPD (consumer) or CCD (corporate). Default CCD. */
+  entryClassCode?: "PPD" | "CCD";
+  /** Batch entry description (≤10). Default "PAYMENT". */
+  entryDescription?: string;
+}
+
+const NACHA_REQUIRED: (keyof NachaSettings)[] = [
+  "odfiRouting", "immediateDestination", "immediateOrigin", "destinationName", "originName", "companyName", "companyId",
+];
+
+export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok: true; settings: NachaSettings } | { ok: false; missing: string[] } {
+  const s = raw ?? {};
+  const missing = NACHA_REQUIRED.filter((k) => {
+    const v = s[k];
+    return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
+  });
+  if (missing.length) return { ok: false, missing };
+  if (!/^\d{9}$/.test(s.odfiRouting!)) return { ok: false, missing: ["odfiRouting (9 digits)"] };
+  return { ok: true, settings: s as NachaSettings };
+}
+
+export async function loadNachaSettings(orgId: string) {
+  const r = (await db.execute(sql`select settings->'nacha' as nacha from orgs where id = ${orgId}`)) as unknown as { rows: { nacha: Partial<NachaSettings> | null }[] };
+  return validateNachaSettings(r.rows[0]?.nacha ?? null);
+}
+
+export interface NachaEntry {
+  /** 22 = checking credit, 32 = savings credit. */
+  transactionCode: "22" | "32";
+  /** Receiving bank 9-digit routing (8 + check digit). */
+  routingNumber: string;
+  accountNumber: string;
+  amountCents: bigint;
+  individualId: string;
+  individualName: string;
+}
+
+function nachaField(v: string, len: number, align: "l" | "r" = "l", pad = " "): string {
+  const s = v.slice(0, len);
+  return align === "l" ? s.padEnd(len, pad) : s.padStart(len, pad);
+}
+
+/** Build a NACHA ACH credit file (94-char records, blocked to 10). */
+export function buildNachaFile(opts: {
+  settings: NachaSettings;
+  effectiveDate: Date;
+  creationDate: Date;
+  fileIdModifier?: string;
+  entries: NachaEntry[];
+}): string {
+  const s = opts.settings;
+  if (opts.entries.length === 0) throw new PaymentError("run has no payments to export");
+  const sec = s.entryClassCode ?? "CCD";
+  const odfi8 = s.odfiRouting.slice(0, 8);
+  const yymmdd = (d: Date) => `${String(d.getFullYear() % 100).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+
+  const rows: string[] = [];
+  // 1 — File Header
+  rows.push(
+    "1" + "01" + nachaField(s.immediateDestination, 10, "r") + nachaField(s.immediateOrigin, 10, "r") +
+    yymmdd(opts.creationDate) + hhmm(opts.creationDate) + (opts.fileIdModifier ?? "A") + "094" + "10" + "1" +
+    nachaField(s.destinationName, 23) + nachaField(s.originName, 23) + nachaField("", 8),
+  );
+  // 5 — Batch Header (220 = credits only)
+  rows.push(
+    "5" + "220" + nachaField(s.companyName, 16) + nachaField("", 20) + nachaField(s.companyId, 10) + sec +
+    nachaField(s.entryDescription ?? "PAYMENT", 10) + nachaField("", 6) + yymmdd(opts.effectiveDate) + nachaField("", 3) +
+    "1" + odfi8 + nachaField("0000001", 7, "r", "0"),
+  );
+  // 6 — Entry Details
+  let entryHash = 0n;
+  let totalCredit = 0n;
+  opts.entries.forEach((e, i) => {
+    if (e.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
+    const rt8 = e.routingNumber.slice(0, 8);
+    const checkDigit = e.routingNumber.length >= 9 ? e.routingNumber[8] : nachaCheckDigit(rt8);
+    entryHash += BigInt(rt8);
+    totalCredit += e.amountCents;
+    const trace = odfi8 + String(i + 1).padStart(7, "0");
+    rows.push(
+      "6" + e.transactionCode + rt8 + checkDigit + nachaField(e.accountNumber, 17) + nachaField(String(e.amountCents), 10, "r", "0") +
+      nachaField(e.individualId, 15) + nachaField(e.individualName, 22) + nachaField("", 2) + "0" + trace,
+    );
+  });
+  const hashMod = (entryHash % 10_000_000_000n).toString().padStart(10, "0");
+  // 8 — Batch Control
+  rows.push(
+    "8" + "220" + nachaField(String(opts.entries.length), 6, "r", "0") + hashMod +
+    nachaField("0", 12, "r", "0") + nachaField(String(totalCredit), 12, "r", "0") + nachaField(s.companyId, 10) +
+    nachaField("", 19) + nachaField("", 6) + odfi8 + nachaField("0000001", 7, "r", "0"),
+  );
+  // 9 — File Control
+  const entryCount = opts.entries.length;
+  const blockCount = Math.ceil((rows.length + 1) / 10);
+  rows.push(
+    "9" + nachaField("1", 6, "r", "0") + nachaField(String(blockCount), 6, "r", "0") + nachaField(String(entryCount), 8, "r", "0") +
+    hashMod + nachaField("0", 12, "r", "0") + nachaField(String(totalCredit), 12, "r", "0") + nachaField("", 39),
+  );
+  // pad with 9-filler records to a full 10-record block
+  while (rows.length % 10 !== 0) rows.push("9".repeat(94));
+  for (const r of rows) if (r.length !== 94) throw new PaymentError(`NACHA record is ${r.length} chars, not 94`);
+  return rows.join("\n") + "\n";
+}
+
+/** ABA routing check digit (mod-10 weighted 3-7-1) from the first 8 digits. */
+function nachaCheckDigit(rt8: string): string {
+  const w = [3, 7, 1, 3, 7, 1, 3, 7];
+  const sum = rt8.split("").reduce((a, d, i) => a + Number(d) * w[i], 0);
+  return String((10 - (sum % 10)) % 10);
+}
+
+export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string }> {
+  await assertNotSandbox(orgId, "generate ACH payment file");
+  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
+  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  if (run.status === "cancelled") throw new PaymentError("run is cancelled");
+  if (run.method !== "ach") throw new PaymentError(`NACHA export applies to ACH runs, not ${run.method}`);
+  const settings = await loadNachaSettings(orgId);
+  if (!settings.ok) throw new PaymentError(`ACH origination is not configured — missing orgs.settings.nacha: ${settings.missing.join(", ")}`);
+
+  const rows = (await db.execute(sql`
+    select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
+      from payment_instructions i
+      join parties p on p.id = i.payee_party_id
+      join party_bank_accounts b on b.id = i.payee_bank_account_id
+      left join documents d on d.id = i.payment_document_id
+     where i.payment_run_id = ${runId} and i.status <> 'cancelled' order by p.display_name
+  `)) as unknown as { rows: { id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }[] };
+  if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
+
+  const entries: NachaEntry[] = rows.rows.map((r) => {
+    const units = toUnits(r.amount);
+    if (units % 100n !== 0n) throw new PaymentError(`instruction for ${r.payee} has sub-cent precision (${r.amount})`);
+    const routingNumber = r.routing.aba ?? r.routing.routingNumber ?? r.routing.routing ?? "";
+    if (!/^\d{9}$/.test(routingNumber)) throw new PaymentError(`${r.payee}: US ACH needs a 9-digit routing number`);
+    return {
+      transactionCode: r.routing.accountType === "savings" ? "32" : "22",
+      routingNumber,
+      accountNumber: decryptAccountNumber(r.account_number_encrypted),
+      amountCents: units / 100n,
+      individualId: (r.document_number ?? r.id).slice(0, 15),
+      individualName: r.payee,
+    };
+  });
+  const effectiveDate = run.scheduledFor ? new Date(`${run.scheduledFor}T00:00:00`) : new Date();
+  const content = buildNachaFile({ settings: settings.settings, effectiveDate, creationDate: new Date(), entries });
+  return { filename: `NACHA-${run.runNumber}.ach`, content, runNumber: run.runNumber };
+}
+
+// ---------------------------------------------------------------------------
+// SEPA — pain.001.001.03 credit transfer, orgs.settings.sepa
+// ---------------------------------------------------------------------------
+
+export interface SepaSettings {
+  originatorName: string;
+  originatorIban: string;
+  originatorBic: string;
+}
+
+export function validateSepaSettings(raw: Partial<SepaSettings> | null): { ok: true; settings: SepaSettings } | { ok: false; missing: string[] } {
+  const s = raw ?? {};
+  const missing = (["originatorName", "originatorIban", "originatorBic"] as (keyof SepaSettings)[]).filter(
+    (k) => typeof s[k] !== "string" || (s[k] as string).trim() === "" || (s[k] as string).includes("FILL-ME"),
+  );
+  if (missing.length) return { ok: false, missing };
+  return { ok: true, settings: s as SepaSettings };
+}
+
+export async function loadSepaSettings(orgId: string) {
+  const r = (await db.execute(sql`select settings->'sepa' as sepa from orgs where id = ${orgId}`)) as unknown as { rows: { sepa: Partial<SepaSettings> | null }[] };
+  return validateSepaSettings(r.rows[0]?.sepa ?? null);
+}
+
+const xmlEsc = (v: string) => v.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
+
+/** Build a SEPA pain.001.001.03 Customer Credit Transfer Initiation (EUR). */
+export function buildSepaFile(opts: {
+  settings: SepaSettings;
+  messageId: string;
+  creationDateTime: string; // ISO
+  executionDate: string; // YYYY-MM-DD
+  payments: { endToEndId: string; amount: string; creditorName: string; creditorIban: string; creditorBic?: string | null; remittance: string | null }[];
+}): string {
+  const s = opts.settings;
+  if (opts.payments.length === 0) throw new PaymentError("run has no payments to export");
+  const ctrlSum = opts.payments.reduce((a, p) => a + Number(p.amount), 0).toFixed(2);
+  const nb = opts.payments.length;
+  const tx = opts.payments.map((p) => {
+    const bic = (p.creditorBic ?? "").trim();
+    return `      <CdtTrfTxInf>
+        <PmtId><EndToEndId>${xmlEsc(p.endToEndId.slice(0, 35))}</EndToEndId></PmtId>
+        <Amt><InstdAmt Ccy="EUR">${Number(p.amount).toFixed(2)}</InstdAmt></Amt>
+${bic ? `        <CdtrAgt><FinInstnId><BIC>${xmlEsc(bic)}</BIC></FinInstnId></CdtrAgt>\n` : ""}        <Cdtr><Nm>${xmlEsc(p.creditorName.slice(0, 70))}</Nm></Cdtr>
+        <CdtrAcct><Id><IBAN>${xmlEsc(p.creditorIban.replace(/\s/g, ""))}</IBAN></Id></CdtrAcct>
+        <RmtInf><Ustrd>${xmlEsc((p.remittance ?? p.endToEndId).slice(0, 140))}</Ustrd></RmtInf>
+      </CdtTrfTxInf>`;
+  }).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>${xmlEsc(opts.messageId.slice(0, 35))}</MsgId>
+      <CreDtTm>${opts.creationDateTime}</CreDtTm>
+      <NbOfTxs>${nb}</NbOfTxs>
+      <CtrlSum>${ctrlSum}</CtrlSum>
+      <InitgPty><Nm>${xmlEsc(s.originatorName.slice(0, 70))}</Nm></InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>${xmlEsc(opts.messageId.slice(0, 35))}</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <NbOfTxs>${nb}</NbOfTxs>
+      <CtrlSum>${ctrlSum}</CtrlSum>
+      <PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf>
+      <ReqdExctnDt>${opts.executionDate}</ReqdExctnDt>
+      <Dbtr><Nm>${xmlEsc(s.originatorName.slice(0, 70))}</Nm></Dbtr>
+      <DbtrAcct><Id><IBAN>${xmlEsc(s.originatorIban.replace(/\s/g, ""))}</IBAN></Id></DbtrAcct>
+      <DbtrAgt><FinInstnId><BIC>${xmlEsc(s.originatorBic)}</BIC></FinInstnId></DbtrAgt>
+      <ChrgBr>SLEV</ChrgBr>
+${tx}
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>
+`;
+}
+
+export async function loadSepaRunFile(runId: string, orgId: string, now: Date): Promise<{ filename: string; content: string; runNumber: string }> {
+  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
+  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  if (run.status === "cancelled") throw new PaymentError("run is cancelled");
+  if (run.method !== "sepa") throw new PaymentError(`SEPA export applies to SEPA runs, not ${run.method}`);
+  const settings = await loadSepaSettings(orgId);
+  if (!settings.ok) throw new PaymentError(`SEPA origination is not configured — missing orgs.settings.sepa: ${settings.missing.join(", ")}`);
+
+  const rows = (await db.execute(sql`
+    select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
+      from payment_instructions i
+      join parties p on p.id = i.payee_party_id
+      join party_bank_accounts b on b.id = i.payee_bank_account_id
+      left join documents d on d.id = i.payment_document_id
+     where i.payment_run_id = ${runId} and i.status <> 'cancelled' order by p.display_name
+  `)) as unknown as { rows: { id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }[] };
+  if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
+
+  const payments = rows.rows.map((r) => {
+    const iban = (r.routing.iban ?? decryptAccountNumber(r.account_number_encrypted)).replace(/\s/g, "");
+    if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) throw new PaymentError(`${r.payee}: SEPA needs a valid IBAN`);
+    return {
+      endToEndId: r.document_number ?? r.id,
+      amount: r.amount,
+      creditorName: r.payee,
+      creditorIban: iban,
+      creditorBic: r.routing.bic ?? null,
+      remittance: r.document_number,
+    };
+  });
+  const content = buildSepaFile({
+    settings: settings.settings,
+    messageId: `MSG-${run.runNumber}`,
+    creationDateTime: now.toISOString().replace(/\.\d{3}Z$/, ""),
+    executionDate: run.scheduledFor ?? now.toISOString().slice(0, 10),
+    payments,
+  });
+  return { filename: `SEPA-${run.runNumber}.xml`, content, runNumber: run.runNumber };
+}
+
+/** Dispatch a payment run to its bank file by method (eft→CPA-005, ach→NACHA, sepa→pain.001). */
+export async function loadRunFile(runId: string, orgId: string, now: Date): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
+  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
+  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  if (run.method === "ach") return { ...(await loadNachaRunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };
+  if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId, now)), contentType: "application/xml" };
+  return { ...(await loadCpa005RunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };
 }

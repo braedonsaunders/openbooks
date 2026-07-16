@@ -12,6 +12,7 @@
     "edit": "Edit",
     "create": "Create",
     "creating": "Creating…",
+    "running": "Running…",
     "add": "Add",
     "remove": "Remove",
     "search": "Search",
@@ -31,6 +32,7 @@
     "view": "View",
     "open": "Open",
     "rename": "Rename",
+    "replace": "Replace",
     "post": "Post",
     "posting": "Posting…",
     "void": "Void",
@@ -41,7 +43,10 @@
     "print": "Print",
     "copy": "Copy",
     "select": "Select",
-    "newRecord": "New"
+    "newRecord": "New",
+    "more": "More actions",
+    "done": "Done",
+    "sending": "Sending…"
   },
   "labels": {
     "name": "Name",
@@ -102,7 +107,8 @@
     "billingMethod": "Billing method",
     "finalInvoice": "Final invoice",
     "paymentHold": "Payment hold",
-    "expectedPayDate": "Expected pay date"
+    "expectedPayDate": "Expected pay date",
+    "openBalance": "Open balance"
   },
   "status": {
     "draft": "Draft",
@@ -136,7 +142,8 @@
     "notFound": "Not found",
     "copied": "Copied",
     "unsavedChanges": "You have unsaved changes",
-    "editingHint": "Editing — Save to apply changes."
+    "editingHint": "Editing — Save to apply changes.",
+    "flowActionDone": "Action completed"
   },
   "confirm": {
     "title": "Are you sure?",
@@ -148,5 +155,30 @@
   "billingMethods": {
     "timeAndMaterials": "Time & materials",
     "fixedPrice": "Fixed price"
+  },
+  "empty": {
+    "title": "Nothing here yet",
+    "description": "No records match the current filters."
+  },
+  "approvalFlow": {
+    "pendingWith": "Pending with {names}",
+    "rejectTitle": "Reject this document?",
+    "rejectReasonLabel": "Rejection reason",
+    "waitingOthers": "Recorded — waiting on the other approvers",
+    "alreadyDecided": "This approval was already decided — refreshing",
+    "decisionFailed": "Decision failed",
+    "historyTitle": "Approvals",
+    "events": {
+      "submitted": "Submitted for approval",
+      "requested": "Approval requested",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "escalated": "Escalated",
+      "delegated": "Delegated"
+    },
+    "badges": {
+      "delegated": "Delegated",
+      "escalated": "Escalated"
+    }
   }
 }

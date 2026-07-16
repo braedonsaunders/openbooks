@@ -1,16 +1,35 @@
 {
   "title": "Approvals",
-  "description": "Pending items assigned to your role ({role}).",
+  "description": "Everything waiting on you across flows and policies, plus where your own submissions stand.",
+  "tabs": {
+    "mine": "My approvals",
+    "submitted": "Submitted by me",
+    "all": "All approvals"
+  },
   "empty": {
     "title": "Nothing waiting on you",
-    "description": "Approval requests routed to your role will appear here."
+    "description": "Approvals assigned, routed, or delegated to you will appear here."
+  },
+  "emptySubmitted": {
+    "title": "No pending submissions",
+    "description": "Documents you submit for approval will appear here while they wait."
+  },
+  "emptyAll": {
+    "title": "Nothing pending",
+    "description": "There are no pending approvals in this organization."
   },
   "table": {
     "document": "Document",
     "kind": "Kind",
     "step": "Step",
     "decision": "Decision",
-    "stepNumber": "step {number}"
+    "stepNumber": "step {number}",
+    "approval": "Approval",
+    "requested": "Requested",
+    "source": "Source",
+    "assignee": "Assignee",
+    "pendingWith": "Pending with",
+    "waitingSince": "Waiting since"
   },
   "kinds": {
     "vendor_bill": "vendor bill",
@@ -24,5 +43,51 @@
   "decide": {
     "rejectionReason": "Rejection reason:",
     "decisionFailed": "Decision failed"
+  },
+  "source": {
+    "flow": "Flow",
+    "legacy": "Policy"
+  },
+  "aging": {
+    "days": "{days}d"
+  },
+  "bulk": {
+    "selected": "{count} selected",
+    "selectAll": "Select all",
+    "selectRow": "Select {document}",
+    "approveSelected": "Approve selected",
+    "rejectSelected": "Reject selected",
+    "rejectTitle": "Reject {count} approvals?",
+    "reasonLabel": "Rejection reason (applied to every selected item)",
+    "approvedCount": "{count} approved",
+    "rejectedCount": "{count} rejected",
+    "failedCount": "{count} failed ({error})"
+  },
+  "ooo": {
+    "button": "Out of office",
+    "title": "Out of office",
+    "description": "Route your incoming approvals to a delegate while you're away.",
+    "delegateTo": "Delegate to",
+    "delegatePlaceholder": "Choose a delegate…",
+    "from": "From",
+    "until": "Until",
+    "invalid": "Pick a delegate and a valid date range",
+    "saved": "Delegation scheduled",
+    "unavailable": "Delegation service is not available yet",
+    "banner": "Your approvals are delegated to {name} until {date}",
+    "endNow": "End now",
+    "ended": "Delegation ended"
+  },
+  "gates": {
+    "rejectTitle": "Reject this approval?",
+    "waitingOthers": "Recorded — waiting on the other approvers",
+    "delegate": "Delegate",
+    "delegatePlaceholder": "Delegate to…",
+    "delegated": "Approval delegated",
+    "badges": {
+      "quorumAll": "All approvers",
+      "reminder": "Reminder {date}",
+      "escalates": "Escalates {date}"
+    }
   }
 }

@@ -25,6 +25,133 @@ function shell(args: { heading: string; bodyHtml: string; footer?: string }): st
     </table>`
 }
 
+// --- Flow / approval emails (engine/src/flows) -------------------------------
+//
+// Bodies for the flows engine's gate lifecycle (assignment / reminder /
+// escalation) and its generic send_email action. Subject/body text arrives
+// already {{field}}-interpolated by the engine; these builders only wrap it in
+// the shared shell and HTML-escape it for the html part.
+
+/**
+ * One-click Approve / Reject buttons for gate emails. The URLs are HMAC-signed
+ * per gate row + assignee (engine/src/flows/email-tokens.ts) and land on a
+ * confirmation page — the email link itself never decides.
+ */
+function decisionButtonsHtml(approveUrl?: string, rejectUrl?: string): string {
+  if (!approveUrl || !rejectUrl) return ''
+  return `
+      <p style="margin:20px 0">
+        <a href="${esc(approveUrl)}" style="display:inline-block;padding:10px 20px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Approve</a>
+        <a href="${esc(rejectUrl)}" style="display:inline-block;padding:10px 20px;background:#dc2626;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;margin-left:12px">Reject</a>
+      </p>`
+}
+
+function decisionLinksText(approveUrl?: string, rejectUrl?: string): string {
+  if (!approveUrl || !rejectUrl) return ''
+  return `Approve: ${approveUrl}\nReject: ${rejectUrl}\n\n`
+}
+
+/**
+ * A gate was assigned: "your approval is requested". Pass `approveUrl` /
+ * `rejectUrl` to render one-click decision buttons.
+ */
+export function flowApprovalRequestEmail(args: {
+  orgName: string
+  gateTitle: string
+  subjectLabel: string
+  flowName: string
+  approveUrl?: string
+  rejectUrl?: string
+}): EmailOut {
+  const subject = `Approval requested: ${args.gateTitle} — ${args.subjectLabel}`
+  const text =
+    `Your approval is requested.\n\n` +
+    `${args.gateTitle}\n${args.subjectLabel}\n\n` +
+    decisionLinksText(args.approveUrl, args.rejectUrl) +
+    `Open OpenBooks → Approvals to decide.\n\n— ${args.orgName} via OpenBooks (flow "${args.flowName}")`
+  const html = shell({
+    heading: 'Approval requested',
+    bodyHtml: `
+      <p><strong>${esc(args.gateTitle)}</strong></p>
+      <p>${esc(args.subjectLabel)}</p>
+      ${decisionButtonsHtml(args.approveUrl, args.rejectUrl)}
+      <p>Or open <strong>OpenBooks → Approvals</strong> to approve or reject.</p>
+      <p style="color:#666">${esc(args.orgName)} · flow “${esc(args.flowName)}”</p>`,
+    footer: 'You received this because a flow routed an approval to you.',
+  })
+  return { subject, html, text }
+}
+
+/**
+ * Reminder: a gate assigned to the recipient is still pending. Pass
+ * `approveUrl` / `rejectUrl` to render one-click decision buttons.
+ */
+export function flowApprovalReminderEmail(args: {
+  orgName: string
+  gateTitle: string
+  subjectLabel: string
+  approveUrl?: string
+  rejectUrl?: string
+}): EmailOut {
+  const subject = `Reminder — approval pending: ${args.gateTitle}`
+  const text =
+    `A pending approval is still waiting on you.\n\n` +
+    `${args.gateTitle}\n${args.subjectLabel}\n\n` +
+    decisionLinksText(args.approveUrl, args.rejectUrl) +
+    `Open OpenBooks → Approvals to decide.\n\n— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: 'Approval still pending',
+    bodyHtml: `
+      <p><strong>${esc(args.gateTitle)}</strong> is still waiting on your decision.</p>
+      <p>${esc(args.subjectLabel)}</p>
+      ${decisionButtonsHtml(args.approveUrl, args.rejectUrl)}
+      <p>Or open <strong>OpenBooks → Approvals</strong> to approve or reject.</p>
+      <p style="color:#666">${esc(args.orgName)} · OpenBooks</p>`,
+    footer: 'You received this because a flow routed an approval to you.',
+  })
+  return { subject, html, text }
+}
+
+/** Escalation: an overdue gate was re-targeted at the recipient. */
+export function flowApprovalEscalationEmail(args: {
+  orgName: string
+  gateTitle: string
+  subjectLabel: string
+}): EmailOut {
+  const subject = `Escalated approval: ${args.gateTitle} — ${args.subjectLabel}`
+  const text =
+    `An overdue approval was escalated to you.\n\n` +
+    `${args.gateTitle}\n${args.subjectLabel}\n\n` +
+    `Open OpenBooks → Approvals to decide.\n\n— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: 'Approval escalated to you',
+    bodyHtml: `
+      <p>An overdue approval was escalated to you: <strong>${esc(args.gateTitle)}</strong></p>
+      <p>${esc(args.subjectLabel)}</p>
+      <p>Open <strong>OpenBooks → Approvals</strong> to approve or reject.</p>
+      <p style="color:#666">${esc(args.orgName)} · OpenBooks</p>`,
+    footer: 'You received this because an approval escalated to you.',
+  })
+  return { subject, html, text }
+}
+
+/** The generic flows send_email action (subject/body already interpolated). */
+export function flowNotificationEmail(args: {
+  orgName: string
+  subject: string
+  body: string
+}): EmailOut {
+  const text = `${args.body}\n\n— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: args.subject,
+    bodyHtml: `
+      <p style="white-space:pre-wrap">${esc(args.body)}</p>
+      <p style="color:#666">${esc(args.orgName)} · OpenBooks</p>`,
+    footer: 'Sent by an automation flow in OpenBooks.',
+  })
+  return { subject: args.subject, html, text }
+}
+
 /** The body for a scheduled financial report; the PDF rides as an attachment. */
 export function scheduledReportEmail(args: {
   orgName: string

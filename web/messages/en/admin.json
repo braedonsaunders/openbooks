@@ -1,13 +1,14 @@
 {
   "hub": {
-    "metaTitle": "Administration",
-    "title": "Administration",
+    "metaTitle": "Platform",
+    "title": "Platform",
     "subtitle": "Everything that configures this workspace — company setup, people, and system.",
     "groups": {
       "company": "Company",
       "people": "People & access",
       "workspace": "Workspace",
-      "activity": "Activity & data"
+      "activity": "Activity & data",
+      "data": "Integrations & data"
     },
     "cards": {
       "settings": {
@@ -26,6 +27,10 @@
         "title": "Navigation",
         "description": "Reorder the sidebar and rename modules per org"
       },
+      "records": {
+        "title": "Custom Records",
+        "description": "Design your own record types — each becomes a full module with its own list & editor"
+      },
       "customFields": {
         "title": "Custom Fields",
         "description": "Add typed fields to records across the app"
@@ -34,26 +39,61 @@
         "title": "Forms & Views",
         "description": "Customize transaction forms and saved list views per org and per user"
       },
+      "pdfTemplates": {
+        "title": "PDF Templates",
+        "description": "Design printable PDF documents for invoices, journals, and every transaction"
+      },
       "scripts": {
         "title": "Scripts",
         "description": "Sandboxed automation that runs on ledger events"
       },
+      "apps": {
+        "title": "Apps",
+        "description": "Build and install app packages — a sandboxed frontend plus a governed backend"
+      },
+      "sandboxes": {
+        "title": "Environments",
+        "description": "Create, refresh, and promote isolated sandbox copies of production"
+      },
       "apiKeys": {
         "title": "API Keys",
         "description": "Create scoped API keys for integrations and view usage logs"
+      },
+      "apiDocs": {
+        "title": "API Docs",
+        "description": "Browse the REST API reference for every record and transaction type"
       },
       "audit": {
         "title": "Audit Log",
         "description": "Every write captured with actor and before/after diffs"
       },
       "sync": {
-        "title": "Sync",
-        "description": "Import from external sources and reconcile migrations"
+        "title": "Migrations & Mirror",
+        "description": "Migrate from NetSuite, QuickBooks and more — then mirror to A/B-run both in parallel"
       },
       "ai": {
         "title": "AI",
         "description": "Provider, models, and encrypted API key for the assistant"
+      },
+      "setup": {
+        "title": "Setup",
+        "description": "Tax, dimensions, payment terms, numbering & other configuration"
+      },
+      "email": {
+        "title": "Email delivery",
+        "description": "Configure your email provider so scheduled reports can be sent"
       }
+    }
+  },
+  "buildHub": {
+    "metaTitle": "Build",
+    "title": "Build",
+    "subtitle": "Everything you author on the platform — data model, forms & documents, automation, and the API.",
+    "groups": {
+      "model": "Data model",
+      "experience": "Forms & documents",
+      "automation": "Automation & apps",
+      "api": "API"
     }
   },
   "audit": {
@@ -323,7 +363,10 @@
       "beforePost": "before post",
       "afterPost": "after post",
       "beforeVoid": "before void",
-      "scheduled": "scheduled"
+      "scheduled": "scheduled",
+      "endpoint": "endpoint",
+      "bulk": "bulk",
+      "client": "client"
     },
     "kinds": {
       "vendorBill": "vendor bill",
@@ -331,7 +374,17 @@
       "vendorPayment": "vendor payment",
       "customerPayment": "customer payment",
       "expenseReport": "expense report",
-      "journal": "journal"
+      "journal": "journal",
+      "vendorCredit": "vendor credit",
+      "customerCredit": "customer credit",
+      "cardCharge": "card charge",
+      "cardRefund": "card refund",
+      "check": "check",
+      "deposit": "deposit",
+      "transfer": "transfer",
+      "purchaseOrder": "purchase order",
+      "salesOrder": "sales order",
+      "quote": "quote"
     },
     "drawer": {
       "newScript": "New script",
@@ -365,7 +418,19 @@
         "aborted": "aborted",
         "error": "error",
         "timeout": "timeout"
-      }
+      },
+      "endpointSlug": "Endpoint slug",
+      "customRecordsGroup": "Custom records",
+      "builtInGroup": "Transactions",
+      "noRuns": "No runs yet — this script has never executed.",
+      "selectRun": "Select a run on the Recent Runs tab to inspect its log.",
+      "logEmpty": "This run produced no log output."
+    },
+    "tabs": {
+      "general": "General",
+      "code": "Code",
+      "runs": "Recent Runs",
+      "log": "Execution Log"
     }
   },
   "apiKeys": {
@@ -558,12 +623,15 @@
       "time": "Time & timesheets",
       "records": "Custom records",
       "assistant": "AI assistant",
-      "sql": "SQL workbench",
-      "sync": "Sync",
+      "sql": "Query workbench",
+      "sync": "Migrations & Mirror",
       "scripts": "Scripting",
+      "flows": "Flows",
+      "apps": "Apps",
       "documents": "File Cabinet",
       "admin": "Administration",
-      "assets": "Fixed assets & depreciation"
+      "assets": "Fixed assets & depreciation",
+      "data": "Import & Export"
     },
     "gl_read": "View journals and balances",
     "gl_post": "Post journal entries",
@@ -599,6 +667,11 @@
     "sql_execute": "Run read-only SQL queries",
     "sync_run": "Run external-source syncs",
     "scripts_manage": "Manage user scripts",
+    "scripts_execute": "Call endpoint scripts",
+    "flows_manage": "Author and manage flows",
+    "flows_approve": "Act on flow approval gates",
+    "apps_use": "Use installed apps",
+    "apps_manage": "Install and manage apps",
     "parties_read": "View parties",
     "parties_manage": "Manage parties",
     "banking_read": "View banking",
@@ -612,11 +685,15 @@
     "admin_customization_manage": "Customize transaction forms and list views",
     "admin_audit_read": "View the audit log",
     "admin_ai_manage": "Manage AI settings",
+    "admin_sandboxes_manage": "Create and manage sandbox environments",
     "api_keys_manage": "Manage API keys",
     "assets_read": "View fixed assets and depreciation",
     "assets_manage": "Create and edit assets, run depreciation",
     "documents_read": "Browse the file cabinet",
-    "documents_manage": "Upload, move, rename, and delete files"
+    "documents_manage": "Upload, move, rename, and delete files",
+    "admin_setup_manage": "Manage setup & configuration",
+    "data_export": "Export data",
+    "data_import": "Import data"
   },
   "ai": {
     "metaTitle": "AI settings",
@@ -660,6 +737,405 @@
       "current": "{id} (current)",
       "hint": "Load the live model list with your API key, or type a model id manually.",
       "idPlaceholder": "model id"
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "new": "New",
+    "empty": "Nothing here yet.",
+    "statusActive": "Active",
+    "statusArchived": "Archived",
+    "yes": "Yes",
+    "selectPlaceholder": "Select…",
+    "searchPlaceholder": "Search…",
+    "created": "Created",
+    "updated": "Saved",
+    "deleted": "Deleted",
+    "confirmDelete": "Delete this record? This cannot be undone.",
+    "validation": {
+      "required": "{field} is required"
+    },
+    "drawer": {
+      "newTitle": "New {name}",
+      "editTitle": "Edit {name}"
+    },
+    "errors": {
+      "duplicate": "A record with that code already exists.",
+      "inUse": "This record is in use and can't be deleted."
+    },
+    "groups": {
+      "company": "Company",
+      "taxes": "Taxes",
+      "dimensions": "Dimensions",
+      "billing": "Billing & numbering",
+      "workforce": "Workforce",
+      "assets": "Assets",
+      "currency": "Currency"
+    },
+    "entities": {
+      "company": {
+        "title": "Company & Accounting",
+        "description": "Organization identity, base currency, fiscal year, and control accounts."
+      },
+      "tax-codes": {
+        "title": "Tax Codes",
+        "description": "Rates you charge and pay, and the accounts they post to."
+      },
+      "tax-rates": {
+        "title": "Tax Rates",
+        "description": "Effective-dated rate history for each tax code."
+      },
+      "tax-groups": {
+        "title": "Tax Groups",
+        "description": "Bundle several tax codes to apply together on a line."
+      },
+      "tax-report-lines": {
+        "title": "Tax Report Lines",
+        "description": "Map tax codes onto the boxes of a tax return."
+      },
+      "classes": {
+        "title": "Classes",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "departments": {
+        "title": "Departments",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "locations": {
+        "title": "Locations",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "payment-terms": {
+        "title": "Payment Terms",
+        "description": "Net and early-payment discount terms for bills and invoices."
+      },
+      "number-sequences": {
+        "title": "Number Sequences",
+        "description": "Document numbering prefixes and counters."
+      },
+      "time-types": {
+        "title": "Time Types",
+        "description": "Cost multipliers and billable defaults for timesheets."
+      },
+      "worker-comp-groups": {
+        "title": "Worker Comp Groups",
+        "description": "Workers' compensation rate groups for labor costing."
+      },
+      "labor-burden-rates": {
+        "title": "Labor Burden Rates",
+        "description": "Effective-dated burden rates applied to labor cost."
+      },
+      "asset-categories": {
+        "title": "Asset Categories",
+        "description": "Default depreciation method and accounts for fixed assets."
+      },
+      "currencies": {
+        "title": "Currencies",
+        "description": "Currency codes and their minor-unit precision."
+      },
+      "sftp": {
+        "title": "SFTP Servers"
+      },
+      "account-groups": {
+        "title": "Account Groups",
+        "description": "Reporting classifications of your chart of accounts (e.g. cost pools). Groups auto-classify accounts by rule, with per-account overrides."
+      }
+    },
+    "fields": {
+      "code": "Code",
+      "name": "Name",
+      "appliesTo": "Applies to",
+      "recoverablePercent": "Recoverable %",
+      "isActive": "Active",
+      "country": "Country",
+      "region": "Region",
+      "collectedAccountId": "Tax collected account",
+      "paidAccountId": "Tax paid account",
+      "taxCodeId": "Tax code",
+      "ratePercent": "Rate %",
+      "effectiveFrom": "Effective from",
+      "effectiveTo": "Effective to",
+      "members": "Tax codes",
+      "reportCode": "Report code",
+      "lineCode": "Line code",
+      "label": "Label",
+      "basis": "Basis",
+      "sign": "Sign",
+      "parentId": "Parent",
+      "netDays": "Net days",
+      "discountDays": "Discount days",
+      "discountPercent": "Discount %",
+      "documentKind": "Document",
+      "prefix": "Prefix",
+      "nextNumber": "Next number",
+      "padding": "Padding",
+      "gapless": "Gapless",
+      "costMultiplier": "Cost multiplier",
+      "isBillableDefault": "Billable by default",
+      "category": "Category",
+      "method": "Method",
+      "departmentId": "Department",
+      "defaultMethod": "Default method",
+      "defaultLifeMonths": "Default life (months)",
+      "assetAccountId": "Asset account",
+      "accumulatedDepreciationAccountId": "Accumulated depreciation account",
+      "depreciationExpenseAccountId": "Depreciation expense account",
+      "gainLossAccountId": "Gain / loss account",
+      "minorUnits": "Minor units",
+      "key": "Key",
+      "dimension": "Dimension",
+      "color": "Colour",
+      "sortOrder": "Sort order"
+    },
+    "options": {
+      "appliesTo": {
+        "sales": "Sales",
+        "purchases": "Purchases",
+        "both": "Both"
+      },
+      "basis": {
+        "net": "Net amount",
+        "tax": "Tax amount"
+      },
+      "sign": {
+        "positive": "Add (+)",
+        "negative": "Subtract (−)"
+      },
+      "method": {
+        "straightLine": "Straight line",
+        "decliningBalance": "Declining balance",
+        "doubleDeclining": "Double declining"
+      },
+      "burdenMethod": {
+        "live": "Live",
+        "standard": "Standard"
+      }
+    }
+  },
+  "flows": {
+    "title": "Flows",
+    "description": "Visual automations over your records — a trigger starts a run, conditions branch, actions do the work, and approval gates pause for people.",
+    "searchPlaceholder": "Search flows…",
+    "subjectFilter": "Record type",
+    "table": {
+      "flow": "Flow",
+      "subject": "Record type",
+      "nodes": "Nodes",
+      "lastRun": "Last run",
+      "updated": "Updated",
+      "status": "Status"
+    },
+    "empty": {
+      "title": "No flows yet",
+      "description": "A flow starts at a trigger, branches on conditions, pauses at approval gates, and finishes with actions — emails, notifications, status changes, webhooks.",
+      "cta": "New flow"
+    },
+    "statusEnabled": "enabled",
+    "statusDisabled": "disabled",
+    "neverRan": "never",
+    "new": {
+      "button": "New flow",
+      "title": "New flow",
+      "description": "Pick the record type this flow runs over. You will design the graph next.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Bill approval over $10,000",
+      "subject": "Record type",
+      "subjectPlaceholder": "Choose a record type…",
+      "create": "Create flow",
+      "failed": "Could not create the flow"
+    },
+    "actions": {
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete",
+      "deleteConfirmTitle": "Delete flow",
+      "deleteConfirm": "Delete “{name}”? Its run history is removed too.",
+      "deleted": "Flow deleted",
+      "deleteFailed": "Could not delete the flow",
+      "updateFailed": "Could not update the flow"
+    },
+    "builder": {
+      "save": "Save",
+      "saved": "Flow saved",
+      "saveFailed": "Could not save the flow",
+      "unsaved": "Unsaved changes",
+      "enabledToggle": "Enabled",
+      "namePlaceholder": "Flow name",
+      "errorsTitle": "Fix these to save the flow",
+      "warningsTitle": "Warnings — the flow saves, but may not run as expected",
+      "warningsBadge": "{count, plural, one {# warning} other {# warnings}}",
+      "tabs": {
+        "canvas": "Canvas",
+        "runs": "Runs"
+      },
+      "palette": {
+        "title": "Add",
+        "trigger": "Trigger",
+        "condition": "Condition",
+        "action": "Action",
+        "gate": "Approval"
+      },
+      "canvasEmpty": {
+        "title": "Start with a trigger",
+        "description": "Triggers start a run, conditions branch it, approval gates pause it for people, and actions finish the work. Add a trigger, then drag from its handle to connect the next step."
+      },
+      "inspector": {
+        "empty": "Select a node to configure it",
+        "deleteNode": "Delete node",
+        "nodeId": "Node"
+      }
+    },
+    "node": {
+      "trigger": "Trigger",
+      "condition": "Condition",
+      "action": "Action",
+      "gate": "Approval",
+      "conditionDefault": "If…",
+      "gateDefault": "Approval"
+    },
+    "edge": {
+      "then": "then",
+      "else": "else",
+      "approve": "approve",
+      "reject": "reject"
+    },
+    "trigger": {
+      "kind": "When",
+      "kinds": {
+        "on_create": "A record is created",
+        "on_submit": "A record is submitted for approval",
+        "before_post": "Before a record posts",
+        "after_post": "After a record posts",
+        "before_void": "Before a record is voided",
+        "status_change": "The status changes",
+        "on_field_value": "A field matches a condition",
+        "scheduled": "On a schedule",
+        "manual": "A user clicks a button"
+      },
+      "from": "From status",
+      "to": "To status",
+      "anyStatus": "Any status",
+      "rule": "When the record matches",
+      "cron": "Cron schedule",
+      "cronHint": "minute · hour · day of month · month · day of week",
+      "cronExample": "e.g. 0 8 * * 1 = Mondays at 08:00",
+      "timezone": "Time zone (optional)",
+      "buttonLabel": "Button label",
+      "confirmText": "Confirmation message (optional)",
+      "requirePermission": "Required permission (optional)",
+      "showIf": "Only show the button when…",
+      "showIfAdd": "Add visibility condition",
+      "showIfRemove": "Remove visibility condition"
+    },
+    "condition": {
+      "rule": "Branch when",
+      "label": "Label (optional)",
+      "labelPlaceholder": "e.g. Over $10,000",
+      "hint": "The “then” branch runs when the rule passes; “else” runs when it fails."
+    },
+    "action": {
+      "kind": "Action",
+      "kinds": {
+        "send_email": "Send an email",
+        "notify": "Send an in-app notification",
+        "set_field": "Set a field",
+        "change_status": "Change the status",
+        "webhook": "Call a webhook",
+        "post_document": "Post the document"
+      },
+      "recipients": "Recipients",
+      "subject": "Subject",
+      "body": "Body",
+      "interpolationHint": "Insert record values with '{{'field'}}' tokens",
+      "availableFields": "Available fields",
+      "title": "Title",
+      "notifyBody": "Message (optional)",
+      "href": "Link to open (optional)",
+      "field": "Field",
+      "value": "Value",
+      "status": "New status",
+      "url": "URL",
+      "method": "Method",
+      "includeRecord": "Include the record snapshot in the payload",
+      "postDocumentHint": "Posts the document to the ledger through the normal posting pipeline. Nothing to configure."
+    },
+    "gate": {
+      "title": "Title",
+      "titlePlaceholder": "e.g. Controller approval",
+      "assignees": "Approvers",
+      "mode": "Quorum",
+      "modeAny": "Any one may decide",
+      "modeAll": "All must approve",
+      "signature": "Require a typed signature",
+      "reminderAfter": "Remind after (hours)",
+      "escalateAfter": "Escalate after (hours)",
+      "escalateTo": "Escalate to",
+      "noEscalation": "No escalation",
+      "hint": "The run pauses here until the approver quorum decides, then continues on the “approve” or “reject” branch."
+    },
+    "targets": {
+      "types": {
+        "user": "A specific user",
+        "role": "Everyone in a role",
+        "submitter": "The submitter",
+        "supervisor": "The submitter's supervisor",
+        "field": "A record field (user)",
+        "email": "Email address(es)"
+      },
+      "add": "Add recipient",
+      "addAssignee": "Add approver",
+      "remove": "Remove",
+      "pickUser": "Choose a user…",
+      "pickRole": "Choose a role…",
+      "pickField": "Choose a field…",
+      "emailPlaceholder": "ops@example.com, cfo@example.com"
+    },
+    "logic": {
+      "groupAnd": "All of…",
+      "groupOr": "Any of…",
+      "groupNot": "Not…",
+      "ops": {
+        "eq": "equals",
+        "ne": "does not equal",
+        "gt": "is greater than",
+        "gte": "is at least",
+        "lt": "is less than",
+        "lte": "is at most",
+        "in": "is one of",
+        "notIn": "is not one of",
+        "isSet": "is set",
+        "isNotSet": "is empty"
+      },
+      "addRule": "Add condition",
+      "addGroup": "Add group",
+      "remove": "Remove",
+      "valuePlaceholder": "Value",
+      "listPlaceholder": "Comma-separated values",
+      "true": "True",
+      "false": "False"
+    },
+    "runs": {
+      "title": "Recent runs",
+      "empty": {
+        "title": "No runs yet",
+        "description": "Enable the flow and trigger it — every run lands here with its status and any error."
+      },
+      "status": {
+        "running": "running",
+        "waiting": "waiting",
+        "completed": "completed",
+        "failed": "failed",
+        "cancelled": "cancelled"
+      },
+      "table": {
+        "status": "Status",
+        "trigger": "Trigger",
+        "subject": "Record",
+        "started": "Started",
+        "finished": "Finished",
+        "error": "Error"
+      }
     }
   }
 }
