@@ -31,12 +31,10 @@
     },
     "forms": {
       "new": "New form",
-      "newFor": "New form…",
       "newTitle": "New custom form",
       "newTitleFor": "New {type} form",
       "editTitle": "Edit form — {name}",
       "basedOn": "Based on the standard {type} form. Adjust fields, order, grouping, and width below.",
-      "listHint": "Duplicate the standard {type} form or an existing one to customize it.",
       "standardName": "Standard {type}",
       "systemDefault": "System default",
       "duplicate": "Duplicate",

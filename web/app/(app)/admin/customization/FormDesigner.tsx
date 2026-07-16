@@ -43,43 +43,16 @@ interface FieldDef {
   sortOrder: number
 }
 
-// The customizable transaction types, in registry order. Kept as a plain list
-// here so the New-form picker doesn't need the full RecordTypeMeta objects.
-const RECORD_TYPE_KEYS = [
-  'vendor_bill',
-  'vendor_credit',
-  'customer_invoice',
-  'customer_credit',
-  'card_charge',
-  'card_refund',
-  'check',
-] as const
-
-/** New-form entry point: pick the transaction type, then open the designer. */
+/** New-form entry point — creates a blank form for the selected record type. */
 export function NewFormButton({ recordType }: { recordType: string }) {
   const t = useTranslations('customization')
   const router = useRouter()
-  // Current record type first, then the rest in registry order.
-  const ordered = [recordType, ...RECORD_TYPE_KEYS.filter((k) => k !== recordType)]
+  // The transaction type is chosen by the record-type pills above the list;
+  // "New form" creates a blank form for the selected type (app convention).
   return (
-    <Select
-      value=""
-      triggerClassName="h-9 min-w-44"
-      placeholder={t('designer.forms.newFor')}
-      onChange={(e) => {
-        const rt = e.target.value
-        if (rt) router.push(`/admin/customization?recordType=${rt}&tab=forms&form=new`)
-      }}
-    >
-      <option value="" disabled hidden>
-        {t('designer.forms.newFor')}
-      </option>
-      {ordered.map((rt) => (
-        <option key={rt} value={rt}>
-          {t(`recordTypes.${rt}` as never)}
-        </option>
-      ))}
-    </Select>
+    <Button onClick={() => router.push(`/admin/customization?recordType=${recordType}&tab=forms&form=new`)}>
+      <Plus size={15} /> {t('designer.forms.new')}
+    </Button>
   )
 }
 
