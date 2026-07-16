@@ -7,7 +7,11 @@
     "@openbooks/schema": "*",
     "drizzle-orm": "*",
     "pg": "^8",
-    "quickjs-emscripten": "^0.31"
+    "quickjs-emscripten": "^0.31",
+    "@openbooks/jobs": "*",
+    "@openbooks/emails": "*",
+    "bullmq": "^5.80.2",
+    "ioredis": "^5.11.1"
   },
   "devDependencies": {
     "@types/pg": "^8",
