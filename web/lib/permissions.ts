@@ -16,6 +16,7 @@ export type PermissionKey = string;
 export const PERMISSION_CATALOGUE = [
   // General ledger
   "gl.read",
+  "gl.manage",
   "gl.post",
   "gl.close",
   // Accounts payable
@@ -130,6 +131,7 @@ export const PERMISSION_GROUPS: {
     labelKey: "permissions.groups.gl",
     permissions: [
       { key: "gl.read", labelKey: permissionLabelKey("gl.read") },
+      { key: "gl.manage", labelKey: permissionLabelKey("gl.manage") },
       { key: "gl.post", labelKey: permissionLabelKey("gl.post") },
       { key: "gl.close", labelKey: permissionLabelKey("gl.close") },
     ],
@@ -319,6 +321,7 @@ export const BUILT_IN_ROLES: Record<
       "Owns the books. Full GL/AP/AR including approvals, posting, payment, and period close, plus reporting, insights, SQL, sync, and the audit log.",
     permissions: [
       "gl.read",
+      "gl.manage",
       "gl.post",
       "gl.close",
       "ap.read",
@@ -379,6 +382,7 @@ export const BUILT_IN_ROLES: Record<
       "Day-to-day bookkeeping: enters and posts journals, bills, and invoices, pays and receives, and builds reports. Cannot approve or close periods.",
     permissions: [
       "gl.read",
+      "gl.manage",
       "gl.post",
       "ap.read",
       "ap.create",

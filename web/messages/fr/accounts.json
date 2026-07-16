@@ -33,6 +33,44 @@
     "income": "Produits",
     "expense": "Charges"
   },
+  "drawer": {
+    "saved": "Compte enregistré",
+    "typeLocked": "Le type ne peut plus être modifié après une activité au grand livre.",
+    "parent": "Compte parent",
+    "currencyRestriction": "Restriction de devise",
+    "anyCurrency": "Toute devise",
+    "allSubsidiaries": "Toutes les filiales",
+    "summary": "Compte récapitulatif",
+    "reconcilable": "Rapprochable",
+    "eliminate": "Éliminer lors de la consolidation",
+    "includeSubsidiaries": "Inclure les filiales enfants",
+    "requiredDimensions": "Dimensions obligatoires à la comptabilisation",
+    "dimensions": {
+      "department": "Service",
+      "location": "Emplacement",
+      "class": "Classe",
+      "project": "Projet",
+      "party": "Tiers"
+    },
+    "errors": {
+      "name_required": "Le nom du compte est obligatoire.",
+      "invalid_type": "Choisissez un type de compte valide.",
+      "type_has_transactions": "Le type ne peut plus être modifié après une activité au grand livre.",
+      "invalid_parent": "Choisissez un compte parent valide.",
+      "parent_must_be_summary": "Le parent doit être un compte récapitulatif.",
+      "parent_cycle": "Ce parent créerait une hiérarchie circulaire.",
+      "summary_reconcilable_conflict": "Un compte récapitulatif ne peut pas être rapprochable.",
+      "summary_has_transactions": "Un compte ayant une activité ne peut pas devenir récapitulatif.",
+      "summary_has_children": "Un compte ayant des enfants actifs doit rester récapitulatif.",
+      "inactive_has_children": "Désactivez d’abord les comptes enfants actifs.",
+      "invalid_currency": "Choisissez une devise valide.",
+      "invalid_subsidiary": "Choisissez une filiale valide.",
+      "invalid_dimensions": "Choisissez des dimensions obligatoires valides.",
+      "invalid_custom_fields": "Vérifiez les valeurs des champs personnalisés.",
+      "number_in_use": "Ce numéro de compte est déjà utilisé.",
+      "save_failed": "Le compte n’a pas pu être enregistré."
+    }
+  },
   "register": {
     "notFound": "Compte introuvable",
     "subtitle": "registre · {count, plural, one {# ligne} other {# lignes}} · solde courant {balance}",

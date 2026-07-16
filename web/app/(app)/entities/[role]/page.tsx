@@ -6,13 +6,14 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
-import { FilterChips } from '../../../../components/filter-bar'
+import { ShowInactivesToggle } from '../../../../components/show-inactives-toggle'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadParty } from '../../../api/parties/_lib'
+import { subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { NewPartyButton } from '../../parties/NewPartyButton'
 import { NewPartyRedirect } from '../../parties/NewPartyRedirect'
 import { PartyDrawer } from '../../parties/PartyDrawer'
@@ -55,12 +56,11 @@ export default async function EntityRole({
   const sp = await searchParams
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
   const listParams = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: ['name', 'code'] as const })
-  const statusParam = pickString(sp.status)
-  const status = statusParam === 'active' || statusParam === 'inactive' ? statusParam : undefined
+  const showInactive = pickString(sp.showInactive) === 'true'
 
   const where = sql`p.org_id = ${orgId} and ${ROLE_CONDITION(role)}
     ${listParams.q ? sql` and (p.display_name ilike ${'%' + listParams.q + '%'} or p.short_code ilike ${'%' + listParams.q + '%'} or p.email ilike ${'%' + listParams.q + '%'})` : sql``}
-    ${status === 'active' ? sql` and p.is_active` : status === 'inactive' ? sql` and not p.is_active` : sql``}`
+    ${showInactive ? sql`` : sql` and p.is_active`}`
 
   const [parties, counts] = await Promise.all([
     db.execute(sql`
@@ -73,13 +73,13 @@ export default async function EntityRole({
       select count(*) as total,
              count(*) filter (where p.is_active) as active,
              count(*) filter (where not p.is_active) as inactive
-        from parties p where p.org_id = ${orgId} and ${ROLE_CONDITION(role)}
+        from parties p where p.org_id = ${orgId} and ${ROLE_CONDITION(role)} ${showInactive ? sql`` : sql`and p.is_active`}
     `) as any,
   ])
   const c = counts.rows[0]
   const total = Number(c.total)
   const filteredTotal =
-    listParams.q || status
+    listParams.q
       ? Number(((await db.execute(sql`select count(*) as n from parties p where ${where}`)) as any).rows[0].n)
       : total
 
@@ -91,14 +91,10 @@ export default async function EntityRole({
           db.execute(sql`select id, name from departments where is_active order by name`) as any,
           db.execute(sql`select id, name from trades where is_active order by name`) as any,
           loadFieldDefs('parties'),
+          subsidiaryOptions(),
         ])
       : null,
   ])
-
-  const statusOptions = [
-    { value: 'active', label: tc('status.active'), count: Number(c.active) },
-    { value: 'inactive', label: tc('status.inactive'), count: Number(c.inactive) },
-  ]
 
   return (
     <ListPageLayout
@@ -111,7 +107,7 @@ export default async function EntityRole({
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder={t('list.searchPlaceholder')} />
-            <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tc('labels.status')} options={statusOptions} />
+            <ShowInactivesToggle basePath={basePath} currentParams={sp} />
           </div>
         </>
       }
@@ -169,6 +165,7 @@ export default async function EntityRole({
           departments={pickers[1].rows}
           trades={pickers[2].rows}
           fieldDefs={pickers[3] as any}
+          subsidiaries={pickers[4]}
         />
       ) : null}
     </ListPageLayout>

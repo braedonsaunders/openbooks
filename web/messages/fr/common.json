@@ -119,6 +119,9 @@
     "error": "Erreur",
     "ok": "OK"
   },
+  "filters": {
+    "showInactive": "Afficher les inactifs"
+  },
   "feedback": {
     "loading": "Chargement…",
     "saved": "Enregistré",

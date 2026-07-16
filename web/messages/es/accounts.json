@@ -33,6 +33,44 @@
     "income": "Ingresos",
     "expense": "Gastos"
   },
+  "drawer": {
+    "saved": "Cuenta guardada",
+    "typeLocked": "El tipo no puede cambiar después de que exista actividad en el libro mayor.",
+    "parent": "Cuenta principal",
+    "currencyRestriction": "Restricción de moneda",
+    "anyCurrency": "Cualquier moneda",
+    "allSubsidiaries": "Todas las subsidiarias",
+    "summary": "Cuenta de resumen",
+    "reconcilable": "Conciliable",
+    "eliminate": "Eliminar en la consolidación",
+    "includeSubsidiaries": "Incluir subsidiarias secundarias",
+    "requiredDimensions": "Dimensiones obligatorias de contabilización",
+    "dimensions": {
+      "department": "Departamento",
+      "location": "Ubicación",
+      "class": "Clase",
+      "project": "Proyecto",
+      "party": "Tercero"
+    },
+    "errors": {
+      "name_required": "El nombre de la cuenta es obligatorio.",
+      "invalid_type": "Seleccione un tipo de cuenta válido.",
+      "type_has_transactions": "El tipo no puede cambiar después de que exista actividad en el libro mayor.",
+      "invalid_parent": "Seleccione una cuenta principal válida.",
+      "parent_must_be_summary": "La cuenta principal debe ser una cuenta de resumen.",
+      "parent_cycle": "Esa cuenta principal crearía una jerarquía circular.",
+      "summary_reconcilable_conflict": "Una cuenta de resumen no puede ser conciliable.",
+      "summary_has_transactions": "Una cuenta con actividad no puede convertirse en una cuenta de resumen.",
+      "summary_has_children": "Una cuenta con cuentas secundarias activas debe seguir siendo de resumen.",
+      "inactive_has_children": "Desactive primero las cuentas secundarias activas.",
+      "invalid_currency": "Seleccione una moneda válida.",
+      "invalid_subsidiary": "Seleccione una subsidiaria válida.",
+      "invalid_dimensions": "Seleccione dimensiones obligatorias válidas.",
+      "invalid_custom_fields": "Revise los valores de los campos personalizados.",
+      "number_in_use": "Ese número de cuenta ya está en uso.",
+      "save_failed": "No se pudo guardar la cuenta."
+    }
+  },
   "register": {
     "notFound": "Cuenta no encontrada",
     "subtitle": "registro · {count, plural, one {# línea} other {# líneas}} · saldo acumulado {balance}",

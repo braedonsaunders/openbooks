@@ -5,6 +5,7 @@ import { PageContainer } from '../../../../components/page-layout'
 import { Pagination } from '../../../../components/pagination'
 import { accountRegister } from '../../../../lib/reports'
 import { money } from '../../../../lib/format'
+import { requirePermission } from '../../../../lib/authz'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,13 +18,14 @@ export default async function Register({
   params: Promise<{ id: string }>
   searchParams: Promise<{ page?: string; from?: string; to?: string }>
 }) {
+  const authz = await requirePermission('gl.read')
   const t = await getTranslations('accounts')
   const tc = await getTranslations('common')
   const { id } = await params
   const sp = await searchParams
   const p = Math.max(1, Number(sp.page ?? 1))
   const period = sp.from || sp.to ? { from: sp.from, to: sp.to } : undefined
-  const { account, lines, total, balance } = await accountRegister(id, PER_PAGE, (p - 1) * PER_PAGE, period)
+  const { account, lines, total, balance } = await accountRegister(authz.user.orgId, id, PER_PAGE, (p - 1) * PER_PAGE, period)
   if (!account) return <PageContainer>{t('register.notFound')}</PageContainer>
   const periodLabel = period?.from || period?.to ? `${period?.from ?? ''} → ${period?.to ?? ''}` : null
   const pageParams: Record<string, string> = { page: String(p) }

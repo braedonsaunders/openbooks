@@ -6,11 +6,13 @@ import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, 
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
+import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { money } from '../../../lib/format'
+import { subsidiaryOptions } from '../../../lib/subsidiaries'
 import { loadProject } from '../../api/projects/_lib'
 import { NewProjectButton } from './NewProjectButton'
 import { NewProjectRedirect } from './NewProjectRedirect'
@@ -68,6 +70,7 @@ export default async function Projects({
   const status = statusParam && (STATUSES as readonly string[]).includes(statusParam) ? statusParam : undefined
   const billingParam = pickString(sp.billing)
   const billing = billingParam && (BILLING_METHODS as readonly string[]).includes(billingParam) ? billingParam : undefined
+  const showInactive = pickString(sp.showInactive) === 'true'
 
   // posted actual cost per project, tagged via journal lines
   const ACTUAL_JOIN = sql`
@@ -87,7 +90,8 @@ export default async function Projects({
         : sql``
     }
     ${status ? sql` and p.status = ${status}` : sql``}
-    ${billing ? sql` and p.billing_method = ${billing}` : sql``}`
+    ${billing ? sql` and p.billing_method = ${billing}` : sql``}
+    ${showInactive ? sql`` : sql` and p.is_active`}`
 
   const [projects, counts] = await Promise.all([
     db.execute(sql`
@@ -105,7 +109,7 @@ export default async function Projects({
     db.execute(sql`
       select count(*) as total, p.status, count(*) as status_count
         from projects p
-       where p.org_id = ${orgId}
+       where p.org_id = ${orgId} ${showInactive ? sql`` : sql`and p.is_active`}
        group by rollup (p.status)
     `) as any,
   ])
@@ -133,12 +137,12 @@ export default async function Projects({
     projectId && projectId !== 'new' && isUuid(projectId) ? await loadProject(projectId, orgId) : null
 
   // party pickers for the drawer (customer/foreman/manager)
-  const parties = projectId
-    ? ((await db.execute(sql`
+  const [parties, subsidiaries] = projectId
+    ? await Promise.all([db.execute(sql`
         select id, display_name from parties
          where org_id = ${orgId} and is_active
-         order by display_name limit 2000`)) as any)
-    : null
+         order by display_name limit 2000`) as any, subsidiaryOptions()])
+    : [null, []]
 
   const statusOptions = (STATUSES as readonly string[]).map((s) => ({
     value: s,
@@ -163,6 +167,7 @@ export default async function Projects({
             <SearchInput placeholder={t('list.searchPlaceholder')} />
             <FilterChips basePath="/projects" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
             <FilterChips basePath="/projects" currentParams={sp} paramKey="billing" label={t('list.billingFilter')} options={billingOptions} />
+            <ShowInactivesToggle basePath="/projects" currentParams={sp} />
           </div>
         </>
       }
@@ -220,6 +225,7 @@ export default async function Projects({
           key={String(openProject.project.id)}
           payload={openProject as any}
           parties={parties.rows}
+          subsidiaries={subsidiaries}
           canManage={canManage}
         />
       ) : null}

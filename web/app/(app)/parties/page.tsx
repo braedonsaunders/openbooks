@@ -6,12 +6,14 @@ import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, 
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
+import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
+import { subsidiaryOptions } from '../../../lib/subsidiaries'
 import { NewPartyButton } from './NewPartyButton'
 import { NewPartyRedirect } from './NewPartyRedirect'
 import { PartyDrawer } from './PartyDrawer'
@@ -52,8 +54,7 @@ export default async function Parties({
   })
   const roleParam = pickString(sp.role)
   const role = roleParam === 'customer' || roleParam === 'vendor' || roleParam === 'employee' ? roleParam : undefined
-  const statusParam = pickString(sp.status)
-  const status = statusParam === 'active' || statusParam === 'inactive' ? statusParam : undefined
+  const showInactive = pickString(sp.showInactive) === 'true'
 
   const where = sql`p.org_id = ${orgId}
     ${
@@ -62,7 +63,7 @@ export default async function Parties({
         : sql``
     }
     ${role ? sql` and ${ROLE_CONDITIONS[role]}` : sql``}
-    ${status === 'active' ? sql` and p.is_active` : status === 'inactive' ? sql` and not p.is_active` : sql``}`
+    ${showInactive ? sql`` : sql` and p.is_active`}`
 
   const [parties, counts] = await Promise.all([
     db.execute(sql`
@@ -83,13 +84,13 @@ export default async function Parties({
              count(*) filter (where p.is_active) as active,
              count(*) filter (where not p.is_active) as inactive
         from parties p
-       where p.org_id = ${orgId}
+       where p.org_id = ${orgId} ${showInactive ? sql`` : sql`and p.is_active`}
     `) as any,
   ])
   const c = counts.rows[0]
   const total = Number(c.total)
   const filteredTotal =
-    params.q || role || status
+    params.q || role
       ? Number(((await db.execute(sql`select count(*) as n from parties p where ${where}`)) as any).rows[0].n)
       : total
 
@@ -101,6 +102,7 @@ export default async function Parties({
           db.execute(sql`select id, name from departments where is_active order by name`) as any,
           db.execute(sql`select id, name from trades where is_active order by name`) as any,
           loadFieldDefs('parties'),
+          subsidiaryOptions(),
         ])
       : null,
   ])
@@ -110,11 +112,6 @@ export default async function Parties({
     { value: 'vendor', label: tc('labels.vendor'), count: Number(c.vendors) },
     { value: 'employee', label: tc('labels.employee'), count: Number(c.employees) },
   ]
-  const statusOptions = [
-    { value: 'active', label: tc('status.active'), count: Number(c.active) },
-    { value: 'inactive', label: tc('status.inactive'), count: Number(c.inactive) },
-  ]
-
   return (
     <ListPageLayout
       header={
@@ -127,7 +124,7 @@ export default async function Parties({
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder={t('list.searchPlaceholder')} />
             <FilterChips basePath="/parties" currentParams={sp} paramKey="role" label={tc('labels.role')} options={roleOptions} />
-            <FilterChips basePath="/parties" currentParams={sp} paramKey="status" label={tc('labels.status')} options={statusOptions} />
+            <ShowInactivesToggle basePath="/parties" currentParams={sp} />
           </div>
         </>
       }
@@ -190,6 +187,7 @@ export default async function Parties({
           departments={pickers[1].rows}
           trades={pickers[2].rows}
           fieldDefs={pickers[3] as any}
+          subsidiaries={pickers[4]}
           canManage={canManage}
         />
       ) : null}

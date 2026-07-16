@@ -13,6 +13,10 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { requirePermission } from '../../../../../lib/authz'
+import { ShowInactivesToggle } from '../../../../../components/show-inactives-toggle'
+import { SearchInput } from '../../../../../components/search-input'
+import { Pagination } from '../../../../../components/pagination'
+import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import {
   SETUP_ENTITY_BY_KEY,
   toSnake,
@@ -132,15 +136,25 @@ export default async function SetupEntityPage({
   const t = await getTranslations('admin.setup')
   const sp = await searchParams
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
+  const showInactive = pickString(sp.showInactive) === 'true'
+  const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
+  const closeHref = mergeHref(`/admin/setup/${entity.key}`, sp, { row: undefined })
 
-  const orgFilter = entity.orgScoped ? sql` where org_id = ${orgId}` : sql``
-  const [rowsRes, refOptions] = await Promise.all([
+  const searchColumns = entity.columns.map((column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`)
+  const rowFilter = sql`where 1 = 1
+    ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+    ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
+    ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
+  const [rowsRes, countRes, refOptions] = await Promise.all([
     db.execute(sql`
-      select * from ${sql.raw(entity.table)}${orgFilter}
-       order by ${sql.raw(orderExpr(entity))}`) as any,
+      select * from ${sql.raw(entity.table)} ${rowFilter}
+       order by ${sql.raw(orderExpr(entity))}
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`) as any,
+    db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`) as any,
     loadRefOptions(entity, orgId),
   ])
   const rows = rowsRes.rows as Record<string, any>[]
+  const total = Number(countRes.rows[0]?.n ?? 0)
 
   // Lookup maps for rendering ref columns.
   const refLabels: Record<string, Map<string, string>> = {}
@@ -153,7 +167,12 @@ export default async function SetupEntityPage({
     ? rowParam === 'new'
       ? { creating: true, row: null as Record<string, any> | null, members: [] as string[] }
       : await (async () => {
-          const found = rows.find((r) => String(r[idColumn]) === rowParam) ?? null
+          const selected = (await db.execute(sql`
+            select * from ${sql.raw(entity.table)}
+             where ${sql.raw(idColumn)} = ${rowParam}
+             ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+             limit 1`)) as any
+          const found = selected.rows[0] ?? null
           let members: string[] = []
           const multi = entity.fields.find((f) => f.kind === 'multiref')
           if (found && multi) {
@@ -177,6 +196,13 @@ export default async function SetupEntityPage({
           </p>
         </div>
         <NewSetupButton entityKey={entity.key} label={t('new')} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+          <SearchInput placeholder={t('searchPlaceholder')} />
+        {entity.hasActive ? (
+          <ShowInactivesToggle basePath={`/admin/setup/${entity.key}`} currentParams={sp} />
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -218,12 +244,21 @@ export default async function SetupEntityPage({
         </Table>
       </div>
 
+      <Pagination
+        basePath={`/admin/setup/${entity.key}`}
+        currentParams={sp}
+        total={total}
+        page={list.page}
+        perPage={list.perPage}
+      />
+
       {open ? (
         <SetupDrawer
           entity={entity}
           row={open.row}
           members={open.members}
           refOptions={refOptions}
+          closeHref={closeHref}
         />
       ) : null}
     </div>
