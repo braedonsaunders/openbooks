@@ -1,9 +1,10 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
+import { statementPageHref } from '../../../../../../lib/report-run'
 import { ReportRunner } from './ReportRunner'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,10 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
 
   const definition = await loadReportDefinition(authz.user.orgId, id)
   if (!definition) notFound()
+  // Standard statement definitions are viewed through their rich drill-through
+  // pages, not the entity-query runner.
+  if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
+  if (!definition.query) notFound()
 
   const [schedules, recentRuns] = await Promise.all([
     db.execute(sql`

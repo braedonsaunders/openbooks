@@ -37,6 +37,11 @@ export async function POST(req: Request) {
   if (body.definitionId) {
     const def = await loadReportDefinition(user.orgId, body.definitionId)
     if (!def) return NextResponse.json({ error: 'report not found' }, { status: 404 })
+    // The query runner handles entity-query definitions; standard statement
+    // definitions are run/exported through resolveReport, not this endpoint.
+    if (def.report_type === 'statement' || !def.query) {
+      return NextResponse.json({ error: 'not a query report' }, { status: 422 })
+    }
     const run = await recordReportRun({
       orgId: user.orgId,
       userId: user.id,

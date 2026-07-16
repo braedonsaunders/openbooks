@@ -1,5 +1,9 @@
 import { sql } from "drizzle-orm";
-import { BUILT_IN_REPORT_DEFINITIONS, validateCustomQuery } from "@openbooks/reports";
+import {
+  BUILT_IN_REPORT_DEFINITIONS,
+  STANDARD_STATEMENT_DEFINITIONS,
+  validateCustomQuery,
+} from "@openbooks/reports";
 import { db } from "./db.ts";
 
 /**
@@ -43,6 +47,27 @@ for (const org of orgs.rows) {
         updated_at = now()
     `);
     console.log(`org "${org.name}": built-in report "${def.name}" ready`);
+  }
+
+  // Standard financial statements as first-class definitions (report_type =
+  // 'statement', system-owned/locked). Standard and custom reports now live in
+  // ONE table. Idempotent on (org_id, slug); refreshes name/description/spec.
+  for (const def of STANDARD_STATEMENT_DEFINITIONS) {
+    const statement = { kind: def.statementKind, params: def.params ?? {} };
+    await db.execute(sql`
+      insert into report_definitions (org_id, kind, report_type, system, slug, name, description, query, statement)
+      values (${org.id}, 'built_in', 'statement', true, ${def.slug}, ${def.name}, ${def.description}, null, ${JSON.stringify(statement)}::jsonb)
+      on conflict (org_id, slug) do update set
+        kind = 'built_in',
+        report_type = 'statement',
+        system = true,
+        name = excluded.name,
+        description = excluded.description,
+        query = null,
+        statement = excluded.statement,
+        updated_at = now()
+    `);
+    console.log(`org "${org.name}": standard report "${def.name}" ready`);
   }
 }
 process.exit(0);

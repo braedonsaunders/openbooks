@@ -25,14 +25,17 @@
       "registersTitle": "Registres clients et fournisseurs",
       "registersDescription": "Registres de transactions par client et par fournisseur avec soldes progressifs",
       "budgetTitle": "Budget vs Réel",
-      "budgetDescription": "Réels par rapport à un scénario budgétaire, par compte, avec écart $ et %"
+      "budgetDescription": "Réels par rapport à un scénario budgétaire, par compte, avec écart $ et %",
+      "projectProfitabilityTitle": "Rentabilité des projets",
+      "projectProfitabilityDescription": "Produits, coûts et marge par projet — concorde avec le résultat, avec les heures approuvées"
     },
     "groups": {
       "financial": "États financiers",
       "ledger": "Grand livre",
       "receivablesPayables": "Clients et fournisseurs",
       "budgeting": "Budgets",
-      "custom": "Personnalisés et enregistrés"
+      "custom": "Personnalisés et enregistrés",
+      "projects": "Projets"
     },
     "customStudio": {
       "title": "Constructeur de rapports",
@@ -315,7 +318,12 @@
       "thenBy": "Puis par",
       "addSortLevel": "Ajouter un niveau de tri",
       "removeSortAria": "Retirer le niveau de tri",
-      "noColumnsSelected": "Aucune colonne sélectionnée — ajoutez-en au moins une."
+      "noColumnsSelected": "Aucune colonne sélectionnée — ajoutez-en au moins une.",
+      "tabs": {
+        "data": "Données",
+        "filter": "Filtre",
+        "format": "Mise en page"
+      }
     },
     "runner": {
       "downloadCsv": "Télécharger le CSV",
@@ -822,5 +830,20 @@
     "print": "Imprimer",
     "printFailed": "Impossible d'ouvrir la boîte d'impression",
     "export": "Exporter"
+  },
+  "projectProfitability": {
+    "title": "Rentabilité des projets",
+    "empty": "Aucune activité de projet sur cette période.",
+    "columns": {
+      "project": "Projet",
+      "customer": "Client",
+      "revenue": "Produits",
+      "cogs": "Coût des ventes",
+      "grossProfit": "Marge brute",
+      "expenses": "Charges",
+      "net": "Résultat net",
+      "margin": "Marge",
+      "hours": "Heures"
+    }
   }
 }

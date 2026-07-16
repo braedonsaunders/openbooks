@@ -25,14 +25,17 @@
       "registersTitle": "Registros de CxC y CxP",
       "registersDescription": "Registros de transacciones por cliente y proveedor con saldos acumulados",
       "budgetTitle": "Presupuesto vs Real",
-      "budgetDescription": "Valores reales frente a un escenario de presupuesto, por cuenta, con variación $ y %"
+      "budgetDescription": "Valores reales frente a un escenario de presupuesto, por cuenta, con variación $ y %",
+      "projectProfitabilityTitle": "Rentabilidad por proyecto",
+      "projectProfitabilityDescription": "Ingresos, costo y margen por proyecto — cuadra con el estado de resultados, con horas aprobadas"
     },
     "groups": {
       "financial": "Estados financieros",
       "ledger": "Libro mayor",
       "receivablesPayables": "Cuentas por cobrar y pagar",
       "budgeting": "Presupuestos",
-      "custom": "Personalizados y guardados"
+      "custom": "Personalizados y guardados",
+      "projects": "Proyectos"
     },
     "customStudio": {
       "title": "Constructor de informes",
@@ -315,7 +318,12 @@
       "thenBy": "Luego por",
       "addSortLevel": "Agregar nivel de orden",
       "removeSortAria": "Quitar nivel de orden",
-      "noColumnsSelected": "No hay columnas seleccionadas: agregue al menos una."
+      "noColumnsSelected": "No hay columnas seleccionadas: agregue al menos una.",
+      "tabs": {
+        "data": "Datos",
+        "filter": "Filtro",
+        "format": "Formato"
+      }
     },
     "runner": {
       "downloadCsv": "Descargar CSV",
@@ -822,5 +830,20 @@
     "print": "Imprimir",
     "printFailed": "No se pudo abrir el cuadro de impresión",
     "export": "Exportar"
+  },
+  "projectProfitability": {
+    "title": "Rentabilidad por proyecto",
+    "empty": "Sin actividad de proyectos en este período.",
+    "columns": {
+      "project": "Proyecto",
+      "customer": "Cliente",
+      "revenue": "Ingresos",
+      "cogs": "Costo de ventas",
+      "grossProfit": "Utilidad bruta",
+      "expenses": "Gastos",
+      "net": "Utilidad neta",
+      "margin": "Margen",
+      "hours": "Horas"
+    }
   }
 }

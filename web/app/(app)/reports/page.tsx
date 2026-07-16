@@ -16,7 +16,9 @@ export default async function Reports() {
     db.execute(sql`select id, name, path, params from saved_reports order by created_at desc limit 12`) as Promise<{
       rows: { id: string; name: string; path: string; params: Record<string, string> }[]
     }>,
-    db.execute(sql`select id, name, kind from report_definitions order by updated_at desc limit 12`) as Promise<{
+    db.execute(
+      sql`select id, name, kind from report_definitions where coalesce(report_type, 'query') = 'query' order by updated_at desc limit 12`,
+    ) as Promise<{
       rows: { id: string; name: string; kind: string }[]
     }>,
   ])
