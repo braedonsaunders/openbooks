@@ -447,6 +447,8 @@ export interface GeneralLedgerLine {
   debit: number
   credit: number
   balance: number // running (debit-signed) within the account
+  docKind: string | null
+  docId: string | null
 }
 
 export interface GeneralLedgerAccount {
@@ -494,11 +496,13 @@ export async function generalLedger(
   const lines = (await db.execute(sql`
     select l.account_id, a.number, a.name, a.type,
            e.id as entry_id, e.entry_number, e.posting_date::text as date,
-           l.memo, p.display_name as party, l.amount
+           l.memo, p.display_name as party, l.amount,
+           d.kind as doc_kind, d.id as doc_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
       join accounts a on a.id = l.account_id
       left join parties p on p.id = l.party_id
+      left join documents d on d.id = e.source_document_id
      where e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}
      order by a.number nulls last, a.name, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
@@ -507,6 +511,7 @@ export async function generalLedger(
       account_id: string; number: string | null; name: string; type: string
       entry_id: string; entry_number: string | null; date: string
       memo: string | null; party: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
     }[]
   }
   const truncated = lines.rows.length > maxLines
@@ -531,6 +536,8 @@ export async function generalLedger(
       debit: amt > 0 ? amt : 0,
       credit: amt < 0 ? -amt : 0,
       balance: current.closing,
+      docKind: r.doc_kind,
+      docId: r.doc_id,
     })
   }
   return { accounts, from, to, truncated }
@@ -556,6 +563,8 @@ export interface JournalReportEntry {
   origin: string
   lines: JournalReportLine[]
   totalDebit: number
+  docKind: string | null
+  docId: string | null
 }
 export interface JournalReportResult {
   entries: JournalReportEntry[]
@@ -578,11 +587,13 @@ export async function journalReport(
   const r = (await db.execute(sql`
     select e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
            a.number as acct_number, a.name as acct_name, p.display_name as party,
-           l.memo as line_memo, l.amount
+           l.memo as line_memo, l.amount,
+           d.kind as doc_kind, d.id as doc_id
       from journal_entries e
       join journal_lines l on l.entry_id = e.id
       join accounts a on a.id = l.account_id
       left join parties p on p.id = l.party_id
+      left join documents d on d.id = e.source_document_id
      where e.status = 'posted' and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimWhere(opts.dims)}
      order by e.posting_date desc, e.entry_number desc, l.line_number
@@ -591,6 +602,7 @@ export async function journalReport(
     rows: {
       id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
       acct_number: string | null; acct_name: string; party: string | null; line_memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
     }[]
   }
   const truncated = r.rows.length > maxLines
@@ -600,7 +612,7 @@ export async function journalReport(
   let current: JournalReportEntry | null = null
   for (const x of rows) {
     if (!current || current.id !== x.id) {
-      current = { id: x.id, entryNumber: x.entry_number, date: x.date, memo: x.entry_memo, origin: x.origin, lines: [], totalDebit: 0 }
+      current = { id: x.id, entryNumber: x.entry_number, date: x.date, memo: x.entry_memo, origin: x.origin, lines: [], totalDebit: 0, docKind: x.doc_kind, docId: x.doc_id }
       entries.push(current)
     }
     const amt = Number(x.amount)
@@ -704,6 +716,8 @@ export interface RegisterLine {
   debit: number
   credit: number
   balance: number
+  docKind: string | null
+  docId: string | null
 }
 export interface RegisterParty {
   partyId: string | null
@@ -747,11 +761,13 @@ export async function partyRegister(
 
   const lines = (await db.execute(sql`
     select l.party_id, pt.display_name as party_name,
-           e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount
+           e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount,
+           d.kind as doc_kind, d.id as doc_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
       join accounts a on a.id = l.account_id
       left join parties pt on pt.id = l.party_id
+      left join documents d on d.id = e.source_document_id
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and ${dimWhere(opts.dims)}${partyFilter}
      order by pt.display_name nulls last, e.posting_date, e.entry_number, l.line_number
@@ -760,6 +776,7 @@ export async function partyRegister(
     rows: {
       party_id: string | null; party_name: string | null
       entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
     }[]
   }
   const truncated = lines.rows.length > maxLines
@@ -783,6 +800,8 @@ export async function partyRegister(
       debit: amt > 0 ? amt : 0,
       credit: amt < 0 ? -amt : 0,
       balance: current.closing,
+      docKind: x.doc_kind,
+      docId: x.doc_id,
     })
   }
   return { parties, from: opts.from, to: opts.to, side, truncated }
@@ -848,6 +867,11 @@ export interface TxnDetailLine {
   party: string | null
   memo: string | null
   amount: number // debit-signed
+  /** Source-document kind (vendor_bill, customer_invoice, journal, …) for the
+   *  transaction-type pill; null for system-generated GL entries. */
+  docKind: string | null
+  /** Source-document id → opens the native module drawer; null when none. */
+  docId: string | null
 }
 
 export interface TxnDetailResult {
@@ -877,8 +901,10 @@ export async function transactionDetail(opts: {
   dims?: DimFilter
   basis?: "accrual" | "cash"
   limit?: number
+  offset?: number
 }): Promise<TxnDetailResult> {
   const limit = opts.limit ?? 2000
+  const offset = opts.offset ?? 0
   const acctFilter =
     opts.accountIds && opts.accountIds.length
       ? sql`a.id in (
@@ -922,19 +948,22 @@ export async function transactionDetail(opts: {
   const r = (await db.execute(sql`
     select e.id as entry_id, e.entry_number, e.posting_date::text as date,
            a.number as acct_number, a.name as acct_name, a.type as acct_type,
-           p.display_name as party, l.memo, l.amount
+           p.display_name as party, l.memo, l.amount,
+           d.kind as doc_kind, d.id as doc_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
       join accounts a on a.id = l.account_id
       left join parties p on p.id = l.party_id
+      left join documents d on d.id = e.source_document_id
      where ${where}
      order by e.posting_date, e.entry_number, l.line_number
-     limit ${limit}
+     limit ${limit} offset ${offset}
   `)) as unknown as {
     rows: {
       entry_id: string; entry_number: string | null; date: string
       acct_number: string | null; acct_name: string; acct_type: string
       party: string | null; memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
     }[]
   }
   const lines: TxnDetailLine[] = r.rows.map((x) => ({
@@ -947,6 +976,8 @@ export async function transactionDetail(opts: {
     party: x.party,
     memo: x.memo,
     amount: Number(x.amount),
+    docKind: x.doc_kind,
+    docId: x.doc_id,
   }))
   return {
     lines,
@@ -956,6 +987,113 @@ export async function transactionDetail(opts: {
     count: totals.n,
     truncated: totals.n > lines.length,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Project profitability — per-project revenue, cost and margin (job costing)
+// ---------------------------------------------------------------------------
+
+export interface ProjectProfitRow {
+  projectId: string
+  projectName: string
+  customerName: string | null
+  status: string | null
+  billingMethod: string | null
+  revenue: number
+  cogs: number
+  grossProfit: number
+  expenses: number
+  net: number
+  margin: number | null // net ÷ revenue; null when there's no revenue
+  hours: number
+}
+export interface ProjectProfitResult {
+  rows: ProjectProfitRow[]
+  totals: { revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number }
+  from: string
+  to: string
+}
+
+/**
+ * Project profitability: for every project with posted P&L activity (or
+ * approved time) in the period, its revenue, COGS, expenses, gross profit, net
+ * and margin — reader-signed so revenue and profit read positive. Money comes
+ * straight from `journal_lines.project_id`, so each project row ties exactly to
+ * the P&L filtered on that project (the row links there). `hours` is approved
+ * `time_entries` for the period, an operational read on the money.
+ */
+export async function projectProfitability(
+  from: string,
+  to: string,
+  opts: { dims?: DimFilter } = {},
+): Promise<ProjectProfitResult> {
+  const r = (await db.execute(sql`
+    with pl as (
+      select l.project_id,
+             coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
+             coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
+             coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+        join accounts a on a.id = l.account_id
+       where l.project_id is not null
+         and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+         and ${dimWhere(opts.dims)}
+       group by l.project_id
+    ),
+    hrs as (
+      select project_id, coalesce(sum(hours), 0) as hours
+        from time_entries
+       where project_id is not null and status = 'approved'
+         and worked_on >= ${from} and worked_on <= ${to}
+       group by project_id
+    )
+    select p.id, p.name, cu.display_name as customer, p.status, p.billing_method,
+           coalesce(pl.revenue, 0) as revenue, coalesce(pl.cogs, 0) as cogs,
+           coalesce(pl.expenses, 0) as expenses, coalesce(hrs.hours, 0) as hours
+      from projects p
+      left join pl on pl.project_id = p.id
+      left join hrs on hrs.project_id = p.id
+      left join parties cu on cu.id = p.customer_id
+     where pl.project_id is not null or hrs.project_id is not null
+     order by (coalesce(pl.revenue, 0) - coalesce(pl.cogs, 0) - coalesce(pl.expenses, 0)) desc, p.name
+  `)) as unknown as {
+    rows: {
+      id: string; name: string; customer: string | null; status: string | null; billing_method: string | null
+      revenue: string; cogs: string; expenses: string; hours: string
+    }[]
+  }
+  const rows: ProjectProfitRow[] = r.rows.map((x) => {
+    const revenue = Number(x.revenue)
+    const cogs = Number(x.cogs)
+    const expenses = Number(x.expenses)
+    const grossProfit = revenue - cogs
+    const net = grossProfit - expenses
+    return {
+      projectId: x.id,
+      projectName: x.name,
+      customerName: x.customer,
+      status: x.status,
+      billingMethod: x.billing_method,
+      revenue, cogs, grossProfit, expenses, net,
+      margin: Math.abs(revenue) >= 0.005 ? net / revenue : null,
+      hours: Number(x.hours),
+    }
+  })
+  const t = rows.reduce(
+    (a, r) => ({
+      revenue: a.revenue + r.revenue,
+      cogs: a.cogs + r.cogs,
+      grossProfit: a.grossProfit + r.grossProfit,
+      expenses: a.expenses + r.expenses,
+      net: a.net + r.net,
+      hours: a.hours + r.hours,
+    }),
+    { revenue: 0, cogs: 0, grossProfit: 0, expenses: 0, net: 0, hours: 0 },
+  )
+  const totals = { ...t, margin: Math.abs(t.revenue) >= 0.005 ? t.net / t.revenue : null }
+  return { rows, totals, from, to }
 }
 
 export async function dimensionOptions() {

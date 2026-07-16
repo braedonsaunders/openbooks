@@ -56,10 +56,13 @@ export function ReportFilterBar({
   controls,
   dimensions,
   actions,
+  defaultPeriod = 'this_fiscal_year',
 }: {
   controls: ReportControls
   dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[] }
   actions?: ReactNode
+  /** Preset shown when no `period` param is set (aging defaults to `today`). */
+  defaultPeriod?: string
 }) {
   const t = useTranslations('reports.filterBar')
   const router = useRouter()
@@ -79,7 +82,7 @@ export function ReportFilterBar({
     [params, pathname, router],
   )
 
-  const period = params.get('period') ?? 'this_fiscal_year'
+  const period = params.get('period') ?? defaultPeriod
   const breakout = params.get('breakout') ?? 'none'
   const compare = params.get('compare') ?? 'none'
   const basis = params.get('basis') ?? 'accrual'

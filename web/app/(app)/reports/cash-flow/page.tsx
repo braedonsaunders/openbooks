@@ -2,11 +2,13 @@ import { getTranslations } from 'next-intl/server'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
+import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
+import { currencySymbol } from '../../../../lib/statement-format'
 import { money } from '../../../../lib/format'
 import { ReportFilterBar } from '../ReportFilterBar'
-import { StatementExport } from '../StatementExport'
+import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +28,9 @@ export default async function CashFlow({
   const from = period.from
   const to = period.to
   const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
-  const [cf, opts] = await Promise.all([cashFlow(from, to, dims), dimensionOptions()])
+  const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims), dimensionOptions(), orgInfo()])
+  const sym = currencySymbol(org?.base_currency)
+  const m = (v: number) => money(v, sym)
 
   const sectionLabels: Record<CashFlowSection, string> = {
     operating: t('sections.operating'),
@@ -42,15 +46,17 @@ export default async function CashFlow({
         <>
           <PageHeader
             title={t('title')}
-            description={t('dateRange', { from, to })}
             back={{ href: '/reports', label: tr('hub.title') }}
-            actions={<><SaveViewButton /><StatementExport kind="cash-flow" params={sp} /></>}
           />
-          <ReportFilterBar controls={{ period: true, dimensions: true }} dimensions={opts} />
+          <ReportFilterBar
+            controls={{ period: true, dimensions: true }}
+            dimensions={opts}
+            actions={<><SaveViewButton /><ExportMenu kind="cash-flow" params={sp} /></>}
+          />
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span>{t('reconciliation')}</span>
             <Badge variant={reconciled ? 'success' : 'destructive'}>
-              {reconciled ? t('reconciled') : t('offBy', { amount: money(cf.reconciliationGap) })}
+              {reconciled ? t('reconciled') : t('offBy', { amount: m(cf.reconciliationGap) })}
             </Badge>
           </div>
         </>
@@ -74,6 +80,7 @@ export default async function CashFlow({
                   subtotalLabel={t('subtotal', { section: sectionLabels[section].toLowerCase() })}
                   lines={s.lines}
                   subtotal={s.subtotal}
+                  m={m}
                 />
               )
             })
@@ -83,17 +90,17 @@ export default async function CashFlow({
               <TableRow>
                 <TableCell className="font-bold">{t('netChange')}</TableCell>
                 <TableCell className={cn('text-right font-bold tabular-nums', cf.netChange < 0 && 'text-red-600 dark:text-red-400')}>
-                  {money(cf.netChange)}
+                  {m(cf.netChange)}
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="pl-8 text-slate-500 dark:text-slate-400">{t('openingCash')}</TableCell>
-                <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{money(cf.openingCash)}</TableCell>
+                <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{m(cf.openingCash)}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-semibold">{t('closingCash')}</TableCell>
                 <TableCell className={cn('text-right font-semibold tabular-nums', cf.closingCash < 0 && 'text-red-600 dark:text-red-400')}>
-                  {money(cf.closingCash)}
+                  {m(cf.closingCash)}
                 </TableCell>
               </TableRow>
             </>
@@ -109,11 +116,13 @@ function SectionRows({
   subtotalLabel,
   lines,
   subtotal,
+  m,
 }: {
   title: string
   subtotalLabel: string
   lines: { type: string; label: string; amount: number }[]
   subtotal: number
+  m: (v: number) => string
 }) {
   return (
     <>
@@ -136,7 +145,7 @@ function SectionRows({
           <TableRow key={l.type}>
             <TableCell className="pl-8">{l.label}</TableCell>
             <TableCell className={cn('text-right tabular-nums', l.amount < 0 && 'text-red-600 dark:text-red-400')}>
-              {money(l.amount)}
+              {m(l.amount)}
             </TableCell>
           </TableRow>
         ))
@@ -144,7 +153,7 @@ function SectionRows({
       <TableRow>
         <TableCell className="font-semibold">{subtotalLabel}</TableCell>
         <TableCell className={cn('text-right font-semibold tabular-nums', subtotal < 0 && 'text-red-600 dark:text-red-400')}>
-          {money(subtotal)}
+          {m(subtotal)}
         </TableCell>
       </TableRow>
     </>

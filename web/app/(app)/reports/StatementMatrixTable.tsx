@@ -1,4 +1,8 @@
+'use client'
+
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
 import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-matrix'
@@ -9,9 +13,27 @@ import { currencySymbol, formatCell, isNegative } from '../../../lib/statement-f
  * Renders a multi-column statement view (P&L, Balance Sheet, …) as a clean,
  * paper-style statement — no card chrome, no zebra: just a ruled header, section
  * headings, indented account rows, and bold subtotal/total rows with a rule
- * above (double rule below the grand total). The currency symbol shows on the
- * first row and on total rows (GAAP convention). Every amount drills through.
+ * above (double rule below the grand total). The currency symbol shows on every
+ * amount row. Every amount drills through. Section headings and parent accounts
+ * carry a subtle chevron to collapse/expand their rows.
  */
+
+/** Last descendant index of row `i` (section → its account rows; parent account
+ *  → its deeper account rows). Returns `i` when the row has no children. */
+function descendantEnd(lines: StatementView['lines'], i: number): number {
+  const row = lines[i]
+  let j = i + 1
+  if (row.kind === 'section') {
+    while (j < lines.length && lines[j].kind === 'account') j++
+    return j - 1
+  }
+  if (row.kind === 'account') {
+    while (j < lines.length && lines[j].kind === 'account' && lines[j].depth > row.depth) j++
+    return j - 1
+  }
+  return i
+}
+
 export function StatementMatrixTable({
   view,
   scale = 'actual',
@@ -20,13 +42,42 @@ export function StatementMatrixTable({
 }: {
   view: StatementView
   scale?: ReportScale
-  /** Currency code (e.g. 'CAD') → symbol shown on first + total rows. */
+  /** Currency code (e.g. 'CAD') → symbol shown on amount rows. */
   currency?: string
   drill?: { dims: StatementDimFilter; basis: StatementBasis; back: string; backLabel: string }
 }) {
   const cols = view.columns
   const sym = currencySymbol(currency)
-  let firstAmountShown = false
+  const lines = view.lines
+
+  // Which rows can collapse, and the descendant range each one hides.
+  const ranges = useMemo(() => {
+    const map = new Map<number, number>()
+    lines.forEach((_, i) => {
+      const end = descendantEnd(lines, i)
+      if (end > i) map.set(i, end)
+    })
+    return map
+  }, [lines])
+
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+
+  const hidden = useMemo(() => {
+    const h = new Set<number>()
+    for (const i of collapsed) {
+      const end = ranges.get(i)
+      if (end === undefined) continue
+      for (let k = i + 1; k <= end; k++) h.add(k)
+    }
+    return h
+  }, [collapsed, ranges])
+
+  const toggle = (i: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      next.has(i) ? next.delete(i) : next.add(i)
+      return next
+    })
 
   return (
     <div className="overflow-x-auto">
@@ -48,7 +99,23 @@ export function StatementMatrixTable({
           </tr>
         </thead>
         <tbody>
-          {view.lines.map((l, i) => {
+          {lines.map((l, i) => {
+            if (hidden.has(i)) return null
+            const canToggle = ranges.has(i)
+            const isCollapsed = collapsed.has(i)
+            const chevron = canToggle ? (
+              <button
+                type="button"
+                onClick={() => toggle(i)}
+                aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                className="mr-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+              </button>
+            ) : (
+              <span className="mr-0.5 inline-block h-4 w-4 shrink-0" />
+            )
+
             if (l.kind === 'section') {
               return (
                 <tr key={i}>
@@ -56,7 +123,10 @@ export function StatementMatrixTable({
                     colSpan={cols.length + 1}
                     className="pt-4 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"
                   >
-                    {l.label}
+                    <span className="inline-flex items-center">
+                      {chevron}
+                      {l.label}
+                    </span>
                   </td>
                 </tr>
               )
@@ -65,8 +135,6 @@ export function StatementMatrixTable({
             const isTotal = l.kind === 'total'
             const isTotalish = isSub || isTotal
             const weight = isTotal || l.emphasis ? 'font-semibold text-slate-900 dark:text-slate-100' : isSub ? 'font-medium' : ''
-            const showSym = isTotalish || !firstAmountShown
-            if (l.values?.some((v) => typeof v === 'number')) firstAmountShown = true
 
             return (
               <tr
@@ -85,14 +153,17 @@ export function StatementMatrixTable({
                     l.depth >= 3 && 'pl-14',
                   )}
                 >
-                  {l.kind === 'account' && l.accountId ? (
-                    <Link href={`/accounts/${l.accountId}`} className="hover:text-teal-700 dark:hover:text-teal-300">
-                      {l.number && <span className="mr-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">{l.number}</span>}
-                      {l.label}
-                    </Link>
-                  ) : (
-                    l.label
-                  )}
+                  <span className="inline-flex items-baseline">
+                    {l.kind === 'account' ? chevron : null}
+                    {l.kind === 'account' && l.accountId ? (
+                      <Link href={`/accounts/${l.accountId}`} className="hover:text-teal-700 dark:hover:text-teal-300">
+                        {l.number && <span className="mr-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">{l.number}</span>}
+                        {l.label}
+                      </Link>
+                    ) : (
+                      l.label
+                    )}
+                  </span>
                 </td>
                 {cols.map((c, ci) => {
                   const v = l.values?.[ci]
@@ -111,7 +182,7 @@ export function StatementMatrixTable({
                         })
                       : null
                   const neg = v !== undefined && isNegative(v, c.kind)
-                  const text = v === undefined ? '' : formatCell(v, c.kind, scale, c.kind === 'amount' && showSym ? sym : '')
+                  const text = v === undefined ? '' : formatCell(v, c.kind, scale, c.kind === 'amount' ? sym : '')
                   return (
                     <td
                       key={c.key}

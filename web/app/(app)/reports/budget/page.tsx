@@ -2,10 +2,11 @@ import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { budgetScenarioOptions, budgetVsActualView } from '../../../../lib/budget-report'
+import { orgInfo } from '../../../../lib/data'
 import { StatementMatrixTable } from '../StatementMatrixTable'
 import { ScenarioPicker } from './ScenarioPicker'
 import { SaveViewButton } from '../SaveViewButton'
-import { StatementExport } from '../StatementExport'
+import { ExportMenu } from '../ExportMenu'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,6 @@ export default async function BudgetPage({
         header={
           <PageHeader
             title={t('budget.title')}
-            description={t('budget.description')}
             back={{ href: '/reports', label: t('hub.title') }}
           />
         }
@@ -47,7 +47,7 @@ export default async function BudgetPage({
     netIncome: t('pnl.netIncome'),
     totalOf: (section: string) => t('statement.sectionTotal', { section }),
   }
-  const view = await budgetVsActualView(scenarioId, labels)
+  const [view, org] = await Promise.all([budgetVsActualView(scenarioId, labels), orgInfo()])
 
   return (
     <ListPageLayout
@@ -55,17 +55,22 @@ export default async function BudgetPage({
         <>
           <PageHeader
             title={t('budget.title')}
-            description={t('budget.description')}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={<><SaveViewButton /><StatementExport kind="budget" params={{ scenario: scenarioId }} /></>}
           />
-          <ScenarioPicker scenarios={scenarios} value={scenarioId} />
+          <div className="flex items-end justify-between gap-2">
+            <ScenarioPicker scenarios={scenarios} value={scenarioId} />
+            <div className="flex items-center gap-1.5">
+              <SaveViewButton />
+              <ExportMenu kind="budget" params={{ scenario: scenarioId }} />
+            </div>
+          </div>
         </>
       }
     >
       {view ? (
         <StatementMatrixTable
           view={view}
+          currency={org?.base_currency}
           drill={{ dims: {}, basis: 'accrual', back: `/reports/budget?scenario=${scenarioId}`, backLabel: t('budget.title') }}
         />
       ) : (

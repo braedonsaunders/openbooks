@@ -28,6 +28,14 @@ export default async function Reports() {
     icon,
   })
 
+  // AR/AP aging split into four distinct reports (side × summary/detail).
+  const agingCard = (side: 'ar' | 'ap', view: 'summary' | 'detail') => ({
+    href: `/reports/aging?side=${side}${view === 'detail' ? '&view=detail' : ''}`,
+    title: `${side === 'ap' ? t('aging.payablesTitle') : t('aging.receivablesTitle')} · ${view === 'detail' ? t('aging.detail') : t('aging.summary')}`,
+    desc: t('hub.cards.agingDescription'),
+    icon: 'CalendarClock',
+  })
+
   const groups: HubGroup[] = [
     {
       key: 'financial',
@@ -51,7 +59,10 @@ export default async function Reports() {
       label: t('hub.groups.receivablesPayables'),
       accent: 'violet',
       cards: [
-        card('aging', '/reports/aging?side=ar', 'CalendarClock'),
+        agingCard('ar', 'summary'),
+        agingCard('ar', 'detail'),
+        agingCard('ap', 'summary'),
+        agingCard('ap', 'detail'),
         card('registers', '/reports/registers?side=ar', 'Receipt'),
         card('receivables', '/reports/partners?kind=receivable', 'Wallet'),
         card('payables', '/reports/partners?kind=payable', 'Landmark'),
@@ -62,6 +73,12 @@ export default async function Reports() {
       label: t('hub.groups.budgeting'),
       accent: 'amber',
       cards: [card('budget', '/reports/budget', 'Target')],
+    },
+    {
+      key: 'projects',
+      label: t('hub.groups.projects'),
+      accent: 'sky',
+      cards: [card('projectProfitability', '/reports/project-profitability', 'Coins')],
     },
     {
       key: 'custom',
