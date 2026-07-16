@@ -13,4 +13,12 @@ extraction/transactions/
 extraction/transactions_dump.log
 extraction/reconciliation-report.json
 
+# raw NetSuite XML metadata extractions — vendor SDF objects + SuiteTalk
+# schema (regenerable reference, not source; kept local, out of the repo)
+extraction/netsuite-sdf/
+extraction/standard-schema/
+extraction/**/*.xml
+extraction/**/*.xsd
+extraction/**/*.wsdl
+
 engine/*.log
