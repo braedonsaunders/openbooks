@@ -50,6 +50,27 @@ export function StatementMatrixTable({
   const sym = currencySymbol(currency)
   const lines = view.lines
 
+  // Merged group headings (e.g. one per department) when breakout is combined
+  // with a compare — consecutive columns sharing a `group` span one heading.
+  const hasGroups = cols.some((c) => c.group)
+  const spans: { group: string; span: number }[] = []
+  if (hasGroups) {
+    for (const c of cols) {
+      const last = spans[spans.length - 1]
+      if (last && last.group === (c.group ?? '')) last.span++
+      else spans.push({ group: c.group ?? '', span: 1 })
+    }
+  }
+  // First column index of each group, for a subtle divider between groups.
+  const groupStart = new Set<number>()
+  if (hasGroups) {
+    let i = 0
+    for (const s of spans) {
+      if (i > 0) groupStart.add(i)
+      i += s.span
+    }
+  }
+
   // Which rows can collapse, and the descendant range each one hides.
   const ranges = useMemo(() => {
     const map = new Map<number, number>()
@@ -83,14 +104,29 @@ export function StatementMatrixTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm tabular-nums">
         <thead>
+          {hasGroups && (
+            <tr>
+              <th className="min-w-[16rem]" />
+              {spans.map((s, i) => (
+                <th
+                  key={i}
+                  colSpan={s.span}
+                  className="border-b border-slate-200 px-4 pt-1 pb-1 text-center text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-700 dark:text-slate-400"
+                >
+                  {s.group}
+                </th>
+              ))}
+            </tr>
+          )}
           <tr className="border-b border-slate-300 dark:border-slate-600">
             <th className="min-w-[16rem] py-2 pr-4 text-left font-semibold text-slate-500 dark:text-slate-400" />
-            {cols.map((c) => (
+            {cols.map((c, ci) => (
               <th
                 key={c.key}
                 className={cn(
                   'py-2 pl-4 text-right font-semibold whitespace-nowrap',
                   c.kind === 'amount' ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500',
+                  groupStart.has(ci) && 'border-l border-slate-200 dark:border-slate-700',
                 )}
               >
                 {c.label}
@@ -186,7 +222,12 @@ export function StatementMatrixTable({
                   return (
                     <td
                       key={c.key}
-                      className={cn('py-1 pl-4 text-right whitespace-nowrap', weight, neg && 'text-red-600 dark:text-red-400')}
+                      className={cn(
+                        'py-1 pl-4 text-right whitespace-nowrap',
+                        weight,
+                        neg && 'text-red-600 dark:text-red-400',
+                        groupStart.has(ci) && 'border-l border-slate-100 dark:border-slate-800',
+                      )}
                     >
                       {href ? (
                         <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">

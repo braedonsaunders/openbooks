@@ -49,6 +49,9 @@ export type StatementColumn = {
   dimField?: 'department' | 'project' | 'location' | 'class'
   /** The dimension value id for this column (null = the "Unassigned" bucket). */
   dimValue?: string | null
+  /** Spanning header group (e.g. the department name) when breakout is combined
+   *  with a compare — columns sharing a group render under one merged heading. */
+  group?: string
 }
 
 export type MatrixRow = {
@@ -104,6 +107,8 @@ type AmountColumn = {
   dimVal?: string | null // null = the "Unassigned" bucket
   /** Breakout dimension (drill-through metadata surfaced on StatementColumn). */
   dimField?: 'department' | 'project' | 'location' | 'class'
+  /** Spanning header group (breakout value name) when combined with compare. */
+  group?: string
 }
 
 function daysBetween(from: string, to: string): number {
@@ -187,41 +192,53 @@ async function buildAmountColumns(opts: {
        limit 1
     `)) as unknown as { rows: unknown[] }
     const dimField = breakout as 'department' | 'project' | 'location' | 'class'
-    const cols: AmountColumn[] = rows.rows.map((r) => ({
-      key: r.id,
-      label: r.name,
-      from: period.from,
-      to: period.to,
-      dimCol,
-      dimVal: r.id,
-      dimField,
-    }))
-    if (unassigned.rows.length) {
-      cols.push({ key: 'unassigned', label: 'Unassigned', from: period.from, to: period.to, dimCol, dimVal: null, dimField })
+    const groups = rows.rows.map((r) => ({ key: r.id, name: r.name, dimVal: r.id as string | null }))
+    if (unassigned.rows.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
+
+    // Compose breakout WITH compare: each breakout value gets one column per
+    // period (Current + Prior). With no compare it stays one column per value.
+    const periods = comparePeriods(period, compare, periodLabel)
+    const grouped = periods.length > 1
+    const cols: AmountColumn[] = []
+    for (const g of groups) {
+      for (const p of periods) {
+        cols.push({
+          key: `${g.key}:${p.key}`,
+          label: grouped ? p.label : g.name,
+          group: grouped ? g.name : undefined,
+          from: p.from,
+          to: p.to,
+          dimCol,
+          dimVal: g.dimVal,
+          dimField,
+        })
+      }
     }
     const capped = cols.slice(0, MAX_MATRIX_COLUMNS)
     return { cols: capped, truncated: cols.length > capped.length }
   }
 
-  // breakout === 'none' — single base column, plus comparison.
-  const base: AmountColumn = { key: 'current', label: periodLabel, from: period.from, to: period.to }
-  if (compare === 'none') return { cols: [base], truncated: false }
+  // breakout === 'none' — base column, plus comparison.
+  const periods = comparePeriods(period, compare, periodLabel)
+  return { cols: periods.map((p) => ({ key: p.key, label: p.label, from: p.from, to: p.to })), truncated: false }
+}
 
-  let prior: AmountColumn
+/** The period columns implied by a compare setting: just the base window when
+ *  `none`, otherwise Current + the shifted Prior window (year or equal-length
+ *  prior period). Reused for every breakout group so the two compose. */
+function comparePeriods(
+  period: { from: string; to: string },
+  compare: StatementCompare,
+  periodLabel: string,
+): { key: string; label: string; from: string; to: string }[] {
+  const current = { key: 'current', label: compare === 'none' ? periodLabel : 'Current', from: period.from, to: period.to }
+  if (compare === 'none') return [current]
   if (compare === 'prior_year') {
-    prior = {
-      key: 'prior',
-      label: 'Prior year',
-      from: addMonthsIso(period.from, -12),
-      to: addMonthsIso(period.to, -12),
-    }
-  } else {
-    // prior_period: the equal-length window ending the day before this one.
-    const priorTo = addDays(period.from, -1)
-    const priorFrom = addDays(priorTo, -daysBetween(period.from, period.to))
-    prior = { key: 'prior', label: 'Prior period', from: priorFrom, to: priorTo }
+    return [current, { key: 'prior', label: 'Prior year', from: addMonthsIso(period.from, -12), to: addMonthsIso(period.to, -12) }]
   }
-  return { cols: [{ ...base, label: 'Current' }, prior], truncated: false }
+  const priorTo = addDays(period.from, -1)
+  const priorFrom = addDays(priorTo, -daysBetween(period.from, period.to))
+  return [current, { key: 'prior', label: 'Prior period', from: priorFrom, to: priorTo }]
 }
 
 /** Roll each column vector up the account tree; sign-flip and prune like the
@@ -373,6 +390,7 @@ export async function statementMatrix(opts: {
     to: c.to,
     dimField: c.dimField,
     dimValue: c.dimField ? c.dimVal : undefined,
+    group: c.group,
   }))
   const wantVariance = (opts.variance ?? true) && compare !== 'none' && cols.length === 2
   if (wantVariance) {

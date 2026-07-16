@@ -507,7 +507,7 @@ export async function renderStatementViewPdf(
     periodPhrase: opts.periodPhrase,
     scaleNote: note || undefined,
     decimals: divisor === 1 ? 2 : 0,
-    columns: view.columns.map((c) => ({ label: c.label, kind: c.kind })),
+    columns: view.columns.map((c) => ({ label: c.group ? `${c.group} · ${c.label}` : c.label, kind: c.kind })),
     rows: view.lines.map((l) => ({
       kind: l.kind,
       label: l.label,
@@ -535,7 +535,7 @@ export async function statementViewToXlsx(
     periodPhrase: opts.periodPhrase,
     note: opts.note,
     accountLabel: opts.accountLabel,
-    columns: view.columns.map((c) => ({ label: c.label, kind: c.kind })),
+    columns: view.columns.map((c) => ({ label: c.group ? `${c.group} · ${c.label}` : c.label, kind: c.kind })),
     rows: view.lines.map((l) => ({
       kind: l.kind,
       label: l.label,
@@ -551,7 +551,7 @@ export function statementViewToExportData(
   view: StatementView,
   opts: { title: string; dateRangeLabel: string; accountLabel: string },
 ): ExportData {
-  const columns = [opts.accountLabel, ...view.columns.map((c) => c.label)]
+  const columns = [opts.accountLabel, ...view.columns.map((c) => (c.group ? `${c.group} · ${c.label}` : c.label))]
   const rows: (string | number | null)[][] = view.lines.map((l) => {
     const label = l.kind === 'account' ? `${indent(l.depth)}${l.label}` : l.label
     if (!l.values) return [label, ...view.columns.map(() => null)]

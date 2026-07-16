@@ -84,6 +84,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
         title={t('pnl.title')}
         periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
         note={scale.note || undefined}
+        wide={view.columns.length > 4}
       >
         <StatementMatrixTable
           view={view}
