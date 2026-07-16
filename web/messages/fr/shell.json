@@ -32,6 +32,65 @@
   "topNav": {
     "ariaLabel": "Principal"
   },
+  "globalCreate": {
+    "ariaLabel": "Créer",
+    "title": "Créer",
+    "description": "Commencez un véritable brouillon sans interrompre votre travail.",
+    "createFailed": "Impossible de créer le brouillon",
+    "groups": {
+      "sales": "Ventes",
+      "purchases": "Achats",
+      "accounting": "Comptabilité",
+      "peopleAndLists": "Personnes et listes"
+    },
+    "items": {
+      "invoice": "Facture client",
+      "creditMemo": "Note de crédit",
+      "estimate": "Devis",
+      "salesOrder": "Commande client",
+      "customerPayment": "Paiement client",
+      "bill": "Facture fournisseur",
+      "vendorCredit": "Crédit fournisseur",
+      "purchaseOrder": "Bon de commande",
+      "vendorPayment": "Paiement fournisseur",
+      "journal": "Écriture de journal",
+      "expense": "Note de frais",
+      "cardCharge": "Débit de carte",
+      "cardRefund": "Remboursement sur carte",
+      "check": "Chèque",
+      "deposit": "Dépôt bancaire",
+      "transfer": "Virement bancaire",
+      "asset": "Immobilisation",
+      "customer": "Client",
+      "vendor": "Fournisseur",
+      "employee": "Employé",
+      "item": "Article ou service",
+      "project": "Projet"
+    }
+  },
+  "relatedParty": {
+    "loadingTitle": "Ouverture de la fiche",
+    "loading": "Chargement de la fiche…",
+    "loadFailed": "Impossible d’ouvrir cette fiche"
+  },
+  "globalSearch": {
+    "ariaLabel": "Rechercher",
+    "placeholder": "Rechercher partout…",
+    "clear": "Effacer la recherche",
+    "searching": "Recherche…",
+    "noMatches": "Aucun résultat pour « {query} »",
+    "navigate": "naviguer",
+    "open": "ouvrir",
+    "close": "fermer",
+    "resultCount": "{count, plural, one {# résultat} other {# résultats}}",
+    "groups": {
+      "contacts": "Contacts",
+      "transactions": "Transactions",
+      "accounts": "Comptes",
+      "items": "Articles",
+      "projects": "Projets"
+    }
+  },
   "meta": {
     "description": "La suite de gestion ouverte. Menez vos affaires à livres ouverts."
   },

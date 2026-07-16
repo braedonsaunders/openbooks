@@ -16,6 +16,7 @@ import { ExpenseDrawer } from './ExpenseDrawer'
 import { NewExpenseButton } from './NewExpenseButton'
 import { loadExpenseReport } from '../../../lib/expenses'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { RelatedPartyLink } from '../../../components/related-party-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -195,9 +196,9 @@ export default async function Expenses({
                   </TableCell>
                   <TableCell>
                     {r.party_id && r.employee ? (
-                      <Link href={`/entities/employees?party=${r.party_id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                      <RelatedPartyLink partyId={String(r.party_id)} role="employee" className="text-teal-700 hover:underline dark:text-teal-300">
                         {r.employee}
-                      </Link>
+                      </RelatedPartyLink>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
