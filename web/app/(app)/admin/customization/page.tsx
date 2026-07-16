@@ -92,7 +92,11 @@ export default async function CustomizationPage({
     <ListPageLayout
       header={
         <>
-          <PageHeader title={t('designer.title')} description={t('designer.description')} />
+          <PageHeader
+            title={t('designer.title')}
+            description={t('designer.description')}
+            actions={tab === 'forms' ? <NewFormButton recordType={recordType} /> : <NewViewButton recordType={recordType} />}
+          />
           <div className="flex flex-wrap items-center gap-1.5">
             {RECORD_TYPES.map((rt) => (
               <Link
@@ -130,9 +134,6 @@ export default async function CustomizationPage({
     >
       {tab === 'forms' ? (
         <>
-          <div className="mb-3 flex justify-end">
-            <NewFormButton recordType={recordType} />
-          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -193,9 +194,6 @@ export default async function CustomizationPage({
         <EmptyState title={t('designer.list.newTitle')} description={t('designer.description')} action={<NewViewButton recordType={recordType} />} />
       ) : (
         <>
-          <div className="mb-3 flex justify-end">
-            <NewViewButton recordType={recordType} />
-          </div>
           <Table>
             <TableHeader>
               <TableRow>
