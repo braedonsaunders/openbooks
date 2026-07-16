@@ -1,0 +1,23 @@
+name: CodeFlow Card
+
+# Recompute the README stats card on every merge to main. Renders
+# .github/codeflow-card.svg (and a small history file for sparklines/deltas)
+# with the same analyzer as the codeflow web app, then commits the result.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+jobs:
+  card:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: braedonsaunders/codeflow/card@v1
+        with:
+          receipts: false # set true to post merged-PR comments
