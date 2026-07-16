@@ -18,6 +18,7 @@ import {
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
+import { ShowInactivesToggle } from '../../../../components/show-inactives-toggle'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../../lib/list-params'
@@ -87,6 +88,7 @@ export default async function RecordModule({
     allowedSorts: ['number', 'created', ...columns.map((f) => f.id)],
   })
   const status = pickString(sp.status)
+  const showInactive = pickString(sp.showInactive) === 'true'
   const recId = typeof sp.rec === 'string' ? sp.rec : undefined
 
   const activeFieldFilters = filterFields
@@ -95,6 +97,7 @@ export default async function RecordModule({
 
   const scope = sql`r.org_id = ${authz.user.orgId} and r.type_key = ${typeKey}`
   let where = sql`${scope}
+    ${showInactive || status === 'inactive' ? sql`` : sql` and r.status <> 'inactive'`}
     ${status ? sql` and r.status = ${status}` : sql``}
     ${listParams.q ? sql` and (r.search_text ilike ${'%' + listParams.q.toLowerCase() + '%'} or r.record_number ilike ${'%' + listParams.q + '%'})` : sql``}`
   for (const { field, value } of activeFieldFilters) {
@@ -122,15 +125,19 @@ export default async function RecordModule({
        limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
     `) as any,
     db.execute(sql`
-      select r.status, count(*) as n from custom_records r where ${scope} group by r.status
+      select r.status, count(*) as n from custom_records r
+       where ${scope} ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
+       group by r.status
     `) as any,
     Promise.all(
       filterFields.map(
         (f) =>
           db.execute(sql`
             select r.data->>${f.id} as v, count(*) as n
-              from custom_records r
-             where ${scope} and r.data->>${f.id} is not null
+             from custom_records r
+             where ${scope}
+               ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
+               and r.data->>${f.id} is not null
              group by 1
           `) as any,
       ),
@@ -184,6 +191,7 @@ export default async function RecordModule({
               label={tc('labels.status')}
               options={statusOptions}
             />
+            <ShowInactivesToggle basePath={basePath} currentParams={sp} />
             {filterFields.map((f) => {
               const counts = new Map<string, number>(
                 (filterCounts[filterFields.indexOf(f)]?.rows ?? []).map((r: any) => [

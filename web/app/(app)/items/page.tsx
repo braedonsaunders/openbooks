@@ -6,6 +6,7 @@ import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, 
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
+import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
@@ -60,8 +61,7 @@ export default async function Items({
   })
   const kindParam = pickString(sp.kind)
   const kind = kindParam && (ITEM_KINDS as readonly string[]).includes(kindParam) ? kindParam : undefined
-  const statusParam = pickString(sp.status)
-  const status = statusParam === 'active' || statusParam === 'inactive' ? statusParam : undefined
+  const showInactive = pickString(sp.showInactive) === 'true'
 
   const where = sql`i.org_id = ${orgId}
     ${
@@ -70,7 +70,7 @@ export default async function Items({
         : sql``
     }
     ${kind ? sql` and i.kind = ${kind}` : sql``}
-    ${status === 'active' ? sql` and i.is_active` : status === 'inactive' ? sql` and not i.is_active` : sql``}`
+    ${showInactive ? sql`` : sql` and i.is_active`}`
 
   const [items, counts] = await Promise.all([
     db.execute(sql`
@@ -86,7 +86,7 @@ export default async function Items({
              count(*) filter (where not i.is_active) as inactive,
              i.kind, count(*) as kind_count
         from items i
-       where i.org_id = ${orgId}
+       where i.org_id = ${orgId} ${showInactive ? sql`` : sql`and i.is_active`}
        group by rollup (i.kind)
     `) as any,
   ])
@@ -99,7 +99,7 @@ export default async function Items({
   }
   const total = Number(grand.total)
   const filteredTotal =
-    params.q || kind || status
+    params.q || kind
       ? Number(((await db.execute(sql`select count(*) as n from items i where ${where}`)) as any).rows[0].n)
       : total
 
@@ -123,11 +123,6 @@ export default async function Items({
     label: kindLabel(k),
     count: kindCounts.get(k) ?? 0,
   }))
-  const statusOptions = [
-    { value: 'active', label: tCommon('status.active'), count: Number(grand.active) },
-    { value: 'inactive', label: tCommon('status.inactive'), count: Number(grand.inactive) },
-  ]
-
   return (
     <ListPageLayout
       header={
@@ -140,7 +135,7 @@ export default async function Items({
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder={t('list.searchPlaceholder')} />
             <FilterChips basePath="/items" currentParams={sp} paramKey="kind" label={t('list.kindFilter')} options={kindOptions} />
-            <FilterChips basePath="/items" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+            <ShowInactivesToggle basePath="/items" currentParams={sp} />
           </div>
         </>
       }

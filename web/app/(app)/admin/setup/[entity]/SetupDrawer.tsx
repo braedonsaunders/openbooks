@@ -50,18 +50,20 @@ export function SetupDrawer({
   row,
   members,
   refOptions,
+  closeHref: closeHrefProp,
 }: {
   entity: SetupEntity
   row: Record<string, any> | null
   members: string[]
   refOptions: Record<string, RefOption[]>
+  closeHref?: string
 }) {
   const t = useTranslations('admin.setup')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const creating = !row
   const idColumn = entity.idColumn ?? 'id'
-  const closeHref = `/admin/setup/${entity.key}`
+  const closeHref = closeHrefProp ?? `/admin/setup/${entity.key}`
 
   const [form, setForm] = useState<Record<string, any>>(() => {
     const init: Record<string, any> = {}

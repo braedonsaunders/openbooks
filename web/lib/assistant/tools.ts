@@ -84,7 +84,7 @@ const findAccounts: AssistantToolDef = {
     includeInactive: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).optional(),
   }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
       query?: string;
       type?: string;
@@ -93,7 +93,7 @@ const findAccounts: AssistantToolDef = {
       limit?: number;
     };
     const limit = Math.min(a.limit ?? 25, 50);
-    const all = await accountsWithBalances(a.asOf);
+    const all = await accountsWithBalances(authz.user.orgId, a.asOf);
     const q = a.query?.trim().toLowerCase();
     const matches = all.filter((r) => {
       if (!a.includeInactive && !r.is_active) return false;
@@ -132,10 +132,10 @@ const accountRegisterTool: AssistantToolDef = {
     accountId: uuidInput,
     limit: z.number().int().min(1).max(50).optional(),
   }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { accountId: string; limit?: number };
     const limit = Math.min(a.limit ?? 25, 50);
-    const r = await accountRegister(a.accountId, limit, 0);
+    const r = await accountRegister(authz.user.orgId, a.accountId, limit, 0);
     if (!r.account) return { ok: false, error: "account_not_found" };
     return {
       ok: true,

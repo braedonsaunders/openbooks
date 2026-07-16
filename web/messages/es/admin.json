@@ -576,6 +576,7 @@
       "data": "Importar y exportar"
     },
     "gl_read": "Ver asientos y saldos",
+    "gl_manage": "Gestionar el plan de cuentas",
     "gl_post": "Contabilizar asientos contables",
     "gl_close": "Cerrar períodos contables",
     "ap_read": "Ver facturas de proveedor",

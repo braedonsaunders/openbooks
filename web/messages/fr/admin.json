@@ -620,6 +620,7 @@
       "data": "Import & Export"
     },
     "gl_read": "Consulter les journaux et les soldes",
+    "gl_manage": "Gérer le plan comptable",
     "gl_post": "Comptabiliser des écritures de journal",
     "gl_close": "Clôturer les périodes comptables",
     "ap_read": "Consulter les factures fournisseurs",

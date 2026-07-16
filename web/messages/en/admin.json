@@ -634,6 +634,7 @@
       "data": "Import & Export"
     },
     "gl_read": "View journals and balances",
+    "gl_manage": "Manage the chart of accounts",
     "gl_post": "Post journal entries",
     "gl_close": "Close accounting periods",
     "ap_read": "View bills",
