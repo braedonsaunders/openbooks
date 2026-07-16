@@ -38,3 +38,46 @@ export type { EvalContext, FieldValueMap, RowMap } from './evaluator'
 
 export { validateResponse } from './validator'
 export type { ValidationError } from './validator'
+
+export {
+  MAX_FLOW_EDGES,
+  MAX_FLOW_NODES,
+  actionDataSchema,
+  assigneeTargetSchema,
+  automationEdgeSchema,
+  automationGraphSchema,
+  automationNodeSchema,
+  emptyAutomationGraph,
+  gateDataSchema,
+  interpolateTemplate,
+  lintAutomationGraph,
+  lintWorkerTriggerCompatibility,
+  planAutomation,
+  planFromGate,
+  recipientTargetSchema,
+  triggerDataSchema,
+} from './automation'
+export type {
+  ActionData,
+  ActionKind,
+  AssigneeTarget,
+  AutomationEdge,
+  AutomationGraph,
+  AutomationNode,
+  AutomationPlan,
+  GateData,
+  PlannedAction,
+  PlannedGate,
+  RecipientTarget,
+  TriggerData,
+  TriggerEvent,
+  TriggerKind,
+} from './automation'
+
+export { profileFieldIds } from './flow-subjects'
+export type {
+  FlowFieldDef,
+  FlowFieldType,
+  FlowStatusDef,
+  FlowSubjectProfile,
+} from './flow-subjects'

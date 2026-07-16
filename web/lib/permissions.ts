@@ -63,8 +63,24 @@ export const PERMISSION_CATALOGUE = [
   "sql.execute",
   // External-source sync/migration runs
   "sync.run",
-  // User scripts (sandboxed automation)
+  // Bulk import / export (data-io) — generic across resources; each resource's
+  // own permission is still enforced per-row (e.g. importing accounts also
+  // needs admin.setup.manage).
+  "data.export",
+  "data.import",
+  // User scripts (sandboxed automation): manage = author/edit; execute = call
+  // endpoint scripts (the RESTlet-style HTTP-invokable kind)
   "scripts.manage",
+  "scripts.execute",
+  // Flows — visual approval/automation graphs (docs/flows-design.md).
+  // manage = author/enable flows; approve = act on flow approval gates
+  // (assignees can always act on their OWN gates regardless of this key).
+  "flows.manage",
+  "flows.approve",
+  // Apps — installable packages (sandboxed frontend + governed backend).
+  // `apps.use` runs an installed App; `apps.manage` installs/upgrades/removes.
+  "apps.use",
+  "apps.manage",
   // File Cabinet — document management (browse, upload, move, rename, version)
   "documents.read",
   "documents.manage",
@@ -80,8 +96,10 @@ export const PERMISSION_CATALOGUE = [
   "admin.roles.manage",
   "admin.nav.manage",
   "admin.customization.manage",
+  "admin.setup.manage",
   "admin.audit.read",
   "admin.ai.manage",
+  "admin.sandboxes.manage",
   "api.keys.manage",
 ] as const;
 
@@ -217,9 +235,36 @@ export const PERMISSION_GROUPS: {
     permissions: [{ key: "sync.run", labelKey: permissionLabelKey("sync.run") }],
   },
   {
+    key: "data",
+    labelKey: "permissions.groups.data",
+    permissions: [
+      { key: "data.export", labelKey: permissionLabelKey("data.export") },
+      { key: "data.import", labelKey: permissionLabelKey("data.import") },
+    ],
+  },
+  {
     key: "scripts",
     labelKey: "permissions.groups.scripts",
-    permissions: [{ key: "scripts.manage", labelKey: permissionLabelKey("scripts.manage") }],
+    permissions: [
+      { key: "scripts.manage", labelKey: permissionLabelKey("scripts.manage") },
+      { key: "scripts.execute", labelKey: permissionLabelKey("scripts.execute") },
+    ],
+  },
+  {
+    key: "flows",
+    labelKey: "permissions.groups.flows",
+    permissions: [
+      { key: "flows.manage", labelKey: permissionLabelKey("flows.manage") },
+      { key: "flows.approve", labelKey: permissionLabelKey("flows.approve") },
+    ],
+  },
+  {
+    key: "apps",
+    labelKey: "permissions.groups.apps",
+    permissions: [
+      { key: "apps.use", labelKey: permissionLabelKey("apps.use") },
+      { key: "apps.manage", labelKey: permissionLabelKey("apps.manage") },
+    ],
   },
   {
     key: "documents",
@@ -244,8 +289,10 @@ export const PERMISSION_GROUPS: {
       { key: "admin.roles.manage", labelKey: permissionLabelKey("admin.roles.manage") },
       { key: "admin.nav.manage", labelKey: permissionLabelKey("admin.nav.manage") },
       { key: "admin.customization.manage", labelKey: permissionLabelKey("admin.customization.manage") },
+      { key: "admin.setup.manage", labelKey: permissionLabelKey("admin.setup.manage") },
       { key: "admin.audit.read", labelKey: permissionLabelKey("admin.audit.read") },
       { key: "admin.ai.manage", labelKey: permissionLabelKey("admin.ai.manage") },
+      { key: "admin.sandboxes.manage", labelKey: permissionLabelKey("admin.sandboxes.manage") },
       { key: "api.keys.manage", labelKey: permissionLabelKey("api.keys.manage") },
     ],
   },
@@ -314,8 +361,16 @@ export const BUILT_IN_ROLES: Record<
       "expenses.create",
       "documents.read",
       "documents.manage",
+      "data.export",
+      "data.import",
       "admin.customization.manage",
+      "admin.setup.manage",
       "admin.audit.read",
+      "apps.use",
+      "apps.manage",
+      "scripts.execute",
+      "flows.manage",
+      "flows.approve",
     ],
   },
   accountant: {
@@ -350,6 +405,10 @@ export const BUILT_IN_ROLES: Record<
       "assistant.write",
       "documents.read",
       "documents.manage",
+      "data.export",
+      "data.import",
+      "apps.use",
+      "scripts.execute",
     ],
   },
   approver: {
@@ -362,6 +421,7 @@ export const BUILT_IN_ROLES: Record<
       "ap.approve",
       "ar.read",
       "ar.approve",
+      "flows.approve",
       "reports.read",
       "insights.read",
       "records.read",
@@ -369,12 +429,14 @@ export const BUILT_IN_ROLES: Record<
       "time.approve",
       "assistant.use",
       "documents.read",
+      "data.export",
+      "apps.use",
     ],
   },
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read"],
+    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read", "data.export", "apps.use"],
   },
 };
 

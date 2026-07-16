@@ -284,11 +284,11 @@ alter table insight_cards add foreign key (org_id) references orgs(id);
 alter table insight_dashboards add foreign key (org_id) references orgs(id);
 alter table insight_dashboard_pins add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (dashboard_id) references insight_dashboards(id) on delete cascade;
 
--- saved searches (NetSuite Saved Search analogue — Knowledge menu)
-alter table saved_searches add foreign key (org_id) references orgs(id);
-alter table saved_searches add foreign key (owner_id) references users(id) on delete cascade;
-alter table saved_searches add foreign key (created_by) references users(id);
-alter table saved_searches add foreign key (updated_by) references users(id);
+-- views (NetSuite Saved Search analogue — Knowledge menu)
+alter table saved_views add foreign key (org_id) references orgs(id);
+alter table saved_views add foreign key (owner_id) references users(id) on delete cascade;
+alter table saved_views add foreign key (created_by) references users(id);
+alter table saved_views add foreign key (updated_by) references users(id);
 
 -- file cabinet (replaced the legacy attachments tables — dropped in 0012_file-cabinet)
 alter table folders add foreign key (org_id) references orgs(id);
@@ -322,3 +322,78 @@ alter table form_layouts add foreign key (org_id) references orgs(id);
 alter table user_form_preferences add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (layout_id) references form_layouts(id) on delete set null;
 alter table list_views add foreign key (org_id) references orgs(id), add foreign key (owner_id) references users(id) on delete cascade;
 alter table user_list_preferences add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (view_id) references list_views(id) on delete set null;
+
+-- pdf templates (org-authored printable documents)
+alter table pdf_templates add foreign key (org_id) references orgs(id);
+alter table pdf_templates add foreign key (created_by) references users(id);
+alter table pdf_templates add foreign key (updated_by) references users(id);
+
+-- environments (sandboxes). The sandbox org row itself carries sandbox_of →
+-- production; deleting a sandbox org cascades its business rows via each
+-- table's org_id FK. Note sandbox_of is intentionally NOT cascade-on-delete of
+-- the production org — a production org can't be deleted while sandboxes exist.
+alter table orgs add foreign key (sandbox_of) references orgs(id);
+alter table sandboxes
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (production_org_id) references orgs(id),
+  add foreign key (as_of_period_id) references accounting_periods(id);
+alter table masking_policies add foreign key (org_id) references orgs(id) on delete cascade;
+alter table change_sets
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (sandbox_org_id) references orgs(id) on delete cascade;
+alter table change_set_items
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (change_set_id) references change_sets(id) on delete cascade;
+
+-- multi-org identity (one login across tenants)
+alter table user_org_access
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (member_user_id) references users(id) on delete cascade,
+  add foreign key (acting_user_id) references users(id) on delete cascade;
+
+-- flows (graph automation + approval gates + in-app inbox).
+-- Deleting a flow cascades its run history; runs cascade their checkpoints
+-- and gates. Assignee/decider FKs are plain (deleting a user must not erase
+-- decision history); a user's inbox rows go with the user.
+alter table flows add foreign key (org_id) references orgs(id) on delete cascade;
+alter table flow_runs
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (flow_id) references flows(id) on delete cascade;
+alter table flow_run_effects
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (run_id) references flow_runs(id) on delete cascade;
+alter table flow_gates
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (flow_id) references flows(id) on delete cascade,
+  add foreign key (run_id) references flow_runs(id) on delete cascade,
+  add foreign key (assignee_user_id) references users(id),
+  add foreign key (decided_by) references users(id);
+alter table approval_delegations
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (from_user_id) references users(id),
+  add foreign key (to_user_id) references users(id);
+alter table notifications
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (user_id) references users(id) on delete cascade;
+
+-- apps (installable packages: bundle + sandboxed backend + KV).
+-- Deleting an app cascades its versions, files, storage and run log; the app's
+-- active_version_id nulls out rather than blocking the version delete.
+alter table apps
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (active_version_id) references app_versions(id) on delete set null;
+alter table app_versions
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (app_id) references apps(id) on delete cascade;
+alter table app_files
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (app_id) references apps(id) on delete cascade,
+  add foreign key (version_id) references app_versions(id) on delete cascade;
+alter table app_storage
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (app_id) references apps(id) on delete cascade;
+alter table app_runs
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (app_id) references apps(id) on delete cascade;
+alter table app_listings
+  add foreign key (publisher_org_id) references orgs(id) on delete cascade;

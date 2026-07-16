@@ -1,16 +1,35 @@
 {
   "title": "Approbations",
-  "description": "Éléments en attente assignés à votre rôle ({role}).",
+  "description": "Tout ce qui attend votre intervention dans les flux et les politiques, ainsi que l’état de vos propres soumissions.",
+  "tabs": {
+    "mine": "Mes approbations",
+    "submitted": "Soumis par moi",
+    "all": "Toutes les approbations"
+  },
   "empty": {
     "title": "Rien n’attend votre intervention",
-    "description": "Les demandes d’approbation acheminées à votre rôle apparaîtront ici."
+    "description": "Les approbations qui vous sont assignées, acheminées ou déléguées apparaîtront ici."
+  },
+  "emptySubmitted": {
+    "title": "Aucune soumission en attente",
+    "description": "Les documents que vous soumettez pour approbation apparaîtront ici pendant leur attente."
+  },
+  "emptyAll": {
+    "title": "Rien en attente",
+    "description": "Aucune approbation en attente dans cette organisation."
   },
   "table": {
     "document": "Document",
     "kind": "Type",
     "step": "Étape",
     "decision": "Décision",
-    "stepNumber": "étape {number}"
+    "stepNumber": "étape {number}",
+    "approval": "Approbation",
+    "requested": "Demandée le",
+    "source": "Source",
+    "assignee": "Responsable",
+    "pendingWith": "En attente chez",
+    "waitingSince": "En attente depuis"
   },
   "kinds": {
     "vendor_bill": "facture fournisseur",
@@ -24,5 +43,51 @@
   "decide": {
     "rejectionReason": "Motif du rejet :",
     "decisionFailed": "Échec de la décision"
+  },
+  "source": {
+    "flow": "Flux",
+    "legacy": "Politique"
+  },
+  "aging": {
+    "days": "{days}j"
+  },
+  "bulk": {
+    "selected": "{count} sélectionné(s)",
+    "selectAll": "Tout sélectionner",
+    "selectRow": "Sélectionner {document}",
+    "approveSelected": "Approuver la sélection",
+    "rejectSelected": "Rejeter la sélection",
+    "rejectTitle": "Rejeter {count} approbations ?",
+    "reasonLabel": "Motif du rejet (appliqué à chaque élément sélectionné)",
+    "approvedCount": "{count} approuvée(s)",
+    "rejectedCount": "{count} rejetée(s)",
+    "failedCount": "{count} en échec ({error})"
+  },
+  "ooo": {
+    "button": "Absence du bureau",
+    "title": "Absence du bureau",
+    "description": "Acheminez vos approbations entrantes vers un délégué pendant votre absence.",
+    "delegateTo": "Déléguer à",
+    "delegatePlaceholder": "Choisir un délégué…",
+    "from": "Du",
+    "until": "Jusqu’au",
+    "invalid": "Choisissez un délégué et une plage de dates valide",
+    "saved": "Délégation planifiée",
+    "unavailable": "Le service de délégation n’est pas encore disponible",
+    "banner": "Vos approbations sont déléguées à {name} jusqu’au {date}",
+    "endNow": "Mettre fin maintenant",
+    "ended": "Délégation terminée"
+  },
+  "gates": {
+    "rejectTitle": "Rejeter cette approbation ?",
+    "waitingOthers": "Enregistré — en attente des autres approbateurs",
+    "delegate": "Déléguer",
+    "delegatePlaceholder": "Déléguer à…",
+    "delegated": "Approbation déléguée",
+    "badges": {
+      "quorumAll": "Tous les approbateurs",
+      "reminder": "Rappel {date}",
+      "escalates": "Escalade {date}"
+    }
   }
 }

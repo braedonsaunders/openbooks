@@ -12,6 +12,7 @@
     "edit": "Editar",
     "create": "Crear",
     "creating": "Creando…",
+    "running": "Ejecutando…",
     "add": "Agregar",
     "remove": "Quitar",
     "search": "Buscar",
@@ -31,6 +32,7 @@
     "view": "Ver",
     "open": "Abrir",
     "rename": "Renombrar",
+    "replace": "Reemplazar",
     "post": "Contabilizar",
     "posting": "Contabilizando…",
     "void": "Anular",
@@ -41,7 +43,10 @@
     "print": "Imprimir",
     "copy": "Copiar",
     "select": "Seleccionar",
-    "newRecord": "Nuevo"
+    "newRecord": "Nuevo",
+    "more": "Más acciones",
+    "done": "Listo",
+    "sending": "Enviando…"
   },
   "labels": {
     "name": "Nombre",
@@ -93,7 +98,8 @@
     "from": "Desde",
     "to": "Hasta",
     "of": "de",
-    "settings": "Configuración"
+    "settings": "Configuración",
+    "openBalance": "Saldo pendiente"
   },
   "status": {
     "draft": "Borrador",
@@ -127,7 +133,8 @@
     "notFound": "No encontrado",
     "copied": "Copiado",
     "unsavedChanges": "Tiene cambios sin guardar",
-    "editingHint": "Editando: guarde para aplicar los cambios."
+    "editingHint": "Editando: guarde para aplicar los cambios.",
+    "flowActionDone": "Acción completada"
   },
   "confirm": {
     "title": "¿Está seguro?",
@@ -135,5 +142,30 @@
     "deleteBody": "Esta acción no se puede deshacer.",
     "confirm": "Confirmar",
     "cancel": "Cancelar"
+  },
+  "empty": {
+    "title": "Aún no hay nada",
+    "description": "Ningún registro coincide con los filtros actuales."
+  },
+  "approvalFlow": {
+    "pendingWith": "Pendiente de {names}",
+    "rejectTitle": "¿Rechazar este documento?",
+    "rejectReasonLabel": "Motivo del rechazo",
+    "waitingOthers": "Registrado — a la espera de los demás aprobadores",
+    "alreadyDecided": "Esta aprobación ya fue decidida — actualizando",
+    "decisionFailed": "La decisión falló",
+    "historyTitle": "Aprobaciones",
+    "events": {
+      "submitted": "Enviado para aprobación",
+      "requested": "Aprobación solicitada",
+      "approved": "Aprobado",
+      "rejected": "Rechazado",
+      "escalated": "Escalado",
+      "delegated": "Delegado"
+    },
+    "badges": {
+      "delegated": "Delegado",
+      "escalated": "Escalado"
+    }
   }
 }

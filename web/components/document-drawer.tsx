@@ -12,8 +12,14 @@ import { CustomFieldInput } from './custom-field-input'
 import { HeaderFields } from './transaction-form/header-fields'
 import { AttachmentPanel } from './attachment-panel'
 import { DocTypeBadge } from './doc-type-badge'
+import { PdfButton } from './pdf-button'
+import { FlowManualButtons } from './flow-manual-buttons'
+import { ApprovalActions } from './approval-actions'
+import { ApprovalHistory } from './approval-history'
+import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
 import { money } from '../lib/format'
 import { confirmDialog } from '../lib/confirm'
+import { runClientScripts } from '../lib/client-scripts'
 import type { DocKindConfig } from '../lib/document-kinds'
 import {
   type FormLayoutConfig,
@@ -337,6 +343,16 @@ export function DocumentDrawer({
   async function save() {
     setBusy(true)
     setSaveState('saving')
+    // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
+    // explicit { abort } blocks; { warnings } toast and proceed; fail-open.
+    const gate = await runClientScripts(config.kind, payload_)
+    if (!gate.ok) {
+      toast.error(gate.reason ?? t('toasts.actionFailed'))
+      setSaveState('error')
+      setBusy(false)
+      return
+    }
+    for (const w of gate.warnings) toast.warning(w)
     const res = await fetch(`/api/documents/${doc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -843,6 +859,15 @@ export function DocumentDrawer({
             </>
           ) : (
             <>
+              {PDF_RECORD_TYPE_BY_KEY[recordType ?? String(doc.kind)] ? (
+                <PdfButton recordType={recordType ?? String(doc.kind)} recordId={String(doc.id)} />
+              ) : null}
+              <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
+              {doc.status === 'pending_approval' ? (
+                // Contextual Approve/Reject (flow gate or legacy step) — or a
+                // "Pending with …" chip when the viewer cannot decide.
+                <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
+              ) : null}
               {canEditStatus ? (
                 <Button variant="outline" onClick={() => setMode('edit')}>
                   {tCommon('actions.edit')}
@@ -979,6 +1004,24 @@ export function DocumentDrawer({
               </div>
             ) : null}
 
+            {config.kind === 'deposit' ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className={field}>
+                  <Label>{t('drawer.depositTo')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+                  {editable ? (
+                    <SearchSelect
+                      options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
+                      value={(customValues.controlAccountId as string) ?? ''}
+                      onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))}
+                      placeholder={t('drawer.accountPlaceholder')}
+                    />
+                  ) : (
+                    <p className="text-sm">{accountName(customValues.controlAccountId as string)}</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {config.partyRole ? (
                 <div className={`${field} lg:col-span-2`}>
@@ -1067,6 +1110,12 @@ export function DocumentDrawer({
               readOnly={!editable}
             />
           </div>
+        ) : null}
+
+        {mode === 'view' ? (
+          // NetSuite "Workflow History" parity: the record's approval timeline
+          // (flows + legacy policy engine). Renders nothing when empty.
+          <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
         ) : null}
 
         <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />

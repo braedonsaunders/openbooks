@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
+import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { nextDocumentNumber } from './bills'
 import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
 
@@ -84,6 +85,10 @@ export async function createDocumentDraft(orgId: string, userId: string, kind: s
       createdBy: userId,
     })
     .returning({ id: schema.documents.id, documentNumber: schema.documents.documentNumber })
+  // on_create flows fire AFTER the insert commits. runRecordFlows never
+  // throws into the caller (failures land on the flow_runs row), and it is
+  // awaited — not detached — so it runs inside this request's RLS org scope.
+  await runRecordFlows({ kind: 'on_create' }, kind, doc.id, { orgId, userId })
   return doc
 }
 

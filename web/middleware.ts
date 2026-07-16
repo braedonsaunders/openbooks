@@ -5,7 +5,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * user-row checks happen server-side in pages/APIs via currentUser().
  */
 
-const PUBLIC = ["/login", "/api/login", "/api/v1/", "/favicon.ico"];
+// /api/flows/email-action is sessionless BY DESIGN: one-click email approvals
+// carry their own HMAC token (verified in the route) instead of a cookie.
+const PUBLIC = ["/login", "/api/login", "/api/v1/", "/api/flows/email-action", "/favicon.ico"];
 
 async function validSignature(token: string, secret: string): Promise<boolean> {
   const parts = token.split(".");

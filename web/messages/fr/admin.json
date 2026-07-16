@@ -1,13 +1,14 @@
 {
   "hub": {
-    "metaTitle": "Administration",
-    "title": "Administration",
+    "metaTitle": "Plateforme",
+    "title": "Plateforme",
     "subtitle": "Tout ce qui configure cet espace de travail — profil de l’entreprise, personnes et système.",
     "groups": {
       "company": "Entreprise",
       "people": "Personnes et accès",
       "workspace": "Espace de travail",
-      "activity": "Activité et données"
+      "activity": "Activité et données",
+      "data": "Intégrations et données"
     },
     "cards": {
       "settings": {
@@ -26,6 +27,10 @@
         "title": "Navigation",
         "description": "Réorganisez la barre latérale et renommez les modules par organisation"
       },
+      "records": {
+        "title": "Enregistrements personnalisés",
+        "description": "Concevez vos propres types d’enregistrement — chacun devient un module complet avec sa liste et son éditeur"
+      },
       "customFields": {
         "title": "Champs personnalisés",
         "description": "Ajoutez des champs typés aux enregistrements dans toute l’application"
@@ -34,26 +39,57 @@
         "title": "Formulaires & vues",
         "description": "Personnalisez les formulaires de transaction et les vues de liste par organisation et par utilisateur"
       },
+      "pdfTemplates": {
+        "title": "Modèles PDF",
+        "description": "Concevez des documents PDF imprimables pour les factures, écritures et toutes les transactions"
+      },
       "scripts": {
         "title": "Scripts",
         "description": "Automatisation en environnement isolé exécutée sur les événements du grand livre"
       },
+      "apps": {
+        "title": "Applications",
+        "description": "Créez et installez des paquets d'application — un frontend isolé et un backend encadré"
+      },
       "apiKeys": {
         "title": "Clés API",
         "description": "Créez des clés API à portée restreinte pour les intégrations et consultez les journaux d'utilisation"
+      },
+      "apiDocs": {
+        "title": "Documentation de l'API",
+        "description": "Parcourez la référence de l'API REST pour chaque type d'enregistrement et de transaction"
       },
       "audit": {
         "title": "Journal d’audit",
         "description": "Chaque écriture capturée avec son auteur et les différences avant/après"
       },
       "sync": {
-        "title": "Synchronisation",
-        "description": "Importez depuis des sources externes et rapprochez les migrations"
+        "title": "Migrations et miroir",
+        "description": "Migrez depuis NetSuite, QuickBooks et plus — puis créez un miroir pour exécuter les deux systèmes en parallèle"
       },
       "ai": {
         "title": "IA",
         "description": "Fournisseur, modèles et clé API chiffrée pour l'assistant"
+      },
+      "setup": {
+        "title": "Setup",
+        "description": "Tax, dimensions, payment terms, numbering & other configuration"
+      },
+      "email": {
+        "title": "Envoi des e-mails",
+        "description": "Configurez votre fournisseur d’e-mail pour l’envoi des rapports planifiés"
       }
+    }
+  },
+  "buildHub": {
+    "metaTitle": "Développement",
+    "title": "Développement",
+    "subtitle": "Tout ce que vous créez sur la plateforme — modèle de données, formulaires et documents, automatisation et API.",
+    "groups": {
+      "model": "Modèle de données",
+      "experience": "Formulaires et documents",
+      "automation": "Automatisation et applications",
+      "api": "API"
     }
   },
   "audit": {
@@ -313,7 +349,10 @@
       "beforePost": "avant comptabilisation",
       "afterPost": "après comptabilisation",
       "beforeVoid": "avant annulation",
-      "scheduled": "planifié"
+      "scheduled": "planifié",
+      "endpoint": "point d’accès",
+      "bulk": "en masse",
+      "client": "client"
     },
     "kinds": {
       "vendorBill": "facture fournisseur",
@@ -321,7 +360,17 @@
       "vendorPayment": "paiement fournisseur",
       "customerPayment": "paiement client",
       "expenseReport": "note de frais",
-      "journal": "journal"
+      "journal": "journal",
+      "vendorCredit": "avoir fournisseur",
+      "customerCredit": "avoir client",
+      "cardCharge": "débit carte",
+      "cardRefund": "remboursement carte",
+      "check": "chèque",
+      "deposit": "dépôt",
+      "transfer": "virement",
+      "purchaseOrder": "bon de commande",
+      "salesOrder": "commande client",
+      "quote": "devis"
     },
     "drawer": {
       "newScript": "Nouveau script",
@@ -355,7 +404,19 @@
         "aborted": "interrompue",
         "error": "erreur",
         "timeout": "délai dépassé"
-      }
+      },
+      "endpointSlug": "Slug du point d’accès",
+      "customRecordsGroup": "Enregistrements personnalisés",
+      "builtInGroup": "Transactions",
+      "noRuns": "Aucune exécution — ce script n'a jamais été lancé.",
+      "selectRun": "Sélectionnez une exécution dans l'onglet Exécutions récentes pour inspecter son journal.",
+      "logEmpty": "Cette exécution n'a produit aucune sortie."
+    },
+    "tabs": {
+      "general": "Général",
+      "code": "Code",
+      "runs": "Exécutions récentes",
+      "log": "Journal d'exécution"
     }
   },
   "apiKeys": {
@@ -548,12 +609,15 @@
       "time": "Temps et feuilles de temps",
       "records": "Enregistrements personnalisés",
       "assistant": "Assistant IA",
-      "sql": "Console SQL",
-      "sync": "Synchronisation",
+      "sql": "Console de requêtes",
+      "sync": "Migrations et miroir",
       "scripts": "Scripts",
+      "flows": "Flux",
+      "apps": "Applications",
       "documents": "Gestion de documents",
       "admin": "Administration",
-      "assets": "Immobilisations et amortissement"
+      "assets": "Immobilisations et amortissement",
+      "data": "Import & Export"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_post": "Comptabiliser des écritures de journal",
@@ -589,6 +653,11 @@
     "sql_execute": "Exécuter des requêtes SQL en lecture seule",
     "sync_run": "Exécuter des synchronisations de sources externes",
     "scripts_manage": "Gérer les scripts utilisateur",
+    "scripts_execute": "Appeler les scripts de point d'accès",
+    "flows_manage": "Créer et gérer les flux",
+    "flows_approve": "Agir sur les jalons d’approbation des flux",
+    "apps_use": "Utiliser les applications installées",
+    "apps_manage": "Installer et gérer les applications",
     "parties_read": "Consulter les tiers",
     "parties_manage": "Gérer les tiers",
     "banking_read": "Consulter les opérations bancaires",
@@ -606,7 +675,10 @@
     "assets_read": "Consulter les immobilisations et l’amortissement",
     "assets_manage": "Créer et modifier des immobilisations, exécuter l’amortissement",
     "documents_read": "Parcourir le gestionnaire de documents",
-    "documents_manage": "Téléverser, déplacer, renommer et supprimer des fichiers"
+    "documents_manage": "Téléverser, déplacer, renommer et supprimer des fichiers",
+    "admin_setup_manage": "Manage setup & configuration",
+    "data_export": "Exporter des données",
+    "data_import": "Importer des données"
   },
   "ai": {
     "metaTitle": "Paramètres d'IA",
@@ -650,6 +722,397 @@
       "current": "{id} (actuel)",
       "hint": "Chargez la liste des modèles avec votre clé API, ou saisissez un identifiant de modèle manuellement.",
       "idPlaceholder": "identifiant du modèle"
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "new": "New",
+    "empty": "Nothing here yet.",
+    "statusActive": "Active",
+    "statusArchived": "Archived",
+    "yes": "Yes",
+    "selectPlaceholder": "Select…",
+    "searchPlaceholder": "Search…",
+    "created": "Created",
+    "updated": "Saved",
+    "deleted": "Deleted",
+    "confirmDelete": "Delete this record? This cannot be undone.",
+    "validation": {
+      "required": "{field} is required"
+    },
+    "drawer": {
+      "newTitle": "New {name}",
+      "editTitle": "Edit {name}"
+    },
+    "errors": {
+      "duplicate": "A record with that code already exists.",
+      "inUse": "This record is in use and can't be deleted."
+    },
+    "groups": {
+      "company": "Company",
+      "taxes": "Taxes",
+      "dimensions": "Dimensions",
+      "billing": "Billing & numbering",
+      "workforce": "Workforce",
+      "assets": "Assets",
+      "currency": "Currency"
+    },
+    "entities": {
+      "company": {
+        "title": "Company & Accounting",
+        "description": "Organization identity, base currency, fiscal year, and control accounts."
+      },
+      "tax-codes": {
+        "title": "Tax Codes",
+        "description": "Rates you charge and pay, and the accounts they post to."
+      },
+      "tax-rates": {
+        "title": "Tax Rates",
+        "description": "Effective-dated rate history for each tax code."
+      },
+      "tax-groups": {
+        "title": "Tax Groups",
+        "description": "Bundle several tax codes to apply together on a line."
+      },
+      "tax-report-lines": {
+        "title": "Tax Report Lines",
+        "description": "Map tax codes onto the boxes of a tax return."
+      },
+      "classes": {
+        "title": "Classes",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "departments": {
+        "title": "Departments",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "locations": {
+        "title": "Locations",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "payment-terms": {
+        "title": "Payment Terms",
+        "description": "Net and early-payment discount terms for bills and invoices."
+      },
+      "number-sequences": {
+        "title": "Number Sequences",
+        "description": "Document numbering prefixes and counters."
+      },
+      "time-types": {
+        "title": "Time Types",
+        "description": "Cost multipliers and billable defaults for timesheets."
+      },
+      "worker-comp-groups": {
+        "title": "Worker Comp Groups",
+        "description": "Workers' compensation rate groups for labor costing."
+      },
+      "labor-burden-rates": {
+        "title": "Labor Burden Rates",
+        "description": "Effective-dated burden rates applied to labor cost."
+      },
+      "asset-categories": {
+        "title": "Asset Categories",
+        "description": "Default depreciation method and accounts for fixed assets."
+      },
+      "currencies": {
+        "title": "Currencies",
+        "description": "Currency codes and their minor-unit precision."
+      },
+      "sftp": {
+        "title": "Serveurs SFTP"
+      }
+    },
+    "fields": {
+      "code": "Code",
+      "name": "Name",
+      "appliesTo": "Applies to",
+      "recoverablePercent": "Recoverable %",
+      "isActive": "Active",
+      "country": "Country",
+      "region": "Region",
+      "collectedAccountId": "Tax collected account",
+      "paidAccountId": "Tax paid account",
+      "taxCodeId": "Tax code",
+      "ratePercent": "Rate %",
+      "effectiveFrom": "Effective from",
+      "effectiveTo": "Effective to",
+      "members": "Tax codes",
+      "reportCode": "Report code",
+      "lineCode": "Line code",
+      "label": "Label",
+      "basis": "Basis",
+      "sign": "Sign",
+      "parentId": "Parent",
+      "netDays": "Net days",
+      "discountDays": "Discount days",
+      "discountPercent": "Discount %",
+      "documentKind": "Document",
+      "prefix": "Prefix",
+      "nextNumber": "Next number",
+      "padding": "Padding",
+      "gapless": "Gapless",
+      "costMultiplier": "Cost multiplier",
+      "isBillableDefault": "Billable by default",
+      "category": "Category",
+      "method": "Method",
+      "departmentId": "Department",
+      "defaultMethod": "Default method",
+      "defaultLifeMonths": "Default life (months)",
+      "assetAccountId": "Asset account",
+      "accumulatedDepreciationAccountId": "Accumulated depreciation account",
+      "depreciationExpenseAccountId": "Depreciation expense account",
+      "gainLossAccountId": "Gain / loss account",
+      "minorUnits": "Minor units"
+    },
+    "options": {
+      "appliesTo": {
+        "sales": "Sales",
+        "purchases": "Purchases",
+        "both": "Both"
+      },
+      "basis": {
+        "net": "Net amount",
+        "tax": "Tax amount"
+      },
+      "sign": {
+        "positive": "Add (+)",
+        "negative": "Subtract (−)"
+      },
+      "method": {
+        "straightLine": "Straight line",
+        "decliningBalance": "Declining balance",
+        "doubleDeclining": "Double declining"
+      },
+      "burdenMethod": {
+        "live": "Live",
+        "standard": "Standard"
+      }
+    }
+  },
+  "flows": {
+    "title": "Flux",
+    "description": "Automatisations visuelles de vos enregistrements — un déclencheur lance une exécution, les conditions bifurquent, les actions font le travail et les portes d'approbation attendent une décision humaine.",
+    "searchPlaceholder": "Rechercher des flux…",
+    "subjectFilter": "Type d'enregistrement",
+    "table": {
+      "flow": "Flux",
+      "subject": "Type d'enregistrement",
+      "nodes": "Nœuds",
+      "lastRun": "Dernière exécution",
+      "updated": "Mis à jour",
+      "status": "Statut"
+    },
+    "empty": {
+      "title": "Aucun flux",
+      "description": "Un flux démarre sur un déclencheur, bifurque selon des conditions, s'arrête aux portes d'approbation et se termine par des actions — courriels, notifications, changements de statut, webhooks.",
+      "cta": "Nouveau flux"
+    },
+    "statusEnabled": "activé",
+    "statusDisabled": "désactivé",
+    "neverRan": "jamais",
+    "new": {
+      "button": "Nouveau flux",
+      "title": "Nouveau flux",
+      "description": "Choisissez le type d'enregistrement concerné. Vous concevrez le graphe ensuite.",
+      "name": "Nom",
+      "namePlaceholder": "p. ex. Approbation des factures > 10 000 $",
+      "subject": "Type d'enregistrement",
+      "subjectPlaceholder": "Choisir un type d'enregistrement…",
+      "create": "Créer le flux",
+      "failed": "Impossible de créer le flux"
+    },
+    "actions": {
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "delete": "Supprimer",
+      "deleteConfirmTitle": "Supprimer le flux",
+      "deleteConfirm": "Supprimer « {name} » ? Son historique d'exécution sera aussi supprimé.",
+      "deleted": "Flux supprimé",
+      "deleteFailed": "Impossible de supprimer le flux",
+      "updateFailed": "Impossible de mettre à jour le flux"
+    },
+    "builder": {
+      "save": "Enregistrer",
+      "saved": "Flux enregistré",
+      "saveFailed": "Impossible d'enregistrer le flux",
+      "unsaved": "Modifications non enregistrées",
+      "enabledToggle": "Activé",
+      "namePlaceholder": "Nom du flux",
+      "errorsTitle": "Corrigez ces points pour enregistrer le flux",
+      "warningsTitle": "Avertissements — le flux s'enregistre mais pourrait ne pas s'exécuter comme prévu",
+      "warningsBadge": "{count, plural, one {# avertissement} other {# avertissements}}",
+      "tabs": {
+        "canvas": "Canevas",
+        "runs": "Exécutions"
+      },
+      "palette": {
+        "title": "Ajouter",
+        "trigger": "Déclencheur",
+        "condition": "Condition",
+        "action": "Action",
+        "gate": "Approbation"
+      },
+      "canvasEmpty": {
+        "title": "Commencez par un déclencheur",
+        "description": "Les déclencheurs lancent une exécution, les conditions la bifurquent, les portes d'approbation l'interrompent pour une décision humaine et les actions terminent le travail. Ajoutez un déclencheur, puis reliez-le à l'étape suivante."
+      },
+      "inspector": {
+        "empty": "Sélectionnez un nœud pour le configurer",
+        "deleteNode": "Supprimer le nœud",
+        "nodeId": "Nœud"
+      }
+    },
+    "node": {
+      "trigger": "Déclencheur",
+      "condition": "Condition",
+      "action": "Action",
+      "gate": "Approbation",
+      "conditionDefault": "Si…",
+      "gateDefault": "Approbation"
+    },
+    "edge": {
+      "then": "alors",
+      "else": "sinon",
+      "approve": "approuver",
+      "reject": "rejeter"
+    },
+    "trigger": {
+      "kind": "Quand",
+      "kinds": {
+        "on_create": "Un enregistrement est créé",
+        "on_submit": "Un enregistrement est soumis pour approbation",
+        "before_post": "Avant la comptabilisation",
+        "after_post": "Après la comptabilisation",
+        "before_void": "Avant l'annulation",
+        "status_change": "Le statut change",
+        "on_field_value": "Un champ correspond à une condition",
+        "scheduled": "Selon un calendrier",
+        "manual": "Un utilisateur clique sur un bouton"
+      },
+      "from": "Depuis le statut",
+      "to": "Vers le statut",
+      "anyStatus": "Tout statut",
+      "rule": "Quand l'enregistrement correspond",
+      "cron": "Expression cron",
+      "cronHint": "minute · heure · jour du mois · mois · jour de la semaine",
+      "cronExample": "p. ex. 0 8 * * 1 = lundi à 08 h",
+      "timezone": "Fuseau horaire (facultatif)",
+      "buttonLabel": "Libellé du bouton",
+      "confirmText": "Message de confirmation (facultatif)",
+      "requirePermission": "Permission requise (facultatif)",
+      "showIf": "N'afficher le bouton que si…",
+      "showIfAdd": "Ajouter une condition de visibilité",
+      "showIfRemove": "Retirer la condition de visibilité"
+    },
+    "condition": {
+      "rule": "Bifurquer quand",
+      "label": "Libellé (facultatif)",
+      "labelPlaceholder": "p. ex. Plus de 10 000 $",
+      "hint": "La branche « alors » s'exécute quand la règle passe ; « sinon » quand elle échoue."
+    },
+    "action": {
+      "kind": "Action",
+      "kinds": {
+        "send_email": "Envoyer un courriel",
+        "notify": "Envoyer une notification interne",
+        "set_field": "Définir un champ",
+        "change_status": "Changer le statut",
+        "webhook": "Appeler un webhook",
+        "post_document": "Comptabiliser le document"
+      },
+      "recipients": "Destinataires",
+      "subject": "Objet",
+      "body": "Corps",
+      "interpolationHint": "Insérez des valeurs de l'enregistrement avec des jetons '{{'champ'}}'",
+      "availableFields": "Champs disponibles",
+      "title": "Titre",
+      "notifyBody": "Message (facultatif)",
+      "href": "Lien à ouvrir (facultatif)",
+      "field": "Champ",
+      "value": "Valeur",
+      "status": "Nouveau statut",
+      "url": "URL",
+      "method": "Méthode",
+      "includeRecord": "Inclure l'instantané de l'enregistrement dans la charge utile",
+      "postDocumentHint": "Comptabilise le document au grand livre via le pipeline normal. Rien à configurer."
+    },
+    "gate": {
+      "title": "Titre",
+      "titlePlaceholder": "p. ex. Approbation du contrôleur",
+      "assignees": "Approbateurs",
+      "mode": "Quorum",
+      "modeAny": "Un seul peut décider",
+      "modeAll": "Tous doivent approuver",
+      "signature": "Exiger une signature saisie",
+      "reminderAfter": "Rappel après (heures)",
+      "escalateAfter": "Escalade après (heures)",
+      "escalateTo": "Escalader vers",
+      "noEscalation": "Pas d'escalade",
+      "hint": "L'exécution s'arrête ici jusqu'à la décision du quorum, puis continue sur la branche « approuver » ou « rejeter »."
+    },
+    "targets": {
+      "types": {
+        "user": "Un utilisateur précis",
+        "role": "Tous les détenteurs d'un rôle",
+        "submitter": "Le soumissionnaire",
+        "supervisor": "Le superviseur du soumissionnaire",
+        "field": "Un champ de l'enregistrement (utilisateur)",
+        "email": "Adresse(s) courriel"
+      },
+      "add": "Ajouter un destinataire",
+      "addAssignee": "Ajouter un approbateur",
+      "remove": "Retirer",
+      "pickUser": "Choisir un utilisateur…",
+      "pickRole": "Choisir un rôle…",
+      "pickField": "Choisir un champ…",
+      "emailPlaceholder": "ops@exemple.com, daf@exemple.com"
+    },
+    "logic": {
+      "groupAnd": "Toutes les conditions…",
+      "groupOr": "Au moins une…",
+      "groupNot": "Sauf si…",
+      "ops": {
+        "eq": "égale",
+        "ne": "diffère de",
+        "gt": "est supérieur à",
+        "gte": "est au moins",
+        "lt": "est inférieur à",
+        "lte": "est au plus",
+        "in": "est parmi",
+        "notIn": "n'est pas parmi",
+        "isSet": "est renseigné",
+        "isNotSet": "est vide"
+      },
+      "addRule": "Ajouter une condition",
+      "addGroup": "Ajouter un groupe",
+      "remove": "Retirer",
+      "valuePlaceholder": "Valeur",
+      "listPlaceholder": "Valeurs séparées par des virgules",
+      "true": "Vrai",
+      "false": "Faux"
+    },
+    "runs": {
+      "title": "Exécutions récentes",
+      "empty": {
+        "title": "Aucune exécution",
+        "description": "Activez le flux et déclenchez-le — chaque exécution apparaît ici avec son statut et toute erreur."
+      },
+      "status": {
+        "running": "en cours",
+        "waiting": "en attente",
+        "completed": "terminée",
+        "failed": "échouée",
+        "cancelled": "annulée"
+      },
+      "table": {
+        "status": "Statut",
+        "trigger": "Déclencheur",
+        "subject": "Enregistrement",
+        "started": "Démarrée",
+        "finished": "Terminée",
+        "error": "Erreur"
+      }
     }
   }
 }

@@ -2,12 +2,19 @@ import { and, asc, eq } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { cmp } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
+import { runRecordFlows } from "./flows/run.ts";
 
 /**
- * Approval engine runtime. A policy's rules declare ordered steps with
- * amount thresholds and role/person assignees; submitting a target builds
- * the concrete request + steps; decisions advance or reject; when the last
- * step approves, the target is releasable (documents flip to 'approved').
+ * Approval engine runtime (LEGACY v1 — approval_policies). A policy's rules
+ * declare ordered steps with amount thresholds and role/person assignees;
+ * submitting a target builds the concrete request + steps; decisions advance
+ * or reject; when the last step approves, the target is releasable
+ * (documents flip to 'approved').
+ *
+ * Flows (engine/src/flows/) SUBSUME this engine: a submit whose kind matches
+ * an enabled flow that produced approval gates routes through flow_gates
+ * instead; the policy path below remains the fallback when no flow gated the
+ * document, so existing behavior is preserved (docs/flows-design.md).
  */
 
 interface Rule {
@@ -48,6 +55,24 @@ export async function submitForApproval(targetKind: string, targetId: string): P
     if (Object.keys(mutations).length > 0) {
       await db.update(schema.documents).set(mutations).where(eq(schema.documents.id, doc.id));
     }
+  }
+
+  // -- flows: on_submit --------------------------------------------------
+  // A flow that produced approval gates OWNS this submit: the document goes
+  // pending_approval and the flow run id stands in for the request id (the
+  // caller only round-trips it as an opaque string). A flow that matched but
+  // created no gates (pure automation) already ran its actions; the legacy
+  // policy path continues below unchanged.
+  const flowResult = await runRecordFlows({ kind: "on_submit" }, doc.kind, doc.id, {
+    orgId: doc.orgId,
+    userId: doc.createdBy,
+  });
+  if (flowResult.gatesCreated > 0) {
+    await db.update(schema.documents)
+      .set({ status: "pending_approval" })
+      .where(eq(schema.documents.id, targetId));
+    const gatedRun = flowResult.runs.find((r) => r.gatesCreated > 0);
+    return gatedRun?.runId ?? flowResult.runs[0]!.runId;
   }
 
   const [policy] = await db

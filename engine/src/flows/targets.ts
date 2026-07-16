@@ -1,0 +1,161 @@
+import { sql } from "drizzle-orm";
+import type { AssigneeTarget, RecipientTarget } from "@openbooks/forms-core";
+import { db } from "../db.ts";
+
+/**
+ * AssigneeTarget / RecipientTarget → concrete users and email addresses.
+ * Ported from the resolver block of beaconhs-platform's execute-flow-plan.ts,
+ * adapted to openbooks' identity model:
+ *
+ *   role       — resolved against BOTH role models: the legacy users.role enum
+ *                AND app_roles/role_assignments membership by role key (the
+ *                seeded built-in keys equal the legacy enum values, see
+ *                engine/src/seed-roles.ts), matching how web/lib/authz.ts
+ *                falls back to users.role when a user has no assignments.
+ *   submitter  — the run's submitter (documents.created_by).
+ *   supervisor — submitter's users.partyId → employee_roles.supervisorId
+ *                (a party) → the user linked to that party.
+ *   field      — a record field holding a user id, verified in-org.
+ *   email      — literal (recipients only): one address or a comma/semicolon/
+ *                space-separated list.
+ */
+
+export interface ResolvedUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface TargetResolutionCtx {
+  orgId: string;
+  submitterUserId?: string | null;
+  values: Record<string, unknown>;
+}
+
+type Rows<T> = { rows: T[] };
+
+/** Active users holding `role` under either role model. */
+export async function roleUsers(orgId: string, role: string): Promise<ResolvedUser[]> {
+  if (!role) return [];
+  const r = (await db.execute(sql`
+    select distinct u.id, u.name, u.email
+      from users u
+      left join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
+      left join app_roles ar on ar.id = ra.role_id
+     where u.org_id = ${orgId} and u.is_active
+       and (u.role = ${role} or ar.key = ${role})
+  `)) as unknown as Rows<ResolvedUser>;
+  return r.rows;
+}
+
+/** One active in-org user by id (verification for user/field targets). */
+export async function verifyUser(orgId: string, userId: string): Promise<ResolvedUser | null> {
+  if (!userId) return null;
+  const r = (await db.execute(sql`
+    select id, name, email from users
+     where id = ${userId} and org_id = ${orgId} and is_active
+  `)) as unknown as Rows<ResolvedUser>;
+  return r.rows[0] ?? null;
+}
+
+/** The submitter's supervisor: users.partyId → employee_roles.supervisorId → user. */
+export async function supervisorOf(orgId: string, userId: string | null | undefined): Promise<ResolvedUser | null> {
+  if (!userId) return null;
+  const r = (await db.execute(sql`
+    select su.id, su.name, su.email
+      from users u
+      join employee_roles er on er.party_id = u.party_id and er.org_id = u.org_id
+      join users su on su.party_id = er.supervisor_id and su.org_id = u.org_id and su.is_active
+     where u.id = ${userId} and u.org_id = ${orgId}
+     limit 1
+  `)) as unknown as Rows<ResolvedUser>;
+  return r.rows[0] ?? null;
+}
+
+/** Role keys the user holds (legacy users.role + app_roles assignments). */
+export async function userRoleKeys(orgId: string, userId: string): Promise<Set<string>> {
+  const r = (await db.execute(sql`
+    select u.role as key from users u where u.id = ${userId} and u.org_id = ${orgId}
+    union
+    select ar.key from role_assignments ra
+      join app_roles ar on ar.id = ra.role_id
+     where ra.user_id = ${userId} and ra.org_id = ${orgId}
+  `)) as unknown as Rows<{ key: string }>;
+  return new Set(r.rows.map((x) => x.key));
+}
+
+/**
+ * Resolve one assignee-shaped target (no email literals) to users. `role`
+ * fans out to every holder — the gate layer decides quorum semantics.
+ */
+async function resolveTargetUsers(
+  target: AssigneeTarget,
+  ctx: TargetResolutionCtx,
+): Promise<ResolvedUser[]> {
+  switch (target.type) {
+    case "user": {
+      const u = await verifyUser(ctx.orgId, target.userId);
+      return u ? [u] : [];
+    }
+    case "role":
+      return roleUsers(ctx.orgId, target.role);
+    case "submitter": {
+      const u = ctx.submitterUserId ? await verifyUser(ctx.orgId, ctx.submitterUserId) : null;
+      return u ? [u] : [];
+    }
+    case "supervisor": {
+      const u = await supervisorOf(ctx.orgId, ctx.submitterUserId);
+      return u ? [u] : [];
+    }
+    case "field": {
+      const v = ctx.values[target.field];
+      const u = typeof v === "string" && v ? await verifyUser(ctx.orgId, v) : null;
+      return u ? [u] : [];
+    }
+  }
+}
+
+/** Union of users behind a list of assignee targets, deduped by user id. */
+export async function resolveAssigneeUsers(
+  targets: AssigneeTarget[],
+  ctx: TargetResolutionCtx,
+): Promise<ResolvedUser[]> {
+  const out = new Map<string, ResolvedUser>();
+  for (const t of targets) {
+    for (const u of await resolveTargetUsers(t, ctx)) out.set(u.id, u);
+  }
+  return [...out.values()];
+}
+
+/** Recipient targets → in-org users (email literals have no user; skipped). */
+export async function resolveRecipientUsers(
+  targets: RecipientTarget[],
+  ctx: TargetResolutionCtx,
+): Promise<ResolvedUser[]> {
+  const out = new Map<string, ResolvedUser>();
+  for (const t of targets) {
+    if (t.type === "email") continue;
+    for (const u of await resolveTargetUsers(t, ctx)) out.set(u.id, u);
+  }
+  return [...out.values()];
+}
+
+/** Recipient targets → deduped email addresses (users + literal lists). */
+export async function resolveRecipientEmails(
+  targets: RecipientTarget[],
+  ctx: TargetResolutionCtx,
+): Promise<string[]> {
+  const out = new Set<string>();
+  const add = (e: string | null | undefined) => {
+    const v = e?.trim();
+    if (v && v.includes("@")) out.add(v);
+  };
+  for (const t of targets) {
+    if (t.type === "email") {
+      for (const part of t.email.split(/[,;\s]+/)) add(part);
+      continue;
+    }
+    for (const u of await resolveTargetUsers(t, ctx)) add(u.email);
+  }
+  return [...out];
+}

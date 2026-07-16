@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
+import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, guardPermission, can } from '../../../../lib/authz'
 import {
   controlDeps,
@@ -85,8 +86,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
 
   const owned = (await db.execute(
-    sql`select kind, status from documents where id = ${id} and org_id = ${user.orgId}`,
-  )) as unknown as { rows: { kind: string; status: string }[] }
+    sql`select kind, status, total from documents where id = ${id} and org_id = ${user.orgId}`,
+  )) as unknown as { rows: { kind: string; status: string; total: string }[] }
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const cfg = DOC_KINDS[row.kind]
@@ -96,6 +97,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (row.status === 'voided') {
     return NextResponse.json({ error: 'a voided document cannot be edited' }, { status: 422 })
+  }
+  // Pending-approval lock (NetSuite parity): while approvers are deciding, the
+  // record they were shown must not shift underneath them. Editing resumes
+  // after the decision (approve → approved, reject → draft); flow admins may
+  // override.
+  if (row.status === 'pending_approval' && !can(authz, 'flows.manage')) {
+    return NextResponse.json(
+      { error: 'this document is locked while its approval is pending — wait for the decision or ask a flow administrator' },
+      { status: 409 },
+    )
   }
 
   const deps = await controlDeps(user.orgId)
@@ -266,6 +277,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (e instanceof ClosedPeriodError) return NextResponse.json({ error: e.message }, { status: 422 })
     throw e
   }
+
+  // on_update flows fire AFTER the edit commits. The edit-shape data rides on
+  // the EVENT (run.ts surfaces it as values.previousTotal / values.totalChanged
+  // for condition nodes — the "re-approval on material edit" pattern).
+  // runRecordFlows never throws into the caller and cannot veto the saved
+  // edit; it is awaited so it runs inside this request's RLS org scope (same
+  // posture as on_create in lib/documents.ts).
+  const newTotal = totals?.total ?? row.total
+  await runRecordFlows(
+    {
+      kind: 'on_update',
+      previousTotal: row.total,
+      totalChanged: Number(newTotal) !== Number(row.total),
+    },
+    row.kind,
+    id,
+    { orgId: user.orgId, userId: user.id },
+  )
 
   const doc = await loadDocument(id)
   return NextResponse.json(doc)

@@ -12,6 +12,7 @@
     "edit": "Modifier",
     "create": "Créer",
     "creating": "Création…",
+    "running": "Exécution…",
     "add": "Ajouter",
     "remove": "Retirer",
     "search": "Rechercher",
@@ -31,6 +32,7 @@
     "view": "Afficher",
     "open": "Ouvrir",
     "rename": "Renommer",
+    "replace": "Remplacer",
     "post": "Comptabiliser",
     "posting": "Comptabilisation…",
     "void": "Annuler",
@@ -41,7 +43,10 @@
     "print": "Imprimer",
     "copy": "Copier",
     "select": "Sélectionner",
-    "newRecord": "Nouveau"
+    "newRecord": "Nouveau",
+    "more": "Plus d'actions",
+    "done": "Terminé",
+    "sending": "Envoi…"
   },
   "labels": {
     "name": "Nom",
@@ -93,7 +98,8 @@
     "from": "De",
     "to": "À",
     "of": "de",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "openBalance": "Solde impayé"
   },
   "status": {
     "draft": "Brouillon",
@@ -127,7 +133,8 @@
     "notFound": "Introuvable",
     "copied": "Copié",
     "unsavedChanges": "Vous avez des modifications non enregistrées",
-    "editingHint": "Modification — Enregistrez pour appliquer les changements."
+    "editingHint": "Modification — Enregistrez pour appliquer les changements.",
+    "flowActionDone": "Action exécutée"
   },
   "confirm": {
     "title": "Êtes-vous sûr?",
@@ -135,5 +142,30 @@
     "deleteBody": "Cette action est irréversible.",
     "confirm": "Confirmer",
     "cancel": "Annuler"
+  },
+  "empty": {
+    "title": "Rien pour l’instant",
+    "description": "Aucun enregistrement ne correspond aux filtres actuels."
+  },
+  "approvalFlow": {
+    "pendingWith": "En attente de {names}",
+    "rejectTitle": "Rejeter ce document ?",
+    "rejectReasonLabel": "Motif du rejet",
+    "waitingOthers": "Enregistré — en attente des autres approbateurs",
+    "alreadyDecided": "Cette approbation a déjà été traitée — actualisation",
+    "decisionFailed": "Échec de la décision",
+    "historyTitle": "Approbations",
+    "events": {
+      "submitted": "Soumis pour approbation",
+      "requested": "Approbation demandée",
+      "approved": "Approuvé",
+      "rejected": "Rejeté",
+      "escalated": "Escaladé",
+      "delegated": "Délégué"
+    },
+    "badges": {
+      "delegated": "Délégué",
+      "escalated": "Escaladé"
+    }
   }
 }

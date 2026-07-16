@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@openbooks/schema": "*",
+    "@openbooks/forms-core": "*",
     "drizzle-orm": "*",
     "pg": "^8",
     "quickjs-emscripten": "^0.31",
@@ -18,9 +19,7 @@
     "tsx": "^4"
   },
   "scripts": {
-    "seed": "tsx src/seed-netsuite.ts",
-    "replay": "tsx src/replay-gl.ts",
-    "tb-proof": "tsx src/tb-proof.ts",
+    "sync": "tsx src/sync/cli.ts",
     "demo": "tsx src/demo-e2e.ts",
     "typecheck": "tsc --noEmit"
   }

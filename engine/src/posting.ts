@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { add, isZero, neg, sum, toUnits } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
+import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 
 /**
  * The posting engine: document → journal entry, through the kernel.
@@ -41,6 +42,15 @@ export interface PostingDeps {
   };
   /** Resolved by postDocument when the document has a payment card. */
   cardLiabilityAccountId?: string;
+  /**
+   * Accounts whose journal lines are OPEN ITEMS (all asset_receivable /
+   * liability_payable accounts). Resolved lazily by postDocument /
+   * regenerateGlImpactTx for journal documents; lets a journal's AR/AP legs
+   * participate in payment applications — openbooks' model applies ANY
+   * crediting document (journal, credit memo, payment) to open items, the way
+   * NetSuite's own receipt journals settle invoices.
+   */
+  openItemAccountIds?: Set<string>;
 }
 
 type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
@@ -209,12 +219,15 @@ export const RULES: Record<string, RuleFn> = {
   card_refund: cardRule,
 
   /** Manual journal: lines carry signed amounts + accounts directly. */
-  journal: (doc, lines) =>
+  journal: (doc, lines, deps) =>
     lines.map((l) => ({
       accountId: l.accountId!,
       amount: l.amount,
       memo: l.description,
       partyId: doc.partyId,
+      // An AR/AP leg on a journal is an OPEN ITEM: a credit can settle
+      // invoices, a debit can be settled — any crediting document applies.
+      isOpenItem: deps.openItemAccountIds?.has(l.accountId!) ?? false,
       ...dims(doc, l),
     })),
 
@@ -241,6 +254,26 @@ export const RULES: Record<string, RuleFn> = {
         amount: neg(total), // credit bank
         ...dims(doc),
       },
+    ];
+  },
+
+  /**
+   * Deposit (Make Deposits): DR the destination bank (the doc's control-account
+   * override, else the org default bank) for the sum of the source lines, CR
+   * each source account. The mirror of `check`.
+   */
+  deposit: (doc, lines, deps) => {
+    const sources: KernelLine[] = lines.map((l) => ({
+      accountId: l.accountId!,
+      amount: neg(l.amount), // credit each source
+      memo: l.description,
+      partyId: doc.partyId,
+      ...dims(doc, l),
+    }));
+    const total = sum(lines.map((l) => l.amount)); // positive = money in
+    return [
+      { accountId: controlOverride(doc) ?? deps.control.bank, amount: total, ...dims(doc) }, // debit bank
+      ...sources,
     ];
   },
 
@@ -306,11 +339,30 @@ export const RULES: Record<string, RuleFn> = {
 
 export class PostingError extends Error {}
 
+/**
+ * Accounts whose lines are open items on a journal (all AR/AP-typed accounts
+ * of the org). One indexed select; called only for journal documents.
+ */
+async function resolveOpenItemAccounts(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+): Promise<Set<string>> {
+  const r = (await runner.execute(sql`
+    select id from accounts
+     where org_id = ${orgId} and type in ('asset_receivable', 'liability_payable')`)) as unknown as {
+    rows: { id: string }[];
+  };
+  return new Set(r.rows.map((x) => x.id));
+}
+
 export async function postDocument(documentId: string, deps: PostingDeps): Promise<string> {
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   if (doc.status === "posted") throw new PostingError(`document ${doc.documentNumber} already posted`);
   if (doc.status === "voided") throw new PostingError(`document ${doc.documentNumber} is voided`);
+  if (doc.kind === "journal" && !deps.openItemAccountIds) {
+    deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(db, doc.orgId) };
+  }
 
   const lines = await db
     .select()
@@ -356,6 +408,20 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
       .where(eq(schema.documents.id, doc.id))
       .returning();
     effectiveDoc = updated;
+  }
+
+  // -- flows: before_post (automation only, never a veto) ------------------
+  // A before_post flow may set_field whitelisted headers; re-read the
+  // document so its projection reflects them.
+  const beforePostFlows = await runRecordFlows({ kind: "before_post" }, doc.kind, doc.id, {
+    orgId: doc.orgId,
+  });
+  if (beforePostFlows.runs.length > 0) {
+    const [refreshed] = await db
+      .select()
+      .from(schema.documents)
+      .where(eq(schema.documents.id, doc.id));
+    if (refreshed) effectiveDoc = refreshed;
   }
 
   // -- build + validate kernel lines --------------------------------------
@@ -434,6 +500,10 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   });
 
   await runTriggerScripts("after_post", { ...scriptCtx, trigger: "after_post" }, doc.id);
+
+  // -- flows: after_post + the status transition (never throws) -------------
+  await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, { orgId: doc.orgId });
+  await emitStatusChange(doc.kind, doc.id, { from: doc.status, to: "posted" }, { orgId: doc.orgId });
   return entryId;
 }
 
@@ -529,6 +599,9 @@ export async function regenerateGlImpactTx(
       .where(eq(schema.paymentCards.id, doc.paymentCardId));
     if (card) deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
+  if (doc.kind === "journal" && !deps.openItemAccountIds) {
+    deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(tx, doc.orgId) };
+  }
 
   const lines = await tx
     .select()
@@ -601,6 +674,13 @@ export async function regenerateGlImpactTx(
     dueDate: l.dueDate ?? null,
     isOpenItem: l.isOpenItem ?? false,
   });
+  // Park every existing line out of the (entry_id, line_number) namespace
+  // first: when the regenerated projection reorders or renumbers lines, the
+  // per-position updates below would otherwise collide with a not-yet-updated
+  // sibling's line_number.
+  await tx.execute(
+    sql`update journal_lines set line_number = line_number + 100000 where entry_id = ${entry.id}`,
+  );
   const overlap = Math.min(existing.length, kernelLines.length);
   for (let i = 0; i < overlap; i++) {
     const { orgId: _o, entryId: _e, ...set } = vals(kernelLines[i]!, i);

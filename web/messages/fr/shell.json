@@ -53,5 +53,11 @@
     },
     "current": "Thème : {theme}",
     "currentHint": "Thème : {theme} (cliquez pour changer)"
+  },
+  "notifications": {
+    "ariaLabel": "Notifications",
+    "title": "Notifications",
+    "empty": "Vous êtes à jour",
+    "markAllRead": "Tout marquer comme lu"
   }
 }

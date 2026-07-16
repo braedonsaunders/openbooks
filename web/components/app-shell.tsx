@@ -12,7 +12,10 @@ import type { NavMode } from '../lib/nav-mode'
 import { Logo } from './brand-logo'
 import { AppSidebar } from './app-sidebar'
 import { TopNav } from './top-nav'
+import { GlobalSearch } from './global-search'
 import { AccountMenu } from './account-menu'
+import { NotificationsBell } from './notifications-bell'
+import type { WorkspaceEnvironments } from '../lib/environments'
 import { AssistantLauncher } from './assistant-launcher'
 import { MobileNavProvider } from './mobile-nav'
 import { MobileNavToggle } from './mobile-nav-toggle'
@@ -20,7 +23,7 @@ import { MobileTabBar } from './mobile-tab-bar'
 
 export function AppShell({
   account,
-  orgName,
+  environments,
   groups,
   navMode = 'sidebar',
   defaultCollapsed = false,
@@ -34,7 +37,8 @@ export function AppShell({
     localePreference: Locale | null
     navModePreference: NavMode | null
   }
-  orgName: string
+  /** Production org + its sandboxes, for the environment switcher. */
+  environments: WorkspaceEnvironments
   groups: SidebarNavGroup[]
   /** Resolved app-menu layout (user preference, else org default, else sidebar). */
   navMode?: NavMode
@@ -54,30 +58,25 @@ export function AppShell({
             <MobileNavToggle groups={groups} />
             {topbar ? (
               // The rail (and its logo) is gone — brand moves into the header
-              // on desktop; below lg the org name stays, as in sidebar mode.
+              // on desktop.
               <>
                 <Logo className="hidden h-7 w-auto shrink-0 lg:block" />
-                <span className="truncate text-sm font-medium text-slate-600 lg:hidden dark:text-slate-300">
-                  {orgName}
-                </span>
                 <TopNav groups={groups} />
                 <div className="flex-1 lg:hidden" />
+                <GlobalSearch className="hidden w-56 shrink-0 lg:block xl:w-72" />
               </>
             ) : (
-              <>
-                <span className="truncate text-sm font-medium text-slate-600 dark:text-slate-300">
-                  {orgName}
-                </span>
-                <div className="flex-1" />
-              </>
+              <GlobalSearch className="mx-auto w-full max-w-xl flex-1" />
             )}
             {showAssistantLauncher ? <AssistantLauncher compact={topbar} /> : null}
+            <NotificationsBell />
             <AccountMenu
               name={account.name}
               email={account.email}
               role={account.role}
               localePreference={account.localePreference}
               navModePreference={account.navModePreference}
+              environments={environments}
             />
           </header>
 

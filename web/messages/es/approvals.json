@@ -1,16 +1,35 @@
 {
   "title": "Aprobaciones",
-  "description": "Elementos pendientes asignados a su rol ({role}).",
+  "description": "Todo lo que espera su intervención en flujos y políticas, además del estado de sus propios envíos.",
+  "tabs": {
+    "mine": "Mis aprobaciones",
+    "submitted": "Enviadas por mí",
+    "all": "Todas las aprobaciones"
+  },
   "empty": {
     "title": "No hay nada pendiente de usted",
-    "description": "Las solicitudes de aprobación dirigidas a su rol aparecerán aquí."
+    "description": "Las aprobaciones asignadas, dirigidas o delegadas a usted aparecerán aquí."
+  },
+  "emptySubmitted": {
+    "title": "No hay envíos pendientes",
+    "description": "Los documentos que envíe para aprobación aparecerán aquí mientras esperan."
+  },
+  "emptyAll": {
+    "title": "Nada pendiente",
+    "description": "No hay aprobaciones pendientes en esta organización."
   },
   "table": {
     "document": "Documento",
     "kind": "Tipo",
     "step": "Paso",
     "decision": "Decisión",
-    "stepNumber": "paso {number}"
+    "stepNumber": "paso {number}",
+    "approval": "Aprobación",
+    "requested": "Solicitada",
+    "source": "Origen",
+    "assignee": "Responsable",
+    "pendingWith": "Pendiente de",
+    "waitingSince": "En espera desde"
   },
   "kinds": {
     "vendor_bill": "factura de proveedor",
@@ -24,5 +43,51 @@
   "decide": {
     "rejectionReason": "Motivo del rechazo:",
     "decisionFailed": "La decisión falló"
+  },
+  "source": {
+    "flow": "Flujo",
+    "legacy": "Política"
+  },
+  "aging": {
+    "days": "{days}d"
+  },
+  "bulk": {
+    "selected": "{count} seleccionado(s)",
+    "selectAll": "Seleccionar todo",
+    "selectRow": "Seleccionar {document}",
+    "approveSelected": "Aprobar selección",
+    "rejectSelected": "Rechazar selección",
+    "rejectTitle": "¿Rechazar {count} aprobaciones?",
+    "reasonLabel": "Motivo del rechazo (se aplica a cada elemento seleccionado)",
+    "approvedCount": "{count} aprobada(s)",
+    "rejectedCount": "{count} rechazada(s)",
+    "failedCount": "{count} con error ({error})"
+  },
+  "ooo": {
+    "button": "Fuera de la oficina",
+    "title": "Fuera de la oficina",
+    "description": "Dirija sus aprobaciones entrantes a un delegado mientras está ausente.",
+    "delegateTo": "Delegar en",
+    "delegatePlaceholder": "Elegir un delegado…",
+    "from": "Desde",
+    "until": "Hasta",
+    "invalid": "Elija un delegado y un rango de fechas válido",
+    "saved": "Delegación programada",
+    "unavailable": "El servicio de delegación aún no está disponible",
+    "banner": "Sus aprobaciones están delegadas a {name} hasta el {date}",
+    "endNow": "Finalizar ahora",
+    "ended": "Delegación finalizada"
+  },
+  "gates": {
+    "rejectTitle": "¿Rechazar esta aprobación?",
+    "waitingOthers": "Registrado — a la espera de los demás aprobadores",
+    "delegate": "Delegar",
+    "delegatePlaceholder": "Delegar a…",
+    "delegated": "Aprobación delegada",
+    "badges": {
+      "quorumAll": "Todos los aprobadores",
+      "reminder": "Recordatorio {date}",
+      "escalates": "Escala {date}"
+    }
   }
 }
