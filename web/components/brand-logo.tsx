@@ -124,7 +124,7 @@ export function Logo({ animated, draw, className, ...rest }: LogoProps) {
   const mode: Mode = draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg
-      viewBox="0 0 302 56"
+      viewBox="0 0 238 56"
       role="img"
       aria-label="openbooks"
       className={cn('h-8 w-auto', INK_CLASS, className)}

@@ -20,4 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: braedonsaunders/codeflow/card@v1
         with:
+          accent: teal # match the openbooks brand
+          show-grade: false # informational card — no health letter grade
+          show-score: false # …and no numeric health score
           receipts: false # set true to post merged-PR comments
