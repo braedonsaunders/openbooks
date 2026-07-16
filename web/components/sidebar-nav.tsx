@@ -125,6 +125,8 @@ export type SidebarNavItem = {
   /** When set, the subgroup header itself navigates here (a landing hub for
    * the section) in addition to expanding its children. */
   subgroupHref?: string
+  /** Icon for the subgroup header (rendered like a regular item's icon). */
+  subgroupIconKey?: string
 }
 
 export type SidebarNavGroup = {
@@ -179,6 +181,7 @@ export function SidebarNav({
                 key={`sub-${block.label}-${bi}`}
                 label={block.label}
                 href={block.href}
+                iconKey={block.iconKey}
                 items={block.items}
                 activeHref={activeHref}
                 collapsed={collapsed}
@@ -195,7 +198,7 @@ export function SidebarNav({
 
 export type NavBlock =
   | { kind: 'item'; item: SidebarNavItem }
-  | { kind: 'subgroup'; label: string; href?: string; items: SidebarNavItem[] }
+  | { kind: 'subgroup'; label: string; href?: string; iconKey?: string; items: SidebarNavItem[] }
 
 /** Fold a flat item list into blocks, coalescing runs that share a subgroup. */
 export function toBlocks(items: SidebarNavItem[]): NavBlock[] {
@@ -206,11 +209,13 @@ export function toBlocks(items: SidebarNavItem[]): NavBlock[] {
       if (last && last.kind === 'subgroup' && last.label === item.subgroup) {
         last.items.push(item)
         if (!last.href) last.href = item.subgroupHref
+        if (!last.iconKey) last.iconKey = item.subgroupIconKey
       } else {
         blocks.push({
           kind: 'subgroup',
           label: item.subgroup,
           href: item.subgroupHref,
+          iconKey: item.subgroupIconKey,
           items: [item],
         })
       }
@@ -273,12 +278,14 @@ function NavLink({
 function SubgroupSection({
   label,
   href,
+  iconKey,
   items,
   activeHref,
   collapsed,
 }: {
   label: string
   href?: string
+  iconKey?: string
   items: SidebarNavItem[]
   activeHref: string | null
   collapsed: boolean
@@ -343,14 +350,16 @@ function SubgroupSection({
             aria-current={selfActive ? 'page' : undefined}
             data-walkthrough={`nav:${href}`}
             onClick={() => setOpen(true)}
-            className="flex-1 rounded-r-md py-1.5 pr-2"
+            className="flex flex-1 items-center gap-2.5 rounded-r-md py-1.5 pr-2"
           >
+            {iconKey ? <NavIcon iconKey={iconKey} className="shrink-0 text-slate-500 dark:text-slate-400" /> : null}
             {label}
           </Link>
         </div>
       ) : (
         <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className={headerClass}>
           {chevron}
+          {iconKey ? <NavIcon iconKey={iconKey} className="shrink-0 text-slate-500 dark:text-slate-400" /> : null}
           <span>{label}</span>
         </button>
       )}

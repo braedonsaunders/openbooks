@@ -79,7 +79,12 @@ export async function resolveNav(
             ? {
                 subgroup: t(`groups.${mod.subgroup.toLowerCase()}`) || mod.subgroup,
                 ...(NAV_SUBGROUPS[mod.subgroup]
-                  ? { subgroupHref: NAV_SUBGROUPS[mod.subgroup].href }
+                  ? {
+                      subgroupHref: NAV_SUBGROUPS[mod.subgroup].href,
+                      ...(NAV_SUBGROUPS[mod.subgroup].iconKey
+                        ? { subgroupIconKey: NAV_SUBGROUPS[mod.subgroup].iconKey }
+                        : {}),
+                    }
                   : {}),
               }
             : {}),
