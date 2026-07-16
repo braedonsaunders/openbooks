@@ -6,7 +6,7 @@
     "afternoon": "Bon après-midi",
     "evening": "Bonsoir"
   },
-  "tenantSummary": "{entries} écritures · {parties} tiers",
+  "tenantSummary": "{entries} écritures",
   "header": {
     "customize": "Personnaliser"
   },
@@ -14,7 +14,6 @@
     "journalEntries": "Écritures de journal",
     "journalLines": "Lignes de journal",
     "activeAccounts": "Comptes actifs",
-    "parties": "Tiers",
     "entriesToday": "Écritures aujourd'hui",
     "pendingApprovals": "Approbations en attente",
     "ledgerBalance": "Solde du grand livre",

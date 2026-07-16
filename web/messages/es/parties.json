@@ -73,6 +73,11 @@
     "noBankAccounts": "No hay cuentas bancarias registradas.",
     "bankAccountFallback": "Cuenta bancaria",
     "approvedOn": "Aprobada el {date}",
-    "bankAccountsNote": "Las cuentas bancarias se agregan y aprueban en el módulo de Pagos."
+    "bankAccountsNote": "Las cuentas bancarias se agregan y aprueban en el módulo de Pagos.",
+    "detailsHeading": {
+      "customer": "Detalles del cliente",
+      "vendor": "Detalles del proveedor",
+      "employee": "Detalles del empleado"
+    }
   }
 }

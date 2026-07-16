@@ -73,6 +73,11 @@
     "noBankAccounts": "No bank accounts on file.",
     "bankAccountFallback": "Bank account",
     "approvedOn": "Approved {date}",
-    "bankAccountsNote": "Bank accounts are added and approved in the Payments module."
+    "bankAccountsNote": "Bank accounts are added and approved in the Payments module.",
+    "detailsHeading": {
+      "customer": "Customer details",
+      "vendor": "Vendor details",
+      "employee": "Employee details"
+    }
   }
 }

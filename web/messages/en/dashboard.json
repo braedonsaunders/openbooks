@@ -6,7 +6,7 @@
     "afternoon": "Good afternoon",
     "evening": "Good evening"
   },
-  "tenantSummary": "{entries} journal entries · {parties} parties",
+  "tenantSummary": "{entries} journal entries",
   "header": {
     "customize": "Customize"
   },
@@ -14,7 +14,6 @@
     "journalEntries": "Journal entries",
     "journalLines": "Journal lines",
     "activeAccounts": "Active accounts",
-    "parties": "Parties",
     "entriesToday": "Entries today",
     "pendingApprovals": "Pending approvals",
     "ledgerBalance": "Ledger balance",

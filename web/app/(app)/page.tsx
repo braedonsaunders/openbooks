@@ -30,7 +30,7 @@ export default async function Home() {
   })
 
   const tenantSummary = canSeeOrgAggregates(authz)
-    ? t('tenantSummary', { entries: data.journalEntryCount, parties: data.partyCount })
+    ? t('tenantSummary', { entries: data.journalEntryCount })
     : null
 
   return (

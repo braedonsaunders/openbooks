@@ -7,7 +7,6 @@ export type DashboardMetrics = {
   journalEntryCount: number
   journalLineCount: number
   accountCount: number
-  partyCount: number
   entriesToday: number
   pendingApprovals: number
   ledgerSum: string
@@ -66,7 +65,6 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
         (select count(*) from journal_entries where org_id = ${orgId} and status = 'posted') as journal_entries,
         (select count(*) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId} and e.status = 'posted') as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
-        (select count(*) from parties where org_id = ${orgId}) as parties,
         (select count(*) from journal_entries where org_id = ${orgId} and status = 'posted' and posting_date = current_date) as entries_today,
         (select count(*) from approval_requests where org_id = ${orgId} and status = 'pending') as pending_approvals,
         (select coalesce(sum(l.amount), 0) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId}) as ledger_sum
@@ -115,7 +113,6 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     journalEntryCount: Number(t.journal_entries),
     journalLineCount: Number(t.journal_lines),
     accountCount: Number(t.accounts),
-    partyCount: Number(t.parties),
     entriesToday: Number(t.entries_today),
     pendingApprovals: Number(t.pending_approvals),
     ledgerSum: t.ledger_sum,
@@ -162,7 +159,6 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-journal-entries': ['journalEntryCount'],
   'kpi-journal-lines': ['journalLineCount'],
   'kpi-accounts-active': ['accountCount'],
-  'kpi-parties': ['partyCount'],
   'kpi-entries-today': ['entriesToday'],
   'kpi-pending-approvals': ['pendingApprovals'],
   'kpi-ledger-balance': ['ledgerSum'],
@@ -177,7 +173,6 @@ const EMPTY_METRICS: DashboardMetrics = {
   journalEntryCount: 0,
   journalLineCount: 0,
   accountCount: 0,
-  partyCount: 0,
   entriesToday: 0,
   pendingApprovals: 0,
   ledgerSum: '0',

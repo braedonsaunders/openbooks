@@ -47,15 +47,6 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
-  'kpi-parties': {
-    id: 'kpi-parties',
-    category: 'kpi',
-    label: 'Parties',
-    description: 'Total parties (customers, vendors, employees).',
-    defaultSize: { w: 3, h: 2 },
-    minSize: { w: 2, h: 2 },
-    maxSize: { w: 6, h: 4 },
-  },
   'kpi-entries-today': {
     id: 'kpi-entries-today',
     category: 'kpi',
