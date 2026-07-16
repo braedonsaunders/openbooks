@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "at": "2026-07-16T02:54:12.216Z",
+      "sha": "a7d6eacd0748b5cdc3b097387a4f04cf52058a3d",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1382,
+      "functions": 1615,
+      "loc": 343284,
+      "languages": 14,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 55,
+          "lines": 188069
+        },
+        {
+          "ext": "xml",
+          "pct": 18,
+          "lines": 62636
+        },
+        {
+          "ext": "ts",
+          "pct": 12,
+          "lines": 41937
+        },
+        {
+          "ext": "tsx",
+          "pct": 12,
+          "lines": 41130
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 41,
+      "deadPct": 2.5,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 1.9,
+      "securityIssues": 52,
+      "patterns": 9,
+      "duplicates": 21,
+      "layerViolations": 564,
+      "connections": 2691,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 5,
+      "testRatio": 0.4,
+      "topFolders": [
+        {
+          "name": "extraction",
+          "count": 620
+        },
+        {
+          "name": "web",
+          "count": 543
+        },
+        {
+          "name": "packages",
+          "count": 94
+        },
+        {
+          "name": "schema",
+          "count": 71
+        },
+        {
+          "name": "engine",
+          "count": 37
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 69,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 153,
+        "transitive": 437,
+        "total": 590
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 153,
+          "transitive": 437,
+          "total": 590
+        },
+        {
+          "path": "packages/ui/src/utils.ts",
+          "direct": 67,
+          "transitive": 416,
+          "total": 483
+        },
+        {
+          "path": "packages/customization/src/schema.ts",
+          "direct": 65,
+          "transitive": 409,
+          "total": 474
+        }
+      ]
+    }
+  ]
+}
