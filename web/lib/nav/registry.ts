@@ -138,8 +138,8 @@ export const ADMIN_MODULE_KEY = 'admin'
  * makes the subgroup header itself a link (to a landing hub that re-gates its
  * cards), on top of expanding/flying out its children.
  */
-export const NAV_SUBGROUPS: Record<string, { href: string }> = {
-  Build: { href: '/admin/build' },
+export const NAV_SUBGROUPS: Record<string, { href: string; iconKey?: string }> = {
+  Build: { href: '/admin/build', iconKey: 'construction' },
 }
 
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))

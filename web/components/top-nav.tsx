@@ -102,6 +102,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
                     key={`sub-${block.label}-${bi}`}
                     label={block.label}
                     href={block.href}
+                    iconKey={block.iconKey}
                     items={block.items}
                     activeHref={activeHref}
                   />
@@ -157,11 +158,13 @@ function MenuItemLink({ item, active }: { item: SidebarNavItem; active: boolean 
 function SubmenuRow({
   label,
   href,
+  iconKey,
   items,
   activeHref,
 }: {
   label: string
   href?: string
+  iconKey?: string
   items: SidebarNavItem[]
   activeHref: string | null
 }) {
@@ -206,8 +209,12 @@ function SubmenuRow({
         )
         const rowContent = (
           <>
-            {/* spacer keeps the label column aligned with sibling item labels */}
-            <span className="w-[15px] shrink-0" aria-hidden />
+            {/* icon (or spacer) keeps the label column aligned with sibling items */}
+            {iconKey ? (
+              <NavIcon iconKey={iconKey} className="shrink-0 text-slate-500 dark:text-slate-400" />
+            ) : (
+              <span className="w-[15px] shrink-0" aria-hidden />
+            )}
             <span className="flex-1 truncate text-left">{label}</span>
             <ChevronRight
               size={12}
