@@ -32,6 +32,65 @@
   "topNav": {
     "ariaLabel": "Principal"
   },
+  "globalCreate": {
+    "ariaLabel": "Crear nuevo",
+    "title": "Crear nuevo",
+    "description": "Inicia un borrador real sin perder el ritmo.",
+    "createFailed": "No se pudo crear el borrador",
+    "groups": {
+      "sales": "Ventas",
+      "purchases": "Compras",
+      "accounting": "Contabilidad",
+      "peopleAndLists": "Personas y listas"
+    },
+    "items": {
+      "invoice": "Factura de venta",
+      "creditMemo": "Nota de crédito",
+      "estimate": "Presupuesto",
+      "salesOrder": "Pedido de venta",
+      "customerPayment": "Pago de cliente",
+      "bill": "Factura de proveedor",
+      "vendorCredit": "Crédito de proveedor",
+      "purchaseOrder": "Orden de compra",
+      "vendorPayment": "Pago a proveedor",
+      "journal": "Asiento contable",
+      "expense": "Informe de gastos",
+      "cardCharge": "Cargo de tarjeta",
+      "cardRefund": "Reembolso de tarjeta",
+      "check": "Cheque",
+      "deposit": "Depósito bancario",
+      "transfer": "Transferencia bancaria",
+      "asset": "Activo fijo",
+      "customer": "Cliente",
+      "vendor": "Proveedor",
+      "employee": "Empleado",
+      "item": "Artículo o servicio",
+      "project": "Proyecto"
+    }
+  },
+  "relatedParty": {
+    "loadingTitle": "Abriendo registro",
+    "loading": "Cargando registro…",
+    "loadFailed": "No se pudo abrir este registro"
+  },
+  "globalSearch": {
+    "ariaLabel": "Buscar",
+    "placeholder": "Buscar en todo…",
+    "clear": "Borrar búsqueda",
+    "searching": "Buscando…",
+    "noMatches": "No hay resultados para «{query}»",
+    "navigate": "navegar",
+    "open": "abrir",
+    "close": "cerrar",
+    "resultCount": "{count, plural, one {# resultado} other {# resultados}}",
+    "groups": {
+      "contacts": "Contactos",
+      "transactions": "Transacciones",
+      "accounts": "Cuentas",
+      "items": "Artículos",
+      "projects": "Proyectos"
+    }
+  },
   "meta": {
     "description": "La suite empresarial abierta. Opere con libros abiertos."
   },

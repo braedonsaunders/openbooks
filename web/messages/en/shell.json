@@ -32,6 +32,65 @@
   "topNav": {
     "ariaLabel": "Primary"
   },
+  "globalCreate": {
+    "ariaLabel": "Create new",
+    "title": "Create new",
+    "description": "Start a real draft and keep moving.",
+    "createFailed": "Could not create the draft",
+    "groups": {
+      "sales": "Sales",
+      "purchases": "Purchases",
+      "accounting": "Accounting",
+      "peopleAndLists": "People & lists"
+    },
+    "items": {
+      "invoice": "Invoice",
+      "creditMemo": "Credit memo",
+      "estimate": "Estimate",
+      "salesOrder": "Sales order",
+      "customerPayment": "Customer payment",
+      "bill": "Bill",
+      "vendorCredit": "Vendor credit",
+      "purchaseOrder": "Purchase order",
+      "vendorPayment": "Vendor payment",
+      "journal": "Journal entry",
+      "expense": "Expense report",
+      "cardCharge": "Card charge",
+      "cardRefund": "Card refund",
+      "check": "Check",
+      "deposit": "Bank deposit",
+      "transfer": "Bank transfer",
+      "asset": "Fixed asset",
+      "customer": "Customer",
+      "vendor": "Vendor",
+      "employee": "Employee",
+      "item": "Item or service",
+      "project": "Project"
+    }
+  },
+  "relatedParty": {
+    "loadingTitle": "Opening record",
+    "loading": "Loading record…",
+    "loadFailed": "Could not open this record"
+  },
+  "globalSearch": {
+    "ariaLabel": "Search",
+    "placeholder": "Search everything…",
+    "clear": "Clear search",
+    "searching": "Searching…",
+    "noMatches": "No matches for “{query}”",
+    "navigate": "navigate",
+    "open": "open",
+    "close": "close",
+    "resultCount": "{count, plural, one {# result} other {# results}}",
+    "groups": {
+      "contacts": "Contacts",
+      "transactions": "Transactions",
+      "accounts": "Accounts",
+      "items": "Items",
+      "projects": "Projects"
+    }
+  },
   "meta": {
     "description": "The open business suite. Run on open books."
   },

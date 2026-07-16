@@ -18,6 +18,7 @@ import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
 import { columnDescriptors, documentWhere, type ListColDesc } from '../lib/customization/list-query'
 import { listSource } from '../lib/list/sources'
+import { RelatedPartyLink } from './related-party-link'
 
 /**
  * The universal record list — one component that renders EVERY documents-backed
@@ -198,7 +199,15 @@ export async function RecordListView({
       const href = linkFn(row)
       return (
         <TableCell key={c.key}>
-          {href && v ? (
+          {href && v && typeof href !== 'string' && href.kind === 'party' ? (
+            <RelatedPartyLink
+              partyId={href.id}
+              role={href.role}
+              className="text-teal-700 hover:underline dark:text-teal-300"
+            >
+              {String(v)}
+            </RelatedPartyLink>
+          ) : href && v && typeof href === 'string' ? (
             <Link href={href as any} className="text-teal-700 hover:underline dark:text-teal-300">
               {String(v)}
             </Link>

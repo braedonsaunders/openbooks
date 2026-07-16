@@ -57,6 +57,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           navMode={navMode}
           defaultCollapsed={defaultCollapsed}
           showAssistantLauncher={can(authz, 'assistant.use')}
+          createPermissions={{
+            accountsReceivable: can(authz, 'ar.create'),
+            accountsPayable: can(authz, 'ap.create'),
+            journal: can(authz, 'gl.post'),
+            customerPayments: can(authz, 'ar.pay'),
+            vendorPayments: can(authz, 'ap.pay'),
+            expenses: can(authz, 'expenses.create'),
+            parties: can(authz, 'parties.manage'),
+            items: can(authz, 'items.manage'),
+            projects: can(authz, 'projects.manage'),
+            assets: can(authz, 'assets.manage'),
+          }}
+          canReadParties={can(authz, 'parties.read')}
+          canManageParties={can(authz, 'parties.manage')}
         >
           {authz.user.envKind !== 'production' && (
             <SandboxBanner name={authz.user.sandboxName} />

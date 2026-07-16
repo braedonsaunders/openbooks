@@ -38,15 +38,21 @@ export interface DocListSource {
   /** Always-selected extra fields (ids for drill-through links). */
   extraSelect?: SQL
   /** Column key → row→href builder for entity drill-through. */
-  links?: Record<string, (row: any) => string | null>
+  links?: Record<string, (row: any) => string | RelatedPartyTarget | null>
+}
+
+export interface RelatedPartyTarget {
+  kind: 'party'
+  id: string
+  role: 'customer' | 'vendor' | 'employee'
 }
 
 /** The `documents d left join parties p` base every source builds on. */
 export const DOCUMENT_BASE_JOIN = sql`left join parties p on p.id = d.party_id`
 
 /** party_id → vendor/customer/employee drawer href. */
-const partyLink = (role: 'vendors' | 'customers' | 'employees') => (row: any) =>
-  row.party_id ? `/entities/${role}?party=${row.party_id}` : null
+const partyLink = (role: RelatedPartyTarget['role']) => (row: any): RelatedPartyTarget | null =>
+  row.party_id ? { kind: 'party', id: String(row.party_id), role } : null
 
 /** A standard documents list source (number/party/date/ref/total/status). */
 function documentSource(cfg: {
@@ -54,7 +60,7 @@ function documentSource(cfg: {
   kinds: readonly string[]
   drawerParam: string
   multiKind?: boolean
-  partyRole?: 'vendors' | 'customers' | 'employees'
+  partyRole?: RelatedPartyTarget['role']
   builtInExpr?: Record<string, SQL>
   joins?: SQL
   extraSelect?: SQL
@@ -82,14 +88,14 @@ const SOURCES: Record<string, DocListSource> = {
     kinds: AP_KINDS,
     drawerParam: 'doc',
     multiKind: true,
-    partyRole: 'vendors',
+    partyRole: 'vendor',
   }),
   customer_invoice: documentSource({
     recordType: 'customer_invoice',
     kinds: AR_KINDS,
     drawerParam: 'doc',
     multiKind: true,
-    partyRole: 'customers',
+    partyRole: 'customer',
   }),
   vendor_payment: {
     recordType: 'vendor_payment',
@@ -101,7 +107,7 @@ const SOURCES: Record<string, DocListSource> = {
     sorts: PAYMENT_SORTS,
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
-      party_name: partyLink('vendors'),
+      party_name: partyLink('vendor'),
       bank_account: (row: any) => (row.bank_account_id ? `/accounts/${row.bank_account_id}` : null),
     },
   },
@@ -114,15 +120,15 @@ const SOURCES: Record<string, DocListSource> = {
     sorts: PAYMENT_SORTS,
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
-      party_name: partyLink('customers'),
+      party_name: partyLink('customer'),
       bank_account: (row: any) => (row.bank_account_id ? `/accounts/${row.bank_account_id}` : null),
     },
   },
   // Orders — single kind, non-posting; edited via OrderDrawer (drawerParam set
   // per page's URL param). Conversion progress lives in a report, not here.
-  quote: documentSource({ recordType: 'quote', kinds: ['quote'], drawerParam: 'estimate', partyRole: 'customers' }),
-  sales_order: documentSource({ recordType: 'sales_order', kinds: ['sales_order'], drawerParam: 'order', partyRole: 'customers' }),
-  purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendors' }),
+  quote: documentSource({ recordType: 'quote', kinds: ['quote'], drawerParam: 'estimate', partyRole: 'customer' }),
+  sales_order: documentSource({ recordType: 'sales_order', kinds: ['sales_order'], drawerParam: 'order', partyRole: 'customer' }),
+  purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),
 }
 
 export function listSource(recordType: string): DocListSource | undefined {

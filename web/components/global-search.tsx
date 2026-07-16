@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Search, CornerDownLeft, Loader2, X } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { NavIcon } from './sidebar-nav'
+import { relatedPartyHref } from './related-party-link'
 
 type Hit = {
   id: string
@@ -18,14 +20,6 @@ type Hit = {
 }
 type Group = { type: string; labelKey: string; hits: Hit[] }
 type Response = { q: string; groups: Group[]; total: number }
-
-const GROUP_LABEL: Record<string, string> = {
-  contacts: 'Contacts',
-  transactions: 'Transactions',
-  accounts: 'Accounts',
-  items: 'Items',
-  projects: 'Projects',
-}
 
 /** Split `text` around the first case-insensitive occurrence of `q` to bold the match. */
 function highlight(text: string, q: string) {
@@ -44,7 +38,10 @@ function highlight(text: string, q: string) {
 }
 
 export function GlobalSearch({ className }: { className?: string }) {
+  const t = useTranslations('shell.globalSearch')
   const router = useRouter()
+  const pathname = usePathname() ?? '/'
+  const searchParams = useSearchParams()
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [q, setQ] = useState('')
@@ -120,9 +117,14 @@ export function GlobalSearch({ className }: { className?: string }) {
       setQ('')
       setRes(null)
       inputRef.current?.blur()
-      router.push(hit.href as never)
+      router.push(
+        (hit.type === 'contact'
+          ? relatedPartyHref(pathname, searchParams.toString(), hit.id)
+          : hit.href) as never,
+        { scroll: false },
+      )
     },
-    [router],
+    [pathname, router, searchParams],
   )
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -163,8 +165,8 @@ export function GlobalSearch({ className }: { className?: string }) {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder="Search everything…"
-          aria-label="Search"
+          placeholder={t('placeholder')}
+          aria-label={t('ariaLabel')}
           className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pr-16 pl-9 text-sm text-slate-900 transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-teal-500 dark:focus:bg-slate-900"
         />
         <div className="pointer-events-none absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center gap-1">
@@ -179,7 +181,7 @@ export function GlobalSearch({ className }: { className?: string }) {
                 inputRef.current?.focus()
               }}
               className="pointer-events-auto rounded p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              aria-label="Clear search"
+              aria-label={t('clear')}
             >
               <X size={14} />
             </button>
@@ -201,7 +203,7 @@ export function GlobalSearch({ className }: { className?: string }) {
               {res.groups.map((group) => (
                 <div key={group.type} className="mb-1 last:mb-0">
                   <div className="px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-                    {GROUP_LABEL[group.labelKey] ?? group.labelKey}
+                    {t(`groups.${group.labelKey}` as never)}
                   </div>
                   {group.hits.map((hit) => {
                     idx++
@@ -261,19 +263,19 @@ export function GlobalSearch({ className }: { className?: string }) {
               ))}
               <div className="mt-1 flex items-center justify-between border-t border-slate-100 px-2 py-1.5 text-[11px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <span>
-                  <kbd className="font-sans">↑↓</kbd> navigate&nbsp;&nbsp;<kbd className="font-sans">↵</kbd> open&nbsp;&nbsp;
-                  <kbd className="font-sans">esc</kbd> close
+                  <kbd className="font-sans">↑↓</kbd> {t('navigate')}&nbsp;&nbsp;<kbd className="font-sans">↵</kbd> {t('open')}&nbsp;&nbsp;
+                  <kbd className="font-sans">esc</kbd> {t('close')}
                 </span>
-                <span>{res.total} results</span>
+                <span>{t('resultCount', { count: res.total })}</span>
               </div>
             </>
           ) : loading ? (
             <div className="flex items-center gap-2 px-3 py-6 text-sm text-slate-400">
-              <Loader2 size={15} className="animate-spin" /> Searching…
+              <Loader2 size={15} className="animate-spin" /> {t('searching')}
             </div>
           ) : (
             <div className="px-3 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-              No matches for “{q.trim()}”
+              {t('noMatches', { query: q.trim() })}
             </div>
           )}
         </div>

@@ -20,6 +20,8 @@ import { AssistantLauncher } from './assistant-launcher'
 import { MobileNavProvider } from './mobile-nav'
 import { MobileNavToggle } from './mobile-nav-toggle'
 import { MobileTabBar } from './mobile-tab-bar'
+import { GlobalCreateMenu, type GlobalCreatePermissions } from './global-create-menu'
+import { GlobalPartyDrawerHost } from './global-party-drawer-host'
 
 export function AppShell({
   account,
@@ -28,6 +30,9 @@ export function AppShell({
   navMode = 'sidebar',
   defaultCollapsed = false,
   showAssistantLauncher = false,
+  createPermissions,
+  canReadParties,
+  canManageParties,
   children,
 }: {
   account: {
@@ -45,6 +50,9 @@ export function AppShell({
   defaultCollapsed?: boolean
   /** Renders the global ⌘K assistant launcher (user holds assistant.use). */
   showAssistantLauncher?: boolean
+  createPermissions: GlobalCreatePermissions
+  canReadParties: boolean
+  canManageParties: boolean
   children: React.ReactNode
 }) {
   const topbar = navMode === 'topbar'
@@ -63,11 +71,12 @@ export function AppShell({
                 <Logo className="hidden h-7 w-auto shrink-0 lg:block" />
                 <TopNav groups={groups} />
                 <div className="flex-1 lg:hidden" />
-                <GlobalSearch className="hidden w-56 shrink-0 lg:block xl:w-72" />
+                <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" />
               </>
             ) : (
-              <GlobalSearch className="mx-auto w-full max-w-xl flex-1" />
+              <GlobalSearch className="mx-auto w-full max-w-lg flex-1" />
             )}
+            <GlobalCreateMenu permissions={createPermissions} />
             {showAssistantLauncher ? <AssistantLauncher compact={topbar} /> : null}
             <NotificationsBell />
             <AccountMenu
@@ -85,6 +94,7 @@ export function AppShell({
           </main>
 
           <MobileTabBar groups={groups} />
+          {canReadParties ? <GlobalPartyDrawerHost canManage={canManageParties} /> : null}
         </div>
       </MobileNavProvider>
     </div>
