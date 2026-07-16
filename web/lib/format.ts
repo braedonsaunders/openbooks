@@ -1,8 +1,9 @@
-export function money(v: string | number | null | undefined): string {
+export function money(v: string | number | null | undefined, symbol = ""): string {
   if (v === null || v === undefined) return "";
   const n = Number(v);
   if (Number.isNaN(n)) return String(v);
-  return n.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const abs = n.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? abs.replace("-", `-${symbol}`) : `${symbol}${abs}`;
 }
 
 export function dateTime(v: string | Date | null | undefined): string {

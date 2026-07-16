@@ -1,18 +1,8 @@
-import { Suspense } from 'react'
-import { EntryFlyout } from './EntryFlyout'
-
 /**
- * Reports layout. Mounts the shared transaction flyout once for the whole
- * reports area, so any report can open a journal entry as a right-side drawer
- * via `?txn=<entryId>` (see TxnLink / EntryFlyout) without a full-page nav.
+ * Reports layout. Report transactions open their REAL native flyout via the
+ * owning module (see TxnLink → `/ap?doc=`, `/journal?entry=`, …), so there is no
+ * reports-only overlay to mount here.
  */
 export default function ReportsLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      {children}
-      <Suspense fallback={null}>
-        <EntryFlyout />
-      </Suspense>
-    </>
-  )
+  return <>{children}</>
 }

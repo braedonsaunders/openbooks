@@ -2,14 +2,17 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../components/page-layout'
+import { DocTypeBadge } from '../../../../../components/doc-type-badge'
 import { partnerStatement, type AgingSide } from '../../../../../lib/reports'
+import { orgInfo } from '../../../../../lib/data'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../../lib/report-filters'
+import { currencySymbol } from '../../../../../lib/statement-format'
 import { money } from '../../../../../lib/format'
 import { ReportFilterBar } from '../../ReportFilterBar'
+import { ExportMenu } from '../../ExportMenu'
 import { TxnLink } from '../../TxnLink'
 import { SaveViewButton } from '../../SaveViewButton'
-import { StatementExport } from '../../StatementExport'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +32,12 @@ export default async function PartnerStatementPage({
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const st = await partnerStatement(partyId, { from: period.from, to: period.to, side })
+  const [st, org] = await Promise.all([
+    partnerStatement(partyId, { from: period.from, to: period.to, side }),
+    orgInfo(),
+  ])
+  const sym = currencySymbol(org?.base_currency)
+  const m = (v: number) => money(v, sym)
   const keep = toSearchParams(q).toString()
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
@@ -46,9 +54,7 @@ export default async function PartnerStatementPage({
         <>
           <PageHeader
             title={st.party.name ?? t('statements.title')}
-            description={`${t('statements.title')} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`}
             back={{ href: '/reports/registers', label: t('registers.arTitle') }}
-            actions={<><SaveViewButton /><StatementExport kind="partner-statement" params={{ ...sp, party: partyId, side }} /></>}
           />
           <div className="flex flex-wrap items-center gap-2">
             <Link href={`/reports/statements/${partyId}?side=ar&${keep}`}>
@@ -58,18 +64,18 @@ export default async function PartnerStatementPage({
               <Badge variant={side === 'ap' ? 'default' : 'outline'}>{t('registers.payables')}</Badge>
             </Link>
             <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            <ReportFilterBar controls={{ period: true }} />
+            <ReportFilterBar controls={{ period: true }} actions={<><SaveViewButton /><ExportMenu kind="partner-statement" params={{ ...sp, party: partyId, side }} /></>} />
           </div>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-slate-200 px-4 py-2 text-sm dark:border-slate-800">
             {BUCKETS.map((b) => (
               <span key={b} className="flex items-baseline gap-1.5">
                 <span className="text-xs text-slate-500 dark:text-slate-400">{bucketLabels[b]}</span>
-                <span className="tabular-nums">{money(st.aging[b])}</span>
+                <span className="tabular-nums">{m(st.aging[b])}</span>
               </span>
             ))}
             <span className="flex items-baseline gap-1.5 font-semibold">
               <span className="text-xs text-slate-500 dark:text-slate-400">{t('aging.columns.total')}</span>
-              <span className="tabular-nums">{money(st.aging.total)}</span>
+              <span className="tabular-nums">{m(st.aging.total)}</span>
             </span>
           </div>
         </>
@@ -91,21 +97,24 @@ export default async function PartnerStatementPage({
             <TableCell colSpan={5} className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {t('statements.opening')}
             </TableCell>
-            <TableCell className="text-right font-medium tabular-nums">{money(st.opening)}</TableCell>
+            <TableCell className="text-right font-medium tabular-nums">{m(st.opening)}</TableCell>
           </TableRow>
           {st.lines.map((l, i) => (
             <TableRow key={`${l.entryId}-${i}`}>
               <TableCell className="tabular-nums">{l.date}</TableCell>
               <TableCell>
-                <TxnLink entryId={l.entryId} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
-                  {l.entryNumber}
-                </TxnLink>
+                <span className="flex items-center gap-1.5">
+                  <TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
+                    {l.entryNumber}
+                  </TxnLink>
+                  {l.docKind && <DocTypeBadge kind={l.docKind} icon={false} />}
+                </span>
               </TableCell>
               <TableCell className="text-slate-600 dark:text-slate-300">{l.memo}</TableCell>
-              <TableCell className="text-right tabular-nums">{l.debit ? money(l.debit) : ''}</TableCell>
-              <TableCell className="text-right tabular-nums">{l.credit ? money(l.credit) : ''}</TableCell>
+              <TableCell className="text-right tabular-nums">{l.debit ? m(l.debit) : ''}</TableCell>
+              <TableCell className="text-right tabular-nums">{l.credit ? m(l.credit) : ''}</TableCell>
               <TableCell className={cn('text-right tabular-nums', l.balance < 0 && 'text-red-600 dark:text-red-400')}>
-                {money(l.balance)}
+                {m(l.balance)}
               </TableCell>
             </TableRow>
           ))}
@@ -114,7 +123,7 @@ export default async function PartnerStatementPage({
               {t('statements.closing')}
             </TableCell>
             <TableCell className={cn('text-right font-semibold tabular-nums', st.closing < 0 && 'text-red-600 dark:text-red-400')}>
-              {money(st.closing)}
+              {m(st.closing)}
             </TableCell>
           </TableRow>
         </TableBody>

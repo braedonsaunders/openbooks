@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { money } from '../../../lib/format'
+import { moduleDrawerHref } from '../../../lib/txn-links'
 
 type EntryData = {
   entry: {
@@ -34,20 +35,6 @@ type EntryData = {
     department: string | null
     project: string | null
   }[]
-}
-
-// Which module owns each document kind — the flyout escalates to that record's
-// full (editable) drawer via its list route + ?doc=/?entry= param.
-const DOC_MODULE: Record<string, { path: string; param: string }> = {
-  vendor_bill: { path: '/ap', param: 'doc' },
-  vendor_credit: { path: '/ap', param: 'doc' },
-  customer_invoice: { path: '/ar', param: 'doc' },
-  customer_credit: { path: '/ar', param: 'doc' },
-  card_charge: { path: '/banking', param: 'doc' },
-  card_refund: { path: '/banking', param: 'doc' },
-  check: { path: '/banking', param: 'doc' },
-  transfer: { path: '/banking', param: 'doc' },
-  journal: { path: '/journal', param: 'entry' },
 }
 
 /**
@@ -92,9 +79,7 @@ export function EntryFlyout() {
 
   const entry = data?.entry
   const origin = entry?.origin ? (t.has(`origins.${entry.origin}`) ? t(`origins.${entry.origin}`) : entry.origin) : ''
-  const module = entry?.doc_kind ? DOC_MODULE[entry.doc_kind] : undefined
-  const escalateHref =
-    module && entry?.doc_id ? `${module.path}?${module.param}=${entry.doc_id}` : null
+  const escalateHref = moduleDrawerHref(entry?.doc_kind, entry?.doc_id)
 
   const totalDebit = (data?.lines ?? []).reduce((a, l) => a + Math.max(0, Number(l.amount)), 0)
 

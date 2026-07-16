@@ -6,8 +6,11 @@ import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
+import { orgInfo } from '../../../../lib/data'
+import { currencySymbol } from '../../../../lib/statement-format'
 import { money } from '../../../../lib/format'
-import { StatementExport } from '../StatementExport'
+import { ExportMenu } from '../ExportMenu'
+import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
 const PER_PAGE = 50
@@ -24,7 +27,9 @@ export default async function Partners({
   const k = sp.kind === 'receivable' ? 'receivable' : 'payable'
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
   const flip = k === 'payable' ? -1 : 1
-  const all = await partnerBalances(k)
+  const [all, org] = await Promise.all([partnerBalances(k), orgInfo()])
+  const sym = currencySymbol(org?.base_currency)
+  const m = (v: number) => money(v, sym)
   const q = params.q?.toLowerCase()
   const filtered = q ? all.filter((r) => (r.display_name ?? '').toLowerCase().includes(q)) : all
   const total = filtered.reduce((a, r) => a + Number(r.balance), 0)
@@ -36,9 +41,7 @@ export default async function Partners({
         <>
           <PageHeader
             title={k === 'payable' ? t('payablesTitle') : t('receivablesTitle')}
-            description={t('description')}
             back={{ href: '/reports', label: tr('hub.title') }}
-            actions={<StatementExport kind="partners" params={{ side: k }} />}
           />
           <div className="flex items-center gap-2">
             <Link href="/reports/partners?kind=payable">
@@ -47,10 +50,14 @@ export default async function Partners({
             <Link href="/reports/partners?kind=receivable">
               <Badge variant={k === 'receivable' ? 'default' : 'outline'}>{t('receivables')}</Badge>
             </Link>
+            <div className="ml-auto flex items-center gap-2">
+              <SaveViewButton />
+              <ExportMenu kind="partners" params={{ side: k }} />
+            </div>
           </div>
           <SearchInput placeholder={t('searchPlaceholder')} />
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t('totalOutstanding')}: <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(flip * total)}</span>
+            {t('totalOutstanding')}: <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{m(flip * total)}</span>
           </p>
         </>
       }
@@ -72,7 +79,7 @@ export default async function Partners({
               <TableCell
                 className={cn('text-right tabular-nums', flip * Number(r.balance) < 0 && 'text-red-600 dark:text-red-400')}
               >
-                {money(flip * Number(r.balance))}
+                {m(flip * Number(r.balance))}
               </TableCell>
               <TableCell className="text-right tabular-nums">{r.line_count}</TableCell>
             </TableRow>
