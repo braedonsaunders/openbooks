@@ -101,6 +101,7 @@ export default async function BalanceSheet({
         title={t('balanceSheet.title')}
         periodPhrase={t('balanceSheet.asOf', { date: period.to })}
         note={scaleFactor(q.scale).note || undefined}
+        wide={view.columns.length > 4}
       >
         <StatementMatrixTable
           view={view}
