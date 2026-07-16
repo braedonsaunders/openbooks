@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Play } from 'lucide-react'
+import { Filter, Play, Settings2, Table2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
+import { Badge, Button, Input, Label, Select, cn } from '@openbooks/ui'
 import {
   REPORT_ENTITIES,
   REPORT_ENTITY_MAP,
@@ -14,17 +14,19 @@ import {
   isOperationalColumn,
   resolveReportLayout,
   type ReportCustomQuery,
-  type ReportEntity,
   type ReportLayoutConfig,
   type ReportRunResult,
 } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { FilterTree } from '../../FilterTree'
-import { ResultView } from '../../ResultView'
+import { PaperView, type PaperData } from '../../../PaperView'
 import { RowsConfig, SummarizeConfig } from '../../../query-config'
+
+type Tab = 'data' | 'filter' | 'format'
 
 export function ReportBuilder({
   definition,
+  company,
 }: {
   definition: {
     id: string
@@ -34,6 +36,7 @@ export function ReportBuilder({
     query: ReportCustomQuery
     layout?: Record<string, unknown> | null
   }
+  company: string
 }) {
   const t = useTranslations('reports.custom.builder')
   const tk = useTranslations('reports.custom')
@@ -50,6 +53,7 @@ export function ReportBuilder({
   const [preview, setPreview] = useState<ReportRunResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  const [tab, setTab] = useState<Tab>('data')
 
   const entity = REPORT_ENTITY_MAP[query.entity] ?? REPORT_ENTITY_MAP.ledger_lines!
   const mode = query.mode ?? 'rows'
@@ -133,12 +137,29 @@ export function ReportBuilder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, description, query, layout])
 
-  const selectableColumns = useMemo(
-    () => entity.columns.filter(isOperationalColumn),
-    [entity],
-  )
+  const selectableColumns = useMemo(() => entity.columns.filter(isOperationalColumn), [entity])
+
+  // ReportRunResult → the unified PaperView shape (same contract statements use).
+  const paper: PaperData | null = preview
+    ? {
+        title: name || t('namePlaceholder'),
+        periodPhrase: description || undefined,
+        groups: preview.groups.map((g) => ({
+          title: g.title,
+          subtitle: g.subtitle,
+          columns: g.columns,
+          rows: g.rows,
+          isEmpty: g.isEmpty,
+        })),
+      }
+    : null
 
   const field = 'space-y-1.5'
+  const tabs: { key: Tab; label: string; icon: typeof Table2 }[] = [
+    { key: 'data', label: t('tabs.data'), icon: Table2 },
+    { key: 'filter', label: t('tabs.filter'), icon: Filter },
+    { key: 'format', label: t('tabs.format'), icon: Settings2 },
+  ]
 
   return (
     <DetailPageLayout
@@ -164,10 +185,7 @@ export function ReportBuilder({
           <div className="flex items-center gap-3">
             <span
               className={
-                'text-xs ' +
-                (saveState === 'error'
-                  ? 'text-red-600 dark:text-red-400'
-                  : 'text-slate-500 dark:text-slate-400')
+                'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
               }
             >
               {saveState === 'saved'
@@ -185,166 +203,161 @@ export function ReportBuilder({
         </div>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
-        {/* --- configuration panel --- */}
-        <div className="space-y-5">
-          <div className={field}>
-            <Label>{t('source')}</Label>
-            <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)}>
-              {REPORT_ENTITIES.map((e) => (
-                <option key={e.key} value={e.key}>
-                  {tReports(`catalog.entities.${e.key}.label`)}
-                </option>
-              ))}
-            </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {tReports(`catalog.entities.${entity.key}.description`)}
-            </p>
-          </div>
-
-          <div className={field}>
-            <Label>{t('mode')}</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={mode === 'rows' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => patch({ mode: 'rows' })}
-              >
-                {t('detailRows')}
-              </Button>
-              <Button
-                type="button"
-                variant={mode === 'summarize' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() =>
-                  patch({
-                    mode: 'summarize',
-                    measures: query.measures?.length ? query.measures : [{ fn: 'count' }],
-                  })
-                }
-              >
-                {t('summarize')}
-              </Button>
-            </div>
-          </div>
-
-          {mode === 'rows' ? (
-            <RowsConfig entity={entity} query={query} patch={patch} columns={selectableColumns} />
-          ) : (
-            <SummarizeConfig entity={entity} query={query} patch={patch} />
-          )}
-
-          <div className={field}>
-            <Label>{tc('labels.filters')}</Label>
-            <FilterTree
-              entity={entity}
-              group={query.filters ?? { combinator: 'and', rules: [] }}
-              onChange={(g) => patch({ filters: g.rules.length ? g : null })}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className={field}>
-              <Label>{t('sortBy')}</Label>
-              <Select
-                value={query.sort?.column ?? ''}
-                onChange={(e) =>
-                  patch({
-                    sort: e.target.value
-                      ? { column: e.target.value, direction: query.sort?.direction ?? 'desc' }
-                      : null,
-                  })
-                }
-              >
-                <option value="">{t('sortDefault')}</option>
-                {entity.columns.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {tReports(`catalog.columns.${entity.key}.${c.key}`)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className={field}>
-              <Label>{t('direction')}</Label>
-              <Select
-                value={query.sort?.direction ?? 'desc'}
-                disabled={!query.sort?.column}
-                onChange={(e) =>
-                  query.sort?.column &&
-                  patch({ sort: { column: query.sort.column, direction: e.target.value as 'asc' | 'desc' } })
-                }
-              >
-                <option value="desc">{t('descending')}</option>
-                <option value="asc">{t('ascending')}</option>
-              </Select>
-            </div>
-          </div>
-
-          <div className={field}>
-            <Label>{t('rowLimit')}</Label>
-            <Input
-              type="number"
-              min={1}
-              max={10000}
-              value={query.limit ?? 1000}
-              onChange={(e) => patch({ limit: Math.min(Math.max(Number(e.target.value) || 1, 1), 10000) })}
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('rowLimitHint', { previewRows: 200 })}
-            </p>
-          </div>
-
-          <div className={field}>
-            <Label>{t('pageSetup.title')}</Label>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('pageSetup.hint')}</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">{t('pageSetup.paper')}</Label>
-                <Select
-                  value={layout.paperSize}
-                  onChange={(e) => setLayout((l) => ({ ...l, paperSize: e.target.value as ReportLayoutConfig['paperSize'] }))}
+      <div className="grid gap-6 lg:grid-cols-[minmax(320px,1fr)_2fr]">
+        {/* --- control panel (1/3) with subtabs --- */}
+        <div className="space-y-4">
+          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
+            {tabs.map((tb) => {
+              const Icon = tb.icon
+              return (
+                <button
+                  key={tb.key}
+                  type="button"
+                  onClick={() => setTab(tb.key)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    tab === tb.key
+                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
+                  )}
                 >
-                  <option value="letter">{t('pageSetup.paperLetter')}</option>
-                  <option value="a4">{t('pageSetup.paperA4')}</option>
-                  <option value="legal">{t('pageSetup.paperLegal')}</option>
+                  <Icon size={14} /> {tb.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {tab === 'data' ? (
+            <div className="space-y-5">
+              <div className={field}>
+                <Label>{t('source')}</Label>
+                <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)}>
+                  {REPORT_ENTITIES.map((e) => (
+                    <option key={e.key} value={e.key}>
+                      {tReports(`catalog.entities.${e.key}.label`)}
+                    </option>
+                  ))}
                 </Select>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{tReports(`catalog.entities.${entity.key}.description`)}</p>
               </div>
-              <div>
-                <Label className="text-xs">{t('pageSetup.orientation')}</Label>
-                <Select
-                  value={layout.orientation}
-                  onChange={(e) => setLayout((l) => ({ ...l, orientation: e.target.value as 'portrait' | 'landscape' }))}
-                >
-                  <option value="landscape">{t('pageSetup.landscape')}</option>
-                  <option value="portrait">{t('pageSetup.portrait')}</option>
-                </Select>
+
+              <div className={field}>
+                <Label>{t('mode')}</Label>
+                <div className="flex gap-2">
+                  <Button type="button" variant={mode === 'rows' ? 'default' : 'outline'} size="sm" onClick={() => patch({ mode: 'rows' })}>
+                    {t('detailRows')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={mode === 'summarize' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => patch({ mode: 'summarize', measures: query.measures?.length ? query.measures : [{ fn: 'count' }] })}
+                  >
+                    {t('summarize')}
+                  </Button>
+                </div>
               </div>
-              <div>
-                <Label className="text-xs">{t('pageSetup.density')}</Label>
-                <Select
-                  value={layout.density}
-                  onChange={(e) => setLayout((l) => ({ ...l, density: e.target.value as ReportLayoutConfig['density'] }))}
-                >
-                  <option value="standard">{t('pageSetup.densityStandard')}</option>
-                  <option value="compact">{t('pageSetup.densityCompact')}</option>
-                </Select>
+
+              {mode === 'rows' ? (
+                <RowsConfig entity={entity} query={query} patch={patch} columns={selectableColumns} />
+              ) : (
+                <SummarizeConfig entity={entity} query={query} patch={patch} />
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className={field}>
+                  <Label>{t('sortBy')}</Label>
+                  <Select
+                    value={query.sort?.column ?? ''}
+                    onChange={(e) =>
+                      patch({ sort: e.target.value ? { column: e.target.value, direction: query.sort?.direction ?? 'desc' } : null })
+                    }
+                  >
+                    <option value="">{t('sortDefault')}</option>
+                    {entity.columns.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {tReports(`catalog.columns.${entity.key}.${c.key}`)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className={field}>
+                  <Label>{t('direction')}</Label>
+                  <Select
+                    value={query.sort?.direction ?? 'desc'}
+                    disabled={!query.sort?.column}
+                    onChange={(e) => query.sort?.column && patch({ sort: { column: query.sort.column, direction: e.target.value as 'asc' | 'desc' } })}
+                  >
+                    <option value="desc">{t('descending')}</option>
+                    <option value="asc">{t('ascending')}</option>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <Label className="text-xs">{t('pageSetup.marginMm')}</Label>
+
+              <div className={field}>
+                <Label>{t('rowLimit')}</Label>
                 <Input
                   type="number"
-                  min={5}
-                  max={30}
-                  value={layout.marginMm}
-                  onChange={(e) => setLayout((l) => ({ ...l, marginMm: Math.min(Math.max(Number(e.target.value) || 15, 5), 30) }))}
+                  min={1}
+                  max={10000}
+                  value={query.limit ?? 1000}
+                  onChange={(e) => patch({ limit: Math.min(Math.max(Number(e.target.value) || 1, 1), 10000) })}
                 />
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('rowLimitHint', { previewRows: 200 })}</p>
               </div>
             </div>
-          </div>
+          ) : tab === 'filter' ? (
+            <div className={field}>
+              <Label>{tc('labels.filters')}</Label>
+              <FilterTree
+                entity={entity}
+                group={query.filters ?? { combinator: 'and', rules: [] }}
+                onChange={(g) => patch({ filters: g.rules.length ? g : null })}
+              />
+            </div>
+          ) : (
+            <div className={field}>
+              <Label>{t('pageSetup.title')}</Label>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('pageSetup.hint')}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">{t('pageSetup.paper')}</Label>
+                  <Select value={layout.paperSize} onChange={(e) => setLayout((l) => ({ ...l, paperSize: e.target.value as ReportLayoutConfig['paperSize'] }))}>
+                    <option value="letter">{t('pageSetup.paperLetter')}</option>
+                    <option value="a4">{t('pageSetup.paperA4')}</option>
+                    <option value="legal">{t('pageSetup.paperLegal')}</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">{t('pageSetup.orientation')}</Label>
+                  <Select value={layout.orientation} onChange={(e) => setLayout((l) => ({ ...l, orientation: e.target.value as 'portrait' | 'landscape' }))}>
+                    <option value="landscape">{t('pageSetup.landscape')}</option>
+                    <option value="portrait">{t('pageSetup.portrait')}</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">{t('pageSetup.density')}</Label>
+                  <Select value={layout.density} onChange={(e) => setLayout((l) => ({ ...l, density: e.target.value as ReportLayoutConfig['density'] }))}>
+                    <option value="standard">{t('pageSetup.densityStandard')}</option>
+                    <option value="compact">{t('pageSetup.densityCompact')}</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">{t('pageSetup.marginMm')}</Label>
+                  <Input
+                    type="number"
+                    min={5}
+                    max={30}
+                    value={layout.marginMm}
+                    onChange={(e) => setLayout((l) => ({ ...l, marginMm: Math.min(Math.max(Number(e.target.value) || 15, 5), 30) }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* --- live preview --- */}
+        {/* --- live paper preview (2/3) --- */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('livePreview')}</h2>
@@ -356,8 +369,10 @@ export function ReportBuilder({
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
               {previewError}
             </div>
-          ) : preview ? (
-            <ResultView result={preview} />
+          ) : paper ? (
+            <div className="rounded-xl bg-slate-100/70 p-4 sm:p-6 dark:bg-slate-950/40">
+              <PaperView company={company} data={paper} emptyLabel={tk('resultView.noRows')} />
+            </div>
           ) : (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
               {previewing ? t('runningPreview') : t('previewEmptyHint')}
@@ -369,6 +384,5 @@ export function ReportBuilder({
   )
 }
 
-// --- rows-mode column picker -------------------------------------------------
-// RowsConfig + SummarizeConfig live in ../../../query-config and are shared
-// with the saved-search builder.
+// RowsConfig + SummarizeConfig live in ../../../query-config and are shared with
+// the saved-search builder.

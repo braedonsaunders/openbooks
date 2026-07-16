@@ -30,12 +30,24 @@ import { auditColumns, id, orgRef } from "./helpers";
  *  authored by a user in the studio. Built-ins are cloneable, not deletable. */
 export const REPORT_DEFINITION_KINDS = ["built_in", "custom"] as const;
 
+/**
+ * How a definition computes its result — the unification discriminator:
+ *  - `query`     → the entity query engine (ReportCustomQuery in `query`).
+ *  - `statement` → a standard financial statement (kind + params in `statement`),
+ *    resolved through the matrix/statement engine. Standard reports (P&L, Balance
+ *    Sheet, GL, …) are seeded as `statement` definitions so standard and custom
+ *    reports share ONE model, run pipeline and (eventually) editor.
+ */
+export const REPORT_DEFINITION_TYPES = ["query", "statement"] as const;
+
 export const reportDefinitions = pgTable(
   "report_definitions",
   {
     id: id(),
     orgId: orgRef(),
     kind: text("kind", { enum: REPORT_DEFINITION_KINDS }).notNull().default("custom"),
+    /** query = entity-query report; statement = seeded standard financial statement. */
+    reportType: text("report_type", { enum: REPORT_DEFINITION_TYPES }).notNull().default("query"),
     /** Stable per-org slug (built-ins keep their catalog slug; custom reports
      *  get a slugified name). Used for deep links and idempotent seeding. */
     slug: text("slug").notNull(),
@@ -44,9 +56,18 @@ export const reportDefinitions = pgTable(
     /**
      * The ReportCustomQuery plan (@openbooks/reports types.ts): entity, mode,
      * columns, breakouts, measures, filters (nested and/or tree), sort, limit.
-     * Validated by validateCustomQuery on every write.
+     * Validated by validateCustomQuery on every write. NULL for `statement`
+     * definitions, which carry their spec in `statement` instead.
      */
-    query: jsonb("query").$type<Record<string, unknown>>().notNull(),
+    query: jsonb("query").$type<Record<string, unknown>>(),
+    /**
+     * Statement spec for `report_type = 'statement'`: `{ kind, params? }` where
+     * `kind` is a standard report kind (pnl, balance-sheet, general-ledger, …)
+     * and `params` are its fixed args (e.g. { side: 'ar' }). NULL for `query`.
+     */
+    statement: jsonb("statement").$type<Record<string, unknown>>(),
+    /** System-owned standard report: seeded + locked (edit ⇒ clone, not deletable). */
+    system: boolean("system").notNull().default(false),
     /**
      * ReportLayoutConfig (paper/orientation/margins/density). Null ⇒ the
      * engine default (landscape Letter). Consumed when the print/PDF pipeline

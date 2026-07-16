@@ -276,6 +276,58 @@ export function balanceSheetExportData(
   }
 }
 
+export function projectProfitabilityExportData(
+  result: {
+    rows: {
+      projectName: string; customerName: string | null
+      revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number
+    }[]
+    totals: { revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number }
+    from: string
+    to: string
+  },
+  t: Translator,
+): ExportData {
+  const pct = (m: number | null) => (m === null ? '' : `${(m * 100).toFixed(1)}%`)
+  const cols = [
+    t('projectProfitability.columns.project'),
+    t('projectProfitability.columns.customer'),
+    t('projectProfitability.columns.revenue'),
+    t('projectProfitability.columns.cogs'),
+    t('projectProfitability.columns.grossProfit'),
+    t('projectProfitability.columns.expenses'),
+    t('projectProfitability.columns.net'),
+    t('projectProfitability.columns.margin'),
+    t('projectProfitability.columns.hours'),
+  ]
+  const data = result.rows.map((r) => [
+    r.projectName, r.customerName ?? '',
+    r.revenue, r.cogs, r.grossProfit, r.expenses, r.net, pct(r.margin), r.hours,
+  ] as (string | number)[])
+  data.push([
+    t('trialBalance.totals'), '',
+    result.totals.revenue, result.totals.cogs, result.totals.grossProfit,
+    result.totals.expenses, result.totals.net, pct(result.totals.margin), result.totals.hours,
+  ])
+  return {
+    title: t('projectProfitability.title'),
+    dateRangeLabel: t('pnl.dateRange', { from: result.from, to: result.to }),
+    summary: [
+      { label: t('projectProfitability.columns.revenue'), value: result.totals.revenue },
+      { label: t('projectProfitability.columns.net'), value: result.totals.net },
+    ],
+    groups: [
+      {
+        kind: 'results',
+        title: t('projectProfitability.title'),
+        columns: cols,
+        rows: data,
+        align: ['left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+      },
+    ],
+  }
+}
+
 export function trialBalanceExportData(
   rows: { number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[],
   asOf: string,

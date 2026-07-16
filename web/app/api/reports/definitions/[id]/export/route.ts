@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { guardPermission } from '../../../../../../lib/authz'
-import {
-  REPORT_MAX_ROWS,
-  executeReport,
-  loadReportDefinition,
-} from '../../../../../../lib/custom-reports'
+import { loadReportDefinition } from '../../../../../../lib/custom-reports'
+import { resolveDefinitionToExportData } from '../../../../../../lib/report-run'
+import { resolvePeriod } from '../../../../../../lib/periods'
+import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { reportCsvOptions } from '../../../../../../lib/report-labels'
 import {
   exportDataToCsv,
@@ -13,7 +12,6 @@ import {
   exportDataToXlsx,
   orgBranding,
   resolveLayout,
-  runResultToExportData,
   type Translator,
 } from '../../../../../../lib/report-pdf'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
@@ -43,22 +41,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!def) return NextResponse.json({ error: 'report not found' }, { status: 404 })
 
   const t = (await getTranslations('reports')) as unknown as Translator
-  const name =
-    def.kind === 'built_in' && tHas(t, `builtIns.${def.slug}.name`)
-      ? t(`builtIns.${def.slug}.name`)
-      : def.name
 
-  let result
+  // One pipeline for BOTH standard (statement) and custom (query) definitions.
+  const q = parseReportQuery(url.searchParams)
+  const period = await resolvePeriod(q.period, {
+    customFrom: url.searchParams.get('from') ?? undefined,
+    customTo: url.searchParams.get('to') ?? undefined,
+  })
+  let data
   try {
-    result = await executeReport(user.orgId, def.query, REPORT_MAX_ROWS)
+    data = await resolveDefinitionToExportData(user.orgId, id, url.searchParams, { t, period, query: q })
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Report run failed' },
-      { status: 422 },
-    )
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Report run failed' }, { status: 422 })
   }
 
-  const data = runResultToExportData(result, { title: name, dateRangeLabel: '' })
   const stamp = new Date().toISOString().slice(0, 10)
   const filename = `${safeName(def.slug)}-${stamp}`
 
@@ -67,17 +63,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
   }
   if (format === 'xlsx') {
-    const buf = await exportDataToXlsx(data, { reportName: name, dateRangeLabel: '' })
+    const buf = await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel })
     return xlsxResponse(buf, filename)
   }
   const { page, showSummary } = resolveLayout(def.layout as Record<string, unknown> | null)
   const branding = await orgBranding()
   const pdf = await exportDataToPdf(data, branding, page, { showSummary })
   return pdfResponse(pdf, filename)
-}
-
-/** next-intl's `t` exposes `.has(key)`; the cast to Translator loses it. */
-function tHas(t: Translator, key: string): boolean {
-  const fn = t as unknown as { has?: (k: string) => boolean }
-  return typeof fn.has === 'function' ? fn.has(key) : false
 }

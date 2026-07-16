@@ -25,14 +25,17 @@
       "registersTitle": "A/R & A/P Registers",
       "registersDescription": "Per-customer and per-vendor transaction registers with running balances",
       "budgetTitle": "Budget vs Actual",
-      "budgetDescription": "Actuals against a budget scenario, by account, with variance $ and %"
+      "budgetDescription": "Actuals against a budget scenario, by account, with variance $ and %",
+      "projectProfitabilityTitle": "Project Profitability",
+      "projectProfitabilityDescription": "Revenue, cost and margin by project — ties to the P&L, with approved job hours"
     },
     "groups": {
       "financial": "Financial Statements",
       "ledger": "General Ledger",
       "receivablesPayables": "Receivables & Payables",
       "budgeting": "Budgeting",
-      "custom": "Custom & Saved"
+      "custom": "Custom & Saved",
+      "projects": "Projects"
     },
     "customStudio": {
       "title": "Custom report builder",
@@ -315,7 +318,12 @@
       "thenBy": "Then by",
       "addSortLevel": "Add sort level",
       "removeSortAria": "Remove sort level",
-      "noColumnsSelected": "No columns selected — add at least one."
+      "noColumnsSelected": "No columns selected — add at least one.",
+      "tabs": {
+        "data": "Data",
+        "filter": "Filter",
+        "format": "Format"
+      }
     },
     "runner": {
       "downloadCsv": "Download CSV",
@@ -833,5 +841,20 @@
   "flyout": {
     "title": "Journal entry",
     "openTransaction": "Open full transaction"
+  },
+  "projectProfitability": {
+    "title": "Project Profitability",
+    "empty": "No project activity in this period.",
+    "columns": {
+      "project": "Project",
+      "customer": "Customer",
+      "revenue": "Revenue",
+      "cogs": "COGS",
+      "grossProfit": "Gross profit",
+      "expenses": "Expenses",
+      "net": "Net profit",
+      "margin": "Margin",
+      "hours": "Hours"
+    }
   }
 }

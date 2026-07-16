@@ -33,10 +33,16 @@ export type ReportDefinitionRow = {
   id: string
   org_id: string
   kind: 'built_in' | 'custom'
+  /** 'query' = entity-query report; 'statement' = seeded standard statement. */
+  report_type: 'query' | 'statement'
   slug: string
   name: string
   description: string | null
-  query: ReportCustomQuery
+  /** NULL for statement definitions (which carry their spec in `statement`). */
+  query: ReportCustomQuery | null
+  /** Statement spec `{ kind, params? }` for report_type='statement', else null. */
+  statement: { kind?: string; params?: Record<string, string> } | null
+  system: boolean
   layout: Record<string, unknown> | null
   created_at: string
   updated_at: string
@@ -48,7 +54,7 @@ export async function loadReportDefinition(
   id: string,
 ): Promise<ReportDefinitionRow | null> {
   const r = (await db.execute(sql`
-    select id, org_id, kind, slug, name, description, query, layout, created_at, updated_at
+    select id, org_id, kind, report_type, slug, name, description, query, statement, system, layout, created_at, updated_at
       from report_definitions
      where id = ${id} and org_id = ${orgId}
   `)) as unknown as { rows: ReportDefinitionRow[] }
