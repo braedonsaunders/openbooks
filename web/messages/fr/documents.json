@@ -12,14 +12,16 @@
       "description": "Téléversez des fichiers ou créez un dossier pour commencer.",
       "allTitle": "Aucun fichier",
       "allDescription": "Téléversez votre premier fichier pour remplir le gestionnaire de documents."
-    }
+    },
+    "folderRow": "Dossier"
   },
   "columns": {
     "name": "Nom",
     "size": "Taille",
     "modified": "Modifié",
     "createdBy": "Créé par",
-    "type": "Type"
+    "type": "Type",
+    "location": "Emplacement"
   },
   "folderTree": {
     "expand": "Déplier",
@@ -61,7 +63,8 @@
     },
     "systemNoDelete": "Les dossiers système ne peuvent pas être supprimés ou renommés.",
     "subfolderCount": "{count, plural, one {# dossier} other {# dossiers}}",
-    "fileCount": "{count, plural, one {# fichier} other {# fichiers}}"
+    "fileCount": "{count, plural, one {# fichier} other {# fichiers}}",
+    "deleteBlocked": "Ce dossier contient des fichiers joints à des enregistrements et ne peut pas être supprimé."
   },
   "file": {
     "drawer": {
@@ -87,6 +90,13 @@
         "title": "Supprimer ce fichier?",
         "body": "Le fichier sera définitivement supprimé du gestionnaire de documents et détaché de tous les enregistrements. Cette action est irréversible."
       }
+    },
+    "preview": {
+      "title": "Aperçu",
+      "loading": "Chargement du fichier…",
+      "loadFailed": "Impossible de charger le contenu de ce fichier.",
+      "tooLarge": "Ce fichier est trop volumineux pour être prévisualisé ici.",
+      "unsupported": "Ce type de fichier ne peut pas être prévisualisé. Téléchargez-le pour l'ouvrir."
     }
   },
   "upload": {
@@ -126,7 +136,9 @@
     "attached": "Fichier joint",
     "attachFailed": "Impossible de joindre le fichier",
     "detached": "Fichier détaché",
-    "detachFailed": "Impossible de détacher le fichier"
+    "detachFailed": "Impossible de détacher le fichier",
+    "linkCopied": "Lien copié",
+    "linkCopyFailed": "Impossible de copier le lien"
   },
   "fileTypes": {
     "pdf": "PDF",
@@ -136,5 +148,14 @@
     "document": "Document",
     "text": "Texte",
     "other": "Fichier"
+  },
+  "rowMenu": {
+    "open": "Ouvrir",
+    "openFolder": "Ouvrir le dossier",
+    "copyLink": "Copier le lien"
+  },
+  "rename": {
+    "fileTitle": "Renommer le fichier",
+    "folderTitle": "Renommer le dossier"
   }
 }

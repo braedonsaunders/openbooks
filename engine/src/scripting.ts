@@ -3,6 +3,7 @@ import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import cronParser from "cron-parser";
 import { db, schema } from "./db.ts";
 import { runUserSql } from "./sqlapi.ts";
+import { createScriptJournal } from "./journal-writes.ts";
 
 /**
  * User scripting: REAL JavaScript (ES2023), executed in a QuickJS sandbox —
@@ -27,6 +28,12 @@ import { runUserSql } from "./sqlapi.ts";
  *   ob.runtime               { org, trigger, user } -- read-only context info
  *   ob.record.load(t, id)    load one row by id (convenience over ob.query)
  *   ob.search(t, filters)    search rows by key=value filters
+ *   ob.journal.create(input[, {post}])
+ *                            governed ledger write: create a BALANCED draft
+ *                            journal (engine/src/journal-writes.ts). post:true
+ *                            runs the posting engine and is allowed only
+ *                            outside before_* triggers (no posting reentrancy
+ *                            while another document is mid-post).
  *
  * Return contract (before_post only):
  *   return { set: { field: value } }  to mutate whitelisted header fields
@@ -39,6 +46,8 @@ export interface ScriptContext {
   trigger: string;
   document?: Record<string, unknown>;
   lines?: Record<string, unknown>[];
+  /** endpoint scripts: the inbound HTTP request { method, query, body }. */
+  request?: Record<string, unknown>;
   org: { id: string; name: string; baseCurrency: string };
   user?: { id: string; name: string; role: string };
 }
@@ -48,6 +57,8 @@ export interface ScriptOutcome {
   name: string;
   status: "ok" | "aborted" | "error" | "timeout";
   set?: Record<string, unknown>;
+  /** main()'s raw JSON return value (endpoint scripts' response body). */
+  returned?: unknown;
   abortReason?: string;
   logs: string[];
   durationMs: number;
@@ -94,13 +105,31 @@ export async function runScript(
       }
     });
 
+    // Governed ledger write. post:true is refused inside before_* triggers —
+    // the posting engine is already mid-flight for the triggering document.
+    const journalFn = vm.newAsyncifiedFunction("__journal_create", async (inputH, postH) => {
+      const post = vm.dump(postH) === true;
+      if (post && ctx.trigger.startsWith("before_")) {
+        return { error: vm.newError(`journal.create: post:true is not allowed in ${ctx.trigger} (create a draft instead)`) };
+      }
+      try {
+        const input = JSON.parse(String(vm.dump(inputH)));
+        const result = await createScriptJournal(ctx.org.id, ctx.user?.id ?? null, input, { post });
+        return vm.newString(JSON.stringify(result));
+      } catch (e) {
+        return { error: vm.newError(`journal.create failed: ${(e as Error).message}`) };
+      }
+    });
+
     vm.setProp(obHandle, "log", logFn);
     vm.setProp(obHandle, "abort", abortFn);
     vm.setProp(obHandle, "__query", queryFn);
+    vm.setProp(obHandle, "__journal_create", journalFn);
     vm.setProp(vm.global, "ob", obHandle);
     logFn.dispose();
     abortFn.dispose();
     queryFn.dispose();
+    journalFn.dispose();
     obHandle.dispose();
 
     const program = `
@@ -147,6 +176,10 @@ export async function runScript(
           return ob.query(q);
         };
 
+        ob.journal = {
+          create: function(input, opts) { return JSON.parse(ob.__journal_create(JSON.stringify(input || {}), !!(opts && opts.post))); }
+        };
+
         if (typeof main !== "function") throw new Error("script must define function main(ctx)");
         const out = main(ctx);
         return JSON.stringify(out ?? null);
@@ -172,7 +205,9 @@ export async function runScript(
     // undefined) come back as a non-string — treat them as "no return value".
     const parsed = typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
     let set: Record<string, unknown> | undefined;
-    if (parsed && typeof parsed === "object" && parsed.set && typeof parsed.set === "object") {
+    // The { set: {...} } mutation contract only applies to before_* triggers —
+    // endpoint/bulk/scheduled scripts' returns are plain data, never mutations.
+    if (ctx.trigger.startsWith("before_") && parsed && typeof parsed === "object" && parsed.set && typeof parsed.set === "object") {
       set = {};
       for (const [k, v] of Object.entries(parsed.set)) {
         if (!MUTABLE_FIELDS.has(k)) {
@@ -186,7 +221,7 @@ export async function runScript(
         set[k] = v;
       }
     }
-    return { status: "ok", set, logs, durationMs: Date.now() - started };
+    return { status: "ok", set, returned: parsed, logs, durationMs: Date.now() - started };
   } finally {
     vm.dispose();
     runtime.dispose();
@@ -268,6 +303,95 @@ export async function runScheduledScript(
   });
   await db.execute(sql`update user_scripts set last_run_at = now() where id = ${s.id}`);
 
+  return outcome;
+}
+
+/**
+ * Run an endpoint script (the RESTlet idea): loaded by its per-org slug, given
+ * the inbound request as ctx.request, and its main() return becomes the HTTP
+ * response body. Every invocation is logged to script_runs.
+ */
+export async function runEndpointScript(
+  slug: string,
+  orgId: string,
+  user: { id: string; name: string; role: string },
+  request: { method: string; query: Record<string, string>; body: unknown },
+): Promise<ScriptOutcome | null> {
+  const [s] = await db
+    .select()
+    .from(schema.userScripts)
+    .where(
+      and(
+        eq(schema.userScripts.orgId, orgId),
+        eq(schema.userScripts.triggerPoint, "endpoint"),
+        eq(schema.userScripts.endpointSlug, slug),
+        eq(schema.userScripts.isActive, true),
+      ),
+    );
+  if (!s) return null;
+
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  if (!org) throw new Error("org not found");
+
+  const ctx: ScriptContext = {
+    trigger: "endpoint",
+    request: request as unknown as Record<string, unknown>,
+    org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    user,
+  };
+  const res = await runScript(s.source, ctx, s.timeoutMs);
+  const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
+
+  await db.insert(schema.scriptRuns).values({
+    orgId,
+    scriptId: s.id,
+    targetKind: "endpoint",
+    targetId: null,
+    status: res.status,
+    logs: res.logs,
+    errorMessage: res.status === "ok" ? null : res.abortReason,
+    durationMs: res.durationMs,
+  });
+  await db.execute(sql`update user_scripts set last_run_at = now() where id = ${s.id}`);
+  return outcome;
+}
+
+/** Bulk scripts get a 30 s deadline regardless of the stored (10 s-capped) timeout. */
+const BULK_TIMEOUT_MS = 30_000;
+
+/**
+ * Run a bulk script — the long-budget background kind. Same contract as a
+ * scheduled script (doc-less ctx), but with an extended deadline; meant to be
+ * consumed on the worker via the scripts queue, with inline fallback.
+ */
+export async function runBulkScript(scriptId: string, orgId: string): Promise<ScriptOutcome> {
+  const [s] = await db
+    .select()
+    .from(schema.userScripts)
+    .where(and(eq(schema.userScripts.id, scriptId), eq(schema.userScripts.orgId, orgId)));
+  if (!s) throw new Error("script not found");
+
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  if (!org) throw new Error("org not found");
+
+  const ctx: ScriptContext = {
+    trigger: "bulk",
+    org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+  };
+  const res = await runScript(s.source, ctx, BULK_TIMEOUT_MS);
+  const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
+
+  await db.insert(schema.scriptRuns).values({
+    orgId,
+    scriptId: s.id,
+    targetKind: "bulk",
+    targetId: null,
+    status: res.status,
+    logs: res.logs,
+    errorMessage: res.status === "ok" ? null : res.abortReason,
+    durationMs: res.durationMs,
+  });
+  await db.execute(sql`update user_scripts set last_run_at = now() where id = ${s.id}`);
   return outcome;
 }
 

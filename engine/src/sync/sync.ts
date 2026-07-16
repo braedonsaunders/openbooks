@@ -1,179 +1,377 @@
 import { desc, eq, sql } from "drizzle-orm";
-import { db, pool, schema } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
-import type { MigrationSource, SourceTransaction } from "./source.ts";
+import { db, schema } from "../db.ts";
+import { toUnits, fromUnits } from "../money.ts";
+import { postDocument, regenerateGlImpactTx, type PostingDeps } from "../posting.ts";
+import { buildNativeContext, type NativeContext, type NativeDocument } from "./native.ts";
+import { loadEntities, type EntityLoadStats } from "./migrate.ts";
+import { reconcileApplications, type ApplyStats } from "./applications.ts";
+import type { MigrationSource } from "./source.ts";
 
 /**
- * Incremental sync: pull changed source transactions, land them in the
- * kernel, verify the trial balance against the live source.
+ * NATIVE sync engine — migration and mirror are one code path.
  *
- *  - new transaction        → post a new origin='migration' entry
- *  - changed transaction    → REVERSE the old entry (linked via
- *    reverses_entry_id) and post the current version — proper accounting,
- *    never mutation; the audit trail keeps every version
- *  - unchanged              → skip (multiset compare of account/amount)
+ * Every source transaction lands as a REAL business document (invoice, bill,
+ * payment, journal, order) and posts through the actual posting engine
+ * (postDocument → RULES → kernel), so the GL is a byproduct of native
+ * transactions. Payment applications reconcile alongside, so AR/AP open
+ * balances are correct and tied payment-to-bill. Then we verify: per-account
+ * trial balance AND per-document open items against the LIVE source.
  *
- * Idempotency key: entry_number = `NS-<type>-<number>-<sourceRef>`, matching
- * the full-migration loader.
+ *  - new source txn      → insert document + lines, post through the kernel
+ *  - changed source txn  → amend in place (document updated, GL projection
+ *    re-materialized via regenerateGlImpactTx — entry keeps its identity so
+ *    applications and bank matches stay linked)
+ *  - unchanged           → skip (canonical content compare)
+ *  - deleted at source   → reported (voiding is deliberate, never automatic)
  */
 
 export interface SyncResult {
   runId: string;
-  newEntries: number;
-  reversedEntries: number;
-  unchanged: number;
+  kind: "incremental" | "full_migration";
+  entities?: EntityLoadStats;
+  docsNew: number;
+  docsAmended: number;
+  docsUnchanged: number;
+  ordersNew: number;
+  docsFailed: number;
   skipped: string[];
+  deletedAtSource: string[];
+  applications: ApplyStats | null;
   tb: { accounts: number; matches: number; mismatches: { accountRef: string; ours: string; theirs: string }[] };
+  openItems: { checked: number; matches: number; mismatches: { ref: string; ours: string; theirs: string }[] } | null;
   syncedThrough: string;
   durationMs: number;
 }
 
-const entryNumberFor = (t: SourceTransaction) => `NS-${t.type}-${t.number ?? t.sourceRef}-${t.sourceRef}`;
-
-function linesKey(lines: { accountRef?: string; accountNs?: string; amount: string }[]): string {
-  return lines
-    .map((l) => `${l.accountRef ?? l.accountNs}:${fromUnits(toUnits(l.amount))}`)
-    .sort()
-    .join("|");
+export interface SyncOptions {
+  kind?: "incremental" | "full_migration";
+  orgId?: string;
+  connectionId?: string;
+  /** "auto" resumes from the watermark; null = all history; Date = explicit. */
+  since?: Date | null | "auto";
+  loadEntitiesFirst?: boolean;
 }
 
-export async function runSync(source: MigrationSource, triggeredBy: string): Promise<SyncResult> {
+/** One-click migration: master data, then every native transaction, verified. */
+export function runFullMigration(
+  source: MigrationSource,
+  triggeredBy: string,
+  ctxOpts: { orgId?: string; connectionId?: string } = {},
+): Promise<SyncResult> {
+  return runSync(source, triggeredBy, {
+    kind: "full_migration",
+    since: null,
+    loadEntitiesFirst: true,
+    ...ctxOpts,
+  });
+}
+
+/** Canonical content key of a native document (change detection). */
+function nativeKey(d: NativeDocument): string {
+  return JSON.stringify([
+    d.kind, d.partyId, d.documentDate, d.dueDate, d.memo, d.referenceNumber, d.controlAccountId,
+    d.lines.map((l) => [
+      l.accountId, l.itemId, toUnits(l.amount).toString(), toUnits(l.taxAmount).toString(),
+      l.taxOverridden, l.taxCodeId, l.departmentId, l.projectId, l.description,
+    ]),
+  ]);
+}
+
+/** The same canonical key computed from the stored document. */
+async function storedKey(docId: string): Promise<string> {
+  const [d] = (
+    (await db.execute(sql`
+      select kind, party_id, document_date::text as ddate, due_date::text as due,
+             memo, reference_number, custom->>'controlAccountId' as ctrl
+        from documents where id = ${docId}`)) as unknown as {
+      rows: { kind: string; party_id: string | null; ddate: string; due: string | null; memo: string | null; reference_number: string | null; ctrl: string | null }[];
+    }
+  ).rows;
+  const lines = (
+    (await db.execute(sql`
+      select account_id, item_id, amount, tax_amount, tax_overridden, tax_code_id,
+             department_id, project_id, description
+        from document_lines where document_id = ${docId} order by line_number`)) as unknown as {
+      rows: {
+        account_id: string | null; item_id: string | null; amount: string; tax_amount: string;
+        tax_overridden: boolean; tax_code_id: string | null; department_id: string | null;
+        project_id: string | null; description: string | null;
+      }[];
+    }
+  ).rows;
+  return JSON.stringify([
+    d!.kind, d!.party_id, d!.ddate, d!.due, d!.memo, d!.reference_number, d!.ctrl,
+    lines.map((l) => [
+      l.account_id, l.item_id, toUnits(l.amount).toString(), toUnits(l.tax_amount).toString(),
+      l.tax_overridden, l.tax_code_id, l.department_id, l.project_id, l.description,
+    ]),
+  ]);
+}
+
+/** Denormalize a posted document's header totals from its journal entry. */
+async function setDocumentTotalsFromEntry(docId: string): Promise<void> {
+  await db.execute(sql`
+    update documents d set
+      total = coalesce(j.pos, 0),
+      tax_total = coalesce(abs(lt.tax), 0),
+      subtotal = coalesce(j.pos, 0) - coalesce(abs(lt.tax), 0)
+    from documents d2
+    left join lateral (
+      select sum(jl.amount) filter (where jl.amount > 0) as pos
+        from journal_lines jl where jl.entry_id = d2.posted_entry_id) j on true
+    left join lateral (
+      select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id) lt on true
+    where d.id = d2.id and d2.id = ${docId}
+  `);
+}
+
+export async function runSync(
+  source: MigrationSource,
+  triggeredBy: string,
+  opts: SyncOptions = {},
+): Promise<SyncResult> {
   const started = Date.now();
-  const [org] = await db.select().from(schema.orgs);
-  const [book] = await db.select().from(schema.accountingBooks).where(eq(schema.accountingBooks.isPrimary, true));
+  const kind = opts.kind ?? "incremental";
+  const refKey = source.refKey;
+  const connectionId = opts.connectionId ?? null;
+  const org = opts.orgId ? { id: opts.orgId } : (await db.select().from(schema.orgs))[0]!;
 
   const [run] = await db
     .insert(schema.syncRuns)
-    .values({ orgId: org.id, source: source.name, kind: "incremental", triggeredBy })
+    .values({ orgId: org.id, connectionId, source: source.name, kind, triggeredBy })
     .returning();
 
   try {
+    // -- 1. master data, so every reference in new transactions resolves.
+    //    Default ON for mirrors too: the upsert-by-ref loader is idempotent,
+    //    and a new customer/account/item referenced by a new transaction must
+    //    exist before the document builds.
+    let entityStats: EntityLoadStats | undefined;
+    if ((opts.loadEntitiesFirst ?? true) && source.entities) {
+      entityStats = await loadEntities(source, org.id);
+    }
+    const ctx: NativeContext = await buildNativeContext(org.id, refKey, source.baseCurrency);
+    const deps: PostingDeps = { control: ctx.control, cardLiabilityAccountId: ctx.control.ap };
+
+    // -- 2. watermark ----------------------------------------------------------
     const [lastOk] = await db
       .select()
       .from(schema.syncRuns)
-      .where(sql`${schema.syncRuns.status} = 'ok' and ${schema.syncRuns.source} = ${source.name} and ${schema.syncRuns.syncedThrough} is not null`)
+      .where(sql`${schema.syncRuns.status} = 'ok' and ${schema.syncRuns.syncedThrough} is not null and ${
+        connectionId
+          ? sql`${schema.syncRuns.connectionId} = ${connectionId}`
+          : sql`${schema.syncRuns.source} = ${source.name}`
+      }`)
       .orderBy(desc(schema.syncRuns.syncedThrough))
       .limit(1);
-    // First incremental run after the full migration: look back a safe window.
-    const since = lastOk?.syncedThrough ?? new Date(Date.now() - 3 * 24 * 3600 * 1000);
+    const since =
+      opts.since === undefined || opts.since === "auto"
+        ? (lastOk?.syncedThrough ?? new Date(Date.now() - 3 * 24 * 3600 * 1000))
+        : opts.since;
 
-    const changes = await source.changesSince(since);
+    // -- 3. pull native changes -------------------------------------------------
+    const changes = await source.nativeChanges(since, ctx);
 
-    // mapping caches
-    const acctRows = await db.execute(sql`select id, custom->>'nsId' as ns from accounts where custom->>'nsId' is not null`);
-    const acctByRef = new Map((acctRows as any).rows.map((r: any) => [r.ns, r.id]));
-    const deptRows = await db.execute(sql`select id, custom->>'nsId' as ns from departments`);
-    const deptByRef = new Map((deptRows as any).rows.map((r: any) => [r.ns, r.id]));
-    const partyRows = await db.execute(sql`select id, custom->>'nsId' as ns from parties`);
-    const partyByRef = new Map((partyRows as any).rows.map((r: any) => [r.ns, r.id]));
-    const periods = (await db.execute(sql`select id, starts_on, ends_on from accounting_periods where org_id=${org.id}`)) as any;
-    const periodFor = (d: string) => periods.rows.find((p: any) => p.starts_on <= d && p.ends_on >= d)?.id;
-
-    let newEntries = 0, reversedEntries = 0, unchanged = 0;
-    const skipped: string[] = [];
-
-    const client = await pool.connect();
-    try {
-      for (const txn of changes.transactions) {
-        if (txn.lines.length === 0) { unchanged++; continue; }
-        const number = entryNumberFor(txn);
-
-        // current live entry for this source txn (latest non-reversed)
-        const existing = await client.query(
-          `select e.id, e.status from journal_entries e
-            where e.entry_number = $1 and e.status = 'posted'
-              and not exists (select 1 from journal_entries r where r.reverses_entry_id = e.id)
-            order by e.created_at desc limit 1`,
-          [number],
-        );
-
-        if (existing.rowCount) {
-          const cur = await client.query(
-            `select a.custom->>'nsId' as ns, l.amount from journal_lines l
-              join accounts a on a.id = l.account_id where l.entry_id = $1`,
-            [existing.rows[0].id],
-          );
-          const curKey = linesKey(cur.rows.map((r: any) => ({ accountRef: r.ns, amount: r.amount })));
-          if (curKey === linesKey(txn.lines)) { unchanged++; continue; }
-        }
-
-        const periodId = periodFor(txn.date);
-        if (!periodId) { skipped.push(`${txn.sourceRef}: no period for ${txn.date}`); continue; }
-        const total = txn.lines.reduce((a, l) => a + toUnits(l.amount), 0n);
-        if (total !== 0n) { skipped.push(`${txn.sourceRef}: imbalance ${fromUnits(total)}`); continue; }
-        const unmapped = txn.lines.find((l) => !acctByRef.has(l.accountRef));
-        if (unmapped) { skipped.push(`${txn.sourceRef}: unmapped account ${unmapped.accountRef}`); continue; }
-
-        await client.query("begin");
-        await client.query("set local openbooks.migration = on");
-        try {
-          if (existing.rowCount) {
-            // reversal entry: mirror-image lines, linked to the original
-            const revRes = await client.query(
-              `insert into journal_entries (org_id, book_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id)
-               values ($1,$2,$3,$4,$5,$6,'draft','migration',$7) returning id`,
-              [org.id, book.id, `${number}-REV`, txn.date, periodId, `sync reversal (source changed)`, existing.rows[0].id],
-            );
-            await client.query(
-              `insert into journal_lines (org_id, entry_id, line_number, account_id, amount, currency, txn_amount, fx_rate, department_id, party_id)
-               select org_id, $2, line_number, account_id, -amount, currency, -txn_amount, fx_rate, department_id, party_id
-                 from journal_lines where entry_id = $1`,
-              [existing.rows[0].id, revRes.rows[0].id],
-            );
-            await client.query(`update journal_entries set status='posted' where id=$1`, [revRes.rows[0].id]);
-            await client.query(`update journal_entries set status='reversed' where id=$1`, [existing.rows[0].id]);
-            reversedEntries++;
-          }
-
-          const entryRes = await client.query(
-            `insert into journal_entries (org_id, book_id, entry_number, posting_date, period_id, memo, status, origin)
-             values ($1,$2,$3,$4,$5,$6,'draft','migration') returning id`,
-            [org.id, book.id, number, txn.date, periodId, txn.memo],
-          );
-          const entryId = entryRes.rows[0].id;
-          const values: string[] = [];
-          const params: any[] = [org.id, entryId];
-          txn.lines.forEach((l, i) => {
-            const b = params.length;
-            params.push(acctByRef.get(l.accountRef), l.amount, l.departmentRef ? deptByRef.get(l.departmentRef) ?? null : null, l.partyRef ? partyByRef.get(l.partyRef) ?? null : null);
-            values.push(`($1,$2,${i + 1},$${b + 1},$${b + 2},'CAD',$${b + 2},1,$${b + 3},$${b + 4})`);
-          });
-          await client.query(
-            `insert into journal_lines (org_id, entry_id, line_number, account_id, amount, currency, txn_amount, fx_rate, department_id, party_id)
-             values ${values.join(",")}`,
-            params,
-          );
-          await client.query(`update journal_entries set status='posted' where id=$1`, [entryId]);
-          await client.query("commit");
-          newEntries++;
-        } catch (e) {
-          await client.query("rollback");
-          skipped.push(`${txn.sourceRef}: ${(e as Error).message}`);
-        }
+    // -- 4. existing documents by source ref -------------------------------------
+    const existing = new Map<string, { id: string; status: string; posted: boolean }>();
+    for (const r of (
+      (await db.execute(sql`
+        select id, status, posted_entry_id is not null as posted, custom->>${refKey} as ref
+          from documents where org_id = ${org.id} and custom->>${refKey} is not null`)) as unknown as {
+        rows: { id: string; status: string; posted: boolean; ref: string }[];
       }
-    } finally {
-      client.release();
+    ).rows) {
+      existing.set(r.ref, { id: r.id, status: r.status, posted: r.posted });
     }
 
-    // -- verify: per-account TB vs the live source -------------------------
+    let docsNew = 0, docsAmended = 0, docsUnchanged = 0, ordersNew = 0, docsFailed = 0;
+    const skipped: string[] = [];
+    for (const u of changes.unbuildable) skipped.push(`${u.ref}: ${u.reason}`);
+
+    for (const doc of changes.documents) {
+      try {
+        const have = existing.get(doc.sourceRef);
+        if (!have) {
+          // ---- NEW: insert + post through the kernel -------------------------
+          if (doc.posting && !ctx.periodFor(doc.documentDate)) {
+            docsFailed++;
+            skipped.push(`${doc.sourceRef}: no period for ${doc.documentDate}`);
+            continue;
+          }
+          const docId = await db.transaction(async (tx) => {
+            const [row] = await tx.insert(schema.documents).values({
+              orgId: org.id,
+              kind: doc.kind,
+              documentNumber: doc.sourceRef,
+              partyId: doc.partyId,
+              documentDate: doc.documentDate,
+              dueDate: doc.dueDate,
+              currency: source.baseCurrency,
+              fxRate: "1",
+              status: "approved",
+              subtotal: doc.subtotal ?? "0",
+              taxTotal: "0",
+              total: doc.total ?? "0",
+              memo: doc.memo,
+              referenceNumber: doc.referenceNumber,
+              custom: doc.controlAccountId
+                ? { [refKey]: doc.sourceRef, controlAccountId: doc.controlAccountId }
+                : { [refKey]: doc.sourceRef },
+            }).returning({ id: schema.documents.id });
+            await tx.insert(schema.documentLines).values(
+              doc.lines.map((l) => ({
+                orgId: org.id,
+                documentId: row!.id,
+                lineNumber: l.lineNumber,
+                accountId: l.accountId,
+                itemId: l.itemId,
+                amount: l.amount,
+                taxCodeId: l.taxCodeId,
+                taxAmount: l.taxAmount,
+                taxOverridden: l.taxOverridden,
+                departmentId: l.departmentId,
+                projectId: l.projectId,
+                description: l.description,
+              })),
+            );
+            return row!.id;
+          });
+          if (doc.posting) {
+            await postDocument(docId, deps);
+            await setDocumentTotalsFromEntry(docId);
+            docsNew++;
+          } else {
+            ordersNew++;
+          }
+          existing.set(doc.sourceRef, { id: docId, status: doc.posting ? "posted" : "approved", posted: doc.posting });
+          continue;
+        }
+
+        // ---- EXISTS: heal orphan, then amend-if-changed ------------------------
+        if (doc.posting && !have.posted && have.status !== "voided") {
+          await postDocument(have.id, deps);
+          await setDocumentTotalsFromEntry(have.id);
+          have.posted = true;
+          docsNew++;
+          continue;
+        }
+        if (nativeKey(doc) === (await storedKey(have.id))) {
+          docsUnchanged++;
+          continue;
+        }
+        // AMEND: document is the system of record; its GL projection follows.
+        // `migration` flag too: a mirror amend re-materializes HISTORY — an
+        // account deactivated since must not block its own past postings.
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.amend = on`);
+          await tx.execute(sql`set local openbooks.migration = on`);
+          await tx.execute(sql`
+            update documents set
+              kind = ${doc.kind}, party_id = ${doc.partyId},
+              document_date = ${doc.documentDate}, due_date = ${doc.dueDate},
+              memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
+              custom = custom || ${JSON.stringify(
+                doc.controlAccountId ? { controlAccountId: doc.controlAccountId } : {},
+              )}::jsonb,
+              updated_at = now()
+            where id = ${have.id}`);
+          await tx.execute(sql`delete from document_lines where document_id = ${have.id}`);
+          await tx.insert(schema.documentLines).values(
+            doc.lines.map((l) => ({
+              orgId: org.id,
+              documentId: have.id,
+              lineNumber: l.lineNumber,
+              accountId: l.accountId,
+              itemId: l.itemId,
+              amount: l.amount,
+              taxCodeId: l.taxCodeId,
+              taxAmount: l.taxAmount,
+              taxOverridden: l.taxOverridden,
+              departmentId: l.departmentId,
+              projectId: l.projectId,
+              description: l.description,
+            })),
+          );
+          if (have.posted) await regenerateGlImpactTx(tx, have.id, deps, "mirror");
+        });
+        if (have.posted) await setDocumentTotalsFromEntry(have.id);
+        docsAmended++;
+      } catch (e) {
+        docsFailed++;
+        skipped.push(`${doc.sourceRef}: ${(e as Error).message.slice(0, 140)}`);
+      }
+    }
+
+    // -- 5. deletions at source: reported, never auto-voided ---------------------
+    // On a FULL sweep the pulled set is the complete source universe, so any
+    // previously-imported ref that vanished was deleted at source (our books
+    // only ever contain refs the source once returned).
+    const deletedAtSource = changes.deletedRefs.filter((r) => existing.has(r));
+    if (since === null) {
+      const pulled = new Set(changes.documents.map((d) => d.sourceRef));
+      for (const u of changes.unbuildable) pulled.add(u.ref);
+      for (const ref of existing.keys()) {
+        if (!pulled.has(ref)) deletedAtSource.push(ref);
+      }
+    }
+
+    // -- 6. applications ----------------------------------------------------------
+    const applications =
+      changes.applications.length > 0
+        ? await reconcileApplications(org.id, refKey, changes.applications)
+        : null;
+
+    // -- 7. verify: trial balance -------------------------------------------------
     const theirs = await source.trialBalance();
     const ours = (await db.execute(sql`
-      select a.custom->>'nsId' as ns, sum(l.amount) as bal
+      select a.custom->>${refKey} as ref, sum(l.amount) as bal
         from journal_lines l join accounts a on a.id = l.account_id
-       where a.custom->>'nsId' is not null group by 1`)) as any;
-    const oursByRef = new Map<string, bigint>(ours.rows.map((r: any) => [r.ns, toUnits(r.bal)]));
-    const mismatches: SyncResult["tb"]["mismatches"] = [];
-    let matches = 0;
+       where l.org_id = ${org.id} and a.custom->>${refKey} is not null group by 1`)) as unknown as {
+      rows: { ref: string; bal: string }[];
+    };
+    const oursByRef = new Map(ours.rows.map((r) => [r.ref, toUnits(r.bal)]));
+    const tbMismatches: SyncResult["tb"]["mismatches"] = [];
+    let tbMatches = 0;
     for (const t of theirs) {
       const mine = oursByRef.get(t.accountRef) ?? 0n;
-      if (mine === toUnits(t.balance)) matches++;
-      else mismatches.push({ accountRef: t.accountRef, ours: fromUnits(mine), theirs: t.balance });
+      if (mine === toUnits(t.balance)) tbMatches++;
+      else tbMismatches.push({ accountRef: t.accountRef, ours: fromUnits(mine), theirs: t.balance });
+    }
+
+    // -- 8. verify: open items (AR/AP aging vs the live source) --------------------
+    let openItems: SyncResult["openItems"] = null;
+    if (source.openItems) {
+      const truth = await source.openItems();
+      const mine = (await db.execute(sql`
+        select custom->>${refKey} as ref, coalesce(open_balance, 0) as ob
+          from documents where org_id = ${org.id} and custom->>${refKey} is not null
+            and status = 'posted' and open_balance is not null`)) as unknown as {
+        rows: { ref: string; ob: string }[];
+      };
+      const mineByRef = new Map(mine.rows.map((r) => [r.ref, toUnits(r.ob)]));
+      const mismatches: NonNullable<SyncResult["openItems"]>["mismatches"] = [];
+      let matches = 0;
+      for (const t of truth) {
+        const want = toUnits(t.unpaid);
+        const got = mineByRef.get(t.ref);
+        if (got === undefined) continue; // not imported (e.g. hidden types) — TB covers it
+        const wantAbs = want < 0n ? -want : want;
+        if (got === wantAbs) matches++;
+        else mismatches.push({ ref: t.ref, ours: fromUnits(got), theirs: fromUnits(wantAbs) });
+      }
+      openItems = { checked: matches + mismatches.length, matches, mismatches: mismatches.slice(0, 50) };
     }
 
     const result: SyncResult = {
-      runId: run.id,
-      newEntries, reversedEntries, unchanged, skipped,
-      tb: { accounts: theirs.length, matches, mismatches: mismatches.slice(0, 50) },
+      runId: run!.id,
+      kind,
+      entities: entityStats,
+      docsNew, docsAmended, docsUnchanged, ordersNew, docsFailed,
+      skipped: skipped.slice(0, 200),
+      deletedAtSource,
+      applications,
+      tb: { accounts: theirs.length, matches: tbMatches, mismatches: tbMismatches.slice(0, 50) },
+      openItems,
       syncedThrough: changes.syncedThrough.toISOString(),
       durationMs: Date.now() - started,
     };
@@ -183,15 +381,27 @@ export async function runSync(source: MigrationSource, triggeredBy: string): Pro
       finishedAt: new Date(),
       syncedThrough: changes.syncedThrough,
       stats: result as unknown as Record<string, unknown>,
-    }).where(eq(schema.syncRuns.id, run.id));
+    }).where(eq(schema.syncRuns.id, run!.id));
 
+    if (connectionId) {
+      await db.execute(sql`
+        update connections
+           set cursor = ${changes.syncedThrough}, last_run_at = now(),
+               status = 'active', last_error = null
+         where id = ${connectionId}`);
+    }
     return result;
   } catch (e) {
+    if (connectionId) {
+      await db.execute(sql`
+        update connections set status = 'error', last_error = ${(e as Error).message}, last_run_at = now()
+         where id = ${connectionId}`);
+    }
     await db.update(schema.syncRuns).set({
       status: "failed",
       finishedAt: new Date(),
       errorMessage: (e as Error).message,
-    }).where(eq(schema.syncRuns.id, run.id));
+    }).where(eq(schema.syncRuns.id, run!.id));
     throw e;
   }
 }

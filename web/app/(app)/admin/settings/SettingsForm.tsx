@@ -18,12 +18,6 @@ import {
   Label,
   SearchSelect,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   type SelectOption,
 } from '@openbooks/ui'
 import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
@@ -67,33 +61,14 @@ const CONTROL_FIELDS: { key: keyof ControlAccounts }[] = [
   { key: 'employeePayable' },
 ]
 
-// Known document-number sequence kinds → admin.settings.documentKinds keys;
-// unknown kinds fall back to the humanized enum code.
-const DOCUMENT_KIND_KEYS: Record<string, string> = {
-  vendor_bill: 'vendorBill',
-  customer_invoice: 'customerInvoice',
-  vendor_payment: 'vendorPayment',
-  customer_payment: 'customerPayment',
-  expense_report: 'expenseReport',
-  journal: 'journal',
-}
-
 export function SettingsForm({
   initial,
   accounts,
   currencies,
-  numberSequences,
 }: {
   initial: Initial
   accounts: AccountOption[]
   currencies: { code: string; name: string }[]
-  numberSequences: {
-    document_kind: string
-    prefix: string
-    next_number: number
-    padding: number
-    gapless: boolean
-  }[]
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
@@ -321,49 +296,6 @@ export function SettingsForm({
               </div>
             )
           })}
-        </CardContent>
-      </Card>
-
-      {/* Document numbering (display) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('numbering.title')}</CardTitle>
-          <CardDescription>{t('numbering.description')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {numberSequences.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('numbering.empty')}</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('numbering.table.document')}</TableHead>
-                  <TableHead>{t('numbering.table.prefix')}</TableHead>
-                  <TableHead className="text-right">{t('numbering.table.next')}</TableHead>
-                  <TableHead className="text-right">{t('numbering.table.padding')}</TableHead>
-                  <TableHead>{t('numbering.table.example')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {numberSequences.map((s) => (
-                  <TableRow key={s.document_kind}>
-                    <TableCell className="font-medium capitalize">
-                      {DOCUMENT_KIND_KEYS[s.document_kind]
-                        ? t(`documentKinds.${DOCUMENT_KIND_KEYS[s.document_kind]}`)
-                        : s.document_kind.replace(/_/g, ' ')}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{s.prefix || '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{s.next_number}</TableCell>
-                    <TableCell className="text-right tabular-nums">{s.padding}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                      {s.prefix}
-                      {String(s.next_number).padStart(s.padding, '0')}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
         </CardContent>
       </Card>
 

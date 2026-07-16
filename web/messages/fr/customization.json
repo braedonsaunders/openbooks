@@ -6,7 +6,12 @@
     "customer_credit": "Avoir client",
     "card_charge": "Dépense par carte",
     "card_refund": "Remboursement par carte",
-    "check": "Chèque"
+    "check": "Chèque",
+    "vendor_payment": "Paiement fournisseur",
+    "customer_payment": "Paiement client",
+    "quote": "Devis",
+    "sales_order": "Commande client",
+    "purchase_order": "Bon de commande"
   },
   "views": {
     "defaultName": "Vue par défaut",

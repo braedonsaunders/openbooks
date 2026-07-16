@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server'
 import {
   BankingError,
   importStatement,
+  parseBai2,
+  parseCamt053,
   parseCsv,
   parseCsvRows,
+  parseMt940,
   parseOfx,
   type CsvMapping,
   type ParsedStatement,
@@ -16,7 +19,7 @@ export const runtime = 'nodejs'
 
 interface ImportBody {
   accountId?: string
-  source?: 'ofx' | 'csv'
+  source?: 'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940'
   text?: string
   mapping?: CsvMapping
   /**
@@ -70,8 +73,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'CSV column mapping (date, amount, description) required' }, { status: 400 })
       }
       lines = parseCsv(body.text, body.mapping)
+    } else if (body.source === 'camt053' || body.source === 'bai2' || body.source === 'mt940') {
+      const parsed =
+        body.source === 'camt053' ? parseCamt053(body.text)
+        : body.source === 'bai2' ? parseBai2(body.text)
+        : parseMt940(body.text)
+      lines = parsed.lines
+      meta = { currency: parsed.currency, statementDate: parsed.statementDate, closingBalance: parsed.closingBalance }
     } else {
-      return NextResponse.json({ error: 'source must be ofx or csv' }, { status: 400 })
+      return NextResponse.json({ error: 'source must be ofx, csv, camt053, bai2 or mt940' }, { status: 400 })
     }
 
     const result = await importStatement(

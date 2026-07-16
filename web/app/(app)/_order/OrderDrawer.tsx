@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { DocTypeBadge } from '../../../components/doc-type-badge'
+import { PdfButton } from '../../../components/pdf-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
@@ -490,6 +491,7 @@ export function OrderDrawer({
           </>
         ) : canManage ? (
           <>
+            <PdfButton recordType={kind} recordId={String(doc.id)} />
             {canEditStatus ? (
               <Button variant="outline" onClick={() => setMode('edit')}>
                 Edit

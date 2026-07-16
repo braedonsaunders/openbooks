@@ -13,6 +13,7 @@
     "newLabel": "{side, select, ap {New payment} other {New customer payment}}",
     "columns": {
       "document": "{side, select, ap {Payment} other {Customer payment}}",
+      "payment": "Payment",
       "bankAccount": "Bank account",
       "ref": "Ref"
     },
@@ -33,6 +34,17 @@
     "selectBankAccountPlaceholder": "Select bank account…",
     "referencePlaceholder": "Cheque / EFT ref…",
     "openItems": "{side, select, ap {Open bills} other {Open invoices}}",
+    "amountReceived": "Amount received",
+    "autoApply": "Auto-apply",
+    "autoApplyFailed": "Could not suggest an application",
+    "autoApplyNone": "No open items match this amount",
+    "autoApplyDone": "Applied to {count, plural, one {# item} other {# items}} ({strategy})",
+    "autoApplyStrategy": {
+      "reference": "by reference",
+      "exact": "exact match",
+      "fifo": "oldest first",
+      "none": "none"
+    },
     "selectPartyHint": "{side, select, ap {Select a vendor to list their open items.} other {Select a customer to list their open items.}}",
     "loadingOpenItems": "Loading open items…",
     "noOpenItems": "{side, select, ap {No open bills for this vendor.} other {No open invoices for this customer.}}",
@@ -146,7 +158,13 @@
       "postedWithFailures": "{count} posted; failed: {failures}",
       "posted": "{count, plural, one {# payment posted and applied} other {# payments posted and applied}}",
       "cancelFailed": "Could not cancel the run",
-      "cancelled": "Run cancelled"
-    }
+      "cancelled": "Run cancelled",
+      "deliverFailed": "Could not deliver the file",
+      "delivered": "Delivered to {path}"
+    },
+    "deliverSftp": "Deliver to SFTP",
+    "deliverHint": "Write this run's bank file to an SFTP server's outbound folder for the bank to fetch.",
+    "sftpServer": "SFTP server",
+    "noSftpServers": "No SFTP servers configured. Add one in Setup → SFTP Servers."
   }
 }

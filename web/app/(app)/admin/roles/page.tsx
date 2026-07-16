@@ -35,6 +35,7 @@ export default async function AdminRolesPage({
   const authz = await requirePermission('admin.roles.manage')
   const t = await getTranslations('admin.roles')
   const tCommon = await getTranslations('common')
+  const tHub = await getTranslations('admin.hub')
   const orgId = authz.user.orgId
   const sp = await searchParams
   const listParams = parseListParams(sp, {
@@ -99,6 +100,7 @@ export default async function AdminRolesPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('title')}
             description={t('description')}
             actions={

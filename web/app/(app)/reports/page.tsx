@@ -71,6 +71,12 @@ export default async function Reports() {
       ],
     },
     {
+      key: 'orders',
+      label: t('hub.groups.orders'),
+      accent: 'teal',
+      cards: [card('orders', '/reports/orders', 'ClipboardList')],
+    },
+    {
       key: 'budgeting',
       label: t('hub.groups.budgeting'),
       accent: 'amber',

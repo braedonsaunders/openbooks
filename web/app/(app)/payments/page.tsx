@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
-import { requirePermission } from '../../../lib/authz'
+import { requirePermission, can } from '../../../lib/authz'
 import { pickString } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'
 import { PaymentsSection } from './PaymentsSection'
@@ -46,7 +46,14 @@ export default async function Payments({
       }
     >
       {view === 'payments' ? (
-        <PaymentsSection sp={sp} basePath="/payments" kind="vendor_payment" orgId={authz.user.orgId} />
+        <PaymentsSection
+          sp={sp}
+          basePath="/payments"
+          kind="vendor_payment"
+          orgId={authz.user.orgId}
+          userId={authz.user.id}
+          canManage={can(authz, 'admin.customization.manage')}
+        />
       ) : (
         <RunsSection sp={sp} orgId={authz.user.orgId} />
       )}

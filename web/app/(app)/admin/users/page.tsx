@@ -36,6 +36,7 @@ export default async function AdminUsersPage({
   const authz = await requirePermission('admin.users.manage')
   const t = await getTranslations('admin.users')
   const tCommon = await getTranslations('common')
+  const tHub = await getTranslations('admin.hub')
   const orgId = authz.user.orgId
   const sp = await searchParams
   const listParams = parseListParams(sp, {
@@ -99,7 +100,7 @@ export default async function AdminUsersPage({
           select a.user_id, r.id as role_id, r.name as role_name
             from role_assignments a
             join app_roles r on r.id = a.role_id
-           where a.org_id = ${orgId} and a.user_id = any(${userIds})
+           where a.org_id = ${orgId} and a.user_id = any(${sql.param(userIds)})
            order by r.name asc`)) as any)
   const assignments = assignmentsR.rows as { user_id: string; role_id: string; role_name: string }[]
   const rolesByUser = new Map<string, { id: string; name: string }[]>()
@@ -116,6 +117,7 @@ export default async function AdminUsersPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('title')}
             description={t('description')}
             actions={

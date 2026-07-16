@@ -2,7 +2,8 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import { setRequestOrg } from "./request-org";
 import {
   PERMISSION_CATALOGUE,
   permissionSetCovers,
@@ -91,18 +92,25 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
   if (!token.startsWith(KEY_PREFIX)) return null;
 
   const keyHash = sha256(token);
-  const keyRow = (
-    (await db.execute(sql`
+  // The key's org isn't known until the row is read — look it up under bypass.
+  const keyRow = await withBypassContext(
+    async () =>
+      (
+        (await db.execute(sql`
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
              u.email, u.name, u.role, u.is_active as user_active
         from api_keys k
         join users u on u.id = k.user_id
        where k.key_hash = ${keyHash}
        limit 1`)) as any
-  ).rows[0];
+      ).rows[0],
+  );
   if (!keyRow) return null;
   if (!keyRow.is_active || !keyRow.user_active) return null;
   if (keyRow.expires_at && new Date(keyRow.expires_at).getTime() < Date.now()) return null;
+
+  // Scope the rest of this request to the key's org (RLS enforced).
+  setRequestOrg(keyRow.org_id);
 
   // Resolve the owner's effective permissions (same logic as authz.getAuthz).
   const [assignments, overrides] = (await Promise.all([
@@ -145,6 +153,12 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     name: keyRow.name,
     role: keyRow.role,
     orgId: keyRow.org_id,
+    // API keys are always bound to their production org — no sandbox entry.
+    envKind: "production",
+    productionOrgId: keyRow.org_id,
+    isSuperAdmin: false,
+    homeUserId: keyRow.user_id,
+    homeOrgId: keyRow.org_id,
   };
 
   // Best-effort last-used update — fire and forget, never blocks the request.

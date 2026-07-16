@@ -28,11 +28,15 @@ export default async function CustomizationPage({
   const authz = await requirePermission('admin.customization.manage')
   const t = await getTranslations('customization')
   const tCommon = await getTranslations('common')
+  const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
   // Whitelist the record type — an unknown key must not reach the designer.
   const requestedType = pickString(sp.recordType)
   const recordType = requestedType && requestedType in RECORD_TYPE_BY_KEY ? requestedType : RECORD_TYPES[0]!.key
-  const tab = pickString(sp.tab) === 'views' ? 'views' : 'forms'
+  // Some record types (e.g. payments) have a bespoke editor, not a customizable
+  // transaction form — only their list views are customizable.
+  const supportsForms = RECORD_TYPE_BY_KEY[recordType]?.supportsForms !== false
+  const tab = !supportsForms ? 'views' : pickString(sp.tab) === 'views' ? 'views' : 'forms'
   const formId = pickString(sp.form)
   const viewId = pickString(sp.view)
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 100 })
@@ -93,6 +97,7 @@ export default async function CustomizationPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('designer.title')}
             description={t('designer.description')}
             actions={tab === 'forms' ? <NewFormButton recordType={recordType} /> : <NewViewButton recordType={recordType} />}
@@ -114,12 +119,14 @@ export default async function CustomizationPage({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
-              <Link
-                href={tabHref('forms')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === 'forms' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-              >
-                {t('designer.tabs.forms')}
-              </Link>
+              {supportsForms ? (
+                <Link
+                  href={tabHref('forms')}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === 'forms' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                >
+                  {t('designer.tabs.forms')}
+                </Link>
+              ) : null}
               <Link
                 href={tabHref('views')}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === 'views' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}

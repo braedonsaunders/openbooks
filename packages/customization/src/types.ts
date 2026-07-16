@@ -212,6 +212,13 @@ export interface RecordTypeMeta {
   lineFields: FieldMeta[]
   listColumns: ListColumnMeta[]
   listFilters: ListFilterMeta[]
+  /**
+   * Whether this record type has a customizable transaction FORM (header/line
+   * layout). Defaults to true. Set false for record types whose list views are
+   * customizable but whose editor is a bespoke flyout (e.g. payments), so the
+   * customization admin shows only the list-view designer.
+   */
+  supportsForms?: boolean
 }
 
 export const DEFAULT_PER_PAGE = 25

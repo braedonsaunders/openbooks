@@ -2,11 +2,12 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { getTranslations } from 'next-intl/server'
 import { AppShell } from '../../components/app-shell'
+import { SandboxBanner } from '../../components/sandbox-banner'
 import { ThemeProvider } from '../../components/theme-provider'
 import { NavigationProvider } from '../../components/navigation-provider'
 import { getAuthz, can } from '../../lib/authz'
 import { resolveNav } from '../../lib/nav/resolve'
-import { orgInfo } from '../../lib/data'
+import { shellEnvironments } from '../../lib/environments'
 import { userLocalePreference } from '../../lib/locale'
 import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
 
@@ -15,11 +16,11 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [org, localePreference, navMode, navModePreference] = await Promise.all([
-    orgInfo(),
+  const [localePreference, navMode, navModePreference, environments] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(),
     userNavModePreference(),
+    shellEnvironments(authz),
   ])
   const jar = await cookies()
   const defaultCollapsed = jar.get('sidebar_collapsed')?.value === '1'
@@ -51,12 +52,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             localePreference,
             navModePreference,
           }}
-          orgName={org ? `${org.name} · ${org.base_currency}` : 'openbooks'}
+          environments={environments}
           groups={groups}
           navMode={navMode}
           defaultCollapsed={defaultCollapsed}
           showAssistantLauncher={can(authz, 'assistant.use')}
         >
+          {authz.user.envKind !== 'production' && (
+            <SandboxBanner name={authz.user.sandboxName} />
+          )}
           {children}
         </AppShell>
       </NavigationProvider>

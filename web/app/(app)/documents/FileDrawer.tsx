@@ -4,10 +4,11 @@ import { useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download, FileText, History, Link2, Loader2, Trash2, UploadCloud } from 'lucide-react'
+import { Download, History, Link2, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { Badge, Button, Input, Label, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { dateTime } from '../../../lib/format'
+import { FilePreview } from './FilePreview'
 
 interface FileVersion {
   id: string
@@ -146,7 +147,7 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
       closeHref={closeHref()}
       title={file.name}
       description={file.folderName ?? undefined}
-      size="lg"
+      size="2xl"
       headerActions={
         mode === 'edit' ? (
           <div className="flex items-center gap-2">
@@ -192,39 +193,41 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
       }
     >
       <div className="space-y-6">
-        {/* File info */}
-        <section className="space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/30 dark:text-teal-400">
-              <FileText className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              {mode === 'edit' ? (
-                <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-              ) : (
-                <h2 className="truncate text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  {file.name}
-                </h2>
-              )}
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                <Badge variant="secondary">v{file.versionCount}</Badge>
-                <span>{formatSize(file.sizeBytes)}</span>
-                <span>·</span>
-                <span>{dateTime(file.updatedAt)}</span>
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* Rename (edit mode only) — the name lives in the drawer title otherwise */}
+        {mode === 'edit' ? (
+          <section className="space-y-1.5">
+            <Label className="text-xs text-slate-500 dark:text-slate-400">{t('name')}</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          </section>
+        ) : null}
+
+        {/* Preview / edit pane — the star of the flyout */}
+        <FilePreview
+          file={{
+            id: file.id,
+            name: file.name,
+            contentType: file.contentType,
+            fileType: file.fileType,
+            extension: file.extension,
+            sizeBytes: file.sizeBytes,
+            currentVersionId: file.currentVersionId,
+          }}
+          canManage={canManage}
+        />
 
         {/* Metadata grid */}
-        <section className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <div>
-            <Label className="text-xs text-slate-500 dark:text-slate-400">{t('folder')}</Label>
-            <p className="text-slate-900 dark:text-slate-100">{file.folderName ?? '—'}</p>
-          </div>
+        <section className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
           <div>
             <Label className="text-xs text-slate-500 dark:text-slate-400">{t('type')}</Label>
-            <p className="text-slate-900 dark:text-slate-100">{file.contentType}</p>
+            <p className="truncate text-slate-900 dark:text-slate-100" title={file.contentType}>
+              {file.contentType}
+            </p>
+          </div>
+          <div>
+            <Label className="text-xs text-slate-500 dark:text-slate-400">{t('size')}</Label>
+            <p className="tabular-nums text-slate-900 dark:text-slate-100">
+              {formatSize(file.sizeBytes)}
+            </p>
           </div>
           <div>
             <Label className="text-xs text-slate-500 dark:text-slate-400">{t('created')}</Label>
@@ -238,29 +241,27 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
 
         {/* Replace action */}
         {canManage ? (
-          <section className="space-y-2">
-            <Label>{tc('actions.replace')}</Label>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                disabled={replacing}
-                onClick={() => replaceInputRef.current?.click()}
-              >
-                {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                {tc('actions.replace')}
-              </Button>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('replaceBody')}</p>
-              <input
-                ref={replaceInputRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) void handleReplace(f)
-                  e.target.value = ''
-                }}
-              />
-            </div>
+          <section className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={replacing}
+              onClick={() => replaceInputRef.current?.click()}
+            >
+              {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+              {tc('actions.replace')}
+            </Button>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('replaceBody')}</p>
+            <input
+              ref={replaceInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void handleReplace(f)
+                e.target.value = ''
+              }}
+            />
           </section>
         ) : null}
 

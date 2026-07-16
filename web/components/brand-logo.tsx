@@ -18,7 +18,11 @@ const BRAND_TEAL_DARK = '#2dd4bf'
 
 const INK_CLASS = 'text-slate-900 dark:text-slate-100'
 
-type Mode = 'static' | 'loop' | 'draw'
+// static — fully drawn, no motion.
+// loop   — perpetual 12s redraw cycle.
+// draw   — draw in, then join the 12s cycle.
+// intro  — draw in once, then hold static (used on the login stage).
+type Mode = 'static' | 'loop' | 'draw' | 'intro'
 
 const delay = (s: number) => ({ '--bd': `${s}s` }) as CSSProperties
 const rayDelay = (s: number, pulse: number) =>
@@ -46,10 +50,22 @@ const MARK_ENTRIES = [
 ]
 
 function MarkArt({ mode }: { mode: Mode }) {
-  const draw = mode === 'draw'
-  const animated = mode !== 'static'
-  const strokeCls = draw ? 'brand-stroke-draw' : animated ? 'brand-stroke-loop' : undefined
-  const entryCls = draw ? 'brand-ray-draw' : animated ? 'brand-ray-loop' : undefined
+  const strokeCls =
+    mode === 'intro'
+      ? 'brand-stroke-intro'
+      : mode === 'draw'
+        ? 'brand-stroke-draw'
+        : mode === 'loop'
+          ? 'brand-stroke-loop'
+          : undefined
+  const entryCls =
+    mode === 'intro'
+      ? 'brand-ray-intro'
+      : mode === 'draw'
+        ? 'brand-ray-draw'
+        : mode === 'loop'
+          ? 'brand-ray-loop'
+          : undefined
   return (
     <>
       <g fill="none" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round">
@@ -88,7 +104,7 @@ function MarkArt({ mode }: { mode: Mode }) {
 // The wordmark is set type, not hand-drawn strokes — geometric and legible.
 // It fades/rises in after the mark draws (mode 'draw'); otherwise it's static.
 function WordmarkText({ mode }: { mode: Mode }) {
-  const fadeCls = mode === 'draw' ? 'brand-word-in' : undefined
+  const fadeCls = mode === 'draw' || mode === 'intro' ? 'brand-word-in' : undefined
   return (
     <text
       x={64}
@@ -109,10 +125,10 @@ function WordmarkText({ mode }: { mode: Mode }) {
 
 /* -------------------------------- Exports -------------------------------- */
 
-type LogoProps = SVGProps<SVGSVGElement> & { animated?: boolean; draw?: boolean }
+type LogoProps = SVGProps<SVGSVGElement> & { animated?: boolean; draw?: boolean; intro?: boolean }
 
-export function LogoMark({ animated, draw, className, ...rest }: LogoProps) {
-  const mode: Mode = draw ? 'draw' : animated ? 'loop' : 'static'
+export function LogoMark({ animated, draw, intro, className, ...rest }: LogoProps) {
+  const mode: Mode = intro ? 'intro' : draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg viewBox="0 0 48 56" aria-hidden className={cn('h-7 w-auto', INK_CLASS, className)} {...rest}>
       <MarkArt mode={mode} />
@@ -120,8 +136,8 @@ export function LogoMark({ animated, draw, className, ...rest }: LogoProps) {
   )
 }
 
-export function Logo({ animated, draw, className, ...rest }: LogoProps) {
-  const mode: Mode = draw ? 'draw' : animated ? 'loop' : 'static'
+export function Logo({ animated, draw, intro, className, ...rest }: LogoProps) {
+  const mode: Mode = intro ? 'intro' : draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg
       viewBox="0 0 238 56"

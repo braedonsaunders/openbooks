@@ -1,16 +1,16 @@
 {
-  "savedSearches": {
-    "new": "Nueva búsqueda guardada",
+  "views": {
+    "new": "Nueva vista",
     "list": {
-      "title": "Búsquedas guardadas",
+      "title": "Vistas",
       "description": "Consultas con nombre y compartibles sobre el libro mayor, documentos, terceros y cuentas — filas de detalle o resúmenes agrupados. Navega, exporta y reutilízalas.",
       "scopeLabel": "Ámbito",
-      "searchPlaceholder": "Buscar búsquedas guardadas…",
+      "searchPlaceholder": "Buscar vistas…",
       "scopeAll": "Todas",
       "scopeShared": "Compartidas",
       "scopePrivate": "Privadas",
-      "emptyTitle": "Aún no hay búsquedas guardadas",
-      "emptyDescription": "Crea tu primera búsqueda para consultar el libro mayor y reutilizarla cuando quieras.",
+      "emptyTitle": "Aún no hay vistas",
+      "emptyDescription": "Crea tu primera vista para consultar el libro mayor y reutilizarla cuando quieras.",
       "columns": {
         "name": "Nombre",
         "source": "Origen",
@@ -25,7 +25,7 @@
       "editAction": "Editar"
     },
     "studio": {
-      "untitled": "Búsqueda sin título",
+      "untitled": "Vista sin título",
       "autosaveHint": "Los cambios se guardan automáticamente.",
       "scopeLabel": "Ámbito",
       "scope": {
@@ -35,19 +35,19 @@
       "exportPdf": "PDF",
       "exportXlsx": "Excel",
       "exportCsv": "CSV",
-      "deleteConfirm": "¿Eliminar esta búsqueda guardada?",
+      "deleteConfirm": "¿Eliminar esta vista?",
       "viewResults": "Ver resultados"
     },
     "run": {
-      "editSearch": "Editar búsqueda",
-      "backToList": "Búsquedas guardadas",
+      "editSearch": "Editar vista",
+      "backToList": "Vistas",
       "resultsTitle": "Resultados",
       "rowsRange": "Mostrando {from}–{to} de {total} filas",
       "lastUpdated": "Actualizado {when}",
       "refreshHint": "Los resultados se ejecutan en vivo sobre los datos actuales.",
       "emptyTitle": "Ninguna fila coincidió",
       "emptyDescription": "Ajuste los criterios o filtros y vuelva a ejecutar.",
-      "notFoundTitle": "Búsqueda guardada no encontrada",
+      "notFoundTitle": "Vista no encontrada",
       "notFoundDescription": "Puede que haya sido eliminada o que no tenga acceso."
     }
   }

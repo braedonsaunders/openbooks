@@ -1,7 +1,85 @@
 {
-  "title": "SQL",
+  "title": "Console de requêtes",
+  "subtitle": "Vrai PostgreSQL, lecture seule. Rôle SELECT, délai 10s. ⌘⏎ pour exécuter.",
   "description": "Du vrai PostgreSQL — pas un dialecte de requête. S’exécute en lecture seule sous un rôle limité à SELECT avec un délai d’expiration de 10 secondes. ⌘⏎ pour exécuter.",
-  "run": "Exécuter la requête",
+  "readOnlyBadge": "Lecture seule",
+  "run": "Exécuter",
   "running": "Exécution…",
-  "resultSummary": "{count, plural, one {# ligne} other {# lignes}}{truncated, select, true { (tronqué)} other {}} · {duration} ms"
+  "clear": "Effacer",
+  "rowLimit": "Limite",
+  "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
+  "failed": "Échec",
+  "queryError": "Erreur de requête",
+  "rowCount": "{count, plural, one {# ligne} other {# lignes}}",
+  "truncated": "Tronqué à {max}",
+  "ranSelection": "Sélection exécutée",
+  "resultsIdle": "Aucun résultat pour l’instant",
+  "resultsIdleHint": "Les résultats s’affichent ici",
+  "filterResults": "Filtrer les lignes…",
+  "copyCsv": "Copier",
+  "copiedCsv": "Résultats copiés en CSV",
+  "copyFailed": "Échec de la copie",
+  "runToSeeResults": "Exécutez une requête pour voir les résultats",
+  "runHint": "Écrivez du SQL ci-dessus, puis Exécuter ou ⌘⏎. Sélectionnez du texte pour n’exécuter que cela.",
+  "emptyResultSet": "La requête n’a renvoyé aucune colonne",
+  "noFilterMatch": "Aucune ligne ne correspond au filtre",
+  "run_legacy": "Exécuter la requête",
+  "rail": {
+    "schema": "Schéma",
+    "snippets": "Extraits",
+    "history": "Historique"
+  },
+  "schema": {
+    "searchPlaceholder": "Rechercher tables et colonnes…",
+    "noMatch": "Aucune table correspondante",
+    "insertTable": "Cliquer pour insérer le nom de la table",
+    "insertColumn": "Cliquer pour insérer le nom de la colonne"
+  },
+  "history": {
+    "count": "{count, plural, one {# requête} other {# requêtes}}",
+    "clear": "Effacer",
+    "rows": "{count, plural, one {# ligne} other {# lignes}}",
+    "failed": "Échec",
+    "empty": "Les requêtes exécutées s’affichent ici"
+  },
+  "snippetSaved": "« {name} » enregistrée",
+  "snippets": {
+    "save": "Enregistrer",
+    "namePlaceholder": "Nommez cette requête…",
+    "savedHeading": "Enregistrées",
+    "examplesHeading": "Exemples",
+    "delete": "Supprimer l’extrait",
+    "trialBalance": {
+      "label": "Balance générale",
+      "description": "Solde signé par compte, uniquement non nuls."
+    },
+    "topAccounts": {
+      "label": "Plus gros soldes",
+      "description": "Les 15 comptes au plus grand solde absolu."
+    },
+    "recentEntries": {
+      "label": "Écritures récentes",
+      "description": "Les 50 écritures les plus récentes avec statut et origine."
+    },
+    "monthlyActivity": {
+      "label": "Activité mensuelle",
+      "description": "Écritures comptabilisées et débits totaux par mois."
+    },
+    "unbalancedEntries": {
+      "label": "Écritures déséquilibrées",
+      "description": "Écritures dont les lignes ne totalisent pas zéro."
+    },
+    "entriesByOrigin": {
+      "label": "Écritures par origine",
+      "description": "Nombre d’écritures regroupées par origine."
+    },
+    "tableSizes": {
+      "label": "Lignes par table",
+      "description": "Lignes actives estimées par table, décroissant."
+    },
+    "listColumns": {
+      "label": "Lister toutes les colonnes",
+      "description": "Chaque colonne du schéma public avec son type."
+    }
+  }
 }

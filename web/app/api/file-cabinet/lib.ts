@@ -18,6 +18,14 @@ export const ALLOWED_CONTENT_TYPES: Record<string, true> = {
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': true,
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': true,
   'text/plain': true,
+  // Text/code files — safe to store and serve: the download route sends
+  // `X-Content-Type-Options: nosniff`, and the preview reads them as text into
+  // a textarea (never executed).
+  'text/markdown': true,
+  'text/javascript': true,
+  'application/json': true,
+  'application/xml': true,
+  'text/xml': true,
 }
 
 export function isAllowedContentType(ct: string): boolean {

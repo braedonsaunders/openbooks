@@ -13,6 +13,7 @@ export default async function NavigationAdmin() {
   const user = await currentUser()
   if (!user) return null
   const t = await getTranslations('admin.navigation')
+  const tHub = await getTranslations('admin.hub')
 
   const r = (await db.execute(
     sql`select config from org_nav_configs where org_id = ${user.orgId} limit 1`,
@@ -21,7 +22,7 @@ export default async function NavigationAdmin() {
 
   return (
     <PageContainer className="max-w-3xl">
-      <PageHeader title={t('title')} description={t('description')} />
+      <PageHeader back={{ href: '/admin', label: tHub('title') }} title={t('title')} description={t('description')} />
       <div className="mt-6">
         <NavEditor initial={config} />
       </div>

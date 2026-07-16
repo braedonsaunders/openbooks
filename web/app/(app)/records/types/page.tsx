@@ -50,6 +50,7 @@ export default async function RecordTypes({
   const authz = await requirePermission('records.manage_types')
   const t = await getTranslations('records')
   const tc = await getTranslations('common')
+  const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
   const typeId = typeof sp.type === 'string' ? sp.type : undefined
   const params = parseListParams(sp, {
@@ -110,6 +111,7 @@ export default async function RecordTypes({
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('types.title')}
             description={t('types.description')}
             actions={<NewTypeButton />}

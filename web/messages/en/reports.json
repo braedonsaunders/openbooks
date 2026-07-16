@@ -27,7 +27,9 @@
       "budgetTitle": "Budget vs Actual",
       "budgetDescription": "Actuals against a budget scenario, by account, with variance $ and %",
       "projectProfitabilityTitle": "Project Profitability",
-      "projectProfitabilityDescription": "Revenue, cost and margin by project — ties to the P&L, with approved job hours"
+      "projectProfitabilityDescription": "Revenue, cost and margin by project — ties to the P&L, with approved job hours",
+      "ordersTitle": "Order pipeline",
+      "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion"
     },
     "groups": {
       "financial": "Financial Statements",
@@ -35,7 +37,8 @@
       "receivablesPayables": "Receivables & Payables",
       "budgeting": "Budgeting",
       "custom": "Custom & Saved",
-      "projects": "Projects"
+      "projects": "Projects",
+      "orders": "Sales & orders"
     },
     "customStudio": {
       "title": "Custom report builder",
@@ -856,5 +859,23 @@
       "margin": "Margin",
       "hours": "Hours"
     }
+  },
+  "orders": {
+    "title": "Order pipeline",
+    "description": "Open backlog and conversion for quotes, sales orders and purchase orders.",
+    "columns": {
+      "type": "Type",
+      "open": "Open",
+      "openValue": "Open value",
+      "converted": "Converted",
+      "convRate": "Conversion",
+      "voided": "Voided"
+    },
+    "kinds": {
+      "quote": "Estimates",
+      "sales_order": "Sales orders",
+      "purchase_order": "Purchase orders"
+    },
+    "note": "Conversion is tracked via document links; historical NetSuite links are not yet imported."
   }
 }

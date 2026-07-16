@@ -7,6 +7,7 @@ import {
   markEmailSent,
   resolveOrgEmailTransport,
 } from "../email-config.ts";
+import { isSandboxOrg } from "../sandbox/guard.ts";
 
 /**
  * Consumes the `emails` queue: one job = one recipient. Resolves the org's
@@ -19,6 +20,20 @@ export function createEmailWorker(): Worker<EmailJobData> {
     EMAIL_QUEUE,
     async (job) => {
       const d = job.data;
+      // Hard sandbox block: a sandbox never sends email, regardless of any
+      // provider config that survived the clone. Recorded as suppressed + acked.
+      if (await isSandboxOrg(d.orgId)) {
+        await insertEmailLog({
+          orgId: d.orgId,
+          jobId: job.id ?? null,
+          recipients: [d.to],
+          subject: d.subject,
+          status: "suppressed",
+          categoryKey: d.meta?.category ?? null,
+          meta: { ...d.meta, reason: "sandbox environment — email egress blocked" },
+        });
+        return { suppressed: true, sandbox: true };
+      }
       const transport = await resolveOrgEmailTransport(d.orgId);
       if (!transport) {
         await insertEmailLog({

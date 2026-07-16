@@ -84,9 +84,10 @@ export function ListViewDesigner({
   const colLabel = (key: string): string => {
     if (isCustomFieldKey(key)) return showInListByDefKey.get(customFieldDefKey(key))?.label ?? key
     switch (key) {
-      case 'document_number': return t('recordTypes.vendor_bill') // bill number column
-      case 'party_name': return tCommon('labels.vendor')
+      case 'document_number': return tCommon('labels.number')
+      case 'party_name': return recordType.startsWith('customer') ? tCommon('labels.customer') : tCommon('labels.vendor')
       case 'document_date': return tCommon('labels.date')
+      case 'bank_account': return tCommon('labels.account')
       case 'reference_number': return tCommon('labels.reference')
       case 'total': return tCommon('labels.total')
       case 'status': return tCommon('labels.status')

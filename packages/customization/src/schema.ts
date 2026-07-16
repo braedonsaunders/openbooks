@@ -323,7 +323,10 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
 export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
   const meta = RECORD_TYPE_BY_KEY[recordType]
   if (!meta) throw new Error(`unknown record type: ${recordType}`)
-  const sortable = meta.listColumns.find((c) => c.sortable)
+  // Prefer date-desc for transaction lists; otherwise the first sortable column.
+  const sortable =
+    meta.listColumns.find((c) => c.sortable && c.sortKey === "date") ??
+    meta.listColumns.find((c) => c.sortable)
   return {
     schemaVersion: 1,
     recordType,

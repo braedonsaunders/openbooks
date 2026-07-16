@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, UrlDrawer } from '@openbooks/ui'
+import { Download, Send } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 
@@ -68,7 +68,37 @@ export function RunDrawer({
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  const [deliverOpen, setDeliverOpen] = useState(false)
+  const [sftpServers, setSftpServers] = useState<{ id: string; name: string }[]>([])
+  const [sftpServerId, setSftpServerId] = useState('')
   const closeHref = '/payments?view=runs'
+
+  async function openDeliver() {
+    setDeliverOpen(true)
+    const res = await fetch(`/api/payments/runs/${run.id}/deliver`)
+    const data = await res.json()
+    if (res.ok) {
+      setSftpServers(data.servers ?? [])
+      setSftpServerId(data.servers?.[0]?.id ?? '')
+    }
+  }
+
+  async function deliver() {
+    if (!sftpServerId) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payments/runs/${run.id}/deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sftpServerId }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error ?? t('runDrawer.toasts.deliverFailed')); return }
+      toast.success(t('runDrawer.toasts.delivered', { path: data.path }))
+      setDeliverOpen(false)
+      router.refresh()
+    } finally { setBusy(false) }
+  }
   const runStatusLabel = (status: string) => {
     if (status === 'confirmed' || status === 'exported') return t(`runs.status.${status}`)
     const key = RUN_STATUS_COMMON_KEY[status]
@@ -153,15 +183,20 @@ export function RunDrawer({
           ) : null}
           {run.status === 'draft' || run.status === 'exported' ? (
             canExport ? (
-              <Button variant={canPost ? 'outline' : 'default'} asChild>
-                <a
-                  href={`/api/payments/runs/${run.id}/file`}
-                  download
-                  onClick={() => setTimeout(() => router.refresh(), 800)}
-                >
-                  <Download size={15} /> {t('runDrawer.downloadFile')}
-                </a>
-              </Button>
+              <>
+                <Button variant={canPost ? 'outline' : 'default'} asChild>
+                  <a
+                    href={`/api/payments/runs/${run.id}/file`}
+                    download
+                    onClick={() => setTimeout(() => router.refresh(), 800)}
+                  >
+                    <Download size={15} /> {t('runDrawer.downloadFile')}
+                  </a>
+                </Button>
+                <Button variant="outline" disabled={busy} onClick={openDeliver}>
+                  <Send size={15} /> {t('runDrawer.deliverSftp')}
+                </Button>
+              </>
             ) : (
               <Button disabled title={t('runDrawer.downloadBlockedTitle')}>
                 <Download size={15} /> {t('runDrawer.downloadFile')}
@@ -264,6 +299,35 @@ export function RunDrawer({
           </table>
         </div>
       </div>
+
+      <Drawer
+        open={deliverOpen}
+        onClose={() => setDeliverOpen(false)}
+        size="sm"
+        title={t('runDrawer.deliverSftp')}
+        description={t('runDrawer.deliverHint')}
+        headerActions={
+          <>
+            <Button variant="outline" onClick={() => setDeliverOpen(false)}>{tCommon('actions.cancel')}</Button>
+            <Button disabled={busy || !sftpServerId} onClick={deliver}>
+              {busy ? tCommon('actions.sending') : t('runDrawer.deliverSftp')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-1.5 p-1">
+          <Label>{t('runDrawer.sftpServer')}</Label>
+          {sftpServers.length === 0 ? (
+            <p className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              {t('runDrawer.noSftpServers')}
+            </p>
+          ) : (
+            <Select value={sftpServerId} onChange={(e) => setSftpServerId(e.target.value)}>
+              {sftpServers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+          )}
+        </div>
+      </Drawer>
     </UrlDrawer>
   )
 }

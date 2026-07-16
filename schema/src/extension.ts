@@ -47,6 +47,16 @@ export const customFieldDefs = pgTable(
  * points. The SuiteScript idea with a modern runtime: scripts receive a
  * context (document + lines + org), can mutate whitelisted fields, veto the
  * operation with ob.abort(), and log. Execution order = sortOrder.
+ *
+ * Script kinds beyond the document-lifecycle triggers:
+ *   endpoint — HTTP-invokable (the RESTlet idea): POST /api/scripts/e/<slug>
+ *              runs main(ctx) with ctx.request; needs scripts.execute.
+ *   bulk     — long-budget background job (map/reduce-lite): enqueued to the
+ *              BullMQ scripts queue and run on the worker with extended
+ *              timeout/row limits; falls back inline when Redis is down.
+ *   client   — delivered to the browser and executed in a sandboxed
+ *              opaque-origin iframe evaluator (never in the host page);
+ *              used for form-level validation hooks.
  */
 export const userScripts = pgTable(
   "user_scripts",
@@ -55,10 +65,12 @@ export const userScripts = pgTable(
     orgId: orgRef(),
     name: text("name").notNull(),
     triggerPoint: text("trigger_point", {
-      enum: ["before_submit", "before_post", "after_post", "before_void", "scheduled"],
+      enum: ["before_submit", "before_post", "after_post", "before_void", "scheduled", "endpoint", "bulk", "client"],
     }).notNull(),
     /** Narrow to a document kind; null = all kinds at this trigger. */
     documentKind: text("document_kind"),
+    /** endpoint scripts: URL slug (unique per org). POST /api/scripts/e/<slug>. */
+    endpointSlug: text("endpoint_slug"),
     /** ES2023 JavaScript source. Entry point: export default function(ctx). */
     source: text("source").notNull(),
     /** For scheduled scripts. */
@@ -76,6 +88,7 @@ export const userScripts = pgTable(
   (t) => [
     index("user_scripts_trigger").on(t.orgId, t.triggerPoint, t.documentKind, t.isActive),
     index("user_scripts_scheduled").on(t.orgId, t.triggerPoint, t.isActive, t.nextRunAt),
+    uniqueIndex("user_scripts_endpoint_slug").on(t.orgId, t.endpointSlug),
   ],
 );
 
@@ -127,6 +140,14 @@ export const users = pgTable(
      * dashboard can't lock a user out of their home.
      */
     homeDashboardId: uuid("home_dashboard_id"),
+    /**
+     * Super admin — a cross-tenant operator. Can enter any org (production or
+     * sandbox) via the workspace switcher, holds all permissions everywhere, and
+     * reaches the super-admin console. Distinct from the per-org `admin` role,
+     * which is scoped to one org. The user's own home row carries the flag; it
+     * follows the login identity, not the org.
+     */
+    isSuperAdmin: boolean("is_super_admin").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     ...auditColumns,
@@ -174,15 +195,59 @@ export const savedReports = pgTable(
 );
 
 /**
- * External-system sync/migration runs. TEMPORARY BRIDGE in its current
- * form (manual, NetSuite-only) — the MigrationSource interface it records
- * for is the seed of one-click migration from NetSuite/QuickBooks/Xero.
+ * A tenant-configured link to an external accounting system (NetSuite, QBO,
+ * Xero…). Created and managed by the tenant in the platform page — one org can
+ * hold several (e.g. mirror from NetSuite while trialling QBO). Drives the
+ * migration loader, the incremental "mirror" sync, and the A/B comparison.
+ *
+ * Credentials NEVER live in plaintext: `secrets` holds an AES-256-GCM sealed
+ * JSON blob (engine/src/secrets.ts, keyed on OPENBOOKS_DATA_KEY); `config`
+ * holds only non-secret settings (host, account id, base currency, realm id).
+ */
+export const connections = pgTable(
+  "connections",
+  {
+    id: id(),
+    orgId: orgRef(),
+    /** Source type key: "netsuite" | "qbo" | … (matches the adapter registry). */
+    source: text("source").notNull(),
+    displayName: text("display_name").notNull(),
+    /** How this connection authenticates: token paste vs OAuth redirect. */
+    authKind: text("auth_kind", { enum: ["token", "oauth2"] }).notNull().default("token"),
+    status: text("status", { enum: ["active", "paused", "error", "unconfigured"] })
+      .notNull()
+      .default("unconfigured"),
+    /** Non-secret settings (host, account, baseCurrency, realmId, refKey…). */
+    config: jsonb("config").notNull().default({}),
+    /** Sealed JSON credential blob (enc:v1:… wire format). Never returned to clients. */
+    secrets: text("secrets"),
+    /** Mirror mode: keep this connection synced on a schedule. */
+    mirrorEnabled: boolean("mirror_enabled").notNull().default(false),
+    /** Cron-ish cadence label, e.g. "daily" (resolved by the scheduler). */
+    mirrorSchedule: text("mirror_schedule").notNull().default("daily"),
+    /** Source-clock high-water mark of the last successful sync. */
+    cursor: timestamp("cursor", { withTimezone: true }),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    ...auditColumns,
+  },
+  (t) => [
+    index("connections_org").on(t.orgId),
+    uniqueIndex("connections_org_name").on(t.orgId, t.displayName),
+  ],
+);
+
+/**
+ * External-system sync/migration runs — one row per full migration or
+ * incremental "mirror" pass, scoped to the `connections` row that produced it.
  */
 export const syncRuns = pgTable(
   "sync_runs",
   {
     id: id(),
     orgId: orgRef(),
+    /** The connection this run belongs to (nullable: pre-connections legacy runs). */
+    connectionId: uuid("connection_id"),
     source: text("source").notNull(), // "netsuite"
     kind: text("kind", { enum: ["incremental", "full_migration", "tb_check"] })
       .notNull()
@@ -195,9 +260,12 @@ export const syncRuns = pgTable(
     /** { newEntries, reversedEntries, linesInserted, tbAccounts, tbMismatches, ... } */
     stats: jsonb("stats").notNull().default({}),
     errorMessage: text("error_message"),
-    triggeredBy: text("triggered_by"), // "ui", "cli"
+    triggeredBy: text("triggered_by"), // "ui", "cli", "worker", "scheduler"
   },
-  (t) => [index("sync_runs_org_started").on(t.orgId, t.startedAt)],
+  (t) => [
+    index("sync_runs_org_started").on(t.orgId, t.startedAt),
+    index("sync_runs_connection").on(t.connectionId, t.startedAt),
+  ],
 );
 
 /**

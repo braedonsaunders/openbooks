@@ -64,6 +64,80 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Pr
   }
 }
 
+export interface SchemaColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+}
+
+export interface SchemaTable {
+  name: string;
+  kind: "table" | "view";
+  columns: SchemaColumn[];
+}
+
+/**
+ * Introspect the tables/views the read-only role can SELECT, with their
+ * columns. Runs under the SAME `openbooks_read` role as user queries and
+ * inside a READ ONLY transaction, so it lists exactly what a user could
+ * actually query — nothing they lack privileges on leaks through.
+ */
+export async function listSchema(): Promise<SchemaTable[]> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin transaction read only");
+    await client.query("set local role openbooks_read");
+    await client.query("set local statement_timeout = 10000");
+    const res = await client.query<{
+      table_name: string;
+      table_type: string;
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      ordinal_position: number;
+    }>(
+      `select c.table_name,
+              t.table_type,
+              c.column_name,
+              c.data_type,
+              c.is_nullable,
+              c.ordinal_position
+         from information_schema.columns c
+         join information_schema.tables t
+           on t.table_schema = c.table_schema
+          and t.table_name = c.table_name
+        where c.table_schema = 'public'
+          and t.table_type in ('BASE TABLE', 'VIEW')
+        order by c.table_name, c.ordinal_position`,
+    );
+    await client.query("rollback");
+
+    const byTable = new Map<string, SchemaTable>();
+    for (const row of res.rows) {
+      let table = byTable.get(row.table_name);
+      if (!table) {
+        table = {
+          name: row.table_name,
+          kind: row.table_type === "VIEW" ? "view" : "table",
+          columns: [],
+        };
+        byTable.set(row.table_name, table);
+      }
+      table.columns.push({
+        name: row.column_name,
+        type: row.data_type,
+        nullable: row.is_nullable === "YES",
+      });
+    }
+    return [...byTable.values()];
+  } catch (e) {
+    await client.query("rollback").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 /**
  * Verify the SELECT-only role exists and is granted to us. Role creation is
  * a superuser bootstrap step (see schema/migrations/README): create role

@@ -8,15 +8,27 @@
 import { closeJobConnections } from "@openbooks/jobs";
 import { createEmailWorker } from "./email-worker.ts";
 import { createReportsWorker } from "./reports-worker.ts";
+import { createMigrationWorker, startMirrorScheduler } from "./migration-worker.ts";
+import { createSandboxWorker } from "./sandbox-worker.ts";
+import { createScriptsWorker } from "./scripts-worker.ts";
 import { startReportScheduler } from "./scheduler.ts";
+import { startSandboxScheduler } from "./sandbox-scheduler.ts";
 
-const workers = [createEmailWorker(), createReportsWorker()];
+const workers = [
+  createEmailWorker(),
+  createReportsWorker(),
+  createMigrationWorker(),
+  createSandboxWorker(),
+  createScriptsWorker(),
+];
 startReportScheduler();
+startSandboxScheduler();
+startMirrorScheduler();
 
 for (const w of workers) {
   w.on("failed", (job, err) => console.error(`[worker] ${w.name} job ${job?.id} failed:`, err?.message));
 }
-console.log("[worker] online — queues: emails, reports; report scheduler ticking every 60s");
+console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts; report + sandbox schedulers ticking");
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {

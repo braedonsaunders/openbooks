@@ -8,13 +8,15 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ChevronDown, LogOut } from 'lucide-react'
-import { Popover } from '@openbooks/ui'
+import { ChevronDown, LogOut, ShieldAlert } from 'lucide-react'
+import { Popover, cn } from '@openbooks/ui'
 import { ThemeToggle } from './theme-toggle'
 import { LanguageSelect } from './language-select'
 import { MenuModeSelect } from './menu-mode-select'
+import { EnvironmentPicker } from './environment-picker'
 import type { Locale } from '../i18n/config'
 import type { NavMode } from '../lib/nav-mode'
+import type { WorkspaceEnvironments } from '../lib/environments'
 
 // Two-letter monogram from a display name, falling back to the email. Handles the
 // "Last, First" directory convention so the initials read First+Last either way.
@@ -44,12 +46,14 @@ export function AccountMenu({
   role,
   localePreference,
   navModePreference,
+  environments,
 }: {
   name: string
   email: string
   role: string
   localePreference: Locale | null
   navModePreference: NavMode | null
+  environments: WorkspaceEnvironments
 }) {
   const t = useTranslations('shell.accountMenu')
   const router = useRouter()
@@ -57,6 +61,12 @@ export function AccountMenu({
   const [pending, startSignOut] = useTransition()
   const label = name || email || t('account')
   const initials = initialsFrom(name, email)
+  const inSandbox = environments.envKind !== 'production'
+  // Show the picker when there's somewhere to switch to.
+  const showPicker =
+    environments.tenants.length > 1 ||
+    environments.tenants.some((t) => t.sandboxes.length > 0) ||
+    inSandbox
 
   return (
     <Popover
@@ -76,7 +86,17 @@ export function AccountMenu({
           <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
             {initials}
           </span>
-          <span className="hidden max-w-[10rem] truncate sm:inline">{label}</span>
+          <span className="hidden min-w-0 max-w-[11rem] flex-col text-left sm:flex">
+            <span className="truncate text-sm leading-tight">{label}</span>
+            <span
+              className={cn(
+                'truncate text-[11px] leading-tight',
+                inSandbox ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500',
+              )}
+            >
+              {inSandbox ? `${environments.currentName} · sandbox` : environments.currentName}
+            </span>
+          </span>
           <ChevronDown
             size={14}
             className="hidden shrink-0 text-slate-400 sm:inline dark:text-slate-500"
@@ -101,6 +121,25 @@ export function AccountMenu({
       <div className="border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400">
         {ROLE_KEYS.includes(role) ? t(`roles.${role}`) : role}
       </div>
+
+      {showPicker && (
+        <div className="border-b border-slate-100 dark:border-slate-800">
+          <EnvironmentPicker env={environments} onNavigate={() => setOpen(false)} />
+        </div>
+      )}
+
+      {environments.isSuperAdmin && (
+        <div className="border-b border-slate-100 p-1 dark:border-slate-800">
+          <Link
+            href="/admin/super"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60"
+          >
+            <ShieldAlert size={15} className="text-amber-500" />
+            Super admin
+          </Link>
+        </div>
+      )}
 
       <div className="border-t border-slate-100 px-3 py-2.5 dark:border-slate-800">
         <div className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">

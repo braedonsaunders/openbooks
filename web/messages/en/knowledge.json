@@ -1,16 +1,16 @@
 {
-  "savedSearches": {
-    "new": "New saved search",
+  "views": {
+    "new": "New view",
     "list": {
-      "title": "Saved Searches",
+      "title": "Views",
       "description": "Named, shareable queries over the ledger, documents, parties and accounts — detail rows or grouped summaries. Browse, export and reuse them.",
       "scopeLabel": "Scope",
-      "searchPlaceholder": "Search saved searches…",
+      "searchPlaceholder": "Search views…",
       "scopeAll": "All",
       "scopeShared": "Shared",
       "scopePrivate": "Private",
-      "emptyTitle": "No saved searches yet",
-      "emptyDescription": "Create your first saved search to query the ledger and reuse it anytime.",
+      "emptyTitle": "No views yet",
+      "emptyDescription": "Create your first view to query the ledger and reuse it anytime.",
       "columns": {
         "name": "Name",
         "source": "Source",
@@ -25,7 +25,7 @@
       "editAction": "Edit"
     },
     "studio": {
-      "untitled": "Untitled saved search",
+      "untitled": "Untitled view",
       "autosaveHint": "Changes save automatically.",
       "scopeLabel": "Scope",
       "scope": {
@@ -35,19 +35,19 @@
       "exportPdf": "PDF",
       "exportXlsx": "Excel",
       "exportCsv": "CSV",
-      "deleteConfirm": "Delete this saved search?",
+      "deleteConfirm": "Delete this view?",
       "viewResults": "View results"
     },
     "run": {
-      "editSearch": "Edit search",
-      "backToList": "Saved searches",
+      "editSearch": "Edit view",
+      "backToList": "Views",
       "resultsTitle": "Results",
       "rowsRange": "Showing {from}–{to} of {total} rows",
       "lastUpdated": "Updated {when}",
       "refreshHint": "Results run live against current data.",
       "emptyTitle": "No rows matched",
       "emptyDescription": "Adjust the search criteria or filters and run again.",
-      "notFoundTitle": "Saved search not found",
+      "notFoundTitle": "View not found",
       "notFoundDescription": "It may have been deleted, or you don't have access to it."
     }
   }

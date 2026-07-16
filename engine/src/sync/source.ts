@@ -1,43 +1,100 @@
+import type { NativeContext, NativeDocument } from "./native.ts";
+
 /**
- * MigrationSource — the adapter contract for pulling accounting data out of
- * an external system. Today: NetSuite (the temporary parallel-run bridge).
- * The same interface is the seed of one-click migration: implement an
- * adapter (QuickBooks Online, Xero, Sage, …), and the sync/migration engine,
- * TB verification, and UI come for free.
+ * MigrationSource — the adapter contract for pulling accounting data out of an
+ * external system, NATIVELY. An adapter emits real business documents
+ * (invoices, bills, payments, journals, orders) resolved against openbooks
+ * ids; the sync engine inserts them and posts them through the REAL posting
+ * engine (postDocument → RULES → kernel), so the GL is a byproduct of native
+ * transactions — never a replayed photocopy. Payment applications ride along,
+ * so AR/AP open balances are correct, tied bill-to-payment.
+ *
+ * Implement this once and the one-click migration, the incremental "mirror",
+ * trial-balance + open-item verification, the worker, and the UI come for
+ * free. NetSuite is the reference adapter.
  */
 
-export interface SourceGlLine {
-  accountRef: string; // source system's account id
-  amount: string; // signed: + debit / − credit (decimal string)
-  departmentRef?: string | null;
-  partyRef?: string | null;
-}
+// --- Entity (master-data) streams --------------------------------------------
 
-export interface SourceTransaction {
-  /** Stable id in the source system (drives idempotency + change detection). */
+/** One canonical master-data record (see migrate.ts for the loader). */
+export interface SourceEntity {
   sourceRef: string;
-  type: string;
-  number?: string | null;
-  date: string; // ISO yyyy-mm-dd
-  memo?: string | null;
-  lines: SourceGlLine[];
+  /** Natural key for the target resource (account number, party short code…). */
+  naturalKey?: string | null;
+  /** Parent's `sourceRef`, for hierarchical resources (accounts, dimensions). */
+  parentRef?: string | null;
+  fields: Record<string, unknown>;
 }
 
-export interface SourceChanges {
-  transactions: SourceTransaction[];
+/**
+ * A stream of one entity kind. `resource` is the data-io resource key
+ * (`"accounts"`, `"parties"`, `"departments"`, `"items"`, `"projects"`, …);
+ * streams load in array order, so dependencies come first.
+ */
+export interface EntityStream {
+  resource: string;
+  records: SourceEntity[];
+}
+
+// --- Native transaction stream ------------------------------------------------
+
+/** A source settlement link: payment/credit → the open item it settled. */
+export interface SourceApplicationLink {
+  paymentRef: string;
+  appliedRef: string;
+  amount: string;
+}
+
+export interface NativeChanges {
+  /** Insert-ready native documents (headers + lines, ids resolved). */
+  documents: NativeDocument[];
+  /** The FULL current application graph (the reconciler is delta-safe). */
+  applications: SourceApplicationLink[];
+  /** Source refs the source system reports deleted (voided in openbooks). */
+  deletedRefs: string[];
   /** Source-clock high-water mark to persist for the next incremental pull. */
   syncedThrough: Date;
+  /** Diagnostics: transactions the adapter could not build (ref → reason). */
+  unbuildable: { ref: string; reason: string }[];
 }
+
+// --- Verification ---------------------------------------------------------------
 
 export interface SourceTrialBalanceRow {
   accountRef: string;
   balance: string; // signed decimal string, debit-positive
 }
 
+/** Source ground truth for one open item (invoice/bill): remaining unpaid. */
+export interface SourceOpenItem {
+  ref: string;
+  unpaid: string;
+}
+
+// --- The adapter -----------------------------------------------------------------
+
 export interface MigrationSource {
   readonly name: string;
-  /** Transactions created or modified after `since` (posted GL only). */
-  changesSince(since: Date | null): Promise<SourceChanges>;
+  /** Key under which source ids live in each row's `custom` jsonb (e.g. "nsId"). */
+  readonly refKey: string;
+  /** ISO 4217 base currency of the source book. */
+  readonly baseCurrency: string;
+
+  /** Cheap connectivity/credential probe for the "Test connection" button. */
+  ping?(): Promise<{ ok: boolean; detail?: string }>;
+
+  /** Master data, in dependency order (accounts, dimensions, parties, items…). */
+  entities?(): Promise<EntityStream[]>;
+
+  /**
+   * Native transactions created/modified after `since` (null = everything),
+   * built against the provided context's id maps, plus the application graph.
+   */
+  nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges>;
+
   /** Live per-account trial balance for verification after sync. */
   trialBalance(): Promise<SourceTrialBalanceRow[]>;
+
+  /** Live per-document unpaid balances (AR/AP aging verification). */
+  openItems?(): Promise<SourceOpenItem[]>;
 }

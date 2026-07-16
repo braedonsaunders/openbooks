@@ -27,6 +27,20 @@ export const orgs = pgTable("orgs", {
   taxIds: jsonb("tax_ids").$type<Record<string, string>>().default({}), // e.g. { "CA_BN": "..." }
   isElimination: boolean("is_elimination").notNull().default(false),
   settings: jsonb("settings").notNull().default({}),
+  /**
+   * Environment kind. `production` is the live book. `sandbox` is a clone of a
+   * production org (created by the rebase clone engine) — isolated, with all
+   * outbound side-effects neutered. `preview` is reserved for next-release
+   * validation copies. `sandboxOf` points a sandbox at its production parent
+   * (distinct from `parentId`, which is the consolidation hierarchy).
+   * `sandboxSeed` is the namespace fed to ob_rebase() so every UUID in this
+   * environment is a deterministic rebase of its production counterpart.
+   */
+  envKind: text("env_kind", { enum: ["production", "sandbox", "preview"] })
+    .notNull()
+    .default("production"),
+  sandboxOf: uuid("sandbox_of"),
+  sandboxSeed: uuid("sandbox_seed"),
   ...auditColumns,
 });
 

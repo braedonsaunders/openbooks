@@ -385,4 +385,4 @@ export function ReportBuilder({
 }
 
 // RowsConfig + SummarizeConfig live in ../../../query-config and are shared with
-// the saved-search builder.
+// the view builder.

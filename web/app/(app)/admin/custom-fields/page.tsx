@@ -32,6 +32,7 @@ export default async function CustomFields({
 }) {
   const t = await getTranslations('admin.customFields')
   const tCommon = await getTranslations('common')
+  const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'target', allowedSorts: ['target'] as const, perPage: 100 })
   const target = pickString(sp.target)
@@ -60,6 +61,7 @@ export default async function CustomFields({
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('title')}
             description={t('description')}
             actions={<NewFieldButton />}

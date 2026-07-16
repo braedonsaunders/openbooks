@@ -12,14 +12,16 @@
       "description": "Sube archivos o crea una carpeta para comenzar.",
       "allTitle": "Aún no hay archivos",
       "allDescription": "Sube tu primer archivo para empezar a usar el gestor de documentos."
-    }
+    },
+    "folderRow": "Carpeta"
   },
   "columns": {
     "name": "Nombre",
     "size": "Tamaño",
     "modified": "Modificado",
     "createdBy": "Creado por",
-    "type": "Tipo"
+    "type": "Tipo",
+    "location": "Ubicación"
   },
   "folderTree": {
     "expand": "Expandir",
@@ -61,7 +63,8 @@
     },
     "systemNoDelete": "Las carpetas del sistema no se pueden eliminar ni renombrar.",
     "subfolderCount": "{count, plural, one {# carpeta} other {# carpetas}}",
-    "fileCount": "{count, plural, one {# archivo} other {# archivos}}"
+    "fileCount": "{count, plural, one {# archivo} other {# archivos}}",
+    "deleteBlocked": "Esta carpeta contiene archivos vinculados a registros y no se puede eliminar."
   },
   "file": {
     "drawer": {
@@ -87,6 +90,13 @@
         "title": "¿Eliminar este archivo?",
         "body": "El archivo se eliminará permanentemente del gestor de documentos y se desvinculará de todos los registros. Esta acción no se puede deshacer."
       }
+    },
+    "preview": {
+      "title": "Vista previa",
+      "loading": "Cargando archivo…",
+      "loadFailed": "No se pudo cargar el contenido de este archivo.",
+      "tooLarge": "Este archivo es demasiado grande para previsualizarlo aquí.",
+      "unsupported": "Este tipo de archivo no se puede previsualizar. Descárgalo para abrirlo."
     }
   },
   "upload": {
@@ -126,7 +136,9 @@
     "attached": "Archivo adjuntado",
     "attachFailed": "No se pudo adjuntar el archivo",
     "detached": "Archivo desvinculado",
-    "detachFailed": "No se pudo desvincular el archivo"
+    "detachFailed": "No se pudo desvincular el archivo",
+    "linkCopied": "Enlace copiado",
+    "linkCopyFailed": "No se pudo copiar el enlace"
   },
   "fileTypes": {
     "pdf": "PDF",
@@ -136,5 +148,14 @@
     "document": "Documento",
     "text": "Texto",
     "other": "Archivo"
+  },
+  "rowMenu": {
+    "open": "Abrir",
+    "openFolder": "Abrir carpeta",
+    "copyLink": "Copiar enlace"
+  },
+  "rename": {
+    "fileTitle": "Renombrar archivo",
+    "folderTitle": "Renombrar carpeta"
   }
 }

@@ -10,6 +10,7 @@ import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { AttachmentPanel } from '../../../components/attachment-panel'
 import { DocTypeBadge } from '../../../components/doc-type-badge'
+import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
 
@@ -340,6 +341,7 @@ export function ExpenseDrawer({
             </>
           ) : (
             <>
+              <PdfButton recordType="expense_report" recordId={String(doc.id)} />
               {canEditStatus ? (
                 <Button variant="outline" onClick={() => setMode('edit')}>
                   Edit

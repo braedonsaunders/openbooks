@@ -1,0 +1,41 @@
+{
+  "title": "Modèles PDF",
+  "description": "Créez de superbes documents imprimables et associez-les aux factures, écritures et à toutes les autres transactions",
+  "newTemplate": "Nouveau modèle",
+  "list": {
+    "name": "Nom",
+    "paper": "Papier",
+    "default": "Par défaut",
+    "builtInStarter": "Design intégré",
+    "starterHint": "Imprimé lorsqu'aucun modèle personnalisé n'existe — dupliquez-le pour le personnaliser",
+    "duplicate": "Dupliquer",
+    "isDefault": "Par défaut"
+  },
+  "editor": {
+    "back": "Modèles PDF",
+    "design": "Design",
+    "code": "HTML",
+    "preview": "Aperçu",
+    "margins": "Marges",
+    "portrait": "Portrait",
+    "landscape": "Paysage",
+    "headerPlaceholder": "En-tête (facultatif) — jetons de fusion autorisés",
+    "footerPlaceholder": "Pied de page — numéros de page pris en charge",
+    "saved": "Modèle enregistré",
+    "saveFailed": "Échec de l'enregistrement",
+    "makeDefault": "Par défaut pour ce type d'enregistrement",
+    "active": "Actif",
+    "previewHint": "Généré par le moteur exact qui imprime le document réel, fusionné avec votre enregistrement le plus récent.",
+    "refreshPreview": "Actualiser l'aperçu",
+    "previewFailed": "Échec de l'aperçu",
+    "deleteConfirm": "Supprimer ce modèle ? Les enregistrements utiliseront le design par défaut.",
+    "blockContent": "Contenu",
+    "blockFields": "Champs de l'enregistrement",
+    "blockTables": "Tableaux"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "Design standard",
+    "failed": "Impossible de charger les modèles PDF"
+  }
+}

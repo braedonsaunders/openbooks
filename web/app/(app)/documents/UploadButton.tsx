@@ -9,8 +9,9 @@ import { Button } from '@openbooks/ui'
 
 const MAX_BYTES = 25 * 1024 * 1024
 const ACCEPT =
-  '.pdf,.png,.jpg,.jpeg,.gif,.csv,.xlsx,.docx,.txt,' +
+  '.pdf,.png,.jpg,.jpeg,.gif,.csv,.xlsx,.docx,.txt,.md,.json,.js,.xml,' +
   'application/pdf,image/png,image/jpeg,image/gif,text/csv,text/plain,' +
+  'text/markdown,text/javascript,application/json,application/xml,text/xml,' +
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,' +
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 

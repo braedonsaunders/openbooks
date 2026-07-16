@@ -20,6 +20,7 @@ export default async function ApiKeysPage({
 }) {
   const authz = await requirePermission('api.keys.manage')
   const t = await getTranslations('admin.apiKeys')
+  const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'created', allowedSorts: ['created', 'name'] as const, perPage: 50 })
   const keyId = sp.key as string | undefined
@@ -61,6 +62,7 @@ export default async function ApiKeysPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('title')}
             description={t('description')}
             actions={<NewKeyButton />}

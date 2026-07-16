@@ -116,6 +116,7 @@ function partyListColumns(numberLabelKey: string, partyLabelKey: string): ListCo
     { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
     { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "open_balance", labelKey: "common.labels.openBalance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", locked: true, defaultWidth: 96 },
   ];
@@ -141,6 +142,7 @@ const VENDOR_BILL: RecordTypeMeta = {
     { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
     { key: "reference_number", labelKey: "ap.list.columns.ref", kind: "text" },
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "open_balance", labelKey: "common.labels.openBalance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", locked: true, defaultWidth: 96 },
   ],
@@ -273,6 +275,86 @@ const CHECK: RecordTypeMeta = {
   ],
 };
 
+/**
+ * Vendor/customer payment documents. Editor is the bespoke PaymentDrawer, so
+ * `supportsForms` is false — only the saved list view is customizable. The
+ * `total` and `bank_account` columns are journal-derived at query time (imported
+ * payments carry the amount on their posted entry, not documents.total).
+ */
+function paymentRecordType(key: string, partyLabelKey: string, entitySource: string): RecordTypeMeta {
+  return {
+    key,
+    labelKey: `customization.recordTypes.${key}`,
+    category: "entity",
+    supportsForms: false,
+    headerFields: [],
+    lineFields: [],
+    listColumns: [
+      { key: "document_number", labelKey: "payments.list.columns.payment", kind: "reference", sortable: true, sortKey: "number", locked: true },
+      { key: "party_name", labelKey: partyLabelKey, kind: "text", sortable: true, sortKey: "party" },
+      { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+      { key: "bank_account", labelKey: "payments.list.columns.bankAccount", kind: "text" },
+      { key: "reference_number", labelKey: "payments.list.columns.ref", kind: "text" },
+      { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 130 },
+      { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    ],
+    listFilters: [
+      DIRECT_POST_STATUS_FILTER,
+      { key: "party_id", labelKey: partyLabelKey, kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource },
+      DATE_FILTER,
+      { key: "reference_number", labelKey: "payments.list.columns.ref", kind: "text", operators: OPERATORS_BY_KIND.text },
+    ],
+  };
+}
+
+const VENDOR_PAYMENT = paymentRecordType("vendor_payment", "common.labels.vendor", "vendor");
+const CUSTOMER_PAYMENT = paymentRecordType("customer_payment", "common.labels.customer", "customer");
+
+/**
+ * Order documents (quotes, sales orders, purchase orders). Non-posting; edited
+ * via the bespoke OrderDrawer, so `supportsForms` is false — only the saved list
+ * view is customizable. Conversion progress ("Converted %") lives in a report,
+ * not the list. Statuses are draft/approved/voided (no approval routing).
+ */
+function orderRecordType(key: string, partyLabelKey: string, entitySource: string): RecordTypeMeta {
+  return {
+    key,
+    labelKey: `customization.recordTypes.${key}`,
+    category: "entity",
+    supportsForms: false,
+    headerFields: [],
+    lineFields: [],
+    listColumns: [
+      { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+      { key: "party_name", labelKey: partyLabelKey, kind: "text", sortable: true, sortKey: "party" },
+      { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+      { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
+      { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+      { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    ],
+    listFilters: [
+      {
+        key: "status",
+        labelKey: "common.labels.status",
+        kind: "select",
+        operators: OPERATORS_BY_KIND.select,
+        options: [
+          { value: "draft", labelKey: "common.status.draft" },
+          { value: "approved", labelKey: "common.status.approved" },
+          { value: "voided", labelKey: "common.status.voided" },
+        ],
+      },
+      { key: "party_id", labelKey: partyLabelKey, kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource },
+      DATE_FILTER,
+      { key: "reference_number", labelKey: "common.labels.reference", kind: "text", operators: OPERATORS_BY_KIND.text },
+    ],
+  };
+}
+
+const QUOTE = orderRecordType("quote", "common.labels.customer", "customer");
+const SALES_ORDER = orderRecordType("sales_order", "common.labels.customer", "customer");
+const PURCHASE_ORDER = orderRecordType("purchase_order", "common.labels.vendor", "vendor");
+
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -281,6 +363,11 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   CARD_CHARGE,
   CARD_REFUND,
   CHECK,
+  VENDOR_PAYMENT,
+  CUSTOMER_PAYMENT,
+  QUOTE,
+  SALES_ORDER,
+  PURCHASE_ORDER,
 ];
 
 export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = Object.fromEntries(

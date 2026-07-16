@@ -49,6 +49,7 @@ export const DOC_TYPE_META: Record<string, DocTypeMeta> = {
   vendor_payment: { label: 'Vendor Payment', short: 'Bill Pmt', icon: <Banknote className={ICON} />, cls: BLUE },
   customer_payment: { label: 'Customer Payment', short: 'Cust Pmt', icon: <Banknote className={ICON} />, cls: BLUE },
   check: { label: 'Check', short: 'Check', icon: <Banknote className={ICON} />, cls: BLUE },
+  deposit: { label: 'Bank Deposit', short: 'Deposit', icon: <Banknote className={ICON} />, cls: TEAL },
   transfer: { label: 'Transfer', short: 'Transfer', icon: <ArrowLeftRight className={ICON} />, cls: SLATE },
   card_charge: { label: 'Card Charge', short: 'Card', icon: <CreditCard className={ICON} />, cls: ROSE },
   card_refund: { label: 'Card Refund', short: 'Card Cr.', icon: <CreditCard className={ICON} />, cls: ROSE },

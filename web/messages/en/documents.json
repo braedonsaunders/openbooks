@@ -12,14 +12,16 @@
       "description": "Upload files or create a folder to get started.",
       "allTitle": "No files yet",
       "allDescription": "Upload your first file to populate the File Cabinet."
-    }
+    },
+    "folderRow": "Folder"
   },
   "columns": {
     "name": "Name",
     "size": "Size",
     "modified": "Modified",
     "createdBy": "Created by",
-    "type": "Type"
+    "type": "Type",
+    "location": "Location"
   },
   "folderTree": {
     "expand": "Expand",
@@ -61,7 +63,8 @@
     },
     "systemNoDelete": "System folders cannot be deleted or renamed.",
     "subfolderCount": "{count, plural, one {# folder} other {# folders}}",
-    "fileCount": "{count, plural, one {# file} other {# files}}"
+    "fileCount": "{count, plural, one {# file} other {# files}}",
+    "deleteBlocked": "This folder contains files attached to records and can't be deleted."
   },
   "file": {
     "drawer": {
@@ -87,6 +90,13 @@
         "title": "Delete this file?",
         "body": "The file will be permanently deleted from the File Cabinet and detached from all records. This cannot be undone."
       }
+    },
+    "preview": {
+      "title": "Preview",
+      "loading": "Loading file…",
+      "loadFailed": "Could not load this file's contents.",
+      "tooLarge": "This file is too large to preview here.",
+      "unsupported": "This file type can't be previewed. Download it to open."
     }
   },
   "upload": {
@@ -126,7 +136,9 @@
     "attached": "File attached",
     "attachFailed": "Could not attach file",
     "detached": "File detached",
-    "detachFailed": "Could not detach file"
+    "detachFailed": "Could not detach file",
+    "linkCopied": "Link copied",
+    "linkCopyFailed": "Could not copy link"
   },
   "fileTypes": {
     "pdf": "PDF",
@@ -136,5 +148,14 @@
     "document": "Document",
     "text": "Text",
     "other": "File"
+  },
+  "rowMenu": {
+    "open": "Open",
+    "openFolder": "Open folder",
+    "copyLink": "Copy link"
+  },
+  "rename": {
+    "fileTitle": "Rename file",
+    "folderTitle": "Rename folder"
   }
 }
