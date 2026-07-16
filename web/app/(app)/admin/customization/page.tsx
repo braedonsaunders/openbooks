@@ -130,8 +130,7 @@ export default async function CustomizationPage({
     >
       {tab === 'forms' ? (
         <>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('designer.forms.listHint', { type: typeLabel })}</p>
+          <div className="mb-3 flex justify-end">
             <NewFormButton recordType={recordType} />
           </div>
           <Table>
