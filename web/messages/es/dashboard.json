@@ -6,7 +6,7 @@
     "afternoon": "Buenas tardes",
     "evening": "Buenas noches"
   },
-  "tenantSummary": "{entries} asientos · {parties} terceros",
+  "tenantSummary": "{entries} asientos",
   "header": {
     "customize": "Personalizar"
   },
@@ -14,7 +14,6 @@
     "journalEntries": "Asientos contables",
     "journalLines": "Líneas de asiento",
     "activeAccounts": "Cuentas activas",
-    "parties": "Terceros",
     "entriesToday": "Asientos hoy",
     "pendingApprovals": "Aprobaciones pendientes",
     "ledgerBalance": "Saldo del libro mayor",

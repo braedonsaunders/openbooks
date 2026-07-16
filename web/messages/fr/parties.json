@@ -73,6 +73,11 @@
     "noBankAccounts": "Aucun compte bancaire au dossier.",
     "bankAccountFallback": "Compte bancaire",
     "approvedOn": "Approuvé le {date}",
-    "bankAccountsNote": "Les comptes bancaires sont ajoutés et approuvés dans le module Paiements."
+    "bankAccountsNote": "Les comptes bancaires sont ajoutés et approuvés dans le module Paiements.",
+    "detailsHeading": {
+      "customer": "Détails du client",
+      "vendor": "Détails du fournisseur",
+      "employee": "Détails de l'employé"
+    }
   }
 }

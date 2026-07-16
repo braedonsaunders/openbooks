@@ -11,7 +11,6 @@ import {
   NotebookPen,
   Receipt,
   Scale,
-  Users,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
 import { money } from '@/lib/format'
@@ -36,8 +35,6 @@ export function WidgetCard({
       return <CountTile icon={<BookOpen size={14} />} label={t('widgets.journalLines')} value={String(data.journalLineCount)} href="/journal" />
     case 'kpi-accounts-active':
       return <CountTile icon={<Layers size={14} />} label={t('widgets.activeAccounts')} value={String(data.accountCount)} href="/accounts" />
-    case 'kpi-parties':
-      return <CountTile icon={<Users size={14} />} label={t('widgets.parties')} value={String(data.partyCount)} href="/parties" />
     case 'kpi-entries-today':
       return <CountTile icon={<FileText size={14} />} label={t('widgets.entriesToday')} value={String(data.entriesToday)} href="/journal" />
     case 'kpi-pending-approvals':

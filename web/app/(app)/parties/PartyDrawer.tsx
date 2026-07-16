@@ -63,6 +63,7 @@ export function PartyDrawer({
   trades,
   fieldDefs,
   canManage,
+  role,
   basePath = '/parties',
 }: {
   payload: PartyPayload
@@ -71,6 +72,11 @@ export function PartyDrawer({
   trades: Opt[]
   fieldDefs: CustomFieldDefClient[]
   canManage: boolean
+  /** When set, the drawer was opened from a role-scoped list (Customers /
+   *  Vendors / Employees): only that role's fields render — the underlying
+   *  multi-role party model stays hidden from end users — and saving always
+   *  keeps that role enabled. Omitted on the unified /parties directory. */
+  role?: 'customer' | 'vendor' | 'employee'
   basePath?: string
 }) {
   const t = useTranslations('parties.drawer')
@@ -166,13 +172,13 @@ export function PartyDrawer({
       custom: customValues,
       roles: {
         customer: {
-          enabled: customer.enabled,
+          enabled: role === 'customer' ? true : customer.enabled,
           paymentTermsId: customer.paymentTermsId || null,
           creditLimit: customer.creditLimit || null,
           currency: customer.currency || null,
         },
         vendor: {
-          enabled: vendor.enabled,
+          enabled: role === 'vendor' ? true : vendor.enabled,
           paymentMethod: vendor.paymentMethod || null,
           eftNotificationEmail: vendor.eftNotificationEmail || null,
           paymentTermsId: vendor.paymentTermsId || null,
@@ -180,7 +186,7 @@ export function PartyDrawer({
           is1099OrT4a: vendor.is1099OrT4a,
         },
         employee: {
-          enabled: employee.enabled,
+          enabled: role === 'employee' ? true : employee.enabled,
           employeeNumber: employee.employeeNumber || null,
           departmentId: employee.departmentId || null,
           tradeId: employee.tradeId || null,
@@ -189,7 +195,7 @@ export function PartyDrawer({
       },
       addresses,
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, customer, vendor, employee, addresses, isActive],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, customer, vendor, employee, addresses, isActive, role],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -413,23 +419,32 @@ export function PartyDrawer({
 
         <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} />
 
-        {/* -- roles ------------------------------------------------------ */}
+        {/* -- roles ------------------------------------------------------
+             Role-scoped open (Customers/Vendors/Employees list): only that
+             role's details render, with no enable checkbox — the multi-role
+             party model is an internal abstraction. The unified /parties
+             directory (no `role`) keeps the full checkbox view. */}
         <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('rolesHeading')}</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {role ? t(`detailsHeading.${role}`) : t('rolesHeading')}
+          </h3>
 
+          {!role || role === 'customer' ? (
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={customer.enabled}
-                onChange={(e) => setCustomer({ ...customer, enabled: e.target.checked })}
-                disabled={ro}
-                className={checkboxClass}
-              />
-              <span className="text-sm font-medium">{tc('labels.customer')}</span>
-            </label>
-            {customer.enabled ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {!role ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={customer.enabled}
+                  onChange={(e) => setCustomer({ ...customer, enabled: e.target.checked })}
+                  disabled={ro}
+                  className={checkboxClass}
+                />
+                <span className="text-sm font-medium">{tc('labels.customer')}</span>
+              </label>
+            ) : null}
+            {role === 'customer' || customer.enabled ? (
+              <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-3`}>
                 <div className={field}>
                   <Label>{t('paymentTerms')}</Label>
                   <Select
@@ -469,20 +484,24 @@ export function PartyDrawer({
               </div>
             ) : null}
           </div>
+          ) : null}
 
+          {!role || role === 'vendor' ? (
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={vendor.enabled}
-                onChange={(e) => setVendor({ ...vendor, enabled: e.target.checked })}
-                disabled={ro}
-                className={checkboxClass}
-              />
-              <span className="text-sm font-medium">{tc('labels.vendor')}</span>
-            </label>
-            {vendor.enabled ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {!role ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={vendor.enabled}
+                  onChange={(e) => setVendor({ ...vendor, enabled: e.target.checked })}
+                  disabled={ro}
+                  className={checkboxClass}
+                />
+                <span className="text-sm font-medium">{tc('labels.vendor')}</span>
+              </label>
+            ) : null}
+            {role === 'vendor' || vendor.enabled ? (
+              <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-3`}>
                 <div className={field}>
                   <Label>{t('paymentMethod')}</Label>
                   <Select
@@ -546,20 +565,24 @@ export function PartyDrawer({
               </div>
             ) : null}
           </div>
+          ) : null}
 
+          {!role || role === 'employee' ? (
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={employee.enabled}
-                onChange={(e) => setEmployee({ ...employee, enabled: e.target.checked })}
-                disabled={ro}
-                className={checkboxClass}
-              />
-              <span className="text-sm font-medium">{tc('labels.employee')}</span>
-            </label>
-            {employee.enabled ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+            {!role ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={employee.enabled}
+                  onChange={(e) => setEmployee({ ...employee, enabled: e.target.checked })}
+                  disabled={ro}
+                  className={checkboxClass}
+                />
+                <span className="text-sm font-medium">{tc('labels.employee')}</span>
+              </label>
+            ) : null}
+            {role === 'employee' || employee.enabled ? (
+              <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-4`}>
                 <div className={field}>
                   <Label>{t('employeeNumber')}</Label>
                   <Input
@@ -611,6 +634,7 @@ export function PartyDrawer({
               </div>
             ) : null}
           </div>
+          ) : null}
         </section>
 
         {/* -- addresses ----------------------------------------------- */}

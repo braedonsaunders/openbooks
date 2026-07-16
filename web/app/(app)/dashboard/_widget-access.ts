@@ -13,7 +13,6 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-accounts-active': GL,
   'kpi-entries-today': GL,
   'kpi-ledger-balance': GL,
-  'kpi-parties': PARTIES,
   'kpi-pending-approvals': AP,
   'list-recent-entries': GL,
   'list-pending-approvals': AP,

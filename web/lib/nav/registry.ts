@@ -43,6 +43,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'ar', href: '/ar', label: 'Invoices', iconKey: 'clipboard-check', group: 'Sales', requiredPermission: 'ar.read' },
   { key: 'receipts', href: '/receipts', label: 'Customer Payments', iconKey: 'check', group: 'Sales', requiredPermission: 'ar.pay' },
   { key: 'customers', href: '/entities/customers', label: 'Customers', iconKey: 'users', group: 'Sales', requiredPermission: 'parties.read' },
+  { key: 'projects', href: '/projects', label: 'Projects', iconKey: 'timer', group: 'Sales', requiredPermission: 'projects.read' },
 
   // Banking — the bank feed, matching, and reconciliation.
   { key: 'banking', href: '/banking', label: 'Overview', iconKey: 'building', group: 'Banking', requiredPermission: 'banking.read', exact: true },
@@ -59,10 +60,11 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Accounting', requiredPermission: 'gl.close' },
   { key: 'items', href: '/items', label: 'Items & Services', iconKey: 'grid', group: 'Accounting', requiredPermission: 'items.read' },
 
-  // People & Time — employees, the party directory, projects, and timesheets.
+  // People & Time — employees and timesheets. The unified party directory
+  // (/parties) is intentionally NOT in the nav: parties are an internal
+  // abstraction; end users only see role-scoped views (Customers, Vendors,
+  // Employees).
   { key: 'employees', href: '/entities/employees', label: 'Employees', iconKey: 'clipboard-check', group: 'People & Time', requiredPermission: 'parties.read' },
-  { key: 'parties', href: '/parties', label: 'All parties', iconKey: 'users', group: 'People & Time', requiredPermission: 'parties.read' },
-  { key: 'projects', href: '/projects', label: 'Projects', iconKey: 'timer', group: 'People & Time', requiredPermission: 'projects.read' },
   { key: 'timesheets', href: '/timesheets', label: 'Weekly Timesheets', iconKey: 'timer', group: 'People & Time', requiredPermission: 'time.read' },
 
   // Reports — every read surface: statements, analytics, views, docs, queries.

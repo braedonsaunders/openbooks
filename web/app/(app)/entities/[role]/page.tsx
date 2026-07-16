@@ -163,6 +163,7 @@ export default async function EntityRole({
         <PartyDrawer
           payload={openParty as any}
           canManage={canManage}
+          role={role}
           basePath={basePath}
           paymentTerms={pickers[0].rows}
           departments={pickers[1].rows}
