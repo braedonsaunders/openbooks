@@ -6,7 +6,12 @@
     "customer_credit": "Nota de crédito de cliente",
     "card_charge": "Cargo de tarjeta",
     "card_refund": "Reembolso de tarjeta",
-    "check": "Cheque"
+    "check": "Cheque",
+    "vendor_payment": "Pago a proveedor",
+    "customer_payment": "Pago de cliente",
+    "quote": "Presupuesto",
+    "sales_order": "Orden de venta",
+    "purchase_order": "Orden de compra"
   },
   "views": {
     "defaultName": "Vista predeterminada",

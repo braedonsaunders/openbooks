@@ -21,7 +21,7 @@
     "party": { "label": "Party", "description": "Pick a vendor, customer, or employee" }
   },
   "types": {
-    "title": "Record Types",
+    "title": "Custom Records",
     "description": "Design your own record types — each published type becomes a full module with its own list, numbering, and flyout editor.",
     "searchPlaceholder": "Search record types…",
     "newButton": "New record type",

@@ -7,6 +7,7 @@ import {
   ADMIN_MODULE_KEY,
   MODULE_BY_KEY,
   NAV_MODULES,
+  NAV_SUBGROUPS,
   defaultNavConfig,
   type OrgNavConfig,
 } from './registry'
@@ -71,6 +72,17 @@ export async function resolveNav(
               : t(`modules.${mod.key}`) || mod.label,
           iconKey: item.iconKey ?? mod.iconKey,
           exact: mod.exact,
+          // Nested sub-menu label (registry-driven; desktop sidebar renders it
+          // collapsible, the top nav as a flyout, flat consumers ignore it).
+          // subgroupHref makes the sub-menu header itself navigate.
+          ...(mod.subgroup
+            ? {
+                subgroup: t(`groups.${mod.subgroup.toLowerCase()}`) || mod.subgroup,
+                ...(NAV_SUBGROUPS[mod.subgroup]
+                  ? { subgroupHref: NAV_SUBGROUPS[mod.subgroup].href }
+                  : {}),
+              }
+            : {}),
         })
       } else {
         items.push({ href: item.href, label: item.label, iconKey: item.iconKey ?? 'link' })

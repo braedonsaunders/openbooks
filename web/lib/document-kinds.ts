@@ -78,6 +78,15 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
   },
+  // Deposit (NetSuite "Make Deposits"): money IN to a chosen bank account,
+  // crediting one or more source accounts (income, undeposited funds, clearing).
+  // The destination bank is stored on doc.custom.controlAccountId and read by
+  // the posting rule's controlOverride; falls back to the org default bank.
+  deposit: {
+    kind: 'deposit', family: 'bank', numberPrefix: 'DEP-', permNamespace: 'gl', i18n: 'banking',
+    partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
+    fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
+  },
   transfer: {
     kind: 'transfer', family: 'transfer', numberPrefix: 'TRF-', permNamespace: 'gl', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
@@ -87,7 +96,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
 
 export const AP_KINDS = ['vendor_bill', 'vendor_credit'] as const
 export const AR_KINDS = ['customer_invoice', 'customer_credit'] as const
-export const BANK_KINDS = ['card_charge', 'card_refund', 'check', 'transfer'] as const
+export const BANK_KINDS = ['card_charge', 'card_refund', 'check', 'deposit', 'transfer'] as const
 
 export function docKindConfig(kind: string): DocKindConfig | undefined {
   return DOC_KINDS[kind]

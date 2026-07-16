@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -8,114 +7,38 @@ import {
   PAYMENT_KIND_SIDE,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
-import { Badge, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { SearchInput } from '../../../components/search-input'
-import { FilterChips } from '../../../components/filter-bar'
-import { Pagination } from '../../../components/pagination'
-import { SortTh } from '../../../components/sortable-th'
-import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
-import { money } from '../../../lib/format'
+import { RecordListView } from '../../../components/record-list-view'
+import { isUuid } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'
 import { PaymentDrawer, type OpenItemClient } from './PaymentDrawer'
 
 /**
- * Server-rendered payment/receipt document list + flyout, shared by
- * /payments (vendor_payment) and /receipts (customer_payment). The page owns
- * the header; this owns filters, table, pagination, and the ?payment= drawer.
+ * Payment/receipt list, shared by /payments (vendor_payment) and /receipts
+ * (customer_payment). The whole list — search, filters, saved views, sortable
+ * typed table, drill-through, pagination — is the universal RecordListView;
+ * this component only resolves the payment-specific ?payment= flyout.
  */
-
-const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
-  posted: 'success',
-  draft: 'secondary',
-  voided: 'outline',
-}
-
-// documents.status enum → common.status.* message keys (fallback: raw value).
-const STATUS_LABEL_KEY: Record<string, string> = {
-  draft: 'draft',
-  pending_approval: 'pendingApproval',
-  approved: 'approved',
-  rejected: 'rejected',
-  posted: 'posted',
-  paid: 'paid',
-  partially_paid: 'partiallyPaid',
-  voided: 'voided',
-  reversed: 'reversed',
-  cancelled: 'cancelled',
-}
-
-const SORT_COLUMNS = {
-  date: sql`d.document_date`,
-  number: sql`d.document_number`,
-  party: sql`p.display_name`,
-  total: sql`d.total`,
-  status: sql`d.status`,
-} as const
-
 export async function PaymentsSection({
   sp,
   basePath,
   kind,
   orgId,
+  userId,
+  canManage,
 }: {
   sp: Record<string, string | string[] | undefined>
   basePath: string
   kind: PaymentKind
   orgId: string
+  userId: string
+  canManage: boolean
 }) {
   const t = await getTranslations('payments')
-  const tCommon = await getTranslations('common')
-  const statusLabel = (status: string) => {
-    const key = STATUS_LABEL_KEY[status]
-    return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
-  }
   const side = PAYMENT_KIND_SIDE[kind]
-  const partyLabel = side === 'ap' ? tCommon('labels.vendor') : tCommon('labels.customer')
   const newLabel = t('list.newLabel', { side })
 
-  const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
-  const params = parseListParams(sp, {
-    sort: 'date',
-    dir: 'desc',
-    perPage: 25,
-    allowedSorts: ['date', 'number', 'party', 'total', 'status'] as const,
-  })
-  const status = pickString(sp.status)
-
-  const where = sql`d.org_id = ${orgId} and d.kind = ${kind}
-    ${status ? sql` and d.status = ${status}` : sql``}
-    ${params.q ? sql` and (d.document_number ilike ${'%' + params.q + '%'} or p.display_name ilike ${'%' + params.q + '%'} or d.reference_number ilike ${'%' + params.q + '%'})` : sql``}`
-
-  const [payments, counts] = await Promise.all([
-    db.execute(sql`
-      select d.id, d.document_number, d.document_date, d.status, d.total, d.reference_number,
-             p.display_name as party, a.number as bank_number, a.name as bank_name
-        from documents d
-        left join parties p on p.id = d.party_id
-        left join accounts a on a.id = (d.custom->>'bankAccountId')::uuid
-       where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`
-      select d.status, count(*) as n from documents d
-       where d.org_id = ${orgId} and d.kind = ${kind} group by d.status
-    `) as any,
-  ])
-  const total = counts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
-  const filteredTotal =
-    status || params.q
-      ? Number(
-          (
-            (await db.execute(sql`
-              select count(*) as n from documents d
-                left join parties p on p.id = d.party_id
-               where ${where}`)) as any
-          ).rows[0].n,
-        )
-      : total
-
   // -- flyout ---------------------------------------------------------------
+  const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
   const loaded = paymentId ? await loadPaymentDocument(paymentId, kind) : null
   const openPayment = loaded && loaded.doc.org_id === orgId ? loaded : null
   let drawer: React.ReactNode = null
@@ -150,83 +73,16 @@ export async function PaymentsSection({
     )
   }
 
-  const statusOptions = counts.rows.map((r: any) => ({
-    value: r.status,
-    label: statusLabel(String(r.status)),
-    count: Number(r.n),
-  }))
-
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput placeholder={t('list.searchPlaceholder', { side })} />
-        <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
-      </div>
-      {total === 0 ? (
-        <div className="mt-4">
-          <EmptyState
-            title={t('list.empty.title', { side })}
-            description={t('list.empty.description', { side })}
-            action={<NewPaymentButton kind={kind} basePath={basePath} label={newLabel} />}
-          />
-        </div>
-      ) : (
-        <div className="mt-3">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortTh basePath={basePath} currentParams={sp} column="number" sort={params.sort} dir={params.dir}>
-                  {t('list.columns.document', { side })}
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={sp} column="party" sort={params.sort} dir={params.dir}>
-                  {partyLabel}
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={sp} column="date" sort={params.sort} dir={params.dir}>
-                  {tCommon('labels.date')}
-                </SortTh>
-                <TableHead>{t('list.columns.bankAccount')}</TableHead>
-                <TableHead>{t('list.columns.ref')}</TableHead>
-                <SortTh basePath={basePath} currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">
-                  {tCommon('labels.total')}
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={sp} column="status" sort={params.sort} dir={params.dir}>
-                  {tCommon('labels.status')}
-                </SortTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payments.rows.map((p: any) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-mono text-[13px] font-semibold">
-                    <Link
-                      href={`${basePath}?payment=${p.id}` as any}
-                      className="text-teal-700 hover:underline dark:text-teal-300"
-                    >
-                      {p.document_number}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{p.party ?? '—'}</TableCell>
-                  <TableCell>{p.document_date}</TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">
-                    {`${p.bank_number ?? ''} ${p.bank_name ?? ''}`.trim() || '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{p.reference_number}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(p.total)}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[p.status] ?? 'secondary'}>
-                      {statusLabel(String(p.status))}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="mt-3">
-            <Pagination basePath={basePath} currentParams={sp} total={filteredTotal} page={params.page} perPage={params.perPage} />
-          </div>
-        </div>
-      )}
-      {drawer}
-    </>
+    <RecordListView
+      recordType={kind}
+      basePath={basePath}
+      orgId={orgId}
+      userId={userId}
+      canManage={canManage}
+      sp={sp}
+      drawer={drawer}
+      emptyAction={<NewPaymentButton kind={kind} basePath={basePath} label={newLabel} />}
+    />
   )
 }

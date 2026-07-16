@@ -67,6 +67,40 @@ export const roleAssignments = pgTable(
 );
 
 /**
+ * Cross-tenant access grants — the "one login, many tenants" model. A member
+ * (identified by their home `users` row = the login identity) is granted access
+ * to another production org, acting there as a specific `users` row in that org.
+ *
+ * A user always has implicit access to their own home org (no row needed), and
+ * to any sandbox of an org they can reach (the acting user is the deterministic
+ * rebase of their production users row). Super admins reach every org without a
+ * row. This table records the EXPLICIT grants managed in the super-admin console.
+ *
+ * Sandboxes are separate tenants (their own org row), so the same login moving
+ * between production and its sandboxes — or between two production orgs — is the
+ * one uniform mechanism: swap the effective org, resolve the acting users row.
+ */
+export const userOrgAccess = pgTable(
+  "user_org_access",
+  {
+    id: id(),
+    /** The login identity being granted access (home users row). */
+    memberUserId: uuid("member_user_id").notNull(),
+    /** The production org granted. */
+    orgId: orgRef(),
+    /** The users row in `orgId` this member acts as when switched in. */
+    actingUserId: uuid("acting_user_id").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("user_org_access_member_org").on(t.memberUserId, t.orgId),
+    index("user_org_access_member").on(t.memberUserId),
+    index("user_org_access_org").on(t.orgId),
+  ],
+);
+
+/**
  * Per-user permission exceptions, layered on top of role-granted permissions.
  * `grant` adds a permission the user's roles don't carry; `deny` removes one
  * they would otherwise have. Resolved in web/lib/authz.ts after the role

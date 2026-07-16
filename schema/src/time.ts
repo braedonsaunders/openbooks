@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -41,6 +42,8 @@ export const timeEntries = pgTable(
     costJournalEntryId: uuid("cost_journal_entry_id"),
     invoicedByLineId: uuid("invoiced_by_line_id"),
     payrollBatchRef: text("payroll_batch_ref"),
+    /** Keeps the NetSuite timebill nsId + source flags for the import bridge. */
+    custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
   (t) => [

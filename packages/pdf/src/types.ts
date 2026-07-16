@@ -1,6 +1,6 @@
 // The vendor-neutral document model the PDF engine renders. Kept dependency-
 // free and decoupled from @openbooks/reports so this package stays a pure
-// renderer: callers (the web report adapters, the saved-search export path)
+// renderer: callers (the web report adapters, the view export path)
 // shape their own result types into this generic input.
 //
 // The visual vocabulary is ported from the beaconhs report document renderer

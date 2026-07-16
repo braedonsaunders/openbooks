@@ -1,31 +1,54 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
  * SuiteQL REST client — Token-Based Auth (OAuth 1.0a HMAC-SHA256).
- * TypeScript port of extraction/suiteql.py; creds from gitignored
- * .env.netsuite at the repo root.
+ * Credentials are passed in (from a tenant's `connections` row), never read
+ * from a global file at call time. `netsuiteCredsFromEnvFile()` bootstraps the
+ * original dev connection from a gitignored .env.netsuite.
  */
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-function loadNsEnv(): Record<string, string> {
+export interface NetSuiteCreds {
+  /** Account id, e.g. "8638714" (used in the OAuth realm). */
+  account: string;
+  /** REST host, e.g. https://<acct>.suitetalk.api.netsuite.com */
+  host: string;
+  consumerKey: string;
+  consumerSecret: string;
+  tokenKey: string;
+  tokenSecret: string;
+}
+
+/** Read the original dev connection's creds from .env.netsuite, or null. */
+export function netsuiteCredsFromEnvFile(): NetSuiteCreds | null {
+  const path = join(repoRoot, ".env.netsuite");
+  if (!existsSync(path)) return null;
   const env: Record<string, string> = {};
-  for (const line of readFileSync(join(repoRoot, ".env.netsuite"), "utf8").split("\n")) {
+  for (const line of readFileSync(path, "utf8").split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
     if (m) env[m[1]] = m[2];
   }
-  return env;
+  if (!env.NETSUITE_CONSUMER_KEY || !env.NETSUITE_TOKEN_KEY) return null;
+  return {
+    account: env.NETSUITE_ACCOUNT,
+    host: env.NETSUITE_HOST,
+    consumerKey: env.NETSUITE_CONSUMER_KEY,
+    consumerSecret: env.NETSUITE_CONSUMER_SECRET,
+    tokenKey: env.NETSUITE_TOKEN_KEY,
+    tokenSecret: env.NETSUITE_TOKEN_SECRET,
+  };
 }
 
 const pct = (s: string | number) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
 
-function oauthHeader(env: Record<string, string>, method: string, url: string, query: Record<string, string | number>): string {
+function oauthHeader(creds: NetSuiteCreds, method: string, url: string, query: Record<string, string | number>): string {
   const oauth: Record<string, string> = {
-    oauth_consumer_key: env.NETSUITE_CONSUMER_KEY,
-    oauth_token: env.NETSUITE_TOKEN_KEY,
+    oauth_consumer_key: creds.consumerKey,
+    oauth_token: creds.tokenKey,
     oauth_signature_method: "HMAC-SHA256",
     oauth_timestamp: String(Math.floor(Date.now() / 1000)),
     oauth_nonce: randomBytes(16).toString("hex"),
@@ -38,11 +61,11 @@ function oauthHeader(env: Record<string, string>, method: string, url: string, q
     .map(([k, v]) => `${k}=${v}`)
     .join("&");
   const base = [method.toUpperCase(), pct(url), pct(paramStr)].join("&");
-  const key = `${pct(env.NETSUITE_CONSUMER_SECRET)}&${pct(env.NETSUITE_TOKEN_SECRET)}`;
+  const key = `${pct(creds.consumerSecret)}&${pct(creds.tokenSecret)}`;
   const sig = createHmac("sha256", key).update(base).digest("base64");
   oauth.oauth_signature = sig;
   return (
-    `OAuth realm="${env.NETSUITE_ACCOUNT}", ` +
+    `OAuth realm="${creds.account}", ` +
     Object.entries(oauth)
       .sort()
       .map(([k, v]) => `${k}="${pct(v)}"`)
@@ -50,9 +73,12 @@ function oauthHeader(env: Record<string, string>, method: string, url: string, q
   );
 }
 
-export async function suiteql<T = Record<string, unknown>>(query: string, limit = 1000): Promise<T[]> {
-  const env = loadNsEnv();
-  const url = `${env.NETSUITE_HOST}/services/rest/query/v1/suiteql`;
+export async function suiteql<T = Record<string, unknown>>(
+  query: string,
+  creds: NetSuiteCreds,
+  limit = 1000,
+): Promise<T[]> {
+  const url = `${creds.host}/services/rest/query/v1/suiteql`;
   const rows: T[] = [];
   let offset = 0;
   for (;;) {
@@ -60,7 +86,7 @@ export async function suiteql<T = Record<string, unknown>>(query: string, limit 
     const res = await fetch(`${url}?limit=${limit}&offset=${offset}`, {
       method: "POST",
       headers: {
-        Authorization: oauthHeader(env, "POST", url, qp),
+        Authorization: oauthHeader(creds, "POST", url, qp),
         "Content-Type": "application/json",
         Prefer: "transient",
       },

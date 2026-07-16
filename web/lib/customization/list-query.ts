@@ -31,31 +31,55 @@ export interface ListColDesc {
   defType?: CustomFieldDef["fieldType"]
 }
 
-/** Sort fragments keyed by the column sortKey (validated by parseListParams). */
-export const VENDOR_BILL_SORTS: Record<string, SQL> = {
+/**
+ * A document's gross amount. documents.total is the source of truth — set by
+ * computeBillTotals natively and denormalized from the posted entry on import
+ * (engine setDocumentTotalsFromEntry + the backfill). The list reads it directly.
+ */
+export const DOC_AMOUNT_EXPR = sql`d.total`
+
+/** Sort fragments shared by every documents-backed list, keyed by sortKey. */
+export const DOCUMENT_SORTS: Record<string, SQL> = {
   number: sql`d.document_number`,
+  party: sql`p.display_name`,
   vendor: sql`p.display_name`,
+  customer: sql`p.display_name`,
   date: sql`d.document_date`,
-  total: sql`d.total`,
+  total: DOC_AMOUNT_EXPR,
+  balance: sql`d.open_balance`,
   status: sql`d.status`,
 }
 
-const BUILT_IN_EXPR: Record<string, SQL> = {
+/** @deprecated use DOCUMENT_SORTS — kept for the AP page's existing import. */
+export const VENDOR_BILL_SORTS = DOCUMENT_SORTS
+
+/** Built-in column key → select expression, shared by documents-backed lists. */
+export const DOCUMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   document_number: sql`d.document_number`,
   party_name: sql`p.display_name`,
   document_date: sql`d.document_date`,
   reference_number: sql`d.reference_number`,
-  total: sql`d.total`,
+  total: DOC_AMOUNT_EXPR,
+  open_balance: sql`d.open_balance`,
   status: sql`d.status`,
 }
+
+const BUILT_IN_EXPR = DOCUMENT_BUILT_IN_EXPR
 
 const SHOW_IN_LIST_BY_KEY = (defs: CustomFieldDef[]) =>
   new Map(defs.filter((d) => d.config.showInList).map((d) => [d.key, d]))
 
-/** Build the ordered, visible column descriptors for the AP table. */
-export function vendorBillColumnDescriptors(
+/**
+ * Build the ordered, visible column descriptors for a record list table from a
+ * resolved view. Generic over record type: `recordType` picks the registry
+ * column metadata, `builtInExpr` supplies the whitelisted SQL select expression
+ * for each built-in key. Custom (`cf_*`) columns bind against `d.custom`.
+ */
+export function columnDescriptors(
+  recordType: string,
   view: ListViewConfig,
   showInListDefs: CustomFieldDef[],
+  builtInExpr: Record<string, SQL>,
   labels: Record<string, string>,
 ): ListColDesc[] {
   const cfByDefKey = SHOW_IN_LIST_BY_KEY(showInListDefs)
@@ -81,8 +105,8 @@ export function vendorBillColumnDescriptors(
       })
       continue
     }
-    const meta = listColumnMeta("vendor_bill", c.key)
-    const expr = BUILT_IN_EXPR[c.key]
+    const meta = listColumnMeta(recordType, c.key)
+    const expr = builtInExpr[c.key]
     if (!meta || !expr) continue
     out.push({
       key: c.key,
@@ -94,6 +118,81 @@ export function vendorBillColumnDescriptors(
     })
   }
   return out
+}
+
+/** Build the ordered, visible column descriptors for the AP table. */
+export function vendorBillColumnDescriptors(
+  view: ListViewConfig,
+  showInListDefs: CustomFieldDef[],
+  labels: Record<string, string>,
+): ListColDesc[] {
+  return columnDescriptors("vendor_bill", view, showInListDefs, BUILT_IN_EXPR, labels)
+}
+
+/* ------------------------------------------------------------------ */
+/* Payments (vendor_payment / customer_payment)                        */
+/* ------------------------------------------------------------------ */
+
+/** Payments share the universal journal-fallback amount. */
+const PAYMENT_AMOUNT_EXPR = DOC_AMOUNT_EXPR
+
+/**
+ * The funding account (bank or card). Prefer the account named in the payment's
+ * custom.bankAccountId (native payments); otherwise derive it from the posted
+ * entry as the non-control line (everything but the AP/AR control account), so
+ * card-funded and imported payments still show where the money moved.
+ */
+const PAYMENT_BANK_EXPR = sql`coalesce(
+  nullif(trim(concat_ws(' ', ca.number, ca.name)), ''),
+  (select trim(concat_ws(' ', acc.number, acc.name))
+     from journal_lines jl
+     join accounts acc on acc.id = jl.account_id
+    where jl.entry_id = d.posted_entry_id
+      and acc.type not in ('liability_payable', 'asset_receivable')
+    order by abs(jl.amount) desc
+    limit 1)
+)`
+
+/** The funding account's id (for drill-through), resolved the same way as
+ *  PAYMENT_BANK_EXPR: custom.bankAccountId, else the entry's non-control line. */
+export const PAYMENT_BANK_ID_EXPR = sql`coalesce(
+  ca.id,
+  (select acc.id
+     from journal_lines jl
+     join accounts acc on acc.id = jl.account_id
+    where jl.entry_id = d.posted_entry_id
+      and acc.type not in ('liability_payable', 'asset_receivable')
+    order by abs(jl.amount) desc
+    limit 1)
+)`
+
+export const PAYMENT_BUILT_IN_EXPR: Record<string, SQL> = {
+  document_number: sql`d.document_number`,
+  party_name: sql`p.display_name`,
+  document_date: sql`d.document_date`,
+  bank_account: PAYMENT_BANK_EXPR,
+  reference_number: sql`d.reference_number`,
+  total: PAYMENT_AMOUNT_EXPR,
+  status: sql`d.status`,
+}
+
+/** Sort fragments for the payments list (keyed by column sortKey). */
+export const PAYMENT_SORTS: Record<string, SQL> = {
+  number: sql`d.document_number`,
+  party: sql`p.display_name`,
+  date: sql`d.document_date`,
+  total: PAYMENT_AMOUNT_EXPR,
+  status: sql`d.status`,
+}
+
+/** Build the ordered, visible column descriptors for the payments table. */
+export function paymentColumnDescriptors(
+  recordType: "vendor_payment" | "customer_payment",
+  view: ListViewConfig,
+  showInListDefs: CustomFieldDef[],
+  labels: Record<string, string>,
+): ListColDesc[] {
+  return columnDescriptors(recordType, view, showInListDefs, PAYMENT_BUILT_IN_EXPR, labels)
 }
 
 /** Allowed ad-hoc URL filters (the quick toolbar filters). */
@@ -117,9 +216,9 @@ function filterPredicate(clause: FilterClause): SQL | null {
       if (operator === "eq") return sql`d.status = ${single(value)}`
       if (operator === "ne") return sql`d.status <> ${single(value)}`
       if (operator === "in")
-        return sql`d.status = any(${Array.isArray(value) ? value : [String(value ?? "")]})`
+        return sql`d.status = any(${sql.param(Array.isArray(value) ? value : [String(value ?? "")])})`
       if (operator === "not_in")
-        return sql`d.status <> all(${Array.isArray(value) ? value : [String(value ?? "")]})`
+        return sql`d.status <> all(${sql.param(Array.isArray(value) ? value : [String(value ?? "")])})`
       return null
     case "party_id":
       if (operator === "eq") return sql`d.party_id = ${single(value)}`
@@ -142,16 +241,21 @@ function filterPredicate(clause: FilterClause): SQL | null {
   }
 }
 
-/** Combine the saved view filters + ad-hoc URL filters into one WHERE fragment.
- *  `orgId` is mandatory — every documents query must be tenant-scoped. */
-export function vendorBillWhere(
+/**
+ * The canonical WHERE fragment for any `documents`-backed list: tenant + kind
+ * scope, the saved view's structured filters, and the ad-hoc toolbar filters.
+ * Every documents list (bills, invoices, orders, payments…) shares this — pass
+ * the record type's `kinds`. `orgId` is mandatory: every query is tenant-scoped.
+ */
+export function documentWhere(
+  kinds: readonly string[],
   view: ListViewConfig,
   adhoc: AdhocFilters,
-  kinds: readonly string[] = ["vendor_bill"],
-  orgId?: string,
+  orgId: string,
 ): SQL {
-  const parts: SQL[] = [sql`d.kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})`]
-  if (orgId) parts.push(sql`and d.org_id = ${orgId}`)
+  const parts: SQL[] = [
+    sql`d.org_id = ${orgId} and d.kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})`,
+  ]
   for (const f of view.filters) {
     const p = filterPredicate(f)
     if (p) parts.push(sql`and ${p}`)
@@ -166,4 +270,24 @@ export function vendorBillWhere(
       sql`and (d.document_number ilike ${"%" + adhoc.q + "%"} or p.display_name ilike ${"%" + adhoc.q + "%"} or d.reference_number ilike ${"%" + adhoc.q + "%"})`,
     )
   return sql.join(parts, sql` `)
+}
+
+/** Back-compat wrapper for the AP list. */
+export function vendorBillWhere(
+  view: ListViewConfig,
+  adhoc: AdhocFilters,
+  kinds: readonly string[] = ["vendor_bill"],
+  orgId?: string,
+): SQL {
+  return documentWhere(kinds, view, adhoc, orgId ?? "")
+}
+
+/** Back-compat wrapper for the payments/receipts list (single kind). */
+export function paymentWhere(
+  view: ListViewConfig,
+  adhoc: AdhocFilters,
+  kind: string,
+  orgId: string,
+): SQL {
+  return documentWhere([kind], view, adhoc, orgId)
 }

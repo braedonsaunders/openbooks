@@ -13,6 +13,7 @@
     "newLabel": "{side, select, ap {Nuevo pago} other {Nuevo pago de cliente}}",
     "columns": {
       "document": "{side, select, ap {Pago} other {Pago de cliente}}",
+      "payment": "Pago",
       "bankAccount": "Cuenta bancaria",
       "ref": "Ref."
     },
@@ -33,6 +34,17 @@
     "selectBankAccountPlaceholder": "Seleccionar cuenta bancaria…",
     "referencePlaceholder": "Ref. de cheque / EFT…",
     "openItems": "{side, select, ap {Facturas de compra pendientes} other {Facturas pendientes}}",
+    "amountReceived": "Importe recibido",
+    "autoApply": "Aplicar auto",
+    "autoApplyFailed": "No se pudo sugerir una aplicación",
+    "autoApplyNone": "Ningún elemento pendiente coincide con este importe",
+    "autoApplyDone": "Aplicado a {count, plural, one {# elemento} other {# elementos}} ({strategy})",
+    "autoApplyStrategy": {
+      "reference": "por referencia",
+      "exact": "coincidencia exacta",
+      "fifo": "más antiguos primero",
+      "none": "ninguna"
+    },
     "selectPartyHint": "{side, select, ap {Seleccione un proveedor para listar sus partidas pendientes.} other {Seleccione un cliente para listar sus partidas pendientes.}}",
     "loadingOpenItems": "Cargando partidas pendientes…",
     "noOpenItems": "{side, select, ap {No hay facturas de compra pendientes para este proveedor.} other {No hay facturas pendientes para este cliente.}}",
@@ -146,7 +158,13 @@
       "postedWithFailures": "{count} contabilizados; fallaron: {failures}",
       "posted": "{count, plural, one {# pago contabilizado y aplicado} other {# pagos contabilizados y aplicados}}",
       "cancelFailed": "No se pudo cancelar el lote",
-      "cancelled": "Lote cancelado"
-    }
+      "cancelled": "Lote cancelado",
+      "deliverFailed": "No se pudo entregar el archivo",
+      "delivered": "Entregado a {path}"
+    },
+    "deliverSftp": "Entregar por SFTP",
+    "deliverHint": "Escribe el archivo bancario de este lote en la carpeta de salida de un servidor SFTP para que el banco lo recoja.",
+    "sftpServer": "Servidor SFTP",
+    "noSftpServers": "No hay servidores SFTP configurados. Agrega uno en Configuración → Servidores SFTP."
   }
 }

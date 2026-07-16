@@ -1,29 +1,21 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { ListPageLayout } from '../../../components/page-layout'
+import { ChevronRight, Home } from 'lucide-react'
+import { EmptyState, PageHeader } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
-import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
-import { getFile, getFolderTree, listFiles } from '../../../lib/file-cabinet'
+import { getFile, getFolderTree, listFiles, type FolderNode } from '../../../lib/file-cabinet'
 import { FolderTree } from './FolderTree'
 import { UploadButton } from './UploadButton'
 import { NewFolderButton } from './NewFolderButton'
 import { FileDrawer } from './FileDrawer'
 import { FolderDrawer } from './FolderDrawer'
+import { FileList } from './FileList'
 
 export const dynamic = 'force-dynamic'
-
-const SORT_COLUMNS = {
-  name: sql`fi.name`,
-  size: sql`fi.size_bytes`,
-  created: sql`fi.created_at`,
-} as const
 
 export async function generateMetadata() {
   const t = await getTranslations('documents')
@@ -34,6 +26,35 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** Ancestor chain (root → … → active) for the breadcrumb. */
+function folderPath(tree: FolderNode[], folderId: string | undefined): FolderNode[] {
+  if (!folderId) return []
+  const byId = new Map(tree.map((f) => [f.id, f]))
+  const path: FolderNode[] = []
+  let cur = byId.get(folderId)
+  let guard = 0
+  while (cur && guard++ < 64) {
+    path.unshift(cur)
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined
+  }
+  return path
+}
+
+/** Build a /documents href that navigates to a folder, preserving sort/search. */
+function folderHref(
+  sp: Record<string, string | string[] | undefined>,
+  folderId: string | null,
+): string {
+  const params = new URLSearchParams()
+  for (const key of ['q', 'sort', 'dir', 'perPage'] as const) {
+    const v = sp[key]
+    if (typeof v === 'string' && v) params.set(key, v)
+  }
+  if (folderId) params.set('fid', folderId)
+  const qs = params.toString()
+  return qs ? `/documents?${qs}` : '/documents'
 }
 
 export default async function Documents({
@@ -47,12 +68,12 @@ export default async function Documents({
   // Private-folder visibility: only global admins bypass is_private.
   const viewer = { userId: authz.user.id, isAdmin: can(authz, '*') }
   const t = await getTranslations('documents')
-  const tc = await getTranslations('common')
 
   const sp = await searchParams
   const fileId = typeof sp.file === 'string' ? sp.file : undefined
   const folderParam = typeof sp.folder === 'string' ? sp.folder : undefined
   const folderId = pickString(sp.fid)
+  const activeFolderId = folderId && isUuid(folderId) ? folderId : undefined
   const params = parseListParams(sp, {
     sort: 'name',
     dir: 'asc',
@@ -63,7 +84,7 @@ export default async function Documents({
   const [tree, { files, total }] = await Promise.all([
     getFolderTree(orgId, viewer),
     listFiles(orgId, viewer, {
-      folderId: folderId && isUuid(folderId) ? folderId : undefined,
+      folderId: activeFolderId,
       q: params.q,
       sort: params.sort,
       dir: params.dir,
@@ -79,115 +100,121 @@ export default async function Documents({
       : null,
   ])
 
-  const activeFolder = folderId && isUuid(folderId) ? tree.find((f) => f.id === folderId) : null
+  // Sub-folders of the current location, shown as rows above the files — a real
+  // file browser. Hidden while searching (search spans the whole cabinet).
+  const childFolders = params.q
+    ? []
+    : tree
+        .filter((f) => f.parentId === (activeFolderId ?? null))
+        .sort((a, b) => a.name.localeCompare(b.name))
+
+  const crumbs = folderPath(tree, activeFolderId)
+  const isEmpty = files.length === 0 && childFolders.length === 0
+  const newFolderParent = activeFolderId
+
+  const actions = canManage ? (
+    <div className="flex items-center gap-2">
+      <NewFolderButton parentId={newFolderParent} />
+      <UploadButton folderId={newFolderParent} />
+    </div>
+  ) : undefined
 
   return (
-    <ListPageLayout
-      className="flex h-full min-h-0 gap-0 p-0 sm:p-0"
-      header={
-        <>
-          <PageHeader
-            title={t('list.title')}
-            description={t('list.description')}
-            actions={
-              canManage ? (
-                <div className="flex items-center gap-2">
-                  <NewFolderButton parentId={folderId && isUuid(folderId) ? folderId : undefined} />
-                  <UploadButton folderId={folderId && isUuid(folderId) ? folderId : undefined} />
-                </div>
-              ) : undefined
-            }
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder={t('list.searchPlaceholder')} />
-          </div>
-        </>
-      }
-    >
-      <div className="flex h-full min-h-0">
-        <FolderTree folders={tree} activeFolderId={folderId} />
-        <div className="app-scroll min-w-0 flex-1 overflow-auto p-3 sm:p-6">
-          {files.length === 0 ? (
-            <EmptyState
-              title={t('list.empty.title')}
-              description={t('list.empty.description')}
-              action={
-                canManage ? (
-                  <div className="flex items-center gap-2">
-                    <NewFolderButton parentId={folderId && isUuid(folderId) ? folderId : undefined} />
-                    <UploadButton folderId={folderId && isUuid(folderId) ? folderId : undefined} />
-                  </div>
-                ) : undefined
-              }
-            />
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <SortTh basePath="/documents" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>
-                      {t('columns.name')}
-                    </SortTh>
-                    <TableHead>{t('columns.type')}</TableHead>
-                    <SortTh basePath="/documents" currentParams={sp} column="size" sort={params.sort} dir={params.dir} align="right">
-                      {t('columns.size')}
-                    </SortTh>
-                    <SortTh basePath="/documents" currentParams={sp} column="created" sort={params.sort} dir={params.dir}>
-                      {t('columns.modified')}
-                    </SortTh>
-                    <TableHead>{t('columns.createdBy')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {files.map((f) => (
-                    <TableRow key={f.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/documents?file=${f.id}${folderId ? `&fid=${folderId}` : ''}`}
-                          className="text-teal-700 hover:underline dark:text-teal-300"
-                        >
-                          {f.name}
-                        </Link>
-                        {f.versionCount > 1 ? (
-                          <span className="ml-2 text-xs text-slate-400">v{f.versionCount}</span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{t(`fileTypes.${f.fileType}`)}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">
-                        {formatSize(f.sizeBytes)}
-                      </TableCell>
-                      <TableCell className="text-slate-500 dark:text-slate-400">
-                        {dateTime(f.updatedAt)}
-                      </TableCell>
-                      <TableCell className="text-slate-500 dark:text-slate-400">
-                        {f.folderName ?? '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="mt-3">
-                <Pagination
-                  basePath="/documents"
-                  currentParams={sp}
-                  total={total}
-                  page={params.page}
-                  perPage={params.perPage}
-                />
-              </div>
-            </>
-          )}
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Header — full width, not centered */}
+      <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
+        <PageHeader title={t('list.title')} description={t('list.description')} actions={actions} />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <SearchInput placeholder={t('list.searchPlaceholder')} />
         </div>
       </div>
+
+      {/* Body — folder tree + file listing fill the viewport */}
+      <div className="flex min-h-0 flex-1">
+        <FolderTree folders={tree} activeFolderId={activeFolderId} />
+        <div className="app-scroll flex min-w-0 flex-1 flex-col overflow-auto">
+          {/* Breadcrumb path */}
+          <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-200 bg-white/95 px-3 py-2 text-sm backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-900/95">
+            <Link
+              href={folderHref(sp, null)}
+              className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            >
+              <Home className="h-3.5 w-3.5" />
+              {t('list.allFiles')}
+            </Link>
+            {crumbs.map((c, i) => (
+              <span key={c.id} className="flex items-center gap-1">
+                <ChevronRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
+                {i === crumbs.length - 1 ? (
+                  <span className="px-1.5 py-0.5 font-medium text-slate-800 dark:text-slate-100">
+                    {c.name}
+                  </span>
+                ) : (
+                  <Link
+                    href={folderHref(sp, c.id)}
+                    className="rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  >
+                    {c.name}
+                  </Link>
+                )}
+              </span>
+            ))}
+          </div>
+
+          <div className="min-w-0 flex-1 p-3 sm:p-4">
+            {isEmpty ? (
+              <EmptyState
+                title={t('list.empty.title')}
+                description={t('list.empty.description')}
+                action={actions}
+              />
+            ) : (
+              <>
+                <FileList
+                  folders={childFolders.map((fo) => ({
+                    id: fo.id,
+                    name: fo.name,
+                    fileCount: fo.fileCount,
+                    isSystem: fo.isSystem,
+                  }))}
+                  files={files.map((f) => ({
+                    id: f.id,
+                    name: f.name,
+                    fileType: f.fileType,
+                    sizeLabel: formatSize(f.sizeBytes),
+                    modifiedLabel: dateTime(f.updatedAt),
+                    versionCount: f.versionCount,
+                    folderName: f.folderName,
+                  }))}
+                  activeFolderId={activeFolderId}
+                  showLocation={!activeFolderId}
+                  canManage={canManage}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                />
+                <div className="mt-3">
+                  <Pagination
+                    basePath="/documents"
+                    currentParams={sp}
+                    total={total}
+                    page={params.page}
+                    perPage={params.perPage}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
       {openFile ? <FileDrawer file={openFile as any} canManage={canManage} /> : null}
       {folderParam === 'new' && canManage ? (
-        <FolderDrawer mode="create" folders={tree} parentId={folderId && isUuid(folderId) ? folderId : undefined} />
+        <FolderDrawer mode="create" folders={tree} parentId={newFolderParent} />
       ) : null}
       {openFolder ? (
         <FolderDrawer mode="edit" folder={openFolder as any} folders={tree} canManage={canManage} />
       ) : null}
-    </ListPageLayout>
+    </div>
   )
 }

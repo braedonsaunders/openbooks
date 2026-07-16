@@ -35,6 +35,14 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
    comes from the database and the source-adapter registry. No
    account-shaped shortcuts: the reference company's usage profile
    prioritizes UX/migration order, never schema or feature scope.
+8a. ALL tenant/connector/integration configuration is PER-TENANT and
+   UI-configurable ONLY — stored on the org's row (e.g. `connections`),
+   secrets sealed via `engine/src/secrets.ts`. NEVER put credentials, API
+   keys, client ids/secrets, tokens, hosts, or realm ids in `.env`/config
+   files or any global. Each tenant enters and manages their own in the
+   platform page. (Env is only for infra: DB URL, Redis, data key, session
+   secret.) The `.env.netsuite` file is a LEGACY dev bootstrap being retired,
+   not a pattern to copy.
 9. Validation gates before any commit: `npx tsc -p web --noEmit` (web has its
    own TypeScript 5.9 — the root has TS7, use `web/node_modules/.bin/tsc`),
    engine typecheck (`npx tsc -p engine --noEmit`), and a clean

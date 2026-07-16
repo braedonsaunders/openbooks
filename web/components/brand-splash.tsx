@@ -70,7 +70,18 @@ export function SplashScreen() {
     }
 
     listeners.add(sync)
-    sync()
+    // Opened from within the app (in-app link in a new tab)? Skip the brand
+    // intro entirely on this load — go straight to gone before paint reveals
+    // anything — but clear the flag so later route fallbacks can still show the
+    // splash normally. A route fallback already holding it open wins.
+    const html = document.documentElement
+    const internal = html.classList.contains('nav-internal')
+    html.classList.remove('nav-internal')
+    if (internal && holds === 0) {
+      apply('gone')
+    } else {
+      sync()
+    }
     return () => {
       listeners.delete(sync)
       clearTimeout(fadeT)
@@ -82,6 +93,7 @@ export function SplashScreen() {
   return (
     <div
       aria-hidden
+      data-splash-root
       className={cn(
         'fixed inset-0 z-[100] transition-opacity ease-out',
         phase === 'visible' ? 'opacity-100' : 'pointer-events-none opacity-0',

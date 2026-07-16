@@ -21,7 +21,7 @@
     "party": { "label": "Tiers", "description": "Choisir un fournisseur, un client ou un employé" }
   },
   "types": {
-    "title": "Types d’enregistrement",
+    "title": "Enregistrements personnalisés",
     "description": "Concevez vos propres types d’enregistrement — chaque type publié devient un module complet avec sa propre liste, sa numérotation et son éditeur en volet.",
     "searchPlaceholder": "Rechercher des types d’enregistrement…",
     "newButton": "Nouveau type d’enregistrement",

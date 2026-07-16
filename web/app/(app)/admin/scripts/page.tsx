@@ -10,6 +10,7 @@ import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
+import { BUILT_IN_SCRIPT_KINDS, customRecordTypeKey, isCustomRecordKind } from '../../../../lib/script-kinds'
 import { NewScriptButton, ScriptDrawer } from './ScriptDrawer'
 
 export const dynamic = 'force-dynamic'
@@ -21,33 +22,29 @@ const TRIGGER_KEYS: Record<string, string> = {
   after_post: 'afterPost',
   before_void: 'beforeVoid',
   scheduled: 'scheduled',
+  endpoint: 'endpoint',
+  bulk: 'bulk',
+  client: 'client',
 }
-const KIND_KEYS: Record<string, string> = {
-  vendor_bill: 'vendorBill',
-  customer_invoice: 'customerInvoice',
-  vendor_payment: 'vendorPayment',
-  customer_payment: 'customerPayment',
-  expense_report: 'expenseReport',
-  journal: 'journal',
-}
-
 export default async function Scripts({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  await requirePermission('scripts.manage')
+  const authz = await requirePermission('scripts.manage')
+  const orgId = authz.user.orgId
   const t = await getTranslations('admin.scripts')
+  const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 50 })
   const trigger = pickString(sp.trigger)
   const scriptId = pickString(sp.script)
 
-  const where = sql`true
+  const where = sql`org_id = ${orgId}
     ${trigger ? sql` and trigger_point = ${trigger}` : sql``}
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}`
 
-  const [scripts, triggers, totalRow, open, runs] = await Promise.all([
+  const [scripts, triggers, totalRow, open, runs, customTypes] = await Promise.all([
     db.execute(sql`
       select s.*, (select count(*) from script_runs r where r.script_id = s.id) as run_count,
              (select max(r.at) from script_runs r where r.script_id = s.id) as last_run
@@ -55,27 +52,40 @@ export default async function Scripts({
        order by s.trigger_point, s.sort_order, s.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
-    db.execute(sql`select trigger_point, count(*) as n from user_scripts group by 1`) as any,
+    db.execute(sql`select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`) as any,
     db.execute(sql`select count(*) as n from user_scripts where ${where}`) as any,
     scriptId && scriptId !== 'new'
-      ? (db.execute(sql`select * from user_scripts where id = ${scriptId}`) as any)
+      ? (db.execute(sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`) as any)
       : null,
     scriptId && scriptId !== 'new'
       ? (db.execute(sql`
           select status, error_message, logs, duration_ms, at, target_kind
-            from script_runs where script_id = ${scriptId} order by at desc limit 20`) as any)
+            from script_runs where script_id = ${scriptId} and org_id = ${orgId} order by at desc limit 20`) as any)
       : null,
+    db.execute(sql`
+      select key, name from custom_record_types
+       where org_id = ${orgId} and status = 'published' order by name`) as any,
   ])
+
+  const customTypeName = new Map<string, string>(
+    customTypes.rows.map((r: any) => [String(r.key), String(r.name)]),
+  )
+  const builtInKindKey = new Map(BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]))
 
   const triggerLabel = (v: string) =>
     TRIGGER_KEYS[v] ? t(`triggers.${TRIGGER_KEYS[v]}`) : v.replace('_', ' ')
-  const kindLabel = (v: string) => (KIND_KEYS[v] ? t(`kinds.${KIND_KEYS[v]}`) : v)
+  const kindLabel = (v: string) => {
+    if (isCustomRecordKind(v)) return customTypeName.get(customRecordTypeKey(v)) ?? customRecordTypeKey(v)
+    const labelKey = builtInKindKey.get(v)
+    return labelKey ? t(labelKey) : v
+  }
 
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('title')}
             description={t('description')}
             actions={<NewScriptButton />}
@@ -140,7 +150,13 @@ export default async function Scripts({
         <Pagination basePath="/admin/scripts" currentParams={sp} total={Number(totalRow.rows[0].n)} page={params.page} perPage={params.perPage} />
       </div>
 
-      {scriptId ? <ScriptDrawer script={open?.rows[0] ?? null} runs={runs?.rows ?? []} /> : null}
+      {scriptId ? (
+        <ScriptDrawer
+          script={open?.rows[0] ?? null}
+          runs={runs?.rows ?? []}
+          customTypes={customTypes.rows.map((r: any) => ({ key: String(r.key), name: String(r.name) }))}
+        />
+      ) : null}
     </ListPageLayout>
   )
 }

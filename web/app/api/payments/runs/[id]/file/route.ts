@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { loadCpa005RunFile } from '@openbooks/engine/src/payments.ts'
+import { loadRunFile } from '@openbooks/engine/src/payments.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { paymentErrorResponse } from '../../../lib'
@@ -20,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   try {
-    const file = await loadCpa005RunFile(id, gate.user.orgId)
+    const file = await loadRunFile(id, gate.user.orgId, new Date())
     await db.execute(sql`
       update payment_runs
          set status = case when status = 'draft' then 'exported' else status end,
@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     `)
     return new NextResponse(file.content, {
       headers: {
-        'Content-Type': 'text/plain; charset=us-ascii',
+        'Content-Type': file.contentType,
         'Content-Disposition': `attachment; filename="${file.filename}"`,
         'Cache-Control': 'no-store',
       },

@@ -34,6 +34,7 @@ export default async function Audit({
 }) {
   await requirePermission('admin.audit.read')
   const t = await getTranslations('admin.audit')
+  const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'at', allowedSorts: ['at'] as const, perPage: 50 })
   const action = pickString(sp.action)
@@ -62,6 +63,7 @@ export default async function Audit({
       header={
         <>
           <PageHeader
+            back={{ href: '/admin', label: tHub('title') }}
             title={t('title')}
             description={t('description')}
           />

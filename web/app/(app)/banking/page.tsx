@@ -1,361 +1,223 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { ListPageLayout } from '../../../components/page-layout'
-import { SearchInput } from '../../../components/search-input'
-import { FilterChips } from '../../../components/filter-bar'
-import { Pagination } from '../../../components/pagination'
-import { SortTh } from '../../../components/sortable-th'
-import { requirePermission, can } from '../../../lib/authz'
-import { parseListParams, parsePrefixedListParams, pickString } from '../../../lib/list-params'
-import { money } from '../../../lib/format'
 import {
-  BANK_KINDS,
-  DOC_KINDS,
-  accountOptions,
-  bankAccountOptions,
-  cardOptions,
-  dimensionOptions,
-  itemOptions,
-  loadDocument,
-  taxCodeOptions,
-} from '../../../lib/documents'
-import { loadFieldDefs } from '../../../lib/custom-fields'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
-import { DocumentDrawer } from '../../../components/document-drawer'
-import { DocumentRowActions } from '../../../components/document-row-actions'
-import { NewDocumentButton } from '../../../components/new-document-button'
+  ArrowUpRight,
+  Database,
+  ListChecks,
+  NotebookPen,
+  Workflow,
+  CheckCircle2,
+} from 'lucide-react'
+import { db } from '@openbooks/engine/src/db.ts'
+import { Badge, PageHeader, cn } from '@openbooks/ui'
+import { PageContainer } from '../../../components/page-layout'
+import { requirePermission, can } from '../../../lib/authz'
+import { money } from '../../../lib/format'
+import { BANK_KINDS } from '../../../lib/documents'
 import { DocTypeBadge } from '../../../components/doc-type-badge'
 
 export const dynamic = 'force-dynamic'
 
-const SORT_COLUMNS = {
-  number: sql`a.number`,
-  name: sql`a.name`,
-  balance: sql`coalesce(bal.balance, 0)`,
-  reconciled: sql`lastrec.through_date`,
-  unmatched: sql`coalesce(unm.n, 0)`,
-} as const
-
-const TX_SORTS = {
-  date: sql`d.document_date`,
-  number: sql`d.document_number`,
-  total: sql`d.total`,
-  status: sql`d.status`,
-} as const
-
-const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
-  posted: 'success',
-  approved: 'success',
-  pending_approval: 'warning',
-  draft: 'secondary',
-  voided: 'outline',
+export async function generateMetadata() {
+  const t = await getTranslations('banking')
+  return { title: t('overview.title') }
 }
 
-const TYPE_KEYS = ['asset_bank', 'liability_card']
-
-export default async function Banking({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
+export default async function BankingOverview() {
   const authz = await requirePermission('banking.read')
-  const canCreate = can(authz, 'ap.create') || can(authz, 'gl.post')
+  const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
-  const tCommon = await getTranslations('common')
-  const typeLabel = (type: string) =>
-    TYPE_KEYS.includes(type) ? t(`types.${type}`) : String(type).replace(/_/g, ' ')
-  const sp = await searchParams
+  const orgId = authz.user.orgId
 
-  // -- accounts list (unprefixed params) ------------------------------------
-  const params = parseListParams(sp, {
-    sort: 'number',
-    dir: 'asc',
-    perPage: 25,
-    allowedSorts: ['number', 'name', 'balance', 'reconciled', 'unmatched'] as const,
-  })
-  const type = pickString(sp.type)
-  const where = sql`a.org_id = ${authz.user.orgId} and a.reconcilable and not a.is_summary
-    ${type ? sql` and a.type = ${type}` : sql``}
-    ${params.q ? sql` and (a.number ilike ${'%' + params.q + '%'} or a.name ilike ${'%' + params.q + '%'})` : sql``}`
-
-  const [accounts, typeCounts, filtered] = (await Promise.all([
-    db.execute(sql`
-      select a.id, a.number, a.name, a.type, a.currency_restriction, a.is_active,
-             coalesce(bal.balance, 0) as balance,
-             lastrec.through_date as reconciled_through,
-             coalesce(unm.n, 0) as unmatched_lines,
-             openrec.id as open_reconciliation_id
-        from accounts a
-        left join lateral (
-          select sum(jl.amount) as balance
-            from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-           where jl.account_id = a.id) bal on true
-        left join lateral (
-          select max(r.through_date) as through_date
-            from reconciliations r
-           where r.account_id = a.id and r.status = 'signed_off') lastrec on true
-        left join lateral (
-          select count(*) as n
-            from bank_statement_lines l
-            join bank_statements s on s.id = l.statement_id
-           where s.account_id = a.id and l.match_status = 'unmatched') unm on true
-        left join lateral (
-          select r.id from reconciliations r
-           where r.account_id = a.id and r.status <> 'signed_off'
-           order by r.created_at desc limit 1) openrec on true
-       where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `),
-    db.execute(sql`
-      select a.type, count(*) as n from accounts a
-       where a.org_id = ${authz.user.orgId} and a.reconcilable and not a.is_summary group by a.type order by a.type
-    `),
-    db.execute(sql`select count(*) as n from accounts a where ${where}`),
-  ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }]
-
-  const total = typeCounts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
-  const filteredTotal = Number(filtered.rows[0].n)
-  const typeOptions = typeCounts.rows.map((r: any) => ({
-    value: r.type,
-    label: typeLabel(r.type),
-    count: Number(r.n),
-  }))
-
-  // -- transactions list (prefixed: tx*) — card charges, refunds, checks, transfers
-  const txParams = parsePrefixedListParams(sp, 'tx', {
-    sort: 'date',
-    dir: 'desc',
-    perPage: 15,
-    allowedSorts: ['date', 'number', 'total', 'status'] as const,
-  })
-  const txKind = pickString(sp.txKind)
   const txList = sql`(${BANK_KINDS.map((k) => `'${k}'`).join(',')})`
-  const txWhere = sql`d.org_id = ${authz.user.orgId} and d.kind in ${txList}
-    ${txKind ? sql` and d.kind = ${txKind}` : sql``}
-    ${txParams.q ? sql` and (d.document_number ilike ${'%' + txParams.q + '%'} or d.memo ilike ${'%' + txParams.q + '%'} or d.reference_number ilike ${'%' + txParams.q + '%'})` : sql``}`
-  const [txRows, txCount, txKindCounts] = (await Promise.all([
+  const [totals, recentTx, recentStmt] = (await Promise.all([
     db.execute(sql`
-      select d.id, d.kind, d.document_number, d.document_date, d.status, d.total,
-             d.reference_number, d.memo, e.id as entry_id
-        from documents d
-        left join journal_entries e on e.id = d.posted_entry_id
-       where ${txWhere}
-       order by ${TX_SORTS[txParams.sort]} ${txParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${txParams.perPage} offset ${(txParams.page - 1) * txParams.perPage}
+      select
+        coalesce(sum(case when a.type = 'asset_bank' then bal.balance else 0 end), 0) as cash,
+        coalesce(sum(case when a.type = 'liability_card' then bal.balance else 0 end), 0) as cards,
+        coalesce(sum(unm.n), 0) as unmatched,
+        coalesce(sum(case when openrec.id is not null then 1 else 0 end), 0) as open_recons
+      from accounts a
+      left join lateral (
+        select sum(jl.amount) as balance from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+         where jl.account_id = a.id) bal on true
+      left join lateral (
+        select count(*) as n from bank_statement_lines l
+          join bank_statements s on s.id = l.statement_id
+         where s.account_id = a.id and l.match_status = 'unmatched') unm on true
+      left join lateral (
+        select r.id from reconciliations r
+         where r.account_id = a.id and r.status <> 'signed_off' limit 1) openrec on true
+      where a.org_id = ${orgId} and a.reconcilable and not a.is_summary
     `),
-    db.execute(sql`select count(*) as n from documents d where ${txWhere}`),
-    db.execute(sql`select kind, count(*) as n from documents d where d.org_id = ${authz.user.orgId} and d.kind in ${txList} group by kind`),
+    db.execute(sql`
+      select d.id, d.kind, d.document_number, d.document_date, d.status, d.total, d.memo
+        from documents d
+       where d.org_id = ${orgId} and d.kind in ${txList}
+       order by d.document_date desc, d.created_at desc
+       limit 6
+    `),
+    db.execute(sql`
+      select s.id, s.statement_date, s.source, s.account_id,
+             a.number as account_number, a.name as account_name,
+             coalesce(lc.n, 0) as line_count, coalesce(lc.unmatched, 0) as unmatched_count
+        from bank_statements s
+        join accounts a on a.id = s.account_id
+        left join lateral (
+          select count(*) as n, count(*) filter (where l.match_status = 'unmatched') as unmatched
+            from bank_statement_lines l where l.statement_id = s.id) lc on true
+       where s.org_id = ${orgId}
+       order by s.imported_at desc
+       limit 6
+    `),
   ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }]
-  const txTotal = Number(txCount.rows[0].n)
-  const txKindOptions = txKindCounts.rows.map((r: any) => ({
-    value: r.kind,
-    label: t(`txKinds.${r.kind}`),
-    count: Number(r.n),
-  }))
 
-  // -- open document drawer (?doc=<id>) -------------------------------------
-  const docId = typeof sp.doc === 'string' ? sp.doc : undefined
-  // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId) : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null
-  const openKind = openDoc?.doc.kind as string | undefined
-  const drawerOpen = !!(openDoc && openKind && (BANK_KINDS as readonly string[]).includes(openKind))
-  const pickers = drawerOpen
-    ? await Promise.all([
-        accountOptions(DOC_KINDS[openKind! as 'card_charge']!),
-        taxCodeOptions(),
-        dimensionOptions(),
-        itemOptions(),
-        cardOptions(),
-        bankAccountOptions(),
-        loadFieldDefs('documents', openKind!),
-        loadFieldDefs('document_lines', openKind!),
-      ])
-    : null
-  // Transfers keep their bespoke form; the line-based banking kinds resolve a
-  // customizable form layout like AP/AR.
-  const resolvedForm = drawerOpen && pickers && openKind !== 'transfer'
-    ? await resolveFormLayout({
-        orgId: authz.user.orgId,
-        userId: authz.user.id,
-        recordType: openKind!,
-        userRoles: [authz.user.role],
-        headerDefs: pickers[6] as any,
-        lineDefs: pickers[7] as any,
-        explicitLayoutId: pickString(sp.form),
-      })
-    : null
-
-  const newItems = [
-    { kind: 'check', label: t('txKinds.check') },
-    { kind: 'card_charge', label: t('txKinds.card_charge') },
-    { kind: 'card_refund', label: t('txKinds.card_refund') },
-    { kind: 'transfer', label: t('txKinds.transfer') },
+  const stat = totals.rows[0]
+  const tiles = [
+    { key: 'cash', value: money(stat.cash), tone: 'text-slate-900 dark:text-slate-100' },
+    { key: 'cards', value: money(stat.cards), tone: 'text-slate-900 dark:text-slate-100' },
+    {
+      key: 'unmatched',
+      value: Number(stat.unmatched).toLocaleString(),
+      tone: Number(stat.unmatched) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100',
+    },
+    {
+      key: 'openRecons',
+      value: Number(stat.open_recons).toLocaleString(),
+      tone: Number(stat.open_recons) > 0 ? 'text-teal-600 dark:text-teal-400' : 'text-slate-900 dark:text-slate-100',
+    },
   ]
 
-  const cfg = openKind ? DOC_KINDS[openKind] : undefined
+  // Quick-link cards to each banking surface. Matching/rules are gated on
+  // banking.reconcile; the read-only lists on banking.read.
+  const links = [
+    { href: '/banking/match', icon: <ListChecks size={18} />, key: 'match', gated: true },
+    { href: '/banking/transactions', icon: <NotebookPen size={18} />, key: 'transactions', gated: false },
+    { href: '/banking/reconciliations', icon: <CheckCircle2 size={18} />, key: 'reconciliations', gated: true },
+    { href: '/banking/imports', icon: <Database size={18} />, key: 'imports', gated: false },
+    { href: '/banking/rules', icon: <Workflow size={18} />, key: 'rules', gated: true },
+  ].filter((l) => !l.gated || canReconcile)
+
+  const tileCls = 'rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900'
+  const tileLabel = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'
 
   return (
-    <ListPageLayout
-      header={
-        <PageHeader
-          title={t('list.title')}
-          description={t('list.description')}
-          actions={
-            canCreate ? (
-              <NewDocumentButton
-                items={newItems}
-                basePath="/banking"
-                triggerLabel={t('actions.new')}
-                creatingLabel={tCommon('actions.creating')}
-                failedLabel={t('toasts.createDraftFailed')}
+    <PageContainer>
+      <div className="space-y-6">
+        <PageHeader title={t('overview.title')} description={t('overview.description')} />
+
+        {/* -- KPI tiles -------------------------------------------------- */}
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {tiles.map((tile) => (
+            <div key={tile.key} className={tileCls}>
+              <div className={tileLabel}>{t(`overview.tiles.${tile.key}`)}</div>
+              <div className={cn('mt-1 text-lg font-semibold tabular-nums', tile.tone)}>{tile.value}</div>
+            </div>
+          ))}
+        </section>
+
+        {/* -- quick links ----------------------------------------------- */}
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href as any}
+              title={t(`overview.links.${l.key}.description`)}
+              className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-colors hover:border-teal-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 dark:bg-teal-950/50 dark:text-teal-300">
+                {l.icon}
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {t(`overview.links.${l.key}.title`)}
+                </h3>
+                <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                  {t(`overview.links.${l.key}.description`)}
+                </p>
+              </div>
+              <ArrowUpRight
+                size={15}
+                aria-hidden
+                className="shrink-0 text-slate-300 opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100 group-hover:text-teal-600 dark:text-slate-600 dark:group-hover:text-teal-300"
               />
-            ) : undefined
-          }
-        />
-      }
-    >
-      {/* -- Accounts ---------------------------------------------------- */}
-      <section className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{t('accountsTitle')}</h2>
-          <SearchInput placeholder={t('list.searchPlaceholder')} />
-          <FilterChips basePath="/banking" currentParams={sp} paramKey="type" label={tCommon('labels.type')} options={typeOptions} />
-        </div>
-        {total === 0 ? (
-          <EmptyState title={t('list.emptyTitle')} description={t('list.emptyDescription')} />
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortTh basePath="/banking" currentParams={sp} column="number" sort={params.sort} dir={params.dir}>{tCommon('labels.account')}</SortTh>
-                  <SortTh basePath="/banking" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>{tCommon('labels.name')}</SortTh>
-                  <TableHead>{tCommon('labels.type')}</TableHead>
-                  <SortTh basePath="/banking" currentParams={sp} column="balance" sort={params.sort} dir={params.dir} align="right">{t('list.columns.glBalance')}</SortTh>
-                  <SortTh basePath="/banking" currentParams={sp} column="reconciled" sort={params.sort} dir={params.dir}>{t('list.columns.reconciledThrough')}</SortTh>
-                  <SortTh basePath="/banking" currentParams={sp} column="unmatched" sort={params.sort} dir={params.dir} align="right">{t('list.columns.unmatchedLines')}</SortTh>
-                  <TableHead>{tCommon('labels.status')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {accounts.rows.map((a: any) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-mono text-[13px] font-semibold">
-                      <Link href={`/banking/${a.id}` as any} className="text-teal-700 hover:underline dark:text-teal-300">
-                        {a.number ?? '—'}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link href={`/banking/${a.id}` as any} className="hover:underline">
-                        {a.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-500 dark:text-slate-400">
-                      {typeLabel(a.type)}
-                      {a.currency_restriction ? ` · ${a.currency_restriction}` : ''}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{money(a.balance)}</TableCell>
-                    <TableCell>{a.reconciled_through ?? <span className="text-slate-400 dark:text-slate-500">{t('labels.never')}</span>}</TableCell>
-                    <TableCell className="text-right tabular-nums">{Number(a.unmatched_lines).toLocaleString()}</TableCell>
-                    <TableCell>
-                      {a.open_reconciliation_id ? (
-                        <Badge variant="warning">{t('list.badges.reconciling')}</Badge>
-                      ) : Number(a.unmatched_lines) > 0 ? (
-                        <Badge variant="secondary">{t('list.badges.linesToMatch')}</Badge>
-                      ) : (
-                        <Badge variant="success">{t('list.badges.upToDate')}</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination basePath="/banking" currentParams={sp} total={filteredTotal} page={params.page} perPage={params.perPage} />
-          </>
-        )}
-      </section>
+            </Link>
+          ))}
+        </section>
 
-      {/* -- Transactions (card charges, refunds, checks, transfers) ------ */}
-      <section className="mt-8 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-auto text-sm font-semibold text-slate-900 dark:text-slate-100">{t('transactionsTitle')}</h2>
-          <SearchInput placeholder={t('transactionsSearch')} paramKey="txQ" pageParamKey="txPage" />
-          <FilterChips basePath="/banking" currentParams={sp} paramKey="txKind" label={tCommon('labels.type')} options={txKindOptions} pageParamKey="txPage" />
-        </div>
-        {txTotal === 0 && !txParams.q && !txKind ? (
-          <EmptyState title={t('transactionsEmptyTitle')} description={t('transactionsEmptyDescription')} />
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortTh basePath="/banking" currentParams={sp} column="number" sort={txParams.sort} dir={txParams.dir} sortParamKey="txSort" dirParamKey="txDir" pageParamKey="txPage">{tCommon('labels.number')}</SortTh>
-                  <TableHead>{tCommon('labels.type')}</TableHead>
-                  <SortTh basePath="/banking" currentParams={sp} column="date" sort={txParams.sort} dir={txParams.dir} sortParamKey="txSort" dirParamKey="txDir" pageParamKey="txPage">{tCommon('labels.date')}</SortTh>
-                  <TableHead>{tCommon('labels.memo')}</TableHead>
-                  <SortTh basePath="/banking" currentParams={sp} column="total" sort={txParams.sort} dir={txParams.dir} sortParamKey="txSort" dirParamKey="txDir" pageParamKey="txPage" align="right">{tCommon('labels.total')}</SortTh>
-                  <SortTh basePath="/banking" currentParams={sp} column="status" sort={txParams.sort} dir={txParams.dir} sortParamKey="txSort" dirParamKey="txDir" pageParamKey="txPage">{tCommon('labels.status')}</SortTh>
-                  <TableHead>{tCommon('labels.actions')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {txRows.rows.map((d: any) => (
-                  <TableRow key={d.id}>
-                    <TableCell>
-                      <Link href={`/banking?doc=${d.id}` as any} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">
-                        {d.document_number}
+        {/* -- recent activity ------------------------------------------- */}
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="space-y-2">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('overview.recentTransactions')}</h2>
+              <Link href="/banking/transactions" className="text-xs text-teal-700 hover:underline dark:text-teal-300">
+                {t('overview.viewAll')}
+              </Link>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+              {recentTx.rows.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('overview.noRecentTransactions')}</p>
+              ) : (
+                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {recentTx.rows.map((d: any) => (
+                    <li key={d.id}>
+                      <Link
+                        href={`/banking/transactions?doc=${d.id}` as any}
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      >
+                        <DocTypeBadge kind={d.kind} />
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          <span className="font-mono text-[13px] font-semibold text-slate-700 dark:text-slate-200">{d.document_number}</span>
+                          {d.memo ? <span className="ml-2 text-slate-500 dark:text-slate-400">{d.memo}</span> : null}
+                        </span>
+                        <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">{d.document_date}</span>
+                        <span className="w-24 shrink-0 text-right text-sm tabular-nums">{money(d.total)}</span>
                       </Link>
-                    </TableCell>
-                    <TableCell><DocTypeBadge kind={d.kind} /></TableCell>
-                    <TableCell>{d.document_date}</TableCell>
-                    <TableCell className="max-w-xs truncate text-slate-500 dark:text-slate-400">{d.memo ?? '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(d.total)}</TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[d.status] ?? 'secondary'}>{d.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DocumentRowActions id={d.id} status={d.status} config={DOC_KINDS[d.kind]} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination basePath="/banking" currentParams={sp} total={txTotal} page={txParams.page} perPage={txParams.perPage} pageParamKey="txPage" />
-          </>
-        )}
-      </section>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
 
-      {openDoc && pickers && cfg ? (
-        <DocumentDrawer
-          payload={openDoc as any}
-          config={cfg}
-          basePath="/banking"
-          accounts={pickers[0] as any}
-          taxCodes={pickers[1] as any}
-          departments={(pickers[2] as any).departments}
-          projects={(pickers[2] as any).projects}
-          locations={(pickers[2] as any).locations}
-          classes={(pickers[2] as any).classes}
-          items={pickers[3] as any}
-          cards={pickers[4] as any}
-          bankAccounts={pickers[5] as any}
-          headerDefs={pickers[6] as any}
-          lineDefs={pickers[7] as any}
-          canCreate={canCreate}
-          canPost={can(authz, 'ap.post') || can(authz, 'gl.post')}
-          layout={resolvedForm?.layout}
-          availableLayouts={resolvedForm?.available}
-          currentLayoutId={resolvedForm?.row?.id ?? null}
-          recordType={openKind !== 'transfer' ? openKind : undefined}
-          canCustomize={can(authz, 'admin.customization.manage')}
-        />
-      ) : null}
-    </ListPageLayout>
+          <div className="space-y-2">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('overview.recentImports')}</h2>
+              <Link href="/banking/imports" className="text-xs text-teal-700 hover:underline dark:text-teal-300">
+                {t('overview.viewAll')}
+              </Link>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+              {recentStmt.rows.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('overview.noRecentImports')}</p>
+              ) : (
+                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {recentStmt.rows.map((s: any) => (
+                    <li key={s.id}>
+                      <Link
+                        href={`/banking/${s.account_id}?statement=${s.id}` as any}
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      >
+                        <Badge variant="outline">{s.source}</Badge>
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          <span className="font-medium text-slate-700 dark:text-slate-200">{s.account_number}</span>
+                          <span className="ml-2 text-slate-500 dark:text-slate-400">{s.account_name}</span>
+                        </span>
+                        {Number(s.unmatched_count) > 0 ? (
+                          <Badge variant="secondary">{t('overview.unmatchedBadge', { count: Number(s.unmatched_count) })}</Badge>
+                        ) : null}
+                        <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">{s.statement_date}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+    </PageContainer>
   )
 }

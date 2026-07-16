@@ -22,7 +22,10 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: '3000'
       OPENBOOKS_DB_URL: ${OPENBOOKS_DB_URL}
+      # BullMQ queues (emails, reports, sandbox) → the HA Redis VM.
+      OPENBOOKS_REDIS_URL: ${OPENBOOKS_REDIS_URL}
       SESSION_SECRET: ${SESSION_SECRET}
+      OPENBOOKS_DATA_KEY: ${OPENBOOKS_DATA_KEY}
       # File-cabinet blob storage → shared MinIO via its public S3 endpoint.
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
@@ -55,6 +58,38 @@ services:
       resources:
         limits:
           memory: 2g
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  # Background worker — BullMQ consumers (emails, reports, sandbox) + the report
+  # and sandbox refresh schedulers. Same image as web, run with the bundled
+  # worker entrypoint instead of the web server. No ingress, no bootstrap (web
+  # owns migrations); it just processes the queues off the HA Redis VM.
+  worker:
+    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_TAG:-latest}
+    command: ["node", "scripts/worker.mjs"]
+    environment:
+      NODE_ENV: production
+      OPENBOOKS_DB_URL: ${OPENBOOKS_DB_URL}
+      OPENBOOKS_REDIS_URL: ${OPENBOOKS_REDIS_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      OPENBOOKS_DATA_KEY: ${OPENBOOKS_DATA_KEY}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    networks:
+      - dokploy-network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname==dokploy-mgr
+      resources:
+        limits:
+          memory: 1g
       restart_policy:
         condition: any
         delay: 5s

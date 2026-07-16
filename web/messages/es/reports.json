@@ -27,7 +27,9 @@
       "budgetTitle": "Presupuesto vs Real",
       "budgetDescription": "Valores reales frente a un escenario de presupuesto, por cuenta, con variación $ y %",
       "projectProfitabilityTitle": "Rentabilidad por proyecto",
-      "projectProfitabilityDescription": "Ingresos, costo y margen por proyecto — cuadra con el estado de resultados, con horas aprobadas"
+      "projectProfitabilityDescription": "Ingresos, costo y margen por proyecto — cuadra con el estado de resultados, con horas aprobadas",
+      "ordersTitle": "Flujo de pedidos",
+      "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión"
     },
     "groups": {
       "financial": "Estados financieros",
@@ -35,7 +37,8 @@
       "receivablesPayables": "Cuentas por cobrar y pagar",
       "budgeting": "Presupuestos",
       "custom": "Personalizados y guardados",
-      "projects": "Proyectos"
+      "projects": "Proyectos",
+      "orders": "Ventas y pedidos"
     },
     "customStudio": {
       "title": "Constructor de informes",
@@ -845,5 +848,23 @@
       "margin": "Margen",
       "hours": "Horas"
     }
+  },
+  "orders": {
+    "title": "Flujo de pedidos",
+    "description": "Cartera abierta y conversión de presupuestos, órdenes de venta y de compra.",
+    "columns": {
+      "type": "Tipo",
+      "open": "Abiertos",
+      "openValue": "Valor abierto",
+      "converted": "Convertidos",
+      "convRate": "Conversión",
+      "voided": "Anulados"
+    },
+    "kinds": {
+      "quote": "Presupuestos",
+      "sales_order": "Órdenes de venta",
+      "purchase_order": "Órdenes de compra"
+    },
+    "note": "La conversión se rastrea mediante enlaces de documentos; los enlaces históricos de NetSuite aún no se importan."
   }
 }

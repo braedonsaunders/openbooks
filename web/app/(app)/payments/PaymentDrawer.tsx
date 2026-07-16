@@ -5,9 +5,11 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { Wand2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { AttachmentPanel } from '../../../components/attachment-panel'
 import { DocTypeBadge } from '../../../components/doc-type-badge'
+import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
 
@@ -115,6 +117,9 @@ export function PaymentDrawer({
   const [bankAccountId, setBankAccountId] = useState<string>(payment.bankAccountId ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
+  // Optional target for Auto-apply (AR receipts); does not change the posting —
+  // the payment total is always the sum of what's actually applied.
+  const [receivedAmount, setReceivedAmount] = useState<string>('')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [openItems, setOpenItems] = useState<OpenItemClient[]>(initialOpenItems)
   const [loadingItems, setLoadingItems] = useState(false)
@@ -281,6 +286,34 @@ export function PaymentDrawer({
     })
   }
 
+  // Automated cash application: ask the engine to spread the received amount
+  // across the party's open items (reference → exact → FIFO) and fill the rows.
+  async function autoApply() {
+    if (!partyId) return
+    const amount = receivedAmount.trim() || openItems.reduce((a, i) => a + Number(i.open), 0).toFixed(2)
+    setBusy(true)
+    try {
+      const res = await fetch('/api/payments/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partyId, amount, side, reference: referenceNumber || null }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? t('autoApplyFailed'))
+        return
+      }
+      if (!data.allocations?.length) {
+        toast.info(t('autoApplyNone'))
+        return
+      }
+      setAllocs(Object.fromEntries(data.allocations.map((a: any) => [a.openLineId, Number(a.amount).toFixed(2)])))
+      toast.success(t('autoApplyDone', { count: data.allocations.length, strategy: t(`autoApplyStrategy.${data.strategy}`) }))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const field = 'space-y-1.5'
   const canPost =
     isDraft &&
@@ -320,6 +353,10 @@ export function PaymentDrawer({
             </>
           ) : (
             <>
+              <PdfButton
+                recordType={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))}
+                recordId={String(doc.id)}
+              />
               {canEditStatus ? (
                 <Button variant="outline" onClick={() => setMode('edit')}>
                   Edit
@@ -452,7 +489,25 @@ export function PaymentDrawer({
 
         {isDraft ? (
           <div className="space-y-2">
-            <Label>{t('openItems', { side })}</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>{t('openItems', { side })}</Label>
+              {editable && partyId && openItems.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  {side === 'ar' ? (
+                    <Input
+                      inputMode="decimal"
+                      value={receivedAmount}
+                      onChange={(e) => setReceivedAmount(e.target.value)}
+                      placeholder={t('amountReceived')}
+                      className="h-8 w-32 text-right tabular-nums"
+                    />
+                  ) : null}
+                  <Button variant="outline" size="sm" disabled={busy} onClick={autoApply}>
+                    <Wand2 size={14} /> {t('autoApply')}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
             {!partyId ? (
               <p className="rounded-md border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 {t('selectPartyHint', { side })}

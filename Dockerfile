@@ -31,6 +31,14 @@ RUN npx esbuild scripts/bootstrap.ts \
       --external:pg-native \
       --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
       --outfile=/out/bootstrap.mjs
+# The background worker (BullMQ consumers + schedulers) as a self-contained
+# bundle, so the same image can run either the web server (default CMD) or the
+# worker (command override in the compose `worker` service).
+RUN npx esbuild engine/src/worker/index.ts \
+      --bundle --platform=node --format=esm \
+      --external:pg-native \
+      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
+      --outfile=/out/worker.mjs
 
 # --- runtime ------------------------------------------------------------------
 FROM node:24-bookworm-slim AS runtime
@@ -45,6 +53,7 @@ ENV NODE_ENV=production \
 COPY --from=build /app/web/.next/standalone ./
 COPY --from=build /app/web/.next/static ./web/.next/static
 COPY --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
+COPY --from=build /out/worker.mjs ./scripts/worker.mjs
 # The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
 COPY schema/migrations ./schema/migrations
 

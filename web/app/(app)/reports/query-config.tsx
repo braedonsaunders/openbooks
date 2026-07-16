@@ -17,7 +17,7 @@ import {
 /**
  * Shared query-config editors (rows-mode column picker, summarize-mode
  * breakouts + measures) reused by the custom-report builder AND the
- * saved-search builder — one editing surface for the shared ReportCustomQuery
+ * view builder — one editing surface for the shared ReportCustomQuery
  * plan. Extracted verbatim from ReportBuilder so neither surface drifts.
  */
 

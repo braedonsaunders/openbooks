@@ -1,6 +1,9 @@
 type ActiveNavItem = {
   href: string
   exact?: boolean
+  /** Landing hub of the sub-menu this item belongs to — participates in
+   * matching so the subgroup header highlights on its own page. */
+  subgroupHref?: string
 }
 
 type ActiveNavGroup = {
@@ -15,20 +18,23 @@ export function findActiveNavHref(
 
   let activeHref: string | null = null
 
+  const consider = (href: string, exact?: boolean) => {
+    if (!matchesNavPath(pathname, href, exact)) return
+    if (!activeHref || href.length > activeHref.length) activeHref = href
+  }
+
   for (const group of groups) {
     for (const item of group.items) {
-      if (!matchesNavPath(pathname, item)) continue
-      if (!activeHref || item.href.length > activeHref.length) {
-        activeHref = item.href
-      }
+      consider(item.href, item.exact)
+      if (item.subgroupHref) consider(item.subgroupHref)
     }
   }
 
   return activeHref
 }
 
-function matchesNavPath(pathname: string, item: ActiveNavItem): boolean {
-  if (pathname === item.href) return true
-  if (item.exact || item.href === '/') return false
-  return pathname.startsWith(item.href + '/')
+function matchesNavPath(pathname: string, href: string, exact?: boolean): boolean {
+  if (pathname === href) return true
+  if (exact || href === '/') return false
+  return pathname.startsWith(href + '/')
 }

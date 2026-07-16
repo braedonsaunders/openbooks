@@ -6,7 +6,12 @@
     "customer_credit": "Customer credit memo",
     "card_charge": "Card charge",
     "card_refund": "Card refund",
-    "check": "Check"
+    "check": "Check",
+    "vendor_payment": "Vendor payment",
+    "customer_payment": "Customer payment",
+    "quote": "Estimate",
+    "sales_order": "Sales order",
+    "purchase_order": "Purchase order"
   },
   "views": {
     "defaultName": "Default view",

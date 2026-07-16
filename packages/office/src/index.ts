@@ -145,6 +145,38 @@ export async function reportResultToXlsx(
   return Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer)
 }
 
+// --- reading (bulk import) ---------------------------------------------------
+
+/**
+ * Read the first worksheet of an .xlsx workbook into a header row + string
+ * cells. Row 1 is treated as the header. Used by the generic bulk importer;
+ * ExcelJS stays isolated in this package (never reaches the client bundle).
+ */
+export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; rows: string[][] }> {
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(buffer as unknown as ArrayBuffer)
+  const ws = wb.worksheets[0]
+  if (!ws) return { headers: [], rows: [] }
+  const cell = (v: ExcelJS.CellValue): string => {
+    if (v === null || v === undefined) return ''
+    if (typeof v === 'object') {
+      const o = v as { text?: string; result?: unknown; hyperlink?: string }
+      if (typeof o.text === 'string') return o.text
+      if (o.result !== undefined) return String(o.result)
+      if (v instanceof Date) return v.toISOString().slice(0, 10)
+      return ''
+    }
+    return String(v)
+  }
+  const matrix: string[][] = []
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    const values = row.values as ExcelJS.CellValue[] // 1-based; index 0 is null
+    matrix.push(values.slice(1).map(cell))
+  })
+  const headers = (matrix.shift() ?? []).map((h) => h.trim())
+  return { headers, rows: matrix }
+}
+
 // --- financial-statement workbook (proper indentation + styled totals) ------
 
 export type StatementSheetColumn = { label: string; kind: 'amount' | 'variance_abs' | 'variance_pct' }

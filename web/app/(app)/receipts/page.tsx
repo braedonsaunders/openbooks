@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
-import { requirePermission } from '../../../lib/authz'
+import { requirePermission, can } from '../../../lib/authz'
 import { NewPaymentButton } from '../payments/NewPaymentButton'
 import { PaymentsSection } from '../payments/PaymentsSection'
 
@@ -32,7 +32,14 @@ export default async function Receipts({
         />
       }
     >
-      <PaymentsSection sp={sp} basePath="/receipts" kind="customer_payment" orgId={authz.user.orgId} />
+      <PaymentsSection
+        sp={sp}
+        basePath="/receipts"
+        kind="customer_payment"
+        orgId={authz.user.orgId}
+        userId={authz.user.id}
+        canManage={can(authz, 'admin.customization.manage')}
+      />
     </ListPageLayout>
   )
 }

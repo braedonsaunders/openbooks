@@ -79,7 +79,7 @@ export default async function Expenses({
 
   const [reports, statusCounts, employeeCounts] = await Promise.all([
     db.execute(sql`
-      select d.id, d.document_number, d.document_date, d.status, d.total, d.memo,
+      select d.id, d.party_id, d.document_number, d.document_date, d.status, d.total, d.memo,
              p.display_name as employee, e.id as entry_id
         from documents d
         left join parties p on p.id = d.party_id
@@ -193,7 +193,15 @@ export default async function Expenses({
                       {r.document_number}
                     </Link>
                   </TableCell>
-                  <TableCell>{r.employee}</TableCell>
+                  <TableCell>
+                    {r.party_id && r.employee ? (
+                      <Link href={`/entities/employees?party=${r.party_id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                        {r.employee}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>{r.document_date}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{r.memo}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.total)}</TableCell>

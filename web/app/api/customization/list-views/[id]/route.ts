@@ -122,6 +122,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   await db.execute(sql`delete from list_views where id = ${id} and org_id = ${user.orgId}`);
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${user.orgId}, 'list_views', ${id}, 'delete', null, ${user.id})`);
+    values (${user.orgId}, 'list_views', ${id}, 'delete', ${JSON.stringify({ name: existing.name, scope: existing.scope })}, ${user.id})`);
   return NextResponse.json({ ok: true });
 }

@@ -23,7 +23,7 @@ export const bankStatements = pgTable(
     id: id(),
     orgId: orgRef(),
     accountId: uuid("account_id").notNull(), // → accounts (reconcilable)
-    source: text("source", { enum: ["ofx", "csv", "camt053", "bai2", "feed_api", "manual"] }).notNull(),
+    source: text("source", { enum: ["ofx", "csv", "camt053", "bai2", "mt940", "feed_api", "manual"] }).notNull(),
     statementDate: date("statement_date").notNull(),
     openingBalance: money("opening_balance"),
     closingBalance: money("closing_balance"),
@@ -134,6 +134,76 @@ export const paymentRuns = pgTable("payment_runs", {
   exportedAt: timestamp("exported_at", { withTimezone: true }),
   ...auditColumns,
 });
+
+/**
+ * SFTP daemon runtime config — a single global row (the deployment hosts one
+ * ssh2 listener that all tenants share, routed by username). Everything the
+ * daemon needs lives here in the DB, never in env: the auto-generated host key,
+ * the listen port, and the hostname advertised to users in the UI. A platform
+ * admin edits it in the UI; there are no SFTP_* environment variables.
+ */
+export const sftpDaemon = pgTable("sftp_daemon", {
+  id: text("id").primaryKey().default("default"),
+  enabled: boolean("enabled").notNull().default(true),
+  port: integer("port").notNull().default(2222),
+  /** Auto-generated ed25519 host key PEM (stable fingerprint across restarts). */
+  hostKey: text("host_key").notNull(),
+  /** Hostname shown in the UI's connection details (defaults to the app host). */
+  advertisedHost: text("advertised_host"),
+  ...auditColumns,
+});
+
+/**
+ * Virtual SFTP servers: each is a login (username + password / authorized keys)
+ * whose filesystem is a MinIO bucket/prefix (or a local folder in dev). One
+ * ssh2 daemon hosts them all; banks and partners drop statement files or fetch
+ * payment files, and the same objects drive the import/export pipeline.
+ */
+export const sftpServers = pgTable(
+  "sftp_servers",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(),
+    username: text("username").notNull(),
+    /** AES-256-GCM (enc:v1) password; null when key-only. */
+    passwordEncrypted: text("password_encrypted"),
+    /** Authorized OpenSSH public keys (one per line) for key auth. */
+    authorizedKeys: text("authorized_keys"),
+    backend: text("backend", { enum: ["s3", "local"] }).notNull().default("s3"),
+    bucket: text("bucket"),
+    /** Root prefix inside the bucket (e.g. "sftp/rbc-inbound"). */
+    rootPrefix: text("root_prefix").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    lastConnectedAt: timestamp("last_connected_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [index("sftp_servers_username").on(t.username)],
+);
+
+/**
+ * Scheduled SFTP import: watch a folder on an SFTP server, and on each tick
+ * parse + import any new statement files into a bank account, then move them to
+ * a `processed/` subfolder. The inbound half of the bank-feed loop.
+ */
+export const sftpImportSchedules = pgTable(
+  "sftp_import_schedules",
+  {
+    id: id(),
+    orgId: orgRef(),
+    sftpServerId: uuid("sftp_server_id").notNull(),
+    accountId: uuid("account_id").notNull(), // reconcilable bank/card account
+    format: text("format", { enum: ["auto", "ofx", "csv", "camt053", "bai2", "mt940"] }).notNull().default("auto"),
+    folder: text("folder").notNull().default("inbound"),
+    /** CSV column mapping when format='csv' (date/amount/description column indexes). */
+    csvMapping: jsonb("csv_mapping"),
+    isActive: boolean("is_active").notNull().default(true),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastResult: jsonb("last_result"),
+    ...auditColumns,
+  },
+  (t) => [index("sftp_import_schedules_active").on(t.orgId, t.isActive)],
+);
 
 export const paymentInstructions = pgTable(
   "payment_instructions",

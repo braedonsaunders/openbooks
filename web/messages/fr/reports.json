@@ -27,7 +27,9 @@
       "budgetTitle": "Budget vs Réel",
       "budgetDescription": "Réels par rapport à un scénario budgétaire, par compte, avec écart $ et %",
       "projectProfitabilityTitle": "Rentabilité des projets",
-      "projectProfitabilityDescription": "Produits, coûts et marge par projet — concorde avec le résultat, avec les heures approuvées"
+      "projectProfitabilityDescription": "Produits, coûts et marge par projet — concorde avec le résultat, avec les heures approuvées",
+      "ordersTitle": "Pipeline de commandes",
+      "ordersDescription": "Devis, commandes client et bons de commande ouverts — nombre, valeur et conversion"
     },
     "groups": {
       "financial": "États financiers",
@@ -35,7 +37,8 @@
       "receivablesPayables": "Clients et fournisseurs",
       "budgeting": "Budgets",
       "custom": "Personnalisés et enregistrés",
-      "projects": "Projets"
+      "projects": "Projets",
+      "orders": "Ventes et commandes"
     },
     "customStudio": {
       "title": "Constructeur de rapports",
@@ -845,5 +848,23 @@
       "margin": "Marge",
       "hours": "Heures"
     }
+  },
+  "orders": {
+    "title": "Pipeline de commandes",
+    "description": "Carnet ouvert et conversion des devis, commandes client et bons de commande.",
+    "columns": {
+      "type": "Type",
+      "open": "Ouverts",
+      "openValue": "Valeur ouverte",
+      "converted": "Convertis",
+      "convRate": "Conversion",
+      "voided": "Annulés"
+    },
+    "kinds": {
+      "quote": "Devis",
+      "sales_order": "Commandes client",
+      "purchase_order": "Bons de commande"
+    },
+    "note": "La conversion est suivie via les liens de documents ; les liens historiques NetSuite ne sont pas encore importés."
   }
 }

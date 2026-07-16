@@ -68,7 +68,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [source, setSource] = useState<'ofx' | 'csv'>('ofx')
+  const [source, setSource] = useState<'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940'>('ofx')
   const [text, setText] = useState('')
   const [fileName, setFileName] = useState<string | null>(null)
   const [header, setHeader] = useState<string[] | null>(null)
@@ -101,8 +101,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       onTextChanged(String(reader.result ?? ''))
       setFileName(file.name)
       const lower = file.name.toLowerCase()
-      if (lower.endsWith('.csv') || lower.endsWith('.txt')) setSource('csv')
+      if (lower.endsWith('.csv')) setSource('csv')
       else if (lower.endsWith('.ofx') || lower.endsWith('.qfx')) setSource('ofx')
+      else if (lower.endsWith('.xml')) setSource('camt053')
+      else if (lower.endsWith('.bai') || lower.endsWith('.bai2')) setSource('bai2')
+      else if (lower.endsWith('.sta') || lower.endsWith('.mt940')) setSource('mt940')
     }
     reader.onerror = () => toast.error(tBanking('errors.fileReadFailed', { name: file.name }))
     reader.readAsText(file)
@@ -138,7 +141,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     setBusy(false)
   }
 
-  const csvReady = source === 'ofx' || (mapping.date !== '' && mapping.amount !== '' && mapping.description !== '')
+  const csvReady = source !== 'csv' || (mapping.date !== '' && mapping.amount !== '' && mapping.description !== '')
 
   async function runPreview() {
     setBusy(true)
@@ -248,13 +251,16 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               <Select
                 value={source}
                 onChange={(e) => {
-                  setSource(e.target.value as 'ofx' | 'csv')
+                  setSource(e.target.value as 'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940')
                   setHeader(null)
                   setPreview(null)
                 }}
               >
                 <option value="ofx">{t('formatOfx')}</option>
                 <option value="csv">{t('formatCsv')}</option>
+                <option value="camt053">{t('formatCamt053')}</option>
+                <option value="bai2">{t('formatBai2')}</option>
+                <option value="mt940">{t('formatMt940')}</option>
               </Select>
             </div>
             <div className={field}>
@@ -263,7 +269,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".ofx,.qfx,.csv,.txt"
+                  accept=".ofx,.qfx,.csv,.xml,.bai,.bai2,.sta,.mt940,.txt"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0]
@@ -287,7 +293,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               rows={8}
               spellCheck={false}
               className="font-mono text-xs"
-              placeholder={source === 'ofx' ? t('pastePlaceholderOfx') : t('pastePlaceholderCsv')}
+              placeholder={source === 'csv' ? t('pastePlaceholderCsv') : t('pastePlaceholderOfx')}
             />
           </div>
 

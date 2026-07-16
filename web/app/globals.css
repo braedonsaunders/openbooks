@@ -277,11 +277,23 @@
 .brand-glow-loop {
   animation: brand-glow-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
 }
+/* Intro mode: draw the logo in exactly once, then hold it static — no cycle,
+   no pulse. Used on the login stage. */
+.brand-stroke-intro {
+  stroke-dasharray: 1;
+  animation: brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) backwards;
+}
+.brand-ray-intro {
+  stroke-dasharray: 1;
+  animation: brand-draw 0.35s ease-out var(--bd, 0s) backwards;
+}
 @media (prefers-reduced-motion: reduce) {
   .brand-stroke-draw,
   .brand-stroke-loop,
+  .brand-stroke-intro,
   .brand-ray-draw,
   .brand-ray-loop,
+  .brand-ray-intro,
   .brand-lamp-draw,
   .brand-lamp-loop,
   .brand-glow-draw,
@@ -370,4 +382,61 @@
 }
 .brand-word-in {
   animation: brand-word-in 0.5s ease-out 0.55s backwards;
+}
+
+/* ======================================================================== */
+/* Login stage — the hero book physically opens (web/app/login/page.tsx).     */
+/* The spine draws first, both covers swing open around it, then the ledger   */
+/* lines write themselves onto the pages. It plays once and rests — static.   */
+/* ======================================================================== */
+
+/* Suppress the brand splash before hydration for in-app new-tab opens. The
+   nav-internal flag is set pre-paint (layout.tsx NAV_INIT) and cleared by
+   SplashScreen on mount; this keeps the splash from flashing in between. */
+.nav-internal [data-splash-root] {
+  display: none !important;
+}
+
+/* One-time entrance: the card settles up into place under the book. */
+@keyframes login-rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.login-rise-in { animation: login-rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* A cover swings open around the spine: from collapsed onto the spine
+   (scaleX ~0) to fully open, with a soft settle at the end. transform-box
+   fill-box pins the origin to the group's own spine-side edge. */
+@keyframes login-book-open {
+  from { transform: scaleX(0.04); }
+  to   { transform: scaleX(1); }
+}
+.login-book .book-spine {
+  stroke-dasharray: 1;
+  animation: brand-draw 0.35s ease-out backwards;
+}
+.login-book .book-cover-l {
+  transform-box: fill-box;
+  transform-origin: right center;
+  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s backwards;
+}
+.login-book .book-cover-r {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s backwards;
+}
+/* Ledger lines fade in only after the covers have finished opening (delay set
+   inline per line); base opacity stays 1, backwards fill hides them until then. */
+.login-book .book-entry {
+  animation: brand-in 0.5s ease-out backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-rise-in,
+  .login-book .book-spine,
+  .login-book .book-cover-l,
+  .login-book .book-cover-r,
+  .login-book .book-entry {
+    animation: none;
+  }
 }

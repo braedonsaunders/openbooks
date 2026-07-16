@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { Badge } from '@openbooks/ui'
+import { Badge, UiBackLink } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
 import { parseListParams } from '../../../lib/list-params'
@@ -27,6 +27,7 @@ export default async function ApiDocsPage({
 }) {
   const authz = await requirePermission('api.keys.manage')
   const t = await getTranslations('apiDocs')
+  const tHub = await getTranslations('admin.hub')
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 100 })
 
@@ -43,6 +44,11 @@ export default async function ApiDocsPage({
     <ListPageLayout
       header={
         <>
+          <UiBackLink
+            href="/admin"
+            label={tHub('title')}
+            className="mb-2 inline-flex text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
+          />
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
             {t('title')}
           </h1>

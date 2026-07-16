@@ -21,7 +21,7 @@
     "party": { "label": "Tercero", "description": "Elija un proveedor, cliente o empleado" }
   },
   "types": {
-    "title": "Tipos de registro",
+    "title": "Registros personalizados",
     "description": "Diseñe sus propios tipos de registro — cada tipo publicado se convierte en un módulo completo con su propia lista, numeración y editor lateral.",
     "searchPlaceholder": "Buscar tipos de registro…",
     "newButton": "Nuevo tipo de registro",

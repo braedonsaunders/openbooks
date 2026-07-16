@@ -2,3 +2,6 @@ export { closeJobConnections, getBlockingConnection, getConnection } from './con
 export { getRedisUrl } from './config'
 export * from './queues/email'
 export * from './queues/reports'
+export * from './queues/migration'
+export * from './queues/sandbox'
+export * from './queues/scripts'

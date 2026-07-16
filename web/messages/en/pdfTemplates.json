@@ -1,0 +1,41 @@
+{
+  "title": "PDF Templates",
+  "description": "Author beautiful printable documents and assign them to invoices, journals, and every other transaction",
+  "newTemplate": "New template",
+  "list": {
+    "name": "Name",
+    "paper": "Paper",
+    "default": "Default",
+    "builtInStarter": "Built-in starter",
+    "starterHint": "Printed when no custom template exists — duplicate it to customize",
+    "duplicate": "Duplicate",
+    "isDefault": "Default"
+  },
+  "editor": {
+    "back": "PDF Templates",
+    "design": "Design",
+    "code": "HTML",
+    "preview": "Preview",
+    "margins": "Margins",
+    "portrait": "Portrait",
+    "landscape": "Landscape",
+    "headerPlaceholder": "Running header (optional) — merge tokens allowed",
+    "footerPlaceholder": "Running footer — page numbers supported",
+    "saved": "Template saved",
+    "saveFailed": "Save failed",
+    "makeDefault": "Default for this record type",
+    "active": "Active",
+    "previewHint": "Rendered by the exact engine that prints the real document, merged with your most recent record.",
+    "refreshPreview": "Refresh preview",
+    "previewFailed": "Preview failed",
+    "deleteConfirm": "Delete this template? Records will fall back to the default design.",
+    "blockContent": "Content",
+    "blockFields": "Record fields",
+    "blockTables": "Tables"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "Standard design",
+    "failed": "Could not load PDF templates"
+  }
+}

@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import { Badge, Button, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { runClientScripts } from '@/lib/client-scripts'
 import { RecordFields } from '../../../../components/record-fields'
 import type { RecordStatus } from '../../../../lib/record-schema'
 
@@ -67,6 +68,16 @@ export function RecordDrawer({
   async function save() {
     setBusy(true)
     setSaveState('saving')
+    // Client scripts scoped to this record type run in a sandboxed evaluator;
+    // an explicit { abort } blocks the save, { warnings } toast and proceed.
+    const gate = await runClientScripts(`custrec:${typeKey}`, { recordNumber: record.recordNumber, status, data: values })
+    if (!gate.ok) {
+      toast.error(gate.reason ?? t('autosaveFailed'))
+      setSaveState('dirty')
+      setBusy(false)
+      return
+    }
+    for (const w of gate.warnings) toast.warning(w)
     const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

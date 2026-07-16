@@ -50,6 +50,11 @@ export const documents = pgTable(
     subtotal: money("subtotal").notNull().default("0"),
     taxTotal: money("tax_total").notNull().default("0"),
     total: money("total").notNull().default("0"),
+    // Amount remaining to settle (NetSuite "Amount Remaining") — abs(open-item
+    // line) − applied for posted open-item docs, else NULL. Maintained by the
+    // triggers in migrations/generated/0020_document-open-balance.sql so lists
+    // can show/sort/filter it without a live applications join.
+    openBalance: money("open_balance"),
 
     // Header dimensions — defaults inherited by lines.
     departmentId: uuid("department_id"),
@@ -203,4 +208,5 @@ export const timeTypes = pgTable("time_types", {
   costMultiplier: money("cost_multiplier").notNull().default("1"),
   isBillableDefault: boolean("is_billable_default").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
+  custom: jsonb("custom").notNull().default({}), // keeps NetSuite nsId for the time-record import bridge
 });

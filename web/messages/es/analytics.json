@@ -1,0 +1,130 @@
+{
+  "hub": {
+    "title": "Analítica",
+    "description": "Paneles de inteligencia nativos — rentabilidad, tesorería, clientes, proveedores y riesgo forense, calculados en vivo desde tu libro mayor.",
+    "searchPlaceholder": "Buscar analítica…",
+    "noMatches": "Ningún panel coincide con tu búsqueda.",
+    "planned": "Previsto",
+    "groups": {
+      "profitability": "Rentabilidad y rendimiento",
+      "operations": "Tesorería y operaciones",
+      "relationships": "Clientes y proveedores",
+      "forensics": "Riesgo y forense"
+    },
+    "cards": {
+      "financialHealthTitle": "Salud financiera",
+      "financialHealthDesc": "Cuadro de márgenes y ratios con una puntuación de salud compuesta",
+      "trueCostTitle": "Costo real",
+      "trueCostDesc": "Absorción de gastos generales y calculadora de tarifa de venta",
+      "utilizationTitle": "Utilización",
+      "utilizationDesc": "Tiempo facturable, utilización y rentabilidad por servicio",
+      "customerTitle": "Inteligencia de clientes",
+      "customerDesc": "Segmentación, valor de vida y rentabilidad del cliente",
+      "vendorTitle": "Rendimiento de proveedores",
+      "vendorDesc": "Gasto fuera de contrato, variación de precios y fichas de proveedores",
+      "sentinelTitle": "Sentinel",
+      "sentinelDesc": "Integridad forense de transacciones y detección de anomalías",
+      "spendVelocityTitle": "Velocidad de gasto",
+      "spendVelocityDesc": "Aceleración del gasto, expansión de suscripciones e informática en la sombra",
+      "cashflowTitle": "Flujo de caja",
+      "cashflowDesc": "Previsión semanal de caja, autonomía y antigüedad de saldos"
+    }
+  },
+  "financialHealth": {
+    "title": "Salud financiera",
+    "description": "Ratios de rentabilidad, eficiencia y operación con una puntuación de salud compuesta.",
+    "backToHub": "Analítica",
+    "tabs": {
+      "overview": "Resumen",
+      "margin": "Margen",
+      "items": "Partidas",
+      "segments": "Segmentos",
+      "forecast": "Previsión",
+      "scenarios": "Escenarios",
+      "budget": "Presupuesto",
+      "drivers": "Factores",
+      "ratios": "Ratios",
+      "configuration": "Configuración"
+    },
+    "kpi": {
+      "revenue": "Ingresos",
+      "grossMargin": "Margen bruto",
+      "operatingIncome": "Resultado operativo",
+      "breakeven": "Punto de equilibrio"
+    },
+    "kpiSub": {
+      "growth": "Interanual {pct}",
+      "grossProfit": "MB: {amount}",
+      "opex": "Gastos: {amount}",
+      "perMonth": "por mes"
+    },
+    "score": {
+      "title": "Puntuación de salud financiera",
+      "overall": "General",
+      "excellent": "Excelente",
+      "good": "Bueno",
+      "average": "Medio",
+      "needsWork": "A mejorar"
+    },
+    "categories": {
+      "profitability": "Rentabilidad",
+      "efficiency": "Eficiencia",
+      "operating": "Operación"
+    },
+    "subKpi": {
+      "roic": "ROIC",
+      "ebitdaMargin": "Margen EBITDA",
+      "opLeverage": "Apalancamiento operativo",
+      "rule40": "Regla del 40"
+    },
+    "subKpiSub": {
+      "returnOnCapital": "Retorno sobre el capital invertido",
+      "earningsMargin": "Margen de ganancias",
+      "sensitivity": "Sensibilidad",
+      "growthProfit": "Crecimiento + ganancia"
+    },
+    "gridHint": "Haz clic en cualquier ratio para ver detalles",
+    "pnl": {
+      "title": "Resumen de resultados",
+      "lineItem": "Concepto",
+      "amount": "Importe",
+      "pctRevenue": "% Ing.",
+      "revenue": "Ingresos",
+      "cogs": "Costo de ventas",
+      "grossProfit": "Margen bruto",
+      "opex": "Gastos operativos",
+      "operatingIncome": "Resultado operativo",
+      "otherIncome": "Otros ingresos",
+      "otherExpense": "Otros gastos",
+      "netIncome": "Resultado neto"
+    }
+  },
+  "customer": {
+    "title": "Inteligencia de clientes",
+    "backToHub": "Analítica"
+  },
+  "vendor": {
+    "title": "Rendimiento de proveedores",
+    "backToHub": "Analítica"
+  },
+  "cashflow": {
+    "title": "Flujo de caja",
+    "backToHub": "Analítica"
+  },
+  "trueCost": {
+    "title": "Costo real",
+    "backToHub": "Analítica"
+  },
+  "utilization": {
+    "title": "Utilización",
+    "backToHub": "Analítica"
+  },
+  "spendVelocity": {
+    "title": "Velocidad de gasto",
+    "backToHub": "Analítica"
+  },
+  "sentinel": {
+    "title": "Sentinel",
+    "backToHub": "Analítica"
+  }
+}

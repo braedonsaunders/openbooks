@@ -2,6 +2,7 @@
 // into the next-intl messages tree. Adding a namespace: create <ns>.json in
 // EVERY locale dir and add the import to EVERY locale index (en/fr/es).
 import common from './common.json'
+import dataIo from './data.json'
 import ui from './ui.json'
 import nav from './nav.json'
 import shell from './shell.json'
@@ -9,6 +10,7 @@ import login from './login.json'
 import dashboard from './dashboard.json'
 import documents from './documents.json'
 import accounts from './accounts.json'
+import analytics from './analytics.json'
 import admin from './admin.json'
 import apiDocs from './apiDocs.json'
 import ap from './ap.json'
@@ -19,6 +21,7 @@ import assets from './assets.json'
 import banking from './banking.json'
 import close from './close.json'
 import customization from './customization.json'
+import pdfTemplates from './pdfTemplates.json'
 import entities from './entities.json'
 import estimates from './estimates.json'
 import expenses from './expenses.json'
@@ -40,6 +43,7 @@ import timesheets from './timesheets.json'
 
 export default {
   common,
+  data: dataIo,
   ui,
   nav,
   shell,
@@ -47,6 +51,7 @@ export default {
   dashboard,
   documents,
   accounts,
+  analytics,
   admin,
   apiDocs,
   ap,
@@ -57,6 +62,7 @@ export default {
   banking,
   close,
   customization,
+  pdfTemplates,
   entities,
   estimates,
   expenses,

@@ -47,7 +47,7 @@ export interface ParsedStatement {
   closingBalance?: string;
 }
 
-export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "feed_api" | "manual";
+export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "feed_api" | "manual";
 
 const CTX = Symbol();
 export interface BankingContext {
@@ -332,6 +332,202 @@ export function parseCsv(text: string, mapping: CsvMapping): ParsedStatementLine
         : null;
     return { postedOn, amount, description, counterpartyRef, bankTransactionId };
   });
+}
+
+// ---------------------------------------------------------------------------
+// International statement formats: CAMT.053 (ISO 20022), BAI2, MT940
+// ---------------------------------------------------------------------------
+
+function xmlTag(block: string, tag: string): string | undefined {
+  const m = block.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "i"));
+  return m ? decodeOfxEntities(m[1].trim()) : undefined;
+}
+function xmlTags(block: string, tag: string): string[] {
+  return [...block.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "gi"))].map((m) => m[1]);
+}
+
+/**
+ * Parse an ISO 20022 CAMT.053 (Bank-to-Customer Statement) into normalized
+ * lines. Reads `<Ntry>` entries — `<Amt Ccy>`, `<CdtDbtInd>` (CRDT/DBIT),
+ * booking date, and `<AddtlNtryInf>`/reference text — plus the closing booked
+ * balance (`<Bal>` with type code CLBD). Amounts sign from the CdtDbtInd.
+ */
+export function parseCamt053(text: string): ParsedStatement {
+  const stmt = xmlTag(text, "Stmt") ?? text;
+  const currency = xmlTag(stmt, "Ccy");
+  const lines: ParsedStatementLine[] = [];
+  let lineNo = 0;
+  for (const ntry of xmlTags(stmt, "Ntry")) {
+    const amtRaw = xmlTag(ntry, "Amt");
+    if (!amtRaw) continue;
+    const ind = (xmlTag(ntry, "CdtDbtInd") ?? "CRDT").toUpperCase();
+    const signed = normalizeAmount((ind === "DBIT" ? "-" : "") + amtRaw, "CAMT.053 amount");
+    const bookg = xmlTag(ntry, "BookgDt");
+    const dt = bookg ? (xmlTag(bookg, "Dt") ?? xmlTag(bookg, "DtTm")) : undefined;
+    const iso = dt?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!iso) throw new BankingError(`CAMT.053: entry missing a booking date`);
+    const txDtls = xmlTag(ntry, "TxDtls") ?? ntry;
+    const description =
+      xmlTag(ntry, "AddtlNtryInf") ??
+      xmlTag(txDtls, "AddtlTxInf") ??
+      xmlTag(txDtls, "Ustrd") ??
+      xmlTag(txDtls, "Nm") ??
+      null;
+    const ref =
+      xmlTag(txDtls, "EndToEndId") ?? xmlTag(txDtls, "TxId") ?? xmlTag(txDtls, "AcctSvcrRef") ?? null;
+    lines.push({
+      postedOn: assertRealDate(iso[1], iso[2], iso[3], `CAMT.053 date "${dt}"`),
+      amount: signed,
+      description,
+      counterpartyRef: ref,
+      bankTransactionId: ref,
+    });
+    lineNo++;
+  }
+  if (lineNo === 0) throw new BankingError("CAMT.053: no <Ntry> entries found");
+  // closing booked balance (CLBD)
+  let closingBalance: string | undefined;
+  let statementDate: string | undefined;
+  for (const bal of xmlTags(stmt, "Bal")) {
+    const cd = xmlTag(bal, "Cd");
+    if (cd && /CLBD|CLAV/i.test(cd)) {
+      const amt = xmlTag(bal, "Amt");
+      const ind = (xmlTag(bal, "CdtDbtInd") ?? "CRDT").toUpperCase();
+      if (amt) closingBalance = normalizeAmount((ind === "DBIT" ? "-" : "") + amt, "CAMT.053 balance");
+      const bd = xmlTag(bal, "Dt");
+      const m = bd?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) statementDate = assertRealDate(m[1], m[2], m[3], "CAMT.053 balance date");
+    }
+  }
+  return { lines, currency, statementDate, closingBalance };
+}
+
+/**
+ * Parse a BAI2 (Cash Management Balance Reporting) file. Type-16 detail records
+ * carry a BAI type code, amount (in cents, no decimal), and reference/text.
+ * Type codes < 400 are credits, ≥ 400 debits. The statement date comes from the
+ * type-02 group header (field 4, YYMMDD) and closing balance from the type-03
+ * account record's 015 status code.
+ */
+export function parseBai2(text: string): ParsedStatement {
+  // Join 88-continuation records onto their parent, split on record delimiter.
+  const raw = text.replace(/\r/g, "");
+  const records: string[] = [];
+  for (const seg of raw.split("/\n")) {
+    for (const ln of seg.split("\n")) {
+      const t = ln.replace(/\/\s*$/, "").trim();
+      if (!t) continue;
+      if (t.startsWith("88,") && records.length) records[records.length - 1] += "," + t.slice(3);
+      else records.push(t);
+    }
+  }
+  const lines: ParsedStatementLine[] = [];
+  let statementDate: string | undefined;
+  let currency: string | undefined;
+  let closingBalance: string | undefined;
+  let lineNo = 0;
+  for (const rec of records) {
+    const f = rec.split(",");
+    if (f[0] === "02") {
+      const d = f[4]; // YYMMDD
+      const m = d?.match(/^(\d{2})(\d{2})(\d{2})$/);
+      if (m) statementDate = assertRealDate("20" + m[1], m[2], m[3], `BAI2 date "${d}"`);
+    } else if (f[0] === "03") {
+      if (f[2]) currency = f[2];
+      // status/summary type codes follow in groups of (code, amount, ...)
+      for (let i = 3; i + 1 < f.length; i += 1) {
+        if (f[i] === "015" && f[i + 1]) closingBalance = baiAmount(f[i + 1]); // 015 = closing ledger
+      }
+    } else if (f[0] === "16") {
+      const typeCode = Number(f[1]);
+      const cents = f[2];
+      if (!cents) continue;
+      const magnitude = baiAmount(cents);
+      const signed = typeCode >= 400 ? "-" + magnitude.replace(/^-/, "") : magnitude;
+      const bankRef = f[4] || null;
+      const custRef = f[5] || null;
+      const textDesc = f.slice(6).join(",").trim() || null;
+      lines.push({
+        postedOn: statementDate ?? new Date().toISOString().slice(0, 10),
+        amount: signed,
+        description: textDesc,
+        counterpartyRef: custRef ?? bankRef,
+        bankTransactionId: bankRef ?? custRef,
+      });
+      lineNo++;
+    }
+  }
+  if (lineNo === 0) throw new BankingError("BAI2: no type-16 transaction records found");
+  return { lines, currency, statementDate, closingBalance };
+}
+
+/** BAI2 amounts are integer cents with no decimal point (e.g. "150000" = 1500.00). */
+function baiAmount(cents: string): string {
+  const neg = cents.startsWith("-");
+  const digits = cents.replace(/[^0-9]/g, "");
+  if (!digits) throw new BankingError(`BAI2: unparseable amount "${cents}"`);
+  return fromUnits((neg ? -1n : 1n) * toUnits((Number(digits) / 100).toString()));
+}
+
+/**
+ * Parse a SWIFT MT940 (Customer Statement) message. Reads :61: statement lines
+ * (value date, D/C mark, amount) with their following :86: information line,
+ * plus :25: account, :28C: statement number, and :62F: closing balance.
+ */
+export function parseMt940(text: string): ParsedStatement {
+  const body = text.replace(/\r/g, "");
+  // Split into tag blocks: a line starting with ":NN:" begins a new field.
+  const fields: { tag: string; value: string }[] = [];
+  for (const ln of body.split("\n")) {
+    const m = ln.match(/^:(\d{2}[A-Z]?):(.*)$/);
+    if (m) fields.push({ tag: m[1], value: m[2] });
+    else if (fields.length && ln.trim() && ln.trim() !== "-") fields[fields.length - 1].value += "\n" + ln;
+  }
+  const lines: ParsedStatementLine[] = [];
+  let currency: string | undefined;
+  let closingBalance: string | undefined;
+  let statementDate: string | undefined;
+  let pending: ParsedStatementLine | null = null;
+  const pushPending = () => {
+    if (pending) lines.push(pending);
+    pending = null;
+  };
+  for (const { tag, value } of fields) {
+    if (tag === "61") {
+      pushPending();
+      // YYMMDD [MMDD] {D|C|RD|RC} [funds] amount(,) type ...
+      const m = value.match(/^(\d{6})(\d{4})?(R?[DC])([A-Z])?([\d.,]+)/);
+      if (!m) throw new BankingError(`MT940: unparseable :61: line "${value.slice(0, 40)}"`);
+      const dm = m[1].match(/^(\d{2})(\d{2})(\d{2})$/)!;
+      const debit = /D/.test(m[3]);
+      const amount = normalizeAmount((debit ? "-" : "") + m[5], "MT940 amount");
+      const rest = value.slice(m[0].length);
+      const ref = rest.split("//")[0]?.replace(/^N[A-Z]{3}/, "").trim() || null;
+      pending = {
+        postedOn: assertRealDate("20" + dm[1], dm[2], dm[3], `MT940 date "${m[1]}"`),
+        amount,
+        description: null,
+        counterpartyRef: ref,
+        bankTransactionId: ref,
+      };
+    } else if (tag === "86" && pending) {
+      pending.description = value.replace(/\n/g, " ").replace(/[?>]\d{2}/g, " ").replace(/\s+/g, " ").trim() || null;
+    } else if (tag === "25") {
+      const cm = value.match(/([A-Z]{3})\s*$/);
+      if (cm) currency = cm[1];
+    } else if (tag === "62F" || tag === "62M") {
+      const m = value.match(/^([DC])(\d{6})([A-Z]{3})([\d.,]+)/);
+      if (m) {
+        closingBalance = normalizeAmount((m[1] === "D" ? "-" : "") + m[4], "MT940 closing balance");
+        currency = currency ?? m[3];
+        const dm = m[2].match(/^(\d{2})(\d{2})(\d{2})$/)!;
+        statementDate = assertRealDate("20" + dm[1], dm[2], dm[3], "MT940 balance date");
+      }
+    }
+  }
+  pushPending();
+  if (lines.length === 0) throw new BankingError("MT940: no :61: statement lines found");
+  return { lines, currency, statementDate, closingBalance };
 }
 
 // ---------------------------------------------------------------------------
@@ -796,6 +992,32 @@ export async function unmatchStatementLine(
   `);
 
   return refreshStatus(recon.id, ctx);
+}
+
+/**
+ * Exclude an unmatched statement line from reconciliation (bank fees you book
+ * elsewhere, duplicates, opening entries). Only unmatched lines can be
+ * excluded; matched lines must be unmatched first.
+ */
+export async function excludeStatementLine(statementLineId: string, ctx: BankingContext): Promise<void> {
+  const res = (await db.execute(sql`
+    update bank_statement_lines l
+       set match_status = 'excluded', updated_at = now(), updated_by = ${ctx.userId}
+     where l.id = ${statementLineId} and l.org_id = ${ctx.orgId} and l.match_status = 'unmatched'
+    returning l.id
+  `)) as unknown as { rows: { id: string }[] };
+  if (!res.rows[0]) throw new BankingError("Only unmatched lines can be excluded");
+}
+
+/** Restore an excluded statement line back to the unmatched queue. */
+export async function restoreStatementLine(statementLineId: string, ctx: BankingContext): Promise<void> {
+  const res = (await db.execute(sql`
+    update bank_statement_lines l
+       set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
+     where l.id = ${statementLineId} and l.org_id = ${ctx.orgId} and l.match_status = 'excluded'
+    returning l.id
+  `)) as unknown as { rows: { id: string }[] };
+  if (!res.rows[0]) throw new BankingError("Only excluded lines can be restored");
 }
 
 /**

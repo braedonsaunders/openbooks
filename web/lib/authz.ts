@@ -25,6 +25,10 @@ export interface Authz {
 export async function getAuthz(): Promise<Authz | null> {
   const user = await currentUser();
   if (!user) return null;
+  // Super admins hold every permission in whatever org they're currently in.
+  if (user.isSuperAdmin) {
+    return { user, permissions: new Set<string>(["*"]) };
+  }
   const [assignments, overrides] = (await Promise.all([
     db.execute(sql`
       select r.permissions
