@@ -1,14 +1,16 @@
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions, projectProfitability } from '../../../../lib/reports'
+import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
-import { money } from '../../../../lib/format'
+import { currencySymbol } from '../../../../lib/statement-format'
+import { orgBranding } from '../../../../lib/report-pdf'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
 import { ExportMenu } from '../ExportMenu'
+import { PaperView, type PaperCell } from '../PaperView'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,21 +31,34 @@ export default async function ProjectProfitabilityPage({
     locationId: q.dims.locationId,
     classId: q.dims.classId,
   }
-  const [result, opts] = await Promise.all([
+  const [result, opts, org, branding] = await Promise.all([
     projectProfitability(period.from, period.to, { dims }),
     dimensionOptions(),
+    orgInfo(),
+    orgBranding(),
   ])
+  const sym = currencySymbol(org?.base_currency)
 
-  // Each project row drills into the full P&L filtered on that project, keeping
-  // the current period/basis/other-dimension context.
+  // Each project drills into the P&L filtered on that project (period + basis +
+  // other dims preserved). Link only the project-name cell.
   const pnlHref = (projectId: string) =>
     `/reports/pnl?${toSearchParams({ ...q, dims: { ...q.dims, projectId } }).toString()}`
 
-  const num = (v: number, danger = false) => (
-    <TableCell className={cn('text-right tabular-nums', danger && v < 0 && 'text-red-600 dark:text-red-400')}>
-      {money(v)}
-    </TableCell>
-  )
+  const rows: PaperCell[][] = result.rows.map((r) => [
+    r.projectName,
+    r.customerName ?? '—',
+    r.revenue,
+    r.cogs,
+    r.grossProfit,
+    r.expenses,
+    r.net,
+    pct(r.margin),
+    r.hours || '',
+  ])
+  const links = result.rows.map((r) => [pnlHref(r.projectId), null, null, null, null, null, null, null, null])
+  const T = result.totals
+  rows.push([t('trialBalance.totals'), '', T.revenue, T.cogs, T.grossProfit, T.expenses, T.net, pct(T.margin), T.hours || ''])
+  links.push([null, null, null, null, null, null, null, null, null])
 
   return (
     <ListPageLayout
@@ -51,7 +66,6 @@ export default async function ProjectProfitabilityPage({
         <>
           <PageHeader
             title={t('projectProfitability.title')}
-            description={t('pnl.dateRange', { from: period.from, to: period.to })}
             back={{ href: '/reports', label: t('hub.title') }}
             actions={
               <div className="flex items-center gap-2">
@@ -64,56 +78,35 @@ export default async function ProjectProfitabilityPage({
         </>
       }
     >
-      {result.rows.length === 0 ? (
-        <p className="py-8 text-center text-slate-400 italic">{t('projectProfitability.empty')}</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('projectProfitability.columns.project')}</TableHead>
-              <TableHead>{t('projectProfitability.columns.customer')}</TableHead>
-              <TableHead className="text-right">{t('projectProfitability.columns.revenue')}</TableHead>
-              <TableHead className="text-right">{t('projectProfitability.columns.cogs')}</TableHead>
-              <TableHead className="text-right">{t('projectProfitability.columns.grossProfit')}</TableHead>
-              <TableHead className="text-right">{t('projectProfitability.columns.expenses')}</TableHead>
-              <TableHead className="text-right">{t('projectProfitability.columns.net')}</TableHead>
-              <TableHead className="text-right">{t('projectProfitability.columns.margin')}</TableHead>
-              <TableHead className="text-right">{t('projectProfitability.columns.hours')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {result.rows.map((r) => (
-              <TableRow key={r.projectId}>
-                <TableCell>
-                  <Link href={pnlHref(r.projectId)} className="font-medium hover:text-teal-700 dark:hover:text-teal-300">
-                    {r.projectName}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-slate-600 dark:text-slate-300">{r.customerName ?? '—'}</TableCell>
-                {num(r.revenue)}
-                {num(r.cogs)}
-                {num(r.grossProfit, true)}
-                {num(r.expenses)}
-                {num(r.net, true)}
-                <TableCell className={cn('text-right tabular-nums', r.margin !== null && r.margin < 0 && 'text-red-600 dark:text-red-400')}>
-                  {pct(r.margin)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{r.hours ? r.hours.toLocaleString() : ''}</TableCell>
-              </TableRow>
-            ))}
-            <TableRow className="border-t-2 font-semibold">
-              <TableCell colSpan={2}>{t('trialBalance.totals')}</TableCell>
-              {num(result.totals.revenue)}
-              {num(result.totals.cogs)}
-              {num(result.totals.grossProfit, true)}
-              {num(result.totals.expenses)}
-              {num(result.totals.net, true)}
-              <TableCell className="text-right tabular-nums">{pct(result.totals.margin)}</TableCell>
-              <TableCell className="text-right tabular-nums">{result.totals.hours ? result.totals.hours.toLocaleString() : ''}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      )}
+      <PaperView
+        company={branding.orgName}
+        currency={sym}
+        emptyLabel={t('projectProfitability.empty')}
+        data={{
+          title: t('projectProfitability.title'),
+          periodPhrase: t('pnl.dateRange', { from: period.from, to: period.to }),
+          groups: [
+            {
+              columns: [
+                t('projectProfitability.columns.project'),
+                t('projectProfitability.columns.customer'),
+                t('projectProfitability.columns.revenue'),
+                t('projectProfitability.columns.cogs'),
+                t('projectProfitability.columns.grossProfit'),
+                t('projectProfitability.columns.expenses'),
+                t('projectProfitability.columns.net'),
+                t('projectProfitability.columns.margin'),
+                t('projectProfitability.columns.hours'),
+              ],
+              align: ['left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+              money: [false, false, true, true, true, true, true, false, false],
+              rows,
+              links,
+              isEmpty: result.rows.length === 0,
+            },
+          ],
+        }}
+      />
     </ListPageLayout>
   )
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { cn } from '@openbooks/ui'
 
 /**
@@ -8,8 +9,12 @@ import { cn } from '@openbooks/ui'
  * statementViewToExportData, custom reports via ReportRunResult). It draws the
  * result as a printed "sheet of paper" (centred company/title/period header,
  * section tables, right-aligned tabular numbers) so the in-app view matches the
- * PDF. Used by the report editor's live preview and, going forward, by the
- * standard report pages — so standard and custom reports look identical.
+ * PDF. Used by the report editor's live preview AND the standard report pages,
+ * so standard and custom reports look identical.
+ *
+ * Fidelity for statement pages: optional per-cell drill `links`, per-column
+ * `money` flags (currency-formatted; counts/percents left plain), and negative
+ * colouring — so a flattened page keeps its drill-through and polish.
  */
 
 export type PaperCell = string | number | null | undefined
@@ -20,6 +25,10 @@ export type PaperGroup = {
   columns: string[]
   rows: PaperCell[][]
   align?: ('left' | 'right' | 'center')[]
+  /** Per-column: format the cell as currency (else plain number/text). */
+  money?: boolean[]
+  /** Per-cell drill href (parallel to `rows`); null/absent ⇒ plain cell. */
+  links?: (string | null | undefined)[][]
   isEmpty?: boolean
 }
 
@@ -30,15 +39,23 @@ export type PaperData = {
   groups: PaperGroup[]
 }
 
-function isNumericCell(v: string | number | null | undefined): boolean {
+function isNumericCell(v: PaperCell): boolean {
   if (typeof v === 'number') return true
   if (typeof v !== 'string') return false
   return /^-?[$(]?-?[\d,]+(\.\d+)?\)?%?$/.test(v.trim())
 }
 
-function fmt(v: string | number | null | undefined): string {
+function fmtMoney(n: number, currency: string): string {
+  const s = Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return n < 0 ? `(${currency}${s})` : `${currency}${s}`
+}
+
+function fmt(v: PaperCell, isMoney: boolean, currency: string): string {
   if (v === null || v === undefined || v === '') return ''
-  if (typeof v === 'number') return v.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  if (typeof v === 'number') {
+    if (isMoney) return fmtMoney(v, currency)
+    return v.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  }
   return v
 }
 
@@ -51,10 +68,12 @@ export function PaperView({
   company,
   data,
   emptyLabel,
+  currency = '',
 }: {
   company: string
   data: PaperData
   emptyLabel: string
+  currency?: string
 }) {
   return (
     <div className="mx-auto w-full max-w-4xl rounded-lg border border-slate-200 bg-white px-6 py-8 text-slate-900 shadow-sm sm:px-10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
@@ -111,7 +130,10 @@ export function PaperView({
                           >
                             {row.map((cell, ci) => {
                               const a = alignOf(ci, cell)
-                              const numeric = a === 'right'
+                              const isMoney = !!group.money?.[ci]
+                              const negative = typeof cell === 'number' && cell < 0
+                              const href = group.links?.[ri]?.[ci]
+                              const text = fmt(cell, isMoney, currency)
                               return (
                                 <td
                                   key={ci}
@@ -119,10 +141,16 @@ export function PaperView({
                                     'px-2 py-1',
                                     a === 'right' && 'text-right tabular-nums',
                                     a === 'center' && 'text-center',
-                                    numeric && typeof cell === 'number' && cell < 0 && 'text-red-600 dark:text-red-400',
+                                    negative && 'text-red-600 dark:text-red-400',
                                   )}
                                 >
-                                  {fmt(cell)}
+                                  {href ? (
+                                    <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                                      {text}
+                                    </Link>
+                                  ) : (
+                                    text
+                                  )}
                                 </td>
                               )
                             })}
