@@ -162,7 +162,8 @@
       "financials": "Finances",
       "cost_time": "Coût et temps",
       "documents": "Documents",
-      "billing": "Facturation"
+      "billing": "Facturation",
+      "charges": "Charges"
     },
     "unbilled": "Non facturé",
     "totalHours": "Heures totales",
@@ -177,5 +178,26 @@
     "billableHead": "Facturable",
     "billValue": "Valeur à facturer",
     "noTime": "Aucun temps approuvé sur ce projet pour le moment."
+  },
+  "charges": {
+    "costRecovered": "Coût récupéré",
+    "billValue": "Valeur à facturer",
+    "count": "Charges",
+    "addTitle": "Ajouter une charge",
+    "addHint": "Affectez une ressource (matériaux, équipement, service) à ce projet à un taux de coût — comptabilisé au COGS du projet et libère le pool de coûts; le taux de facturation alimente la facturation T&M.",
+    "item": "Ressource / article",
+    "selectItem": "Sélectionnez un article…",
+    "quantity": "Quantité",
+    "costRate": "Taux de coût",
+    "billRate": "Taux de facturation",
+    "post": "Comptabiliser",
+    "title": "Charges",
+    "none": "Aucune charge sur ce projet pour le moment.",
+    "cost": "Coût",
+    "billed": "Facturé",
+    "billedYes": "Facturé",
+    "created": "Charge comptabilisée",
+    "failed": "Impossible de comptabiliser la charge",
+    "pickItem": "Choisissez un article"
   }
 }

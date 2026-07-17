@@ -162,7 +162,8 @@
       "financials": "Financials",
       "cost_time": "Cost & Time",
       "documents": "Documents",
-      "billing": "Billing"
+      "billing": "Billing",
+      "charges": "Charges"
     },
     "unbilled": "Unbilled",
     "totalHours": "Total hours",
@@ -177,5 +178,26 @@
     "billableHead": "Billable",
     "billValue": "Bill value",
     "noTime": "No approved time on this project yet."
+  },
+  "charges": {
+    "costRecovered": "Cost recovered",
+    "billValue": "Bill value",
+    "count": "Charges",
+    "addTitle": "Add a charge",
+    "addHint": "Allocate a resource (materials, equipment, service) to this project at a cost rate — posts to project COGS and relieves the cost pool; the bill rate feeds T&M billing.",
+    "item": "Resource / item",
+    "selectItem": "Select an item…",
+    "quantity": "Quantity",
+    "costRate": "Cost rate",
+    "billRate": "Bill rate",
+    "post": "Post charge",
+    "title": "Charges",
+    "none": "No charges on this project yet.",
+    "cost": "Cost",
+    "billed": "Billed",
+    "billedYes": "Billed",
+    "created": "Charge posted",
+    "failed": "Could not post charge",
+    "pickItem": "Pick an item first"
   }
 }
