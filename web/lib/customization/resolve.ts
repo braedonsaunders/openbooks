@@ -259,7 +259,7 @@ function mergeCustomFieldsIntoView(
     if (!placed.has(column.key)) {
       view.columns.push({
         key: column.key,
-        visible: true,
+        visible: !column.defaultHidden,
         width: column.defaultWidth ?? null,
         labelOverride: null,
       });

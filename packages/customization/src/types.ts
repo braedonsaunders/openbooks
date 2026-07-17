@@ -179,6 +179,8 @@ export interface ListColumnMeta {
   /** Sort key the web query builder maps to a whitelisted SQL fragment. */
   sortKey?: string
   locked?: boolean
+  /** Hidden in the seeded default view (still available to add in the designer). */
+  defaultHidden?: boolean
   /** Default column width (px) when the view doesn't specify one. */
   defaultWidth?: number
 }

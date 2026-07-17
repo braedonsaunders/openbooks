@@ -500,13 +500,14 @@ const PROJECT: RecordTypeMeta = {
   ],
   lineFields: [],
   listColumns: [
-    { key: "code", labelKey: "projects.labels.code", kind: "reference", sortable: true, sortKey: "code", locked: true },
-    { key: "name", labelKey: "common.labels.name", kind: "text", sortable: true, sortKey: "name" },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "code", labelKey: "projects.labels.code", kind: "text", sortable: true, sortKey: "code", defaultHidden: true },
     { key: "customer", labelKey: "common.labels.customer", kind: "text", sortable: true, sortKey: "customer" },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "billing_method", labelKey: "projects.labels.billing", kind: "text" },
     { key: "contract", labelKey: "projects.labels.contractValue", kind: "amount", sortable: true, sortKey: "contract", defaultWidth: 130 },
     { key: "actual", labelKey: "projects.labels.actualCost", kind: "amount", sortable: true, sortKey: "actual", defaultWidth: 130 },
+    { key: "created", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created", defaultWidth: 120 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
