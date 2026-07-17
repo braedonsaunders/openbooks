@@ -22,6 +22,7 @@
     "installing": "Installation…"
   },
   "installed": "{boxes} cases installées ({sales} codes de vente / {purchases} codes d’achat associés)",
+  "reinstall": "Réinstaller le module GST34",
   "export": {
     "label": "Exporter",
     "pdf": "Fac-similé PDF",
