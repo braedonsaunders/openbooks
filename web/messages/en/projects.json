@@ -31,6 +31,52 @@
     "substantially_complete": "Substantially complete"
   },
   "billing": {
+    "availableToBill": "Available to bill",
+    "requestBilling": "Request billing",
+    "unbilledDetail": "{entries} time entries · {hours}h · {lines} cost lines",
+    "requestCreated": "Billing request created",
+    "requestFailed": "Could not create billing request",
+    "invoiceCreated": "Invoice {number} created",
+    "invoiceFailed": "Could not create invoice",
+    "invoiceType": "Type",
+    "basis": "Basis",
+    "drawAmount": "Draw amount",
+    "startDate": "Start date",
+    "cutoffDate": "Cutoff date",
+    "description": "Description",
+    "customerPo": "Customer PO",
+    "backupRequired": "Backup required",
+    "backupType": "Backup type",
+    "createRequest": "Create request",
+    "requests": "Billing requests",
+    "noRequests": "No billing requests yet.",
+    "invoice": "Invoice",
+    "createInvoice": "Create invoice",
+    "downloadBackup": "Download backup",
+    "type": {
+      "progress": "Progress",
+      "final": "Final"
+    },
+    "basisOpt": {
+      "date_range": "Date range",
+      "draw_amount": "Draw amount",
+      "time_selection": "Time selection",
+      "milestone": "Milestone"
+    },
+    "backup": {
+      "none": "None",
+      "costed_timesheets": "Costed timesheets",
+      "timesheets_purchases": "Timesheets + purchases",
+      "purchases": "Purchases",
+      "purchases_shop_time": "Purchases + shop time",
+      "quote_only": "Quote only"
+    },
+    "status": {
+      "open": "Open",
+      "invoiced": "Invoiced",
+      "closed": "Closed",
+      "cancelled": "Cancelled"
+    },
     "time_and_materials": "Time & materials",
     "fixed_price": "Fixed price",
     "cost_plus": "Cost plus"
@@ -115,7 +161,8 @@
       "overview": "Overview",
       "financials": "Financials",
       "cost_time": "Cost & Time",
-      "documents": "Documents"
+      "documents": "Documents",
+      "billing": "Billing"
     },
     "unbilled": "Unbilled",
     "totalHours": "Total hours",
