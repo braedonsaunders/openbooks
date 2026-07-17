@@ -38,6 +38,27 @@ export {
 } from "./email-tokens.ts";
 export { runDueScheduledFlows, lastCronOccurrenceBetween } from "./scheduled.ts";
 export { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
+export {
+  checkFlowLock,
+  getFlowLock,
+  lockRecord,
+  unlockRecord,
+  type FlowLockInfo,
+} from "./locks.ts";
+export { userRoleKeys } from "./targets.ts";
+export {
+  registerFlowPdfRenderer,
+  renderFlowPdf,
+  hasFlowPdfRenderer,
+  type FlowPdfAttachment,
+  type FlowPdfRenderer,
+} from "./pdf-hook.ts";
+export {
+  BANK_ACCOUNT_SUBJECT_KIND,
+  BANK_ACCOUNT_MATERIAL_FIELDS,
+  bankAccountsFlowAdapter,
+  bankAccountSubjectProfile,
+} from "./bank-accounts-adapter.ts";
 export { lintFlowGraphForSubject } from "./lint.ts";
 export {
   BUILT_IN_ROLE_NAMES,

@@ -55,6 +55,7 @@ export {
   planAutomation,
   planFromGate,
   recipientTargetSchema,
+  scheduledSafeActions,
   triggerDataSchema,
 } from './automation'
 export type {
@@ -65,6 +66,7 @@ export type {
   AutomationGraph,
   AutomationNode,
   AutomationPlan,
+  FlowEventSource,
   GateData,
   PlannedAction,
   PlannedGate,

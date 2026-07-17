@@ -5,7 +5,6 @@
     "subtitle": "Everything that configures this workspace — company setup, people, and system.",
     "groups": {
       "company": "Company",
-      "accounting": "Accounting",
       "people": "People & access",
       "workspace": "Workspace",
       "activity": "Activity & data",
@@ -339,7 +338,15 @@
       "keyPlaceholder": "ap_clerk",
       "descriptionPlaceholder": "What is this role for?",
       "permissionsHeading": "Permissions",
-      "selectedCount": "{count} selected"
+      "selectedCount": "{count} selected",
+      "subsidiaryHeading": "Subsidiary access",
+      "subsidiaryModeAll": "All subsidiaries",
+      "subsidiaryModeSubtree": "A subsidiary and its children",
+      "subsidiaryModeList": "Specific subsidiaries",
+      "subsidiaryPlaceholder": "Choose a subsidiary…",
+      "subsidiarySearchPlaceholder": "Search subsidiaries…",
+      "subsidiaryRequired": "Choose a subsidiary",
+      "subsidiaryListRequired": "Select at least one subsidiary"
     }
   },
   "scripts": {
@@ -773,6 +780,7 @@
     },
     "groups": {
       "company": "Company",
+      "accounting": "Accounting",
       "taxes": "Taxes",
       "dimensions": "Dimensions",
       "billing": "Billing & numbering",
@@ -804,6 +812,14 @@
       "classes": {
         "title": "Classes",
         "description": "A reporting dimension for slicing transactions."
+      },
+      "segment-definitions": {
+        "title": "Segments",
+        "description": "Configure built-in and custom accounting segments across transactions, accounts, and reports."
+      },
+      "segment-values": {
+        "title": "Segment Values",
+        "description": "Manage the selectable values and hierarchies for custom segments."
       },
       "departments": {
         "title": "Departments",
@@ -847,6 +863,22 @@
       "account-groups": {
         "title": "Account Groups",
         "description": "Reporting classifications of your chart of accounts (e.g. cost pools). Groups auto-classify accounts by rule, with per-account overrides."
+      },
+      "subsidiaries": {
+        "title": "Subsidiaries",
+        "description": "The legal entities inside your organization — a consolidation tree with one root."
+      },
+      "intercompany-pairs": {
+        "title": "Intercompany Pairs",
+        "description": "Due-from / due-to account mappings for transactions that cross two subsidiaries."
+      },
+      "fx-rates": {
+        "title": "Exchange Rates",
+        "description": "Tenant-owned daily rates used to post foreign-currency transactions."
+      },
+      "consolidated-fx-rates": {
+        "title": "Consolidated Exchange Rates",
+        "description": "Period current, average, and historical rates used for subsidiary consolidation."
       }
     },
     "fields": {
@@ -893,7 +925,35 @@
       "key": "Key",
       "dimension": "Dimension",
       "color": "Colour",
-      "sortOrder": "Sort order"
+      "sortOrder": "Sort order",
+      "legalName": "Legal name",
+      "baseCurrency": "Base currency",
+      "isElimination": "Elimination",
+      "fromSubsidiaryId": "From subsidiary",
+      "toSubsidiaryId": "To subsidiary",
+      "dueFromAccountId": "Due-from account",
+      "dueToAccountId": "Due-to account"
+      ,"asOf": "As of"
+      ,"fromCurrency": "From currency"
+      ,"toCurrency": "To currency"
+      ,"rateType": "Rate type"
+      ,"rate": "Rate"
+      ,"source": "Source"
+      ,"periodId": "Accounting period"
+      ,"currentRate": "Current rate"
+      ,"averageRate": "Average rate"
+      ,"historicalRate": "Historical rate"
+      ,"subsidiaryId": "Subsidiary"
+      ,"subsidiaryIncludeChildren": "Include child subsidiaries"
+      ,"pluralName": "Plural name"
+      ,"sourceKind": "Source"
+      ,"isHierarchical": "Hierarchical"
+      ,"showOnHeader": "Show on transaction header"
+      ,"showOnLines": "Show on transaction lines"
+      ,"showInReports": "Show in reports"
+      ,"allowAccountRequirement": "Allow as an account requirement"
+      ,"segmentId": "Segment"
+      ,"description": "Description"
     },
     "options": {
       "appliesTo": {
@@ -917,6 +977,15 @@
       "burdenMethod": {
         "live": "Live",
         "standard": "Standard"
+      },
+      "fxRateType": {
+        "spot": "Spot",
+        "average": "Average",
+        "historical": "Historical"
+      },
+      "rateSource": {
+        "derived": "Derived",
+        "manual": "Manual"
       }
     }
   },
@@ -1049,7 +1118,9 @@
         "set_field": "Set a field",
         "change_status": "Change the status",
         "webhook": "Call a webhook",
-        "post_document": "Post the document"
+        "post_document": "Post the document",
+        "lock_record": "Lock the record",
+        "unlock_record": "Unlock the record"
       },
       "recipients": "Recipients",
       "subject": "Subject",
@@ -1065,7 +1136,12 @@
       "url": "URL",
       "method": "Method",
       "includeRecord": "Include the record snapshot in the payload",
-      "postDocumentHint": "Posts the document to the ledger through the normal posting pipeline. Nothing to configure."
+      "postDocumentHint": "Posts the document to the ledger through the normal posting pipeline. Nothing to configure.",
+      "lockReason": "Lock reason",
+      "lockReasonPlaceholder": "e.g. Approved — payment is final",
+      "lockExemptRoles": "Exempt roles",
+      "lockExemptHint": "Admins are always exempt; selected roles may still edit.",
+      "unlockHint": "Removes the flow lock so the record can be edited again."
     },
     "gate": {
       "title": "Title",

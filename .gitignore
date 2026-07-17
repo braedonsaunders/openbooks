@@ -29,3 +29,11 @@ dump.rdb
 
 # regenerable 41MB NetSuite time-entry dump (dump_timebill.py recreates it)
 extraction/account-data/timebill.ndjson
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# local-only workflow replication reference (names, emails, approval chains —
+# never commit; the replicated flows live in the database)
+docs/netsuite-workflows-*.md

@@ -6,8 +6,7 @@ import { BUILT_IN_ROLE_NAMES } from "./subject-profiles.ts";
 
 /**
  * party_bank_accounts FlowSubjectAdapter — the first non-document subject.
- * Replicates the NetSuite "KLP | Vendor Bank Details Approval" workflow
- * (docs/netsuite-workflows-aux-spec.md): bank-detail rows are fraud-sensitive,
+ * Bank-detail change approval: bank-detail rows are fraud-sensitive,
  * so new/edited details sit `pending` — INACTIVE and invisible to payment
  * runs (payments.ts selects `is_active AND approved_at IS NOT NULL`) — until
  * a gate approves them. The adapter maintains that invariant on every status

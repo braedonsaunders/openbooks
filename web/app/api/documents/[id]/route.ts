@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
-import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
+import { runRecordFlows, checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, guardPermission, can } from '../../../../lib/authz'
 import {
   controlDeps,
@@ -16,6 +16,8 @@ import {
   type BillLineInput,
 } from '../../../../lib/documents'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { isUuid } from '../../../../lib/list-params'
+import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 
 export const runtime = 'nodejs'
 
@@ -32,11 +34,14 @@ async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise
       coalesce(d.party_id::text,'') || '~' || coalesce(d.payment_card_id::text,'') || '~' ||
       coalesce(d.document_date::text,'') || '~' || coalesce(d.posting_date::text,'') || '~' ||
       coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
+      coalesce(d.subsidiary_id::text,'') || '~' ||
+      coalesce(d.extra_dims::text,'{}') || '~' ||
       coalesce((select string_agg(
         coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
         coalesce(tax_code_id::text,'') || ':' || tax_amount::text || ':' ||
         coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
-        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,''),
+        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' ||
+        coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
         '|' order by line_number)
         from document_lines where document_id = d.id), '')
     ) as sig
@@ -86,8 +91,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
 
   const owned = (await db.execute(
-    sql`select kind, status, total from documents where id = ${id} and org_id = ${user.orgId}`,
-  )) as unknown as { rows: { kind: string; status: string; total: string }[] }
+    sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId" from documents where id = ${id} and org_id = ${user.orgId}`,
+  )) as unknown as { rows: { kind: string; status: string; total: string; taxTotal: string; partyId: string | null }[] }
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const cfg = DOC_KINDS[row.kind]
@@ -108,6 +113,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 409 },
     )
   }
+  // Flow-managed lock (the lock_record action — NetSuite "Lock Record" with
+  // role exemptions, e.g. approved payments stay permanently locked except
+  // for admins/controllers). Independent of document status.
+  {
+    const roles = await userRoleKeys(user.orgId, user.id)
+    const lock = await checkFlowLock(row.kind, id, {
+      isAdmin: user.isSuperAdmin || roles.has('admin'),
+      roles: [...roles],
+    })
+    if (lock) {
+      return NextResponse.json(
+        { error: `this document is locked by a workflow${lock.reason ? ` — ${lock.reason}` : ''}` },
+        { status: 409 },
+      )
+    }
+  }
+  // Pre-edit line snapshot for line-level change detection (NetSuite's
+  // "expense-line account/department changed → needs re-review" pattern).
+  const oldLines = ((await db.execute(sql`
+    select line_number as "lineNumber", account_id as "accountId", department_id as "departmentId",
+           project_id as "projectId", amount
+      from document_lines where document_id = ${id} order by line_number
+  `)) as unknown as { rows: { lineNumber: number; accountId: string | null; departmentId: string | null; projectId: string | null; amount: string }[] }).rows
 
   const deps = await controlDeps(user.orgId)
 
@@ -124,6 +152,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     projectId?: string | null
     locationId?: string | null
     classId?: string | null
+    extraDims?: Record<string, string | null>
+    /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
+    subsidiaryId?: string | null
     expectedPayDate?: string | null
     paymentHoldReason?: string | null
     internalNotes?: string | null
@@ -139,6 +170,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       projectId?: string | null
       locationId?: string | null
       classId?: string | null
+      extraDims?: Record<string, string | null>
       custom?: Record<string, unknown>
     })[]
   }
@@ -151,12 +183,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 422 },
     )
   }
+  if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
+    if (!isUuid(body.subsidiaryId)) {
+      return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+    }
+    const subsidiary = (await db.execute(sql`
+      select 1 from subsidiaries
+       where id = ${body.subsidiaryId} and org_id = ${user.orgId}
+         and is_active and not is_elimination`)) as any
+    if (!subsidiary.rows.length) {
+      return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+    }
+  }
 
   // custom-field validation (header + line) against the live definitions
-  const [headerDefs, lineDefs] = await Promise.all([
+  const [headerDefs, lineDefs, segments] = await Promise.all([
     loadFieldDefs('documents', row.kind),
     loadFieldDefs('document_lines', row.kind),
+    segmentRegistry(user.orgId),
   ])
+  const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
+  if (headerDims && !headerDims.ok) return NextResponse.json({ error: headerDims.error }, { status: 422 })
   let headerCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
     const v = validateCustomValues(headerDefs, body.custom)
@@ -167,7 +214,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Pre-validate + prepare lines before touching the DB, so a bad line
   // returns 422 without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
-  let preparedLines: { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; custom: Record<string, unknown> }[] | null = null
+  let preparedLines: { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
     const computed = computeBillTotals(valid, await taxRateMap())
@@ -190,6 +237,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         projectId?: string | null
         locationId?: string | null
         classId?: string | null
+        extraDims?: Record<string, string | null>
         custom?: Record<string, unknown>
       }
       const lv = validateCustomValues(lineDefs, l.custom)
@@ -198,6 +246,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { error: `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, fieldErrors: lv.errors },
           { status: 422 },
         )
+      }
+      const lineDims = validateExtraDims(l.extraDims, segments)
+      if (!lineDims.ok) {
+        return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
       }
       preparedLines.push({
         accountId: l.accountId!,
@@ -214,6 +266,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
+        extraDims: lineDims.cleaned,
         custom: lv.cleaned,
       })
     }
@@ -234,11 +287,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
-                                        department_id, project_id, location_id, class_id, custom)
+                                        department_id, project_id, location_id, class_id, extra_dims, custom)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
-                    ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId}, ${JSON.stringify(l.custom)})
+                    ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
+                    ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
           `)
         }
       }
@@ -256,6 +310,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
           location_id = ${body.locationId !== undefined ? body.locationId : sql`location_id`},
           class_id = ${body.classId !== undefined ? body.classId : sql`class_id`},
+          extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
+          subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
           expected_pay_date = ${body.expectedPayDate !== undefined ? body.expectedPayDate : sql`expected_pay_date`},
           payment_hold_reason = ${body.paymentHoldReason !== undefined ? body.paymentHoldReason : sql`payment_hold_reason`},
           internal_notes = ${body.internalNotes !== undefined ? body.internalNotes : sql`internal_notes`},
@@ -266,7 +322,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
           total = coalesce(${totals?.total ?? null}, total),
           updated_at = now(), updated_by = ${user.id}
-        where id = ${id}
+        where id = ${id} and org_id = ${user.orgId}
       `)
 
       if ((await glSignature(tx, id)) !== sigBefore) {
@@ -279,17 +335,45 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // on_update flows fire AFTER the edit commits. The edit-shape data rides on
-  // the EVENT (run.ts surfaces it as values.previousTotal / values.totalChanged
-  // for condition nodes — the "re-approval on material edit" pattern).
-  // runRecordFlows never throws into the caller and cannot veto the saved
-  // edit; it is awaited so it runs inside this request's RLS org scope (same
-  // posture as on_create in lib/documents.ts).
+  // the EVENT (run.ts surfaces it as eval-context values: previousTotal /
+  // totalChanged / changedFields / changedLineFields / old_* — the NetSuite
+  // "re-approval on material edit" pattern). runRecordFlows never throws into
+  // the caller and cannot veto the saved edit; it is awaited so it runs
+  // inside this request's RLS org scope (same posture as on_create in
+  // lib/documents.ts).
   const newTotal = totals?.total ?? row.total
+  const newTaxTotal = totals?.taxTotal ?? row.taxTotal
+  const changedFields: string[] = []
+  if (Number(newTotal) !== Number(row.total)) changedFields.push('total')
+  if (Number(newTaxTotal) !== Number(row.taxTotal)) changedFields.push('taxTotal')
+  if (body.partyId !== undefined && body.partyId !== row.partyId) changedFields.push('partyId')
+  // Line-level diff: pair old/new lines by line number; adds/removes count as
+  // every compared field changing (a removed expense line IS a material edit).
+  const changedLineFields = new Set<string>()
+  if (preparedLines) {
+    const maxLen = Math.max(oldLines.length, preparedLines.length)
+    for (let i = 0; i < maxLen; i++) {
+      const o = oldLines[i]
+      const n = preparedLines[i]
+      if (!o || !n) {
+        changedLineFields.add('accountId').add('departmentId').add('projectId').add('amount')
+        break
+      }
+      if (o.accountId !== n.accountId) changedLineFields.add('accountId')
+      if ((o.departmentId ?? null) !== (n.departmentId ?? null)) changedLineFields.add('departmentId')
+      if ((o.projectId ?? null) !== (n.projectId ?? null)) changedLineFields.add('projectId')
+      if (Number(o.amount) !== Number(n.amount)) changedLineFields.add('amount')
+    }
+  }
   await runRecordFlows(
     {
       kind: 'on_update',
+      source: 'ui',
       previousTotal: row.total,
       totalChanged: Number(newTotal) !== Number(row.total),
+      changedFields,
+      changedLineFields: [...changedLineFields],
+      old: { total: row.total, taxTotal: row.taxTotal },
     },
     row.kind,
     id,
@@ -314,6 +398,21 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
   if (!can(authz, createPermission(row.kind))) {
     return NextResponse.json({ error: `missing permission: ${createPermission(row.kind)}` }, { status: 403 })
+  }
+  // Flow-managed lock: a locked record can't be deleted out from under its
+  // workflow either (same exemptions as edits).
+  {
+    const roles = await userRoleKeys(authz.user.orgId, authz.user.id)
+    const lock = await checkFlowLock(row.kind, id, {
+      isAdmin: authz.user.isSuperAdmin || roles.has('admin'),
+      roles: [...roles],
+    })
+    if (lock) {
+      return NextResponse.json(
+        { error: `this document is locked by a workflow${lock.reason ? ` — ${lock.reason}` : ''}` },
+        { status: 409 },
+      )
+    }
   }
   try {
     await deleteDocument(id, authz.user.id)

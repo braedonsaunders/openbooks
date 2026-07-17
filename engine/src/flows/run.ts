@@ -107,14 +107,25 @@ export async function runRecordFlows(
         values: { ...subject.values },
         rows: subject.rows ?? {},
       };
+      // Where the mutation came from — conditions can auto-approve
+      // system-generated records (NetSuite execution-context filters).
+      evalCtx.values.event_source = event.source ?? "api";
       // on_update carries edit-shape data ON THE EVENT (the caller knows what
       // changed; the adapter only sees the post-edit record). Surface it as
-      // eval-context values so condition nodes / templates can use
-      // `previousTotal` / `totalChanged` — the "re-approval on material edit"
-      // seam (see DOCUMENT_FIELDS in subject-profiles.ts).
+      // eval-context values so condition nodes / templates can implement the
+      // NetSuite "needs re-approval on material edit" pattern (see
+      // DOCUMENT_FIELDS in subject-profiles.ts). `changedFields` /
+      // `changedLineFields` are arrays — LogicRule `in` over them is
+      // ANY-OVERLAP, so {op:'in', field:'changedFields',
+      // value:['total','taxTotal']} reads "total or tax total changed".
       if (event.kind === "on_update") {
         evalCtx.values.previousTotal = event.previousTotal ?? null;
         evalCtx.values.totalChanged = event.totalChanged ?? false;
+        evalCtx.values.changedFields = event.changedFields ?? [];
+        evalCtx.values.changedLineFields = event.changedLineFields ?? [];
+        for (const [k, v] of Object.entries(event.old ?? {})) {
+          evalCtx.values[`old_${k}`] = v as never;
+        }
       }
       let plan = planAutomation(graph, event, evalCtx);
       if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {

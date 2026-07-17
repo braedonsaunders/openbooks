@@ -1,6 +1,17 @@
-import cronParser from "cron-parser";
+// Named export, NOT the default: under ESM/tsx the default resolves to the
+// module namespace (no .parse), which silently breaks cron matching — see
+// lastCronOccurrenceBetween's catch. CronExpressionParser.parse works under
+// both CJS and ESM interop.
+import { CronExpressionParser } from "cron-parser";
 import { eq, sql } from "drizzle-orm";
-import { planAutomation, type AutomationGraph } from "@openbooks/forms-core";
+import {
+  evaluateLogicRule,
+  planAutomation,
+  scheduledSafeActions,
+  type AutomationGraph,
+  type AutomationPlan,
+  type EvalContext,
+} from "@openbooks/forms-core";
 import { db, schema, withOrg } from "../db.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -23,9 +34,9 @@ import { parseFlowGraph } from "./run.ts";
  * are skipped with a recorded warning rather than silently half-running.
  */
 
-const WORKER_SAFE_ACTIONS = new Set(["send_email", "notify"]);
-
 type FlowRow = typeof schema.flows.$inferSelect;
+
+const DEFAULT_FANOUT_LIMIT = 200;
 
 /** Latest occurrence of `cron` in (after, until]; null when none/invalid. */
 export function lastCronOccurrenceBetween(
@@ -35,7 +46,7 @@ export function lastCronOccurrenceBetween(
   tz?: string,
 ): Date | null {
   try {
-    const it = cronParser.parse(cron, { currentDate: after, tz: tz ?? "UTC" });
+    const it = CronExpressionParser.parse(cron, { currentDate: after, tz: tz ?? "UTC" });
     let last: Date | null = null;
     // Bounded walk: enough for a catch-up scan without spinning on
     // pathological every-second crons.
@@ -96,12 +107,16 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
     const due = dueScheduledNodes(graph, anchor, now);
     if (!due) continue;
 
-    // Claim by advancing the cursor — only one claimer wins; a crash after
-    // the claim loses at most this occurrence (same trade as user_scripts).
+    // Claim by advancing the cursor MONOTONICALLY — only one claimer wins
+    // (both compute the same cron-quantized occurrence; the second's `<`
+    // guard fails). A crash after the claim loses at most this occurrence
+    // (same trade as user_scripts). Deliberately not an equality compare:
+    // JS Dates carry milliseconds while timestamptz keeps microseconds, so
+    // read-back equality can never match a cursor written with now().
     const claimed = (await db.execute(sql`
       update flows set last_scheduled_run_at = ${due.latest}
        where id = ${flow.id}
-         and last_scheduled_run_at is not distinct from ${flow.lastScheduledRunAt}
+         and (last_scheduled_run_at is null or last_scheduled_run_at < ${due.latest})
     `)) as unknown as { rowCount?: number };
     if (!claimed.rowCount) continue;
 
@@ -116,53 +131,66 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
   return result;
 }
 
-async function runScheduledFlow(flow: FlowRow, graph: AutomationGraph, nodeIds: string[]): Promise<void> {
-  // No subject record: an empty EvalContext (the lint keeps scheduled
-  // branches to record-free actions).
-  const evalCtx = { values: {}, rows: {} };
-  const plan = planAutomation(graph, { kind: "scheduled" }, evalCtx, { triggerNodeIds: nodeIds });
-  if (plan.actionNodes.length === 0 && plan.gates.length === 0) return;
-
-  // Runtime guard mirroring lintWorkerTriggerCompatibility: drop gates and
-  // non-worker-safe actions with a recorded warning.
-  const warnings: string[] = [];
+/**
+ * Runtime guard mirroring lintWorkerTriggerCompatibility: drop gates and
+ * non-safe actions with a recorded warning. `hasRecord` widens the safe set
+ * (fan-out runs have a real subject, so set_field is well-defined).
+ */
+function toSafePlan(
+  plan: AutomationPlan,
+  hasRecord: boolean,
+  warnings: string[],
+): AutomationPlan {
+  const safe = scheduledSafeActions(hasRecord);
   if (plan.gates.length > 0) {
     warnings.push(`skipped ${plan.gates.length} gate(s) — scheduled runs cannot pause for approval`);
   }
   const actionNodes = plan.actionNodes.filter((n) => {
-    if (WORKER_SAFE_ACTIONS.has(n.action.action)) return true;
+    if (safe.has(n.action.action)) return true;
     warnings.push(`skipped "${n.action.action}" — not worker-safe for scheduled runs`);
     return false;
   });
-  const safePlan = { actions: actionNodes.map((n) => n.action), actionNodes, gates: [] };
+  return { actions: actionNodes.map((n) => n.action), actionNodes, gates: [] };
+}
 
+/** Execute one scheduled firing as a flow_runs row; returns the failure text. */
+async function executeScheduledRun(
+  flow: FlowRow,
+  subjectId: string,
+  plan: AutomationPlan,
+  evalCtx: EvalContext,
+  warnings: string[],
+  submitterUserId?: string | null,
+): Promise<string | null> {
   const [run] = await db
     .insert(schema.flowRuns)
     .values({
       orgId: flow.orgId,
       flowId: flow.id,
       subjectKind: flow.subjectKind,
-      // flow_runs.subject_id is NOT NULL but a scheduled firing has no record
-      // — the flow's own id stands in (see the contract note in the report).
-      subjectId: flow.id,
+      subjectId,
       trigger: "scheduled",
       status: "running",
-      context: {},
+      context:
+        subjectId === flow.id
+          ? {}
+          : (JSON.parse(JSON.stringify(evalCtx.values)) as Record<string, unknown>),
     })
     .returning({ id: schema.flowRuns.id });
 
   const adapter = getFlowAdapter(flow.subjectKind);
   let failedText: string | null = null;
-  if (safePlan.actionNodes.length > 0) {
+  if (plan.actionNodes.length > 0) {
     if (!adapter) {
       failedText = `no subject adapter for "${flow.subjectKind}"`;
     } else {
       const res = await executeFlowPlan({ orgId: flow.orgId }, adapter, {
         flow: { id: flow.id, name: flow.name, subjectKind: flow.subjectKind, graph: flow.graph },
         runId: run.id,
-        subjectId: flow.id,
-        plan: safePlan,
+        subjectId,
+        plan,
         evalCtx,
+        submitterUserId,
       });
       if (res.failed.length > 0) failedText = res.failed.join("; ");
     }
@@ -177,4 +205,71 @@ async function runScheduledFlow(flow: FlowRow, graph: AutomationGraph, nodeIds: 
       finishedAt: new Date(),
     })
     .where(eq(schema.flowRuns.id, run.id));
+  return failedText;
+}
+
+async function runScheduledFlow(flow: FlowRow, graph: AutomationGraph, nodeIds: string[]): Promise<void> {
+  // Due nodes split by shape: plain schedules run ONCE with no record;
+  // `select` schedules FAN OUT one run per matching record (NetSuite
+  // "scheduled workflow over a saved search"). Double-firing across
+  // processes is prevented by the lastScheduledRunAt claim; a crash after
+  // the claim loses at most this occurrence (documented trade above).
+  const plainNodeIds: string[] = [];
+  const fanoutNodes: Array<{ nodeId: string; rule?: Parameters<typeof evaluateLogicRule>[0]; limit: number }> = [];
+  for (const node of graph.nodes) {
+    if (!nodeIds.includes(node.id)) continue;
+    if (node.data.kind !== "trigger" || node.data.trigger.trigger !== "scheduled") continue;
+    const select = node.data.trigger.select;
+    if (select) {
+      fanoutNodes.push({
+        nodeId: node.id,
+        rule: select.rule,
+        limit: Math.min(select.limit ?? DEFAULT_FANOUT_LIMIT, 1_000),
+      });
+    } else {
+      plainNodeIds.push(node.id);
+    }
+  }
+
+  if (plainNodeIds.length > 0) {
+    const evalCtx: EvalContext = { values: { event_source: "schedule" }, rows: {} };
+    const plan = planAutomation(graph, { kind: "scheduled" }, evalCtx, {
+      triggerNodeIds: plainNodeIds,
+    });
+    if (plan.actionNodes.length > 0 || plan.gates.length > 0) {
+      const warnings: string[] = [];
+      const safePlan = toSafePlan(plan, false, warnings);
+      // flow_runs.subject_id is NOT NULL but a record-free firing has no
+      // record — the flow's own id stands in.
+      await executeScheduledRun(flow, flow.id, safePlan, evalCtx, warnings);
+    }
+  }
+
+  const adapter = getFlowAdapter(flow.subjectKind);
+  for (const node of fanoutNodes) {
+    if (!adapter?.findCandidateIds) {
+      console.error(
+        `[flows] scheduled fan-out on "${flow.subjectKind}" needs an adapter with findCandidateIds — skipped`,
+      );
+      continue;
+    }
+    const candidateIds = await adapter.findCandidateIds(node.limit);
+    for (const subjectId of candidateIds) {
+      const subject = await adapter.loadContext(subjectId);
+      if (!subject) continue;
+      const evalCtx: EvalContext = {
+        values: { ...subject.values, event_source: "schedule" },
+        rows: subject.rows ?? {},
+      };
+      if (node.rule && !evaluateLogicRule(node.rule, evalCtx)) continue;
+
+      const plan = planAutomation(graph, { kind: "scheduled" }, evalCtx, {
+        triggerNodeIds: [node.nodeId],
+      });
+      if (plan.actionNodes.length === 0 && plan.gates.length === 0) continue;
+      const warnings: string[] = [];
+      const safePlan = toSafePlan(plan, true, warnings);
+      await executeScheduledRun(flow, subjectId, safePlan, evalCtx, warnings, subject.submitterUserId);
+    }
+  }
 }
