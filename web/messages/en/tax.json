@@ -21,7 +21,10 @@
   "export": { "label": "Working-copy export", "pdf": "Working-copy PDF", "csv": "Working-copy CSV", "xlsx": "Working-copy Excel" },
   "official": { "download": "Filled official form" },
   "submission": {
-    "title": "Government submission",
+    "title": "How to file this return",
+    "description": "Use the configured filing channel and action below after reviewing the return.",
+    "channelLabel": "Filing channel",
+    "actionLabel": "Required action",
     "openGovernment": "Open filing instructions",
     "exportNotice": "Working-copy exports are for review and records. They are not government submission files unless the configured filing method explicitly says otherwise.",
     "gst34Notice": "GST34 is normally entered in CRA Account or NETFILE. CRA's uploadable .tax file can only be produced by CRA-certified software; PDF, CSV, and Excel are not accepted filing formats."

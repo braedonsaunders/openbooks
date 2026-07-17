@@ -191,15 +191,33 @@ export function TaxFilingsView({
             </CardContent>
             {selectedForm ? (
               <CardContent className="border-t border-slate-100 pt-4 dark:border-slate-800">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('submission.title')}</span>
-                  <span className="text-slate-500 dark:text-slate-400">{t(`channels.${selectedForm.submission_channel}`)}</span>
-                  <span className="text-slate-500 dark:text-slate-400">{t(`governmentFormats.${selectedForm.government_format}`)}</span>
-                  {governmentUrl ? (
-                    <a className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300" href={governmentUrl} target="_blank" rel="noreferrer">
-                      {t('submission.openGovernment')} <ExternalLink size={13} />
-                    </a>
-                  ) : null}
+                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <FileCheck2 className="mt-0.5 text-teal-600 dark:text-teal-400" size={18} />
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">{t('submission.title')}</p>
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('submission.description')}</p>
+                      </div>
+                    </div>
+                    {governmentUrl ? (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={governmentUrl} target="_blank" rel="noreferrer">
+                          {t('submission.openGovernment')} <ExternalLink size={13} />
+                        </a>
+                      </Button>
+                    ) : null}
+                  </div>
+                  <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md bg-white px-3 py-2.5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                      <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('submission.channelLabel')}</dt>
+                      <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{t(`channels.${selectedForm.submission_channel}`)}</dd>
+                    </div>
+                    <div className="rounded-md bg-white px-3 py-2.5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+                      <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('submission.actionLabel')}</dt>
+                      <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{t(`governmentFormats.${selectedForm.government_format}`)}</dd>
+                    </div>
+                  </dl>
                 </div>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('submission.exportNotice')}</p>
                 {code === 'CA_GST34' ? (

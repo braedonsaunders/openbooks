@@ -21,7 +21,10 @@
   "export": { "label": "Exportación de trabajo", "pdf": "PDF de trabajo", "csv": "CSV de trabajo", "xlsx": "Excel de trabajo" },
   "official": { "download": "Formulario oficial rellenado" },
   "submission": {
-    "title": "Presentación gubernamental",
+    "title": "Cómo presentar esta declaración",
+    "description": "Después de revisar la declaración, utilice el canal y la acción configurados a continuación.",
+    "channelLabel": "Canal de presentación",
+    "actionLabel": "Acción requerida",
     "openGovernment": "Abrir instrucciones de presentación",
     "exportNotice": "Las exportaciones de trabajo sirven para revisión y archivo. No son archivos de presentación gubernamental salvo que el método configurado lo indique expresamente.",
     "gst34Notice": "La GST34 normalmente se introduce en la cuenta de la CRA o NETFILE. El archivo .tax cargable solo puede producirlo software certificado por la CRA; no se aceptan PDF, CSV ni Excel."
