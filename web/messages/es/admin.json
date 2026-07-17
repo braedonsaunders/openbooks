@@ -161,6 +161,18 @@
       "items": {
         "label": "Artículos y servicios",
         "description": "Productos y servicios."
+      },
+      "crmAccounts": {
+        "label": "Cuentas de CRM",
+        "description": "Perfiles de calificación de clientes potenciales, prospectos y clientes."
+      },
+      "crmActivities": {
+        "label": "Actividades de CRM",
+        "description": "Llamadas, visitas, eventos, correos, notas y tareas."
+      },
+      "crmOpportunities": {
+        "label": "Oportunidades de CRM",
+        "description": "Oportunidades del canal y detalles de previsión."
       }
     },
     "kinds": {
@@ -587,7 +599,8 @@
       "documents": "Gestor de documentos",
       "admin": "Administración",
       "assets": "Activos fijos y depreciación",
-      "data": "Importar y exportar"
+      "data": "Importar y exportar",
+      "crm": "Gestión de relaciones con clientes"
     },
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
@@ -656,7 +669,20 @@
     "documents_manage": "Subir, mover, renombrar y eliminar archivos",
     "admin_setup_manage": "Manage setup & configuration",
     "data_export": "Exportar datos",
-    "data_import": "Importar datos"
+    "data_import": "Importar datos",
+    "crm_accounts_read": "Ver cuentas de CRM",
+    "crm_accounts_create": "Crear clientes potenciales y prospectos",
+    "crm_accounts_manage": "Gestionar cuentas de CRM",
+    "crm_accounts_assign": "Asignar y dirigir cuentas de CRM",
+    "crm_activities_read": "Ver actividades de CRM",
+    "crm_activities_manage": "Crear y gestionar actividades de CRM",
+    "crm_opportunities_read": "Ver oportunidades",
+    "crm_opportunities_manage": "Crear y gestionar oportunidades",
+    "crm_opportunities_close": "Cerrar oportunidades ganadas o perdidas",
+    "crm_forecasts_read": "Ver previsiones de ventas",
+    "crm_forecasts_manage": "Crear instantáneas de previsión",
+    "crm_forecasts_override": "Anular previsiones del equipo",
+    "crm_setup_manage": "Gestionar configuración de CRM"
   },
   "ai": {
     "metaTitle": "Configuración de IA",

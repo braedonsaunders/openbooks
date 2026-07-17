@@ -111,6 +111,14 @@ accounts match NetSuite exactly**.
       deterministic exact-money detectors, evidence-backed review queue,
       automatic resolution, feedback, audit history, tenant kill switches,
       schedules, and materiality policies under Platform → AI *(2026-07-16)*
+- [x] Sales CRM waves 0–3: relationship lifecycle and assignment history,
+      activities and related-record links, opportunity pipeline and quote
+      conversion, exact weighted forecasting, quotas/snapshots, tenant setup,
+      RBAC, custom-field targets, and complete en/fr/es UX *(2026-07-16)*
+- [ ] Source CRM activity evidence: customer lifecycle/statuses imported; the
+      current source role exposes 3,832 note links but not note bodies/authors
+      and does not expose native task/call/calendar records. Grant a source
+      role/API that can read those records, then rerun the idempotent CRM import.
 
 ### M5 — Cutover
 - [ ] NetSuite → read-only; openbooks system of record

@@ -19,7 +19,7 @@
     "employees": "Employees",
     "projects": "Projects",
     "items": "Items & Services",
-    "journal": "Journal",
+    "journal": "Journals",
     "accounts": "Chart of Accounts",
     "assets": "Fixed Assets",
     "budgets": "Budgets",
@@ -47,7 +47,12 @@
     "admin-pdf-templates": "PDF Templates",
     "admin-apps": "Apps",
     "admin-setup": "Setup",
-    "analytics": "Analytics"
+    "analytics": "Analytics",
+    "crm-leads": "Leads",
+    "crm-prospects": "Prospects",
+    "crm-opportunities": "Opportunities",
+    "crm-activities": "Activities",
+    "crm-forecasts": "Forecasts & Quotas"
   },
   "groups": {
     "overview": "Overview",
@@ -69,6 +74,7 @@
     "sales": "Sales",
     "accounting": "Accounting",
     "people-time": "People & Time",
-    "reports": "Analysis"
+    "reports": "Analysis",
+    "crm": "CRM"
   }
 }

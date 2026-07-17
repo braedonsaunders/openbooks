@@ -6,6 +6,7 @@ import { guardPermission } from '../../../lib/authz'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, loadOrder, orderTaxRateMap, type OrderLineInput } from './lib'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
+import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -158,6 +159,17 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           updated_at = now(), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
       `)
+      const nextPartyId = body.partyId !== undefined ? body.partyId : null
+      if (nextPartyId && (cfg.kind === 'quote' || cfg.kind === 'sales_order')) {
+        await promoteCrmAccount(tx, {
+          orgId: user.orgId,
+          partyId: nextPartyId,
+          actorId: user.id,
+          toStage: cfg.kind === 'quote' ? 'prospect' : 'customer',
+          sourceKind: cfg.kind,
+          sourceId: id,
+        })
+      }
     })
 
     const order = await loadOrder(id, user.orgId, cfg.kind)

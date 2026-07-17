@@ -105,3 +105,40 @@ export async function suiteql<T = Record<string, unknown>>(
     offset += limit;
   }
 }
+
+/** Read a paginated native-record collection through SuiteTalk REST. */
+export async function netsuiteRecords<T = Record<string, unknown>>(
+  recordType: string,
+  creds: NetSuiteCreds,
+  limit = 1000,
+): Promise<T[]> {
+  const endpoint = `${creds.host}/services/rest/record/v1/${encodeURIComponent(recordType)}`;
+  const rows: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const query = { limit, offset };
+    const res = await fetch(`${endpoint}?limit=${limit}&offset=${offset}`, {
+      headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`SuiteTalk ${recordType} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
+    const data = await res.json() as { items?: T[]; hasMore?: boolean };
+    rows.push(...(data.items ?? []));
+    if (!data.hasMore) return rows;
+    offset += limit;
+  }
+}
+
+/** Read one native SuiteTalk REST record, expanding referenced subresources. */
+export async function netsuiteRecord<T = Record<string, unknown>>(
+  recordType: string,
+  id: string | number,
+  creds: NetSuiteCreds,
+): Promise<T> {
+  const endpoint = `${creds.host}/services/rest/record/v1/${encodeURIComponent(recordType)}/${encodeURIComponent(String(id))}`;
+  const query = { expandSubResources: "true" };
+  const res = await fetch(`${endpoint}?expandSubResources=true`, {
+    headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`SuiteTalk ${recordType}/${id} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
+  return await res.json() as T;
+}

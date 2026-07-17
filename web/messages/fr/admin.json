@@ -161,6 +161,18 @@
       "items": {
         "label": "Articles et services",
         "description": "Produits et services."
+      },
+      "crmAccounts": {
+        "label": "Comptes CRM",
+        "description": "Profils de qualification des pistes, prospects et clients."
+      },
+      "crmActivities": {
+        "label": "Activités CRM",
+        "description": "Appels, visites, événements, courriels, notes et tâches."
+      },
+      "crmOpportunities": {
+        "label": "Occasions CRM",
+        "description": "Occasions du pipeline et détails des prévisions."
       }
     },
     "kinds": {
@@ -631,7 +643,8 @@
       "documents": "Gestion de documents",
       "admin": "Administration",
       "assets": "Immobilisations et amortissement",
-      "data": "Import & Export"
+      "data": "Importation et exportation",
+      "crm": "Gestion de la relation client"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -700,7 +713,20 @@
     "documents_manage": "Téléverser, déplacer, renommer et supprimer des fichiers",
     "admin_setup_manage": "Manage setup & configuration",
     "data_export": "Exporter des données",
-    "data_import": "Importer des données"
+    "data_import": "Importer des données",
+    "crm_accounts_read": "Voir les comptes CRM",
+    "crm_accounts_create": "Créer des pistes et des prospects",
+    "crm_accounts_manage": "Gérer les comptes CRM",
+    "crm_accounts_assign": "Attribuer et acheminer les comptes CRM",
+    "crm_activities_read": "Voir les activités CRM",
+    "crm_activities_manage": "Créer et gérer les activités CRM",
+    "crm_opportunities_read": "Voir les occasions",
+    "crm_opportunities_manage": "Créer et gérer les occasions",
+    "crm_opportunities_close": "Clore les occasions gagnées ou perdues",
+    "crm_forecasts_read": "Voir les prévisions de vente",
+    "crm_forecasts_manage": "Créer des instantanés de prévision",
+    "crm_forecasts_override": "Remplacer les prévisions d’équipe",
+    "crm_setup_manage": "Gérer la configuration CRM"
   },
   "ai": {
     "metaTitle": "Paramètres d'IA",
