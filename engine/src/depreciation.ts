@@ -83,6 +83,9 @@ export interface ScheduleInput {
    * to the straight-line-equivalent rate (1 / life-years).
    */
   ratePercent?: string | null;
+  /** First-period convention: full_month (default), or mid_month / half_year
+   *  which prorate the first period (and extend the schedule by one). */
+  convention?: "full_month" | "mid_month" | "half_year" | null;
 }
 
 export interface ScheduleLinePlan {
@@ -120,12 +123,15 @@ function addMonths(monthStartDate: string, n: number): string {
 export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
   const life = Math.max(1, Math.trunc(input.lifeMonths));
   const { formula, rateTable } = formulaForMethod(input.method, input.ratePercent, life);
+  const firstPeriodFraction =
+    input.convention === "mid_month" || input.convention === "half_year" ? 0.5 : 1;
   const rows = computeScheduleByFormula({
     cost: input.cost,
     salvage: input.salvage,
     lifePeriods: life,
     formula,
     rateTable,
+    firstPeriodFraction,
   });
   const start = monthStart(input.inServiceOn);
   return rows.map((r) => ({
@@ -225,9 +231,9 @@ export async function buildSchedule(
   if (!asset.in_service_on) throw new Error("asset has no in-service date");
 
   const catRes = (await db.execute(sql`
-    select default_method, default_life_months
+    select default_method, default_life_months, default_convention
       from asset_categories where id = ${asset.category_id} and org_id = ${orgId}`)) as unknown as {
-    rows: { default_method: DepreciationMethod; default_life_months: number | null }[];
+    rows: { default_method: DepreciationMethod; default_life_months: number | null; default_convention: string | null }[];
   };
   const category = catRes.rows[0];
   if (!category) throw new Error("asset category not found");
@@ -238,6 +244,7 @@ export async function buildSchedule(
   const method: DepreciationMethod = custom.method ?? category.default_method ?? "straight_line";
   const lifeMonths: number = Number(custom.lifeMonths ?? category.default_life_months ?? 0);
   const ratePercent: string | null = custom.ratePercent != null ? String(custom.ratePercent) : null;
+  const convention = (custom.convention ?? category.default_convention ?? null) as ScheduleInput["convention"];
   if (!lifeMonths || lifeMonths <= 0) throw new Error("asset has no useful life (months)");
 
   const bookId = await primaryBookId();
@@ -249,6 +256,7 @@ export async function buildSchedule(
     lifeMonths,
     method,
     ratePercent,
+    convention,
   });
 
   return await db.transaction(async (tx) => {

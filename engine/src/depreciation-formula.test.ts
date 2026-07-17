@@ -94,6 +94,17 @@ test("units-of-production charges by usage and retains balance (no plug)", () =>
   assert.equal(lines[2]!.netBookValue, "1000.0000"); // 10000 usage → fully used, lands on salvage
 });
 
+test("a part-period convention prorates period 1 and extends the schedule", () => {
+  // Mid-month: half of month 1, full months 2..12, the deferred half in month 13.
+  const lines = computeScheduleByFormula(sl({ firstPeriodFraction: 0.5 }));
+  assert.equal(lines.length, 13);
+  assert.equal(lines[0]!.planned, "500.0000");
+  assert.equal(lines[1]!.planned, "1000.0000");
+  assert.equal(lines[12]!.planned, "500.0000"); // deferred fraction plugged at the end
+  assert.equal(lines[12]!.netBookValue, "0.0000");
+  assert.equal(Math.round(money(lines) * 10000), 12000 * 10000); // total unchanged
+});
+
 test("INVARIANT: fully_depreciate methods total exactly cost − salvage, NBV = salvage", () => {
   for (const formula of [BUILTIN_FORMULAS.straight_line, BUILTIN_FORMULAS.declining_150, BUILTIN_FORMULAS.double_declining, BUILTIN_FORMULAS.sum_of_years_digits]) {
     const lines = computeScheduleByFormula({ cost: "8000", salvage: "500", lifePeriods: 36, formula });

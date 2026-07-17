@@ -289,6 +289,10 @@ export interface FormulaScheduleInput {
   lifetimeUsage?: number;
   /** Rate-table entries referenced as R1..Rn. */
   rateTable?: number[];
+  /** Convention: fraction of the FIRST period taken (1 = full month, 0.5 =
+   *  mid-month / half-year). When < 1 the schedule extends by one period so the
+   *  deferred fraction depreciates at the end; total lifetime is unchanged. */
+  firstPeriodFraction?: number;
 }
 
 export interface FormulaScheduleLine {
@@ -321,14 +325,21 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
   const endOfLife = input.endOfLife ?? "fully_depreciate";
   const lu = input.lifetimeUsage ?? (input.usage ? input.usage.reduce((a, b) => a + b, 0) : 0);
 
+  const fpf = input.firstPeriodFraction ?? 1;
+  // A part-period convention defers a fraction of period 1, so the schedule
+  // needs one extra period at the end to absorb it (only meaningful when the
+  // final period plugs).
+  const extend = fpf < 1 && endOfLife === "fully_depreciate" ? 1 : 0;
+  const totalPeriods = life + extend;
+
   const lines: FormulaScheduleLine[] = [];
   let accumulated = 0;
   let last = 0;
-  for (let cp = 1; cp <= life; cp++) {
+  for (let cp = 1; cp <= totalPeriods; cp++) {
     const nb = round4(cost - accumulated);
     const remaining = round4(nb - salvage); // depreciable value left above salvage
     let charge: number;
-    if (endOfLife === "fully_depreciate" && cp === life) {
+    if (endOfLife === "fully_depreciate" && cp === totalPeriods) {
       charge = remaining; // plug so the schedule totals exactly
     } else {
       const ctx: DepContext = {
@@ -338,6 +349,7 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
       };
       charge = round4(evalFn(ctx));
       if (!Number.isFinite(charge) || charge < 0) charge = 0;
+      if (cp === 1 && fpf < 1) charge = round4(charge * fpf); // convention proration
       if (charge > remaining) charge = remaining;
     }
     accumulated = round4(accumulated + charge);

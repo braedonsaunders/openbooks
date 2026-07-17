@@ -28,6 +28,10 @@ export const assetCategories = pgTable("asset_categories", {
     enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
   }).notNull().default("straight_line"),
   defaultLifeMonths: integer("default_life_months"),
+  /** First-period convention: full_month (default), mid_month, half_year. */
+  defaultConvention: text("default_convention", {
+    enum: ["full_month", "mid_month", "half_year"],
+  }).notNull().default("full_month"),
   /** e.g. CCA class for Canadian tax book: { "ca_cca_class": "10", "ca_cca_rate": 30 } */
   taxAttributes: jsonb("tax_attributes").notNull().default({}),
   isActive: boolean("is_active").notNull().default(true),
