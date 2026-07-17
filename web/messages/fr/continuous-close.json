@@ -3,6 +3,7 @@
   "title": "Clôture continue",
   "description": "Surveille en continu la préparation à la clôture et présente les exceptions comptables et financières étayées par des preuves.",
   "search": "Rechercher des constats…",
+  "tabs": { "ariaLabel": "Sections de la clôture continue", "findings": "Constats", "reports": "Rapports" },
   "agents": { "accounting": "Comptabilité", "finance": "Finance" },
   "metrics": { "active": "Actifs", "critical": "Critiques", "accounting": "Constats comptables", "finance": "Constats financiers" },
   "filters": { "agent": "Agent", "severity": "Gravité" },

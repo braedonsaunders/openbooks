@@ -3,6 +3,7 @@
   "title": "Continuous close",
   "description": "Continuously monitors close readiness and surfaces evidence-backed accounting and finance exceptions for review.",
   "search": "Search findings…",
+  "tabs": { "ariaLabel": "Continuous close sections", "findings": "Findings", "reports": "Reports" },
   "agents": {
     "accounting": "Accounting",
     "finance": "Finance"

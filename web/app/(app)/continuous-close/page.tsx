@@ -42,6 +42,7 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
   const tc = await getTranslations('common')
   const locale = await getLocale()
   const sp = await searchParams
+  const tab = pickString(sp.tab) === 'reports' ? 'reports' : 'findings'
   const params = parseListParams(sp, { sort: 'detected', dir: 'desc', perPage: 25, allowedSorts: ['detected', 'severity', 'materiality', 'status'] as const })
   const requestedAgent = pickString(sp.agent)
   const agent = requestedAgent === 'accounting' || requestedAgent === 'finance'
@@ -160,45 +161,54 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
           description={t('description')}
           actions={canManage ? <Button variant="outline" asChild><Link href="/admin/ai"><Settings size={14} />{t('actions.settings')}</Link></Button> : undefined}
         />
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <FileText size={16} className="text-violet-600 dark:text-violet-400" />
-              <div><h2 className="text-sm font-semibold">{t('reports.title')}</h2><p className="text-xs text-slate-500">{t('reports.description')}</p></div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <SearchInput placeholder={t('reports.search')} paramKey="reportQ" pageParamKey="reportPage" />
-              <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="reportAgent" pageParamKey="reportPage" label={t('filters.agent')} options={reportAgentCounts.rows.map((row) => ({ value: row.agent_key, label: t(`agents.${row.agent_key}`), count: Number(row.n) }))} />
-            </div>
+        <nav className="-mb-2 flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={t('tabs.ariaLabel')}>
+          {(['findings', 'reports'] as const).map((key) => <Link
+            key={key}
+            href={mergeHref('/continuous-close', sp, { tab: key === 'findings' ? undefined : key, item: undefined, report: undefined }) as never}
+            role="tab"
+            aria-selected={tab === key}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${tab === key
+              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'}`}
+          >{t(`tabs.${key}`)}</Link>)}
+        </nav>
+        {tab === 'findings' ? <>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Metric locale={locale} label={t('metrics.active')} value={activeCount} />
+            <Metric locale={locale} label={t('metrics.critical')} value={Number(criticalCount)} tone={Number(criticalCount) > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
+            <Metric locale={locale} label={t('metrics.accounting')} value={Number(counts.rows.find((row) => row.agent_key === 'accounting')?.n ?? 0)} />
+            <Metric locale={locale} label={t('metrics.finance')} value={Number(counts.rows.find((row) => row.agent_key === 'finance')?.n ?? 0)} />
           </div>
-          {reportRows.rows.length ? <div className="divide-y divide-slate-200 px-3 dark:divide-slate-800">{reportRows.rows.map((report) => <NarrativeEntry
-            key={report.id}
-            narrative={report.narrative}
-            href={mergeHref('/continuous-close', sp, { report: report.id })}
-            labels={{
-              agent: t('narrative.agent', { agent: t(`agents.${report.agent_key}`) }),
-              fallbackTitle: t('narrative.title'),
-              generated: t('narrative.generated', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(report.finished_at)) }),
-              open: t('narrative.open'),
-            }}
-          />)}</div> : <p className="px-4 py-6 text-center text-sm text-slate-500">{t('reports.empty')}</p>}
-          <Pagination basePath="/continuous-close" currentParams={sp} total={reportTotal} page={reportPage} perPage={reportPerPage} pageParamKey="reportPage" />
-        </section>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Metric locale={locale} label={t('metrics.active')} value={activeCount} />
-          <Metric locale={locale} label={t('metrics.critical')} value={Number(criticalCount)} tone={Number(criticalCount) > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
-          <Metric locale={locale} label={t('metrics.accounting')} value={Number(counts.rows.find((row) => row.agent_key === 'accounting')?.n ?? 0)} />
-          <Metric locale={locale} label={t('metrics.finance')} value={Number(counts.rows.find((row) => row.agent_key === 'finance')?.n ?? 0)} />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput placeholder={t('search')} />
-          <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="agent" label={t('filters.agent')} options={counts.rows.map((row) => ({ value: row.agent_key, label: t(`agents.${row.agent_key}`), count: Number(row.n) }))} />
-          <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="status" label={tc('labels.status')} options={statusCounts.rows.map((row) => ({ value: row.status, label: t(`status.${row.status}`), count: Number(row.n) }))} />
-          <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="severity" label={t('filters.severity')} options={severityCounts.rows.map((row) => ({ value: row.severity, label: t(`severity.${row.severity}`), count: Number(row.n) }))} />
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput placeholder={t('search')} />
+            <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="agent" label={t('filters.agent')} options={counts.rows.map((row) => ({ value: row.agent_key, label: t(`agents.${row.agent_key}`), count: Number(row.n) }))} />
+            <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="status" label={tc('labels.status')} options={statusCounts.rows.map((row) => ({ value: row.status, label: t(`status.${row.status}`), count: Number(row.n) }))} />
+            <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="severity" label={t('filters.severity')} options={severityCounts.rows.map((row) => ({ value: row.severity, label: t(`severity.${row.severity}`), count: Number(row.n) }))} />
+          </div>
+        </> : <div className="flex flex-wrap items-center gap-2">
+          <SearchInput placeholder={t('reports.search')} paramKey="reportQ" pageParamKey="reportPage" />
+          <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="reportAgent" pageParamKey="reportPage" label={t('filters.agent')} options={reportAgentCounts.rows.map((row) => ({ value: row.agent_key, label: t(`agents.${row.agent_key}`), count: Number(row.n) }))} />
+        </div>}
       </>}
     >
-      {total === 0 ? (
+      {tab === 'reports' ? <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <FileText size={16} className="text-violet-600 dark:text-violet-400" />
+          <div><h2 className="text-sm font-semibold">{t('reports.title')}</h2><p className="text-xs text-slate-500">{t('reports.description')}</p></div>
+        </div>
+        {reportRows.rows.length ? <div className="divide-y divide-slate-200 px-3 dark:divide-slate-800">{reportRows.rows.map((report) => <NarrativeEntry
+          key={report.id}
+          narrative={report.narrative}
+          href={mergeHref('/continuous-close', sp, { tab: 'reports', report: report.id })}
+          labels={{
+            agent: t('narrative.agent', { agent: t(`agents.${report.agent_key}`) }),
+            fallbackTitle: t('narrative.title'),
+            generated: t('narrative.generated', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(report.finished_at)) }),
+            open: t('narrative.open'),
+          }}
+        />)}</div> : <p className="px-4 py-6 text-center text-sm text-slate-500">{t('reports.empty')}</p>}
+        <Pagination basePath="/continuous-close" currentParams={sp} total={reportTotal} page={reportPage} perPage={reportPerPage} pageParamKey="reportPage" />
+      </section> : total === 0 ? (
         <EmptyState
           icon={<Activity />}
           title={t('empty.title')}
