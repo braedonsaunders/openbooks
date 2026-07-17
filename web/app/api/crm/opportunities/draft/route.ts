@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
         (org_id, opportunity_number, title, party_id, owner_user_id, status_id, probability,
          forecast_category, currency, is_active, created_by, updated_by)
       values (${user.orgId}, ${number}, 'New opportunity', ${body.partyId ?? null}, ${user.id}, ${s.id},
-              ${s.probability}, ${s.default_forecast_category}, ${org.rows[0]?.base_currency ?? 'CAD'}, false, ${user.id}, ${user.id})
+              ${s.probability}, ${s.default_forecast_category}, ${org.rows[0]!.base_currency}, false, ${user.id}, ${user.id})
       returning id`)) as unknown as { rows: { id: string }[] }
     if (body.partyId) await promoteCrmAccount(tx, { orgId: user.orgId, partyId: body.partyId, actorId: user.id, toStage: 'prospect', sourceKind: 'opportunity', sourceId: inserted.rows[0]!.id })
     await tx.execute(sql`
