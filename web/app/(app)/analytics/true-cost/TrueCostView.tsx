@@ -43,6 +43,18 @@ function FilterPill({ icon: Icon, children }: { icon: typeof Building2; children
 /** Select trigger styled to sit borderless inside a FilterPill. */
 const PILL_TRIGGER = 'h-6 rounded-full border-0 bg-transparent px-1.5 text-xs shadow-none dark:bg-transparent'
 
+const ALLOCATION_BASE_LABEL: Record<string, string> = {
+  billed_hours: 'Billed Hours',
+  total_hours: 'Total Hours',
+  labor_dollars: 'Labor Dollars',
+  headcount: 'Headcount',
+  revenue: 'Revenue',
+  direct_cost: 'Direct Cost',
+  square_feet: 'Square Feet',
+  units: 'Units Produced',
+  custom: 'Custom Metric',
+}
+
 /* ---------------------------------------------------------- API mutations */
 
 async function apiCall(path: string, init: RequestInit): Promise<boolean> {
@@ -55,6 +67,25 @@ const unpinAccount = (groupId: string, accountId: string) =>
   apiCall(`/api/account-groups/${groupId}/pins?accountId=${accountId}`, { method: 'DELETE' })
 const patchGroup = (groupId: string, body: { name?: string; color?: string; match?: object }) =>
   apiCall(`/api/account-groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+/** Read the full engine config, apply a mutation to the ACTIVE profile, PUT it back. */
+async function mutateActiveProfile(mutate: (profile: any) => void): Promise<boolean> {
+  const res = await fetch('/api/analytics/true-cost/config')
+  if (!res.ok) return false
+  const cfg = await res.json() as { activeProfileId: string; profiles: any[] }
+  const profile = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0]
+  if (!profile) return false
+  mutate(profile)
+  return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
+}
+/** Set the active profile, then PUT. */
+async function switchProfile(activeProfileId: string): Promise<boolean> {
+  const res = await fetch('/api/analytics/true-cost/config')
+  if (!res.ok) return false
+  const cfg = await res.json() as { activeProfileId: string; profiles: any[] }
+  cfg.activeProfileId = activeProfileId
+  return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
+}
 
 /* ------------------------------------------------------------------- shell */
 
@@ -248,9 +279,13 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
     router.refresh()
     setBusy(false)
   }
+  const setAllocation = (patch: Record<string, unknown>) =>
+    run(() => mutateActiveProfile((profile) => { profile.categorySettings ??= {}; profile.categorySettings[cat.id] = { ...profile.categorySettings[cat.id], ...patch } }))
+
+  const baseLabel = ALLOCATION_BASE_LABEL[cat.allocationBase] ?? cat.allocationBase
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={cat.name} description={`${money0(cat.totalAmount)} · ${rate(cat.rate)} of the composite · Expense on Hours base`} bodyClassName="p-0 overflow-y-auto">
+    <Drawer open onClose={onClose} size="lg" title={cat.name} description={`${money0(cat.totalAmount)} · ${cat.rateDisplay} · ${baseLabel} base · ${cat.allocationMethod}`} bodyClassName="p-0 overflow-y-auto">
       {/* Definition / edit */}
       <div className="border-b border-slate-100 dark:border-slate-800">
         <button type="button" onClick={() => setEditOpen(!editOpen)} className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -274,6 +309,42 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
             </div>
           </div>
         ) : null}
+      </div>
+
+      {/* Allocation settings (Gantry rate engine) */}
+      <div className="space-y-2.5 border-b border-slate-100 bg-slate-50/40 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/20">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Allocation</p>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-[11px] text-slate-500 dark:text-slate-400">
+            Base
+            <Select value={cat.allocationBase} disabled={busy} onChange={(e) => setAllocation({ allocationBase: e.target.value })} className="mt-0.5 w-full" triggerClassName="h-7 text-xs">
+              {Object.entries(ALLOCATION_BASE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </Select>
+          </label>
+          <label className="text-[11px] text-slate-500 dark:text-slate-400">
+            Method
+            <Select value={cat.allocationMethod} disabled={busy} onChange={(e) => setAllocation({ allocationMethod: e.target.value })} className="mt-0.5 w-full" triggerClassName="h-7 text-xs">
+              <option value="simple">Simple division</option>
+              <option value="weighted">Weighted</option>
+              <option value="stepped">Stepped/Tiered</option>
+            </Select>
+          </label>
+          <label className="text-[11px] text-slate-500 dark:text-slate-400">
+            Rate format
+            <Select value={cat.rateFormat} disabled={busy} onChange={(e) => setAllocation({ rateFormat: e.target.value })} className="mt-0.5 w-full" triggerClassName="h-7 text-xs">
+              <option value="per_hour">$/Hour</option>
+              <option value="percent_labor">% of Labor</option>
+              <option value="percent_cost">% of Cost</option>
+              <option value="per_fte">$/FTE</option>
+              <option value="per_unit">$/Unit</option>
+            </Select>
+          </label>
+          <label className="flex items-end gap-1.5 pb-1 text-[11px] text-slate-500 dark:text-slate-400">
+            <input type="checkbox" checked={cat.includeInComposite} disabled={busy} onChange={(e) => setAllocation({ includeInComposite: e.target.checked })} className="h-3.5 w-3.5 rounded border-slate-300" />
+            Include in composite
+          </label>
+        </div>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">Rate = expense ÷ {baseLabel.toLowerCase()} ({cat.allocationMethod}) → <span className="font-semibold text-slate-600 dark:text-slate-300">{cat.rateDisplay}</span></p>
       </div>
 
       {/* Per-department rates */}
@@ -1238,17 +1309,140 @@ function TrendsTab({ data }: { data: TrueCostData }) {
 
 /* ----------------------------------------------------------- Configuration */
 
+/** Composite method + active-profile switcher (Gantry calculateCompositeRate + getActiveProfile). */
+function CompositePanel({ data }: { data: TrueCostData }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const run = async (fn: () => Promise<boolean>) => { setBusy(true); await fn(); router.refresh(); setBusy(false) }
+  const [newProfile, setNewProfile] = useState('')
+
+  return (
+    <Panel title="Composite & Profiles" icon={SlidersHorizontal}>
+      <div className="space-y-3">
+        <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+          Composite method
+          <Select value={data.config.compositeMethod} disabled={busy} onChange={(e) => run(() => mutateActiveProfile((p) => { p.compositeMethod = e.target.value }))} className="mt-1 w-full" triggerClassName="h-8 text-sm">
+            <option value="sum">Sum — add all category rates</option>
+            <option value="weighted">Weighted — by expense volume</option>
+            <option value="cascading">Cascading — each layer wraps the running rate</option>
+          </Select>
+          <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">Current composite: <span className="font-semibold text-slate-600 dark:text-slate-300">{rate(data.kpis.compositeRate)}</span></span>
+        </label>
+
+        <div>
+          <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">Active profile</p>
+          <div className="flex flex-wrap gap-1.5">
+            {data.config.profiles.map((p) => (
+              <button key={p.id} type="button" disabled={busy} onClick={() => run(() => switchProfile(p.id))}
+                className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', p.id === data.config.activeProfileId ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <input value={newProfile} onChange={(e) => setNewProfile(e.target.value)} placeholder="New profile name" className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+            <button type="button" disabled={busy || !newProfile.trim()} onClick={() => { const name = newProfile.trim(); setNewProfile(''); void run(async () => {
+              const res = await fetch('/api/analytics/true-cost/config'); if (!res.ok) return false
+              const cfg = await res.json() as { activeProfileId: string; profiles: any[] }
+              const active = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0]
+              const id = `profile_${Math.random().toString(36).slice(2, 10)}`
+              cfg.profiles.push({ ...active, id, name })
+              cfg.activeProfileId = id
+              return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
+            }) }} className="rounded-md border border-teal-500/50 px-2 py-1 text-[11px] font-medium text-teal-600 hover:bg-teal-50 disabled:opacity-40 dark:text-teal-400 dark:hover:bg-teal-950/40">+ Duplicate active</button>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">A profile bundles the composite method, per-category allocation settings and custom categories (Gantry getActiveProfile).</p>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+/** What-if scenario modeler (Gantry calculateScenario — 6 types). */
+function ScenarioModeler({ data }: { data: TrueCostData }) {
+  const [type, setType] = useState<'hire' | 'terminate' | 'win_contract' | 'lose_contract' | 'cost_change' | 'utilization_change'>('hire')
+  const [employeeCount, setEmployeeCount] = useState('1')
+  const [avgSalary, setAvgSalary] = useState('75000')
+  const [expectedUtilization, setExpectedUtilization] = useState('75')
+  const [annualHours, setAnnualHours] = useState('2000')
+  const [changeType, setChangeType] = useState<'increase' | 'decrease'>('increase')
+  const [amount, setAmount] = useState('50000')
+  const [newUtilization, setNewUtilization] = useState('80')
+  const [busy, setBusy] = useState(false)
+  const [impact, setImpact] = useState<any>(null)
+
+  const compute = async () => {
+    setBusy(true)
+    const body: Record<string, unknown> = { scenarioType: type, period: 'custom', from: data.period.from, to: data.period.to }
+    if (type === 'hire' || type === 'terminate') { body.employeeCount = Number(employeeCount); body.avgSalary = Number(avgSalary); body.expectedUtilization = Number(expectedUtilization) / 100 }
+    else if (type === 'win_contract' || type === 'lose_contract') body.annualHours = Number(annualHours)
+    else if (type === 'cost_change') { body.changeType = changeType; body.amount = Number(amount) }
+    else body.newUtilization = Number(newUtilization) / 100
+    const res = await fetch('/api/analytics/true-cost/scenario', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    setImpact(res.ok ? (await res.json()).impact : null)
+    setBusy(false)
+  }
+
+  return (
+    <Panel title="Scenario Modeler" icon={Wand2} hint="What-if impact on the composite rate (Gantry calculateScenario)">
+      <div className="space-y-2.5">
+        <Select value={type} onChange={(e) => { setType(e.target.value as typeof type); setImpact(null) }} className="w-full" triggerClassName="h-8 text-sm">
+          <option value="hire">Hire employees</option>
+          <option value="terminate">Reduce staff</option>
+          <option value="win_contract">Win a contract</option>
+          <option value="lose_contract">Lose a contract</option>
+          <option value="cost_change">Change overhead cost</option>
+          <option value="utilization_change">Change utilization</option>
+        </Select>
+        <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+          {(type === 'hire' || type === 'terminate') && <>
+            <label>Employees<input type="number" value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
+            <label>Avg salary ($)<input type="number" value={avgSalary} onChange={(e) => setAvgSalary(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
+            <label>Utilization (%)<input type="number" value={expectedUtilization} onChange={(e) => setExpectedUtilization(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
+          </>}
+          {(type === 'win_contract' || type === 'lose_contract') &&
+            <label className="col-span-2">Annual hours<input type="number" value={annualHours} onChange={(e) => setAnnualHours(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>}
+          {type === 'cost_change' && <>
+            <label>Direction<Select value={changeType} onChange={(e) => setChangeType(e.target.value as 'increase' | 'decrease')} className="mt-0.5 w-full" triggerClassName="h-7 text-xs"><option value="increase">Increase</option><option value="decrease">Decrease</option></Select></label>
+            <label>Amount ($)<input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
+          </>}
+          {type === 'utilization_change' &&
+            <label className="col-span-2">New utilization (%)<input type="number" value={newUtilization} onChange={(e) => setNewUtilization(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>}
+        </div>
+        <button type="button" disabled={busy} onClick={compute} className="w-full rounded-md bg-teal-600 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700">{busy ? 'Computing…' : 'Run scenario'}</button>
+        {impact && (
+          <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Current</p><p className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">{rate(impact.currentRate)}</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Projected</p><p className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">{rate(impact.projectedRate)}</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Change</p><p className={cn('text-sm font-semibold tabular-nums', impact.change > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{impact.change > 0 ? '+' : ''}{rate(impact.change)} ({impact.changePercent > 0 ? '+' : ''}{impact.changePercent.toFixed(1)}%)</p></div>
+            </div>
+            <p className="mt-2 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{impact.insight}</p>
+            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">Fringe rate {(impact.fringeRate * 100).toFixed(0)}% · 2080 hrs/yr · breakeven {Math.round(impact.breakeven.hoursNeeded).toLocaleString()} hrs</p>
+          </div>
+        )}
+      </div>
+    </Panel>
+  )
+}
+
 function ConfigTab({ data }: { data: TrueCostData }) {
   const items = [
-    { label: 'Allocation base', value: 'Billed hours', note: 'Composite rate = burden expense ÷ billed labour hours (Gantry method)' },
-    { label: 'Burden categories', value: String(data.categories.length), note: 'Native Account Groups (`burden` dimension) — rule + pin, editable from the category flyout or Setup' },
+    { label: 'Composite method', value: data.config.compositeMethod, note: 'How category rates blend into the headline rate (sum / weighted / cascading)' },
+    { label: 'Burden categories', value: String(data.categories.length), note: 'Native Account Groups (`burden` dimension) + custom time/manual/derived/formula categories' },
     { label: 'Burden centres', value: String(data.departments.length), note: 'Departments with billed hours; dept-tagged expense stays, untagged allocates by hours share' },
+    { label: 'Allocation bases', value: '6 live', note: 'Billed/total hours, labour $, headcount, revenue, direct cost — per category, plus manual sqft/units/custom' },
     { label: 'Direct labour', value: 'Excluded', note: 'Wage/salary accounts (cost_pool dimension) are labour, never burden; COGS is direct cost' },
-    { label: 'Unassigned', value: String(data.unassigned.length), note: 'Expense accounts no category matches — excluded from the composite until classified' },
     { label: 'Absorption model', value: data.hasBurdenGL ? 'GL applied' : 'Utilization', note: data.hasBurdenGL ? 'From the Overhead Burden GL account postings' : 'GL account 5200 "Overhead Burden" exists but carries no postings — applied = burden × utilization until it is used' },
     { label: 'Labour rates', value: `${data.labor.count} employees`, note: `Per-entry cost rates, $${Math.round(data.labor.min)}–$${Math.round(data.labor.max)}, weighted ${rate(data.labor.weighted)}` },
   ]
   return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <CompositePanel data={data} />
+        <ScenarioModeler data={data} />
+        <CustomCategoryManager data={data} />
+      </div>
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <Panel title="Model & Assumptions" icon={SlidersHorizontal} bodyClassName="p-0">
         <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
@@ -1275,5 +1469,59 @@ function ConfigTab({ data }: { data: TrueCostData }) {
         </div>
       </Panel>
     </div>
+    </div>
+  )
+}
+
+/** Manage config-driven custom categories: manual / derived / formula (Gantry). */
+function CustomCategoryManager({ data }: { data: TrueCostData }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [name, setName] = useState('')
+  const [type, setType] = useState<'manual' | 'derived' | 'formula'>('manual')
+  const [fixedTotal, setFixedTotal] = useState('')
+  const [sourceCategory, setSourceCategory] = useState('')
+  const [percentage, setPercentage] = useState('10')
+  const [formula, setFormula] = useState('')
+
+  const run = async (fn: () => Promise<boolean>) => { setBusy(true); await fn(); router.refresh(); setBusy(false) }
+  const add = () => {
+    const cat: Record<string, unknown> = { name: name.trim(), type, color: '#64748b', allocationBase: 'billed_hours', rateFormat: 'per_hour', includeInComposite: true }
+    if (type === 'manual') cat.manualConfig = { entryMode: 'fixed_total', fixedTotal: Number(fixedTotal) || 0 }
+    else if (type === 'derived') cat.derivedConfig = { sourceCategory, percentage: Number(percentage) || 0, allocationBase: 'same' }
+    else cat.formulaConfig = { formula }
+    setName(''); setFixedTotal(''); setFormula('')
+    void run(() => mutateActiveProfile((p) => { p.customCategories ??= []; p.customCategories.push(cat) }))
+  }
+  const remove = (id: string) => run(() => mutateActiveProfile((p) => { p.customCategories = (p.customCategories ?? []).filter((c: any) => c.id !== id) }))
+  const addDisabled = busy || !name.trim() || (type === 'manual' && !(Number(fixedTotal) > 0)) || (type === 'derived' && !sourceCategory) || (type === 'formula' && !formula.trim())
+
+  return (
+    <Panel title="Custom Categories" icon={PlusCircle} hint="Time / manual / derived / formula categories (Gantry category types)">
+      {data.config.customCategories.length ? (
+        <ul className="mb-3 divide-y divide-slate-50 dark:divide-slate-800/60">
+          {data.config.customCategories.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+              <span className="min-w-0"><span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span><span className="ml-2 text-xs text-slate-400">{c.type}</span></span>
+              <button type="button" disabled={busy} onClick={() => remove(c.id)} className="shrink-0 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:text-rose-500 dark:border-slate-700">Remove</button>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">No custom categories — only account-group expense categories contribute.</p>}
+      <div className="space-y-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
+        <div className="flex gap-2">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <Select value={type} onChange={(e) => setType(e.target.value as typeof type)} className="w-28" triggerClassName="h-7 text-xs"><option value="manual">Manual</option><option value="derived">Derived</option><option value="formula">Formula</option></Select>
+        </div>
+        {type === 'manual' && <input type="number" value={fixedTotal} onChange={(e) => setFixedTotal(e.target.value)} placeholder="Fixed total ($, allocated by billed hours)" className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />}
+        {type === 'derived' && <div className="flex gap-2">
+          <Select value={sourceCategory} onChange={(e) => setSourceCategory(e.target.value)} className="flex-1" triggerClassName="h-7 text-xs"><option value="">Source category…</option>{data.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
+          <input type="number" value={percentage} onChange={(e) => setPercentage(e.target.value)} title="% of source" className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+        </div>}
+        {type === 'formula' && <input value={formula} onChange={(e) => setFormula(e.target.value)} placeholder="e.g. base.revenue * 0.03" className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />}
+        <button type="button" disabled={addDisabled} onClick={add} className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700">Add category</button>
+        <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">Formula supports arithmetic over <code>base.revenue</code>, <code>base.billed_hours</code>, <code>base.labor_dollars</code>, <code>base.headcount</code>, <code>base.direct_cost</code> and <code>cat.&lt;id&gt;</code>.</p>
+      </div>
+    </Panel>
   )
 }

@@ -2,6 +2,21 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { resolveAccountGroups } from "../account-groups";
+import {
+  type AllocationBase,
+  type AllocationMethod,
+  type RateFormat,
+  type CompositeMethod,
+  type AllocationBaseBundle,
+  type CompositeCategory,
+  calculateRate,
+  formatRate,
+  calculateCompositeRate,
+  calculateManualCategoryData,
+  calculateDerivedCategoryData,
+  calculateFormulaCategoryData,
+  getAllocationBaseValue,
+} from "./true-cost-engine";
 
 /**
  * True Cost — a faithful port of Gantry's Burden (Rate Engine) dashboard
@@ -54,13 +69,66 @@ export interface BurdenCategory {
   key: string;
   name: string;
   color: string | null;
+  /** Category type — expense (account-group) or a config-driven synthetic type. */
+  categoryType: "expense" | "time" | "manual" | "derived" | "formula";
   /** The group's auto-match rule (editable in the category flyout). */
   match: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string };
   totalAmount: number;
-  rate: number; // totalAmount ÷ total billed hours
+  rate: number; // the formatted rate value in the category's rate format
+  /** Raw $/hr rate before formatting (totalAmount ÷ allocation base at Overall). */
+  rawRate: number;
+  /** Allocation settings applied to this category (Gantry engine). */
+  allocationBase: AllocationBase;
+  allocationMethod: AllocationMethod;
+  rateFormat: RateFormat;
+  includeInComposite: boolean;
+  /** Formatted display string, e.g. "$33.38/hr" or "12.4%". */
+  rateDisplay: string;
   accounts: BurdenAccount[];
   /** deptId → { amount, rate } (allocated where untagged). */
   byDept: Record<string, { amount: number; rate: number }>;
+}
+
+/** Additional non-expense category from config (Gantry manual/derived/formula). */
+export interface CustomCategory {
+  id: string;
+  name: string;
+  color: string | null;
+  type: "manual" | "derived" | "formula";
+  allocationBase: AllocationBase;
+  rateFormat: RateFormat;
+  includeInComposite: boolean;
+  manualConfig?: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number; byDeptAmounts?: Record<string, number>; unitType?: AllocationBase; perUnitRate?: number };
+  derivedConfig?: { sourceCategory?: string; percentage?: number; allocationBase?: AllocationBase | "same" };
+  formulaConfig?: { formula?: string };
+}
+
+/** Per-category allocation overrides, keyed by category id. */
+export interface CategorySettings {
+  allocationBase?: AllocationBase;
+  allocationMethod?: AllocationMethod;
+  rateFormat?: RateFormat;
+  includeInComposite?: boolean;
+  allocationWeights?: Record<string, number>;
+  allocationTiers?: { min?: number; max?: number; rate?: number }[];
+}
+
+/** A named engine profile (Gantry getActiveProfile) — all tunables in one bundle. */
+export interface TrueCostProfile {
+  id: string;
+  name: string;
+  color?: string | null;
+  compositeMethod: CompositeMethod;
+  baseLaborRate: number; // cascading base
+  fringeRate: number; // scenario fringe (0..1)
+  categorySettings: Record<string, CategorySettings>;
+  customCategories: CustomCategory[];
+  baseOverrides: { squareFeet?: Record<string, number>; units?: Record<string, number>; custom?: Record<string, number> };
+}
+
+export interface TrueCostConfig {
+  activeProfileId: string;
+  profiles: TrueCostProfile[];
 }
 
 export interface MonthPoint {
@@ -107,12 +175,61 @@ export interface TrueCostData {
   monthly: MonthPoint[];
   forecast: { month: string; label: string; rate: number }[];
   hasBurdenGL: boolean; // the 5200 applied account carries postings
+  /** Allocation base values (Gantry fetchAllAllocationBases) for the engine + UI. */
+  bases: AllocationBaseBundle;
+  /** Active engine config: composite method, per-category settings, custom categories, profiles. */
+  config: {
+    activeProfileId: string;
+    compositeMethod: CompositeMethod;
+    baseLaborRate: number;
+    fringeRate: number;
+    categorySettings: Record<string, CategorySettings>;
+    profiles: { id: string; name: string; color?: string | null }[];
+    customCategories: CustomCategory[];
+  };
 }
 
 function monthLabel(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1, 1));
   return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
+}
+
+/** Hours-weighted average labour cost rate (cascading composite base). */
+function employeesWeightedRate(rows: any[]): number {
+  let wsum = 0, hsum = 0;
+  for (const r of rows) {
+    const rate = Number(r.rate ?? 0);
+    const hours = Number(r.hours ?? 0);
+    if (rate > 0 && hours > 0) { wsum += rate * hours; hsum += hours; }
+  }
+  return hsum > 0 ? wsum / hsum : 50;
+}
+
+export const DEFAULT_PROFILE: TrueCostProfile = {
+  id: "default",
+  name: "Default",
+  color: "#3b82f6",
+  compositeMethod: "sum",
+  baseLaborRate: 50,
+  fringeRate: 0.25,
+  categorySettings: {},
+  customCategories: [],
+  baseOverrides: {},
+};
+
+/** Load the True Cost engine config and resolve the active profile (Gantry getActiveProfile). */
+export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfileId: string; profiles: TrueCostProfile[]; profile: TrueCostProfile }> {
+  const r = (await db.execute(sql`
+    select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${orgId}
+  `)) as any;
+  const raw = r.rows[0]?.cfg as Partial<TrueCostConfig> | null;
+  let profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw!.profiles.length
+    ? raw!.profiles.map((p) => ({ ...DEFAULT_PROFILE, ...p, categorySettings: p.categorySettings ?? {}, customCategories: p.customCategories ?? [], baseOverrides: p.baseOverrides ?? {} }))
+    : [DEFAULT_PROFILE];
+  const activeProfileId = raw?.activeProfileId && profiles.some((p) => p.id === raw!.activeProfileId) ? raw!.activeProfileId : profiles[0]!.id;
+  const profile = profiles.find((p) => p.id === activeProfileId) ?? profiles[0]!;
+  return { activeProfileId, profiles, profile };
 }
 
 export async function trueCostData(orgId: string, period: { from: string; to: string; label: string }): Promise<TrueCostData> {
@@ -123,7 +240,10 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const priorFrom = new Date(start.getTime() - days * 86_400_000).toISOString().slice(0, 10);
   const priorTo = new Date(start.getTime() - 86_400_000).toISOString().slice(0, 10);
 
-  const [burdenGroups, poolGroups, acctRows, hoursRows, empRows, priorRows, appliedRows, deptRows] = await Promise.all([
+  const monthCount = Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth()) + 1);
+
+  const [cfg, burdenGroups, poolGroups, acctRows, hoursRows, empRows, priorRows, appliedRows, deptRows, baseRows] = await Promise.all([
+    loadTrueCostConfig(orgId),
     resolveAccountGroups("burden", orgId),
     resolveAccountGroups("cost_pool", orgId),
     // Expense account totals per account × department × month.
@@ -200,7 +320,44 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `) as Promise<any>,
     db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`) as Promise<any>,
+    // Allocation bases by department (Gantry fetchAllAllocationBases): labour $,
+    // headcount, revenue, direct cost. Hours come from hoursRows above.
+    db.execute(sql`
+      select d.id as dept_id,
+        coalesce((
+          select sum(l.amount) from journal_lines l
+          join journal_entries e on e.id = l.entry_id
+          join accounts a on a.id = l.account_id
+          where l.org_id = ${orgId} and l.department_id = d.id
+            and a.type in ('expense','expense_other','expense_deferred','cogs')
+            and a.name ~* 'wage|salary|payroll|labou?r'
+            and e.posting_date >= ${from} and e.posting_date <= ${to}
+        ), 0) as labor_dollars,
+        coalesce((
+          select count(distinct t.employee_party_id) from time_entries t
+          where t.org_id = ${orgId} and t.department_id = d.id
+            and t.worked_on >= ${from} and t.worked_on <= ${to}
+        ), 0) as headcount,
+        coalesce((
+          select -sum(l.amount) from journal_lines l
+          join journal_entries e on e.id = l.entry_id
+          join accounts a on a.id = l.account_id
+          where l.org_id = ${orgId} and l.department_id = d.id
+            and a.type in ('income','income_other')
+            and e.posting_date >= ${from} and e.posting_date <= ${to}
+        ), 0) as revenue,
+        coalesce((
+          select sum(l.amount) from journal_lines l
+          join journal_entries e on e.id = l.entry_id
+          join accounts a on a.id = l.account_id
+          where l.org_id = ${orgId} and l.department_id = d.id
+            and a.type = 'cogs'
+            and e.posting_date >= ${from} and e.posting_date <= ${to}
+        ), 0) as direct_cost
+      from departments d where d.org_id = ${orgId}
+    `) as Promise<any>,
   ]);
+  const profile = cfg.profile;
 
   // ---- hours by department --------------------------------------------------
   const deptHours = new Map<string, { billed: number; total: number }>();
@@ -228,6 +385,28 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     .filter((d) => d.hours.billed > 0)
     .sort((a, b) => b.hours.billed - a.hours.billed);
   const billedShare = new Map(departmentsBase.map((d) => [d.id, billedHours > 0 ? d.hours.billed / billedHours : 0]));
+
+  // ---- allocation-base bundle (Gantry fetchAllAllocationBases) -----------------
+  const deptIds = departmentsBase.map((d) => d.id);
+  const baseMap = new Map((baseRows.rows as any[]).map((r) => [r.dept_id as string, r]));
+  const sumBase = (field: string) => deptIds.reduce((s, id) => s + Number(baseMap.get(id)?.[field] ?? 0), 0);
+  const byDeptBase = (field: string): Record<string, number> => Object.fromEntries(deptIds.map((id) => [id, Number(baseMap.get(id)?.[field] ?? 0)]));
+  const bases: AllocationBaseBundle = {
+    hours: {
+      total: totalHours,
+      totalBilled: billedHours,
+      byDept: Object.fromEntries(departmentsBase.map((d) => [d.id, { total: d.hours.total, billed: d.hours.billed }])),
+    },
+    laborDollars: { total: sumBase("labor_dollars"), byDept: byDeptBase("labor_dollars") },
+    headcount: { total: sumBase("headcount"), byDept: byDeptBase("headcount") },
+    revenue: { total: sumBase("revenue"), byDept: byDeptBase("revenue") },
+    directCost: { total: sumBase("direct_cost"), byDept: byDeptBase("direct_cost") },
+    squareFeet: { total: Object.values(profile.baseOverrides.squareFeet ?? {}).reduce((s, v) => s + Number(v || 0), 0), byDept: profile.baseOverrides.squareFeet ?? {} },
+    units: { total: Object.values(profile.baseOverrides.units ?? {}).reduce((s, v) => s + Number(v || 0), 0), byDept: profile.baseOverrides.units ?? {} },
+    custom: { total: Object.values(profile.baseOverrides.custom ?? {}).reduce((s, v) => s + Number(v || 0), 0), byDept: profile.baseOverrides.custom ?? {} },
+    monthCount,
+  };
+  const periodData = { laborDollars: bases.laborDollars, directCost: bases.directCost, units: bases.units, monthCount };
 
   // ---- classify expense into burden categories --------------------------------
   const directLabor = new Set(
@@ -304,29 +483,80 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   }
 
   const totalOverhead = [...cats.values()].reduce((s, c) => s + c.total, 0);
-  const compositeRate = billedHours > 0 ? totalOverhead / billedHours : 0;
+  const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
 
-  const categories: BurdenCategory[] = burdenGroups.groups.map((g) => {
-    const c = cats.get(g.id)!;
+  // Apply the Gantry rate engine to one category's expense-by-dept: allocation
+  // base × method → raw rate, then formatted per the category's rate format.
+  function buildCategory(
+    id: string, key: string, name: string, color: string | null,
+    categoryType: BurdenCategory["categoryType"], match: BurdenCategory["match"],
+    expenseByDept: Record<string, number>, total: number, accounts: BurdenAccount[],
+  ): BurdenCategory {
+    const s = settingsOf(id);
+    const allocationBase = s.allocationBase ?? "billed_hours";
+    const allocationMethod = s.allocationMethod ?? "simple";
+    const rateFormat = s.rateFormat ?? "per_hour";
+    const includeInComposite = s.includeInComposite ?? true;
+    const baseByDept: Record<string, number> = {};
     const byDept: Record<string, { amount: number; rate: number }> = {};
     for (const d of departmentsBase) {
-      const amount = c.byDept.get(d.id) ?? 0;
-      byDept[d.id] = { amount, rate: d.hours.billed > 0 ? amount / d.hours.billed : 0 };
+      const amount = expenseByDept[d.id] ?? 0;
+      const deptBase = getAllocationBaseValue(allocationBase, bases, d.id);
+      baseByDept[d.id] = deptBase;
+      byDept[d.id] = { amount, rate: deptBase > 0 ? amount / deptBase : 0 };
     }
+    const rawRate = allocationMethod === "weighted"
+      ? calculateRate({ id, allocationMethod, allocationWeights: s.allocationWeights, allocationTiers: s.allocationTiers }, expenseByDept, baseByDept, allocationMethod)
+      : calculateRate({ id, allocationMethod, allocationTiers: s.allocationTiers }, total, getAllocationBaseValue(allocationBase, bases, "Overall"), allocationMethod);
+    const formatted = formatRate(rawRate, rateFormat, periodData, { totalExpense: total });
     return {
-      id: c.id, key: c.key, name: c.name, color: c.color,
-      match: g.match ?? {},
-      totalAmount: c.total,
-      rate: billedHours > 0 ? c.total / billedHours : 0,
-      accounts: [...c.accounts.values()].sort((a, b) => b.amount - a.amount),
-      byDept,
+      id, key, name, color, categoryType, match,
+      totalAmount: total, rawRate, rate: formatted.value, rateDisplay: formatted.display,
+      allocationBase, allocationMethod, rateFormat, includeInComposite,
+      accounts, byDept,
     };
+  }
+
+  const expenseCategories: BurdenCategory[] = burdenGroups.groups.map((g) => {
+    const c = cats.get(g.id)!;
+    const expenseByDept: Record<string, number> = {};
+    for (const d of departmentsBase) expenseByDept[d.id] = c.byDept.get(d.id) ?? 0;
+    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, c.total, [...c.accounts.values()].sort((a, b) => b.amount - a.amount));
   }).filter((c) => Math.abs(c.totalAmount) > 0.005);
+
+  // ---- custom categories (manual / derived / formula) --------------------------
+  // categoryTotals lets derived/formula reference other categories by id.
+  const categoryTotals: Record<string, { expenseOverall: number }> = {};
+  for (const c of expenseCategories) categoryTotals[c.id] = { expenseOverall: c.totalAmount };
+  const customCategories: BurdenCategory[] = [];
+  for (const cc of profile.customCategories) {
+    let calc: { expense: Record<string, number>; totalExpense: number };
+    if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases);
+    else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases);
+    else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases);
+    categoryTotals[cc.id] = { expenseOverall: calc.totalExpense };
+    // Custom category settings live on the category record itself.
+    profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
+    const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, []);
+    if (Math.abs(built.totalAmount) > 0.005) customCategories.push(built);
+  }
+
+  const categories: BurdenCategory[] = [...expenseCategories, ...customCategories];
+
+  // ---- composite rate via the configured method (Gantry calculateCompositeRate) ---
+  const laborHoursSumForComposite = employeesWeightedRate(empRows.rows as any[]);
+  const compositeCats: CompositeCategory[] = categories.map((c) => ({
+    id: c.id, rateValue: c.rate, totalExpense: c.totalAmount, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite,
+  }));
+  const composite = calculateCompositeRate(compositeCats, { method: profile.compositeMethod, baseLaborRate: profile.baseLaborRate }, { avgLaborRate: laborHoursSumForComposite });
+  const compositeRate = composite.value;
 
   const totalsByDept: Record<string, number> = {};
   const departments: Dept[] = departmentsBase.map((d) => {
-    const deptBurden = categories.reduce((s, c) => s + (c.byDept[d.id]?.amount ?? 0), 0);
-    const composite = d.hours.billed > 0 ? deptBurden / d.hours.billed : 0;
+    // Dept composite = sum of each included category's per-dept rate (matches the
+    // matrix column), consistent with the sum composite; other methods still
+    // headline via the engine value above.
+    const composite = categories.filter((c) => c.includeInComposite).reduce((s, c) => s + (c.byDept[d.id]?.rate ?? 0), 0);
     totalsByDept[d.id] = composite;
     return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, composite };
   });
@@ -436,5 +666,15 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     monthly,
     forecast,
     hasBurdenGL,
+    bases,
+    config: {
+      activeProfileId: cfg.activeProfileId,
+      compositeMethod: profile.compositeMethod,
+      baseLaborRate: profile.baseLaborRate,
+      fringeRate: profile.fringeRate,
+      categorySettings: profile.categorySettings,
+      profiles: cfg.profiles.map((p) => ({ id: p.id, name: p.name, color: p.color })),
+      customCategories: profile.customCategories,
+    },
   };
 }
