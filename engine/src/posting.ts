@@ -10,6 +10,7 @@ import {
   validateSubsidiaryRestrictions,
 } from "./subsidiaries.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "./close.ts";
+import { resolveBillInventoryAccounts } from "./inventory.ts";
 
 /**
  * The posting engine: document → journal entry, through the kernel.
@@ -81,6 +82,13 @@ export interface PostingDeps {
    * regenerateGlImpactTx for customer_invoice documents.
    */
   deferralAccountByLine?: Map<string, string>;
+  /**
+   * document_line id → the account a vendor_bill inventory line should DEBIT
+   * (received-not-billed clearing, else the inventory asset account). The
+   * inventory subledger then receives the stock. Resolved lazily by
+   * postDocument / regenerateGlImpactTx for vendor_bill documents.
+   */
+  inventoryAssetByLine?: Map<string, string>;
 }
 
 /** document_line id → deferred-revenue account for rev-rec invoice lines. */
@@ -252,8 +260,10 @@ function taxLines(
 export const RULES: Record<string, RuleFn> = {
   vendor_bill: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
-      amount: l.amount, // debit expense
+      // Inventory item lines DR the clearing/asset account (subledger receives
+      // the stock); all other lines DR their expense account.
+      accountId: deps.inventoryAssetByLine?.get(l.id) ?? l.accountId!,
+      amount: l.amount, // debit expense / inventory
       memo: l.description,
       partyId: doc.partyId,
       ...dims(doc, l),
@@ -609,6 +619,9 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(db, doc.id) };
   }
+  if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
+    deps = { ...deps, inventoryAssetByLine: await resolveBillInventoryAccounts(db, doc.orgId, doc.id) };
+  }
 
   const lines = await db
     .select()
@@ -878,6 +891,9 @@ export async function regenerateGlImpactTx(
   }
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id) };
+  }
+  if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
+    deps = { ...deps, inventoryAssetByLine: await resolveBillInventoryAccounts(tx, doc.orgId, doc.id) };
   }
 
   const lines = await tx

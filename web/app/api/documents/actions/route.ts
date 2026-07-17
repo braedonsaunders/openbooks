@@ -4,6 +4,10 @@ import { db, schema } from '@openbooks/engine/src/db.ts'
 import { submitForApproval } from '@openbooks/engine/src/approvals.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { createObligationsFromInvoice } from '@openbooks/engine/src/revenue-recognition.ts'
+import {
+  applyInventoryIssuesForInvoice,
+  applyInventoryReceiptsForBill,
+} from '@openbooks/engine/src/inventory.ts'
 import { getAuthz, can } from '../../../../lib/authz'
 import { controlDeps, DOC_KINDS, createPermission, postPermission } from '../../../../lib/documents'
 
@@ -74,14 +78,24 @@ export async function POST(req: Request) {
     // post
     const deps = await controlDeps(user.orgId)
     const entryId = await postDocument(doc.id, deps)
-    // A posted invoice with rev-rec items spawns performance obligations +
-    // recognition schedules (deferred revenue was booked by the posting rule).
+    const postingDate = (doc.postingDate ?? doc.documentDate) as string
     let revenue: { created: number } | undefined
+    let inventory: { movements: number } | undefined
     if (doc.kind === 'customer_invoice') {
+      // Rev-rec items spawn obligations + schedules (deferred revenue was booked
+      // by the posting rule); inventory items issue to COGS.
       const r = await createObligationsFromInvoice(doc.id, user.orgId, user.id)
       if (r.created > 0) revenue = { created: r.created }
+      if (doc.subsidiaryId) {
+        const n = await applyInventoryIssuesForInvoice(user.orgId, user.id, doc.id, postingDate, doc.subsidiaryId)
+        if (n > 0) inventory = { movements: n }
+      }
+    } else if (doc.kind === 'vendor_bill' && doc.subsidiaryId && entryId) {
+      // Inventory item lines receive stock (bill DR'd clearing/inventory).
+      const n = await applyInventoryReceiptsForBill(user.orgId, user.id, doc.id, entryId, postingDate, doc.subsidiaryId)
+      if (n > 0) inventory = { movements: n }
     }
-    return NextResponse.json({ ok: true, entryId, ...(revenue ? { revenue } : {}) })
+    return NextResponse.json({ ok: true, entryId, ...(revenue ? { revenue } : {}), ...(inventory ? { inventory } : {}) })
   } catch (e) {
     const status = e instanceof PostingError ? 422 : 500
     return NextResponse.json({ error: (e as Error).message }, { status })

@@ -53,6 +53,12 @@ export const itemInventoryProfiles = pgTable("item_inventory_profiles", {
   cogsAccountId: uuid("cogs_account_id").notNull(),
   adjustmentAccountId: uuid("adjustment_account_id"),
   varianceAccountId: uuid("variance_account_id"), // standard-cost variance
+  /** Received-not-billed / GRNI clearing account. When set, a vendor bill's
+   *  inventory line posts here and the receipt drains it into inventory (this
+   *  is what lets standard-cost items book purchase variance from a bill).
+   *  When null, the bill posts straight to the asset account and the receipt
+   *  records the layer without its own entry. */
+  receivedNotBilledAccountId: uuid("received_not_billed_account_id"),
   standardCost: money("standard_cost"),
   baseUnit: text("base_unit").notNull().default("ea"),
   /** unit conversions: { "box": 12, "pallet": 720 } — base units per unit */

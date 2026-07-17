@@ -791,6 +791,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'cogsAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'adjustmentAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'varianceAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'receivedNotBilledAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'standardCost', kind: 'decimal' },
       { key: 'baseUnit', kind: 'text', keepDefault: true },
       { key: 'reorderPoint', kind: 'decimal' },

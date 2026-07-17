@@ -146,7 +146,8 @@ alter table document_lines
   add foreign key (employee_id) references parties(id),
   add foreign key (time_entry_id) references time_entries(id),
   add foreign key (time_type_id) references time_types(id),
-  add foreign key (billed_by_line_id) references document_lines(id);
+  add foreign key (billed_by_line_id) references document_lines(id),
+  add foreign key (stock_location_id) references stock_locations(id);
 alter table document_links
   add foreign key (from_document_id) references documents(id),
   add foreign key (to_document_id) references documents(id);
@@ -173,7 +174,8 @@ alter table item_inventory_profiles
   add foreign key (asset_account_id) references accounts(id),
   add foreign key (cogs_account_id) references accounts(id),
   add foreign key (adjustment_account_id) references accounts(id),
-  add foreign key (variance_account_id) references accounts(id);
+  add foreign key (variance_account_id) references accounts(id),
+  add foreign key (received_not_billed_account_id) references accounts(id);
 alter table lots add foreign key (item_id) references items(id);
 alter table serials
   add foreign key (item_id) references items(id),

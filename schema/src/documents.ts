@@ -140,6 +140,11 @@ export const documentLines = pgTable(
     quantityFulfilled: money("quantity_fulfilled").notNull().default("0"),
     quantityBilled: money("quantity_billed").notNull().default("0"),
 
+    /** Stock location for an inventory item line — where a bill receives stock
+     *  or an invoice/shipment issues it. Null lines fall back to the single
+     *  active stock location, else the line is treated as non-inventory. */
+    stockLocationId: uuid("stock_location_id"),
+
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
