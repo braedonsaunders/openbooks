@@ -17,8 +17,10 @@ import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers
 /**
  * Business documents — the mutable layer users touch. One supertype table +
  * lines; `kind` drives behavior via posting rules, not via 20 near-identical
- * tables. Posting produces exactly one journal entry (ledger.ts) and freezes
- * the document.
+ * tables. Posting produces exactly one journal entry (ledger.ts). Posted
+ * documents remain editable while their accounting scope is open; the entry
+ * is re-materialized in place and immutable before/after evidence is written
+ * to audit_log. Closed-period changes require reopening or a reversal.
  *
  * Kinds (initial set, from actual usage): vendor_bill, vendor_credit,
  * vendor_payment, expense_report, customer_invoice, customer_credit,

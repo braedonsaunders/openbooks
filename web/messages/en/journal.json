@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Journal",
-    "description": "{count, plural, one {# posted entry} other {# posted entries}} · immutable, append-only.",
+    "description": "{count, plural, one {# posted entry} other {# posted entries}} · audited; closed periods are immutable.",
     "searchPlaceholder": "Search entry number or memo…",
     "originFilter": "Origin",
     "draftsHeading": "Draft journals — not yet posted",

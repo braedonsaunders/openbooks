@@ -14,11 +14,12 @@ import {
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 
 /**
- * THE KERNEL. Append-only double-entry journal.
+ * THE KERNEL. Controlled-mutation double-entry journal.
  *
  * Invariants enforced in Postgres (see migrations/kernel-constraints.sql):
  *  - SUM(journal_lines.amount) = 0 per entry (deferred constraint trigger)
- *  - posted entries and their lines are immutable (UPDATE/DELETE blocked)
+ *  - posted entries are locked by default; audited engine amendments are
+ *    allowed only while both the old and new accounting scopes are open
  *  - lines post only to active, non-summary accounts
  *  - entry period must be open for the entry's module at post time
  *  - amount = round(txn_amount * fx_rate) when currency differs from base
@@ -73,7 +74,7 @@ export const journalEntries = pgTable(
     })
       .notNull()
       .default("manual"),
-    /** Reversal chain — a reversal is a NEW entry, never an edit. */
+    /** Reversal chain for voids and closed-period corrections. */
     reversesEntryId: uuid("reverses_entry_id"),
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,

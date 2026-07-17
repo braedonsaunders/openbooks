@@ -46,7 +46,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     key: "journal-entries",
     label: "Journal Entries",
     description:
-      "Append-only ledger entries. Each entry must balance to zero (kernel-enforced). Documents post exactly one journal entry; corrections are reversals, never edits.",
+      "Balanced ledger entries enforced by the accounting kernel. Documents post exactly one entry; authorized open-period amendments re-materialize it with immutable before/after evidence, while closed-period corrections use reopening or reversal.",
     table: "journal_entries",
     readPermission: "gl.read",
     writePermission: "gl.post",

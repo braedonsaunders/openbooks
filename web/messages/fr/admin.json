@@ -94,7 +94,7 @@
   },
   "audit": {
     "title": "Journal d’audit",
-    "description": "Historique au niveau des champs des modifications de la couche métier. Le grand livre n’a pas besoin de piste d’audit — il est, par construction, en ajout seulement.",
+    "description": "Historique métier immuable, incluant l’état complet avant/après du document et son impact au grand livre pour les modifications comptabilisées et les suppressions.",
     "searchPlaceholder": "Rechercher une table, un auteur ou un id de ligne…",
     "actionFilter": "Action",
     "empty": {

@@ -50,12 +50,17 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
 
 ## Accounting Kernel Discipline (never violate)
 
-- Documents (business layer, mutable while draft) are strictly separate from
-  the ledger (journal entries/lines — append-only, immutable once posted).
-  Posting a document produces exactly one journal entry; corrections are
-  reversals (`reverses_entry_id`), never edits.
-- Postgres enforces the invariants (balance = 0 per entry, posted-immutable,
-  no posting to summary/inactive accounts, application caps) via triggers in
+- Documents (business layer) are strictly separate from their ledger projection.
+  Posting produces exactly one journal entry. Authorized edits or deletes may
+  re-materialize/remove it in place only while every old/new accounting scope is
+  open, through the transaction-scoped `openbooks.amend` engine path, with a
+  complete immutable before/after document + GL audit row written atomically.
+  Closed-period impact is immutable; corrections use controlled reopening or
+  reversals (`reverses_entry_id`). Never expose `openbooks.amend` outside the
+  audited engine path.
+- Postgres enforces the invariants (balance = 0 per entry, guarded posted writes,
+  closed-period immutability, append-only audit evidence, no posting to
+  summary/inactive accounts, application caps) via triggers in
   `schema/migrations/kernel-constraints.sql`. Never weaken a trigger to "make
   it work"; the migration-mode GUC (`openbooks.migration = on`) exists only
   for historical replays.

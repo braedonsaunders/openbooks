@@ -43,9 +43,10 @@
 
 openbooks is an open-source business suite with the discipline of a real
 accounting system at its core: a **double-entry general-ledger kernel** where
-every posted entry balances to zero, posted rows are immutable, and corrections
-are reversals — invariants enforced by **PostgreSQL triggers**, not by hopeful
-application code.
+every posted entry balances to zero, closed-period rows are immutable, and
+controlled open-period amendments preserve immutable before/after document and
+GL-impact evidence — invariants enforced by **PostgreSQL triggers**, not by
+hopeful application code.
 
 On top of that kernel sit the workflows a company actually runs on — payables,
 receivables, payments, expenses, banking, period close — plus an app-builder,
@@ -63,11 +64,11 @@ back office on it.**
 
 ## Why openbooks is different
 
-- **A kernel, not a spreadsheet with steps.** Documents (mutable while draft) are
-  strictly separated from the ledger (append-only, immutable once posted).
-  Posting a document produces exactly one journal entry; the balance-to-zero,
-  posted-immutable, and closed-period rules live in the database. You physically
-  cannot post an unbalanced entry.
+- **A kernel, not a spreadsheet with steps.** Documents are strictly separated
+  from their ledger projection. Posting produces exactly one journal entry;
+  authorized edits in an open period re-materialize that entry in place and
+  atomically record its old/new business and GL state. Closed-period impact is
+  immutable, and the database physically refuses unbalanced entries.
 - **Real tools, not sanitized brands.** User scripting is **real JavaScript** in
   a QuickJS sandbox. The query surface is **real PostgreSQL** through a
   SELECT-only role. No invented mini-language you have to relearn.
@@ -137,7 +138,8 @@ ships with search, filters, and pagination as a non-negotiable.
 - **App builder** — custom fields (header + line, any module), **custom record
   types** (auto-generated modules + dynamic sidebar), and a forms engine.
 - **User scripting** (real JavaScript, QuickJS sandbox), **navigation
-  customization**, an **audit log** (before/after diff on every mutation),
+  customization**, an append-only **audit log** (including complete old/new
+  document and GL snapshots for posted amendments and deletion tombstones),
   **API keys**, and a **data import/export** adapter registry.
 
 ## The Kernel
@@ -147,16 +149,19 @@ The general-ledger kernel is the part you can't fake, so openbooks doesn't.
 - **Balanced by construction.** A Postgres trigger rejects any journal entry
   whose lines don't sum to zero. There is no code path that writes an unbalanced
   entry — not an admin override, not a migration.
-- **Append-only & immutable.** Posted journal lines can't be edited or deleted.
-  A correction is a reversal (`reverses_entry_id`) that leaves the original
-  intact — the audit trail is the ledger.
+- **Audited open-period amendments.** Posted transactions are locked by default,
+  but the engine may re-materialize or delete them while every affected scope is
+  open and dependency checks pass. The same transaction stores immutable old/new
+  document and GL snapshots; closed-period corrections use controlled reopening
+  or reversals (`reverses_entry_id`).
 - **Money is exact.** Amounts are `numeric(19,4)` and computed with BigInt units
   (`engine/src/money.ts`) — never floats, never rounding drift, handles
   scientific notation.
 - **Guardrails in the database.** No posting to summary or inactive accounts, no
   posting into a closed period, application caps enforced — all in
-  `schema/migrations/kernel-constraints.sql`. A migration-mode GUC exists only
-  for historical replays and is never used at runtime.
+  `schema/migrations/kernel-constraints.sql`. The amendment GUC is engine-only
+  and transaction-scoped; the separate migration-mode GUC exists only for
+  historical replays.
 
 ## Architecture
 

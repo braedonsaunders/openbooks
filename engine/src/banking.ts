@@ -1090,8 +1090,9 @@ export async function markReconciled(
       );
     }
 
-    // journal_lines carries no audit columns (append-only kernel) — the
-    // reconciliation stamp itself is the audit trail.
+    // journal_lines carries no row-level audit columns. The reconciliation
+    // stamp is its own evidence; transaction amendments are preserved through
+    // immutable document + GL snapshots in audit_log.
     const stamped = (await tx.execute(sql`
       update journal_lines jl
          set reconciled_at = now(), reconciliation_id = ${recon.id}

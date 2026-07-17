@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Diario",
-    "description": "{count, plural, one {# asiento contabilizado} other {# asientos contabilizados}} · inmutable, de solo adición.",
+    "description": "{count, plural, one {# asiento contabilizado} other {# asientos contabilizados}} · auditado; los períodos cerrados son inmutables.",
     "searchPlaceholder": "Buscar por número de asiento o memo…",
     "originFilter": "Origen",
     "draftsHeading": "Asientos en borrador — aún sin contabilizar",

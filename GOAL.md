@@ -19,8 +19,11 @@ Non-negotiables (standing rules):
   never schema/feature scope.
 - **Vendor-neutral product.** No hardcoded vendors/orgs in UI; adapters and
   data carry identity.
-- **Kernel discipline.** Balanced-by-construction, append-only, posted =
-  immutable. Postgres enforces it, not app code.
+- **Kernel discipline.** Balanced-by-construction. Posted transactions may be
+  amended in place only while every affected accounting scope is open, through
+  the guarded engine path, with immutable old/new document + GL evidence written
+  atomically. Closed-period impact is immutable; corrections are reopenings or
+  reversals. Postgres enforces the boundary, not app code.
 - **Real tools, not sanitized brands.** User scripting is real JavaScript;
   the query language is real SQL.
 

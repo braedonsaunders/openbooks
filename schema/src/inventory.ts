@@ -92,7 +92,8 @@ export const serials = pgTable(
 );
 
 /**
- * The inventory event log — append-only once posted, like the ledger.
+ * The inventory event log — append-only once posted as permanent subledger
+ * history.
  * Receipts create cost layers; issues consume them (see consumptions);
  * transfers move quantity between stock locations at carried cost.
  */

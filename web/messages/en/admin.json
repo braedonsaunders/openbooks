@@ -98,7 +98,7 @@
   },
   "audit": {
     "title": "Audit Log",
-    "description": "Field-level history of business-layer changes. The ledger needs no audit trail — it is append-only by construction.",
+    "description": "Immutable business history, including complete before/after document and GL impact for posted amendments and deletion tombstones.",
     "searchPlaceholder": "Search table, actor, or row id…",
     "actionFilter": "Action",
     "empty": {

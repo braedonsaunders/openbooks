@@ -10,13 +10,15 @@ first-class concepts.
 ## Principles
 
 1. **Two strictly separated layers.** *Documents* (invoices, bills, payments,
-   expense reports) are the business layer — mutable while draft, workflow-
-   driven. The *ledger* (journal entries/lines) is the accounting layer —
-   append-only, immutable once posted, derived from documents by posting
-   rules. NetSuite's `transaction` / `transactionline` /
+   expense reports) are the business layer — workflow-driven and editable
+   while their accounting scope is open. The *ledger* (journal entries/lines)
+   is their controlled accounting projection, derived by posting rules.
+   NetSuite's `transaction` / `transactionline` /
    `transactionaccountingline` triple-decker blurs these; openbooks never
-   does. Every posted document produces exactly one journal entry; reversal
-   creates a new linked entry, never an edit.
+   does. Every posted document produces exactly one journal entry. An
+   authorized open-period edit re-materializes that entry in place and writes
+   complete before/after evidence atomically; closed-period corrections use a
+   controlled reopening or a linked reversal.
 2. **The GL balances by construction.** A deferred constraint enforces
    Σ(signed amount) = 0 per journal entry at commit time. No app-layer-only
    invariants.
@@ -46,8 +48,8 @@ first-class concepts.
    Document status is a text enum; approval state lives in the workflow
    tables, not mixed into document status.
 8. **Everything is auditable.** `created_by/at`, `updated_by/at` everywhere;
-   posted rows immutable; an `audit_log` table captures field-level changes
-   on the business layer.
+   `audit_log` is append-only and captures field-level business changes plus
+   complete document and GL snapshots for posted amendments and deletions.
 9. **Extensible without schema migration.** Custom fields = registry +
    validated JSONB (`custom` column on extensible tables), same plugin-
    framework philosophy as beaconhs. Rassaun's 319 bolt-on fields become
@@ -87,7 +89,7 @@ parties     parties, party_roles, addresses, contacts, party_bank_accounts
 tax         tax_codes, tax_rates, tax_groups, tax_report_lines
 documents   documents (header supertype), document_lines, applications,
             document_links (fulfillment/billing chains)
-ledger      journal_entries, journal_lines  ← append-only kernel
+ledger      journal_entries, journal_lines  ← controlled-mutation kernel
 approvals   approval_policies, approval_requests, approval_steps
 extension   custom_field_defs, (JSONB `custom` on extensible tables), audit_log
 ```
@@ -98,8 +100,11 @@ extension   custom_field_defs, (JSONB `custom` on extensible tables), audit_log
   `SUM(amount) = 0` per entry via deferred constraint trigger.
 - Foreign-currency lines carry `currency_code`, `fx_rate`, `txn_amount`;
   `amount = round(txn_amount × fx_rate)` checked.
-- A journal entry is `draft → posted → (reversed)`. Posted lines: UPDATE/DELETE
-  revoked by trigger. Reversal = new entry with `reverses_entry_id`.
+- A journal entry is `draft → posted → (reversed)`. Posted writes are blocked
+  by default. The guarded engine may re-materialize or delete an entry only
+  while every affected scope is open and immutable audit evidence is written
+  in the same transaction. Closed-period corrections use reopening or a new
+  entry with `reverses_entry_id`.
 - Line must reference a **postable, active** account (no posting to summary
   accounts — NetSuite allows posting to parents, which wrecks roll-ups).
 - `period_id` derives from posting date and must be an **open** period for the

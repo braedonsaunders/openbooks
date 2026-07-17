@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { sum } from '@openbooks/engine/src/money.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { loadJournalDoc } from '../../../../lib/journals'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
@@ -172,6 +173,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
+      const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
+      const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
       const sigBefore = await glSignature(tx, id)
 
       if (preparedLines) {
@@ -209,6 +212,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // edits like memo/reference #, which preserves migrated GL).
       if ((await glSignature(tx, id)) !== sigBefore) {
         await regenerateGlImpactTx(tx, id, deps, user.id)
+      }
+      if (auditBefore) {
+        const auditAfter = await captureTransactionAuditSnapshot(tx, id)
+        if (!auditAfter) throw new Error(`journal ${id} disappeared during amendment`)
+        await recordTransactionAudit(tx, {
+          orgId: user.orgId,
+          documentId: id,
+          action: 'update',
+          actorId: user.id,
+          source: 'ui',
+          before: auditBefore,
+          after: auditAfter,
+        })
       }
     })
   } catch (e) {
