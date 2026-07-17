@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import {
   AlertTriangle, BarChart3, CalendarDays, CheckCircle2, Copy, FileWarning, Flag, Ghost,
-  History, Info, ListOrdered, Scale, ShieldAlert, SlidersHorizontal, Sigma, Zap, Database,
+  History, Info, ListOrdered, Scale, ShieldAlert, SlidersHorizontal, Sigma, Zap, Database, Download,
 } from 'lucide-react'
 import { cn, Badge } from '@openbooks/ui'
 import type { SentinelData, FlaggedDoc } from '../../../../lib/analytics/sentinel-data'
@@ -12,6 +12,7 @@ import { Panel } from '../_ui/Panel'
 import { Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
+import { exportCsv } from '../_ui/exportCsv'
 import { TxnLink } from '../../reports/TxnLink'
 import { fmtMoney } from '../_ui/format'
 
@@ -533,7 +534,20 @@ function DetectionTab({ data }: { data: SentinelData }) {
       ]} />
 
       {sub === 'flagged' ? (
-        <Panel title={`All Flagged Documents (top ${num(Math.min(300, s.flaggedCount))} of ${num(s.flaggedCount)})`} icon={Flag} bodyClassName="p-0">
+        <Panel
+          title={`All Flagged Documents (top ${num(Math.min(300, s.flaggedCount))} of ${num(s.flaggedCount)})`}
+          icon={Flag}
+          bodyClassName="p-0"
+          actions={
+            <button
+              type="button"
+              onClick={() => exportCsv('flagged-documents', ['Date', 'Document', 'Kind', 'Party', 'Amount', 'Flag', 'Risk', 'Reason'], data.flagged.map((f) => [f.date, f.docNumber, f.kind, f.partyName, Math.round(f.amount), f.flagType, f.riskScore, f.reason]))}
+              className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              <Download size={11} /> CSV
+            </button>
+          }
+        >
           <FlaggedTable items={data.flagged} />
         </Panel>
       ) : null}

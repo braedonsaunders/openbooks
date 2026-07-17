@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info } from 'lucide-react'
+import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info, Download } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { VendorData, VendorRow, SpendTier, Grade, Quadrant } from '../../../../lib/analytics/vendor-data'
 import { Gauge } from '../_ui/Gauge'
@@ -9,6 +9,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
+import { exportCsv } from '../_ui/exportCsv'
 import { fmtMoney, fmtPct } from '../_ui/format'
 
 const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors'] as const
@@ -295,7 +296,20 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
     </th>
   )
   return (
-    <Panel title={`All Vendors (${data.rows.length})`} icon={Table2} bodyClassName="p-0">
+    <Panel
+      title={`All Vendors (${data.rows.length})`}
+      icon={Table2}
+      bodyClassName="p-0"
+      actions={
+        <button
+          type="button"
+          onClick={() => exportCsv('vendors', ['Vendor', 'Spend', 'Share %', 'Bills', 'Avg Bill', 'On-Time %', 'Score', 'Tier'], rows.map((r) => [r.name, Math.round(r.spend), (r.sharePct * 100).toFixed(1), r.bills, Math.round(r.avgBill), r.onTimePct === null ? '' : (r.onTimePct * 100).toFixed(0), Math.round(r.score), TIER_LABEL[r.tier]]))}
+          className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+        >
+          <Download size={11} /> CSV
+        </button>
+      }
+    >
       <div className="max-h-[32rem] overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-slate-900">
