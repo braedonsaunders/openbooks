@@ -30,7 +30,8 @@
     }
   },
   "topNav": {
-    "ariaLabel": "Principal"
+    "ariaLabel": "Principal",
+    "more": "Más"
   },
   "globalCreate": {
     "ariaLabel": "Crear nuevo",

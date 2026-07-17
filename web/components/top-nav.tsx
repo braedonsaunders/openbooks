@@ -14,7 +14,7 @@
 // dropdown is open at a time; hover-to-open with a small close delay so the
 // pointer can cross the gap between trigger and panel.
 
-import { useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -23,14 +23,78 @@ import { Popover, cn } from '@openbooks/ui'
 import { NavIcon, toBlocks, type SidebarNavGroup, type SidebarNavItem } from './sidebar-nav'
 import { findActiveNavHref } from './sidebar-nav-active'
 import { useNavGroups } from './use-platform-nav'
+import { visibleTopNavGroupCount } from '../lib/top-nav-overflow'
+
+const MORE_MENU_INDEX = -1
 
 export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   const t = useTranslations('shell.topNav')
   const pathname = usePathname() ?? ''
   const navGroups = useNavGroups(groups)
   const activeHref = findActiveNavHref(pathname, navGroups)
+  const moreLabel = t('more')
   const [openIdx, setOpenIdx] = useState<number | null>(null)
+  const [visibleCount, setVisibleCount] = useState(navGroups.length)
+  const navRef = useRef<HTMLElement>(null)
+  const measurementRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    const measurement = measurementRef.current
+    if (!nav || !measurement) return
+    let active = true
+
+    function measure() {
+      if (!active) return
+      const groupWidths = Array.from(
+        measurement!.querySelectorAll<HTMLElement>('[data-top-nav-measure="group"]'),
+        (element) => element.getBoundingClientRect().width,
+      )
+      const moreWidth =
+        measurement!.querySelector<HTMLElement>('[data-top-nav-measure="more"]')?.getBoundingClientRect().width ?? 0
+      const gap = Number.parseFloat(window.getComputedStyle(measurement!).columnGap) || 0
+      const next = visibleTopNavGroupCount({
+        availableWidth: nav!.clientWidth,
+        groupWidths,
+        moreWidth,
+        gap,
+      })
+      setVisibleCount((current) => (current === next ? current : next))
+    }
+
+    measure()
+    const frame = window.requestAnimationFrame(measure)
+    const timer = window.setTimeout(measure, 0)
+    const observer = new ResizeObserver(measure)
+    observer.observe(nav)
+    observer.observe(measurement)
+    window.addEventListener('resize', measure)
+    void document.fonts?.ready.then(measure)
+    return () => {
+      active = false
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(timer)
+      window.removeEventListener('resize', measure)
+      observer.disconnect()
+    }
+  }, [navGroups, moreLabel])
+
+  useEffect(() => {
+    if (
+      openIdx !== null &&
+      ((openIdx === MORE_MENU_INDEX && visibleCount === navGroups.length) || openIdx >= visibleCount)
+    ) {
+      setOpenIdx(null)
+    }
+  }, [navGroups.length, openIdx, visibleCount])
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) window.clearTimeout(closeTimer.current)
+    },
+    [],
+  )
 
   function enterMenu(i: number) {
     if (closeTimer.current) {
@@ -45,16 +109,42 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
     closeTimer.current = window.setTimeout(() => setOpenIdx(null), 150)
   }
 
+  const visibleGroups = navGroups.slice(0, visibleCount)
+  const overflowGroups = navGroups.slice(visibleCount)
+  const moreOpen = openIdx === MORE_MENU_INDEX
+  const moreActive = overflowGroups.some((group) => group.items.some((item) => item.href === activeHref))
+
   return (
     <nav
+      ref={navRef}
       aria-label={t('ariaLabel')}
-      // flex-1 min-w-0 so the bar yields space to the right-hand cluster
-      // (assistant + account, both shrink-0); overflow-x-auto with a hidden
-      // scrollbar means a bar too wide to fit SCROLLS instead of overflowing
-      // its box and colliding with that cluster.
-      className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto lg:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="relative hidden min-w-0 flex-1 items-center gap-0.5 overflow-hidden lg:flex"
     >
-      {navGroups.map((group, i) => {
+      <div
+        ref={measurementRef}
+        aria-hidden
+        className="pointer-events-none invisible absolute flex w-max items-center gap-0.5"
+      >
+        {navGroups.map((group, i) => (
+          <span
+            key={`${group.label}-${i}`}
+            data-top-nav-measure="group"
+            className="flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium"
+          >
+            {group.label}
+            <ChevronDown size={12} className="opacity-50" />
+          </span>
+        ))}
+        <span
+          data-top-nav-measure="more"
+          className="flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium"
+        >
+          {moreLabel}
+          <ChevronDown size={12} className="opacity-50" />
+        </span>
+      </div>
+
+      {visibleGroups.map((group, i) => {
         const open = openIdx === i
         const groupActive = group.items.some((item) => item.href === activeHref)
         return (
@@ -72,6 +162,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
                 aria-current={groupActive ? 'true' : undefined}
                 onMouseEnter={() => enterMenu(i)}
                 onMouseLeave={scheduleClose}
+                onClick={() => enterMenu(i)}
                 className={cn(
                   'flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium transition-colors',
                   groupActive
@@ -84,35 +175,155 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
               </button>
             }
           >
-            <div
-              role="menu"
-              onMouseEnter={() => enterMenu(i)}
-              onMouseLeave={scheduleClose}
-              onClick={() => setOpenIdx(null)}
-            >
-              {toBlocks(group.items).map((block, bi) =>
-                block.kind === 'item' ? (
-                  <MenuItemLink
-                    key={block.item.href}
-                    item={block.item}
-                    active={activeHref === block.item.href}
-                  />
-                ) : (
-                  <SubmenuRow
-                    key={`sub-${block.label}-${bi}`}
-                    label={block.label}
-                    href={block.href}
-                    iconKey={block.iconKey}
-                    items={block.items}
-                    activeHref={activeHref}
-                  />
-                ),
-              )}
-            </div>
+            <GroupMenu
+              items={group.items}
+              activeHref={activeHref}
+              onEnter={() => enterMenu(i)}
+              onLeave={scheduleClose}
+              onSelect={() => setOpenIdx(null)}
+            />
           </Popover>
         )
       })}
+
+      {overflowGroups.length > 0 ? (
+        <Popover
+          open={moreOpen}
+          onOpenChange={(open) => (open ? enterMenu(MORE_MENU_INDEX) : setOpenIdx(null))}
+          align="start"
+          className="min-w-[15rem] py-1.5"
+          trigger={
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              aria-current={moreActive ? 'true' : undefined}
+              onMouseEnter={() => enterMenu(MORE_MENU_INDEX)}
+              onMouseLeave={scheduleClose}
+              onClick={() => enterMenu(MORE_MENU_INDEX)}
+              className={cn(
+                'flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium transition-colors',
+                moreActive
+                  ? 'text-teal-700 dark:text-teal-300'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
+              )}
+            >
+              {moreLabel}
+              <ChevronDown size={12} className="opacity-50" />
+            </button>
+          }
+        >
+          <div
+            role="menu"
+            onMouseEnter={() => enterMenu(MORE_MENU_INDEX)}
+            onMouseLeave={scheduleClose}
+            onClick={() => setOpenIdx(null)}
+          >
+            {overflowGroups.map((group, i) => (
+              <OverflowGroupRow key={`${group.label}-${visibleCount + i}`} group={group} activeHref={activeHref} />
+            ))}
+          </div>
+        </Popover>
+      ) : null}
     </nav>
+  )
+}
+
+function GroupMenu({
+  items,
+  activeHref,
+  onEnter,
+  onLeave,
+  onSelect,
+}: {
+  items: SidebarNavItem[]
+  activeHref: string | null
+  onEnter?: () => void
+  onLeave?: () => void
+  onSelect?: () => void
+}) {
+  return (
+    <div role="menu" onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={onSelect}>
+      {toBlocks(items).map((block, bi) =>
+        block.kind === 'item' ? (
+          <MenuItemLink key={block.item.href} item={block.item} active={activeHref === block.item.href} />
+        ) : (
+          <SubmenuRow
+            key={`sub-${block.label}-${bi}`}
+            label={block.label}
+            href={block.href}
+            iconKey={block.iconKey}
+            items={block.items}
+            activeHref={activeHref}
+          />
+        ),
+      )}
+    </div>
+  )
+}
+
+function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activeHref: string | null }) {
+  const [open, setOpen] = useState(false)
+  const [flip, setFlip] = useState(false)
+  const rowRef = useRef<HTMLDivElement>(null)
+  const closeTimer = useRef<number | null>(null)
+  const active = group.items.some((item) => item.href === activeHref)
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) window.clearTimeout(closeTimer.current)
+    },
+    [],
+  )
+
+  function openMenu() {
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+    const rect = rowRef.current?.getBoundingClientRect()
+    setFlip(rect ? rect.right + 248 > window.innerWidth : false)
+    setOpen(true)
+  }
+
+  function scheduleClose() {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current)
+    closeTimer.current = window.setTimeout(() => setOpen(false), 150)
+  }
+
+  return (
+    <div ref={rowRef} className="relative" onMouseEnter={openMenu} onMouseLeave={scheduleClose}>
+      <button
+        type="button"
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation()
+          setOpen((current) => !current)
+        }}
+        className={cn(
+          'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
+          active
+            ? 'text-teal-800 dark:text-teal-200'
+            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
+        )}
+      >
+        <span className="flex-1 truncate text-left">{group.label}</span>
+        <ChevronRight size={12} className={cn('shrink-0 opacity-50', flip && open && 'rotate-180')} />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className={cn(
+            'absolute top-0 z-10 min-w-[15rem] rounded-md border border-slate-200 bg-white py-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900',
+            flip ? 'right-full -mr-1' : 'left-full -ml-1',
+          )}
+        >
+          <GroupMenu items={group.items} activeHref={activeHref} />
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -192,12 +403,7 @@ function SubmenuRow({
   }
 
   return (
-    <div
-      ref={rowRef}
-      className="relative"
-      onMouseEnter={openMenu}
-      onMouseLeave={scheduleClose}
-    >
+    <div ref={rowRef} className="relative" onMouseEnter={openMenu} onMouseLeave={scheduleClose}>
       {(() => {
         const rowClass = cn(
           'group flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
@@ -216,10 +422,7 @@ function SubmenuRow({
               <span className="w-[15px] shrink-0" aria-hidden />
             )}
             <span className="flex-1 truncate text-left">{label}</span>
-            <ChevronRight
-              size={12}
-              className={cn('shrink-0 opacity-50', flip && open && 'rotate-180')}
-            />
+            <ChevronRight size={12} className={cn('shrink-0 opacity-50', flip && open && 'rotate-180')} />
           </>
         )
         return href ? (
