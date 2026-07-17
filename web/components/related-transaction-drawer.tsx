@@ -8,11 +8,11 @@ import {
   PAYMENT_KIND_SIDE,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
-import { DocumentDrawer } from './document-drawer'
-import { PaymentDrawer, type OpenItemClient } from '../app/(app)/payments/PaymentDrawer'
-import { OrderDrawer } from '../app/(app)/_order/OrderDrawer'
-import { ExpenseDrawer } from '../app/(app)/expenses/ExpenseDrawer'
-import { JournalDrawer } from '../app/(app)/journal/JournalDrawer'
+import type { OpenItemClient } from '../app/(app)/payments/PaymentDrawer'
+import {
+  RelatedTransactionDrawerClient,
+  type RelatedTransactionDrawerData,
+} from './related-transaction-drawer-client'
 import { loadOrder } from '../app/api/_order/lib'
 import type { OrderKind } from '../lib/order-kinds'
 import { can, type Authz } from '../lib/authz'
@@ -60,7 +60,7 @@ async function visibleSubsidiaries(authz: Authz) {
  * below this component; UrlDrawer derives the child close destination by
  * removing only partyTxn/partyTxnKind from the current URL.
  */
-export async function RelatedTransactionDrawer({
+export async function loadRelatedTransactionDrawerData({
   id,
   kind,
   partyId,
@@ -72,7 +72,7 @@ export async function RelatedTransactionDrawer({
   partyId: string
   authz: Authz
   formLayoutId?: string
-}) {
+}): Promise<RelatedTransactionDrawerData | null> {
   if (PAYMENT_KINDS.has(kind)) {
     const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'
     if (!can(authz, permission)) return null
@@ -106,17 +106,18 @@ export async function RelatedTransactionDrawer({
     const openItems: OpenItemClient[] = payment.doc.status === 'draft'
       ? await openItemsForParty(partyId, side)
       : []
-    return (
-      <PaymentDrawer
-        payment={payment as any}
-        initialOpenItems={openItems}
-        parties={parties.rows}
-        bankAccounts={banks.rows}
-        side={side}
-        basePath={side === 'ap' ? '/payments' : '/receipts'}
-        layout={resolvedForm.layout}
-      />
-    )
+    return {
+      type: 'payment',
+      props: {
+        payment: payment as any,
+        initialOpenItems: openItems,
+        parties: parties.rows,
+        bankAccounts: banks.rows,
+        side,
+        basePath: side === 'ap' ? '/payments' : '/receipts',
+        layout: resolvedForm.layout,
+      },
+    }
   }
 
   if (ORDER_KINDS.has(kind)) {
@@ -146,21 +147,22 @@ export async function RelatedTransactionDrawer({
         explicitLayoutId: formLayoutId,
       }),
     ])
-    return (
-      <OrderDrawer
-        order={order as any}
-        kind={orderKind}
-        parties={parties.rows}
-        accounts={accounts.rows}
-        items={items.rows}
-        taxCodes={taxCodes as any}
-        departments={departments.rows}
-        projects={projects.rows}
-        segments={segments}
-        canManage={can(authz, orderKind === 'purchase_order' ? 'ap.create' : 'ar.create')}
-        layout={resolvedForm.layout}
-      />
-    )
+    return {
+      type: 'order',
+      props: {
+        order: order as any,
+        kind: orderKind,
+        parties: parties.rows,
+        accounts: accounts.rows,
+        items: items.rows,
+        taxCodes: taxCodes as any,
+        departments: departments.rows,
+        projects: projects.rows,
+        segments,
+        canManage: can(authz, orderKind === 'purchase_order' ? 'ap.create' : 'ar.create'),
+        layout: resolvedForm.layout,
+      },
+    }
   }
 
   if (kind === 'expense_report') {
@@ -189,22 +191,23 @@ export async function RelatedTransactionDrawer({
       lineDefs: lineDefs as any,
       explicitLayoutId: formLayoutId,
     })
-    return (
-      <ExpenseDrawer
-        report={report as any}
-        employees={employees.rows}
-        accounts={accounts.rows}
-        taxCodes={taxCodes as any}
-        departments={dimensions.departments as any}
-        projects={dimensions.projects as any}
-        segments={segments as any}
-        headerDefs={headerDefs as any}
-        lineDefs={lineDefs as any}
-        canSubmit={can(authz, 'expenses.create')}
-        canPost={can(authz, 'ap.post')}
-        layout={resolvedForm.layout}
-      />
-    )
+    return {
+      type: 'expense',
+      props: {
+        report: report as any,
+        employees: employees.rows,
+        accounts: accounts.rows,
+        taxCodes: taxCodes as any,
+        departments: dimensions.departments as any,
+        projects: dimensions.projects as any,
+        segments: segments as any,
+        headerDefs: headerDefs as any,
+        lineDefs: lineDefs as any,
+        canSubmit: can(authz, 'expenses.create'),
+        canPost: can(authz, 'ap.post'),
+        layout: resolvedForm.layout,
+      },
+    }
   }
 
   if (kind === 'journal') {
@@ -229,20 +232,21 @@ export async function RelatedTransactionDrawer({
       lineDefs: lineDefs as any,
       explicitLayoutId: formLayoutId,
     })
-    return (
-      <JournalDrawer
-        journal={journal as any}
-        parties={parties.rows}
-        accounts={accounts.rows}
-        departments={dimensions.departments as any}
-        projects={dimensions.projects as any}
-        subsidiaries={subsidiaries}
-        segments={segments as any}
-        headerDefs={headerDefs as any}
-        lineDefs={lineDefs as any}
-        layout={resolvedForm.layout}
-      />
-    )
+    return {
+      type: 'journal',
+      props: {
+        journal: journal as any,
+        parties: parties.rows,
+        accounts: accounts.rows,
+        departments: dimensions.departments as any,
+        projects: dimensions.projects as any,
+        subsidiaries,
+        segments: segments as any,
+        headerDefs: headerDefs as any,
+        lineDefs: lineDefs as any,
+        layout: resolvedForm.layout,
+      },
+    }
   }
 
   const config = DOC_KINDS[kind]
@@ -272,33 +276,41 @@ export async function RelatedTransactionDrawer({
       explicitLayoutId: formLayoutId,
     }),
   ])
-  return (
-    <DocumentDrawer
-      payload={payload as any}
-      config={config}
-      basePath={config.family === 'ap' ? '/ap' : config.family === 'ar' ? '/ar' : '/banking/transactions'}
-      parties={parties as any}
-      accounts={accounts as any}
-      taxCodes={taxCodes as any}
-      cards={cards as any}
-      bankAccounts={banks as any}
-      departments={dimensions.departments as any}
-      projects={dimensions.projects as any}
-      locations={dimensions.locations as any}
-      classes={dimensions.classes as any}
-      segments={dimensions.segments as any}
-      builtinSegments={dimensions.builtinSegments as any}
-      items={items as any}
-      subsidiaries={subsidiaries}
-      headerDefs={headerDefs as any}
-      lineDefs={lineDefs as any}
-      canCreate={can(authz, createPermission(kind))}
-      canPost={can(authz, postPermission(kind))}
-      layout={resolvedForm.layout}
-      availableLayouts={resolvedForm.available}
-      currentLayoutId={resolvedForm.row?.id ?? null}
-      recordType={kind}
-      canCustomize={can(authz, 'admin.customization.manage')}
-    />
-  )
+  return {
+    type: 'document',
+    props: {
+      payload: payload as any,
+      config,
+      basePath: config.family === 'ap' ? '/ap' : config.family === 'ar' ? '/ar' : '/banking/transactions',
+      parties: parties as any,
+      accounts: accounts as any,
+      taxCodes: taxCodes as any,
+      cards: cards as any,
+      bankAccounts: banks as any,
+      departments: dimensions.departments as any,
+      projects: dimensions.projects as any,
+      locations: dimensions.locations as any,
+      classes: dimensions.classes as any,
+      segments: dimensions.segments as any,
+      builtinSegments: dimensions.builtinSegments as any,
+      items: items as any,
+      subsidiaries,
+      headerDefs: headerDefs as any,
+      lineDefs: lineDefs as any,
+      canCreate: can(authz, createPermission(kind)),
+      canPost: can(authz, postPermission(kind)),
+      layout: resolvedForm.layout,
+      availableLayouts: resolvedForm.available,
+      currentLayoutId: resolvedForm.row?.id ?? null,
+      recordType: kind,
+      canCustomize: can(authz, 'admin.customization.manage'),
+    },
+  }
+}
+
+export async function RelatedTransactionDrawer(
+  props: Parameters<typeof loadRelatedTransactionDrawerData>[0],
+) {
+  const data = await loadRelatedTransactionDrawerData(props)
+  return data ? <RelatedTransactionDrawerClient data={data} /> : null
 }
