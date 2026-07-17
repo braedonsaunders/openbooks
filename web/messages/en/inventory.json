@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "Inventory",
+    "description": "On-hand valuation and stock movements — costed FIFO, moving-average, or standard.",
+    "searchPlaceholder": "Search items or locations…",
+    "emptyTitle": "No inventory yet",
+    "emptyDescription": "Configure an item's costing profile in Setup, then receive stock.",
+    "newButton": "New movement",
+    "view": "View"
+  },
+  "view": {
+    "onhand": "On hand",
+    "movements": "Movements"
+  },
+  "labels": {
+    "item": "Item",
+    "location": "Location",
+    "quantity": "Quantity",
+    "avgCost": "Avg cost",
+    "value": "Value",
+    "date": "Date",
+    "kind": "Type",
+    "unitCost": "Unit cost"
+  },
+  "kind": {
+    "receipt": "Receipt",
+    "issue": "Issue",
+    "transfer_out": "Transfer out",
+    "transfer_in": "Transfer in",
+    "adjustment": "Adjustment",
+    "count": "Count",
+    "assembly_build": "Assembly build",
+    "assembly_consume": "Assembly consume",
+    "return": "Return"
+  },
+  "drawer": {
+    "title": "Inventory movement",
+    "post": "Post",
+    "action": "Action",
+    "actions": {
+      "receive": "Receive",
+      "issue": "Issue",
+      "adjust": "Adjust"
+    },
+    "hint": {
+      "receive": "Add stock at cost (DR inventory / CR offset).",
+      "issue": "Remove stock to COGS (DR COGS / CR inventory).",
+      "adjust": "Correct on-hand quantity against the adjustment account."
+    },
+    "selectItem": "Select an item",
+    "selectLocation": "Select a location",
+    "selectAccount": "Select an account",
+    "quantityDelta": "Quantity (+/-)",
+    "offsetAccount": "Offset account",
+    "offsetHint": "The account credited for the receipt (clearing / GRNI / opening balance).",
+    "memoPlaceholder": "Optional note",
+    "missingFields": "Item, location, and quantity are required",
+    "failed": "Movement failed",
+    "posted": "Posted movement ({value})"
+  }
+}

@@ -1010,7 +1010,8 @@
       "workforce": "Workforce",
       "assets": "Assets",
       "currency": "Currency",
-      "revenue": "Revenue"
+      "revenue": "Revenue",
+      "inventory": "Inventory"
     },
     "fxProvider": {
       "title": "Exchange rate provider",
@@ -1380,6 +1381,14 @@
       "fair-value-prices": {
         "title": "Fair Value Prices",
         "description": "Standalone selling prices used to allocate bundle revenue across obligations."
+      },
+      "stock-locations": {
+        "title": "Stock Locations",
+        "description": "Physical bins, zones, and warehouses under the locations dimension."
+      },
+      "item-inventory-profiles": {
+        "title": "Item Costing",
+        "description": "Costing method, inventory accounts, tracking, and standard cost per item."
       }
     },
     "fields": {
@@ -1434,7 +1443,7 @@
       "defaultConvention": "Depreciation convention",
       "endOfLife": "End of life",
       "defaultLifeMonths": "Default life (months)",
-      "assetAccountId": "Asset account",
+      "assetAccountId": "Inventory asset account",
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
       "depreciationExpenseAccountId": "Depreciation expense account",
       "gainLossAccountId": "Gain / loss account",
@@ -1484,7 +1493,18 @@
       "unitPrice": "Unit price",
       "lowValue": "Low value",
       "highValue": "High value",
-      "currency": "Currency"
+      "currency": "Currency",
+      "locationId": "Location",
+      "kind": "Kind",
+      "costingMethod": "Costing method",
+      "tracking": "Tracking",
+      "cogsAccountId": "COGS account",
+      "adjustmentAccountId": "Adjustment account",
+      "varianceAccountId": "Variance account",
+      "standardCost": "Standard cost",
+      "baseUnit": "Base unit",
+      "reorderPoint": "Reorder point",
+      "preferredStockLevel": "Preferred stock level"
     },
     "options": {
       "appliesTo": {
@@ -1561,6 +1581,24 @@
         "term": "Term length",
         "obligation": "Obligation end",
         "contract": "Contract end"
+      },
+      "costingMethod": {
+        "fifo": "FIFO",
+        "movingAverage": "Moving average",
+        "standard": "Standard cost"
+      },
+      "tracking": {
+        "none": "None",
+        "lot": "Lot",
+        "serial": "Serial"
+      },
+      "stockLocationKind": {
+        "warehouse": "Warehouse",
+        "zone": "Zone",
+        "bin": "Bin",
+        "staging": "Staging",
+        "transit": "Transit",
+        "quarantine": "Quarantine"
       }
     }
   },

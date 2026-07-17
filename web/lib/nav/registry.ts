@@ -192,6 +192,14 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'parties.read',
   },
   {
+    key: 'inventory',
+    href: '/inventory',
+    label: 'Inventory',
+    iconKey: 'package',
+    group: 'purchases',
+    requiredPermission: 'items.read',
+  },
+  {
     key: 'purchase-orders',
     href: '/purchase-orders',
     label: 'Purchase Orders',
