@@ -44,15 +44,7 @@
     "admin-pdf-templates": "PDF Templates",
     "admin-apps": "Apps",
     "admin-setup": "Setup",
-    "analytics": "Overview",
-    "analytics-financial-health": "Financial Health",
-    "analytics-customer": "Customer Intelligence",
-    "analytics-vendor": "Vendor Performance",
-    "analytics-cashflow": "Cash Flow",
-    "analytics-true-cost": "True Cost",
-    "analytics-utilization": "Utilization",
-    "analytics-spend-velocity": "Spend Velocity",
-    "analytics-sentinel": "Sentinel"
+    "analytics": "Analytics"
   },
   "groups": {
     "overview": "Overview",

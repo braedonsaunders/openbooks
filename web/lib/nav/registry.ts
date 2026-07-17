@@ -57,7 +57,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'journal', href: '/journal', label: 'Journal', iconKey: 'journal', group: 'Accounting', requiredPermission: 'gl.read' },
   { key: 'accounts', href: '/accounts', label: 'Chart of Accounts', iconKey: 'layers', group: 'Accounting', requiredPermission: 'gl.read' },
   { key: 'assets', href: '/assets', label: 'Fixed Assets', iconKey: 'building', group: 'Accounting', requiredPermission: 'assets.read' },
-  { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Accounting', requiredPermission: 'gl.close' },
+  { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Banking', requiredPermission: 'close.read' },
   { key: 'items', href: '/items', label: 'Items & Services', iconKey: 'grid', group: 'Accounting', requiredPermission: 'items.read' },
 
   // People & Time — employees and timesheets. The unified party directory
@@ -69,15 +69,11 @@ export const NAV_MODULES: NavModule[] = [
 
   // Reports — every read surface: statements, analytics, views, docs, queries.
   { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics', href: '/analytics', label: 'Analytics', iconKey: 'activity', group: 'Reports', requiredPermission: 'reports.read', exact: true },
-  { key: 'analytics-financial-health', href: '/analytics/financial-health', label: 'Financial Health', iconKey: 'heart-pulse', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics-customer', href: '/analytics/customer-intelligence', label: 'Customer Intelligence', iconKey: 'users', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics-vendor', href: '/analytics/vendor-performance', label: 'Vendor Performance', iconKey: 'clipboard', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics-cashflow', href: '/analytics/cashflow', label: 'Cash Flow', iconKey: 'building', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics-true-cost', href: '/analytics/true-cost', label: 'True Cost', iconKey: 'layers', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics-utilization', href: '/analytics/utilization', label: 'Utilization', iconKey: 'timer', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics-spend-velocity', href: '/analytics/spend-velocity', label: 'Spend Velocity', iconKey: 'activity', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'analytics-sentinel', href: '/analytics/sentinel', label: 'Sentinel', iconKey: 'search', group: 'Reports', requiredPermission: 'reports.read' },
+  // Analytics is ONE nav entry — the /analytics hub. The individual dashboards
+  // (Financial Health, Customer Intelligence, …) are cards on the hub, not nav
+  // modules (user directive 2026-07-16). No `exact` so it stays active on
+  // /analytics/* sub-routes.
+  { key: 'analytics', href: '/analytics', label: 'Analytics', iconKey: 'activity', group: 'Reports', requiredPermission: 'reports.read' },
   { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'sparkles', group: 'Reports', requiredPermission: 'insights.read' },
   { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'folder', group: 'Reports', requiredPermission: 'documents.read' },
   { key: 'saved-searches', href: '/knowledge/views', label: 'Views', iconKey: 'search', group: 'Reports', requiredPermission: 'reports.read' },
@@ -105,7 +101,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'admin-custom-fields', href: '/admin/custom-fields', label: 'Custom Fields', iconKey: 'tag', group: 'Settings', subgroup: 'Build', requiredPermission: 'admin.custom_fields.manage' },
   { key: 'admin-customization', href: '/admin/customization', label: 'Forms & Views', iconKey: 'panel-left', group: 'Settings', subgroup: 'Build', requiredPermission: 'admin.customization.manage' },
   { key: 'admin-pdf-templates', href: '/admin/pdf-templates', label: 'PDF Templates', iconKey: 'scroll', group: 'Settings', subgroup: 'Build', requiredPermission: 'admin.customization.manage' },
-  { key: 'admin-scripts', href: '/admin/scripts', label: 'Scripts', iconKey: 'workflow', group: 'Settings', subgroup: 'Build', requiredPermission: 'scripts.manage' },
+  { key: 'admin-scripts', href: '/admin/scripts', label: 'Scripts', iconKey: 'code', group: 'Settings', subgroup: 'Build', requiredPermission: 'scripts.manage' },
   { key: 'flows', href: '/admin/flows', label: 'Flows', iconKey: 'workflow', group: 'Settings', subgroup: 'Build', requiredPermission: 'flows.manage' },
   { key: 'admin-apps', href: '/admin/apps', label: 'Apps', iconKey: 'library', group: 'Settings', subgroup: 'Build', requiredPermission: 'apps.manage' },
   { key: 'admin-api-keys', href: '/admin/api-keys', label: 'API Keys', iconKey: 'key', group: 'Settings', subgroup: 'Build', requiredPermission: 'api.keys.manage' },
