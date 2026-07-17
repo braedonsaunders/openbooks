@@ -44,15 +44,7 @@
     "admin-pdf-templates": "Modèles PDF",
     "admin-apps": "Applications",
     "admin-setup": "Configuration",
-    "analytics": "Vue d'ensemble",
-    "analytics-financial-health": "Santé financière",
-    "analytics-customer": "Intelligence client",
-    "analytics-vendor": "Performance fournisseurs",
-    "analytics-cashflow": "Trésorerie",
-    "analytics-true-cost": "Coût réel",
-    "analytics-utilization": "Utilisation",
-    "analytics-spend-velocity": "Vélocité des dépenses",
-    "analytics-sentinel": "Sentinel"
+    "analytics": "Analytique"
   },
   "groups": {
     "overview": "Aperçu",

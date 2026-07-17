@@ -45,15 +45,7 @@
     "admin-pdf-templates": "Plantillas PDF",
     "admin-apps": "Apps",
     "admin-setup": "Configuración",
-    "analytics": "Resumen",
-    "analytics-financial-health": "Salud financiera",
-    "analytics-customer": "Inteligencia de clientes",
-    "analytics-vendor": "Rendimiento de proveedores",
-    "analytics-cashflow": "Flujo de caja",
-    "analytics-true-cost": "Costo real",
-    "analytics-utilization": "Utilización",
-    "analytics-spend-velocity": "Velocidad de gasto",
-    "analytics-sentinel": "Sentinel"
+    "analytics": "Analítica"
   },
   "groups": {
     "overview": "Resumen",
