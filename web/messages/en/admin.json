@@ -1138,6 +1138,10 @@
         "title": "Depreciation Methods",
         "description": "Author custom depreciation formulas — the formula builder."
       },
+      "depreciation-book-policies": {
+        "title": "Book Depreciation Policies",
+        "description": "Per-book, per-category method for multi-book depreciation."
+      },
       "currencies": {
         "title": "Currencies",
         "description": "Currency codes and their minor-unit precision."
@@ -1217,6 +1221,11 @@
       "isBillableDefault": "Billable by default",
       "category": "Category",
       "method": "Method",
+      "postsGl": "Posts to GL",
+      "bookId": "Book",
+      "categoryId": "Asset category",
+      "convention": "Convention",
+      "lifeMonths": "Life (months)",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultConvention": "Depreciation convention",

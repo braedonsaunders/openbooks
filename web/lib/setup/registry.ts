@@ -268,6 +268,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
       { key: 'isPrimary', kind: 'boolean' },
+      { key: 'postsGl', kind: 'boolean', keepDefault: true },
       { key: 'isActive', kind: 'boolean', defaultValue: true },
     ],
   },
@@ -745,6 +746,32 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'formula', kind: 'textarea', required: true },
       { key: 'endOfLife', kind: 'select', options: END_OF_LIFE, keepDefault: true },
       { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Multi-book: per-book, per-category depreciation policy (a tax/alternate book
+    // runs a different method than the primary posting book).
+    key: 'depreciation-book-policies',
+    table: 'depreciation_book_policies',
+    actorCols: true,
+    groupKey: 'assets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'book_id, category_id',
+    hasActive: false,
+    columns: [
+      { key: 'bookId', kind: 'ref', ref: 'accounting-books' },
+      { key: 'categoryId', kind: 'ref', ref: 'asset-categories' },
+      { key: 'method', kind: 'text' },
+      { key: 'lifeMonths', kind: 'number' },
+    ],
+    fields: [
+      { key: 'bookId', kind: 'ref', ref: 'accounting-books', required: true },
+      { key: 'categoryId', kind: 'ref', ref: 'asset-categories', required: true },
+      { key: 'method', kind: 'select', options: DEPRECIATION_METHODS, keepDefault: true },
+      { key: 'lifeMonths', kind: 'integer' },
+      { key: 'ratePercent', kind: 'percent' },
+      { key: 'convention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
     ],
   },
 
