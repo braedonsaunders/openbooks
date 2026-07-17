@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Payments",
-    "description": "Vendor payments applied to open bills, and EFT payment runs exported as CPA-005 files.",
+    "description": "Manage vendor payments and payment runs from selection through posting.",
     "newPayment": "New payment",
     "newRun": "New payment run",
     "tabs": {
