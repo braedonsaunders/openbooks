@@ -66,6 +66,14 @@ async function validateEntityIntegrity(
   orgId: string,
   rowId?: string,
 ): Promise<string | null> {
+  if (entity.key === 'tax-return-forms' && body.submissionUrl) {
+    try {
+      const url = new URL(String(body.submissionUrl))
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'invalid-url'
+    } catch {
+      return 'invalid-url'
+    }
+  }
   if (entity.key === 'accounting-books') {
     if (coerceBoolean(body.isPrimary) && body.isActive !== undefined && !coerceBoolean(body.isActive)) {
       return 'primary-active-required'

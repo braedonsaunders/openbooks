@@ -140,6 +140,13 @@ const SUBMISSION_CHANNELS = [
   { value: 'portal_manual', labelKey: 'options.channel.portalManual' },
 ]
 
+const GOVERNMENT_FORMATS = [
+  { value: 'portal_entry', labelKey: 'options.governmentFormat.portalEntry' },
+  { value: 'certified_file', labelKey: 'options.governmentFormat.certifiedFile' },
+  { value: 'api', labelKey: 'options.governmentFormat.api' },
+  { value: 'paper', labelKey: 'options.governmentFormat.paper' },
+]
+
 const TAX_SIGN = [
   { value: '1', labelKey: 'options.sign.positive' },
   { value: '-1', labelKey: 'options.sign.negative' },
@@ -342,6 +349,8 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'name', kind: 'text' },
       { key: 'country', kind: 'text' },
       { key: 'submissionChannel', kind: 'text' },
+      { key: 'governmentFormat', kind: 'text' },
+      { key: 'officialPdfFileId', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
@@ -350,6 +359,8 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'country', kind: 'text' },
       { key: 'region', kind: 'text' },
       { key: 'submissionChannel', kind: 'select', options: SUBMISSION_CHANNELS, keepDefault: true },
+      { key: 'governmentFormat', kind: 'select', options: GOVERNMENT_FORMATS, keepDefault: true },
+      { key: 'submissionUrl', kind: 'text' },
       { key: 'watermark', kind: 'text' },
       { key: 'isActive', kind: 'boolean' },
     ],

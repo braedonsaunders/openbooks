@@ -203,6 +203,29 @@ drop trigger if exists audit_log_append_only on audit_log;
 create trigger audit_log_append_only before update or delete on audit_log
   for each row execute function audit_log_append_only_guard();
 
+-- Prepared tax-return snapshots are evidence, not a mutable working table.
+-- A user may only transition a prepared snapshot to filed and record the
+-- government reference/timestamp; every value used to prepare it stays frozen.
+create or replace function tax_filing_immutable_guard() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'DELETE' then
+    if openbooks_sandbox_wipe_allowed(old.org_id) then return old; end if;
+    raise exception 'tax filing snapshots cannot be deleted';
+  end if;
+  if old.status = 'prepared' and new.status = 'filed'
+     and (to_jsonb(new) - 'status' - 'filing_reference' - 'filed_at' - 'updated_at' - 'updated_by')
+       = (to_jsonb(old) - 'status' - 'filing_reference' - 'filed_at' - 'updated_at' - 'updated_by')
+  then
+    return new;
+  end if;
+  raise exception 'tax filing snapshots are immutable';
+end $$;
+
+drop trigger if exists tax_filing_immutable on tax_filings;
+create trigger tax_filing_immutable before update or delete on tax_filings
+  for each row execute function tax_filing_immutable_guard();
+
 -- ---------------------------------------------------------------------------
 -- 3. Lines post only to active, postable (non-summary) accounts.
 --    NetSuite allows posting to parent accounts; openbooks refuses.

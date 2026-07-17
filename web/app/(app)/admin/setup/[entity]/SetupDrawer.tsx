@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Upload } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -72,6 +72,7 @@ export function SetupDrawer({
     return init
   })
   const [busy, setBusy] = useState(false)
+  const [officialBusy, setOfficialBusy] = useState(false)
 
   const entityTitle = entity.singularTitleKey
     ? t(entity.singularTitleKey)
@@ -139,6 +140,7 @@ export function SetupDrawer({
     if (code === 'primary-required') return t('errors.primaryRequired')
     if (code === 'primary-active-required') return t('errors.primaryActiveRequired')
     if (code === 'archive-only') return t('errors.archiveOnly')
+    if (code === 'invalid-url') return t('errors.invalidUrl')
     if (typeof code === 'string' && code) return code
     return tCommon('feedback.saveFailed')
   }
@@ -181,6 +183,69 @@ export function SetupDrawer({
             t={t}
           />
         ))}
+        {!creating && entity.key === 'tax-return-forms' ? (
+          <div className="space-y-2 border-t border-slate-200 pt-4 sm:col-span-2 dark:border-slate-800">
+            <Label>{t('taxOfficial.title')}</Label>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('taxOfficial.description')}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  disabled={officialBusy}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0]
+                    event.target.value = ''
+                    if (!file) return
+                    setOfficialBusy(true)
+                    try {
+                      const body = new FormData()
+                      body.set('file', file)
+                      const response = await fetch(`/api/tax/returns/${encodeURIComponent(String(row?.code))}/official-pdf`, { method: 'POST', body })
+                      if (!response.ok) throw new Error()
+                      toast.success(t('taxOfficial.uploaded'))
+                      router.refresh()
+                    } catch {
+                      toast.error(tCommon('feedback.saveFailed'))
+                    } finally {
+                      setOfficialBusy(false)
+                    }
+                  }}
+                />
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900">
+                  <Upload size={14} />
+                  {officialBusy ? t('taxOfficial.uploading') : t('taxOfficial.upload')}
+                </span>
+              </label>
+              {row?.official_pdf_file_id ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={officialBusy}
+                  onClick={async () => {
+                    setOfficialBusy(true)
+                    try {
+                      const response = await fetch(`/api/tax/returns/${encodeURIComponent(String(row.code))}/official-pdf`, { method: 'DELETE' })
+                      if (!response.ok) throw new Error()
+                      toast.success(t('taxOfficial.removed'))
+                      router.refresh()
+                    } catch {
+                      toast.error(tCommon('feedback.saveFailed'))
+                    } finally {
+                      setOfficialBusy(false)
+                    }
+                  }}
+                >
+                  {t('taxOfficial.remove')}
+                </Button>
+              ) : (
+                <span className="text-xs text-slate-500 dark:text-slate-400">{t('taxOfficial.none')}</span>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </UrlDrawer>
   )

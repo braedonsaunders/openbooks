@@ -840,6 +840,29 @@
   "setup": {
     "title": "Setup",
     "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "taxLibrary": {
+      "title": "Biblioteca de declaraciones fiscales",
+      "description": "Importe estructuras mantenidas para Canadá, Reino Unido, Australia, Nueva Zelanda y una hoja de trabajo estadounidense para impuestos estatales y locales.",
+      "pack": "Paquete de jurisdicción",
+      "optionInstalled": "{country} · {name} · instalado",
+      "optionAvailable": "{country} · {name}",
+      "import": "Importar paquete",
+      "reset": "Restablecer valores de biblioteca",
+      "working": "Importando…",
+      "importSuccess": "Paquete de declaración importado",
+      "resetSuccess": "Paquete restablecido a los valores de biblioteca",
+      "usNotice": "Estados Unidos no tiene una declaración federal de impuesto sobre ventas. Esta hoja debe adaptarse a cada jurisdicción estatal y local."
+    },
+    "taxOfficial": {
+      "title": "Formulario oficial de presentación",
+      "description": "Cargue un PDF oficial rellenable solo cuando la jurisdicción lo acepte o exija. Asigne sus campos en Casillas de la declaración.",
+      "upload": "Cargar PDF oficial",
+      "uploading": "Cargando…",
+      "uploaded": "Formulario oficial cargado",
+      "remove": "Quitar",
+      "removed": "Formulario oficial quitado",
+      "none": "No hay PDF oficial cargado"
+    },
     "new": "New",
     "empty": "Nothing here yet.",
     "statusActive": "Active",
@@ -864,6 +887,7 @@
       "primaryRequired": "Elija otro libro contable como principal antes de quitarle ese estado a este libro.",
       "primaryActiveRequired": "El libro contable principal debe permanecer activo.",
       "archiveOnly": "Los libros contables se conservan para el historial del mayor y solo se pueden archivar."
+      ,"invalidUrl": "Introduzca una URL gubernamental válida que comience por http:// o https://."
     },
     "groups": {
       "company": "Company",
@@ -1069,6 +1093,9 @@
       "basis": "Basis",
       "sign": "Sign",
       "submissionChannel": "Canal de presentación",
+      "governmentFormat": "Formato gubernamental",
+      "submissionUrl": "URL de presentación gubernamental",
+      "officialPdfFileId": "PDF oficial",
       "watermark": "Marca de agua",
       "sequence": "Orden",
       "formula": "Fórmula",
@@ -1144,6 +1171,12 @@
         "fileUpload": "Carga de archivo electrónico",
         "efileApi": "Presentación electrónica (API)",
         "portalManual": "Portal gubernamental (entrada manual)"
+      },
+      "governmentFormat": {
+        "portalEntry": "Entrada en portal en línea",
+        "certifiedFile": "Archivo gubernamental certificado",
+        "api": "Software o API compatible",
+        "paper": "Formulario oficial en papel"
       },
       "method": {
         "straightLine": "Straight line",

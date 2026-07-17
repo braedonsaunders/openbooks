@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, fromUnits, neg, toUnits } from "./money.ts";
+import { abs, add, fromUnits, neg, toUnits } from "./money.ts";
 
 /**
  * Configurable government tax return computation.
@@ -50,17 +50,18 @@ export class TaxReturnError extends Error {
 }
 
 /**
- * Evaluate a box `formula` — `+`/`-` over line-code references, numeric literals
- * and parentheses — against already-computed box values, in exact money math.
- * Deliberately supports only addition/subtraction (every real VAT/GST box is a
- * sum of other boxes); anything else is a configuration error, not silent 0.
+ * Evaluate a box `formula` — `+`/`-` and `abs(...)` over line-code references,
+ * numeric literals and parentheses — against already-computed box values, in
+ * exact money math. `abs` is required by returns such as UK VAT100 box 5 and
+ * New Zealand GST101A box 15, which report the unsigned difference between tax
+ * collected and credits. Anything else is a configuration error, not silent 0.
  */
 export function evalFormula(
   expr: string,
   values: Map<string, string>,
   boxCodes: ReadonlySet<string>,
 ): string {
-  const tokens = expr.match(/[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[()+\-]/g);
+  const tokens = expr.match(/[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[(),+\-]/g);
   if (!tokens || tokens.join("").replace(/\s/g, "") !== expr.replace(/\s/g, "")) {
     throw new TaxReturnError(`invalid formula "${expr}"`);
   }
@@ -88,7 +89,7 @@ export function evalFormula(
     }
     return acc;
   };
-  // term := '(' expr ')' | '-' term | boxCode | numberLiteral
+  // term := '(' expr ')' | '-' term | 'abs' '(' expr ')' | boxCode | numberLiteral
   const parseTerm = (): string => {
     const tok = next();
     if (tok === undefined) throw new TaxReturnError(`unexpected end of formula "${expr}"`);
@@ -99,6 +100,12 @@ export function evalFormula(
     }
     if (tok === "-") return neg(parseTerm());
     if (tok === "+") return parseTerm();
+    if (tok === "abs") {
+      if (next() !== "(") throw new TaxReturnError(`abs must be followed by parentheses in "${expr}"`);
+      const inner = parseExpr();
+      if (next() !== ")") throw new TaxReturnError(`unbalanced abs parentheses in "${expr}"`);
+      return abs(inner);
+    }
     // Box code wins over numeric-literal reading, so "105 - 108" references
     // boxes 105 and 108 rather than the numbers.
     if (boxCodes.has(tok)) return boxRef(tok);

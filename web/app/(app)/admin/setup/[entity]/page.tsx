@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
+import { TAX_RETURN_PACKS } from '@openbooks/engine/src/seed-tax-forms.ts'
 import {
   Badge,
   Table,
@@ -28,6 +29,7 @@ import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
 import { FxProviderPage } from './FxProviderPage'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
+import { TaxReturnLibrary } from './TaxReturnLibrary'
 
 export const dynamic = 'force-dynamic'
 
@@ -165,13 +167,16 @@ export default async function SetupEntityPage({
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
-  const [rowsRes, countRes, refOptions] = await Promise.all([
+  const [rowsRes, countRes, refOptions, installedPackRows] = await Promise.all([
     db.execute(sql`
       select * from ${sql.raw(entity.table)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`) as any,
     db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`) as any,
     loadRefOptions(entity, orgId),
+    entity.key === 'tax-return-forms'
+      ? db.execute(sql`select code from tax_return_forms where org_id = ${orgId}`) as any
+      : Promise.resolve({ rows: [] as { code: string }[] }),
   ])
   const rows = rowsRes.rows as Record<string, any>[]
   const total = Number(countRes.rows[0]?.n ?? 0)
@@ -217,6 +222,13 @@ export default async function SetupEntityPage({
         </div>
         <NewSetupButton entityKey={entity.key} label={t('new')} />
       </div>
+
+      {entity.key === 'tax-return-forms' ? (
+        <TaxReturnLibrary
+          packs={TAX_RETURN_PACKS.map(({ code, name, country }) => ({ code, name, country }))}
+          installedCodes={installedPackRows.rows.map((row: { code: string }) => row.code)}
+        />
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
           <SearchInput placeholder={t('searchPlaceholder')} />

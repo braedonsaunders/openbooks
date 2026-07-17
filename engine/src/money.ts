@@ -50,6 +50,10 @@ export function fromUnits(u: bigint): string {
 
 export const add = (a: string, b: string) => fromUnits(toUnits(a) + toUnits(b));
 export const neg = (a: string) => fromUnits(-toUnits(a));
+export const abs = (a: string) => {
+  const units = toUnits(a);
+  return fromUnits(units < 0n ? -units : units);
+};
 export const sum = (xs: string[]) => fromUnits(xs.reduce((acc, x) => acc + toUnits(x), 0n));
 export const isZero = (a: string) => toUnits(a) === 0n;
 export const cmp = (a: string, b: string) => {

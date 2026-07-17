@@ -1,50 +1,69 @@
 {
   "title": "Déclarations fiscales",
-  "description": "Calculez les déclarations de taxes gouvernementales à partir de votre grand livre et produisez un fac-similé prêt à déposer.",
-  "period": "du {from} au {to}",
+  "description": "Préparez les déclarations gouvernementales à partir du grand livre et conservez ce qui a été déposé.",
+  "setup": "Configuration des déclarations",
   "notice": "Avis",
+  "period": "du {from} au {to}",
   "form": "Déclaration",
-  "selectForm": "Sélectionner une déclaration",
   "from": "Du",
   "to": "Au",
   "compute": "Calculer",
   "computing": "Calcul…",
   "empty": "Choisissez une déclaration et une période, puis calculez.",
-  "columns": {
-    "line": "Ligne",
-    "description": "Description",
-    "amount": "Montant"
-  },
+  "adjustmentAria": "Ajustement pour {label}",
+  "adjustmentPlaceholder": "0,00",
+  "columns": { "line": "Ligne", "description": "Description", "amount": "Montant" },
   "noForms": {
     "title": "Aucune déclaration configurée",
-    "description": "Installez un module de juridiction pour commencer, ou créez-en une dans Configuration → Taxes.",
-    "install": "Installer GST34 (Canada)",
-    "installing": "Installation…"
+    "description": "Importez un module de juridiction ou créez une déclaration dans Configuration → Taxes.",
+    "openSetup": "Ouvrir la configuration fiscale"
   },
-  "installed": "{boxes} cases installées ({sales} codes de vente / {purchases} codes d’achat associés)",
-  "reinstall": "Réinstaller le module GST34",
-  "export": {
-    "label": "Exporter",
-    "pdf": "Fac-similé PDF",
-    "csv": "CSV",
-    "xlsx": "Excel"
-  },
-  "official": {
-    "label": "Formulaire officiel",
-    "present": "téléversé",
-    "none": "non téléversé",
-    "upload": "Téléverser le PDF officiel",
-    "uploading": "Téléversement…",
-    "uploaded": "Formulaire officiel téléversé",
-    "remove": "Retirer",
-    "removed": "Formulaire officiel retiré",
-    "download": "Formulaire officiel (rempli)",
-    "hint": "Téléversez le PDF à remplir de votre gouvernement; associez chaque case à son champ dans Configuration → Cases de déclaration."
+  "export": { "label": "Export de travail", "pdf": "PDF de travail", "csv": "CSV de travail", "xlsx": "Excel de travail" },
+  "official": { "download": "Formulaire officiel rempli" },
+  "submission": {
+    "title": "Dépôt gouvernemental",
+    "openGovernment": "Ouvrir les instructions de dépôt",
+    "exportNotice": "Les exports de travail servent à la révision et aux dossiers. Ils ne sont pas des fichiers de dépôt gouvernementaux, sauf indication explicite du mode configuré.",
+    "gst34Notice": "La GST34 est normalement saisie dans Mon dossier d’entreprise ou IMPÔTNET TPS/TVH. Le fichier .tax téléversable ne peut être produit que par un logiciel homologué par l’ARC; les formats PDF, CSV et Excel ne sont pas acceptés."
   },
   "channels": {
     "print_pdf": "Imprimer et poster",
     "file_upload": "Téléversement électronique",
-    "efile_api": "Télédéclaration (API)",
+    "efile_api": "API de télédéclaration",
     "portal_manual": "Portail gouvernemental"
+  },
+  "governmentFormats": {
+    "portal_entry": "Saisir la déclaration en ligne",
+    "certified_file": "Fichier gouvernemental certifié",
+    "api": "Logiciel ou API compatible requis",
+    "paper": "Formulaire papier officiel"
+  },
+  "history": {
+    "title": "Déclarations précédentes",
+    "description": "Instantanés versionnés et immuables des déclarations préparées et déposées.",
+    "search": "Rechercher dans l’historique…",
+    "statusLabel": "Statut",
+    "empty": "Aucune déclaration enregistrée ne correspond à ces filtres.",
+    "save": "Enregistrer dans l’historique",
+    "saving": "Enregistrement…",
+    "saved": "Instantané de la déclaration enregistré",
+    "status": { "prepared": "Préparée", "filed": "Déposée" },
+    "columns": { "form": "Déclaration", "period": "Période", "version": "Version", "status": "Statut", "reference": "Référence", "saved": "Enregistrée" },
+    "drawerDescription": "du {from} au {to} · version {version}",
+    "formCode": "Code de déclaration",
+    "country": "Pays",
+    "reference": "Confirmation ou référence gouvernementale",
+    "referencePlaceholder": "Numéro de confirmation ou référence du reçu",
+    "filedAt": "Déposée le",
+    "markFiledHint": "Ne marquez cet instantané comme déposé qu’après son acceptation par le gouvernement. Cette action est irréversible.",
+    "markFiled": "Marquer comme déposée",
+    "markingFiled": "Marquage…",
+    "filedSuccess": "Déclaration marquée comme déposée",
+    "line": "Ligne",
+    "lineDescription": "Description",
+    "amount": "Montant",
+    "hash": "SHA-256 de l’instantané : {hash}"
+    ,"snapshotWatermark": "Instantané immuable enregistré · SHA-256 {hash}"
+    ,"export": { "pdf": "PDF", "xlsx": "Excel", "csv": "CSV" }
   }
 }
