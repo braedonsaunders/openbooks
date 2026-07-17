@@ -3,6 +3,49 @@ import { fromUnits, toUnits } from "./money.ts";
 export const CONTINUOUS_CLOSE_AGENT_KEYS = ["accounting", "finance"] as const;
 export type ContinuousCloseAgentKey = (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
 
+export type AgentModelTier = "fast" | "smart";
+
+/**
+ * Model-driven work is independently controllable from deterministic controls.
+ * The model may investigate, explain, and recommend; it never posts or mutates
+ * accounting records.
+ */
+export type ContinuousCloseAnalysisSettings = {
+  rootCauseAnalysis: boolean;
+  recommendations: boolean;
+  narrative: boolean;
+  modelTier: AgentModelTier;
+  maxToolSteps: number;
+};
+
+export function defaultContinuousCloseAnalysisSettings(): ContinuousCloseAnalysisSettings {
+  return {
+    rootCauseAnalysis: true,
+    recommendations: true,
+    narrative: true,
+    modelTier: "smart",
+    maxToolSteps: 16,
+  };
+}
+
+/** Canonicalize persisted/API analysis controls and clamp the agent loop. */
+export function normalizeContinuousCloseAnalysisSettings(raw: unknown): ContinuousCloseAnalysisSettings {
+  const row = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  const maxToolSteps = row.maxToolSteps === undefined ? 16 : Number(row.maxToolSteps);
+  if (!Number.isInteger(maxToolSteps) || maxToolSteps < 4 || maxToolSteps > 30) {
+    throw new Error("invalid agent tool step limit");
+  }
+  return {
+    rootCauseAnalysis: row.rootCauseAnalysis !== false,
+    recommendations: row.recommendations !== false,
+    narrative: row.narrative !== false,
+    modelTier: row.modelTier === "fast" ? "fast" : "smart",
+    maxToolSteps,
+  };
+}
+
 export type DetectorParameterSpec = {
   key: string;
   defaultValue: number;

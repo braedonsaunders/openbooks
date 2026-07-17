@@ -42,6 +42,7 @@ const QBO_ACCOUNT_TYPE: Record<string, string> = {
 const TXN_ENTITIES = [
   "Invoice", "CreditMemo", "Bill", "VendorCredit", "Payment", "BillPayment",
   "JournalEntry", "Deposit", "Purchase", "Transfer", "SalesReceipt", "RefundReceipt",
+  "TaxPayment",
 ];
 
 interface QboAccount {
@@ -190,13 +191,14 @@ export class QboSource implements MigrationSource {
     const firstType = (t: string) => rows.find((a) => a.AccountType === t && a.Active !== false);
     const bySub = (s: string) => rows.find((a) => a.AccountSubType === s);
     const tax = bySub("GlobalTaxPayable") ?? bySub("SalesTaxPayable") ?? rows.find((a) => /tax.*payable/i.test(a.Name));
-    const taxSuspense = bySub("GlobalTaxSuspense");
     return {
       ar: firstType("Accounts Receivable")?.Id,
       ap: firstType("Accounts Payable")?.Id,
       bank: firstType("Bank")?.Id,
+      // Both sales tax collected AND purchase input-tax credits net in the same
+      // liability (GST/HST Payable); Suspense is only for filed/remitted tax.
       taxCollected: tax?.Id,
-      taxPaid: (taxSuspense ?? tax)?.Id,
+      taxPaid: tax?.Id,
     };
   }
 
@@ -210,6 +212,7 @@ export class QboSource implements MigrationSource {
       itemIncomeAccount: new Map(items.filter((i) => i.IncomeAccountRef).map((i) => [String(i.Id), String(i.IncomeAccountRef!.value)])),
       itemExpenseAccount: new Map(items.filter((i) => i.ExpenseAccountRef).map((i) => [String(i.Id), String(i.ExpenseAccountRef!.value)])),
       undepositedFundsRef: accounts.find((a) => a.AccountSubType === "UndepositedFunds")?.Id,
+      taxSuspenseRef: accounts.find((a) => a.AccountSubType === "GlobalTaxSuspense")?.Id,
     };
 
     const where = since ? `Metadata.LastUpdatedTime >= '${since.toISOString()}'` : "";

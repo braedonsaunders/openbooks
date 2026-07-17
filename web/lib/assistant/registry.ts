@@ -22,20 +22,28 @@ function safeErrorMessage(e: unknown): string {
   return "tool_failed";
 }
 
+/** Execute one named tool through the same gates and error contract as AI SDK calls. */
+export async function executeAssistantTool(
+  authz: Authz,
+  name: string,
+  args: unknown,
+): Promise<ToolResult> {
+  const definition = ASSISTANT_TOOLS.find((candidate) => candidate.name === name);
+  if (!definition || !canRunTool(authz, definition)) return { ok: false, error: "forbidden" };
+  try {
+    return await definition.execute(args, authz);
+  } catch (error) {
+    console.warn(`[assistant] tool ${name} failed`, error);
+    return { ok: false, error: safeErrorMessage(error) };
+  }
+}
+
 /** Construct the permission-bound tool set the model may use this turn. */
 export function buildToolRegistry(authz: Authz): ToolSet {
   const runnable = ASSISTANT_TOOLS.filter((t) => canRunTool(authz, t));
   const entries = runnable.map((t) => {
     // Shared execute wrapper: defensive gate re-check + never-throw contract.
-    const execute = async (args: unknown): Promise<ToolResult> => {
-      if (!canRunTool(authz, t)) return { ok: false, error: "forbidden" };
-      try {
-        return await t.execute(args, authz);
-      } catch (e) {
-        console.warn(`[assistant] tool ${t.name} failed`, e);
-        return { ok: false, error: safeErrorMessage(e) };
-      }
-    };
+    const execute = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, t.name, args);
     return [
       t.name,
       tool({ description: t.description, inputSchema: t.inputSchema, execute }),

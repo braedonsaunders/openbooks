@@ -15,7 +15,11 @@ import { generateText, type LanguageModel } from "ai";
  * HTTPS with no obviously-private host.
  */
 
-const AI_REQUEST_TIMEOUT_MS = 120_000;
+// Tool-heavy financial runs can leave a large evidence packet for the final
+// synthesis request. Keep the per-request ceiling below the background run's
+// five-minute cap, while allowing slower tenant-selected reasoning models to
+// finish that final response.
+const AI_REQUEST_TIMEOUT_MS = 240_000;
 
 export type AiProvider =
   | "anthropic"

@@ -37,3 +37,9 @@ __pycache__/
 # local-only workflow replication reference (names, emails, approval chains —
 # never commit; the replicated flows live in the database)
 docs/netsuite-workflows-*.md
+
+# generated report/pdf output
+output/
+
+# scratch/test artifacts
+tmp/

@@ -95,7 +95,18 @@ type OrgCtx = {
   bypass: boolean;
   txDb?: NodePgDatabase<typeof schema>;
 };
-export const orgContext = new AsyncLocalStorage<OrgCtx>();
+type DbRuntime = typeof globalThis & {
+  __openbooksOrgContext?: AsyncLocalStorage<OrgCtx>;
+  __openbooksRequestOrgResolver?: RequestOrgResolver | null;
+};
+const dbRuntime = globalThis as DbRuntime;
+
+// Next/Turbopack may instantiate this file through both a workspace alias and
+// a relative engine import. Tenant scope must span those module graphs: a
+// module-local AsyncLocalStorage would make the second graph silently fall
+// back to trusted bypass mode. The process-global singleton preserves the
+// request/transaction context across every import identity and hot reload.
+export const orgContext = dbRuntime.__openbooksOrgContext ??= new AsyncLocalStorage<OrgCtx>();
 
 // A Next.js request can't scope itself from the inside: calling
 // AsyncLocalStorage.enterWith() within an awaited helper (currentUser) does not
@@ -105,12 +116,11 @@ export const orgContext = new AsyncLocalStorage<OrgCtx>();
 // consulted whenever no explicit orgContext block is active. Explicit
 // withOrg/withBypass blocks take precedence over the request default.
 export type RequestOrgResolver = () => { orgId: string | null; bypass: boolean } | undefined;
-let requestOrgResolver: RequestOrgResolver | null = null;
 export function registerRequestOrgResolver(fn: RequestOrgResolver): void {
-  requestOrgResolver = fn;
+  dbRuntime.__openbooksRequestOrgResolver = fn;
 }
 function activeOrgCtx(): OrgCtx | undefined {
-  return orgContext.getStore() ?? requestOrgResolver?.();
+  return orgContext.getStore() ?? dbRuntime.__openbooksRequestOrgResolver?.();
 }
 
 const rawConnect = (): Promise<pg.PoolClient> =>
@@ -204,6 +214,15 @@ export function withBypass<T>(fn: () => Promise<T>): Promise<T> {
  */
 export function withBypassContext<T>(fn: () => Promise<T>): Promise<T> {
   return orgContext.run({ orgId: null, bypass: true }, fn);
+}
+
+/**
+ * Apply tenant RLS to independent pooled queries without opening one long
+ * transaction. Use this for network-bound jobs (for example model tool loops)
+ * whose individual reads must be scoped but must not pin an idle transaction.
+ */
+export function withOrgContext<T>(orgId: string, fn: () => Promise<T>): Promise<T> {
+  return orgContext.run({ orgId, bypass: false }, fn);
 }
 
 /**

@@ -19,6 +19,27 @@
     "gross_margin_decline": { "title": "Disminución del margen bruto", "description": "El margen bruto cayó más allá del umbral configurado frente al período completado anterior." }
   },
   "summary": { "records": "{count, plural, one {# registro} other {# registros}}", "review": "Revise la evidencia de respaldo" },
+  "narrative": {
+    "title": "Último resumen del agente",
+    "agent": "Generado por {agent}",
+    "generated": "Generado el {date}",
+    "generatedLabel": "Generado",
+    "open": "Abrir informe",
+    "downloadPdf": "PDF",
+    "executiveSummary": "Resumen ejecutivo",
+    "highlights": "Aspectos destacados del rendimiento",
+    "risks": "Riesgos y anomalías",
+    "recommendations": "Acciones recomendadas",
+    "sources": "Fuentes de respaldo",
+    "sourceLabel": "Fuente",
+    "sourcePath": "Ruta en la aplicación"
+  },
+  "analysis": {
+    "title": "Análisis del agente",
+    "rootCauses": "Factores probables",
+    "recommendations": "Acciones recomendadas",
+    "evidenceNotice": "El análisis generado por el modelo se basa en los registros vinculados y sigue sujeto a revisión."
+  },
   "empty": { "title": "Aún no hay hallazgos", "description": "Active un agente y ejecute su primer análisis. Las condiciones corregidas se resuelven automáticamente en análisis posteriores.", "action": "Configurar agentes" },
   "details": { "materiality": "Materialidad", "confidence": "Confianza", "lastDetected": "Última detección", "summary": "Resumen", "evidence": "Evidencia de respaldo", "noEvidence": "Este hallazgo se basa en un requisito previo ausente, por lo que no hay registros fuente para mostrar.", "dismissalReason": "Motivo del descarte" },
   "fields": { "account": "Cuenta", "count": "Registros", "oldestDate": "Fecha más antigua", "throughDate": "Conciliado hasta", "difference": "Diferencia", "budget": "Presupuesto", "budgetAmount": "Importe presupuestado", "actual": "Real", "variance": "Desviación", "period": "Períodos", "revenueChange": "Cambio en ingresos", "marginChange": "Cambio en margen", "points": "puntos" },

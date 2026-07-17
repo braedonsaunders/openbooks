@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { useState } from 'react'
-import { Check, ExternalLink, RotateCcw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { Check, ExternalLink, RotateCcw, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Textarea, UrlDrawer } from '@openbooks/ui'
 import { money } from '../../../lib/format'
@@ -57,6 +57,9 @@ export function WorkItemDrawer({
   const [reason, setReason] = useState('')
   const [feedback, setFeedback] = useState(item.feedback)
   const href = typeof item.summary.href === 'string' ? item.summary.href : null
+  const aiAnalysis = item.summary.aiAnalysis && typeof item.summary.aiAnalysis === 'object' && !Array.isArray(item.summary.aiAnalysis)
+    ? item.summary.aiAnalysis as Record<string, unknown>
+    : null
 
   async function mutate(action: 'review' | 'resolve' | 'dismiss' | 'reopen') {
     setBusy(true)
@@ -120,6 +123,30 @@ export function WorkItemDrawer({
           <div><dt className="text-[11px] font-medium uppercase text-slate-500">{t('details.confidence')}</dt><dd className="mt-1 font-semibold tabular-nums">{Math.round(Number(item.confidence) * 100)}%</dd></div>
           <div><dt className="text-[11px] font-medium uppercase text-slate-500">{t('details.lastDetected')}</dt><dd className="mt-1 text-sm">{new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.lastDetectedAt))}</dd></div>
         </dl>
+
+        {aiAnalysis ? (
+          <section className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/20">
+            <div className="flex items-center gap-2">
+              <Sparkles size={15} className="text-violet-600 dark:text-violet-400" />
+              <h3 className="text-sm font-semibold">{t('analysis.title')}</h3>
+            </div>
+            {aiAnalysis.headline ? <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{text(aiAnalysis.headline)}</h4> : null}
+            {aiAnalysis.explanation ? <p className="text-sm leading-6 text-slate-700 dark:text-slate-300">{text(aiAnalysis.explanation)}</p> : null}
+            <AnalysisList title={t('analysis.rootCauses')} values={aiAnalysis.rootCauses} />
+            <AnalysisList title={t('analysis.recommendations')} values={aiAnalysis.recommendations} />
+            {Array.isArray(aiAnalysis.citations) && aiAnalysis.citations.length ? (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {aiAnalysis.citations.map((citation, index) => {
+                  if (!citation || typeof citation !== 'object' || Array.isArray(citation)) return null
+                  const row = citation as Record<string, unknown>
+                  if (typeof row.href !== 'string' || !row.href.startsWith('/') || typeof row.label !== 'string') return null
+                  return <Button key={`${row.href}-${index}`} variant="outline" size="sm" asChild><Link href={row.href as never}>{row.label}<ExternalLink size={12} /></Link></Button>
+                })}
+              </div>
+            ) : null}
+            <p className="text-[11px] text-violet-700/80 dark:text-violet-300/80">{t('analysis.evidenceNotice')}</p>
+          </section>
+        ) : null}
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">{t('details.summary')}</h3>
@@ -193,5 +220,12 @@ export function WorkItemDrawer({
     if (evidence.kind === 'budget_variance') { secondary = `${t('fields.budgetAmount')}: ${money(text(d.budget))} · ${t('fields.actual')}: ${money(text(d.actual))}`; amount = text(d.variance) }
     if (evidence.kind === 'period_comparison') { secondary = `${text(d.currentPeriod)} / ${text(d.priorPeriod)}` }
     return <div className="flex items-center gap-3 px-3 py-2.5"><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{primary}</div>{secondary ? <div className="truncate text-xs text-slate-500">{secondary}</div> : null}</div>{amount ? <div className="shrink-0 text-right text-sm font-medium tabular-nums">{money(amount)}</div> : null}</div>
+  }
+
+  function AnalysisList({ title, values }: { title: string; values: unknown }) {
+    if (!Array.isArray(values) || values.length === 0) return null
+    const items = values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    if (!items.length) return null
+    return <div><h4 className="text-xs font-semibold text-slate-800 dark:text-slate-200">{title}</h4><ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm leading-5 text-slate-700 dark:text-slate-300">{items.map((value, index) => <li key={index}>{value}</li>)}</ul></div>
   }
 }

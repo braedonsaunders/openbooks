@@ -316,6 +316,11 @@ function stampFooters(
 
   for (let i = range.start; i < range.start + total; i++) {
     doc.switchToPage(i)
+    // PDFKit normally treats the bottom margin as a hard text boundary. A
+    // footer intentionally lives inside that margin, so temporarily release
+    // it or `text()` silently appends a new blank page while stamping.
+    const bottomMargin = doc.page.margins.bottom
+    doc.page.margins.bottom = 0
     const n = i - range.start + 1
     doc.font('Helvetica').fontSize(8).fillColor('#6b7280')
     doc.text(leftText, page.contentLeft, footerY, {
@@ -335,6 +340,7 @@ function stampFooters(
       lineBreak: false,
       ellipsis: true,
     })
+    doc.page.margins.bottom = bottomMargin
   }
 }
 

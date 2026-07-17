@@ -5,6 +5,7 @@ import { postDocument, regenerateGlImpactTx, type PostingDeps } from "../posting
 import { buildNativeContext, type NativeContext, type NativeDocument } from "./native.ts";
 import { loadEntities, type EntityLoadStats } from "./migrate.ts";
 import { reconcileApplications, type ApplyStats } from "./applications.ts";
+import { trueUpResidualGl, type TrueUpStats } from "./trueup.ts";
 import type { MigrationSource } from "./source.ts";
 import { verifyAccountMonths, type AccountMonthVerification } from "./verification.ts";
 import {
@@ -42,6 +43,7 @@ export interface SyncResult {
   skipped: string[];
   deletedAtSource: string[];
   applications: ApplyStats | null;
+  trueUp: TrueUpStats | null;
   tb: { accounts: number; matches: number; mismatches: { accountRef: string; ours: string; theirs: string }[] };
   openItems: { checked: number; matches: number; mismatches: { ref: string; ours: string; theirs: string }[] } | null;
   /** Mandatory month-bucketed activity gate (catches date-allocation drift). */
@@ -206,7 +208,10 @@ export async function runSync(
           ).rows[0];
           if (row) resolved[key] = row.id;
         }
-        if (resolved.ar && resolved.ap) {
+        // Write whatever resolved (partial is fine): a source that exposes AR
+        // but not AP still lets its customer documents post. Missing legs just
+        // fall back to org defaults per document kind.
+        if (resolved.ar || resolved.ap || resolved.bank) {
           await db.execute(sql`
             update orgs set settings = settings || ${JSON.stringify({ controlAccounts: resolved })}::jsonb
              where id = ${org.id}`);
@@ -260,8 +265,8 @@ export async function runSync(
               extraDims: doc.extraDims ?? {},
               documentDate: doc.documentDate,
               dueDate: doc.dueDate,
-              currency: source.baseCurrency,
-              fxRate: "1",
+              currency: doc.currency ?? source.baseCurrency,
+              fxRate: doc.fxRate ?? "1",
               status: "approved",
               subtotal: doc.subtotal ?? "0",
               taxTotal: "0",
@@ -329,6 +334,7 @@ export async function runSync(
             update documents set
               kind = ${doc.kind}, party_id = ${doc.partyId}, subsidiary_id = ${doc.subsidiaryId},
               document_date = ${doc.documentDate}, posting_date = ${doc.documentDate}, due_date = ${doc.dueDate},
+              currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${doc.fxRate ?? "1"},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
               extra_dims = ${JSON.stringify(doc.extraDims ?? {})}::jsonb,
               custom = custom || ${JSON.stringify(
@@ -356,6 +362,11 @@ export async function runSync(
             })),
           );
           if (have.posted) await regenerateGlImpactTx(tx, have.id, deps, "mirror");
+          // The open-balance trigger fires only on posted_entry_id/status change;
+          // an amend keeps the entry identity (to preserve applications), so the
+          // trigger never sees the changed open lines. Recompute explicitly from
+          // the freshly regenerated journal lines (applications are preserved).
+          if (have.posted) await tx.execute(sql`select recompute_document_open_balance(${have.id})`);
           if (auditBefore) {
             const auditAfter = await captureTransactionAuditSnapshot(tx, have.id);
             if (!auditAfter) throw new Error(`document ${have.id} disappeared during mirror amendment`);
@@ -402,6 +413,18 @@ export async function runSync(
       changes.applications.length > 0
         ? await reconcileApplications(org.id, refKey, changes.applications)
         : null;
+
+    // -- 6b. GL residual trueup: bring in API-opaque sub-ledger GL (inventory
+    //    valuation, realized FX, opening balances) as dated adjusting journals.
+    //    OPT-IN per target org (orgs.settings.glTrueup) — it posts real journals,
+    //    so it must never fire silently on a live ledger (e.g. Rassaun/NetSuite,
+    //    whose cumulative TB matches but has benign monthly date-allocation drift).
+    const trueUpEnabled = (
+      (await db.execute(sql`select (settings->>'glTrueup')::boolean as on from orgs where id = ${org.id}`)) as unknown as {
+        rows: { on: boolean | null }[];
+      }
+    ).rows[0]?.on === true;
+    const trueUp = trueUpEnabled ? await trueUpResidualGl(org.id, source) : null;
 
     // -- 7. verify: trial balance -------------------------------------------------
     const theirs = await source.trialBalance();
@@ -471,6 +494,7 @@ export async function runSync(
       skipped: skipped.slice(0, 200),
       deletedAtSource,
       applications,
+      trueUp,
       tb: { accounts: theirs.length, matches: tbMatches, mismatches: tbMismatches.slice(0, 50) },
       openItems,
       periods,

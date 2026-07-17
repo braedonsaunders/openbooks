@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { classifyBudgetVariance, classifyPeriodPerformance, classifyUnmatchedBankActivity, nextContinuousCloseRunAt } from "./continuous-close.ts";
-import { defaultContinuousCloseDetectors, effectiveDetectorMateriality, enabledDetectorKeys, normalizeContinuousCloseDetectors } from "./continuous-close-config.ts";
+import {
+  defaultContinuousCloseDetectors,
+  effectiveDetectorMateriality,
+  enabledDetectorKeys,
+  normalizeContinuousCloseAnalysisSettings,
+  normalizeContinuousCloseDetectors,
+} from "./continuous-close-config.ts";
 
 test("unmatched bank activity escalates for age, count, or exact materiality", () => {
   const now = new Date("2026-07-16T12:00:00Z");
@@ -177,6 +183,36 @@ test("detector policy validation rejects unsafe ranges and inverted severity thr
         period_revenue_decline: { materialityThreshold: "-0.0001" },
       }),
     /invalid materiality threshold/,
+  );
+});
+
+test("agentic analysis defaults on and validates the bounded tool loop", () => {
+  assert.deepEqual(normalizeContinuousCloseAnalysisSettings(null), {
+    rootCauseAnalysis: true,
+    recommendations: true,
+    narrative: true,
+    modelTier: "smart",
+    maxToolSteps: 16,
+  });
+  assert.deepEqual(
+    normalizeContinuousCloseAnalysisSettings({
+      rootCauseAnalysis: false,
+      recommendations: true,
+      narrative: false,
+      modelTier: "fast",
+      maxToolSteps: 8,
+    }),
+    {
+      rootCauseAnalysis: false,
+      recommendations: true,
+      narrative: false,
+      modelTier: "fast",
+      maxToolSteps: 8,
+    },
+  );
+  assert.throws(
+    () => normalizeContinuousCloseAnalysisSettings({ maxToolSteps: 31 }),
+    /invalid agent tool step limit/,
   );
 });
 

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { Activity, Settings } from 'lucide-react'
+import { Activity, ArrowRight, Settings, Sparkles } from 'lucide-react'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
@@ -14,6 +14,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { money } from '../../../lib/format'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
+import { NarrativeDrawer } from './NarrativeDrawer'
 import { WorkItemDrawer, type ContinuousCloseWorkItem } from './WorkItemDrawer'
 
 export const dynamic = 'force-dynamic'
@@ -58,7 +59,7 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     ${severity ? sql`and w.severity = ${severity}` : sql``}
     ${params.q ? sql`and (w.finding_type ilike ${`%${params.q}%`} or w.summary::text ilike ${`%${params.q}%`})` : sql``}`
 
-  const [rows, totalResult, counts, statusCounts, severityCounts] = (await Promise.all([
+  const [rows, totalResult, counts, statusCounts, severityCounts, narratives] = (await Promise.all([
     db.execute(sql`
       select w.id, w.agent_key, w.finding_type, w.severity, w.status, w.confidence::text,
              w.materiality::text, w.summary, w.first_detected_at, w.last_detected_at
@@ -70,6 +71,14 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     db.execute(sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`),
     db.execute(sql`select status, count(*) as n from ai_work_items w where ${base} group by status`),
     db.execute(sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`),
+    db.execute(sql`
+      select distinct on (agent_key) id, agent_key,
+             stats->'enrichment'->'narrative' as narrative, finished_at
+        from ai_agent_runs
+       where org_id = ${authz.user.orgId} and agent_key in ${readableSql}
+         and status = 'completed' and jsonb_typeof(stats->'enrichment'->'narrative') = 'object'
+       order by agent_key, finished_at desc
+    `),
   ])) as unknown as { rows: Record<string, any>[] }[]
   const total = Number(totalResult.rows[0]?.n ?? 0)
   const itemId = pickString(sp.item)
@@ -106,11 +115,27 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     }
   }
 
+  const reportId = pickString(sp.report)
+  let selectedNarrative: Record<string, any> | null = null
+  if (reportId && isUuid(reportId)) {
+    const detail = (await db.execute(sql`
+      select id, agent_key, stats->'enrichment'->'narrative' as narrative, finished_at
+        from ai_agent_runs
+       where id = ${reportId} and org_id = ${authz.user.orgId} and agent_key in ${readableSql}
+         and status = 'completed' and jsonb_typeof(stats->'enrichment'->'narrative') = 'object'
+    `)) as unknown as { rows: Record<string, any>[] }
+    selectedNarrative = detail.rows[0] ?? null
+  }
+
   const closeHref = mergeHref('/continuous-close', sp, { item: undefined })
+  const reportCloseHref = mergeHref('/continuous-close', sp, { report: undefined })
   const canManage = can(authz, 'admin.ai.manage')
   const canWrite = can(authz, 'assistant.write')
   const activeCount = statusCounts.rows.filter((row) => row.status === 'open' || row.status === 'in_review').reduce((sum, row) => sum + Number(row.n), 0)
   const criticalCount = severityCounts.rows.find((row) => row.severity === 'critical')?.n ?? 0
+  const preferredNarrative = narratives.rows.find((row) => row.agent_key === agent)
+    ?? narratives.rows.find((row) => row.agent_key === 'finance')
+    ?? narratives.rows[0]
 
   return (
     <ListPageLayout
@@ -120,6 +145,12 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
           description={t('description')}
           actions={canManage ? <Button variant="outline" asChild><Link href="/admin/ai"><Settings size={14} />{t('actions.settings')}</Link></Button> : undefined}
         />
+        {preferredNarrative ? <NarrativeEntry narrative={preferredNarrative.narrative} href={mergeHref('/continuous-close', sp, { report: preferredNarrative.id })} labels={{
+          agent: t('narrative.agent', { agent: t(`agents.${preferredNarrative.agent_key}`) }),
+          fallbackTitle: t('narrative.title'),
+          generated: t('narrative.generated', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(preferredNarrative.finished_at)) }),
+          open: t('narrative.open'),
+        }} /> : null}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric locale={locale} label={t('metrics.active')} value={activeCount} />
           <Metric locale={locale} label={t('metrics.critical')} value={Number(criticalCount)} tone={Number(criticalCount) > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
@@ -167,6 +198,22 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
         </>
       )}
       {selected ? <WorkItemDrawer item={selected} closeHref={closeHref} canWrite={canWrite} /> : null}
+      {selectedNarrative ? <NarrativeDrawer
+        runId={selectedNarrative.id}
+        title={typeof selectedNarrative.narrative.title === 'string' ? selectedNarrative.narrative.title : t('narrative.title')}
+        narrative={selectedNarrative.narrative}
+        closeHref={reportCloseHref}
+        labels={{
+          agent: t('narrative.agent', { agent: t(`agents.${selectedNarrative.agent_key}`) }),
+          generated: t('narrative.generated', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(selectedNarrative.finished_at)) }),
+          executiveSummary: t('narrative.executiveSummary'),
+          highlights: t('narrative.highlights'),
+          risks: t('narrative.risks'),
+          recommendations: t('narrative.recommendations'),
+          downloadPdf: t('narrative.downloadPdf'),
+          sources: t('narrative.sources'),
+        }}
+      /> : null}
     </ListPageLayout>
   )
 
@@ -177,6 +224,24 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     if (summary.count != null) return t('summary.records', { count: Number(summary.count) })
     return t('summary.review')
   }
+}
+
+function NarrativeEntry({ narrative, href, labels }: { narrative: Record<string, unknown>; href: string; labels: { agent: string; fallbackTitle: string; generated: string; open: string } }) {
+  const title = typeof narrative.title === 'string' ? narrative.title : labels.fallbackTitle
+  const executiveSummary = typeof narrative.executiveSummary === 'string' ? narrative.executiveSummary : ''
+  return (
+    <section className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-900 dark:bg-violet-950/20">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"><Sparkles size={16} /></div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500"><span className="font-medium text-violet-700 dark:text-violet-300">{labels.agent}</span><span>{labels.generated}</span></div>
+          <h2 className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">{title}</h2>
+          {executiveSummary ? <p className="mt-0.5 line-clamp-1 text-xs text-slate-600 dark:text-slate-400">{executiveSummary}</p> : null}
+        </div>
+        <Button variant="outline" size="sm" asChild><Link href={href as never}>{labels.open}<ArrowRight size={13} /></Link></Button>
+      </div>
+    </section>
+  )
 }
 
 function Metric({ label, value, locale, tone }: { label: string; value: number; locale: string; tone?: string }) {

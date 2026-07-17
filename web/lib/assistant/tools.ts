@@ -9,11 +9,14 @@ import {
   agingByParty,
   balanceSheet,
   cashFlow,
+  financialTrends as financialTrendRows,
   profitAndLoss,
   trialBalance,
 } from "../reports";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { readableContinuousCloseAgents } from "../continuous-close";
+import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
+import { projectCostSummary } from "../project-costing";
 
 /**
  * Read/search tools for the agentic assistant — the openbooks replacement for
@@ -555,6 +558,7 @@ const profitAndLossTool: AssistantToolDef = {
         grossProfit: num(r.grossProfit),
         expenses: num(r.expenses),
         netIncome: num(r.netIncome),
+        href: `/reports/pnl?from=${a.fromDate}&to=${a.toDate}`,
         truncated,
         items,
       },
@@ -589,6 +593,7 @@ const balanceSheetTool: AssistantToolDef = {
         totalAssets: num(r.totalAssets),
         totalLiabilities: num(r.totalLiabilities),
         totalEquity: num(r.totalEquity),
+        href: `/reports/balance-sheet?asOf=${a.asOf}`,
         assets: section(r.assets),
         liabilities: section(r.liabilities),
         equity: section(r.equity),
@@ -657,6 +662,7 @@ const agingTool: AssistantToolDef = {
           over90: row.b4,
           total: row.total,
         })),
+        href: `/reports/aging?side=${a.side}&asOf=${a.asOf ?? today()}`,
       },
     };
   },
@@ -686,8 +692,197 @@ const cashFlowTool: AssistantToolDef = {
         openingCash: num(r.openingCash),
         closingCash: num(r.closingCash),
         reconciliationGap: num(r.reconciliationGap),
+        href: `/reports/cash-flow?from=${a.fromDate}&to=${a.toDate}`,
       },
     };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Agent-grade financial context (shared by chat and scheduled agents)
+// ---------------------------------------------------------------------------
+
+const financialPeriods: AssistantToolDef = {
+  name: "financial_periods",
+  description:
+    "List recent fiscal periods with exact boundaries, period-close run status, readiness, and locked accounting scopes. Use this before choosing comparison dates. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["reports.read", "close.read"] },
+  inputSchema: z.object({
+    completedOnly: z.boolean().optional(),
+    limit: z.number().int().min(1).max(24).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { completedOnly?: boolean; limit?: number };
+    const limit = Math.min(a.limit ?? 15, 24);
+    const rows = (await db.execute(sql`
+      select p.id, p.name, p.fiscal_year, p.period_number,
+             p.starts_on::text, p.ends_on::text, p.is_adjustment,
+             r.status as close_status, r.readiness_score,
+             coalesce(array_agg(distinct (l.module || ':' || l.state)) filter (where l.id is not null), '{}') as locked_scopes
+        from accounting_periods p
+        join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+        left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
+        left join period_locks l on l.period_id = p.id and l.org_id = p.org_id and l.state <> 'open'
+       where p.org_id = ${authz.user.orgId} and fc.is_default and fc.is_active
+         ${a.completedOnly === false ? sql`` : sql`and p.ends_on < current_date`}
+       group by p.id, r.id
+       order by p.ends_on desc, p.period_number desc
+       limit ${limit}
+    `)) as unknown as { rows: Record<string, unknown>[] };
+    return {
+      ok: true,
+      data: {
+        returned: rows.rows.length,
+        href: "/close",
+        periods: rows.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          fiscalYear: row.fiscal_year,
+          periodNumber: row.period_number,
+          fromDate: row.starts_on,
+          toDate: row.ends_on,
+          adjustment: row.is_adjustment,
+          closeStatus: row.close_status,
+          readinessScore: row.readiness_score,
+          lockedScopes: row.locked_scopes,
+        })),
+      },
+    };
+  },
+};
+
+const financialTrends: AssistantToolDef = {
+  name: "financial_trends",
+  description:
+    "Return up to 15 completed fiscal periods of exact revenue, COGS, gross profit, operating expense, net income, gross-margin percentage, and period-end cash. Use for trend and anomaly analysis without making many report calls. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  inputSchema: z.object({ limit: z.number().int().min(2).max(15).optional() }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const limit = Math.min((raw as { limit?: number }).limit ?? 15, 15);
+    return {
+      ok: true,
+      data: { periods: await financialTrendRows(authz.user.orgId, limit), href: "/reports/pnl" },
+    };
+  },
+};
+
+const budgetVsActualTool: AssistantToolDef = {
+  name: "budget_vs_actual",
+  description:
+    "List budget scenarios or return one scenario's P&L budget-versus-actual statement with account rows and exact actual, budget, variance amount, and variance percent. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["budgets.read", "reports.read"] },
+  inputSchema: z.object({ scenarioId: uuidInput.optional() }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const scenarioId = (raw as { scenarioId?: string }).scenarioId;
+    if (!scenarioId) {
+      return { ok: true, data: { scenarios: await budgetScenarioOptions(authz.user.orgId), href: "/budgets" } };
+    }
+    const view = await budgetVsActualView(scenarioId, authz.user.orgId, {
+      actual: "Actual",
+      budget: "Budget",
+      variance: "Variance",
+      variancePct: "Variance %",
+      revenue: "Revenue",
+      costOfGoodsSold: "Cost of goods sold",
+      grossProfit: "Gross profit",
+      expenses: "Expenses",
+      netIncome: "Net income",
+      totalOf: (section) => `Total ${section}`,
+    });
+    if (!view) return { ok: false, error: "budget_not_found" };
+    return {
+      ok: true,
+      data: {
+        columns: view.columns.map((column) => ({ key: column.key, label: column.label })),
+        lines: view.lines.slice(0, MAX_STATEMENT_ROWS).map((line) => ({
+          kind: line.kind,
+          label: line.label,
+          number: "number" in line ? line.number : null,
+          accountId: "accountId" in line ? line.accountId : null,
+          values: "values" in line ? line.values : null,
+        })),
+        truncated: view.lines.length > MAX_STATEMENT_ROWS,
+        href: `/reports/budget?scenario=${scenarioId}`,
+      },
+    };
+  },
+};
+
+const partyConcentration: AssistantToolDef = {
+  name: "party_concentration",
+  description:
+    "Rank customer revenue or vendor spend for a date range, with share of total and source-document counts. Use for concentration, dependency, and change-driver analysis. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "reports.read"] },
+  inputSchema: z.object({
+    side: z.enum(["customer", "vendor"]),
+    fromDate: dateInput,
+    toDate: dateInput,
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { side: "customer" | "vendor"; fromDate: string; toDate: string; limit?: number };
+    if (!can(authz, a.side === "customer" ? "ar.read" : "ap.read") && !can(authz, "reports.read")) {
+      return { ok: false, error: "forbidden" };
+    }
+    const kinds = a.side === "customer"
+      ? ["customer_invoice", "customer_credit"]
+      : ["vendor_bill", "vendor_credit"];
+    const limit = Math.min(a.limit ?? 20, 50);
+    const rows = (await db.execute(sql`
+      with ranked as (
+        select p.id, p.display_name,
+               sum(case when d.kind in ('customer_credit','vendor_credit') then -abs(d.total) else abs(d.total) end) as amount,
+               count(*)::int as document_count
+          from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
+         where d.org_id = ${authz.user.orgId} and d.status = 'posted'
+           and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+           and d.document_date between ${a.fromDate} and ${a.toDate}
+         group by p.id, p.display_name
+      ), totals as (select coalesce(sum(amount), 0) as total from ranked)
+      select r.id, r.display_name, r.amount::text, r.document_count,
+             case when t.total = 0 then 0 else round((r.amount / t.total) * 100, 2) end::text as share_percent
+        from ranked r cross join totals t
+       order by r.amount desc limit ${limit}
+    `)) as unknown as { rows: Record<string, unknown>[] };
+    return { ok: true, data: { side: a.side, fromDate: a.fromDate, toDate: a.toDate, rows: rows.rows, href: a.side === "customer" ? "/ar" : "/ap" } };
+  },
+};
+
+const projectProfitability: AssistantToolDef = {
+  name: "project_profitability",
+  description:
+    "List active projects, or return one project's budget, posted revenue/cost/margin, commitments, forecast, cost drivers, and source documents. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["projects.read", "reports.read"] },
+  inputSchema: z.object({
+    projectId: uuidInput.optional(),
+    query: z.string().max(100).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { projectId?: string; query?: string; limit?: number };
+    if (a.projectId) {
+      const exists = (await db.execute(sql`
+        select id, name, status from projects where id = ${a.projectId} and org_id = ${authz.user.orgId}
+      `)) as unknown as { rows: { id: string; name: string; status: string }[] };
+      if (!exists.rows[0]) return { ok: false, error: "project_not_found" };
+      return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId)), href: `/projects/${a.projectId}` } };
+    }
+    const limit = Math.min(a.limit ?? 20, 50);
+    const like = a.query ? `%${a.query}%` : null;
+    const rows = (await db.execute(sql`
+      select p.id, p.name, p.status, p.starts_on, p.ends_on, c.display_name as customer
+        from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
+       where p.org_id = ${authz.user.orgId}
+         ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
+       order by case p.status when 'active' then 0 when 'awarded' then 1 else 2 end, p.name
+       limit ${limit}
+    `)) as unknown as { rows: Record<string, unknown>[] };
+    return { ok: true, data: { returned: rows.rows.length, projects: rows.rows, href: "/projects" } };
   },
 };
 
@@ -762,6 +957,46 @@ const continuousCloseFindings: AssistantToolDef = {
   },
 };
 
+const getContinuousCloseFinding: AssistantToolDef = {
+  name: "get_continuous_close_finding",
+  description:
+    "Load one continuous-close finding with its exact detector summary and complete evidence packet. Use this before explaining root cause or recommending action. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
+  inputSchema: z.object({ findingId: uuidInput }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const findingId = (raw as { findingId: string }).findingId;
+    const item = (await db.execute(sql`
+      select id, agent_key, finding_type, detector_version, severity, status,
+             confidence::text, materiality::text, subject_type, subject_id,
+             summary, first_detected_at, last_detected_at
+        from ai_work_items
+       where id = ${findingId} and org_id = ${authz.user.orgId}
+    `)) as unknown as { rows: Record<string, unknown>[] };
+    const row = item.rows[0];
+    if (!row) return { ok: false, error: "finding_not_found" };
+    if (!readableContinuousCloseAgents(authz).includes(row.agent_key as "accounting" | "finance")) {
+      return { ok: false, error: "forbidden" };
+    }
+    const evidence = (await db.execute(sql`
+      select id, kind, source_type, source_id, data, created_at
+        from ai_work_item_evidence
+       where org_id = ${authz.user.orgId} and work_item_id = ${findingId}
+       order by created_at, id
+       limit 100
+    `)) as unknown as { rows: Record<string, unknown>[] };
+    return {
+      ok: true,
+      data: {
+        ...row,
+        evidence: evidence.rows,
+        evidenceTruncated: evidence.rows.length === 100,
+        href: `/continuous-close?item=${findingId}`,
+      },
+    };
+  },
+};
+
 export const READ_TOOLS: AssistantToolDef[] = [
   whoami,
   findAccounts,
@@ -776,5 +1011,11 @@ export const READ_TOOLS: AssistantToolDef[] = [
   trialBalanceTool,
   agingTool,
   cashFlowTool,
+  financialPeriods,
+  financialTrends,
+  budgetVsActualTool,
+  partyConcentration,
+  projectProfitability,
   continuousCloseFindings,
+  getContinuousCloseFinding,
 ];

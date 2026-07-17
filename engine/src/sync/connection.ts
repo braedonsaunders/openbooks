@@ -11,6 +11,8 @@ import { QboClient, type QboApp, type QboTokens } from "../qbo.ts";
 import { QboSource } from "./qbo-source.ts";
 import { XeroClient, type XeroApp, type XeroTokens } from "../xero.ts";
 import { XeroSource } from "./xero-source.ts";
+import { DynamicsClient, type DynamicsApp, type DynamicsTokens } from "../dynamics.ts";
+import { DynamicsSource } from "./dynamics-source.ts";
 import { sealJson } from "../secrets.ts";
 import type { MigrationSource } from "./source.ts";
 
@@ -159,6 +161,31 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
       ],
     },
   },
+  {
+    source: "dynamics",
+    displayName: "Dynamics 365 Business Central",
+    authKind: "oauth2",
+    blurb: "Register an Entra ID (Azure AD) app, enter its Client ID + Secret plus your directory (tenant) ID and BC environment, save, then click Connect. Invoices, bills, credit memos, payments and journals migrate and mirror natively; the trial balance reconciles from the posted general-ledger entries.",
+    configFields: [
+      { key: "aadTenantId", label: "Directory (tenant) ID", placeholder: "00000000-0000-0000-0000-000000000000", required: true, help: "Your Microsoft Entra directory (tenant) id." },
+      { key: "environment", label: "BC environment", placeholder: "Production", required: true, help: "The Business Central environment name (e.g. Production or Sandbox)." },
+      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
+    ],
+    secretFields: [
+      { key: "clientId", label: "Client ID (Application ID)", required: true },
+      { key: "clientSecret", label: "Client Secret", required: true },
+    ],
+    oauthSetup: {
+      portalUrl: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+      portalLabel: "Azure portal · App registrations",
+      steps: [
+        "Register an app (single tenant is fine); note the Application (client) ID and Directory (tenant) ID.",
+        "Add the Redirect URI shown below (platform: Web) and create a client secret.",
+        "Under API permissions add Dynamics 365 Business Central → Financials.ReadWrite.All (delegated) and grant admin consent.",
+        "Paste the Client ID, Client Secret, tenant ID and environment name into this form, save, then click Connect.",
+      ],
+    },
+  },
 ];
 
 export function sourceType(source: string): SourceTypeManifest | undefined {
@@ -211,6 +238,12 @@ interface QboSecrets extends Partial<QboTokens> {
 
 /** Sealed `secrets` blob for a Xero connection: app creds + (once authorized) tokens. */
 interface XeroSecrets extends Partial<XeroTokens> {
+  clientId: string;
+  clientSecret: string;
+}
+
+/** Sealed `secrets` blob for a Dynamics BC connection: app creds + tokens. */
+interface DynamicsSecrets extends Partial<DynamicsTokens> {
   clientId: string;
   clientSecret: string;
 }
@@ -312,6 +345,32 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id}`);
     };
     return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { baseCurrency: cfg.baseCurrency });
+  }
+
+  if (conn.source === "dynamics") {
+    const cfg = conn.config as { aadTenantId?: string; environment?: string; companyId?: string; baseCurrency?: string };
+    const secret = unsealJson<DynamicsSecrets>(conn.secrets);
+    if (!secret?.clientId || !secret?.clientSecret) {
+      throw new Error("Dynamics connection is missing its app credentials (Client ID / Secret)");
+    }
+    if (!cfg.aadTenantId || !cfg.environment) {
+      throw new Error("Dynamics connection needs its directory (tenant) ID and environment");
+    }
+    if (!cfg.companyId) {
+      throw new Error("Dynamics connection is not authorized yet — click Connect to select a company");
+    }
+    const app: DynamicsApp = {
+      clientId: secret.clientId,
+      clientSecret: secret.clientSecret,
+      redirectUri: "",
+      aadTenantId: String(cfg.aadTenantId),
+    };
+    // App-only (client-credentials) auth — no stored user tokens needed; the
+    // client mints an app token on demand. Start expired so it fetches one.
+    const tokens: DynamicsTokens = { accessToken: "", refreshToken: "", expiresAt: "1970-01-01T00:00:00.000Z" };
+    return new DynamicsSource(new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens), {
+      baseCurrency: cfg.baseCurrency,
+    });
   }
 
   throw new Error(`no adapter registered for source "${conn.source}"`);

@@ -19,6 +19,27 @@
     "gross_margin_decline": { "title": "Baisse de la marge brute", "description": "La marge brute a reculé au-delà du seuil configuré par rapport à la période achevée précédente." }
   },
   "summary": { "records": "{count, plural, one {# enregistrement} other {# enregistrements}}", "review": "Examiner les preuves à l’appui" },
+  "narrative": {
+    "title": "Dernière synthèse de l’agent",
+    "agent": "Générée par {agent}",
+    "generated": "Générée le {date}",
+    "generatedLabel": "Générée",
+    "open": "Ouvrir le rapport",
+    "downloadPdf": "PDF",
+    "executiveSummary": "Résumé de direction",
+    "highlights": "Faits saillants de la performance",
+    "risks": "Risques et anomalies",
+    "recommendations": "Mesures recommandées",
+    "sources": "Sources à l’appui",
+    "sourceLabel": "Source",
+    "sourcePath": "Chemin dans l’application"
+  },
+  "analysis": {
+    "title": "Analyse de l’agent",
+    "rootCauses": "Facteurs probables",
+    "recommendations": "Mesures recommandées",
+    "evidenceNotice": "L’analyse générée par le modèle repose sur les enregistrements liés et demeure soumise à révision."
+  },
   "empty": { "title": "Aucun constat pour le moment", "description": "Activez un agent et lancez sa première analyse. Les situations corrigées sont automatiquement résolues lors des analyses suivantes.", "action": "Configurer les agents" },
   "details": { "materiality": "Importance relative", "confidence": "Confiance", "lastDetected": "Dernière détection", "summary": "Résumé", "evidence": "Preuves à l’appui", "noEvidence": "Ce constat repose sur un prérequis manquant; aucun enregistrement source n’est donc disponible.", "dismissalReason": "Motif du rejet" },
   "fields": { "account": "Compte", "count": "Enregistrements", "oldestDate": "Date la plus ancienne", "throughDate": "Rapproché jusqu’au", "difference": "Écart", "budget": "Budget", "budgetAmount": "Montant budgété", "actual": "Réel", "variance": "Écart", "period": "Périodes", "revenueChange": "Variation du chiffre d’affaires", "marginChange": "Variation de la marge", "points": "points" },

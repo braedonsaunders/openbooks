@@ -1,12 +1,14 @@
 import { sql } from "drizzle-orm";
-import { db, schema, withOrg } from "./db.ts";
+import { db, schema, withOrg, withOrgContext } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
 import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   defaultContinuousCloseDetectors,
   effectiveDetectorMateriality,
   enabledDetectorKeys,
+  normalizeContinuousCloseAnalysisSettings,
   normalizeContinuousCloseDetectors,
+  type ContinuousCloseAnalysisSettings,
   type ContinuousCloseAgentKey,
   type ContinuousCloseDetectorKey,
   type ContinuousCloseDetectorPolicy,
@@ -15,8 +17,12 @@ import {
 export {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   CONTINUOUS_CLOSE_DETECTOR_SPECS,
+  defaultContinuousCloseAnalysisSettings,
   defaultContinuousCloseDetectors,
+  normalizeContinuousCloseAnalysisSettings,
   normalizeContinuousCloseDetectors,
+  type AgentModelTier,
+  type ContinuousCloseAnalysisSettings,
   type ContinuousCloseAgentKey,
   type ContinuousCloseDetectorKey,
   type ContinuousCloseDetectorPolicy,
@@ -27,9 +33,10 @@ export {
 /**
  * Continuous Close control plane.
  *
- * Detectors are deliberately deterministic: SQL and exact money arithmetic
- * establish the finding; an LLM may later explain or draft a response, but it
- * never decides whether the books balance or whether a variance is material.
+ * The evidence controls are deliberately deterministic: SQL and exact money
+ * arithmetic establish measured findings. A second, tool-using model layer
+ * investigates records, connects drivers, and produces narratives and
+ * recommendations, but never decides whether the books balance or posts.
  * Every scan refreshes stable fingerprints, replaces their evidence snapshot,
  * reopens conditions that returned, and auto-resolves conditions that cleared.
  */
@@ -48,6 +55,7 @@ export type ContinuousClosePolicy = {
   cadence: AgentCadence;
   materialityThreshold: string;
   detectors: ContinuousCloseDetectorPolicy[];
+  analysis: ContinuousCloseAnalysisSettings;
   lastRunAt: string | null;
   nextRunAt: string | null;
   lastRunStatus: "completed" | "failed" | "skipped" | "running" | null;
@@ -86,6 +94,7 @@ export function defaultContinuousClosePolicy(agentKey: ContinuousCloseAgentKey):
     cadence: "daily",
     materialityThreshold: "1000.0000",
     detectors: defaultContinuousCloseDetectors(agentKey),
+    analysis: normalizeContinuousCloseAnalysisSettings(null),
     lastRunAt: null,
     nextRunAt: null,
     lastRunStatus: null,
@@ -101,7 +110,8 @@ export function nextContinuousCloseRunAt(cadence: AgentCadence, from = new Date(
 export async function getContinuousClosePolicies(orgId: string): Promise<ContinuousClosePolicy[]> {
   const rows = (await db.execute(sql`
     select p.id, p.agent_key, p.enabled, p.automatic_runs, p.cadence,
-           p.materiality_threshold, p.detector_settings, p.last_run_at, p.next_run_at,
+           p.materiality_threshold, p.detector_settings, p.analysis_settings,
+           p.last_run_at, p.next_run_at,
            (select r.status from ai_agent_runs r
              where r.org_id = p.org_id and r.agent_key = p.agent_key
              order by r.started_at desc limit 1) as last_run_status
@@ -120,6 +130,7 @@ export async function getContinuousClosePolicies(orgId: string): Promise<Continu
       cadence: row.cadence === "weekly" ? "weekly" : "daily",
       materialityThreshold: String(row.materiality_threshold),
       detectors: normalizeContinuousCloseDetectors(agentKey, row.detector_settings),
+      analysis: normalizeContinuousCloseAnalysisSettings(row.analysis_settings),
       lastRunAt: row.last_run_at ? new Date(row.last_run_at as string | Date).toISOString() : null,
       nextRunAt: row.next_run_at ? new Date(row.next_run_at as string | Date).toISOString() : null,
       lastRunStatus: (row.last_run_status as ContinuousClosePolicy["lastRunStatus"]) ?? null,
@@ -703,8 +714,64 @@ export type ContinuousCloseRunResult = {
   autoResolved: number;
 };
 
+export type ContinuousCloseEnrichmentInput = {
+  orgId: string;
+  runId: string;
+  agentKey: ContinuousCloseAgentKey;
+  trigger: AgentTrigger;
+  findingIds: string[];
+  analysis: ContinuousCloseAnalysisSettings;
+};
+
+export type ContinuousCloseEnrichmentResult = {
+  status: "completed" | "skipped" | "failed";
+  analyzedFindings: number;
+  /** Structured, evidence-grounded brief persisted with the immutable run. */
+  narrative?: Record<string, unknown> | null;
+  model?: string | null;
+  toolCalls?: number;
+  reason?: string;
+};
+
+type ContinuousCloseEnricher = (
+  input: ContinuousCloseEnrichmentInput,
+) => Promise<ContinuousCloseEnrichmentResult>;
+
+type ContinuousCloseRuntime = typeof globalThis & {
+  __openbooksContinuousCloseEnricher?: ContinuousCloseEnricher | null;
+};
+
+function registeredContinuousCloseEnricher(): ContinuousCloseEnricher | null {
+  return (globalThis as ContinuousCloseRuntime).__openbooksContinuousCloseEnricher ?? null;
+}
+
+/**
+ * The web process registers the shared chatbot tool runtime at boot. Keeping
+ * the hook here lets the accounting engine schedule scans without importing
+ * Next.js, while manual and scheduled runs use the same governed tools.
+ */
+export function registerContinuousCloseEnricher(enricher: ContinuousCloseEnricher | null): void {
+  // Next's development bundler can instantiate the engine through more than
+  // one module identifier (for example the instrumentation and route graphs).
+  // Process-global storage keeps the registered runtime shared in that case
+  // and also survives hot-reload module replacement.
+  (globalThis as ContinuousCloseRuntime).__openbooksContinuousCloseEnricher = enricher;
+}
+
 export async function runContinuousCloseAgent(args: { orgId: string; agentKey: ContinuousCloseAgentKey; trigger: AgentTrigger; initiatedBy?: string | null }): Promise<ContinuousCloseRunResult> {
-  return withOrg(args.orgId, async () => {
+  type PreparedRun =
+    | { kind: "terminal"; result: ContinuousCloseRunResult }
+    | {
+        kind: "ready";
+        runId: string;
+        detected: number;
+        autoResolved: number;
+        evaluatedDetectors: ContinuousCloseDetectorKey[];
+        findingIds: string[];
+        analysis: ContinuousCloseAnalysisSettings;
+      };
+
+  const prepared = await withOrg(args.orgId, async (): Promise<PreparedRun> => {
     const lock = (await db.execute(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${`${args.orgId}:${args.agentKey}`}, 0)) as acquired
     `)) as unknown as { rows: { acquired: boolean }[] };
@@ -715,33 +782,53 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
           orgId: args.orgId,
           agentKey: args.agentKey,
           trigger: args.trigger,
-        status: "skipped",
-        detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
+          status: "skipped",
+          detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
           initiatedBy: args.initiatedBy ?? null,
           finishedAt: new Date(),
           stats: { reason: "already_running" },
         })
         .returning({ id: schema.aiAgentRuns.id });
-      return {
-        runId: skipped!.id,
-        agentKey: args.agentKey,
-        status: "skipped",
-        detected: 0,
-        autoResolved: 0,
-      };
+      return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
+    }
+    // The advisory transaction lock closes the insert race. The durable row
+    // keeps a second request from starting while the first run is outside its
+    // short detector transaction and using network-bound model tools.
+    const active = (await db.execute(sql`
+      select id from ai_agent_runs
+       where org_id = ${args.orgId} and agent_key = ${args.agentKey}
+         and status = 'running' and started_at > now() - interval '15 minutes'
+       order by started_at desc limit 1
+    `)) as unknown as { rows: { id: string }[] };
+    if (active.rows[0]) {
+      const [skipped] = await db
+        .insert(schema.aiAgentRuns)
+        .values({
+          orgId: args.orgId,
+          agentKey: args.agentKey,
+          trigger: args.trigger,
+          status: "skipped",
+          detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
+          initiatedBy: args.initiatedBy ?? null,
+          finishedAt: new Date(),
+          stats: { reason: "already_running", activeRunId: active.rows[0].id },
+        })
+        .returning({ id: schema.aiAgentRuns.id });
+      return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
     }
     const global = (await db.execute(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${args.orgId}
     `)) as unknown as { rows: { enabled: boolean }[] };
     const policy = (await db.execute(sql`
-      select enabled, materiality_threshold::text, detector_settings
+      select enabled, materiality_threshold::text, detector_settings, analysis_settings
         from ai_agent_policies where org_id = ${args.orgId} and agent_key = ${args.agentKey}
     `)) as unknown as {
       rows: {
         enabled: boolean;
         materiality_threshold: string;
         detector_settings: unknown;
+        analysis_settings: unknown;
       }[];
     };
     const configured = policy.rows[0];
@@ -760,19 +847,15 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
         update ai_agent_runs set status = 'skipped', finished_at = now(), stats = '{"reason":"disabled"}'::jsonb
          where id = ${run!.id} and org_id = ${args.orgId}
       `);
-      return {
-        runId: run!.id,
-        agentKey: args.agentKey,
-        status: "skipped",
-        detected: 0,
-        autoResolved: 0,
-      };
+      return { kind: "terminal", result: { runId: run!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
     }
     try {
       const detectors = normalizeContinuousCloseDetectors(args.agentKey, configured.detector_settings);
+      const analysis = normalizeContinuousCloseAnalysisSettings(configured.analysis_settings);
       const evaluatedDetectors = enabledDetectorKeys(detectors);
       const findings = args.agentKey === "accounting" ? await accountingFindings(args.orgId, configured.materiality_threshold, detectors) : await financeFindings(args.orgId, configured.materiality_threshold, detectors);
-      for (const finding of findings) await persistFinding(args.orgId, run!.id, finding);
+      const findingIds: string[] = [];
+      for (const finding of findings) findingIds.push(await persistFinding(args.orgId, run!.id, finding));
       const resolved =
         evaluatedDetectors.length === 0
           ? { rows: [] as { id: string }[] }
@@ -787,24 +870,14 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
                and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
             returning id
           `)) as unknown as { rows: { id: string }[] });
-      const stats = {
+      return {
+        kind: "ready",
+        runId: run!.id,
         detected: findings.length,
         autoResolved: resolved.rows.length,
         evaluatedDetectors,
-      };
-      await db.execute(sql`
-        update ai_agent_runs set status = 'completed', finished_at = now(), stats = ${JSON.stringify(stats)}::jsonb
-         where id = ${run!.id} and org_id = ${args.orgId}
-      `);
-      await db.execute(sql`
-        update ai_agent_policies set last_run_at = now(), updated_at = now()
-         where org_id = ${args.orgId} and agent_key = ${args.agentKey}
-      `);
-      return {
-        runId: run!.id,
-        agentKey: args.agentKey,
-        status: "completed",
-        ...stats,
+        findingIds,
+        analysis,
       };
     } catch (error) {
       console.error(`[continuous-close] ${args.agentKey} scan failed`, error);
@@ -812,14 +885,60 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
         update ai_agent_runs set status = 'failed', finished_at = now(), error_code = 'detector_failed'
          where id = ${run!.id} and org_id = ${args.orgId}
       `);
-      return {
-        runId: run!.id,
+      return { kind: "terminal", result: { runId: run!.id, agentKey: args.agentKey, status: "failed", detected: 0, autoResolved: 0 } };
+    }
+  });
+  if (prepared.kind === "terminal") return prepared.result;
+
+  let enrichment: ContinuousCloseEnrichmentResult = {
+    status: "skipped",
+    analyzedFindings: 0,
+    reason: registeredContinuousCloseEnricher() ? "all_model_capabilities_disabled" : "tool_runtime_unavailable",
+  };
+  const modelWorkEnabled = prepared.analysis.rootCauseAnalysis || prepared.analysis.recommendations || prepared.analysis.narrative;
+  const enricher = registeredContinuousCloseEnricher();
+  if (enricher && modelWorkEnabled) {
+    try {
+      enrichment = await withOrgContext(args.orgId, () => enricher({
+        orgId: args.orgId,
+        runId: prepared.runId,
         agentKey: args.agentKey,
+        trigger: args.trigger,
+        findingIds: prepared.findingIds,
+        analysis: prepared.analysis,
+      }));
+    } catch (error) {
+      console.error(`[continuous-close] ${args.agentKey} enrichment failed`, error);
+      enrichment = {
         status: "failed",
-        detected: 0,
-        autoResolved: 0,
+        analyzedFindings: 0,
+        reason: error instanceof Error && error.message === "continuous_close_agent_timeout"
+          ? "enrichment_timeout"
+          : "enrichment_failed",
       };
     }
+  }
+  const stats = {
+    detected: prepared.detected,
+    autoResolved: prepared.autoResolved,
+    evaluatedDetectors: prepared.evaluatedDetectors,
+    enrichment,
+  };
+  return withOrg(args.orgId, async () => {
+    await db.execute(sql`
+      update ai_agent_runs set status = 'completed', finished_at = now(), stats = ${JSON.stringify(stats)}::jsonb
+       where id = ${prepared.runId} and org_id = ${args.orgId}
+    `);
+    await db.execute(sql`
+      update ai_agent_policies set last_run_at = now(), updated_at = now()
+       where org_id = ${args.orgId} and agent_key = ${args.agentKey}
+    `);
+    return {
+      runId: prepared.runId,
+      agentKey: args.agentKey,
+      status: "completed",
+      ...stats,
+    };
   });
 }
 

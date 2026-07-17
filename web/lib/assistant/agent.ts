@@ -1,5 +1,5 @@
 import "server-only";
-import { stepCountIs, streamText, type ModelMessage, type ToolSet, type UIMessage } from "ai";
+import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet, type UIMessage } from "ai";
 import { AIDisabledError, getModel, type AiConfig, type ModelTier } from "./client";
 
 /**
@@ -35,6 +35,52 @@ export type RunAgentTurnArgs = {
 };
 
 const DEFAULT_MAX_STEPS = 12;
+
+export type BackgroundAgentResult = {
+  text: string;
+  finishReason: string;
+  toolCalls: number;
+  usage: { inputTokens: number; outputTokens: number };
+};
+
+/**
+ * Non-streaming form of the same tool loop for scheduled agents. It receives
+ * the identical permission-bound ToolSet as chat and is still capped by a
+ * hard step limit. Background agents are only given read tools.
+ */
+export async function runBackgroundAgent(
+  config: AiConfig | null | undefined,
+  args: {
+    prompt: string;
+    system: string;
+    tools: ToolSet;
+    tier?: ModelTier;
+    maxSteps?: number;
+    temperature?: number;
+    abortSignal?: AbortSignal;
+  },
+): Promise<BackgroundAgentResult> {
+  const model = getModel(config, args.tier ?? "smart");
+  if (!model) throw new AIDisabledError();
+  const result = await generateText({
+    model,
+    system: args.system,
+    prompt: args.prompt,
+    tools: args.tools,
+    stopWhen: stepCountIs(Math.max(4, args.maxSteps ?? DEFAULT_MAX_STEPS)),
+    temperature: args.temperature ?? 0.2,
+    abortSignal: args.abortSignal,
+  });
+  return {
+    text: result.text,
+    finishReason: result.finishReason,
+    toolCalls: result.steps.reduce((count, step) => count + step.toolCalls.length, 0),
+    usage: {
+      inputTokens: result.totalUsage.inputTokens ?? 0,
+      outputTokens: result.totalUsage.outputTokens ?? 0,
+    },
+  };
+}
 
 /**
  * Run one agentic turn and return a streaming Response (UI-message SSE protocol).

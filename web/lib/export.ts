@@ -7,7 +7,7 @@ export function pdfResponse(pdf: Buffer, filename: string): NextResponse {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${safeName(filename)}.pdf"`,
+      'Content-Disposition': contentDisposition('inline', filename, 'pdf'),
       'Cache-Control': 'no-store',
     },
   })
@@ -19,7 +19,7 @@ export function xlsxResponse(xlsx: Buffer, filename: string): NextResponse {
     status: 200,
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="${safeName(filename)}.xlsx"`,
+      'Content-Disposition': contentDisposition('attachment', filename, 'xlsx'),
       'Cache-Control': 'no-store',
     },
   })
@@ -32,7 +32,7 @@ export function csvResponse(csv: string, filename: string): NextResponse {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${safeName(filename)}.csv"`,
+      'Content-Disposition': contentDisposition('attachment', filename, 'csv'),
       'Cache-Control': 'no-store',
     },
   })
@@ -43,7 +43,26 @@ export function safeName(name: string): string {
   return name
     .replace(/[/\\]/g, '-')
     .replace(/[",]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120)
+}
+
+/** RFC 5987 filename with a header-safe ASCII fallback for Web Headers. */
+export function contentDisposition(
+  disposition: 'inline' | 'attachment',
+  filename: string,
+  extension: string,
+): string {
+  const base = safeName(filename) || 'export'
+  const full = `${base}.${extension}`
+  const asciiBase = base
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7e]/g, '')
+    .replace(/["\\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'export'
+  const encoded = encodeURIComponent(full.replace(/[\uD800-\uDFFF]/g, '\uFFFD'))
+  return `${disposition}; filename="${asciiBase}.${extension}"; filename*=UTF-8''${encoded}`
 }

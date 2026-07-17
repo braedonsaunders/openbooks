@@ -84,6 +84,29 @@ async function ensureSchema(): Promise<void> {
   await db.execute(sql`create index if not exists contacts_party on contacts (party_id)`);
 }
 
+/**
+ * Ensure the org has a root subsidiary (posting requires exactly one). Uses the
+ * org's own base_currency/country so single-entity migrations post cleanly; if
+ * a source later supplies a `subsidiaries` stream, its root upsert reuses this
+ * parentless row by ref.
+ */
+async function ensureRootSubsidiary(orgId: string, fallbackCurrency: string): Promise<void> {
+  const existing = (await db.execute(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`)) as { rows: { id: string }[] };
+  if (existing.rows[0]) return;
+  const org = (await db.execute(sql`
+    select name, legal_name, base_currency, country from orgs where id = ${orgId}`)) as {
+    rows: { name: string; legal_name: string | null; base_currency: string | null; country: string | null }[];
+  };
+  const o = org.rows[0];
+  const name = o?.legal_name || o?.name || "Head Office";
+  const currency = String(o?.base_currency || fallbackCurrency || "USD").toUpperCase();
+  const country = String(o?.country || "US").toUpperCase();
+  await db.execute(sql`
+    insert into subsidiaries (org_id, parent_id, name, legal_name, base_currency, country)
+    values (${orgId}, null, ${name}, ${o?.legal_name ?? null}, ${currency}, ${country})`);
+}
+
 export async function loadEntities(
   source: MigrationSource,
   orgId: string,
@@ -107,6 +130,12 @@ export async function loadEntities(
       payment_terms: await loadMap("payment_terms", orgId, refKey),
     },
   };
+
+  // Every org needs exactly one root subsidiary for posting. Multi-entity
+  // sources (NetSuite) supply a `subsidiaries` stream that fills it; single-
+  // entity sources (Xero, QBO, Odoo, ERPNext) don't, so guarantee a root here
+  // from the org's own currency/country. Idempotent — a no-op once one exists.
+  await ensureRootSubsidiary(orgId, source.baseCurrency);
 
   const streams = [
     { resource: "accounting_periods", records: await source.accountingPeriods() },

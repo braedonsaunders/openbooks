@@ -25,6 +25,7 @@ export interface QboTxnBase {
   TxnDate: string;
   DocNumber?: string;
   PrivateNote?: string;
+  CurrencyRef?: Ref;
   ExchangeRate?: number;
   MetaData?: { LastUpdatedTime?: string };
 }
@@ -33,8 +34,8 @@ export interface QboLine {
   Amount?: number;
   Description?: string;
   DetailType: string;
-  SalesItemLineDetail?: { ItemRef?: Ref; TaxCodeRef?: Ref };
-  ItemBasedExpenseLineDetail?: { ItemRef?: Ref };
+  SalesItemLineDetail?: { ItemRef?: Ref; ItemAccountRef?: Ref; TaxCodeRef?: Ref };
+  ItemBasedExpenseLineDetail?: { ItemRef?: Ref; ItemAccountRef?: Ref };
   AccountBasedExpenseLineDetail?: { AccountRef?: Ref };
   DiscountLineDetail?: { DiscountAccountRef?: Ref };
   JournalEntryLineDetail?: { PostingType?: string; AccountRef?: Ref };
@@ -60,6 +61,11 @@ export interface QboTxn extends QboTxnBase {
   FromAccountRef?: Ref;
   ToAccountRef?: Ref;
   Amount?: number; // Transfer
+  // TaxPayment (sales-tax remittance to the agency)
+  PaymentDate?: string;
+  PaymentAccountRef?: Ref;
+  PaymentAmount?: number;
+  Refund?: boolean;
 }
 
 export interface QboBuildOpts {
@@ -68,6 +74,8 @@ export interface QboBuildOpts {
   itemExpenseAccount: Map<string, string>;
   /** The company's Undeposited Funds account ref (deposit LinkedTxn lines). */
   undepositedFundsRef?: string;
+  /** GST/HST Suspense account ref — where filed tax + remittances post. */
+  taxSuspenseRef?: string;
 }
 
 const isVoided = (t: QboTxnBase) => /voided/i.test(t.PrivateNote ?? "");
@@ -79,13 +87,18 @@ export function buildNativeFromQbo(
   opts: QboBuildOpts,
 ): NativeDocument | { skip: string } {
   if (isVoided(t)) return { skip: "cancelled" };
-  const rate = t.ExchangeRate && t.ExchangeRate > 0 ? t.ExchangeRate : 1;
-  const home = (v: number | undefined): bigint => toUnits(((v ?? 0) * rate).toFixed(2));
+  // Post in the TRANSACTION currency and let the engine translate + settle FX.
+  // QBO amounts are already in the txn currency; ExchangeRate is txn→home.
+  const currency = t.CurrencyRef?.value || ctx.baseCurrency;
+  const fxRate = t.ExchangeRate && t.ExchangeRate > 0 ? String(t.ExchangeRate) : "1";
+  const txn = (v: number | undefined): bigint => toUnits((v ?? 0).toFixed(2));
   const acct = (ref?: Ref): string | null => (ref?.value ? ctx.accountByRef.get(ref.value)?.id ?? null : null);
   const sourceRef = `${entity}:${t.Id}`;
   const base = {
     sourceRef,
     posting: true,
+    currency,
+    fxRate,
     documentDate: t.TxnDate,
     dueDate: t.DueDate ?? null,
     memo: t.PrivateNote ?? null,
@@ -103,26 +116,31 @@ export function buildNativeFromQbo(
     const out: NativeDocLine[] = [];
     for (const l of t.Line ?? []) {
       if (l.DetailType === "SalesItemLineDetail") {
-        const a = l.SalesItemLineDetail?.ItemRef?.value
-          ? ctx.accountByRef.get(
-              (income ? opts.itemIncomeAccount : opts.itemExpenseAccount).get(l.SalesItemLineDetail.ItemRef.value) ?? "",
-            )?.id ?? null
-          : null;
-        if (!a) return { skip: `unmapped item ${l.SalesItemLineDetail?.ItemRef?.value}` };
-        out.push(mk(a, home(l.Amount) * sign, l.Description ?? null));
+        // QBO populates ItemAccountRef (the posting account) directly on the
+        // line — use it first. It's the only account on markup / billable-
+        // expense lines, which carry no ItemRef. Fall back to the item register.
+        const d = l.SalesItemLineDetail;
+        const a =
+          acct(d?.ItemAccountRef) ??
+          (d?.ItemRef?.value
+            ? ctx.accountByRef.get((income ? opts.itemIncomeAccount : opts.itemExpenseAccount).get(d.ItemRef.value) ?? "")?.id ?? null
+            : null);
+        if (!a) return { skip: `unmapped item ${d?.ItemRef?.value ?? "(markup/no item)"}` };
+        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null));
       } else if (l.DetailType === "ItemBasedExpenseLineDetail") {
-        const a = l.ItemBasedExpenseLineDetail?.ItemRef?.value
-          ? ctx.accountByRef.get(opts.itemExpenseAccount.get(l.ItemBasedExpenseLineDetail.ItemRef.value) ?? "")?.id ?? null
-          : null;
-        if (!a) return { skip: `unmapped item ${l.ItemBasedExpenseLineDetail?.ItemRef?.value}` };
-        out.push(mk(a, home(l.Amount) * sign, l.Description ?? null));
+        const d = l.ItemBasedExpenseLineDetail;
+        const a =
+          acct(d?.ItemAccountRef) ??
+          (d?.ItemRef?.value ? ctx.accountByRef.get(opts.itemExpenseAccount.get(d.ItemRef.value) ?? "")?.id ?? null : null);
+        if (!a) return { skip: `unmapped item ${d?.ItemRef?.value ?? "(no item)"}` };
+        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null));
       } else if (l.DetailType === "AccountBasedExpenseLineDetail") {
         const a = acct(l.AccountBasedExpenseLineDetail?.AccountRef);
         if (!a) return { skip: `unmapped account ${l.AccountBasedExpenseLineDetail?.AccountRef?.value}` };
-        out.push(mk(a, home(l.Amount) * sign, l.Description ?? null));
+        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null));
       } else if (l.DetailType === "DiscountLineDetail") {
         const a = acct(l.DiscountLineDetail?.DiscountAccountRef);
-        if (a) out.push(mk(a, -home(l.Amount) * sign, l.Description ?? "Discount"));
+        if (a) out.push(mk(a, -txn(l.Amount) * sign, l.Description ?? "Discount"));
       }
       // SubTotalLineDetail / DescriptionOnly are presentational — skipped.
     }
@@ -133,7 +151,7 @@ export function buildNativeFromQbo(
   /** Attach QBO's actual tax per rate to the first detail line. */
   const attachTax = (lines: NativeDocLine[]): void => {
     for (const tl of t.TxnTaxDetail?.TaxLine ?? []) {
-      const amt = home(tl.Amount);
+      const amt = txn(tl.Amount);
       if (amt === 0n) continue;
       const a = amt < 0n ? -amt : amt;
       const carrier = lines[0]!;
@@ -182,7 +200,7 @@ export function buildNativeFromQbo(
         kind: "customer_payment",
         partyId: ctx.partyByRef.get(`C:${t.CustomerRef?.value}`) ?? null,
         controlAccountId: acct(t.ARAccountRef),
-        lines: [mk(counter, home(t.TotalAmt))],
+        lines: [mk(counter, txn(t.TotalAmt))],
       };
     }
     case "BillPayment": {
@@ -194,7 +212,7 @@ export function buildNativeFromQbo(
         kind: "vendor_payment",
         partyId: ctx.partyByRef.get(`V:${t.VendorRef?.value}`) ?? null,
         controlAccountId: acct(t.APAccountRef),
-        lines: [mk(counter, home(t.TotalAmt))],
+        lines: [mk(counter, txn(t.TotalAmt))],
       };
     }
     case "JournalEntry": {
@@ -203,7 +221,7 @@ export function buildNativeFromQbo(
         if (l.DetailType !== "JournalEntryLineDetail") continue;
         const a = acct(l.JournalEntryLineDetail?.AccountRef);
         if (!a) return { skip: `unmapped account ${l.JournalEntryLineDetail?.AccountRef?.value}` };
-        const amt = home(l.Amount);
+        const amt = txn(l.Amount);
         if (amt === 0n) continue;
         lines.push(mk(a, l.JournalEntryLineDetail?.PostingType === "Credit" ? -amt : amt, l.Description ?? null));
       }
@@ -220,7 +238,7 @@ export function buildNativeFromQbo(
             ? ctx.accountByRef.get(opts.undepositedFundsRef)?.id ?? null
             : null);
         if (!a) continue;
-        lines.push(mk(a, home(l.Amount), l.Description ?? null));
+        lines.push(mk(a, txn(l.Amount), l.Description ?? null));
       }
       if (lines.length === 0) return { skip: "deposit has no source lines" };
       return { ...base, kind: "deposit", partyId: null, controlAccountId: acct(t.DepositToAccountRef), lines };
@@ -243,7 +261,22 @@ export function buildNativeFromQbo(
       if (!to || !from) return { skip: "unmapped transfer account" };
       return {
         ...base, kind: "transfer", partyId: null, controlAccountId: null,
-        lines: [mk(to, home(t.Amount)), mk(from, 0n)],
+        lines: [mk(to, txn(t.Amount)), mk(from, 0n)],
+      };
+    }
+    case "TaxPayment": {
+      // Sales-tax remittance: DR the tax liability (GST/HST Payable), CR bank.
+      // Refund reverses. Clears the collected/paid tax that accrued on sales/bills.
+      const bank = acct(t.PaymentAccountRef);
+      const taxAcct = (opts.taxSuspenseRef ? ctx.accountByRef.get(opts.taxSuspenseRef)?.id : null) ?? ctx.control.taxCollected ?? null;
+      if (!bank || !taxAcct) return { skip: "tax payment missing bank or tax account" };
+      const amt = txn(t.PaymentAmount);
+      const [dr, cr] = t.Refund ? [bank, taxAcct] : [taxAcct, bank];
+      return {
+        ...base,
+        documentDate: t.PaymentDate ?? base.documentDate,
+        kind: "journal", partyId: null, controlAccountId: null,
+        lines: [mk(dr, amt, "Sales tax remittance"), mk(cr, -amt, "Sales tax remittance")],
       };
     }
     case "SalesReceipt":
@@ -253,12 +286,12 @@ export function buildNativeFromQbo(
       const bank = acct(t.DepositToAccountRef) ??
         (opts.undepositedFundsRef ? ctx.accountByRef.get(opts.undepositedFundsRef)?.id ?? null : null);
       if (!bank) return { skip: "receipt without deposit-to account" };
-      const lines: NativeDocLine[] = [mk(bank, home(t.TotalAmt) * sign)];
+      const lines: NativeDocLine[] = [mk(bank, txn(t.TotalAmt) * sign)];
       const detail = detailLines(true, 1n);
       if ("skip" in detail) return detail;
       for (const d of detail) lines.push({ ...d, amount: fromUnits(-toUnits(d.amount) * sign), lineNumber: ++n });
       for (const tl of t.TxnTaxDetail?.TaxLine ?? []) {
-        const amt = home(tl.Amount);
+        const amt = txn(tl.Amount);
         if (amt === 0n) continue;
         const rateRef = tl.TaxLineDetail?.TaxRateRef?.value;
         const codeId = rateRef ? ctx.taxCodeByRef.get(rateRef) ?? null : null;
