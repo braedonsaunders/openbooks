@@ -3,11 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, teams, sources, items, canManage }: { data:any; statuses:any[]; accounts:any[]; contacts:any[]; owners:any[]; teams:any[]; sources:any[]; items:any[]; canManage:boolean }) {
+export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, teams, sources, items, currencies, canManage }: { data:any; statuses:any[]; accounts:any[]; contacts:any[]; owners:any[]; teams:any[]; sources:any[]; items:any[]; currencies:{code:string;name:string}[]; canManage:boolean }) {
   const t=useTranslations('crm'); const tc=useTranslations('common'); const router=useRouter(); const row=data.opportunity
   const [form,setForm]=useState({ title:row.title==='New opportunity'?'':row.title, partyId:row.party_id??'', primaryContactId:row.primary_contact_id??'', ownerUserId:row.owner_user_id??'', salesTeamId:row.sales_team_id??'', statusId:row.status_id, leadSourceId:row.lead_source_id??'', expectedCloseDate:row.expected_close_date??'', forecastCategory:row.forecast_category, probability:String(row.probability), currency:row.currency, nextStep:row.next_step??'', description:row.description??'', winLossReason:row.win_loss_reason??'' })
   const [lines,setLines]=useState<any[]>(data.lines.map((line:any)=>({itemId:line.item_id??'',description:line.description??'',quantity:String(line.quantity),unit:line.unit??'',unitPrice:String(line.unit_price)})))
@@ -26,7 +26,7 @@ export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, 
       <Field label={t('fields.probability')}><Input type="number" min="0" max="100" value={form.probability} onChange={e=>set('probability',e.target.value)} disabled={!canManage}/></Field>
       <Field label={t('fields.forecastCategory')}><Select value={form.forecastCategory} onChange={e=>set('forecastCategory',e.target.value)} disabled={!canManage}>{['omitted','worst_case','most_likely','upside'].map(v=><option key={v} value={v}>{t(`forecastCategories.${v}`)}</option>)}</Select></Field>
       <Field label={t('fields.expectedClose')}><Input type="date" value={form.expectedCloseDate} onChange={e=>set('expectedCloseDate',e.target.value)} disabled={!canManage}/></Field>
-      <Field label={t('fields.currency')}><Input maxLength={3} value={form.currency} onChange={e=>set('currency',e.target.value.toUpperCase())} disabled={!canManage}/></Field>
+      <Field label={t('fields.currency')}><SearchSelect value={form.currency} onChange={value=>set('currency',value)} options={currencies.map(currency=>({value:currency.code,label:`${currency.code} · ${currency.name}`}))} ariaLabel={t('fields.currency')} disabled={!canManage}/></Field>
       <Field label={t('fields.leadSource')}><Select value={form.leadSourceId} onChange={e=>set('leadSourceId',e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{sources.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <div className="sm:col-span-3"><Field label={t('fields.nextStep')}><Input value={form.nextStep} onChange={e=>set('nextStep',e.target.value)} disabled={!canManage}/></Field></div>
     </div>

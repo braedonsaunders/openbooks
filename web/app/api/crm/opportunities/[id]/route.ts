@@ -81,6 +81,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!CATEGORIES.includes(category)) return NextResponse.json({ error: 'invalid forecast category' }, { status: 422 })
   const title = body.title === undefined ? current.title : textOrNull(body.title)
   if (!title) return NextResponse.json({ error: 'title is required' }, { status: 422 })
+  const currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
+  if (!(await db.execute(sql`select 1 from currencies where code = ${currency}`) as any).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
   const winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
   if (nextStatus.is_closed && !nextStatus.is_won && !winLossReason) return NextResponse.json({ error: 'a loss reason is required' }, { status: 422 })
   const lines = body.lines as Array<any> | undefined
@@ -136,7 +138,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         sales_team_id = ${salesTeamId}, status_id = ${statusId}, lead_source_id = ${leadSourceId},
         expected_close_date = ${body.expectedCloseDate !== undefined ? textOrNull(body.expectedCloseDate) : sql`expected_close_date`},
         forecast_category = ${category}, probability = ${probability},
-        currency = ${body.currency !== undefined ? String(body.currency).toUpperCase() : sql`currency`},
+        currency = ${currency},
         projected_amount = ${projected}, weighted_amount = ${weighted},
         range_low = ${body.rangeLow !== undefined ? textOrNull(body.rangeLow) : sql`range_low`},
         range_high = ${body.rangeHigh !== undefined ? textOrNull(body.rangeHigh) : sql`range_high`},
