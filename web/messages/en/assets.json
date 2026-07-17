@@ -11,6 +11,14 @@
     "working": "Posting…",
     "done": "Disposed — gain/loss {gainLoss}"
   },
+  "remeasure": {
+    "label": "Revalue",
+    "newValue": "New carrying value",
+    "date": "Date",
+    "action": "Apply",
+    "working": "Applying…",
+    "done": "{kind} — {delta}"
+  },
   "taxPools": {
     "title": "Tax Depreciation (CCA)",
     "description": "Compute capital cost allowance by class pool for a tax year.",

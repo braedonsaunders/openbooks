@@ -11,6 +11,14 @@
     "working": "Registrando…",
     "done": "Dado de baja — ganancia/pérdida {gainLoss}"
   },
+  "remeasure": {
+    "label": "Revaluar",
+    "newValue": "Nuevo valor contable",
+    "date": "Fecha",
+    "action": "Aplicar",
+    "working": "Aplicando…",
+    "done": "{kind} — {delta}"
+  },
   "taxPools": {
     "title": "Depreciación fiscal (CCA)",
     "description": "Calcule la deducción por costo de capital por grupo de clase para un año fiscal.",
