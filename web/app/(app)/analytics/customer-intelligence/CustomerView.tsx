@@ -45,6 +45,7 @@ import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, GroupedBar } from '../_ui/charts'
+import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { fmtMoney, fmtPct } from '../_ui/format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
@@ -195,8 +196,11 @@ const money = (n: number) => fmtMoney(n, { compact: true })
 /* -------------------------------------------------------------------- view */
 export function CustomerView({ data, profitability }: { data: CustomerData; profitability: Profitability }) {
   const [tab, setTab] = useState<Tab>('overview')
+  const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
   const intel = data.intelligence
+  const openCustomer = (r: Pick<CustomerRow, 'id' | 'name' | 'invoices' | 'revenue'>) =>
+    setDrill({ kind: 'party', id: r.id, name: r.name, sub: `${r.invoices} invoices · ${money(r.revenue)}` })
 
   return (
     <div className="space-y-5">
@@ -232,7 +236,7 @@ export function CustomerView({ data, profitability }: { data: CustomerData; prof
 
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
-        {tab === 'health' ? <HealthTab data={data} /> : null}
+        {tab === 'health' ? <HealthTab data={data} onDrill={openCustomer} /> : null}
         {tab === 'segmentation' ? <SegmentationTab data={data} /> : null}
         {tab === 'lifetime' ? <LifetimeTab data={data} profitability={profitability} /> : null}
         {tab === 'churn' ? <ChurnTab data={data} /> : null}
@@ -240,6 +244,8 @@ export function CustomerView({ data, profitability }: { data: CustomerData; prof
         {tab === 'profitability' ? <ProfitabilityTab p={profitability} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
       </div>
+
+      <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
   )
 }
@@ -342,7 +348,7 @@ function OverviewTab({ data }: { data: CustomerData }) {
 type GroupBy = 'none' | 'segment' | 'tier' | 'churn' | 'grade'
 const HEALTH_PAGE = 25
 
-function HealthTab({ data }: { data: CustomerData }) {
+function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: CustomerRow) => void }) {
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [page, setPage] = useState(1)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -372,7 +378,7 @@ function HealthTab({ data }: { data: CustomerData }) {
   const avgHealth = rows.length ? Math.round(rows.reduce((a, r) => a + r.healthScore, 0) / rows.length) : 0
 
   const Row = ({ r }: { r: CustomerRow }) => (
-    <tr className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+    <tr onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
       <td className="px-4 py-2">
         <p className="font-medium text-slate-800 dark:text-slate-200">{r.name}{r.isFakeChampion ? <span title="High revenue, low margin — review pricing"> ⚠️</span> : null}</p>
         <p className="text-[11px] text-slate-400 dark:text-slate-500">Last: {r.recencyDays >= 9999 ? '—' : `${r.recencyDays} days ago`}</p>

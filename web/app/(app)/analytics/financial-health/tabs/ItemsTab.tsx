@@ -11,7 +11,7 @@ import { fmtMoney, fmtPct } from '../../_ui/format'
 
 type SortKey = 'current' | 'change' | 'changePct' | 'contribution'
 
-export function ItemsTab({ data }: { data: HealthData }) {
+export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
   const [sort, setSort] = useState<SortKey>('current')
   const { rows, gainers, decliners, totalCurrent, totalChange } = data.items
 
@@ -57,7 +57,7 @@ export function ItemsTab({ data }: { data: HealthData }) {
                 </thead>
                 <tbody>
                   {sorted.map((it) => (
-                    <tr key={it.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                    <tr key={it.id} onClick={() => onDrill(it.id, it.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                       <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{it.name}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(it.prior)}</td>
                       <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(it.current)}</td>

@@ -85,19 +85,6 @@ export interface SVInsight {
   action: string;
 }
 
-export interface SVTxn {
-  docId: string;
-  docNumber: string;
-  kind: string;
-  date: string;
-  accountId: string;
-  accountName: string;
-  partyId: string | null;
-  partyName: string;
-  amount: number;
-  memo: string;
-}
-
 export interface SpendVelocityData {
   period: { from: string; to: string; label: string };
   config: typeof CFG;
@@ -167,7 +154,6 @@ export interface SpendVelocityData {
     summary: { currentTotal: number; priorTotal: number; twoBackTotal: number; projectedTotal: number; changePct: number; priorLabel: string; twoBackLabel: string };
     accounts: { accountId: string; accountName: string; currentAmount: number; priorAmount: number; twoBackAmount: number; changePct: number; projectedAmount: number; isNew: boolean; monthlyTrend: number[]; velocity: number; acceleration: number; trend: string }[];
   };
-  transactions: SVTxn[];
   expenseAnalysis: {
     summary: { expenseReportTotal: number; vendorBillTotal: number; topSpenderCount: number; categoryIncreaseTotal: number };
     topSpenders: { employeeId: string; employeeName: string; totalSpend: number; priorSpend: number; reportCount: number; changePct: number }[];
@@ -249,7 +235,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
       and e.posting_date >= ${f} and e.posting_date <= ${t}`;
 
-  const [acctRows, vendRows, pyRows, poSoRows, revRows, txnRows, spenderRows, catRows, cmpRows] = await Promise.all([
+  const [acctRows, vendRows, pyRows, poSoRows, revRows, spenderRows, catRows, cmpRows] = await Promise.all([
     // 1. Monthly account spend split by transaction kind (PRIMARY).
     db.execute(sql`
       select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
@@ -307,24 +293,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       where l.org_id = ${orgId} and a.type in ('income', 'income_other')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `) as Promise<any>,
-    // 6. Transaction detail for drill-down (most recent 2000, Gantry cap).
-    db.execute(sql`
-      select d.id as doc_id, d.document_number, d.kind, e.posting_date::text as date,
-        l.account_id, a.name as account_name, d.party_id, coalesce(p.display_name, '') as party_name,
-        l.amount, coalesce(l.memo, '') as memo
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id
-      join documents d on d.id = e.source_document_id
-      join accounts a on a.id = l.account_id
-      left join parties p on p.id = d.party_id
-      where l.org_id = ${orgId} and d.voided_at is null
-        and d.kind in ('vendor_bill', 'expense_report', 'check')
-        and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
-        and e.posting_date >= ${from} and e.posting_date <= ${to}
-        and l.amount <> 0
-      order by e.posting_date desc
-      limit 2000
-    `) as Promise<any>,
+    // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
     // 7. Top spenders — expense reports by employee, current vs prior window.
     db.execute(sql`
       select d.party_id as employee_id, coalesce(p.display_name, 'Unknown') as employee_name,
@@ -728,13 +697,6 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     accounts: cmpAccounts,
   };
 
-  // ---- transactions ----------------------------------------------------------------------------------------
-  const transactions: SVTxn[] = (txnRows.rows as any[]).map((r) => ({
-    docId: r.doc_id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-    accountId: r.account_id, accountName: r.account_name ?? "", partyId: r.party_id, partyName: r.party_name ?? "",
-    amount: Number(r.amount ?? 0), memo: r.memo ?? "",
-  }));
-
   // ---- expense analysis ---------------------------------------------------------------------------------------
   const topSpenders = (spenderRows.rows as any[]).map((r) => {
     const current = Number(r.current_spend ?? 0);
@@ -861,7 +823,6 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     revenue,
     insights,
     periodComparison,
-    transactions,
     expenseAnalysis,
   };
 }

@@ -8,6 +8,7 @@ import type { HealthData } from '../../../../lib/analytics/health-data'
 import type { RatioDef } from '../_ui/RatioCard'
 import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
+import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { fmtMoney, fmtPct } from '../_ui/format'
 import { OverviewTab } from './tabs/OverviewTab'
 import { MarginTab } from './tabs/MarginTab'
@@ -32,7 +33,9 @@ export function FinancialHealthView({
 }) {
   const t = useTranslations('analytics.financialHealth')
   const [tab, setTab] = useState<Tab>('overview')
+  const [drill, setDrill] = useState<DrillTarget | null>(null)
   const f = data.figures
+  const openAccount = (id: string, name: string) => setDrill({ kind: 'account', id, name })
 
   return (
     <div className="space-y-5">
@@ -98,15 +101,17 @@ export function FinancialHealthView({
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'margin' ? <MarginTab data={data} /> : null}
-        {tab === 'items' ? <ItemsTab data={data} /> : null}
+        {tab === 'items' ? <ItemsTab data={data} onDrill={openAccount} /> : null}
         {tab === 'segments' ? <SegmentsTab data={data} /> : null}
         {tab === 'forecast' ? <ForecastTab data={data} /> : null}
         {tab === 'scenarios' ? <ScenariosTab data={data} /> : null}
         {tab === 'budget' ? <BudgetTab data={data} /> : null}
-        {tab === 'drivers' ? <DriversTab data={data} /> : null}
+        {tab === 'drivers' ? <DriversTab data={data} onDrill={openAccount} /> : null}
         {tab === 'ratios' ? <RatiosTab data={data} defs={defs} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
       </div>
+
+      <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
   )
 }

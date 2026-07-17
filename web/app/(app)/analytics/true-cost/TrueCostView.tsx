@@ -12,6 +12,7 @@ import type { TrueCostData } from '../../../../lib/analytics/true-cost-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
+import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
@@ -63,6 +64,7 @@ export function TrueCostView({ data }: { data: TrueCostData }) {
   const [openCatId, setOpenCatId] = useState<string | null>(null)
   const [openDeptId, setOpenDeptId] = useState<string | null>(null)
   const [cell, setCell] = useState<CellRef | null>(null)
+  const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
   const under = k.gap < 0
 
@@ -101,9 +103,10 @@ export function TrueCostView({ data }: { data: TrueCostData }) {
         {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
 
-      {openCatId ? <CategoryFlyout catId={openCatId} data={data} onClose={() => setOpenCatId(null)} /> : null}
+      {openCatId ? <CategoryFlyout catId={openCatId} data={data} onClose={() => setOpenCatId(null)} onDrillAccount={setDrill} /> : null}
       {openDeptId ? <DeptFlyout deptId={openDeptId} data={data} onClose={() => setOpenDeptId(null)} /> : null}
       {cell ? <CellFlyout cell={cell} data={data} onClose={() => setCell(null)} /> : null}
+      <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
   )
 }
@@ -227,7 +230,7 @@ function MiniDonut({ color, slices }: { color: string; slices: number[] }) {
 
 /* --------------------------------------------------------- Category flyout */
 
-function CategoryFlyout({ catId, data, onClose }: { catId: string; data: TrueCostData; onClose: () => void }) {
+function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: string; data: TrueCostData; onClose: () => void; onDrillAccount: (t: DrillTarget) => void }) {
   const router = useRouter()
   const cat = data.categories.find((c) => c.id === catId)
   const [busy, setBusy] = useState(false)
@@ -292,9 +295,11 @@ function CategoryFlyout({ catId, data, onClose }: { catId: string; data: TrueCos
           <tbody>
             {cat.accounts.map((a) => (
               <tr key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
-                  {a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}
-                  {a.name}
+                <td className="px-4 py-2">
+                  <button type="button" onClick={() => onDrillAccount({ kind: 'account', id: a.id, name: a.name, sub: a.number ? `Account ${a.number}` : undefined })} className="text-left text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400" title="View transactions">
+                    {a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}
+                    {a.name}
+                  </button>
                 </td>
                 <td className="px-2 py-2 text-center">
                   {a.pinned

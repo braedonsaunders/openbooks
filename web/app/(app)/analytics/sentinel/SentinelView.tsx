@@ -10,6 +10,7 @@ import type { SentinelData, FlaggedDoc } from '../../../../lib/analytics/sentine
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Chart } from '../_ui/charts'
+import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { TxnLink } from '../../reports/TxnLink'
 import { fmtMoney } from '../_ui/format'
 
@@ -133,6 +134,7 @@ function SubPills<T extends string>({ value, onChange, options }: { value: T; on
 
 export function SentinelView({ data }: { data: SentinelData }) {
   const [tab, setTab] = useState<Tab>('overview')
+  const [drill, setDrill] = useState<DrillTarget | null>(null)
   const s = data.summary
 
   return (
@@ -168,10 +170,12 @@ export function SentinelView({ data }: { data: SentinelData }) {
         {tab === 'benford' ? <BenfordTab data={data} /> : null}
         {tab === 'analysis' ? <AnalysisTab data={data} /> : null}
         {tab === 'detection' ? <DetectionTab data={data} /> : null}
-        {tab === 'vendors' ? <VendorsTab data={data} /> : null}
+        {tab === 'vendors' ? <VendorsTab data={data} onDrill={setDrill} /> : null}
         {tab === 'audit' ? <AuditTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
+
+      <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
   )
 }
@@ -659,9 +663,9 @@ function DetectionTab({ data }: { data: SentinelData }) {
 
 /* ------------------------------------------------------------------ Vendors */
 
-function VendorsTab({ data }: { data: SentinelData }) {
+function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillTarget) => void }) {
   return (
-    <Panel title="Vendor Risk Roll-Up" icon={ShieldAlert} hint="Parties ranked by flag severity across all detectors" bodyClassName="p-0">
+    <Panel title="Vendor Risk Roll-Up" icon={ShieldAlert} hint="Parties ranked by flag severity across all detectors · click a row for that party's transactions" bodyClassName="p-0">
       <div className="max-h-144 overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-slate-900">
@@ -675,7 +679,11 @@ function VendorsTab({ data }: { data: SentinelData }) {
           </thead>
           <tbody>
             {data.vendorRisk.map((v, i) => (
-              <tr key={`${v.partyId}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+              <tr
+                key={`${v.partyId}-${i}`}
+                onClick={v.partyId ? () => onDrill({ kind: 'party', id: v.partyId!, name: v.partyName, sub: `${v.flagCount} flags · ${money0(v.totalAmount)} flagged` }) : undefined}
+                className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', v.partyId && 'cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30')}
+              >
                 <td className="max-w-56 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={v.partyName}>{v.partyName}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{v.flagCount}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalAmount)}</td>

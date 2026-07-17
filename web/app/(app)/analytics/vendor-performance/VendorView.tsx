@@ -8,6 +8,7 @@ import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
+import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { fmtMoney, fmtPct } from '../_ui/format'
 
 const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors'] as const
@@ -39,8 +40,10 @@ const QUADRANT: Record<Quadrant, { label: string; color: string; desc: string }>
 
 export function VendorView({ data }: { data: VendorData }) {
   const [tab, setTab] = useState<Tab>('overview')
+  const [drill, setDrill] = useState<DrillTarget | null>(null)
   const t = data.totals
   const diversification = Math.max(0, Math.min(100, (1 - t.hhi) * 100))
+  const openVendor = (r: VendorRow) => setDrill({ kind: 'party', id: r.id, name: r.name, sub: `${r.bills} bills · ${money(r.spend)} spend` })
 
   return (
     <div className="space-y-5">
@@ -66,11 +69,13 @@ export function VendorView({ data }: { data: VendorData }) {
 
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
-        {tab === 'payment' ? <PaymentTab data={data} /> : null}
-        {tab === 'scorecard' ? <ScorecardTab data={data} /> : null}
+        {tab === 'payment' ? <PaymentTab data={data} onDrill={openVendor} /> : null}
+        {tab === 'scorecard' ? <ScorecardTab data={data} onDrill={openVendor} /> : null}
         {tab === 'matrix' ? <MatrixTab data={data} /> : null}
-        {tab === 'vendors' ? <VendorsTab data={data} /> : null}
+        {tab === 'vendors' ? <VendorsTab data={data} onDrill={openVendor} /> : null}
       </div>
+
+      <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
   )
 }
@@ -114,7 +119,7 @@ function OverviewTab({ data }: { data: VendorData }) {
 }
 
 /* --------------------------------------------------------- Payment Behavior */
-function PaymentTab({ data }: { data: VendorData }) {
+function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const [sort, setSort] = useState<'spend' | 'avgDaysToPay' | 'onTimePct' | 'lateSpend'>('lateSpend')
   const t = data.totals
   const paid = data.rows.filter((r) => r.paidBills > 0)
@@ -155,7 +160,7 @@ function PaymentTab({ data }: { data: VendorData }) {
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                    <tr key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                       <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.paidBills}</td>
@@ -178,7 +183,7 @@ function PaymentTab({ data }: { data: VendorData }) {
 }
 
 /* -------------------------------------------------------------- Scorecard */
-function ScorecardTab({ data }: { data: VendorData }) {
+function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const rows = [...data.rows].sort((a, b) => b.score - a.score)
   return (
     <div className="space-y-5">
@@ -208,7 +213,7 @@ function ScorecardTab({ data }: { data: VendorData }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                <tr key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                   <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</td>
                   <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{TIER_LABEL[r.tier]}</span></td>
@@ -277,7 +282,7 @@ function matrixOption(rows: VendorRow[]): Record<string, unknown> {
 }
 
 /* ------------------------------------------------------------ Vendors table */
-function VendorsTab({ data }: { data: VendorData }) {
+function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
   const [sort, setSort] = useState<keyof Pick<VendorRow, 'spend' | 'bills' | 'avgBill' | 'recencyDays' | 'score'>>('spend')
   const rows = [...data.rows].sort((a, b) => {
     const av = a[sort] ?? -1
@@ -307,7 +312,7 @@ function VendorsTab({ data }: { data: VendorData }) {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+              <tr key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                 <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.spend)}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</td>
