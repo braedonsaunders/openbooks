@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { submitForApproval } from '@openbooks/engine/src/approvals.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
+import { createObligationsFromInvoice } from '@openbooks/engine/src/revenue-recognition.ts'
 import { getAuthz, can } from '../../../../lib/authz'
 import { controlDeps, DOC_KINDS, createPermission, postPermission } from '../../../../lib/documents'
 
@@ -73,7 +74,14 @@ export async function POST(req: Request) {
     // post
     const deps = await controlDeps(user.orgId)
     const entryId = await postDocument(doc.id, deps)
-    return NextResponse.json({ ok: true, entryId })
+    // A posted invoice with rev-rec items spawns performance obligations +
+    // recognition schedules (deferred revenue was booked by the posting rule).
+    let revenue: { created: number } | undefined
+    if (doc.kind === 'customer_invoice') {
+      const r = await createObligationsFromInvoice(doc.id, user.orgId, user.id)
+      if (r.created > 0) revenue = { created: r.created }
+    }
+    return NextResponse.json({ ok: true, entryId, ...(revenue ? { revenue } : {}) })
   } catch (e) {
     const status = e instanceof PostingError ? 422 : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
