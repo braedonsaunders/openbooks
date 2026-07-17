@@ -114,6 +114,9 @@ export default async function Items({
             sql`select id, code, name from tax_codes where org_id = ${orgId} and is_active order by code`,
           ) as any,
           loadFieldDefs('items'),
+          db.execute(
+            sql`select id, code, name from recognition_rules where org_id = ${orgId} and is_active and not is_forecast order by code`,
+          ) as any,
         ])
       : null,
   ])
@@ -197,6 +200,7 @@ export default async function Items({
           accounts={pickers[0].rows}
           taxCodes={pickers[1].rows}
           fieldDefs={pickers[2] as any}
+          recognitionRules={pickers[3].rows}
           canManage={canManage}
         />
       ) : null}

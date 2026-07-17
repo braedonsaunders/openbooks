@@ -9,7 +9,7 @@ Two outcomes, one codebase:
 1. **Escape** — Rassaun runs month-end close entirely in openbooks, the
    parallel-run trial balance stays green through a close, NetSuite goes
    read-only, the contract dies.
-2. **Product** — a general-purpose, MIT-licensed suite anyone can self-host:
+2. **Product** — a general-purpose, AGPL-licensed suite anyone can self-host:
    NetSuite-class capability (GL kernel, subledgers, dimensions, approvals,
    real-JS scripting, real-SQL reporting) with none of the ransom. One-click
    migration *in*, and — unlike every incumbent — trivial migration *out*.

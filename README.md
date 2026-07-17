@@ -11,9 +11,10 @@
 
 <p align="center">
   <strong>The open business suite. Run on open books.</strong><br />
-  An open-source, NetSuite-class ERP: a double-entry general-ledger kernel with
-  dimensions, subledgers, multi-entity, multi-currency, period close, real-JS
-  scripting, and a real-SQL reporting engine — and trivial migration <em>out</em>.
+  An open-source ERP built on a double-entry general-ledger kernel: dimensions,
+  subledgers, multi-entity, multi-currency, period close, real-JavaScript
+  scripting, and a real-SQL reporting engine — with an open schema you can always
+  get your data out of.
 </p>
 
 <p align="center">
@@ -22,13 +23,11 @@
   <a href="#features">Features</a> ·
   <a href="#the-kernel">The Kernel</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="GOAL.md">Roadmap</a>
+  <a href="#quick-start">Quick start</a>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-0f766e" /></a>
-  <img alt="Status" src="https://img.shields.io/badge/status-pre--alpha-d29922" />
+  <a href="LICENSE"><img alt="License: AGPL v3" src="https://img.shields.io/badge/License-AGPL_v3-0f766e" /></a>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" />
@@ -53,14 +52,9 @@ receivables, payments, expenses, banking, period close — plus an app-builder,
 real-JavaScript scripting, and a real-SQL reporting surface that make it
 extensible without a proprietary DSL in sight.
 
-It's built to a single, unusually concrete bar: **run a real $23M/yr company's
-books in parallel with its incumbent ERP until the trial balance stays green
-through a full month-end close — then cancel the six-figure contract.** The full
-8-year general ledger already replays into openbooks with **262 / 262 accounts
-matching the source exactly.**
-
-openbooks is MIT-licensed — **self-host it, extend it, or run your whole
-back office on it.**
+openbooks is AGPL-3.0-licensed — **self-host it, extend it, or run your whole
+back office on it.** The copyleft is deliberate: improvements stay open, and
+anyone who offers it as a hosted service has to share their changes.
 
 ## Why openbooks is different
 
@@ -76,9 +70,9 @@ back office on it.**
   formula rows, first-match account claiming, an automatic catch-all — that
   render to first-class **PDF** (pure-JS, no Chromium), **Excel**, and **CSV**,
   and every account line drills straight into its register.
-- **Built to migrate — both ways.** A source-adapter registry pulls a full ledger
-  in; the SQL surface and open schema make getting your data back out trivial.
-  No incumbent lets you leave this easily. That's the point.
+- **Your data stays yours.** A source-adapter registry can pull a full ledger
+  in, and the SQL surface plus open schema make getting your data back out
+  straightforward. No lock-in by design.
 - **Vendor-neutral by construction.** No hardcoded org or vendor names in the
   product — identity comes from the database and the adapter registry, so the
   same build runs anyone's books.
@@ -94,7 +88,7 @@ ships with search, filters, and pagination as a non-negotiable.
 
 ### Payables & spend
 
-- **Vendor bills** — line editor, GST/HST tax codes with dated rates,
+- **Vendor bills** — line editor, tax codes with dated rates,
   auto-numbering, draft → submit → approve → post lifecycle.
 - **Purchase orders**, **expense reports** (instant-draft flyout → line grid →
   approval → posting to employee payable), and an **approval engine** with
@@ -170,7 +164,7 @@ posting engine, and a set of focused packages.
 
 ```
 schema/     Drizzle schema (one domain per file) + generated migrations
-            + hand-written kernel/FK SQL — 119 tables, org-scoped
+            + hand-written kernel/FK SQL — org-scoped
 engine/     Posting rules, approvals runtime, money math, QuickJS scripting,
             SQL API, and the source-adapter registry (ledger migration in)
 web/        Next.js 16 App Router app — authenticated shell in app/(app),
@@ -185,7 +179,6 @@ packages/
   customization/ Custom fields + custom record types
   jobs/         Background job runtime
   emails/       Transactional email templates
-extraction/ · analysis/   Migration-source artifacts and design docs
 ```
 
 Every change lands complete: UI, permission key, route, migration, FK, and
@@ -240,22 +233,9 @@ Full conventions, validation gates, and the database rebuild recipe live in
 [`AGENTS.md`](AGENTS.md); the internationalization rules are in
 [`web/i18n/README.md`](web/i18n/README.md).
 
-## Roadmap
-
-openbooks is **pre-alpha** and moving fast. The kernel, subledgers (AP · AR ·
-payments · expenses · journals · banking), period close, reporting, and the
-platform layer are live; the focus now is read/write parity with the incumbent,
-one clean parallel close, cutover, and — after that — the multi-org, one-click
-migration product.
-
-The milestone-by-milestone plan, live scoreboard, and standing directives are in
-**[`GOAL.md`](GOAL.md)** — it doubles as honest project history, so verify status
-against current code.
-
 ## Contributing
 
-openbooks is early and opinionated, but contributions are welcome — issues,
-discussions, and PRs all help.
+Contributions are welcome — issues, discussions, and PRs all help.
 
 1. Fork the repo and follow the [Quick start](#quick-start).
 2. Keep changes type-safe: `npx tsc -p web --noEmit`, `npx tsc -p engine
@@ -270,8 +250,11 @@ actually work, that feedback is gold —
 
 ## License
 
-openbooks is licensed under the **[MIT License](LICENSE)** — use it, modify it,
-self-host it, ship it.
+openbooks is licensed under the **[GNU Affero General Public License v3.0](LICENSE)**
+— use it, modify it, self-host it, ship it. Because it's AGPL, if you run a
+modified version as a network service you must make your source available to its
+users under the same license. That keeps the project open for everyone and keeps
+hosting-as-a-business honest.
 
 Copyright © 2026 the openbooks contributors.
 

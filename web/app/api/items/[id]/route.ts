@@ -50,7 +50,16 @@ interface PatchBody {
   showOnTimesheet?: boolean
   isActive?: boolean
   custom?: Record<string, unknown>
+  // Revenue recognition (ASC 606) item defaults.
+  recognitionRuleId?: string | null
+  deferredAccountId?: string | null
+  createPlansOn?: string
+  revenueAllocation?: string
+  standaloneSellingPrice?: string | null
 }
+
+const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
+const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('items.read')
@@ -148,6 +157,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     taxCodeId = v
   }
 
+  // -- revenue recognition -------------------------------------------------
+  let recognitionRuleId: string | null | undefined
+  if (body.recognitionRuleId !== undefined) {
+    const v = uuidOrNull(body.recognitionRuleId)
+    if (v === 'invalid') return bad('Invalid recognition rule')
+    if (v !== null) {
+      const r = (await db.execute(
+        sql`select 1 from recognition_rules where id = ${v} and org_id = ${user.orgId}`,
+      )) as unknown as { rows: unknown[] }
+      if (!r.rows[0]) return bad('Recognition rule not found')
+    }
+    recognitionRuleId = v
+  }
+
+  let deferredAccountId: string | null | undefined
+  if (body.deferredAccountId !== undefined) {
+    const v = uuidOrNull(body.deferredAccountId)
+    if (v === 'invalid') return bad('Invalid deferred revenue account')
+    if (v !== null) {
+      const r = (await db.execute(
+        sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`,
+      )) as unknown as { rows: unknown[] }
+      if (!r.rows[0]) return bad('Deferred revenue account not found')
+    }
+    deferredAccountId = v
+  }
+
+  if (body.createPlansOn !== undefined && !CREATE_PLANS_ON.includes(body.createPlansOn as (typeof CREATE_PLANS_ON)[number])) {
+    return bad('Invalid "create plans on" value')
+  }
+  if (
+    body.revenueAllocation !== undefined &&
+    !REVENUE_ALLOCATION.includes(body.revenueAllocation as (typeof REVENUE_ALLOCATION)[number])
+  ) {
+    return bad('Invalid revenue allocation')
+  }
+
+  let standaloneSellingPrice: string | null | undefined
+  if (body.standaloneSellingPrice !== undefined) {
+    const raw = strOrNull(body.standaloneSellingPrice)
+    if (raw === null) standaloneSellingPrice = null
+    else {
+      const n = Number(raw)
+      if (Number.isNaN(n)) return bad('Standalone selling price must be a number')
+      standaloneSellingPrice = n.toFixed(4)
+    }
+  }
+
   // -- custom fields -------------------------------------------------------
   let cleanedCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
@@ -170,6 +227,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`expense_account_id`},
         tax_code_id = ${taxCodeId !== undefined ? taxCodeId : sql`tax_code_id`},
         show_on_timesheet = ${body.showOnTimesheet !== undefined ? body.showOnTimesheet : sql`show_on_timesheet`},
+        recognition_rule_id = ${recognitionRuleId !== undefined ? recognitionRuleId : sql`recognition_rule_id`},
+        deferred_account_id = ${deferredAccountId !== undefined ? deferredAccountId : sql`deferred_account_id`},
+        create_plans_on = ${body.createPlansOn !== undefined ? body.createPlansOn : sql`create_plans_on`},
+        revenue_allocation = ${body.revenueAllocation !== undefined ? body.revenueAllocation : sql`revenue_allocation`},
+        standalone_selling_price = ${standaloneSellingPrice !== undefined ? standaloneSellingPrice : sql`standalone_selling_price`},
         is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
         custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
         updated_at = now(), updated_by = ${user.id}

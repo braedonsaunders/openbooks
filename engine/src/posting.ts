@@ -73,6 +73,34 @@ export interface PostingDeps {
    */
   taxCollectedByCode?: Map<string, string>;
   taxPaidByCode?: Map<string, string>;
+  /**
+   * document_line id → deferred-revenue account, for customer_invoice lines
+   * whose item carries a recognition rule (ASC 606). Such lines credit deferred
+   * revenue instead of income; engine/src/revenue-recognition.ts later drains
+   * deferred → earned over the term. Resolved lazily by postDocument /
+   * regenerateGlImpactTx for customer_invoice documents.
+   */
+  deferralAccountByLine?: Map<string, string>;
+}
+
+/** document_line id → deferred-revenue account for rev-rec invoice lines. */
+async function resolveDeferralAccounts(
+  runner: Pick<typeof db, "execute">,
+  documentId: string,
+): Promise<Map<string, string>> {
+  const r = (await runner.execute(sql`
+    select dl.id as line_id,
+           coalesce(it.deferred_account_id, r.deferred_account_id) as deferred_account_id
+      from document_lines dl
+      join items it on it.id = dl.item_id and it.recognition_rule_id is not null
+      join recognition_rules r on r.id = it.recognition_rule_id
+     where dl.document_id = ${documentId}
+       and coalesce(it.deferred_account_id, r.deferred_account_id) is not null`)) as unknown as {
+    rows: { line_id: string; deferred_account_id: string }[];
+  };
+  const map = new Map<string, string>();
+  for (const row of r.rows) map.set(row.line_id, row.deferred_account_id);
+  return map;
 }
 
 /** tax code id → its own collected/paid control accounts, when configured. */
@@ -248,8 +276,10 @@ export const RULES: Record<string, RuleFn> = {
 
   customer_invoice: (doc, lines, deps) => {
     const income: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
-      amount: neg(l.amount), // credit income
+      // Rev-rec lines credit deferred revenue; recognition drains it over the
+      // term. All other lines credit income directly.
+      accountId: deps.deferralAccountByLine?.get(l.id) ?? l.accountId!,
+      amount: neg(l.amount), // credit income / deferred revenue
       memo: l.description,
       partyId: doc.partyId,
       ...dims(doc, l),
@@ -576,6 +606,9 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
     const tax = await resolveTaxAccounts(db, doc.orgId);
     deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
   }
+  if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
+    deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(db, doc.id) };
+  }
 
   const lines = await db
     .select()
@@ -842,6 +875,9 @@ export async function regenerateGlImpactTx(
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(tx, doc.orgId);
     deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
+  }
+  if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
+    deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id) };
   }
 
   const lines = await tx

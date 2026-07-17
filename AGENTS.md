@@ -43,6 +43,18 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
    platform page. (Env is only for infra: DB URL, Redis, data key, session
    secret.) The `.env.netsuite` file is a LEGACY dev bootstrap being retired,
    not a pattern to copy.
+9a. Configurable by default. Anything an accountant would reasonably expect to
+   tune for an accounting system — recognition rules, depreciation methods,
+   costing methods, tax codes/rates/returns, posting/control accounts, number
+   sequences, close policies, approval thresholds, calendars/periods, dimensions,
+   fair-value/price lists, and the like — MUST be configurable in the UI
+   (per-tenant, org-scoped), never hardcoded, seeded-only, or edited by
+   engineers. Prefer the declarative Setup registry (`web/lib/setup/registry.ts`)
+   so a new config surface is one descriptor that yields list + drawer + safe
+   CRUD API; use the customization/forms layer for record-shaped config. Reserve
+   hardcoding for true accounting invariants (double-entry, balance = 0,
+   closed-period immutability) and pure infra. When unsure whether something is
+   "reasonably expected" to be configurable, make it configurable.
 9. Validation gates before any commit: `npx tsc -p web --noEmit` (web has its
    own TypeScript 5.9 — the root has TS7, use `web/node_modules/.bin/tsc`),
    engine typecheck (`npx tsc -p engine --noEmit`), the test suite (`npm test`

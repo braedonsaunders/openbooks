@@ -775,7 +775,10 @@
       "materiality": "Seuil d’importance relative",
       "materialityHint": "Le seuil monétaire par défaut utilisé par les contrôles, sauf remplacement propre à un détecteur.",
       "materialitySummary": "Importance relative {amount}",
-      "cadences": { "daily": "Chaque jour", "weekly": "Chaque semaine" },
+      "cadences": {
+        "daily": "Chaque jour",
+        "weekly": "Chaque semaine"
+      },
       "manualOnly": "Exécutions manuelles",
       "controlsEnabled": "{count} contrôles sur {total} activés",
       "configure": "Configurer",
@@ -794,12 +797,24 @@
       "reasoningTitle": "Raisonnement et récits de l’agent",
       "reasoningDescription": "Donnez à cet agent les mêmes outils de lecture contrôlés que l’assistant afin qu’il puisse examiner les preuves, relier les facteurs et produire une analyse révisable. Il ne peut ni modifier ni comptabiliser d’enregistrements.",
       "reasoning": {
-        "rootCauseAnalysis": { "title": "Analyse des causes fondamentales", "description": "Examine les opérations justificatives et explique les facteurs précis de chaque constat." },
-        "recommendations": { "title": "Mesures recommandées", "description": "Propose des prochaines étapes concrètes et révisables à partir des preuves recueillies." },
-        "narrative": { "title": "Récit de gestion", "description": "Crée une synthèse de préparation à la clôture ou de performance financière à partir des rapports et tendances actuels." }
+        "rootCauseAnalysis": {
+          "title": "Analyse des causes fondamentales",
+          "description": "Examine les opérations justificatives et explique les facteurs précis de chaque constat."
+        },
+        "recommendations": {
+          "title": "Mesures recommandées",
+          "description": "Propose des prochaines étapes concrètes et révisables à partir des preuves recueillies."
+        },
+        "narrative": {
+          "title": "Récit de gestion",
+          "description": "Crée une synthèse de préparation à la clôture ou de performance financière à partir des rapports et tendances actuels."
+        }
       },
       "modelTier": "Modèle d’analyse",
-      "modelTiers": { "smart": "Modèle avancé — analyse approfondie", "fast": "Modèle rapide — coût réduit" },
+      "modelTiers": {
+        "smart": "Modèle avancé — analyse approfondie",
+        "fast": "Modèle rapide — coût réduit"
+      },
       "maxToolSteps": "Nombre maximal d’étapes d’outils",
       "maxToolStepsHint": "Limite le nombre de consultations de rapports et d’enregistrements par exécution (4 à 30).",
       "resetRecommended": "Rétablir les valeurs recommandées",
@@ -828,13 +843,34 @@
         "criticalDropPoints": "Baisse critique de la marge"
       },
       "detectors": {
-        "unmatched_bank_activity": { "title": "Activité bancaire non appariée", "description": "Repère les lignes de relevé non appariées par compte bancaire, mesure l’exposition totale et augmente la priorité selon l’âge, le volume ou l’importance relative." },
-        "reconciliation_difference": { "title": "Écarts de rapprochement", "description": "Compare les soldes de relevé en cours avec l’activité rapprochée du grand livre et signale tout écart non nul." },
-        "stale_accounting_documents": { "title": "Documents comptables périmés", "description": "Repère les factures, crédits, dépenses et écritures brouillons ou en attente qui dépassent l’âge configuré." },
-        "missing_approved_budget": { "title": "Budget approuvé manquant", "description": "Confirme qu’un budget approuvé couvre la période d’exploitation actuelle avant l’analyse des écarts." },
-        "unfavorable_budget_variance": { "title": "Écart budgétaire défavorable", "description": "Évalue les insuffisances de revenus et les dépassements de dépenses selon les montants exacts et des seuils de pourcentage configurables." },
-        "period_revenue_decline": { "title": "Baisse du chiffre d’affaires par période", "description": "Compare les deux dernières périodes terminées et signale une détérioration importante du chiffre d’affaires." },
-        "gross_margin_decline": { "title": "Baisse de la marge brute", "description": "Compare la marge brute des périodes terminées et signale une compression importante en points de pourcentage." }
+        "unmatched_bank_activity": {
+          "title": "Activité bancaire non appariée",
+          "description": "Repère les lignes de relevé non appariées par compte bancaire, mesure l’exposition totale et augmente la priorité selon l’âge, le volume ou l’importance relative."
+        },
+        "reconciliation_difference": {
+          "title": "Écarts de rapprochement",
+          "description": "Compare les soldes de relevé en cours avec l’activité rapprochée du grand livre et signale tout écart non nul."
+        },
+        "stale_accounting_documents": {
+          "title": "Documents comptables périmés",
+          "description": "Repère les factures, crédits, dépenses et écritures brouillons ou en attente qui dépassent l’âge configuré."
+        },
+        "missing_approved_budget": {
+          "title": "Budget approuvé manquant",
+          "description": "Confirme qu’un budget approuvé couvre la période d’exploitation actuelle avant l’analyse des écarts."
+        },
+        "unfavorable_budget_variance": {
+          "title": "Écart budgétaire défavorable",
+          "description": "Évalue les insuffisances de revenus et les dépassements de dépenses selon les montants exacts et des seuils de pourcentage configurables."
+        },
+        "period_revenue_decline": {
+          "title": "Baisse du chiffre d’affaires par période",
+          "description": "Compare les deux dernières périodes terminées et signale une détérioration importante du chiffre d’affaires."
+        },
+        "gross_margin_decline": {
+          "title": "Baisse de la marge brute",
+          "description": "Compare la marge brute des périodes terminées et signale une compression importante en points de pourcentage."
+        }
       },
       "accounting": {
         "title": "Agent comptable",
@@ -852,7 +888,12 @@
       "runNow": "Exécuter",
       "scanComplete": "Analyse terminée : {detected} détectés, {resolved} résolus.",
       "scanFailed": "L’analyse de l’agent a échoué.",
-      "runStatus": { "completed": "terminée", "failed": "échouée", "skipped": "ignorée", "running": "en cours" }
+      "runStatus": {
+        "completed": "terminée",
+        "failed": "échouée",
+        "skipped": "ignorée",
+        "running": "en cours"
+      }
     },
     "documentCapture": {
       "title": "Capture de documents fournisseurs",
@@ -871,7 +912,11 @@
       "confidenceHint": "Les valeurs sous ce seuil de 0 à 1 sont signalées pour révision.",
       "autoDraft": "Créer automatiquement des brouillons uniquement pour les bons de commande entièrement appariés",
       "test": "Tester le fournisseur documentaire",
-      "testResult": { "connected": "Connexion au fournisseur documentaire établie.", "failed": "Le test du fournisseur documentaire a échoué.", "missing": "Saisissez d’abord un point de terminaison et une clé API." }
+      "testResult": {
+        "connected": "Connexion au fournisseur documentaire établie.",
+        "failed": "Le test du fournisseur documentaire a échoué.",
+        "missing": "Saisissez d’abord un point de terminaison et une clé API."
+      }
     },
     "models": {
       "load": "Charger les modèles",
@@ -938,8 +983,8 @@
       "inUse": "This record is in use and can't be deleted.",
       "primaryRequired": "Choisissez un autre livre comptable comme livre principal avant de retirer ce statut à celui-ci.",
       "primaryActiveRequired": "Le livre comptable principal doit rester actif.",
-      "archiveOnly": "Les livres comptables sont conservés pour l’historique du grand livre et peuvent seulement être archivés."
-      ,"invalidUrl": "Saisissez une URL gouvernementale valide commençant par http:// ou https://."
+      "archiveOnly": "Les livres comptables sont conservés pour l’historique du grand livre et peuvent seulement être archivés.",
+      "invalidUrl": "Saisissez une URL gouvernementale valide commençant par http:// ou https://."
     },
     "groups": {
       "company": "Company",
@@ -949,7 +994,8 @@
       "billing": "Billing & numbering",
       "workforce": "Workforce",
       "assets": "Assets",
-      "currency": "Currency"
+      "currency": "Currency",
+      "revenue": "Revenus"
     },
     "fxProvider": {
       "title": "Fournisseur de taux de change",
@@ -970,7 +1016,12 @@
       "baseCurrency": "Devise de base du locataire",
       "selectCurrency": "Sélectionner une devise…",
       "schedule": "Calendrier de synchronisation",
-      "schedules": { "manual": "Manuelle uniquement", "daily": "Quotidienne", "weekdays": "Jours ouvrables", "weekly": "Hebdomadaire" },
+      "schedules": {
+        "manual": "Manuelle uniquement",
+        "daily": "Quotidienne",
+        "weekdays": "Jours ouvrables",
+        "weekly": "Hebdomadaire"
+      },
       "syncHourUtc": "Heure de synchronisation (UTC)",
       "lookbackDays": "Période de révision (jours)",
       "currencies": "Devises à importer",
@@ -996,30 +1047,203 @@
       "nextSync": "Prochaine synchronisation",
       "latestRun": "Dernière exécution",
       "noRuns": "Le fournisseur n'a pas encore été exécuté.",
-      "runStatus": { "running": "En cours", "ok": "Réussie", "failed": "Échouée" },
+      "runStatus": {
+        "running": "En cours",
+        "ok": "Réussie",
+        "failed": "Échouée"
+      },
       "runSummary": "{observations} observations · {inserted} insérés · {updated} mis à jour · {preserved} remplacements manuels conservés",
       "overridePolicy": "Les taux modifiés dans Configuration deviennent des remplacements manuels protégés. Les importations ne les remplacent jamais."
     },
     "paymentOperations": {
       "title": "Paiements et services bancaires",
       "description": "Configurez les réseaux de paiement, les profils bancaires, les calendriers, les approbations, la livraison et les mandats de prélèvement.",
-      "tabs": { "profiles": "Profils bancaires", "formats": "Formats de paiement", "schedules": "Calendriers", "mandates": "Mandats de prélèvement" },
-      "search": { "profiles": "Rechercher des profils…", "formats": "Rechercher des formats…", "schedules": "Rechercher des calendriers…", "mandates": "Rechercher des mandats…" },
-      "state": "État", "new": { "profiles": "Nouveau profil", "formats": "Nouveau format personnalisé", "schedules": "Nouveau calendrier", "mandates": "Nouveau mandat" },
-      "columns": { "name": "Nom", "bank": "Compte de financement", "format": "Format", "currency": "Devise", "delivery": "Livraison", "approval": "Approbation du lot", "status": "Statut", "code": "Code", "rail": "Réseau", "direction": "Sens", "profile": "Profil", "cron": "Calendrier", "nextRun": "Prochaine exécution", "action": "Action", "reference": "Référence", "party": "Tiers", "scheme": "Régime", "signedOn": "Signé", "expiresOn": "Expiration" },
-      "states": { "active": "Actif", "archived": "Archivé", "pending": "En attente", "suspended": "Suspendu", "revoked": "Révoqué", "expired": "Expiré" },
-      "rails": { "cpa005_credit": "Crédit CPA-005", "nacha_credit": "Crédit NACHA", "sepa_credit": "Virement SEPA", "nacha_debit": "Débit NACHA", "sepa_debit": "Prélèvement SEPA", "positive_pay": "Positive Pay", "wire": "Virement bancaire", "cheque": "Chèque", "custom": "Personnalisé" },
-      "directions": { "credit": "Crédit", "debit": "Débit", "both": "Crédit et débit" },
-      "actions": { "create_draft": "Créer un brouillon", "submit_for_approval": "Soumettre à l’approbation" },
-      "schemes": { "nacha": "NACHA", "sepa_core": "SEPA Core", "sepa_b2b": "SEPA B2B", "custom": "Personnalisé" },
-      "fields": { "name": "Nom", "currency": "Devise", "bankAccount": "Compte de financement", "format": "Format de paiement", "subsidiary": "Filiale", "country": "Pays", "sftpServer": "Serveur SFTP existant", "sftpFolder": "Dossier sortant", "requireRunApproval": "Exiger l’approbation du lot de paiements", "requireFileApproval": "Exiger l’approbation du fichier généré", "autoRemittance": "Envoyer automatiquement l’avis de paiement", "discountAccount": "Compte d’escompte de paiement anticipé", "positivePayAccountReference": "Référence de compte de l’institution", "active": "Actif", "code": "Code", "direction": "Sens", "extension": "Extension de fichier", "contentType": "Type de contenu", "formatterScript": "JavaScript de formatage", "profile": "Profil bancaire", "cron": "Expression cron", "timezone": "Fuseau horaire", "action": "À l’échéance", "party": "Tiers", "partyBankAccount": "Compte bancaire approuvé", "scheme": "Régime du mandat", "reference": "Référence du mandat", "status": "Statut", "signedOn": "Signé le", "validFrom": "Valide à partir du", "expiresOn": "Expire le" },
-      "secretFields": { "originatorId": "Identifiant de l’émetteur", "originatorShortName": "Nom court", "originatorLongName": "Nom long", "dataCentre": "Centre de données", "institution": "Institution", "transit": "Transit", "account": "Numéro de compte", "transactionCode": "Code de transaction", "odfiRouting": "Routage ODFI", "immediateDestination": "Destination immédiate", "immediateOrigin": "Origine immédiate", "destinationName": "Nom de la destination", "originName": "Nom de l’origine", "companyName": "Nom de l’entreprise", "companyId": "Identifiant de l’entreprise", "entryClassCode": "Classe d’entrée", "entryDescription": "Description de l’entrée", "originatorName": "Nom de l’émetteur", "originatorIban": "IBAN de l’émetteur", "originatorBic": "BIC de l’émetteur", "creditorId": "Identifiant du créancier" },
-      "originator": { "title": "Identifiants de l’émetteur", "newHint": "Stockés sous forme chiffrée pour ce locataire et ce profil.", "editHint": "Les identifiants sont en écriture seule. Laissez tous les champs vides pour conserver les valeurs enregistrées." },
-      "accounting": { "title": "Comptabilité et références bancaires", "noDiscountAccount": "Ne pas saisir les escomptes", "hint": "Le compte d’escompte comptabilise les économies réalisées lorsqu’un lot utilise un escompte disponible selon les conditions de paiement." },
-      "delivery": { "title": "Livraison", "manual": "Téléchargement manuel", "existingSftpHint": "Les serveurs SFTP sont gérés une seule fois dans la configuration SFTP existante. Ce profil en sélectionne seulement un pour la livraison." },
-      "criteria": { "title": "Critères de sélection", "dueThroughDays": "Inclure les factures exigibles dans (jours)", "minimumAmount": "Montant minimal de la facture", "maximumRunAmount": "Montant maximal du lot", "captureDiscounts": "Saisir les escomptes pour paiement anticipé disponibles", "applyCredits": "Appliquer les crédits disponibles" },
-      "drawer": { "new": { "profiles": "Nouveau profil bancaire", "formats": "Nouveau format de paiement personnalisé", "schedules": "Nouveau calendrier de paiement", "mandates": "Nouveau mandat de prélèvement" }, "edit": { "profiles": "Modifier le profil bancaire", "formats": "Modifier le format de paiement", "schedules": "Modifier le calendrier de paiement", "mandates": "Modifier le mandat de prélèvement" }, "description": { "profiles": "Associez un compte de financement à un réseau de paiement et à une politique de livraison.", "formats": "Définissez les métadonnées du fichier et le JavaScript isolé d’un format bancaire personnalisé.", "schedules": "Sélectionnez les opérations admissibles selon un calendrier récurrent.", "mandates": "Consignez l’autorisation requise pour prélever des fonds auprès d’un tiers." } },
-      "select": "Sélectionner…", "allSubsidiaries": "Toutes les filiales", "empty": "Aucun enregistrement correspondant.", "manualDelivery": "Téléchargement manuel", "runApproval": "Requise", "automatic": "Automatique", "any": "Toutes", "builtInFormatHint": "Ce formateur intégré est maintenu par le moteur de paiement. Sa définition exécutable ne peut pas être modifiée ici.", "save": "Enregistrer", "saving": "Enregistrement…", "saved": "Enregistré", "cancel": "Annuler", "saveFailed": "Impossible d’enregistrer la configuration."
+      "tabs": {
+        "profiles": "Profils bancaires",
+        "formats": "Formats de paiement",
+        "schedules": "Calendriers",
+        "mandates": "Mandats de prélèvement"
+      },
+      "search": {
+        "profiles": "Rechercher des profils…",
+        "formats": "Rechercher des formats…",
+        "schedules": "Rechercher des calendriers…",
+        "mandates": "Rechercher des mandats…"
+      },
+      "state": "État",
+      "new": {
+        "profiles": "Nouveau profil",
+        "formats": "Nouveau format personnalisé",
+        "schedules": "Nouveau calendrier",
+        "mandates": "Nouveau mandat"
+      },
+      "columns": {
+        "name": "Nom",
+        "bank": "Compte de financement",
+        "format": "Format",
+        "currency": "Devise",
+        "delivery": "Livraison",
+        "approval": "Approbation du lot",
+        "status": "Statut",
+        "code": "Code",
+        "rail": "Réseau",
+        "direction": "Sens",
+        "profile": "Profil",
+        "cron": "Calendrier",
+        "nextRun": "Prochaine exécution",
+        "action": "Action",
+        "reference": "Référence",
+        "party": "Tiers",
+        "scheme": "Régime",
+        "signedOn": "Signé",
+        "expiresOn": "Expiration"
+      },
+      "states": {
+        "active": "Actif",
+        "archived": "Archivé",
+        "pending": "En attente",
+        "suspended": "Suspendu",
+        "revoked": "Révoqué",
+        "expired": "Expiré"
+      },
+      "rails": {
+        "cpa005_credit": "Crédit CPA-005",
+        "nacha_credit": "Crédit NACHA",
+        "sepa_credit": "Virement SEPA",
+        "nacha_debit": "Débit NACHA",
+        "sepa_debit": "Prélèvement SEPA",
+        "positive_pay": "Positive Pay",
+        "wire": "Virement bancaire",
+        "cheque": "Chèque",
+        "custom": "Personnalisé"
+      },
+      "directions": {
+        "credit": "Crédit",
+        "debit": "Débit",
+        "both": "Crédit et débit"
+      },
+      "actions": {
+        "create_draft": "Créer un brouillon",
+        "submit_for_approval": "Soumettre à l’approbation"
+      },
+      "schemes": {
+        "nacha": "NACHA",
+        "sepa_core": "SEPA Core",
+        "sepa_b2b": "SEPA B2B",
+        "custom": "Personnalisé"
+      },
+      "fields": {
+        "name": "Nom",
+        "currency": "Devise",
+        "bankAccount": "Compte de financement",
+        "format": "Format de paiement",
+        "subsidiary": "Filiale",
+        "country": "Pays",
+        "sftpServer": "Serveur SFTP existant",
+        "sftpFolder": "Dossier sortant",
+        "requireRunApproval": "Exiger l’approbation du lot de paiements",
+        "requireFileApproval": "Exiger l’approbation du fichier généré",
+        "autoRemittance": "Envoyer automatiquement l’avis de paiement",
+        "discountAccount": "Compte d’escompte de paiement anticipé",
+        "positivePayAccountReference": "Référence de compte de l’institution",
+        "active": "Actif",
+        "code": "Code",
+        "direction": "Sens",
+        "extension": "Extension de fichier",
+        "contentType": "Type de contenu",
+        "formatterScript": "JavaScript de formatage",
+        "profile": "Profil bancaire",
+        "cron": "Expression cron",
+        "timezone": "Fuseau horaire",
+        "action": "À l’échéance",
+        "party": "Tiers",
+        "partyBankAccount": "Compte bancaire approuvé",
+        "scheme": "Régime du mandat",
+        "reference": "Référence du mandat",
+        "status": "Statut",
+        "signedOn": "Signé le",
+        "validFrom": "Valide à partir du",
+        "expiresOn": "Expire le"
+      },
+      "secretFields": {
+        "originatorId": "Identifiant de l’émetteur",
+        "originatorShortName": "Nom court",
+        "originatorLongName": "Nom long",
+        "dataCentre": "Centre de données",
+        "institution": "Institution",
+        "transit": "Transit",
+        "account": "Numéro de compte",
+        "transactionCode": "Code de transaction",
+        "odfiRouting": "Routage ODFI",
+        "immediateDestination": "Destination immédiate",
+        "immediateOrigin": "Origine immédiate",
+        "destinationName": "Nom de la destination",
+        "originName": "Nom de l’origine",
+        "companyName": "Nom de l’entreprise",
+        "companyId": "Identifiant de l’entreprise",
+        "entryClassCode": "Classe d’entrée",
+        "entryDescription": "Description de l’entrée",
+        "originatorName": "Nom de l’émetteur",
+        "originatorIban": "IBAN de l’émetteur",
+        "originatorBic": "BIC de l’émetteur",
+        "creditorId": "Identifiant du créancier"
+      },
+      "originator": {
+        "title": "Identifiants de l’émetteur",
+        "newHint": "Stockés sous forme chiffrée pour ce locataire et ce profil.",
+        "editHint": "Les identifiants sont en écriture seule. Laissez tous les champs vides pour conserver les valeurs enregistrées."
+      },
+      "accounting": {
+        "title": "Comptabilité et références bancaires",
+        "noDiscountAccount": "Ne pas saisir les escomptes",
+        "hint": "Le compte d’escompte comptabilise les économies réalisées lorsqu’un lot utilise un escompte disponible selon les conditions de paiement."
+      },
+      "delivery": {
+        "title": "Livraison",
+        "manual": "Téléchargement manuel",
+        "existingSftpHint": "Les serveurs SFTP sont gérés une seule fois dans la configuration SFTP existante. Ce profil en sélectionne seulement un pour la livraison."
+      },
+      "criteria": {
+        "title": "Critères de sélection",
+        "dueThroughDays": "Inclure les factures exigibles dans (jours)",
+        "minimumAmount": "Montant minimal de la facture",
+        "maximumRunAmount": "Montant maximal du lot",
+        "captureDiscounts": "Saisir les escomptes pour paiement anticipé disponibles",
+        "applyCredits": "Appliquer les crédits disponibles"
+      },
+      "drawer": {
+        "new": {
+          "profiles": "Nouveau profil bancaire",
+          "formats": "Nouveau format de paiement personnalisé",
+          "schedules": "Nouveau calendrier de paiement",
+          "mandates": "Nouveau mandat de prélèvement"
+        },
+        "edit": {
+          "profiles": "Modifier le profil bancaire",
+          "formats": "Modifier le format de paiement",
+          "schedules": "Modifier le calendrier de paiement",
+          "mandates": "Modifier le mandat de prélèvement"
+        },
+        "description": {
+          "profiles": "Associez un compte de financement à un réseau de paiement et à une politique de livraison.",
+          "formats": "Définissez les métadonnées du fichier et le JavaScript isolé d’un format bancaire personnalisé.",
+          "schedules": "Sélectionnez les opérations admissibles selon un calendrier récurrent.",
+          "mandates": "Consignez l’autorisation requise pour prélever des fonds auprès d’un tiers."
+        }
+      },
+      "select": "Sélectionner…",
+      "allSubsidiaries": "Toutes les filiales",
+      "empty": "Aucun enregistrement correspondant.",
+      "manualDelivery": "Téléchargement manuel",
+      "runApproval": "Requise",
+      "automatic": "Automatique",
+      "any": "Toutes",
+      "builtInFormatHint": "Ce formateur intégré est maintenu par le moteur de paiement. Sa définition exécutable ne peut pas être modifiée ici.",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Enregistré",
+      "cancel": "Annuler",
+      "saveFailed": "Impossible d’enregistrer la configuration."
     },
     "entities": {
       "company": {
@@ -1129,6 +1353,14 @@
       "consolidated-fx-rates": {
         "title": "Taux de change consolidés",
         "description": "Taux courants, moyens et historiques par période utilisés pour la consolidation des filiales."
+      },
+      "recognition-rules": {
+        "title": "Règles de comptabilisation",
+        "description": "Comment les produits sont comptabilisés dans le temps — méthode, calendrier et comptes (ASC 606)."
+      },
+      "fair-value-prices": {
+        "title": "Prix de juste valeur",
+        "description": "Prix de vente autonomes utilisés pour répartir les produits d'une offre groupée entre les obligations."
       }
     },
     "fields": {
@@ -1194,28 +1426,42 @@
       "fromSubsidiaryId": "From subsidiary",
       "toSubsidiaryId": "To subsidiary",
       "dueFromAccountId": "Due-from account",
-      "dueToAccountId": "Due-to account"
-      ,"asOf": "À la date du"
-      ,"fromCurrency": "Devise source"
-      ,"toCurrency": "Devise cible"
-      ,"rateType": "Type de taux"
-      ,"rate": "Taux"
-      ,"source": "Source"
-      ,"periodId": "Période comptable"
-      ,"currentRate": "Taux courant"
-      ,"averageRate": "Taux moyen"
-      ,"historicalRate": "Taux historique"
-      ,"subsidiaryId": "Filiale"
-      ,"subsidiaryIncludeChildren": "Inclure les filiales enfants"
-      ,"pluralName": "Nom au pluriel"
-      ,"sourceKind": "Source"
-      ,"isHierarchical": "Hiérarchique"
-      ,"showOnHeader": "Afficher dans l’en-tête de transaction"
-      ,"showOnLines": "Afficher sur les lignes de transaction"
-      ,"showInReports": "Afficher dans les rapports"
-      ,"allowAccountRequirement": "Autoriser comme exigence de compte"
-      ,"segmentId": "Segment"
-      ,"description": "Description"
+      "dueToAccountId": "Due-to account",
+      "asOf": "À la date du",
+      "fromCurrency": "Devise source",
+      "toCurrency": "Devise cible",
+      "rateType": "Type de taux",
+      "rate": "Taux",
+      "source": "Source",
+      "periodId": "Période comptable",
+      "currentRate": "Taux courant",
+      "averageRate": "Taux moyen",
+      "historicalRate": "Taux historique",
+      "subsidiaryId": "Filiale",
+      "subsidiaryIncludeChildren": "Inclure les filiales enfants",
+      "pluralName": "Nom au pluriel",
+      "sourceKind": "Source",
+      "isHierarchical": "Hiérarchique",
+      "showOnHeader": "Afficher dans l’en-tête de transaction",
+      "showOnLines": "Afficher sur les lignes de transaction",
+      "showInReports": "Afficher dans les rapports",
+      "allowAccountRequirement": "Autoriser comme exigence de compte",
+      "segmentId": "Segment",
+      "description": "Description",
+      "recognitionPeriods": "Périodes de comptabilisation",
+      "startDateSource": "Source de la date de début",
+      "endDateSource": "Source de la date de fin",
+      "periodOffset": "Décalage de périodes",
+      "startOffsetDays": "Décalage de début (jours)",
+      "initialAmountPercent": "Montant initial %",
+      "deferredAccountId": "Compte de produits différés",
+      "recognizedAccountId": "Compte de produits comptabilisés",
+      "isForecast": "Règle de prévision",
+      "itemId": "Article",
+      "unitPrice": "Prix unitaire",
+      "lowValue": "Valeur basse",
+      "highValue": "Valeur haute",
+      "currency": "Devise"
     },
     "options": {
       "appliesTo": {
@@ -1271,6 +1517,27 @@
       "rateSource": {
         "derived": "Calculé",
         "manual": "Manuel"
+      },
+      "recognitionMethod": {
+        "pointInTime": "Ponctuel",
+        "straightLineEven": "Linéaire, périodes égales",
+        "straightLineProrate": "Linéaire, prorata premier et dernier",
+        "straightLineDaily": "Linéaire, jours exacts",
+        "percentComplete": "Pourcentage d'avancement",
+        "milestone": "Jalon",
+        "usage": "Utilisation"
+      },
+      "startDateSource": {
+        "obligation": "Début de l'obligation",
+        "document": "Date du document",
+        "fulfillment": "Exécution",
+        "event": "Événement",
+        "contract": "Début du contrat"
+      },
+      "endDateSource": {
+        "term": "Durée du terme",
+        "obligation": "Fin de l'obligation",
+        "contract": "Fin du contrat"
       }
     }
   },

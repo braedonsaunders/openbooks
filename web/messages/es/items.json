@@ -51,5 +51,27 @@
     "noExpenseAccount": "Sin cuenta de gastos",
     "selectAccount": "Seleccionar cuenta…",
     "showOnTimesheet": "Mostrar en la hoja de horas"
+  },
+  "revrec": {
+    "title": "Reconocimiento de ingresos",
+    "hint": "Diferir y reconocer los ingresos de este artículo a lo largo del tiempo (ASC 606)",
+    "rule": "Regla de reconocimiento",
+    "noRule": "Reconocer de inmediato",
+    "selectRule": "Seleccionar una regla",
+    "deferredAccount": "Cuenta de ingresos diferidos",
+    "ruleDefault": "Usar valor de la regla",
+    "standaloneSellingPrice": "Precio de venta independiente",
+    "createPlansOn": "Crear plan en",
+    "createPlansOnOptions": {
+      "billing": "Facturación",
+      "fulfillment": "Cumplimiento",
+      "arrangement": "Creación del acuerdo"
+    },
+    "allocation": "Asignación de ingresos",
+    "allocationOptions": {
+      "normal": "Normal",
+      "exclude": "Excluir",
+      "software": "Software (residual)"
+    }
   }
 }

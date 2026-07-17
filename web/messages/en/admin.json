@@ -790,7 +790,10 @@
       "materiality": "Materiality threshold",
       "materialityHint": "The default monetary floor used by controls unless a detector overrides it.",
       "materialitySummary": "Materiality {amount}",
-      "cadences": { "daily": "Daily", "weekly": "Weekly" },
+      "cadences": {
+        "daily": "Daily",
+        "weekly": "Weekly"
+      },
       "manualOnly": "Manual runs",
       "controlsEnabled": "{count} of {total} controls on",
       "configure": "Configure",
@@ -809,12 +812,24 @@
       "reasoningTitle": "Agent reasoning and narratives",
       "reasoningDescription": "Give this agent the same governed read tools as the assistant so it can investigate evidence, connect drivers, and create reviewable analysis. It cannot change or post records.",
       "reasoning": {
-        "rootCauseAnalysis": { "title": "Root-cause analysis", "description": "Investigate supporting transactions and explain the specific drivers behind each finding." },
-        "recommendations": { "title": "Recommended actions", "description": "Suggest concrete, reviewable next steps based on the evidence gathered." },
-        "narrative": { "title": "Management narrative", "description": "Create a close-readiness brief or financial performance summary from current reports and trends." }
+        "rootCauseAnalysis": {
+          "title": "Root-cause analysis",
+          "description": "Investigate supporting transactions and explain the specific drivers behind each finding."
+        },
+        "recommendations": {
+          "title": "Recommended actions",
+          "description": "Suggest concrete, reviewable next steps based on the evidence gathered."
+        },
+        "narrative": {
+          "title": "Management narrative",
+          "description": "Create a close-readiness brief or financial performance summary from current reports and trends."
+        }
       },
       "modelTier": "Analysis model",
-      "modelTiers": { "smart": "Smart model — deeper analysis", "fast": "Fast model — lower cost" },
+      "modelTiers": {
+        "smart": "Smart model — deeper analysis",
+        "fast": "Fast model — lower cost"
+      },
       "maxToolSteps": "Maximum tool steps",
       "maxToolStepsHint": "Caps how many report and record lookups one run may perform (4–30).",
       "resetRecommended": "Reset recommended defaults",
@@ -843,13 +858,34 @@
         "criticalDropPoints": "Critical margin drop"
       },
       "detectors": {
-        "unmatched_bank_activity": { "title": "Unmatched bank activity", "description": "Finds unmatched statement lines by bank account, measures total exposure, and escalates aging, volume, or materiality concentrations." },
-        "reconciliation_difference": { "title": "Reconciliation differences", "description": "Compares in-progress statement balances with reconciled ledger activity and flags every non-zero difference." },
-        "stale_accounting_documents": { "title": "Stale accounting documents", "description": "Finds draft or pending bills, invoices, credits, expenses, and journals that have exceeded the configured age." },
-        "missing_approved_budget": { "title": "Missing approved budget", "description": "Confirms that an approved budget covers the current operating period before variance analysis runs." },
-        "unfavorable_budget_variance": { "title": "Unfavorable budget variance", "description": "Evaluates income shortfalls and expense overruns using exact amounts plus configurable percentage severity thresholds." },
-        "period_revenue_decline": { "title": "Period revenue decline", "description": "Compares the two latest completed periods and flags material revenue deterioration." },
-        "gross_margin_decline": { "title": "Gross-margin decline", "description": "Compares completed-period gross margin and flags material compression in percentage points." }
+        "unmatched_bank_activity": {
+          "title": "Unmatched bank activity",
+          "description": "Finds unmatched statement lines by bank account, measures total exposure, and escalates aging, volume, or materiality concentrations."
+        },
+        "reconciliation_difference": {
+          "title": "Reconciliation differences",
+          "description": "Compares in-progress statement balances with reconciled ledger activity and flags every non-zero difference."
+        },
+        "stale_accounting_documents": {
+          "title": "Stale accounting documents",
+          "description": "Finds draft or pending bills, invoices, credits, expenses, and journals that have exceeded the configured age."
+        },
+        "missing_approved_budget": {
+          "title": "Missing approved budget",
+          "description": "Confirms that an approved budget covers the current operating period before variance analysis runs."
+        },
+        "unfavorable_budget_variance": {
+          "title": "Unfavorable budget variance",
+          "description": "Evaluates income shortfalls and expense overruns using exact amounts plus configurable percentage severity thresholds."
+        },
+        "period_revenue_decline": {
+          "title": "Period revenue decline",
+          "description": "Compares the two latest completed periods and flags material revenue deterioration."
+        },
+        "gross_margin_decline": {
+          "title": "Gross-margin decline",
+          "description": "Compares completed-period gross margin and flags material compression in percentage points."
+        }
       },
       "accounting": {
         "title": "Accounting agent",
@@ -867,7 +903,12 @@
       "runNow": "Run now",
       "scanComplete": "Scan complete: {detected} detected, {resolved} resolved.",
       "scanFailed": "The agent scan failed.",
-      "runStatus": { "completed": "completed", "failed": "failed", "skipped": "skipped", "running": "running" }
+      "runStatus": {
+        "completed": "completed",
+        "failed": "failed",
+        "skipped": "skipped",
+        "running": "running"
+      }
     },
     "documentCapture": {
       "title": "AP document capture",
@@ -886,7 +927,11 @@
       "confidenceHint": "Values below this 0–1 threshold are flagged for review.",
       "autoDraft": "Automatically create drafts only for fully matched purchase orders",
       "test": "Test document provider",
-      "testResult": { "connected": "Connected to the document provider.", "failed": "The document provider test failed.", "missing": "Enter an endpoint and API key first." }
+      "testResult": {
+        "connected": "Connected to the document provider.",
+        "failed": "The document provider test failed.",
+        "missing": "Enter an endpoint and API key first."
+      }
     },
     "models": {
       "load": "Load models",
@@ -953,8 +998,8 @@
       "inUse": "This record is in use and can't be deleted.",
       "primaryRequired": "Choose another accounting book as primary before removing primary status from this one.",
       "primaryActiveRequired": "The primary accounting book must remain active.",
-      "archiveOnly": "Accounting books are retained for ledger history and can only be archived."
-      ,"invalidUrl": "Enter a valid http:// or https:// government filing URL."
+      "archiveOnly": "Accounting books are retained for ledger history and can only be archived.",
+      "invalidUrl": "Enter a valid http:// or https:// government filing URL."
     },
     "groups": {
       "company": "Company",
@@ -964,7 +1009,8 @@
       "billing": "Billing & numbering",
       "workforce": "Workforce",
       "assets": "Assets",
-      "currency": "Currency"
+      "currency": "Currency",
+      "revenue": "Revenue"
     },
     "fxProvider": {
       "title": "Exchange rate provider",
@@ -1016,54 +1062,203 @@
       "nextSync": "Next synchronization",
       "latestRun": "Latest run",
       "noRuns": "The provider has not been run yet.",
-      "runStatus": { "running": "Running", "ok": "Successful", "failed": "Failed" },
+      "runStatus": {
+        "running": "Running",
+        "ok": "Successful",
+        "failed": "Failed"
+      },
       "runSummary": "{observations} observations · {inserted} inserted · {updated} updated · {preserved} manual overrides preserved",
       "overridePolicy": "Rates edited in Setup become protected manual overrides. Provider imports never replace them."
     },
     "paymentOperations": {
       "title": "Payments & Banking",
       "description": "Configure payment rails, funding profiles, schedules, approvals, delivery, and debit mandates.",
-      "tabs": { "profiles": "Bank profiles", "formats": "Payment formats", "schedules": "Schedules", "mandates": "Debit mandates" },
-      "search": { "profiles": "Search profiles…", "formats": "Search formats…", "schedules": "Search schedules…", "mandates": "Search mandates…" },
+      "tabs": {
+        "profiles": "Bank profiles",
+        "formats": "Payment formats",
+        "schedules": "Schedules",
+        "mandates": "Debit mandates"
+      },
+      "search": {
+        "profiles": "Search profiles…",
+        "formats": "Search formats…",
+        "schedules": "Search schedules…",
+        "mandates": "Search mandates…"
+      },
       "state": "State",
-      "new": { "profiles": "New profile", "formats": "New custom format", "schedules": "New schedule", "mandates": "New mandate" },
+      "new": {
+        "profiles": "New profile",
+        "formats": "New custom format",
+        "schedules": "New schedule",
+        "mandates": "New mandate"
+      },
       "columns": {
-        "name": "Name", "bank": "Funding account", "format": "Format", "currency": "Currency", "delivery": "Delivery", "approval": "Run approval", "status": "Status",
-        "code": "Code", "rail": "Rail", "direction": "Direction", "profile": "Profile", "cron": "Schedule", "nextRun": "Next run", "action": "Action",
-        "reference": "Reference", "party": "Counterparty", "scheme": "Scheme", "signedOn": "Signed", "expiresOn": "Expires"
+        "name": "Name",
+        "bank": "Funding account",
+        "format": "Format",
+        "currency": "Currency",
+        "delivery": "Delivery",
+        "approval": "Run approval",
+        "status": "Status",
+        "code": "Code",
+        "rail": "Rail",
+        "direction": "Direction",
+        "profile": "Profile",
+        "cron": "Schedule",
+        "nextRun": "Next run",
+        "action": "Action",
+        "reference": "Reference",
+        "party": "Counterparty",
+        "scheme": "Scheme",
+        "signedOn": "Signed",
+        "expiresOn": "Expires"
       },
-      "states": { "active": "Active", "archived": "Archived", "pending": "Pending", "suspended": "Suspended", "revoked": "Revoked", "expired": "Expired" },
+      "states": {
+        "active": "Active",
+        "archived": "Archived",
+        "pending": "Pending",
+        "suspended": "Suspended",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      },
       "rails": {
-        "cpa005_credit": "CPA-005 credit", "nacha_credit": "NACHA credit", "sepa_credit": "SEPA credit", "nacha_debit": "NACHA debit", "sepa_debit": "SEPA debit",
-        "positive_pay": "Positive Pay", "wire": "Wire", "cheque": "Cheque", "custom": "Custom"
+        "cpa005_credit": "CPA-005 credit",
+        "nacha_credit": "NACHA credit",
+        "sepa_credit": "SEPA credit",
+        "nacha_debit": "NACHA debit",
+        "sepa_debit": "SEPA debit",
+        "positive_pay": "Positive Pay",
+        "wire": "Wire",
+        "cheque": "Cheque",
+        "custom": "Custom"
       },
-      "directions": { "credit": "Credit", "debit": "Debit", "both": "Credit and debit" },
-      "actions": { "create_draft": "Create draft", "submit_for_approval": "Submit for approval" },
-      "schemes": { "nacha": "NACHA", "sepa_core": "SEPA Core", "sepa_b2b": "SEPA B2B", "custom": "Custom" },
+      "directions": {
+        "credit": "Credit",
+        "debit": "Debit",
+        "both": "Credit and debit"
+      },
+      "actions": {
+        "create_draft": "Create draft",
+        "submit_for_approval": "Submit for approval"
+      },
+      "schemes": {
+        "nacha": "NACHA",
+        "sepa_core": "SEPA Core",
+        "sepa_b2b": "SEPA B2B",
+        "custom": "Custom"
+      },
       "fields": {
-        "name": "Name", "currency": "Currency", "bankAccount": "Funding account", "format": "Payment format", "subsidiary": "Subsidiary", "country": "Country",
-        "sftpServer": "Existing SFTP server", "sftpFolder": "Outbound folder", "requireRunApproval": "Require payment-run approval", "requireFileApproval": "Require generated-file approval",
-        "autoRemittance": "Send remittance advice automatically", "discountAccount": "Early-payment discount account", "positivePayAccountReference": "Institution account reference", "active": "Active", "code": "Code", "direction": "Direction", "extension": "File extension", "contentType": "Content type",
-        "formatterScript": "Formatter JavaScript", "profile": "Bank profile", "cron": "Cron expression", "timezone": "Time zone", "action": "When due", "party": "Counterparty",
-        "partyBankAccount": "Approved bank account", "scheme": "Mandate scheme", "reference": "Mandate reference", "status": "Status", "signedOn": "Signed on", "validFrom": "Valid from", "expiresOn": "Expires on"
+        "name": "Name",
+        "currency": "Currency",
+        "bankAccount": "Funding account",
+        "format": "Payment format",
+        "subsidiary": "Subsidiary",
+        "country": "Country",
+        "sftpServer": "Existing SFTP server",
+        "sftpFolder": "Outbound folder",
+        "requireRunApproval": "Require payment-run approval",
+        "requireFileApproval": "Require generated-file approval",
+        "autoRemittance": "Send remittance advice automatically",
+        "discountAccount": "Early-payment discount account",
+        "positivePayAccountReference": "Institution account reference",
+        "active": "Active",
+        "code": "Code",
+        "direction": "Direction",
+        "extension": "File extension",
+        "contentType": "Content type",
+        "formatterScript": "Formatter JavaScript",
+        "profile": "Bank profile",
+        "cron": "Cron expression",
+        "timezone": "Time zone",
+        "action": "When due",
+        "party": "Counterparty",
+        "partyBankAccount": "Approved bank account",
+        "scheme": "Mandate scheme",
+        "reference": "Mandate reference",
+        "status": "Status",
+        "signedOn": "Signed on",
+        "validFrom": "Valid from",
+        "expiresOn": "Expires on"
       },
       "secretFields": {
-        "originatorId": "Originator ID", "originatorShortName": "Short name", "originatorLongName": "Long name", "dataCentre": "Data centre", "institution": "Institution", "transit": "Transit", "account": "Account number", "transactionCode": "Transaction code",
-        "odfiRouting": "ODFI routing", "immediateDestination": "Immediate destination", "immediateOrigin": "Immediate origin", "destinationName": "Destination name", "originName": "Origin name", "companyName": "Company name", "companyId": "Company ID", "entryClassCode": "Entry class", "entryDescription": "Entry description",
-        "originatorName": "Originator name", "originatorIban": "Originator IBAN", "originatorBic": "Originator BIC", "creditorId": "Creditor ID"
+        "originatorId": "Originator ID",
+        "originatorShortName": "Short name",
+        "originatorLongName": "Long name",
+        "dataCentre": "Data centre",
+        "institution": "Institution",
+        "transit": "Transit",
+        "account": "Account number",
+        "transactionCode": "Transaction code",
+        "odfiRouting": "ODFI routing",
+        "immediateDestination": "Immediate destination",
+        "immediateOrigin": "Immediate origin",
+        "destinationName": "Destination name",
+        "originName": "Origin name",
+        "companyName": "Company name",
+        "companyId": "Company ID",
+        "entryClassCode": "Entry class",
+        "entryDescription": "Entry description",
+        "originatorName": "Originator name",
+        "originatorIban": "Originator IBAN",
+        "originatorBic": "Originator BIC",
+        "creditorId": "Creditor ID"
       },
-      "originator": { "title": "Originator credentials", "newHint": "Stored encrypted for this tenant and profile.", "editHint": "Credentials are write-only. Leave every field blank to keep the saved values." },
-      "accounting": { "title": "Accounting and bank references", "noDiscountAccount": "Do not capture discounts", "hint": "The discount account records savings earned when a run captures an available payment-term discount." },
-      "delivery": { "title": "Delivery", "manual": "Manual download", "existingSftpHint": "SFTP servers are managed once in the existing SFTP setup. This profile only selects one for delivery." },
-      "criteria": { "title": "Selection criteria", "dueThroughDays": "Include bills due within (days)", "minimumAmount": "Minimum bill amount", "maximumRunAmount": "Maximum run amount", "captureDiscounts": "Capture available early-payment discounts", "applyCredits": "Apply available credits" },
+      "originator": {
+        "title": "Originator credentials",
+        "newHint": "Stored encrypted for this tenant and profile.",
+        "editHint": "Credentials are write-only. Leave every field blank to keep the saved values."
+      },
+      "accounting": {
+        "title": "Accounting and bank references",
+        "noDiscountAccount": "Do not capture discounts",
+        "hint": "The discount account records savings earned when a run captures an available payment-term discount."
+      },
+      "delivery": {
+        "title": "Delivery",
+        "manual": "Manual download",
+        "existingSftpHint": "SFTP servers are managed once in the existing SFTP setup. This profile only selects one for delivery."
+      },
+      "criteria": {
+        "title": "Selection criteria",
+        "dueThroughDays": "Include bills due within (days)",
+        "minimumAmount": "Minimum bill amount",
+        "maximumRunAmount": "Maximum run amount",
+        "captureDiscounts": "Capture available early-payment discounts",
+        "applyCredits": "Apply available credits"
+      },
       "drawer": {
-        "new": { "profiles": "New bank profile", "formats": "New custom payment format", "schedules": "New payment schedule", "mandates": "New debit mandate" },
-        "edit": { "profiles": "Edit bank profile", "formats": "Edit payment format", "schedules": "Edit payment schedule", "mandates": "Edit debit mandate" },
-        "description": { "profiles": "Connect a funding account to a payment rail and delivery policy.", "formats": "Define file metadata and sandboxed JavaScript for a custom bank format.", "schedules": "Select eligible transactions on a repeatable schedule.", "mandates": "Record the authorization required to collect funds from a counterparty." }
+        "new": {
+          "profiles": "New bank profile",
+          "formats": "New custom payment format",
+          "schedules": "New payment schedule",
+          "mandates": "New debit mandate"
+        },
+        "edit": {
+          "profiles": "Edit bank profile",
+          "formats": "Edit payment format",
+          "schedules": "Edit payment schedule",
+          "mandates": "Edit debit mandate"
+        },
+        "description": {
+          "profiles": "Connect a funding account to a payment rail and delivery policy.",
+          "formats": "Define file metadata and sandboxed JavaScript for a custom bank format.",
+          "schedules": "Select eligible transactions on a repeatable schedule.",
+          "mandates": "Record the authorization required to collect funds from a counterparty."
+        }
       },
-      "select": "Select…", "allSubsidiaries": "All subsidiaries", "empty": "No matching records.", "manualDelivery": "Manual download", "runApproval": "Required", "automatic": "Automatic", "any": "Any",
+      "select": "Select…",
+      "allSubsidiaries": "All subsidiaries",
+      "empty": "No matching records.",
+      "manualDelivery": "Manual download",
+      "runApproval": "Required",
+      "automatic": "Automatic",
+      "any": "Any",
       "builtInFormatHint": "This built-in formatter is maintained by the payment engine. Its executable definition cannot be edited here.",
-      "save": "Save", "saving": "Saving…", "saved": "Saved", "cancel": "Cancel", "saveFailed": "Could not save the configuration."
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "cancel": "Cancel",
+      "saveFailed": "Could not save the configuration."
     },
     "entities": {
       "company": {
@@ -1177,6 +1372,14 @@
       "consolidated-fx-rates": {
         "title": "Consolidated Exchange Rates",
         "description": "Period current, average, and historical rates used for subsidiary consolidation."
+      },
+      "recognition-rules": {
+        "title": "Recognition Rules",
+        "description": "How revenue is recognized over time — method, timing, and accounts (ASC 606)."
+      },
+      "fair-value-prices": {
+        "title": "Fair Value Prices",
+        "description": "Standalone selling prices used to allocate bundle revenue across obligations."
       }
     },
     "fields": {
@@ -1246,28 +1449,42 @@
       "fromSubsidiaryId": "From subsidiary",
       "toSubsidiaryId": "To subsidiary",
       "dueFromAccountId": "Due-from account",
-      "dueToAccountId": "Due-to account"
-      ,"asOf": "As of"
-      ,"fromCurrency": "From currency"
-      ,"toCurrency": "To currency"
-      ,"rateType": "Rate type"
-      ,"rate": "Rate"
-      ,"source": "Source"
-      ,"periodId": "Accounting period"
-      ,"currentRate": "Current rate"
-      ,"averageRate": "Average rate"
-      ,"historicalRate": "Historical rate"
-      ,"subsidiaryId": "Subsidiary"
-      ,"subsidiaryIncludeChildren": "Include child subsidiaries"
-      ,"pluralName": "Plural name"
-      ,"sourceKind": "Source"
-      ,"isHierarchical": "Hierarchical"
-      ,"showOnHeader": "Show on transaction header"
-      ,"showOnLines": "Show on transaction lines"
-      ,"showInReports": "Show in reports"
-      ,"allowAccountRequirement": "Allow as an account requirement"
-      ,"segmentId": "Segment"
-      ,"description": "Description"
+      "dueToAccountId": "Due-to account",
+      "asOf": "As of",
+      "fromCurrency": "From currency",
+      "toCurrency": "To currency",
+      "rateType": "Rate type",
+      "rate": "Rate",
+      "source": "Source",
+      "periodId": "Accounting period",
+      "currentRate": "Current rate",
+      "averageRate": "Average rate",
+      "historicalRate": "Historical rate",
+      "subsidiaryId": "Subsidiary",
+      "subsidiaryIncludeChildren": "Include child subsidiaries",
+      "pluralName": "Plural name",
+      "sourceKind": "Source",
+      "isHierarchical": "Hierarchical",
+      "showOnHeader": "Show on transaction header",
+      "showOnLines": "Show on transaction lines",
+      "showInReports": "Show in reports",
+      "allowAccountRequirement": "Allow as an account requirement",
+      "segmentId": "Segment",
+      "description": "Description",
+      "recognitionPeriods": "Recognition periods",
+      "startDateSource": "Start date source",
+      "endDateSource": "End date source",
+      "periodOffset": "Period offset",
+      "startOffsetDays": "Start offset (days)",
+      "initialAmountPercent": "Initial amount %",
+      "deferredAccountId": "Deferred revenue account",
+      "recognizedAccountId": "Recognized revenue account",
+      "isForecast": "Forecast rule",
+      "itemId": "Item",
+      "unitPrice": "Unit price",
+      "lowValue": "Low value",
+      "highValue": "High value",
+      "currency": "Currency"
     },
     "options": {
       "appliesTo": {
@@ -1323,6 +1540,27 @@
       "rateSource": {
         "derived": "Derived",
         "manual": "Manual"
+      },
+      "recognitionMethod": {
+        "pointInTime": "Point in time",
+        "straightLineEven": "Straight-line, even periods",
+        "straightLineProrate": "Straight-line, prorate first & last",
+        "straightLineDaily": "Straight-line, exact days",
+        "percentComplete": "Percent complete",
+        "milestone": "Milestone",
+        "usage": "Usage"
+      },
+      "startDateSource": {
+        "obligation": "Obligation start",
+        "document": "Document date",
+        "fulfillment": "Fulfillment",
+        "event": "Event",
+        "contract": "Contract start"
+      },
+      "endDateSource": {
+        "term": "Term length",
+        "obligation": "Obligation end",
+        "contract": "Contract end"
       }
     }
   },

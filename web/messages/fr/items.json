@@ -51,5 +51,27 @@
     "noExpenseAccount": "Aucun compte de charges",
     "selectAccount": "Sélectionner un compte…",
     "showOnTimesheet": "Afficher sur la feuille de temps"
+  },
+  "revrec": {
+    "title": "Comptabilisation des produits",
+    "hint": "Différer et comptabiliser les produits de cet article dans le temps (ASC 606)",
+    "rule": "Règle de comptabilisation",
+    "noRule": "Comptabiliser immédiatement",
+    "selectRule": "Sélectionner une règle",
+    "deferredAccount": "Compte de produits différés",
+    "ruleDefault": "Valeur par défaut de la règle",
+    "standaloneSellingPrice": "Prix de vente autonome",
+    "createPlansOn": "Créer le plan lors de",
+    "createPlansOnOptions": {
+      "billing": "Facturation",
+      "fulfillment": "Exécution",
+      "arrangement": "Création de l'accord"
+    },
+    "allocation": "Répartition des produits",
+    "allocationOptions": {
+      "normal": "Normale",
+      "exclude": "Exclure",
+      "software": "Logiciel (résiduel)"
+    }
   }
 }
