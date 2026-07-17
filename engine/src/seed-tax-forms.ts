@@ -22,7 +22,7 @@ interface Box {
   label: string;
   sign: number;
   sequence: number;
-  basis?: "tax_amount" | "taxable_base";
+  basis?: "tax_collected" | "tax_paid" | "taxable_base";
   formula?: string;
   /** 'sales' → map to every sales/both tax code; 'purchases' → purchases/both. */
   glMap?: "sales" | "purchases";
@@ -30,10 +30,10 @@ interface Box {
 
 const GST34_BOXES: Box[] = [
   { lineCode: "101", label: "Sales and other revenue", sign: 1, sequence: 10 },
-  { lineCode: "103", label: "GST/HST collected or collectible", sign: -1, sequence: 20, basis: "tax_amount", glMap: "sales" },
+  { lineCode: "103", label: "GST/HST collected or collectible", sign: -1, sequence: 20, basis: "tax_collected", glMap: "sales" },
   { lineCode: "104", label: "Adjustments to be added to net tax", sign: 1, sequence: 30 },
   { lineCode: "105", label: "Total GST/HST and adjustments", sign: 1, sequence: 40, formula: "103 + 104" },
-  { lineCode: "106", label: "Input tax credits (ITCs)", sign: 1, sequence: 50, basis: "tax_amount", glMap: "purchases" },
+  { lineCode: "106", label: "Input tax credits (ITCs)", sign: 1, sequence: 50, basis: "tax_paid", glMap: "purchases" },
   { lineCode: "107", label: "Adjustments to be deducted from net tax", sign: 1, sequence: 60 },
   { lineCode: "108", label: "Total ITCs and adjustments", sign: 1, sequence: 70, formula: "106 + 107" },
   { lineCode: "109", label: "Net tax", sign: 1, sequence: 80, formula: "105 - 108" },

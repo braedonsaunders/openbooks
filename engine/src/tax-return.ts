@@ -26,6 +26,9 @@ export interface TaxReturnBoxDef {
   sequence: number;
   /** Arithmetic over sibling line codes; when set the box is computed, not GL-mapped. */
   formula: string | null;
+  /** True for manual ADJUSTMENT boxes (no formula, no GL source): the filer types
+   *  the amount (e.g. GST34 lines 104/107). */
+  editable: boolean;
 }
 
 export interface TaxReturnBox {
@@ -34,6 +37,8 @@ export interface TaxReturnBox {
   /** Final base-currency value at numeric(19,4), sign applied. */
   value: string;
   computed: boolean;
+  /** True when the filer supplies this box's amount (an adjustment). */
+  editable: boolean;
 }
 
 export class TaxReturnError extends Error {
@@ -110,6 +115,7 @@ export function evalFormula(
 export function assembleReturn(
   boxes: TaxReturnBoxDef[],
   glRawByLineCode: Map<string, string>,
+  adjustments: Map<string, string> = new Map(),
 ): TaxReturnBox[] {
   const ordered = [...boxes].sort(
     (a, b) => a.sequence - b.sequence || a.lineCode.localeCompare(b.lineCode),
@@ -124,11 +130,21 @@ export function assembleReturn(
     let value: string;
     if (box.formula && box.formula.trim()) {
       value = signed(evalFormula(box.formula, values, boxCodes));
+    } else if (box.editable) {
+      // Adjustment box: the filer's typed amount (already in the sign the form
+      // shows), defaulting to zero. Not sign-flipped — it's entered as displayed.
+      value = fromUnits(toUnits(adjustments.get(box.lineCode) ?? "0"));
     } else {
       value = signed(glRawByLineCode.get(box.lineCode) ?? "0");
     }
     values.set(box.lineCode, value);
-    result.push({ lineCode: box.lineCode, label: box.label, value, computed: Boolean(box.formula?.trim()) });
+    result.push({
+      lineCode: box.lineCode,
+      label: box.label,
+      value,
+      computed: Boolean(box.formula?.trim()),
+      editable: box.editable,
+    });
   }
   return result;
 }
@@ -164,6 +180,7 @@ export function planReturn(rows: TaxReportLineRow[]): {
 } {
   const byLine = new Map<string, TaxReturnBoxDef>();
   const glSources: TaxReturnGlSource[] = [];
+  const hasGl = new Set<string>();
   for (const row of rows) {
     const existing = byLine.get(row.lineCode);
     if (!existing) {
@@ -173,6 +190,7 @@ export function planReturn(rows: TaxReportLineRow[]): {
         sign: row.sign,
         sequence: row.sequence,
         formula: row.formula,
+        editable: false,
       });
     } else {
       existing.sequence = Math.min(existing.sequence, row.sequence);
@@ -180,7 +198,12 @@ export function planReturn(rows: TaxReportLineRow[]): {
     }
     if (!row.formula?.trim() && row.taxCodeId && row.basis) {
       glSources.push({ lineCode: row.lineCode, taxCodeId: row.taxCodeId, basis: row.basis });
+      hasGl.add(row.lineCode);
     }
+  }
+  // A box with neither a formula nor any GL source is a manual adjustment box.
+  for (const box of byLine.values()) {
+    box.editable = !box.formula?.trim() && !hasGl.has(box.lineCode);
   }
   return { boxes: [...byLine.values()], glSources };
 }
@@ -206,6 +229,7 @@ export async function computeTaxReturn(
   formCode: string,
   from: string,
   to: string,
+  adjustments: Record<string, string> = {},
 ): Promise<TaxReturnResult> {
   const formRes = (await db.execute(sql`
     select name, submission_channel, watermark
@@ -215,6 +239,17 @@ export async function computeTaxReturn(
   };
   const form = formRes.rows[0];
   if (!form) throw new TaxReturnError(`tax return form "${formCode}" is not configured`);
+
+  // Org control tax accounts — the fallback a tax code posts to when it has no
+  // collected/paid account of its own.
+  const ctrlRes = (await db.execute(sql`
+    select settings->'controlAccounts'->>'taxCollected' as tax_collected,
+           settings->'controlAccounts'->>'taxPaid' as tax_paid
+      from orgs where id = ${orgId}`)) as unknown as {
+    rows: { tax_collected: string | null; tax_paid: string | null }[];
+  };
+  const orgTaxCollected = ctrlRes.rows[0]?.tax_collected ?? null;
+  const orgTaxPaid = ctrlRes.rows[0]?.tax_paid ?? null;
 
   const boxRes = (await db.execute(sql`
     select line_code, label, coalesce(sign, 1) as sign, coalesce(sequence, 0) as sequence,
@@ -243,13 +278,31 @@ export async function computeTaxReturn(
     })),
   );
 
-  // Accumulate each GL source into its box. tax_amount sums the tax lines for
-  // the code; taxable_base sums the base of the lines it was applied to. Several
-  // sources may feed one box (e.g. GST + every HST rate → line 103).
+  // Accumulate each GL source into its box. Several sources may feed one box
+  // (e.g. GST + every HST rate → line 103). The basis decides WHAT is summed:
+  //  - tax_collected / tax_paid: the tax on the code's collected (liability) or
+  //    paid (recoverable) account — scoping to the account keeps a "both" code
+  //    from feeding its collected tax into an ITC box (and vice versa);
+  //  - tax_amount: every tax line for the code (kept for non-split reports);
+  //  - taxable_base: the base the tax applied to.
   const glRaw = new Map<string, string>();
   for (const src of glSources) {
     let total: string;
-    if (src.basis === "tax_amount") {
+    if (src.basis === "tax_collected" || src.basis === "tax_paid") {
+      const orgFallback = src.basis === "tax_collected" ? orgTaxCollected : orgTaxPaid;
+      const acctCol = src.basis === "tax_collected" ? sql`tc.collected_account_id` : sql`tc.paid_account_id`;
+      const r = (await db.execute(sql`
+        select coalesce(sum(l.amount), 0)::text as total
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id
+          join tax_codes tc on tc.id = l.tax_code_id
+         where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
+           and e.status = 'posted' and e.posting_date between ${from} and ${to}
+           and l.account_id = coalesce(${acctCol}, ${orgFallback})`)) as unknown as {
+        rows: { total: string }[];
+      };
+      total = r.rows[0]?.total ?? "0";
+    } else if (src.basis === "tax_amount") {
       const r = (await db.execute(sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
@@ -274,7 +327,7 @@ export async function computeTaxReturn(
     glRaw.set(src.lineCode, add(glRaw.get(src.lineCode) ?? "0", total));
   }
 
-  const boxes = assembleReturn(boxDefs, glRaw);
+  const boxes = assembleReturn(boxDefs, glRaw, new Map(Object.entries(adjustments)));
 
   return {
     formCode,

@@ -1067,6 +1067,8 @@
         "both": "Both"
       },
       "basis": {
+        "collected": "Taxe perçue (extrant)",
+        "paid": "Taxe payée / CTI (intrant)",
         "net": "Net amount",
         "tax": "Tax amount"
       },

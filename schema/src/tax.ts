@@ -110,8 +110,14 @@ export const taxReportLines = pgTable("tax_report_lines", {
   lineCode: text("line_code").notNull(), // "101"
   label: text("label").notNull(),
   taxCodeId: uuid("tax_code_id"),
-  /** GL-mapped boxes sum tax or taxable base; null for computed boxes. */
-  basis: text("basis", { enum: ["tax_amount", "taxable_base"] }),
+  /**
+   * How a GL-mapped box sums the ledger (null for computed/manual boxes):
+   *  - tax_collected: tax on the code's collected (liability) account — output tax;
+   *  - tax_paid: tax on the code's paid (recoverable) account — input tax credits;
+   *  - tax_amount: every tax line for the code (no collected/paid split);
+   *  - taxable_base: the base amount the tax applied to.
+   */
+  basis: text("basis", { enum: ["tax_collected", "tax_paid", "tax_amount", "taxable_base"] }),
   sign: integer("sign").notNull().default(1),
   /** Presentation + evaluation order within the form. */
   sequence: integer("sequence").notNull().default(0),
