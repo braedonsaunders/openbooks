@@ -11,6 +11,7 @@ import { AttachmentPanel } from '../../../components/attachment-panel'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
+import { SendButton } from '../../../components/send-button'
 import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
@@ -383,6 +384,10 @@ export function PaymentDrawer({
           ) : (
             <>
               <PdfButton
+                recordType={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))}
+                recordId={String(doc.id)}
+              />
+              <SendButton
                 recordType={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))}
                 recordId={String(doc.id)}
               />

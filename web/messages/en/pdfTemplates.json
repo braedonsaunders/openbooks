@@ -37,5 +37,17 @@
     "label": "PDF",
     "defaultTemplate": "Standard design",
     "failed": "Could not load PDF templates"
+  },
+  "send": {
+    "label": "Send",
+    "to": "Recipient",
+    "toPlaceholder": "customer@example.com",
+    "message": "Message (optional)",
+    "messagePlaceholder": "Add a note…",
+    "action": "Send email",
+    "sending": "Sending…",
+    "sent": "Sent to {to}",
+    "noRecipient": "Enter a recipient email address",
+    "failed": "Could not send the email"
   }
 }

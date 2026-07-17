@@ -37,5 +37,17 @@
     "label": "PDF",
     "defaultTemplate": "Diseño estándar",
     "failed": "No se pudieron cargar las plantillas PDF"
+  },
+  "send": {
+    "label": "Enviar",
+    "to": "Destinatario",
+    "toPlaceholder": "cliente@ejemplo.com",
+    "message": "Mensaje (opcional)",
+    "messagePlaceholder": "Añadir una nota…",
+    "action": "Enviar correo",
+    "sending": "Enviando…",
+    "sent": "Enviado a {to}",
+    "noRecipient": "Introduzca la dirección de correo del destinatario",
+    "failed": "No se pudo enviar el correo"
   }
 }
