@@ -78,8 +78,13 @@ accounts match NetSuite exactly**.
 - [ ] GST/HST return (tax report lines → GST34 numbers)
 - [ ] Fixed assets + depreciation runs (replace the locked FAM bundle)
 - [ ] Payroll journal import + labor burden runs (Paymate bridge)
-- [x] Period close: per-module AR/AP/GL close/reopen with ordering rules,
-      kernel enforces closed-period posting refusal *(2026-07-14)*
+- [x] Period close operating system: Setup owns fiscal calendars, generated
+      periods, book/entity/module locks, versioned dependency blueprints,
+      policies, event automation, reporting packages, and controlled expiring
+      reopen approvals; Banking owns the live readiness → execute → review →
+      lock → publish wizard with evidence, continuous invalidation, independent
+      sign-off, and hash-addressed audit binders. The kernel enforces scoped
+      closed-period posting refusal *(2026-07-16)*
 - [ ] One full month closed in parallel, TB green the whole way
 
 ### Platform (NetSuite-parity foundations, built 2026-07-14)

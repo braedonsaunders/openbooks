@@ -20,6 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, env, pool } from "../engine/src/db.ts";
+import { ensureCloseDefaults } from "../engine/src/close.ts";
 import { BUILT_IN_ROLES } from "../web/lib/permissions.ts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,7 +30,11 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-async function applyTracked(label: string, filename: string, content: string): Promise<void> {
+async function applyTracked(
+  label: string,
+  filename: string,
+  content: string,
+): Promise<void> {
   const digest = sha256(content);
   const seen = (await db.execute(sql`
     select sha256 from _applied_migrations where filename = ${filename}
@@ -55,7 +60,9 @@ async function applyTracked(label: string, filename: string, content: string): P
     await client.query("commit");
   } catch (err) {
     await client.query("rollback").catch(() => {});
-    throw new Error(`[bootstrap] ${filename} failed: ${(err as Error).message}`);
+    throw new Error(
+      `[bootstrap] ${filename} failed: ${(err as Error).message}`,
+    );
   } finally {
     client.release();
   }
@@ -64,7 +71,8 @@ async function applyTracked(label: string, filename: string, content: string): P
 async function migrate(): Promise<void> {
   // The id() column default across the whole schema — a plain SQL v7-UUID
   // generator (no extension). Must exist before the first CREATE TABLE.
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     CREATE OR REPLACE FUNCTION public.uuid_generate_v7()
      RETURNS uuid
      LANGUAGE sql
@@ -74,7 +82,8 @@ async function migrate(): Promise<void> {
         placing substring(int8send((extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
         from 1 for 6), 52, 1), 53, 1), 'hex')::uuid
     $fn$;
-  `));
+  `),
+  );
   await db.execute(sql`
     create table if not exists _applied_migrations (
       filename text primary key,
@@ -89,14 +98,18 @@ async function migrate(): Promise<void> {
   // Baseline: a pre-existing database (the real cluster DB was built by
   // applying these files manually) has the schema but no tracking rows.
   // Record everything as applied instead of re-running CREATE TABLEs into it.
-  const tracked = (await db.execute(sql`select count(*)::int as n from _applied_migrations`)) as unknown as {
+  const tracked = (await db.execute(
+    sql`select count(*)::int as n from _applied_migrations`,
+  )) as unknown as {
     rows: { n: number }[];
   };
   const hasSchema = (await db.execute(sql`
     select 1 from information_schema.tables where table_schema = 'public' and table_name = 'orgs'
   `)) as unknown as { rows: unknown[] };
   if (tracked.rows[0].n === 0 && hasSchema.rows.length > 0) {
-    console.log("[bootstrap] existing schema detected — baselining migration history without applying");
+    console.log(
+      "[bootstrap] existing schema detected — baselining migration history without applying",
+    );
     for (const f of generated) {
       const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
       await db.execute(sql`
@@ -113,10 +126,18 @@ async function migrate(): Promise<void> {
     }
   }
   for (const f of generated) {
-    await applyTracked("migration", `generated/${f}`, readFileSync(join(migrationsDir, "generated", f), "utf8"));
+    await applyTracked(
+      "migration",
+      `generated/${f}`,
+      readFileSync(join(migrationsDir, "generated", f), "utf8"),
+    );
   }
   for (const f of ["referential-integrity.sql", "kernel-constraints.sql"]) {
-    await applyTracked("constraints", f, readFileSync(join(migrationsDir, f), "utf8"));
+    await applyTracked(
+      "constraints",
+      f,
+      readFileSync(join(migrationsDir, f), "utf8"),
+    );
   }
 }
 
@@ -133,15 +154,23 @@ async function ensureReadRole(): Promise<void> {
          end if;
        end $$;`,
     ],
-    ["grant select", `grant select on all tables in schema public to openbooks_read`],
-    ["default privileges", `alter default privileges in schema public grant select on tables to openbooks_read`],
+    [
+      "grant select",
+      `grant select on all tables in schema public to openbooks_read`,
+    ],
+    [
+      "default privileges",
+      `alter default privileges in schema public grant select on tables to openbooks_read`,
+    ],
     ["grant to app user", `grant openbooks_read to current_user`],
   ];
   for (const [label, stmt] of steps) {
     try {
       await db.execute(sql.raw(stmt));
     } catch (err) {
-      console.warn(`[bootstrap] openbooks_read ${label} skipped: ${(err as Error).message}`);
+      console.warn(
+        `[bootstrap] openbooks_read ${label} skipped: ${(err as Error).message}`,
+      );
     }
   }
   try {
@@ -155,12 +184,16 @@ async function ensureReadRole(): Promise<void> {
       client.release();
     }
   } catch {
-    console.warn("[bootstrap] WARNING: cannot assume openbooks_read — SQL workbench/user-script queries will fail");
+    console.warn(
+      "[bootstrap] WARNING: cannot assume openbooks_read — SQL workbench/user-script queries will fail",
+    );
   }
 }
 
 async function ensureOrg(): Promise<string> {
-  const existing = (await db.execute(sql`select id from orgs order by created_at limit 1`)) as unknown as {
+  const existing = (await db.execute(
+    sql`select id from orgs order by created_at limit 1`,
+  )) as unknown as {
     rows: { id: string }[];
   };
   if (existing.rows.length > 0) return existing.rows[0].id;
@@ -181,8 +214,10 @@ async function ensureOrg(): Promise<string> {
     on conflict do nothing
   `);
 
+  const { calendarId } = await ensureCloseDefaults(orgId);
+
   // Monthly periods: two fiscal years back through five ahead — plenty for a
-  // dev instance; the period-close UI manages them afterwards.
+  // dev instance; Setup → Periods & Close manages them afterwards.
   const thisYear = new Date().getUTCFullYear();
   for (let y = thisYear - 2; y <= thisYear + 5; y++) {
     for (let m = 1; m <= 12; m++) {
@@ -190,13 +225,15 @@ async function ensureOrg(): Promise<string> {
       const endDate = new Date(Date.UTC(y, m, 0));
       const end = endDate.toISOString().slice(0, 10);
       await db.execute(sql`
-        insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on)
-        values (${orgId}, ${y}, ${m}, ${`${y}-${String(m).padStart(2, "0")}`}, ${start}, ${end})
+        insert into accounting_periods (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on)
+        values (${orgId}, ${calendarId}, ${y}, ${m}, ${`${y}-${String(m).padStart(2, "0")}`}, ${start}, ${end})
         on conflict do nothing
       `);
     }
   }
-  console.log(`[bootstrap] primary book + periods ${thisYear - 2}..${thisYear + 5} ensured`);
+  console.log(
+    `[bootstrap] primary book + periods ${thisYear - 2}..${thisYear + 5} ensured`,
+  );
   return orgId;
 }
 

@@ -40,7 +40,7 @@ permission gates → build → verify in preview → commit.
 | Parties directory | agent-LANDED | web/app/(app)/parties, web/app/api/parties | started |
 | Bank reconciliation | agent-LANDED | web/app/(app)/banking, web/app/api/banking, engine/src/banking.ts | landed; e2e verified (import→auto/manual match→sign-off) |
 | Expenses | agent-LANDED | web/app/(app)/expenses, web/app/api/expenses | started |
-| Period close | integrator | web/app/(app)/close, web/app/api/close | started |
+| Period close | integrator | schema/src/close.ts, engine/src/close.ts, web/app/(app)/close, web/app/(app)/admin/setup/[entity]/CloseSetupWorkspace.tsx | complete |
 | Scripts + audit admin | integrator | web/app/(app)/admin/scripts, /admin/audit | pending |
 | Custom record types | agent | web/app/(app)/records, web/app/api/records, web/app/api/forms/options, schema/src/custom-records.ts, web/lib/record{s,-schema}.ts, web/components/record-fields.tsx | landed; schema UNMIGRATED (custom_record_types + custom_records + FKs pending) |
 | AI assistant (agent loop + accounting tools + /assistant chat + ⌘K launcher + multi-provider admin UI) | integrator | web/app/(app)/assistant, web/app/api/assistant, web/lib/assistant, web/lib/ai-conversations.ts, web/components/assistant, web/components/assistant-launcher.tsx, web/app/(app)/admin/ai, web/app/api/admin/ai, web/lib/secrets.ts, schema/src/ai.ts | DONE (0010 applied; roles re-seeded; provider+key configured per-org under Admin → AI, encrypted at rest with OPENBOOKS_DATA_KEY — no AI keys in env) |
