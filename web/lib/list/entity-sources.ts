@@ -46,7 +46,6 @@ export interface EntityListSource {
   basePath: string
   /** Where the reference column links (default: the edit drawer). Projects link
    *  to the full cockpit page instead. */
-  rowHref?: (id: string) => string
   /** The list has an `is_active` flag → show a "show inactive" toggle. */
   hasInactive?: boolean
   /** Always-selected extra fields (e.g. is_active for row styling). */
@@ -66,7 +65,6 @@ const SOURCES: Record<string, EntityListSource> = {
     where: projectWhere,
     drawerParam: 'project',
     basePath: '/projects',
-    rowHref: (id) => `/projects?project=${id}`,
     hasInactive: true,
     extraSelect: sql`p.is_active`,
   },

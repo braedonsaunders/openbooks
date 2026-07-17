@@ -12,7 +12,7 @@ import { ShowInactivesToggle } from './show-inactives-toggle'
 import { Pagination } from './pagination'
 import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
-import { parseListParams, pickString } from '../lib/list-params'
+import { parseListParams, pickString, mergeHref } from '../lib/list-params'
 import { money } from '../lib/format'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
@@ -162,11 +162,15 @@ export async function EntityListView({
     label: o.labelKey ? label(o.labelKey) : o.value,
   }))
 
+  // Opening a record keeps the list's current filters/sort/search/page — it
+  // just adds the drawer param, never resets the view.
+  const openHref = (id: string) => mergeHref(basePath, sp, { [source.drawerParam]: id })
+
   const cell = (row: any, c: ListColDesc) => {
     const v = row[c.key]
     switch (c.kind) {
       case 'reference': {
-        const href = source.rowHref ? source.rowHref(String(row.id)) : `${basePath}?${source.drawerParam}=${row.id}`
+        const href = openHref(String(row.id))
         return (
           <TableCell key={c.key} className="font-mono text-[13px] font-semibold">
             <Link href={href as any} className="text-teal-700 hover:underline dark:text-teal-300">
@@ -199,7 +203,7 @@ export async function EntityListView({
         return (
           <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
             <Link
-              href={`${basePath}?${source.drawerParam}=${row.id}` as any}
+              href={openHref(String(row.id)) as any}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
               aria-label={tCommon('actions.open')}
               title={tCommon('actions.open')}

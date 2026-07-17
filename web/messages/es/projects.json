@@ -180,7 +180,16 @@
     "costBreakdownAria": "Desglose de costos",
     "timeBreakdownAria": "Desglose de tiempo",
     "tabsAria": "Secciones del proyecto",
-    "recognizeRevenue": "Reconocer ingresos"
+    "recognizeRevenue": "Reconocer ingresos",
+    "pnlTitle": "Resultado",
+    "invoicedToDate": "Facturado a la fecha",
+    "invoicedHint": "Ingresos contabilizados de facturas de clientes.",
+    "couldBeInvoiced": "Se puede facturar",
+    "couldBeInvoicedHint": "Trabajo facturable realizado, aún no facturado.",
+    "totalJobPrice": "Precio total del trabajo",
+    "totalJobCost": "Costo total del trabajo",
+    "committedHint": "Compromisos de órdenes de compra abiertas.",
+    "grossProfit": "Utilidad bruta"
   },
   "charges": {
     "costRecovered": "Costo recuperado",
