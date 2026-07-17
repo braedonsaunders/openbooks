@@ -1,7 +1,7 @@
 {
   "hub": {
-    "metaTitle": "Platform",
-    "title": "Platform",
+    "metaTitle": "Admin Center",
+    "title": "Admin Center",
     "subtitle": "Everything that configures this workspace — company setup, people, and system.",
     "groups": {
       "company": "Company",
@@ -25,7 +25,7 @@
       },
       "navigation": {
         "title": "Navigation",
-        "description": "Reorder the sidebar and rename modules per org"
+        "description": "Organize workspaces, menu labels, and mobile shortcuts"
       },
       "records": {
         "title": "Custom Records",
@@ -295,7 +295,7 @@
   },
   "navigation": {
     "title": "Navigation",
-    "description": "Customize the sidebar for everyone in the organization: rename, reorder, hide modules, or add links. Permission gates still apply on top.",
+    "description": "Customize every menu layout for the organization: organize workspaces, rename or hide destinations, add links, and choose up to four mobile shortcuts. Permission gates still apply.",
     "groupLabelAria": "Group label",
     "moveGroupUp": "Move group up",
     "moveGroupDown": "Move group down",
@@ -304,9 +304,17 @@
     "hideItem": "Hide item",
     "moveItemUp": "Move item up",
     "moveItemDown": "Move item down",
+    "moveToGroup": "Move to workspace",
+    "pinMobile": "Pin to mobile navigation",
+    "unpinMobile": "Remove from mobile navigation",
+    "mobileLimit": "Mobile navigation supports up to four pinned destinations",
     "linkUrlPrompt": "Link URL (internal route or https://…):",
     "linkLabelPrompt": "Label:",
     "addLink": "Add link",
+    "deleteLink": "Delete link",
+    "newGroupPrompt": "Workspace name:",
+    "addGroup": "Add workspace",
+    "deleteGroup": "Delete workspace",
     "save": "Save navigation",
     "saved": "Navigation saved",
     "saveFailed": "Could not save",

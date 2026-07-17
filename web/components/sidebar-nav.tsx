@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -56,7 +56,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
-import { cn } from '@openbooks/ui'
+import { Popover, cn } from '@openbooks/ui'
 import { findActiveNavHref } from './sidebar-nav-active'
 
 // Map string keys → icon components. RSCs can't serialise function references,
@@ -129,12 +129,19 @@ export type SidebarNavItem = {
   subgroupHref?: string
   /** Icon for the subgroup header (rendered like a regular item's icon). */
   subgroupIconKey?: string
+  /** Tenant-selected shortcut in the four-item mobile tab bar. */
+  mobile?: boolean
 }
 
 export type SidebarNavGroup = {
+  /** Stable workspace id; labels may be translated or tenant-customized. */
+  id: string
   label: string
+  iconKey: string
   items: SidebarNavItem[]
 }
+
+const EXPANDED_STORAGE_KEY = 'openbooks.nav.expanded-workspaces'
 
 /**
  * Pathname-aware sidebar nav.
@@ -147,52 +154,187 @@ export type SidebarNavGroup = {
  * The "active" check is greedy: /equipment/123 highlights the /equipment
  * top-level nav item. Sub-routes therefore keep the parent illuminated.
  */
-export function SidebarNav({
-  groups,
-  collapsed = false,
-}: {
-  groups: SidebarNavGroup[]
-  collapsed?: boolean
-}) {
+export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGroup[]; collapsed?: boolean }) {
   const pathname = usePathname() ?? ''
   const activeHref = findActiveNavHref(pathname, groups)
+  const activeGroupId = groups.find((group) => groupContainsActiveHref(group, activeHref))?.id ?? null
+  const navRef = useRef<HTMLElement>(null)
+  const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(
+    () => new Set([groups[0]?.id, activeGroupId].filter((id): id is string => Boolean(id))),
+  )
+  const openGroupKey = useMemo(() => [...openGroupIds].sort().join('|'), [openGroupIds])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(EXPANDED_STORAGE_KEY)
+      if (raw === null) return
+      const saved = JSON.parse(raw) as unknown
+      if (!Array.isArray(saved)) return
+      const valid = saved.filter(
+        (id): id is string => typeof id === 'string' && groups.some((group) => group.id === id),
+      )
+      setOpenGroupIds(new Set([...valid, activeGroupId].filter((id): id is string => Boolean(id))))
+    } catch {
+      // Corrupt or unavailable storage falls back to Home + the active workspace.
+    }
+  }, [activeGroupId, groups])
+
+  useEffect(() => {
+    if (!activeGroupId) return
+    setOpenGroupIds((current) => {
+      if (current.has(activeGroupId)) return current
+      const next = new Set(current).add(activeGroupId)
+      persistExpandedGroups(next)
+      return next
+    })
+  }, [activeGroupId])
+
+  useEffect(() => {
+    if (collapsed) return
+    const frame = window.requestAnimationFrame(() => {
+      navRef.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [collapsed, openGroupKey, pathname])
+
+  function toggleGroup(id: string) {
+    setOpenGroupIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      persistExpandedGroups(next)
+      return next
+    })
+  }
+
   return (
-    <nav className={cn('app-scroll flex-1 overflow-y-auto py-3', collapsed ? 'px-2' : 'px-2')}>
-      {groups.map((group) => (
-        <div key={group.label} className="mb-3">
-          {collapsed ? (
-            <div
-              className="mx-2 mb-1 border-t border-slate-100 dark:border-slate-800"
-              aria-hidden
+    <nav ref={navRef} className={cn('app-scroll flex-1 overflow-y-auto px-2 py-3', collapsed && 'space-y-1')}>
+      {collapsed
+        ? groups.map((group) => (
+            <CollapsedWorkspace
+              key={group.id}
+              group={group}
+              activeHref={activeHref}
+              active={group.id === activeGroupId}
             />
-          ) : (
-            <div className="px-2 pb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-              {group.label}
-            </div>
-          )}
-          {toBlocks(group.items).map((block, bi) =>
-            block.kind === 'item' ? (
-              <NavLink
-                key={block.item.href}
-                item={block.item}
-                active={activeHref === block.item.href}
-                collapsed={collapsed}
-              />
-            ) : (
-              <SubgroupSection
-                key={`sub-${block.label}-${bi}`}
-                label={block.label}
-                href={block.href}
-                iconKey={block.iconKey}
-                items={block.items}
-                activeHref={activeHref}
-                collapsed={collapsed}
-              />
-            ),
-          )}
-        </div>
-      ))}
+          ))
+        : groups.map((group) => {
+            const open = openGroupIds.has(group.id)
+            const active = group.id === activeGroupId
+            const panelId = `nav-workspace-${group.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+            return (
+              <section key={group.id} className="mb-1">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={panelId}
+                  onClick={() => toggleGroup(group.id)}
+                  className={cn(
+                    'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold tracking-wide transition-colors',
+                    active
+                      ? 'bg-teal-50/80 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+                    'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+                  )}
+                >
+                  <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
+                  <ChevronRight
+                    size={13}
+                    className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
+                  />
+                </button>
+                {open ? (
+                  <div id={panelId} className="mt-0.5 space-y-0.5">
+                    <WorkspaceItems items={group.items} activeHref={activeHref} />
+                  </div>
+                ) : null}
+              </section>
+            )
+          })}
     </nav>
+  )
+}
+
+function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | null) {
+  return group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
+}
+
+function persistExpandedGroups(ids: Set<string>) {
+  try {
+    localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify([...ids]))
+  } catch {
+    // Storage is an enhancement; navigation remains fully functional without it.
+  }
+}
+
+function WorkspaceItems({ items, activeHref }: { items: SidebarNavItem[]; activeHref: string | null }) {
+  return toBlocks(items).map((block, bi) =>
+    block.kind === 'item' ? (
+      <NavLink key={block.item.href} item={block.item} active={activeHref === block.item.href} />
+    ) : (
+      <SubgroupSection
+        key={`sub-${block.label}-${bi}`}
+        label={block.label}
+        href={block.href}
+        iconKey={block.iconKey}
+        items={block.items}
+        activeHref={activeHref}
+      />
+    ),
+  )
+}
+
+function CollapsedWorkspace({
+  group,
+  activeHref,
+  active,
+}: {
+  group: SidebarNavGroup
+  activeHref: string | null
+  active: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      side="right"
+      align="start"
+      className="max-h-[min(36rem,calc(100vh-2rem))] w-64 overflow-y-auto py-1.5"
+      trigger={
+        <button
+          type="button"
+          aria-label={group.label}
+          aria-expanded={open}
+          title={group.label}
+          onClick={() => setOpen((value) => !value)}
+          className={cn(
+            'relative grid h-9 w-full place-items-center rounded-md transition-colors',
+            'before:absolute before:top-1/2 before:left-0 before:h-5 before:w-[2px] before:-translate-y-1/2 before:rounded-full',
+            active
+              ? 'bg-teal-50 text-teal-700 before:bg-teal-700 dark:bg-teal-950/50 dark:text-teal-300 dark:before:bg-teal-400'
+              : 'text-slate-500 before:bg-transparent hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+            'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+          )}
+        >
+          <NavIcon iconKey={group.iconKey} size={17} />
+        </button>
+      }
+    >
+      <div
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest('a')) setOpen(false)
+        }}
+      >
+        <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+          {group.label}
+        </div>
+        <div className="py-1">
+          <WorkspaceItems items={group.items} activeHref={activeHref} />
+        </div>
+      </div>
+    </Popover>
   )
 }
 
@@ -200,7 +342,13 @@ export function SidebarNav({
 
 export type NavBlock =
   | { kind: 'item'; item: SidebarNavItem }
-  | { kind: 'subgroup'; label: string; href?: string; iconKey?: string; items: SidebarNavItem[] }
+  | {
+      kind: 'subgroup'
+      label: string
+      href?: string
+      iconKey?: string
+      items: SidebarNavItem[]
+    }
 
 /** Fold a flat item list into blocks, coalescing runs that share a subgroup. */
 export function toBlocks(items: SidebarNavItem[]): NavBlock[] {
@@ -229,36 +377,21 @@ export function toBlocks(items: SidebarNavItem[]): NavBlock[] {
 }
 
 /** A single nav link. `nested` indents it under a subgroup header. */
-function NavLink({
-  item,
-  active,
-  collapsed,
-  nested = false,
-}: {
-  item: SidebarNavItem
-  active: boolean
-  collapsed: boolean
-  nested?: boolean
-}) {
+function NavLink({ item, active, nested = false }: { item: SidebarNavItem; active: boolean; nested?: boolean }) {
   const Icon = ICONS[item.iconKey] ?? Gauge
-  return (
-    <Link
-      href={item.href as any}
-      aria-current={active ? 'page' : undefined}
-      title={collapsed ? item.label : undefined}
-      data-walkthrough={`nav:${item.href}`}
-      className={cn(
-        'group relative flex items-center rounded-md py-1.5 text-sm',
-        'transition-colors duration-150 ease-out',
-        collapsed ? 'justify-center px-2' : nested ? 'gap-2.5 pr-2 pl-8' : 'gap-2.5 px-2',
-        'before:absolute before:top-1/2 before:left-0 before:h-5 before:w-[2px] before:-translate-y-1/2 before:rounded-full',
-        'before:transition-all before:duration-150 before:ease-out',
-        active
-          ? 'bg-teal-50 text-teal-900 before:h-6 before:bg-teal-700 dark:bg-teal-950/50 dark:text-teal-100 dark:before:bg-teal-400'
-          : 'text-slate-700 before:bg-transparent hover:bg-slate-100 hover:text-slate-900 hover:before:bg-slate-300 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:hover:before:bg-slate-600',
-        'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-      )}
-    >
+  const className = cn(
+    'group relative flex items-center rounded-md py-1.5 text-sm',
+    'transition-colors duration-150 ease-out',
+    nested ? 'gap-2.5 pr-2 pl-8' : 'gap-2.5 px-2',
+    'before:absolute before:top-1/2 before:left-0 before:h-5 before:w-[2px] before:-translate-y-1/2 before:rounded-full',
+    'before:transition-all before:duration-150 before:ease-out',
+    active
+      ? 'bg-teal-50 text-teal-900 before:h-6 before:bg-teal-700 dark:bg-teal-950/50 dark:text-teal-100 dark:before:bg-teal-400'
+      : 'text-slate-700 before:bg-transparent hover:bg-slate-100 hover:text-slate-900 hover:before:bg-slate-300 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:hover:before:bg-slate-600',
+    'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+  )
+  const content = (
+    <>
       <Icon
         size={15}
         className={cn(
@@ -268,29 +401,40 @@ function NavLink({
             : 'text-slate-500 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200',
         )}
       />
-      {collapsed ? null : <span>{item.label}</span>}
+      <span>{item.label}</span>
+    </>
+  )
+  return item.href.startsWith('https://') ? (
+    <a href={item.href} data-walkthrough={`nav:${item.href}`} className={className}>
+      {content}
+    </a>
+  ) : (
+    <Link
+      href={item.href as never}
+      aria-current={active ? 'page' : undefined}
+      data-walkthrough={`nav:${item.href}`}
+      className={className}
+    >
+      {content}
     </Link>
   )
 }
 
 /** Collapsible nested section. Auto-opens when a child (or its own landing
  *  page) is active. When `href` is set the label navigates to the section's
- *  landing hub while the chevron keeps toggling the children. In collapsed
- *  rail mode the header is dropped and children render as plain icon links. */
+ *  landing hub while the chevron keeps toggling the children. */
 function SubgroupSection({
   label,
   href,
   iconKey,
   items,
   activeHref,
-  collapsed,
 }: {
   label: string
   href?: string
   iconKey?: string
   items: SidebarNavItem[]
   activeHref: string | null
-  collapsed: boolean
 }) {
   const selfActive = href != null && activeHref === href
   const hasActiveChild = items.some((i) => i.href === activeHref) || selfActive
@@ -299,17 +443,6 @@ function SubgroupSection({
   useEffect(() => {
     if (hasActiveChild) setOpen(true)
   }, [hasActiveChild])
-
-  if (collapsed) {
-    return (
-      <>
-        <div className="mx-2 my-1 border-t border-slate-100 dark:border-slate-800" aria-hidden />
-        {items.map((item) => (
-          <NavLink key={item.href} item={item} active={activeHref === item.href} collapsed />
-        ))}
-      </>
-    )
-  }
 
   const headerClass = cn(
     'group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm',
@@ -368,7 +501,7 @@ function SubgroupSection({
       {open ? (
         <div className="mt-0.5 space-y-0.5">
           {items.map((item) => (
-            <NavLink key={item.href} item={item} active={activeHref === item.href} collapsed={false} nested />
+            <NavLink key={item.href} item={item} active={activeHref === item.href} nested />
           ))}
         </div>
       ) : null}
@@ -382,15 +515,7 @@ function SubgroupSection({
 export const ICON_KEYS = Object.keys(ICONS).sort()
 
 /** Render a nav icon by its string key (falls back to a neutral gauge). */
-export function NavIcon({
-  iconKey,
-  size = 15,
-  className,
-}: {
-  iconKey: string
-  size?: number
-  className?: string
-}) {
+export function NavIcon({ iconKey, size = 15, className }: { iconKey: string; size?: number; className?: string }) {
   const Icon = ICONS[iconKey] ?? Gauge
   return <Icon size={size} className={className} />
 }

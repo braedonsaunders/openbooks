@@ -15,6 +15,7 @@ import { useMobileNav } from './mobile-nav'
 import { NavIcon, type SidebarNavGroup } from './sidebar-nav'
 import { findActiveNavHref } from './sidebar-nav-active'
 import { useNavGroups } from './use-platform-nav'
+import { selectMobileTabs } from '../lib/mobile-nav'
 
 const TAB_COUNT = 4
 
@@ -32,10 +33,7 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
   const { setOpen } = useMobileNav()
   const navGroups = useNavGroups(groups)
 
-  const tabs = navGroups
-    .flatMap((g) => g.items)
-    .filter((item, i, arr) => arr.findIndex((x) => x.href === item.href) === i)
-    .slice(0, TAB_COUNT)
+  const tabs = selectMobileTabs(navGroups, TAB_COUNT)
   const activeHref = findActiveNavHref(pathname, [{ items: tabs }])
 
   if (tabs.length === 0) return null

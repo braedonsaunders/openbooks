@@ -21,6 +21,7 @@ import { MobileNavToggle } from './mobile-nav-toggle'
 import { MobileTabBar } from './mobile-tab-bar'
 import { GlobalCreateMenu, type GlobalCreatePermissions } from './global-create-menu'
 import { GlobalPartyDrawerHost } from './global-party-drawer-host'
+import { AppLauncherLink } from './app-launcher-link'
 
 export function AppShell({
   account,
@@ -54,20 +55,27 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const topbar = navMode === 'topbar'
+  const appItem = groups.flatMap((group) => group.items).find((item) => item.href === '/apps')
+  const navigationGroups = groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.href !== '/apps'),
+    }))
+    .filter((group) => group.items.length > 0)
   return (
     <div className="flex h-screen overflow-hidden">
-      {topbar ? null : <AppSidebar groups={groups} defaultCollapsed={defaultCollapsed} />}
+      {topbar ? null : <AppSidebar groups={navigationGroups} defaultCollapsed={defaultCollapsed} />}
 
       <MobileNavProvider>
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden [padding-top:env(safe-area-inset-top)]">
           <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900">
-            <MobileNavToggle groups={groups} />
+            <MobileNavToggle groups={navigationGroups} />
             {topbar ? (
               // The rail (and its logo) is gone — brand moves into the header
               // on desktop.
               <>
                 <Logo className="hidden h-7 w-auto shrink-0 lg:block" />
-                <TopNav groups={groups} />
+                <TopNav groups={navigationGroups} />
                 <div className="flex-1 lg:hidden" />
                 <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" />
               </>
@@ -75,6 +83,7 @@ export function AppShell({
               <GlobalSearch className="mx-auto w-full max-w-lg flex-1" />
             )}
             <div className="flex shrink-0 items-center gap-1">
+              {appItem ? <AppLauncherLink item={appItem} /> : null}
               <GlobalCreateMenu permissions={createPermissions} />
               <NotificationsBell />
               <AccountMenu
@@ -92,7 +101,7 @@ export function AppShell({
             {children}
           </main>
 
-          <MobileTabBar groups={groups} />
+          <MobileTabBar groups={navigationGroups} />
           {canReadParties ? <GlobalPartyDrawerHost canManage={canManageParties} canReadActivities={canReadActivities} /> : null}
         </div>
       </MobileNavProvider>
