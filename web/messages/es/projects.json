@@ -161,7 +161,7 @@
       "overview": "Resumen",
       "financials": "Finanzas",
       "cost_time": "Costo y tiempo",
-      "documents": "Documentos",
+      "transactions": "Transacciones",
       "billing": "Facturación",
       "charges": "Cargos"
     },
@@ -177,7 +177,9 @@
     "hoursHead": "Horas",
     "billableHead": "Facturable",
     "billValue": "Valor a facturar",
-    "noTime": "Aún no hay tiempo aprobado en este proyecto."
+    "noTime": "Aún no hay tiempo aprobado en este proyecto.",
+    "costBreakdownAria": "Desglose de costos",
+    "timeBreakdownAria": "Desglose de tiempo"
   },
   "charges": {
     "costRecovered": "Costo recuperado",
