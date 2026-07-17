@@ -5,7 +5,7 @@
  * browser. Mirrors the web/lib/order-kinds.ts split.
  */
 
-export type DocFamily = 'ap' | 'ar' | 'bank' | 'transfer'
+export type DocFamily = 'ap' | 'ar' | 'bank' | 'transfer' | 'gl'
 export type PermNamespace = 'ap' | 'ar' | 'gl'
 
 export interface DocKindConfig {
@@ -90,6 +90,16 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   transfer: {
     kind: 'transfer', family: 'transfer', numberPrefix: 'TRF-', permNamespace: 'gl', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
+    fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
+  },
+  // Project charge / resource usage — allocates a pooled, already-incurred cost
+  // (non-inventory materials, owned equipment, internal services) onto a project
+  // at a cost rate, carrying a billable rate for T&M. Posts DR project COGS /
+  // CR cost pool (see the project_charge rule in engine/src/posting.ts). Internal
+  // (no party); direct-post.
+  project_charge: {
+    kind: 'project_charge', family: 'gl', numberPrefix: 'CHG-', permNamespace: 'gl', i18n: 'banking',
+    partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
 }

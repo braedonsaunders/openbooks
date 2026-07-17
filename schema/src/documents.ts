@@ -193,6 +193,16 @@ export const items = pgTable(
     incomeAccountId: uuid("income_account_id"),
     expenseAccountId: uuid("expense_account_id"),
     defaultRate: money("default_rate"),
+    /** Standard COST per unit — job cost when the item is charged to a project
+     *  (the cost side of a resource_usage/project_charge). Distinct from
+     *  default_rate (the billable price). */
+    defaultCost: money("default_cost"),
+    /** When this item is charged to a project, the account CREDITED (the cost
+     *  pool relieved / recovery account). Null → the item's expense account,
+     *  making the charge a pure dimensional reclass (relieve the untagged pool,
+     *  charge the project). A dedicated recovery account gives absorption
+     *  tracking (e.g. owned-equipment recovery vs depreciation). */
+    costRecoveryAccountId: uuid("cost_recovery_account_id"),
     unit: text("unit"),
     taxCodeId: uuid("tax_code_id"),
     showOnTimesheet: boolean("show_on_timesheet").notNull().default(false),

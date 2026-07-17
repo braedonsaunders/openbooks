@@ -292,7 +292,7 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
         join documents d on d.id = dl.document_id
        where dl.org_id = ${orgId} and dl.project_id = ${projectId}
          and dl.is_billable and dl.billed_by_line_id is null
-         and d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')
+         and d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check', 'project_charge')
     `) as any,
   ])
   const tr = timeRow.rows[0] ?? {}

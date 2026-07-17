@@ -156,7 +156,8 @@ alter table items
   add foreign key (expense_account_id) references accounts(id),
   add foreign key (tax_code_id) references tax_codes(id),
   add foreign key (recognition_rule_id) references recognition_rules(id),
-  add foreign key (deferred_account_id) references accounts(id);
+  add foreign key (deferred_account_id) references accounts(id),
+  add foreign key (cost_recovery_account_id) references accounts(id);
 alter table labor_burden_rates add foreign key (department_id) references departments(id);
 
 -- approvals
