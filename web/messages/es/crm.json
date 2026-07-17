@@ -147,6 +147,84 @@
     "priority": "Prioridad",
     "defaultOwner": "Responsable predeterminado",
     "manager": "Gerente",
+    "empty": "No hay registros de configuración coincidentes.",
+    "openRecord": "Abrir {name}",
+    "percent": "{value} %",
+    "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
+    "created": "Registro de configuración de CRM creado",
+    "updated": "Registro de configuración de CRM actualizado",
+    "new": {
+      "accountStatuses": "Nuevo estado de cuenta",
+      "opportunityStatuses": "Nueva etapa de oportunidad",
+      "sources": "Nuevo origen de cliente potencial",
+      "territories": "Nuevo territorio",
+      "teams": "Nuevo equipo de ventas",
+      "quotas": "Nueva cuota"
+    },
+    "search": {
+      "accountStatuses": "Buscar estados de cuenta",
+      "opportunityStatuses": "Buscar etapas de oportunidad",
+      "sources": "Buscar orígenes de clientes potenciales",
+      "territories": "Buscar territorios",
+      "teams": "Buscar equipos de ventas",
+      "quotas": "Buscar cuotas"
+    },
+    "drawer": {
+      "new": {
+        "accountStatuses": "Nuevo estado de cuenta",
+        "opportunityStatuses": "Nueva etapa de oportunidad",
+        "sources": "Nuevo origen de cliente potencial",
+        "territories": "Nuevo territorio",
+        "teams": "Nuevo equipo de ventas",
+        "quotas": "Nueva cuota"
+      },
+      "edit": {
+        "accountStatuses": "Editar estado de cuenta",
+        "opportunityStatuses": "Editar etapa de oportunidad",
+        "sources": "Editar origen de cliente potencial",
+        "territories": "Editar territorio",
+        "teams": "Editar equipo de ventas",
+        "quotas": "Editar cuota"
+      },
+      "description": {
+        "accountStatuses": "Controla la clasificación del ciclo de vida y el comportamiento de calificación.",
+        "opportunityStatuses": "Controla la probabilidad, la previsión y el comportamiento de cierre del canal.",
+        "sources": "Mantén los orígenes de adquisición normalizados utilizados en CRM.",
+        "territories": "Configura la propiedad y las reglas de asignación deterministas.",
+        "teams": "Asigna un gerente y los miembros activos de este equipo de ventas.",
+        "quotas": "Establece un objetivo de período para un representante o equipo de ventas."
+      }
+    },
+    "fields": {
+      "name": "Nombre",
+      "matchMode": "Coincidencia de reglas",
+      "rules": "Reglas de asignación (JSON)",
+      "members": "Miembros del equipo",
+      "targetType": "Tipo de objetivo",
+      "isQualified": "Estado calificado",
+      "isClosed": "Estado cerrado",
+      "isWon": "Estado ganado",
+      "isDefault": "Predeterminado",
+      "isActive": "Activo"
+    },
+    "states": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "matchModes": {
+      "all": "Cumplir todas las reglas",
+      "any": "Cumplir cualquier regla"
+    },
+    "targetTypes": {
+      "user": "Representante de ventas",
+      "team": "Equipo de ventas"
+    },
+    "validation": {
+      "nameRequired": "Introduce un nombre.",
+      "invalidRules": "Las reglas de asignación deben ser una matriz JSON válida."
+    },
     "tabs": {
       "accountStatuses": "Estados de cuentas",
       "opportunityStatuses": "Etapas de oportunidades",
@@ -167,7 +245,13 @@
       "manager_name": "Gerente",
       "period_start": "Inicio del período",
       "period_end": "Fin del período",
-      "amount": "Importe"
+      "amount": "Importe",
+      "is_qualified": "Calificado",
+      "is_closed": "Cerrado",
+      "is_active": "Estado",
+      "member_count": "Miembros",
+      "target_name": "Objetivo",
+      "currency": "Moneda"
     }
   },
   "validation": {
