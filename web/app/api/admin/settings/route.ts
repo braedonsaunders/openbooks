@@ -32,6 +32,13 @@ const CONTROL_ACCOUNT_KEYS = [
   "taxPaid",
   "employeePayable",
   "fxUnrealizedGainLoss",
+  // Project GL recognition (inert until mapped). Labor→WIP posts DR laborWip /
+  // CR laborClearing at time approval; fixed-price recognition posts DR
+  // unbilledReceivable / CR projectRevenue and the invoice relieves unbilledReceivable.
+  "laborWip",
+  "laborClearing",
+  "unbilledReceivable",
+  "projectRevenue",
 ] as const;
 type ControlAccountKey = (typeof CONTROL_ACCOUNT_KEYS)[number];
 

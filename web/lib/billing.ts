@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, mulRate, sum } from '@openbooks/engine/src/money.ts'
+import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
 import { nextDocumentNumber } from './bills'
 
 /**
@@ -67,6 +68,14 @@ export async function generateInvoiceFromBillingRequest(
     `)) as unknown as { rows: { id: string }[] }
     const defaultIncomeId = defIncome.rows[0]?.id ?? null
 
+    // Fixed-price with revenue recognition configured: the invoice must relieve
+    // the Unbilled receivable (contract asset) rather than credit income — the
+    // revenue was already recognized over-time, so crediting income again would
+    // double-count. Inert (falls back to income) unless the account is mapped.
+    const recog = await recognitionAccounts(orgId)
+    const fixedPriceCreditAcct =
+      billingMethod === 'fixed_price' && recog.unbilledReceivable ? recog.unbilledReceivable : defaultIncomeId
+
     // -- build the invoice lines ------------------------------------------
     interface BuiltLine {
       itemId: string | null
@@ -87,10 +96,10 @@ export async function generateInvoiceFromBillingRequest(
     if (billingMethod === 'draw_amount' || req.basis === 'draw_amount') {
       const amt = String(req.draw_amount ?? '0')
       if (!amt || Number(amt) === 0) throw new BillingError('Enter a draw amount to bill')
-      if (!defaultIncomeId) throw new BillingError('No income account is configured to post the draw to')
+      if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post the draw to')
       built.push({
         itemId: null,
-        accountId: defaultIncomeId,
+        accountId: fixedPriceCreditAcct,
         description: req.invoice_description ?? 'Progress draw',
         quantity: '1',
         unitPrice: amt,
@@ -109,13 +118,13 @@ export async function generateInvoiceFromBillingRequest(
          order by sort_order
       `)) as unknown as { rows: any[] }
       if (scheds.rows.length === 0) throw new BillingError('No open milestones to bill on this project')
-      if (!defaultIncomeId) throw new BillingError('No income account is configured to post milestones to')
+      if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post milestones to')
       for (const m of scheds.rows) {
         const amt = String(m.amount_billed ?? '0')
         if (Number(amt) === 0) continue
         built.push({
           itemId: null,
-          accountId: defaultIncomeId,
+          accountId: fixedPriceCreditAcct,
           description: m.name,
           quantity: '1',
           unitPrice: amt,
