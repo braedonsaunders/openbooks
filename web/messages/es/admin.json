@@ -827,9 +827,13 @@
         "title": "Tax Groups",
         "description": "Bundle several tax codes to apply together on a line."
       },
+      "tax-return-forms": {
+        "title": "Declaraciones de impuestos",
+        "description": "Configure una declaración de impuestos gubernamental: sus casillas, cómo se calcula cada una y cómo se presenta."
+      },
       "tax-report-lines": {
-        "title": "Tax Report Lines",
-        "description": "Map tax codes onto the boxes of a tax return."
+        "title": "Casillas de la declaración",
+        "description": "Asigne códigos de impuesto a las casillas de una declaración, o calcule una casilla a partir de otras."
       },
       "classes": {
         "title": "Classes",
@@ -929,6 +933,11 @@
       "label": "Label",
       "basis": "Basis",
       "sign": "Sign",
+      "submissionChannel": "Canal de presentación",
+      "watermark": "Marca de agua",
+      "sequence": "Orden",
+      "formula": "Fórmula",
+      "pdfField": "Campo PDF",
       "parentId": "Parent",
       "netDays": "Net days",
       "discountDays": "Discount days",
@@ -992,6 +1001,12 @@
       "sign": {
         "positive": "Add (+)",
         "negative": "Subtract (−)"
+      },
+      "channel": {
+        "printPdf": "Imprimir y enviar por correo (PDF oficial)",
+        "fileUpload": "Carga de archivo electrónico",
+        "efileApi": "Presentación electrónica (API)",
+        "portalManual": "Portal gubernamental (entrada manual)"
       },
       "method": {
         "straightLine": "Straight line",
