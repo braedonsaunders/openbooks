@@ -69,8 +69,6 @@
     }
   },
   "relatedParty": {
-    "loadingTitle": "Abriendo registro",
-    "loading": "Cargando registro…",
     "loadFailed": "No se pudo abrir este registro"
   },
   "globalSearch": {

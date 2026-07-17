@@ -69,8 +69,6 @@
     }
   },
   "relatedParty": {
-    "loadingTitle": "Ouverture de la fiche",
-    "loading": "Chargement de la fiche…",
     "loadFailed": "Impossible d’ouvrir cette fiche"
   },
   "globalSearch": {
