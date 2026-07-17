@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { buildSchedule } from '@openbooks/engine/src/depreciation.ts'
+import { buildAllSchedules } from '@openbooks/engine/src/depreciation.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAsset } from '../_lib'
@@ -213,7 +213,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Rebuild the schedule when we have enough to plan (best-effort — a partial
   // draft simply produces no lines and reports nothing).
   try {
-    await buildSchedule(id, user.orgId, user.id)
+    await buildAllSchedules(id, user.orgId, user.id)
   } catch {
     // asset not yet complete enough to schedule (no in-service / life) — fine.
   }

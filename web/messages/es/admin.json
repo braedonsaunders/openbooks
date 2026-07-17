@@ -1050,6 +1050,10 @@
         "title": "Métodos de depreciación",
         "description": "Cree fórmulas de depreciación personalizadas — el generador de fórmulas."
       },
+      "depreciation-book-policies": {
+        "title": "Políticas de depreciación por libro",
+        "description": "Método por libro y categoría para la depreciación multilibro."
+      },
       "currencies": {
         "title": "Currencies",
         "description": "Currency codes and their minor-unit precision."
@@ -1125,6 +1129,11 @@
       "isBillableDefault": "Billable by default",
       "category": "Category",
       "method": "Method",
+      "postsGl": "Contabiliza en el libro mayor",
+      "bookId": "Libro",
+      "categoryId": "Categoría de activo",
+      "convention": "Convención",
+      "lifeMonths": "Vida (meses)",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultConvention": "Convención de depreciación",

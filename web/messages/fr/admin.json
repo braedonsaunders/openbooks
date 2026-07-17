@@ -1094,6 +1094,10 @@
         "title": "Méthodes d’amortissement",
         "description": "Créez des formules d’amortissement personnalisées — le générateur de formules."
       },
+      "depreciation-book-policies": {
+        "title": "Politiques d’amortissement par livre",
+        "description": "Méthode par livre et par catégorie pour l’amortissement multi-livres."
+      },
       "currencies": {
         "title": "Currencies",
         "description": "Currency codes and their minor-unit precision."
@@ -1169,6 +1173,11 @@
       "isBillableDefault": "Billable by default",
       "category": "Category",
       "method": "Method",
+      "postsGl": "Comptabilise au grand livre",
+      "bookId": "Livre",
+      "categoryId": "Catégorie d’immobilisation",
+      "convention": "Convention",
+      "lifeMonths": "Durée (mois)",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultConvention": "Convention d’amortissement",

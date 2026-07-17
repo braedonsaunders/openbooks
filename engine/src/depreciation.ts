@@ -213,6 +213,7 @@ export async function buildSchedule(
   assetId: string,
   orgId: string,
   actorId: string | null,
+  forBookId?: string,
 ): Promise<BuildScheduleResult> {
   const assetRes = (await db.execute(sql`
     select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value, custom
@@ -241,13 +242,22 @@ export async function buildSchedule(
   // Method / life / rate live on the schedule; seed them from the asset's
   // custom overrides (set by the drawer) else the category defaults.
   const custom = asset.custom ?? {};
-  const method: DepreciationMethod = custom.method ?? category.default_method ?? "straight_line";
-  const lifeMonths: number = Number(custom.lifeMonths ?? category.default_life_months ?? 0);
-  const ratePercent: string | null = custom.ratePercent != null ? String(custom.ratePercent) : null;
-  const convention = (custom.convention ?? category.default_convention ?? null) as ScheduleInput["convention"];
-  if (!lifeMonths || lifeMonths <= 0) throw new Error("asset has no useful life (months)");
+  const bookId = forBookId ?? (await primaryBookId());
 
-  const bookId = await primaryBookId();
+  // Multi-book: a per-book policy for this category overrides the method / life /
+  // rate / convention on this book; else the asset custom + category defaults.
+  const policyRes = (await db.execute(sql`
+    select method, life_months, rate_percent, convention from depreciation_book_policies
+     where org_id = ${orgId} and book_id = ${bookId} and category_id = ${asset.category_id} limit 1`)) as unknown as {
+    rows: { method: DepreciationMethod; life_months: number | null; rate_percent: string | null; convention: string | null }[];
+  };
+  const pol = policyRes.rows[0];
+  const method: DepreciationMethod = pol?.method ?? custom.method ?? category.default_method ?? "straight_line";
+  const lifeMonths: number = Number(pol?.life_months ?? custom.lifeMonths ?? category.default_life_months ?? 0);
+  const ratePercent: string | null =
+    pol?.rate_percent != null ? String(pol.rate_percent) : custom.ratePercent != null ? String(custom.ratePercent) : null;
+  const convention = (pol?.convention ?? custom.convention ?? category.default_convention ?? null) as ScheduleInput["convention"];
+  if (!lifeMonths || lifeMonths <= 0) throw new Error("asset has no useful life (months)");
 
   // A user-authored formula method (the formula builder) resolves by code; if
   // none matches, fall back to the built-in method path unchanged.
@@ -341,6 +351,23 @@ export async function buildSchedule(
   });
 }
 
+/**
+ * Build the depreciation schedule for every active book (multi-book). Each book
+ * gets its own plan from its per-book policy, else the category/asset defaults.
+ */
+export async function buildAllSchedules(
+  assetId: string,
+  orgId: string,
+  actorId: string | null,
+): Promise<BuildScheduleResult[]> {
+  const books = (await db.execute(sql`
+    select id from accounting_books where org_id = ${orgId} and is_active
+     order by is_primary desc, code`)) as unknown as { rows: { id: string }[] };
+  const results: BuildScheduleResult[] = [];
+  for (const b of books.rows) results.push(await buildSchedule(assetId, orgId, actorId, b.id));
+  return results;
+}
+
 // ---------------------------------------------------------------------------
 // runDepreciation — post due periods through the kernel
 // ---------------------------------------------------------------------------
@@ -367,7 +394,6 @@ export async function runDepreciation(
   assetId?: string,
   allowedSubsidiaryIds?: string[],
 ): Promise<RunDepreciationResult> {
-  const bookId = await primaryBookId();
   const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
 
   // Due, unposted lines with their asset + resolved accounts + period window.
@@ -376,10 +402,11 @@ export async function runDepreciation(
            l.planned_amount as planned,
            l.sequence      as sequence,
            l.period_id     as period_id,
+           s.book_id       as book_id,
            p.name          as period_name,
            p.ends_on       as period_ends_on,
-           (period_module_is_closed(${orgId}, p.id, ${bookId}, a.subsidiary_id, 'assets')
-             or period_module_is_closed(${orgId}, p.id, ${bookId}, a.subsidiary_id, 'gl')) as period_closed,
+           (period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'assets')
+             or period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'gl')) as period_closed,
            a.id            as asset_id,
            a.subsidiary_id as subsidiary_id,
            sub.base_currency as base_currency,
@@ -393,7 +420,8 @@ export async function runDepreciation(
            c.accumulated_depreciation_account_id as cat_accum,
            c.depreciation_expense_account_id     as cat_expense
       from depreciation_schedule_lines l
-      join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
+      join depreciation_schedules s on s.id = l.schedule_id
+      join accounting_books bk on bk.id = s.book_id and bk.posts_gl and bk.is_active
       join fixed_assets a on a.id = s.asset_id
       join subsidiaries sub on sub.id = a.subsidiary_id
       join asset_categories c on c.id = a.category_id
@@ -475,7 +503,7 @@ export async function runDepreciation(
         const entryRes = (await tx.execute(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-          values (${orgId}, ${bookId}, ${row.subsidiary_id},
+          values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
                   ${`DEP-${row.asset_number}-${row.period_name}`},
                   ${postingDate}, ${row.period_id},
                   ${`Depreciation — ${row.asset_name} (${row.period_name})`},

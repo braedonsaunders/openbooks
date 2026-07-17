@@ -203,7 +203,7 @@ export async function disposeAsset(
     await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid}`);
     await tx.execute(sql`update fixed_assets set status = ${status}, updated_at = now(), updated_by = ${opts.actorId} where id = ${assetId}`);
     await tx.execute(sql`
-      insert into asset_events (org_id, asset_id, kind, event_date, amount, journal_entry_id, created_by)
+      insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
       values (${orgId}, ${assetId}, ${status === "written_off" ? "written_off" : "disposed"}, ${opts.date}, ${proceeds}, ${eid}, ${opts.actorId})`);
     return eid;
   });
@@ -293,7 +293,7 @@ export async function remeasureAsset(
     }
     await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid}`);
     await tx.execute(sql`
-      insert into asset_events (org_id, asset_id, kind, event_date, amount, journal_entry_id, created_by)
+      insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
       values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId})`);
     return eid;
   });

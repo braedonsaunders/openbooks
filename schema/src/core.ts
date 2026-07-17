@@ -59,6 +59,9 @@ export const accountingBooks = pgTable(
     code: text("code").notNull(), // "primary", "tax", "ifrs"
     name: text("name").notNull(),
     isPrimary: boolean("is_primary").notNull().default(false),
+    /** Accounting books post GL journals; alternate/reporting books compute
+     *  schedules without posting (multi-book depreciation). */
+    postsGl: boolean("posts_gl").notNull().default(true),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },

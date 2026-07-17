@@ -90,7 +90,7 @@ export async function runTaxPool(
       join fixed_assets a on a.id = e.asset_id
       join asset_categories c on c.id = a.category_id
      where e.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
-       and e.kind in ('disposed', 'written_off') and e.event_date between ${opts.yearStart} and ${opts.yearEnd}
+       and e.kind in ('disposed', 'written_off') and e.occurred_on between ${opts.yearStart} and ${opts.yearEnd}
        and coalesce(c.tax_attributes->>'ca_cca_class', '') <> ''
      group by c.tax_attributes->>'ca_cca_class'`)) as unknown as {
     rows: { class_code: string; dispositions: string }[];

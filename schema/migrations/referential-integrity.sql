@@ -123,6 +123,9 @@ alter table tax_pool_periods
   add foreign key (pool_id) references tax_depreciation_pools(id);
 alter table tax_first_year_rules add foreign key (org_id) references orgs(id);
 alter table depreciation_methods add foreign key (org_id) references orgs(id);
+alter table depreciation_book_policies
+  add foreign key (org_id) references orgs(id),
+  add foreign key (book_id) references accounting_books(id);
 alter table tax_return_forms add foreign key (official_pdf_file_id) references files(id);
 alter table tax_filings add foreign key (org_id) references orgs(id);
 

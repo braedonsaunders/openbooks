@@ -146,3 +146,27 @@ export const assetEvents = pgTable(
   },
   (t) => [index("asset_events_asset").on(t.assetId)],
 );
+
+/**
+ * Per-book depreciation policy (multi-book): overrides the method / life / rate /
+ * convention for a given category on a given accounting book. Lets the primary
+ * book run one method while an alternate/tax book runs another. Absent → the
+ * book uses the asset's own overrides and the category defaults.
+ */
+export const depreciationBookPolicies = pgTable(
+  "depreciation_book_policies",
+  {
+    id: id(),
+    orgId: orgRef(),
+    bookId: uuid("book_id").notNull(),
+    categoryId: uuid("category_id").notNull(),
+    method: text("method", {
+      enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
+    }).notNull().default("straight_line"),
+    lifeMonths: integer("life_months"),
+    ratePercent: money("rate_percent"),
+    convention: text("convention", { enum: ["full_month", "mid_month", "half_year"] }).notNull().default("full_month"),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("dep_book_policies_identity").on(t.orgId, t.bookId, t.categoryId)],
+);
