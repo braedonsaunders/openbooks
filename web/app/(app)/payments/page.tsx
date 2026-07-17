@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { cn, PageHeader } from '@openbooks/ui'
+import { Plus } from 'lucide-react'
+import { Button, cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { requirePermission, can } from '../../../lib/authz'
-import { pickString } from '../../../lib/list-params'
+import { mergeHref, pickString } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'
 import { PaymentsSection } from './PaymentsSection'
 import { RunsSection } from './RunsSection'
@@ -35,7 +36,14 @@ export default async function Payments({
             actions={
               view === 'payments' ? (
                 <NewPaymentButton kind="vendor_payment" basePath="/payments" label={t('page.newPayment')} />
-              ) : undefined
+              ) : (
+                <Button asChild size="sm">
+                  <Link href={mergeHref('/payments', sp, { view: 'runs', newRun: '1', run: undefined }) as any}>
+                    <Plus size={16} />
+                    {t('page.newRun')}
+                  </Link>
+                </Button>
+              )
             }
           />
           <ViewTabs

@@ -3,6 +3,7 @@
     "title": "Pagos",
     "description": "Pagos a proveedores aplicados a facturas de compra pendientes, y lotes de pagos EFT exportados como archivos CPA-005.",
     "newPayment": "Nuevo pago",
+    "newRun": "Nuevo lote de pagos",
     "tabs": {
       "payments": "Pagos",
       "runs": "Lotes de pagos"
@@ -86,10 +87,12 @@
   },
   "eft": {
     "notConfiguredTitle": "La emisión EFT no está configurada",
-    "notConfiguredListDescription": "Los lotes de pagos pueden armarse, pero el archivo CPA-005 no puede generarse hasta que un administrador configure <code>orgs.settings.eft</code> — falta: {missing}. Genere valores provisionales con <code>engine/src/seed-eft-settings.ts</code> y luego complete los datos del ordenante asignados por el banco.",
-    "notConfiguredDrawerDescription": "El archivo CPA-005 no puede generarse hasta que un administrador configure <code>orgs.settings.eft</code> — falta: {missing}. Los valores provisionales pueden generarse con <code>engine/src/seed-eft-settings.ts</code> y luego completarse con los datos del ordenante asignados por el banco."
+    "notConfiguredListDescription": "Los lotes se pueden seguir preparando, pero la exportación del archivo bancario está desactivada hasta que un administrador complete la configuración de emisión EFT. Campos faltantes: {missing}.",
+    "notConfiguredDrawerDescription": "La exportación del archivo bancario está desactivada hasta que un administrador complete la configuración de emisión EFT. Campos faltantes: {missing}."
   },
   "runBuilder": {
+    "title": "Nuevo lote de pagos",
+    "description": "Elija la cuenta de origen y las facturas, y luego cree un lote borrador para revisarlo.",
     "noOpenBills": "Ninguna factura de compra contabilizada con saldo pendiente coincide.",
     "selectAllAriaLabel": "Seleccionar todas las facturas de compra de esta página",
     "selectAriaLabel": "Seleccionar {document}",
@@ -104,7 +107,9 @@
     "bankMissing": "faltantes",
     "payFromBankAccount": "Pagar desde la cuenta bancaria",
     "selectBankAccountPlaceholder": "Seleccionar cuenta bancaria…",
+    "noBankAccounts": "No hay cuentas bancarias activas",
     "fundsDate": "Fecha de fondos",
+    "selectedForPayment": "Seleccionado para pago",
     "selectionSummary": "{count, plural, one {# factura de compra} other {# facturas de compra}} · <total>{amount}</total>",
     "createRun": "Crear lote de pagos",
     "toasts": {
@@ -114,14 +119,25 @@
   },
   "runs": {
     "openBillsHeading": "Facturas de compra pendientes por pagar",
+    "openBillsDescription": "Seleccione facturas de varios proveedores; cada proveedor se convierte en una instrucción de pago.",
     "billsSearchPlaceholder": "Buscar facturas de compra, proveedores, refs…",
     "runsHeading": "Lotes de pagos",
-    "noRunsYet": "Aún no hay lotes de pagos — seleccione facturas de compra arriba para crear el primero.",
+    "description": "Revise borradores, exporte archivos bancarios y confirme los pagos contabilizados.",
+    "searchPlaceholder": "Buscar lotes o cuentas bancarias…",
+    "noRunsYet": "Aún no hay lotes de pagos. Cree el primero cuando haya facturas listas para pagar.",
     "columns": {
       "run": "Lote",
       "bankAccount": "Cuenta bancaria",
+      "method": "Método",
       "fundsDate": "Fecha de fondos",
       "payments": "Pagos"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "Transferencia",
+      "cheque": "Cheque"
     },
     "status": {
       "confirmed": "Confirmado",
