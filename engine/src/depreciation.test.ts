@@ -70,12 +70,13 @@ test("invariants hold across every implemented method", () => {
   }
 });
 
-// KNOWN LIMITATION (documented, not a feature): units_of_production is in the
-// method enum + schema (unitsTotal) but computeSchedule has no usage input, so it
-// silently falls through to the declining-balance branch. This test pins that
-// current behavior so a real implementation is a deliberate, visible change.
-test("units_of_production currently behaves like declining-balance (not yet implemented)", () => {
-  const input = base({ cost: "10000.0000", lifeMonths: 60, method: "units_of_production" });
-  const asDeclining = base({ cost: "10000.0000", lifeMonths: 60, method: "declining_balance" });
-  assert.deepEqual(computeSchedule(input), computeSchedule(asDeclining));
+// units_of_production needs per-period usage that the per-asset BOOK path does
+// not capture yet, so in this path it falls back to straight-line (a sensible,
+// non-zero schedule) rather than the old silent declining-balance fall-through.
+// The formula engine (depreciation-formula.ts) computes true units-of-production
+// when usage is supplied — see its tests.
+test("units_of_production falls back to straight-line in the book path (until usage capture)", () => {
+  const asUsage = base({ cost: "10000.0000", lifeMonths: 60, method: "units_of_production" });
+  const asStraightLine = base({ cost: "10000.0000", lifeMonths: 60, method: "straight_line" });
+  assert.deepEqual(computeSchedule(asUsage), computeSchedule(asStraightLine));
 });

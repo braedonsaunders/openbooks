@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
+import { BUILTIN_FORMULAS, computeScheduleByFormula } from "./depreciation-formula.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
@@ -118,79 +119,49 @@ function addMonths(monthStartDate: string, n: number): string {
  */
 export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
   const life = Math.max(1, Math.trunc(input.lifeMonths));
-  const cost = toUnits(input.cost);
-  const salvage = toUnits(input.salvage);
-  const depreciableBase = cost - salvage; // total to depreciate over life
-  if (depreciableBase <= 0n) return [];
-
+  const { formula, rateTable } = formulaForMethod(input.method, input.ratePercent, life);
+  const rows = computeScheduleByFormula({
+    cost: input.cost,
+    salvage: input.salvage,
+    lifePeriods: life,
+    formula,
+    rateTable,
+  });
   const start = monthStart(input.inServiceOn);
-  const plans: ScheduleLinePlan[] = [];
-
-  let accumulated = 0n; // units already depreciated
-
-  if (input.method === "straight_line" || input.method === "manual") {
-    // Even monthly amount; last month absorbs the rounding remainder.
-    const per = depreciableBase / BigInt(life);
-    for (let i = 0; i < life; i++) {
-      let amt = i === life - 1 ? depreciableBase - accumulated : per;
-      if (amt < 0n) amt = 0n;
-      accumulated += amt;
-      plans.push(makeLine(i, addMonths(start, i), amt, accumulated, cost));
-    }
-    return plans;
-  }
-
-  // Declining-balance family: apply a monthly rate to the *remaining* book
-  // value (above salvage) each month; stop at salvage; last month plugs.
-  // annual rate: double_declining => 2/lifeYears; declining_balance => provided
-  // ratePercent (else 1/lifeYears straight-line-equivalent).
-  const lifeYears = life / 12;
-  let annualRate: number;
-  if (input.method === "double_declining") {
-    annualRate = 2 / lifeYears;
-  } else {
-    // declining_balance
-    const provided = input.ratePercent != null ? Number(input.ratePercent) / 100 : NaN;
-    annualRate = Number.isFinite(provided) && provided > 0 ? provided : 1 / lifeYears;
-  }
-  const monthlyRate = annualRate / 12;
-
-  for (let i = 0; i < life; i++) {
-    const remaining = depreciableBase - accumulated; // book value above salvage, units
-    if (remaining <= 0n) {
-      plans.push(makeLine(i, addMonths(start, i), 0n, accumulated, cost));
-      continue;
-    }
-    let amt: bigint;
-    if (i === life - 1) {
-      // final month: take everything left so NBV lands exactly on salvage
-      amt = remaining;
-    } else {
-      // round to whole cents
-      amt = BigInt(Math.round(Number(remaining) * monthlyRate));
-      if (amt < 0n) amt = 0n;
-      if (amt > remaining) amt = remaining;
-    }
-    accumulated += amt;
-    plans.push(makeLine(i, addMonths(start, i), amt, accumulated, cost));
-  }
-  return plans;
+  return rows.map((r) => ({
+    sequence: r.sequence,
+    periodMonth: addMonths(start, r.sequence),
+    planned: r.planned,
+    accumulated: r.accumulated,
+    netBookValue: r.netBookValue,
+  }));
 }
 
-function makeLine(
-  sequence: number,
-  periodMonth: string,
-  amtUnits: bigint,
-  accumulatedUnits: bigint,
-  costUnits: bigint,
-): ScheduleLinePlan {
-  return {
-    sequence,
-    periodMonth,
-    planned: fromUnits(amtUnits),
-    accumulated: fromUnits(accumulatedUnits),
-    netBookValue: fromUnits(costUnits - accumulatedUnits),
-  };
+/**
+ * Map a built-in method to a formula so the flexible engine drives every method
+ * (declining-balance now gets the DB→SL crossover for a clean finish).
+ * `declining_balance` passes its monthly rate as R1 (from `ratePercent`, else the
+ * straight-line-equivalent 1/life). `units_of_production` needs per-period usage
+ * that this book path doesn't capture yet, so it falls back to straight-line.
+ */
+function formulaForMethod(
+  method: DepreciationMethod,
+  ratePercent: string | null | undefined,
+  lifeMonths: number,
+): { formula: string; rateTable?: number[] } {
+  switch (method) {
+    case "double_declining":
+      return { formula: BUILTIN_FORMULAS.double_declining };
+    case "declining_balance": {
+      const annual = ratePercent != null && Number(ratePercent) > 0 ? Number(ratePercent) / 100 : 12 / lifeMonths;
+      return { formula: "(NB-RV)*R1~(NB-RV)/(AL-CP+1)", rateTable: [annual / 12] };
+    }
+    case "straight_line":
+    case "manual":
+    case "units_of_production":
+    default:
+      return { formula: BUILTIN_FORMULAS.straight_line };
+  }
 }
 
 // ---------------------------------------------------------------------------
