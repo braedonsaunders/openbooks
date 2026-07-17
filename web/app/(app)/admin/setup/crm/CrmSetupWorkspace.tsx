@@ -11,6 +11,7 @@ import {
   Button,
   Input,
   Label,
+  SearchSelect,
   Select,
   Table,
   TableBody,
@@ -65,6 +66,7 @@ const COLUMNS: Record<CrmSetupTab, string[]> = {
 };
 
 type Option = { id: string; name: string };
+type CurrencyOption = { code: string; name: string };
 
 export function CrmSetupWorkspace({
   tab,
@@ -78,6 +80,7 @@ export function CrmSetupWorkspace({
   users,
   teams,
   baseCurrency,
+  currencies,
 }: {
   tab: CrmSetupTab;
   rows: Record<string, any>[];
@@ -90,6 +93,7 @@ export function CrmSetupWorkspace({
   users: Option[];
   teams: Option[];
   baseCurrency: string;
+  currencies: CurrencyOption[];
 }) {
   const t = useTranslations("crm");
   const searchParams = useSearchParams();
@@ -158,6 +162,7 @@ export function CrmSetupWorkspace({
           users={users}
           teams={teams}
           baseCurrency={baseCurrency}
+          currencies={currencies}
           closeHref={closeHref}
         />
       ) : null}
@@ -263,6 +268,7 @@ function CrmSetupDrawer({
   users,
   teams,
   baseCurrency,
+  currencies,
   closeHref,
 }: {
   tab: CrmSetupTab;
@@ -270,6 +276,7 @@ function CrmSetupDrawer({
   users: Option[];
   teams: Option[];
   baseCurrency: string;
+  currencies: CurrencyOption[];
   closeHref: string;
 }) {
   const t = useTranslations("crm");
@@ -355,6 +362,7 @@ function CrmSetupDrawer({
             set={set}
             users={users}
             teams={teams}
+            currencies={currencies}
             t={t}
           />
         ) : null}
@@ -690,8 +698,13 @@ function QuotaFields({
   set,
   users,
   teams,
+  currencies,
   t,
-}: FieldProps & { users: Option[]; teams: Option[] }) {
+}: FieldProps & {
+  users: Option[];
+  teams: Option[];
+  currencies: CurrencyOption[];
+}) {
   const options = form.targetType === "team" ? teams : users;
   return (
     <>
@@ -731,11 +744,18 @@ function QuotaFields({
         value={form.periodEnd}
         onChange={(v) => set("periodEnd", v)}
       />
-      <TextField
-        label={t("fields.currency")}
-        value={form.currency}
-        onChange={(v) => set("currency", v.toUpperCase())}
-      />
+      <div className="space-y-1.5">
+        <Label>{t("fields.currency")}</Label>
+        <SearchSelect
+          value={form.currency}
+          onChange={(value) => set("currency", value)}
+          options={currencies.map((currency) => ({
+            value: currency.code,
+            label: `${currency.code} · ${currency.name}`,
+          }))}
+          ariaLabel={t("fields.currency")}
+        />
+      </div>
       <TextField
         label={t("forecasts.quota")}
         type="number"

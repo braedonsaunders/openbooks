@@ -119,15 +119,17 @@ export default async function CrmSetup({
     ]);
   }
 
-  const [usersResult, teamsResult, orgResult] = (await Promise.all([
-    db.execute(
-      sql`select id,name from users where org_id=${orgId} and is_active order by name`,
-    ),
-    db.execute(
-      sql`select id,name from crm_sales_teams where org_id=${orgId} and is_active order by name`,
-    ),
-    db.execute(sql`select base_currency from orgs where id=${orgId}`),
-  ])) as any[];
+  const [usersResult, teamsResult, orgResult, currenciesResult] =
+    (await Promise.all([
+      db.execute(
+        sql`select id,name from users where org_id=${orgId} and is_active order by name`,
+      ),
+      db.execute(
+        sql`select id,name from crm_sales_teams where org_id=${orgId} and is_active order by name`,
+      ),
+      db.execute(sql`select base_currency from orgs where id=${orgId}`),
+      db.execute(sql`select code,name from currencies order by code`),
+    ])) as any[];
 
   const rowParam = pickString(sp.row);
   const creating = rowParam === "new";
@@ -183,6 +185,7 @@ export default async function CrmSetup({
       users={usersResult.rows}
       teams={teamsResult.rows}
       baseCurrency={orgResult.rows[0]?.base_currency ?? ""}
+      currencies={currenciesResult.rows}
     />
   );
 }

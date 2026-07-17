@@ -238,6 +238,15 @@ export async function POST(req: NextRequest) {
         },
         { status: 422 },
       );
+    const currency = String(body.currency).toUpperCase();
+    if (
+      !(
+        (await db.execute(
+          sql`select 1 from currencies where code=${currency}`,
+        )) as any
+      ).rows[0]
+    )
+      return NextResponse.json({ error: "invalid currency" }, { status: 422 });
     if (
       ownerUserId &&
       !(
@@ -264,10 +273,10 @@ export async function POST(req: NextRequest) {
       );
     row = recordId
       ? await db.execute(
-          sql`update crm_sales_quotas set owner_user_id=${ownerUserId},sales_team_id=${salesTeamId},period_start=${body.periodStart},period_end=${body.periodEnd},currency=${String(body.currency).toUpperCase()},amount=${String(body.amount)},filters=${JSON.stringify(body.filters ?? {})}::jsonb,updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
+          sql`update crm_sales_quotas set owner_user_id=${ownerUserId},sales_team_id=${salesTeamId},period_start=${body.periodStart},period_end=${body.periodEnd},currency=${currency},amount=${String(body.amount)},filters=${JSON.stringify(body.filters ?? {})}::jsonb,updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
         )
       : await db.execute(
-          sql`insert into crm_sales_quotas (org_id,owner_user_id,sales_team_id,period_start,period_end,currency,amount,filters,created_by,updated_by) values (${user.orgId},${ownerUserId},${salesTeamId},${body.periodStart},${body.periodEnd},${String(body.currency).toUpperCase()},${String(body.amount)},${JSON.stringify(body.filters ?? {})}::jsonb,${user.id},${user.id}) returning *`,
+          sql`insert into crm_sales_quotas (org_id,owner_user_id,sales_team_id,period_start,period_end,currency,amount,filters,created_by,updated_by) values (${user.orgId},${ownerUserId},${salesTeamId},${body.periodStart},${body.periodEnd},${currency},${String(body.amount)},${JSON.stringify(body.filters ?? {})}::jsonb,${user.id},${user.id}) returning *`,
         );
   } else {
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
