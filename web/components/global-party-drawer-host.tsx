@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Drawer } from '@openbooks/ui'
 import { toast } from 'sonner'
-import { LogoLoader } from './brand-logo'
 import { PartyDrawer } from '../app/(app)/parties/PartyDrawer'
 import type { RelatedPartyRole } from './related-party-link'
 
@@ -77,13 +75,9 @@ export function GlobalPartyDrawerHost({ canManage }: { canManage: boolean }) {
   }, [closeHref, partyId, router, t])
 
   if (!partyId) return null
-  if (!data || loadedId !== partyId) {
-    return (
-      <Drawer open onClose={() => router.push(closeHref as never, { scroll: false })} size="lg" title={t('loadingTitle')}>
-        <LogoLoader label={t('loading')} />
-      </Drawer>
-    )
-  }
+  // Keep the page beneath completely undisturbed while the record loads. The
+  // real, full-size drawer mounts only after its complete payload is ready.
+  if (!data || loadedId !== partyId) return null
 
   return (
     <PartyDrawer

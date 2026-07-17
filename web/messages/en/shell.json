@@ -69,8 +69,6 @@
     }
   },
   "relatedParty": {
-    "loadingTitle": "Opening record",
-    "loading": "Loading record…",
     "loadFailed": "Could not open this record"
   },
   "globalSearch": {
