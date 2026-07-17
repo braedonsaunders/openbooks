@@ -60,7 +60,7 @@ export const documents = pgTable(
     total: money("total").notNull().default("0"),
     // Amount remaining to settle (NetSuite "Amount Remaining") — abs(open-item
     // line) − applied for posted open-item docs, else NULL. Maintained by the
-    // triggers in migrations/generated/0020_document-open-balance.sql so lists
+    // open-balance triggers in migrations/generated/0001_baseline.sql so lists
     // can show/sort/filter it without a live applications join.
     openBalance: money("open_balance"),
 
