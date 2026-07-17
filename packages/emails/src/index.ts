@@ -173,6 +173,37 @@ export function scheduledReportEmail(args: {
   return { subject, html, text }
 }
 
+/** Cover email for a transaction (invoice, quote, PO, …) sent to its party; the
+ *  rendered document rides as a PDF attachment. An optional free-text `message`
+ *  from the sender is shown above the standard line. */
+export function documentEmail(args: {
+  orgName: string
+  docTitle: string
+  reference: string
+  partyName?: string
+  message?: string
+  attachmentName: string
+}): EmailOut {
+  const subject = `${args.docTitle} ${args.reference} — ${args.orgName}`
+  const greeting = args.partyName ? `Hello ${args.partyName},` : 'Hello,'
+  const msg = args.message?.trim()
+  const text =
+    `${greeting}\n\n` +
+    (msg ? `${msg}\n\n` : '') +
+    `Please find ${args.docTitle} ${args.reference} attached (${args.attachmentName}).\n\n` +
+    `— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: `${args.docTitle} ${args.reference}`,
+    bodyHtml: `
+      <p>${esc(greeting)}</p>
+      ${msg ? `<p style="white-space:pre-wrap">${esc(msg)}</p>` : ''}
+      <p>Please find <strong>${esc(args.docTitle)} ${esc(args.reference)}</strong> attached as <strong>${esc(args.attachmentName)}</strong>.</p>
+      <p style="color:#666">${esc(args.orgName)} · OpenBooks</p>`,
+    footer: `Sent by ${args.orgName} via OpenBooks.`,
+  })
+  return { subject, html, text }
+}
+
 /** Remittance advice for a completed outbound payment. */
 export function paymentRemittanceEmail(args: {
   orgName: string

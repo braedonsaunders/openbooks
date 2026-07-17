@@ -37,5 +37,17 @@
     "label": "PDF",
     "defaultTemplate": "Design standard",
     "failed": "Impossible de charger les modèles PDF"
+  },
+  "send": {
+    "label": "Envoyer",
+    "to": "Destinataire",
+    "toPlaceholder": "client@exemple.com",
+    "message": "Message (facultatif)",
+    "messagePlaceholder": "Ajouter une note…",
+    "action": "Envoyer le courriel",
+    "sending": "Envoi…",
+    "sent": "Envoyé à {to}",
+    "noRecipient": "Saisissez l’adresse courriel du destinataire",
+    "failed": "Impossible d’envoyer le courriel"
   }
 }

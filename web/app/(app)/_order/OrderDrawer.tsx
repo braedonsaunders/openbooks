@@ -10,6 +10,7 @@ import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
+import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
@@ -572,6 +573,7 @@ export function OrderDrawer({
         ) : canManage ? (
           <>
             <PdfButton recordType={kind} recordId={String(doc.id)} />
+            <SendButton recordType={kind} recordId={String(doc.id)} />
             {isDraft ? (
               <Button disabled={busy || !canIssue} onClick={issue}>
                 {t('issue')}
