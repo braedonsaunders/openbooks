@@ -1134,6 +1134,10 @@
         "title": "Asset Categories",
         "description": "Default depreciation method and accounts for fixed assets."
       },
+      "depreciation-methods": {
+        "title": "Depreciation Methods",
+        "description": "Author custom depreciation formulas — the formula builder."
+      },
       "currencies": {
         "title": "Currencies",
         "description": "Currency codes and their minor-unit precision."
@@ -1216,6 +1220,7 @@
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultConvention": "Depreciation convention",
+      "endOfLife": "End of life",
       "defaultLifeMonths": "Default life (months)",
       "assetAccountId": "Asset account",
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
@@ -1292,6 +1297,10 @@
         "fullMonth": "Full month",
         "midMonth": "Mid-month",
         "halfYear": "Half-year"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "Fully depreciate",
+        "retainBalance": "Retain balance"
       },
       "burdenMethod": {
         "live": "Live",

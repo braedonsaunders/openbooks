@@ -1046,6 +1046,10 @@
         "title": "Asset Categories",
         "description": "Default depreciation method and accounts for fixed assets."
       },
+      "depreciation-methods": {
+        "title": "Métodos de depreciación",
+        "description": "Cree fórmulas de depreciación personalizadas — el generador de fórmulas."
+      },
       "currencies": {
         "title": "Currencies",
         "description": "Currency codes and their minor-unit precision."
@@ -1124,6 +1128,7 @@
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultConvention": "Convención de depreciación",
+      "endOfLife": "Fin de vida",
       "defaultLifeMonths": "Default life (months)",
       "assetAccountId": "Asset account",
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
@@ -1196,6 +1201,10 @@
         "fullMonth": "Mes completo",
         "midMonth": "Medio mes",
         "halfYear": "Medio año"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "Depreciar por completo",
+        "retainBalance": "Conservar el saldo"
       },
       "burdenMethod": {
         "live": "Live",
