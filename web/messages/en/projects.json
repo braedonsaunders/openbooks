@@ -161,7 +161,7 @@
       "overview": "Overview",
       "financials": "Financials",
       "cost_time": "Cost & Time",
-      "documents": "Documents",
+      "transactions": "Transactions",
       "billing": "Billing",
       "charges": "Charges"
     },
@@ -177,7 +177,9 @@
     "hoursHead": "Hours",
     "billableHead": "Billable",
     "billValue": "Bill value",
-    "noTime": "No approved time on this project yet."
+    "noTime": "No approved time on this project yet.",
+    "costBreakdownAria": "Cost breakdown",
+    "timeBreakdownAria": "Time breakdown"
   },
   "charges": {
     "costRecovered": "Cost recovered",
