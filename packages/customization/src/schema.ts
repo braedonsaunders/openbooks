@@ -310,6 +310,12 @@ const VENDOR_BILL_HEADER_SPAN: Record<string, number> = {
   memo: 3,
 }
 
+/** Per-record-type header col-span defaults so a fresh baseline reads well.
+ *  Falls back to VENDOR_BILL_HEADER_SPAN for transaction kinds. */
+const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
+  project: { name: 2, customer_id: 2, notes: 4 },
+}
+
 /**
  * The system-default form layout for a record type — the form as it renders
  * today (before customization). Used when neither the org nor the user has a
@@ -320,6 +326,7 @@ const VENDOR_BILL_HEADER_SPAN: Record<string, number> = {
 export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
   const meta = RECORD_TYPE_BY_KEY[recordType]
   if (!meta) throw new Error(`unknown record type: ${recordType}`)
+  const spanMap = HEADER_SPAN_BY_TYPE[recordType] ?? VENDOR_BILL_HEADER_SPAN
   return {
     schemaVersion: 1,
     defaultVisibilityVersion: 1,
@@ -334,7 +341,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
             visible: true,
             required: f.required ? true : null,
             labelOverride: null,
-            colSpan: VENDOR_BILL_HEADER_SPAN[f.key] ?? null,
+            colSpan: spanMap[f.key] ?? null,
           })),
         },
       ],

@@ -7,6 +7,10 @@ import { useTranslations } from 'next-intl'
 import { LayoutDashboard, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@openbooks/ui'
+import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
+import { CustomFieldInput } from '../../../components/custom-field-input'
+import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import { HeaderFields } from '../../../components/transaction-form/header-fields'
 
 interface PartyOpt {
   id: string
@@ -39,6 +43,7 @@ interface ProjectPayload {
     estimated_hours: string | null
     estimated_cost: string | null
   }[]
+  customFieldDefs?: CustomFieldDefClient[]
 }
 
 const field = 'space-y-1.5'
@@ -58,12 +63,16 @@ export function ProjectDrawer({
   subsidiaries,
   canManage,
   basePath = '/projects',
+  layout,
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   basePath?: string
+  /** Resolved form layout (custom fields already merged in). Falls back to the
+   *  system default so custom fields still render if none is passed. */
+  layout?: FormLayoutConfig
 }) {
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
@@ -116,6 +125,10 @@ export function ProjectDrawer({
     payload.contractValue != null ? Number(payload.contractValue).toFixed(2) : '',
   )
   const [notes, setNotes] = useState<string>(pr.notes ?? '')
+  const customFieldDefs = payload.customFieldDefs ?? []
+  const [custom, setCustom] = useState<Record<string, unknown>>(
+    (pr.custom as Record<string, unknown> | null) ?? {},
+  )
   const [tasks, setTasks] = useState<TaskRow[]>(
     payload.tasks.map((t) => ({
       id: t.id,
@@ -167,6 +180,7 @@ export function ProjectDrawer({
       endsOn: endsOn || null,
       contractValue: contractValue || null,
       notes: notes || null,
+      custom,
       subsidiaryId: subsidiaries.length > 1 ? subsidiaryId || null : undefined,
       subsidiaryIncludeChildren: subsidiaries.length > 1 ? subsidiaryIncludeChildren : undefined,
       tasks: tasks
@@ -180,7 +194,7 @@ export function ProjectDrawer({
           estimatedCost: t.estimatedCost || null,
         })),
     }),
-    [name, code, customerId, foremanId, managerId, status, billingMethod, customerPoNumber, startsOn, endsOn, contractValue, notes, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
+    [name, code, customerId, foremanId, managerId, status, billingMethod, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -208,6 +222,7 @@ export function ProjectDrawer({
     setEndsOn(pr.ends_on ?? '')
     setContractValue(payload.contractValue != null ? Number(payload.contractValue).toFixed(2) : '')
     setNotes(pr.notes ?? '')
+    setCustom((pr.custom as Record<string, unknown> | null) ?? {})
     setSubsidiaryId(pr.subsidiary_id ?? '')
     setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false)
     setTasks(
@@ -267,6 +282,144 @@ export function ProjectDrawer({
   }
 
   const ro = !editable
+  // Custom fields render inline among the native fields via the form layout —
+  // they are placed wherever the form designer puts them (default: a trailing
+  // group), never in a bolted-on section.
+  const effectiveLayout = layout ?? defaultFormLayout('project')
+  const cfByKey = useMemo(
+    () => new Map(customFieldDefs.map((d) => [`cf_${d.key}`, d])),
+    [customFieldDefs],
+  )
+
+  /** Render one placement's full cell (label + control) for the header layout. */
+  function renderProjectField(placement: HeaderFieldPlacement): React.ReactNode {
+    const lbl = placement.labelOverride?.trim() || undefined
+    switch (placement.key) {
+      case 'name':
+        return (
+          <>
+            <Label>{lbl || tCommon('labels.name')}<span className="text-red-500"> *</span></Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} disabled={ro} />
+          </>
+        )
+      case 'code':
+        return (
+          <>
+            <Label>{lbl || t('labels.code')}</Label>
+            <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder={t('drawer.codePlaceholder')} disabled={ro} />
+          </>
+        )
+      case 'customer_id':
+        return (
+          <>
+            <Label>{lbl || tCommon('labels.customer')}</Label>
+            <SearchSelect value={customerId} onChange={setCustomerId} options={partyOptions} clearable emptyLabel={t('drawer.noCustomer')} placeholder={t('drawer.selectCustomer')} sheetTitle={tCommon('labels.customer')} ariaLabel={tCommon('labels.customer')} disabled={ro} />
+          </>
+        )
+      case 'status':
+        return (
+          <>
+            <Label>{lbl || tCommon('labels.status')}</Label>
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} disabled={ro}>
+              {statusOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+            </Select>
+          </>
+        )
+      case 'billing_method':
+        return (
+          <>
+            <Label>{lbl || t('labels.billingMethod')}</Label>
+            <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)} disabled={ro}>
+              <option value="">—</option>
+              {billingOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+            </Select>
+          </>
+        )
+      case 'contract_value':
+        return (
+          <>
+            <Label>{lbl || t('labels.contractValue')}</Label>
+            <div className="flex items-center">
+              <span className="mr-1 text-slate-500">$</span>
+              <Input inputMode="decimal" className="text-right tabular-nums" value={contractValue} onChange={(e) => setContractValue(e.target.value)} disabled={ro} />
+            </div>
+          </>
+        )
+      case 'foreman_id':
+        return (
+          <>
+            <Label>{lbl || t('labels.foreman')}</Label>
+            <SearchSelect value={foremanId} onChange={setForemanId} options={partyOptions} clearable emptyLabel={t('drawer.noForeman')} placeholder={t('drawer.selectForeman')} sheetTitle={t('labels.foreman')} ariaLabel={t('labels.foreman')} disabled={ro} />
+          </>
+        )
+      case 'manager_id':
+        return (
+          <>
+            <Label>{lbl || t('labels.manager')}</Label>
+            <SearchSelect value={managerId} onChange={setManagerId} options={partyOptions} clearable emptyLabel={t('drawer.noManager')} placeholder={t('drawer.selectManager')} sheetTitle={t('labels.manager')} ariaLabel={t('labels.manager')} disabled={ro} />
+          </>
+        )
+      case 'customer_po_number':
+        return (
+          <>
+            <Label>{lbl || t('labels.customerPo')}</Label>
+            <Input value={customerPoNumber} onChange={(e) => setCustomerPoNumber(e.target.value)} className="font-mono" disabled={ro} />
+          </>
+        )
+      case 'starts_on':
+        return (
+          <>
+            <Label>{lbl || t('labels.startDate')}</Label>
+            <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} disabled={ro} />
+          </>
+        )
+      case 'ends_on':
+        return (
+          <>
+            <Label>{lbl || t('labels.endDate')}</Label>
+            <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} disabled={ro} />
+          </>
+        )
+      case 'subsidiary_id':
+        if (subsidiaries.length <= 1) return null
+        return (
+          <>
+            <Label>{lbl || t('drawer.subsidiaryRestriction')}</Label>
+            <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)} disabled={ro}>
+              <option value="">{t('drawer.allSubsidiaries')}</option>
+              {subsidiaries.map((s) => (<option key={s.id} value={s.id}>{`${'— '.repeat(s.depth)}${s.name}`}</option>))}
+            </Select>
+            {subsidiaryId ? (
+              <label className="mt-1 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                <input type="checkbox" checked={subsidiaryIncludeChildren} onChange={(e) => setSubsidiaryIncludeChildren(e.target.checked)} disabled={ro} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                {t('drawer.includeChildSubsidiaries')}
+              </label>
+            ) : null}
+          </>
+        )
+      case 'notes':
+        return (
+          <>
+            <Label>{lbl || tCommon('labels.notes')}</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={ro} />
+          </>
+        )
+      default: {
+        // Custom field (cf_<key>) — rendered inline exactly like a built-in.
+        const def = cfByKey.get(placement.key)
+        if (!def) return null
+        const overridden = lbl ? { ...def, label: lbl } : def
+        return (
+          <CustomFieldInput
+            def={overridden}
+            value={custom[def.key]}
+            onChange={(v) => setCustom({ ...custom, [def.key]: v })}
+            readOnly={ro}
+          />
+        )
+      }
+    }
+  }
 
   return (
     <UrlDrawer
@@ -347,134 +500,8 @@ export function ProjectDrawer({
       }
     >
       <div className="space-y-7 p-1">
-        {/* -- identity ------------------------------------------------- */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className={`${field} lg:col-span-2`}>
-            <Label>
-              {tCommon('labels.name')}<span className="text-red-500"> *</span>
-            </Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} disabled={ro} />
-          </div>
-          <div className={field}>
-            <Label>{t('labels.code')}</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder={t('drawer.codePlaceholder')} disabled={ro} />
-          </div>
-          <div className={field}>
-            <Label>{tCommon('labels.status')}</Label>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)} disabled={ro}>
-              {statusOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className={`${field} lg:col-span-2`}>
-            <Label>{tCommon('labels.customer')}</Label>
-            <SearchSelect
-              value={customerId}
-              onChange={setCustomerId}
-              options={partyOptions}
-              clearable
-              emptyLabel={t('drawer.noCustomer')}
-              placeholder={t('drawer.selectCustomer')}
-              sheetTitle={tCommon('labels.customer')}
-              ariaLabel={tCommon('labels.customer')}
-              disabled={ro}
-            />
-          </div>
-          <div className={field}>
-            <Label>{t('labels.billingMethod')}</Label>
-            <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)} disabled={ro}>
-              <option value="">—</option>
-              {billingOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className={field}>
-            <Label>{t('labels.contractValue')}</Label>
-            <Input
-              inputMode="decimal"
-              className="text-right tabular-nums"
-              value={contractValue}
-              onChange={(e) => setContractValue(e.target.value)}
-              disabled={ro}
-            />
-          </div>
-        </section>
-
-        {subsidiaries.length > 1 ? (
-          <section className="grid gap-4 sm:grid-cols-2">
-            <div className={field}>
-              <Label>{t('drawer.subsidiaryRestriction')}</Label>
-              <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)} disabled={ro}>
-                <option value="">{t('drawer.allSubsidiaries')}</option>
-                {subsidiaries.map((s) => (
-                  <option key={s.id} value={s.id}>{`${'— '.repeat(s.depth)}${s.name}`}</option>
-                ))}
-              </Select>
-            </div>
-            {subsidiaryId ? (
-              <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={subsidiaryIncludeChildren}
-                  onChange={(e) => setSubsidiaryIncludeChildren(e.target.checked)}
-                  disabled={ro}
-                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                {t('drawer.includeChildSubsidiaries')}
-              </label>
-            ) : null}
-          </section>
-        ) : null}
-
-        {/* -- assignment / schedule ----------------------------------- */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className={field}>
-            <Label>{t('labels.foreman')}</Label>
-            <SearchSelect
-              value={foremanId}
-              onChange={setForemanId}
-              options={partyOptions}
-              clearable
-              emptyLabel={t('drawer.noForeman')}
-              placeholder={t('drawer.selectForeman')}
-              sheetTitle={t('labels.foreman')}
-              ariaLabel={t('labels.foreman')}
-              disabled={ro}
-            />
-          </div>
-          <div className={field}>
-            <Label>{t('labels.manager')}</Label>
-            <SearchSelect
-              value={managerId}
-              onChange={setManagerId}
-              options={partyOptions}
-              clearable
-              emptyLabel={t('drawer.noManager')}
-              placeholder={t('drawer.selectManager')}
-              sheetTitle={t('labels.manager')}
-              ariaLabel={t('labels.manager')}
-              disabled={ro}
-            />
-          </div>
-          <div className={field}>
-            <Label>{t('labels.customerPo')}</Label>
-            <Input value={customerPoNumber} onChange={(e) => setCustomerPoNumber(e.target.value)} className="font-mono" disabled={ro} />
-          </div>
-          <div className={field}>
-            <Label>{t('labels.startDate')}</Label>
-            <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} disabled={ro} />
-          </div>
-          <div className={field}>
-            <Label>{t('labels.endDate')}</Label>
-            <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} disabled={ro} />
-          </div>
-        </section>
+        {/* Header fields (native + custom) driven by the resolved form layout. */}
+        <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderProjectField} />
 
         {/* -- WBS tasks (cost budget) --------------------------------- */}
         <section className="space-y-3">
@@ -551,12 +578,6 @@ export function ProjectDrawer({
               ))}
             </div>
           )}
-        </section>
-
-        {/* -- notes --------------------------------------------------- */}
-        <section className={field}>
-          <Label>{tCommon('labels.notes')}</Label>
-          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={ro} />
         </section>
       </div>
     </UrlDrawer>

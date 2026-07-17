@@ -76,7 +76,8 @@
     "addTask": "Add task",
     "noTasks": "No tasks yet.",
     "taskNamePlaceholder": "Task name…",
-    "removeTaskAria": "Remove task"
+    "removeTaskAria": "Remove task",
+    "customFields": "Custom fields"
   },
   "cockpit": {
     "subtitle": "Job-costing cockpit",
@@ -109,6 +110,25 @@
     "noWbsTasks": "No WBS tasks. Add them from the project editor.",
     "transactions": "Transactions",
     "noTransactionsTitle": "No transactions tagged to this job",
-    "noTransactionsDescription": "Bills, invoices, expenses, orders, and journals with a line tagged to this project appear here."
+    "noTransactionsDescription": "Bills, invoices, expenses, orders, and journals with a line tagged to this project appear here.",
+    "tabs": {
+      "overview": "Overview",
+      "financials": "Financials",
+      "cost_time": "Cost & Time",
+      "documents": "Documents"
+    },
+    "unbilled": "Unbilled",
+    "totalHours": "Total hours",
+    "billableHours": "Billable hours",
+    "laborCost": "Labor cost",
+    "laborBill": "Labor bill value",
+    "timeByTask": "Hours by task",
+    "timeByEmployee": "Hours by employee",
+    "unassignedTask": "Unassigned",
+    "unassignedEmployee": "Unassigned",
+    "hoursHead": "Hours",
+    "billableHead": "Billable",
+    "billValue": "Bill value",
+    "noTime": "No approved time on this project yet."
   }
 }

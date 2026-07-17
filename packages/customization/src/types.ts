@@ -224,6 +224,18 @@ export interface RecordTypeMeta {
    * customization admin shows only the list-view designer.
    */
   supportsForms?: boolean
+  /**
+   * The table whose `custom` jsonb + custom_field_defs back this record type's
+   * custom fields. Defaults to 'documents' (transactions). Entity record types
+   * point at their own table (e.g. 'projects'). Custom-field defs for entity
+   * tables use a null `target_kind`; documents defs use the record type as kind.
+   */
+  customFieldTable?: string
+  /**
+   * The table backing LINE custom fields, or null for header-only record types
+   * (all 'entity' types, plus payments/transfer). Defaults to 'document_lines'.
+   */
+  customFieldLineTable?: string | null
 }
 
 export const DEFAULT_PER_PAGE = 25

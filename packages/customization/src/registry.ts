@@ -461,6 +461,71 @@ const QUOTE = orderRecordType("quote", "common.labels.customer", "customer");
 const SALES_ORDER = orderRecordType("sales_order", "common.labels.customer", "customer");
 const PURCHASE_ORDER = orderRecordType("purchase_order", "common.labels.vendor", "vendor");
 
+/**
+ * Projects — the first `entity` record type: a header-only configurable form
+ * (no line grid) whose custom fields live in projects.custom, and whose list
+ * view is customizable. `contract_value` is a header field even though it is
+ * stored in custom.contractValue (the renderer/query treat it specially).
+ */
+const PROJECT_STATUS_OPTIONS = [
+  { value: "quoted", labelKey: "projects.status.quoted" },
+  { value: "awarded", labelKey: "projects.status.awarded" },
+  { value: "active", labelKey: "common.status.active" },
+  { value: "substantially_complete", labelKey: "projects.status.substantially_complete" },
+  { value: "closed", labelKey: "common.status.closed" },
+  { value: "cancelled", labelKey: "common.status.cancelled" },
+];
+
+const PROJECT: RecordTypeMeta = {
+  key: "project",
+  labelKey: "customization.recordTypes.project",
+  category: "entity",
+  supportsForms: true,
+  customFieldTable: "projects",
+  customFieldLineTable: null,
+  headerFields: [
+    { key: "name", labelKey: "common.labels.name", level: "header", kind: "text", required: true, locked: true },
+    { key: "code", labelKey: "projects.labels.code", level: "header", kind: "text" },
+    { key: "customer_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref" },
+    { key: "status", labelKey: "common.labels.status", level: "header", kind: "select" },
+    { key: "billing_method", labelKey: "projects.labels.billingMethod", level: "header", kind: "select" },
+    { key: "contract_value", labelKey: "projects.labels.contractValue", level: "header", kind: "currency" },
+    { key: "foreman_id", labelKey: "projects.labels.foreman", level: "header", kind: "entity_ref" },
+    { key: "manager_id", labelKey: "projects.labels.manager", level: "header", kind: "entity_ref" },
+    { key: "customer_po_number", labelKey: "projects.labels.customerPo", level: "header", kind: "text" },
+    { key: "starts_on", labelKey: "projects.labels.startDate", level: "header", kind: "date" },
+    { key: "ends_on", labelKey: "projects.labels.endDate", level: "header", kind: "date" },
+    { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref" },
+    { key: "notes", labelKey: "common.labels.notes", level: "header", kind: "long_text" },
+  ],
+  lineFields: [],
+  listColumns: [
+    { key: "code", labelKey: "projects.labels.code", kind: "reference", sortable: true, sortKey: "code", locked: true },
+    { key: "name", labelKey: "common.labels.name", kind: "text", sortable: true, sortKey: "name" },
+    { key: "customer", labelKey: "common.labels.customer", kind: "text", sortable: true, sortKey: "customer" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "billing_method", labelKey: "projects.labels.billing", kind: "text" },
+    { key: "contract", labelKey: "projects.labels.contractValue", kind: "amount", sortable: true, sortKey: "contract", defaultWidth: 130 },
+    { key: "actual", labelKey: "projects.labels.actualCost", kind: "amount", sortable: true, sortKey: "actual", defaultWidth: 130 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    { key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: PROJECT_STATUS_OPTIONS },
+    {
+      key: "billing_method",
+      labelKey: "projects.labels.billingMethod",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "time_and_materials", labelKey: "projects.billing.time_and_materials" },
+        { value: "fixed_price", labelKey: "projects.billing.fixed_price" },
+        { value: "cost_plus", labelKey: "projects.billing.cost_plus" },
+      ],
+    },
+    { key: "customer_id", labelKey: "common.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+  ],
+};
+
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -478,6 +543,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   QUOTE,
   SALES_ORDER,
   PURCHASE_ORDER,
+  PROJECT,
 ];
 
 export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = Object.fromEntries(
@@ -536,6 +602,29 @@ export function listColumnMeta(recordType: string, key: string): ListColumnMeta 
 
 export function listFilterMeta(recordType: string, key: string): ListFilterMeta | undefined {
   return RECORD_TYPE_BY_KEY[recordType]?.listFilters.find((f) => f.key === key);
+}
+
+/**
+ * Where a record type's custom-field definitions live. Documents-backed types
+ * (transactions) key their defs by `target_kind = recordType`; entity types
+ * (e.g. projects) use a null kind and their own table. Line defs only exist for
+ * types with a line grid (customFieldLineTable non-null).
+ */
+export function customFieldTargetFor(recordType: string): {
+  table: string
+  kind: string | undefined
+  lineTable: string | null
+  lineKind: string | undefined
+} {
+  const meta = RECORD_TYPE_BY_KEY[recordType]
+  const table = meta?.customFieldTable ?? "documents"
+  const lineTable = meta && meta.customFieldLineTable !== undefined ? meta.customFieldLineTable : "document_lines"
+  return {
+    table,
+    kind: table === "documents" ? recordType : undefined,
+    lineTable,
+    lineKind: lineTable === "document_lines" ? recordType : undefined,
+  }
 }
 
 /** Is `key` a custom-field reference (`cf_<defKey>`)? */
