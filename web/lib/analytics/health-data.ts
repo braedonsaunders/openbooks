@@ -480,7 +480,7 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
     where bs.org_id = ${orgId} and bs.kind = 'budget' and bs.status = 'approved'
       and exists (
         select 1 from budget_lines bl
-        join accounting_periods p on p.id = bl.period_id
+        join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
         where bl.org_id = ${orgId} and bl.scenario_id = bs.id and p.starts_on <= ${to} and p.ends_on >= ${from}
       )
     order by bs.fiscal_year desc, bs.updated_at desc nulls last
@@ -493,16 +493,16 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
     with b as (
       select bl.account_id, sum(case when acc.type in ('income','income_other') then -bl.amount else bl.amount end) as budget
       from budget_lines bl
-      join accounting_periods p on p.id = bl.period_id
-      join accounts acc on acc.id = bl.account_id
+      join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
+      join accounts acc on acc.id = bl.account_id and acc.org_id = bl.org_id
       where bl.org_id = ${orgId} and bl.scenario_id = ${s.id} and p.starts_on <= ${to} and p.ends_on >= ${from}
       group by 1
     ), a as (
       select l.account_id,
         sum(case when acc.type in ('income','income_other') then -l.amount else l.amount end) as actual
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
-      join accounts acc on acc.id = l.account_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       where l.org_id = ${orgId} and e.book_id = ${s.book_id}
         and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
         and e.posting_date >= ${from} and e.posting_date <= ${to}

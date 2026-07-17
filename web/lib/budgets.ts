@@ -155,8 +155,9 @@ export async function loadBudgetWorkspace(
     }>,
     loadBudgetDimensionOptions(orgId),
     db.execute(sql`
-      select coalesce(sum(bl.amount), 0)::text as total
+      select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
         from budget_lines bl
+        join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
        where bl.org_id = ${orgId} and bl.scenario_id = ${id}
          and ${dimensionWhere('bl', opts.dims)}
     `) as Promise<{ rows: { total: string }[] }>,
