@@ -11,6 +11,26 @@
     "working": "Comptabilisation…",
     "done": "Cédé — gain/perte {gainLoss}"
   },
+  "taxPools": {
+    "title": "Amortissement fiscal (DPA)",
+    "description": "Calculez la déduction pour amortissement par catégorie pour une année d’imposition.",
+    "taxYear": "Année d’imposition",
+    "run": "Exécuter",
+    "running": "Exécution…",
+    "done": "{count} catégories calculées",
+    "empty": "Aucun bien avec une catégorie fiscale pour cette année.",
+    "totals": "Total",
+    "columns": {
+      "class": "Catégorie",
+      "opening": "FNACC d’ouverture",
+      "additions": "Acquisitions",
+      "dispositions": "Dispositions",
+      "allowance": "DPA",
+      "closing": "FNACC de clôture",
+      "recapture": "Récupération",
+      "terminalLoss": "Perte finale"
+    }
+  },
   "list": {
     "title": "Immobilisations",
     "description": "Le registre des immobilisations derrière l'amortissement — coût, amortissement cumulé et valeur nette comptable par actif.",

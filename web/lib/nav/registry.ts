@@ -293,6 +293,14 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'assets.read',
   },
   {
+    key: 'tax-depreciation',
+    href: '/assets/tax-pools',
+    label: 'Tax Depreciation',
+    iconKey: 'receipt',
+    group: 'accounting',
+    requiredPermission: 'assets.read',
+  },
+  {
     key: 'budgets',
     href: '/budgets',
     label: 'Budgets',

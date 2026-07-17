@@ -11,6 +11,26 @@
     "working": "Posting…",
     "done": "Disposed — gain/loss {gainLoss}"
   },
+  "taxPools": {
+    "title": "Tax Depreciation (CCA)",
+    "description": "Compute capital cost allowance by class pool for a tax year.",
+    "taxYear": "Tax year",
+    "run": "Run",
+    "running": "Running…",
+    "done": "Computed {count} pools",
+    "empty": "No assets with a tax class for this year.",
+    "totals": "Total",
+    "columns": {
+      "class": "Class",
+      "opening": "Opening UCC",
+      "additions": "Additions",
+      "dispositions": "Dispositions",
+      "allowance": "CCA",
+      "closing": "Closing UCC",
+      "recapture": "Recapture",
+      "terminalLoss": "Terminal loss"
+    }
+  },
   "list": {
     "title": "Fixed Assets",
     "description": "The asset register behind depreciation — cost, accumulated depreciation, and net book value per asset.",

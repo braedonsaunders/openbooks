@@ -11,6 +11,26 @@
     "working": "Registrando…",
     "done": "Dado de baja — ganancia/pérdida {gainLoss}"
   },
+  "taxPools": {
+    "title": "Depreciación fiscal (CCA)",
+    "description": "Calcule la deducción por costo de capital por grupo de clase para un año fiscal.",
+    "taxYear": "Año fiscal",
+    "run": "Ejecutar",
+    "running": "Ejecutando…",
+    "done": "{count} grupos calculados",
+    "empty": "No hay activos con una clase fiscal para este año.",
+    "totals": "Total",
+    "columns": {
+      "class": "Clase",
+      "opening": "UCC inicial",
+      "additions": "Adiciones",
+      "dispositions": "Disposiciones",
+      "allowance": "CCA",
+      "closing": "UCC final",
+      "recapture": "Recuperación",
+      "terminalLoss": "Pérdida final"
+    }
+  },
   "list": {
     "title": "Activos fijos",
     "description": "El registro de activos detrás de la depreciación — costo, depreciación acumulada y valor en libros neto por activo.",
