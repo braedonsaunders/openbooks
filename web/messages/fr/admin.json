@@ -1370,6 +1370,10 @@
       "item-inventory-profiles": {
         "title": "Coût des articles",
         "description": "Méthode de coût, comptes de stock, suivi et coût standard par article."
+      },
+      "bom-components": {
+        "title": "Nomenclature",
+        "description": "Composants consommés pour assembler chaque article."
       }
     },
     "fields": {
@@ -1482,7 +1486,10 @@
       "baseUnit": "Unité de base",
       "reorderPoint": "Point de commande",
       "preferredStockLevel": "Niveau de stock préféré",
-      "receivedNotBilledAccountId": "Compte de réception non facturée"
+      "receivedNotBilledAccountId": "Compte de réception non facturée",
+      "assemblyItemId": "Article assemblé",
+      "componentItemId": "Composant",
+      "quantityPer": "Quantité par"
     },
     "options": {
       "appliesTo": {

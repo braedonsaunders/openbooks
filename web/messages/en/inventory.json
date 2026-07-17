@@ -41,13 +41,17 @@
       "receive": "Receive",
       "issue": "Issue",
       "adjust": "Adjust",
-      "transfer": "Transfer"
+      "transfer": "Transfer",
+      "build": "Build assembly",
+      "landed": "Landed cost"
     },
     "hint": {
       "receive": "Add stock at cost (DR inventory / CR offset).",
       "issue": "Remove stock to COGS (DR COGS / CR inventory).",
       "adjust": "Correct on-hand quantity against the adjustment account.",
-      "transfer": "Move stock between two locations at its carried cost."
+      "transfer": "Move stock between two locations at its carried cost.",
+      "build": "Consume components per the BOM and produce the finished good at cost.",
+      "landed": "Capitalize freight/duty onto an item’s on-hand layers."
     },
     "selectItem": "Select an item",
     "selectLocation": "Select a location",
@@ -60,6 +64,15 @@
     "failed": "Movement failed",
     "posted": "Posted movement ({value})",
     "fromLocation": "From location",
-    "toLocation": "To location"
+    "toLocation": "To location",
+    "assemblyItem": "Assembly item",
+    "amount": "Amount",
+    "freightAccount": "Freight / duty account",
+    "freightHint": "The account the freight currently sits in; it moves into inventory.",
+    "basis": "Allocation basis",
+    "bases": {
+      "value": "By value",
+      "quantity": "By quantity"
+    }
   }
 }

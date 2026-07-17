@@ -10,8 +10,9 @@ interface ItemOpt { id: string; code?: string | null; name?: string | null }
 interface LocOpt { id: string; code?: string | null }
 interface AccountOpt { id: string; number?: string | null; name?: string | null }
 
-const ACTIONS = ['receive', 'issue', 'adjust', 'transfer'] as const
+const ACTIONS = ['receive', 'issue', 'adjust', 'transfer', 'build', 'landed'] as const
 type Action = (typeof ACTIONS)[number]
+const BASES = ['value', 'quantity'] as const
 
 const field = 'space-y-1.5'
 
@@ -39,6 +40,7 @@ export function InventoryActionDrawer({
   const [quantity, setQuantity] = useState('')
   const [unitCost, setUnitCost] = useState('')
   const [offsetAccountId, setOffsetAccountId] = useState('')
+  const [basis, setBasis] = useState<string>('value')
   const [memo, setMemo] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -47,7 +49,11 @@ export function InventoryActionDrawer({
   const accountOptions = accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))
 
   const needsCost = action === 'receive'
-  const needsOffset = action === 'receive'
+  const needsOffset = action === 'receive' || action === 'landed'
+  const itemLabel = action === 'build' ? t('drawer.assemblyItem') : t('labels.item')
+  const quantityLabel =
+    action === 'landed' ? t('drawer.amount') : action === 'adjust' ? t('drawer.quantityDelta') : t('labels.quantity')
+  const offsetLabel = action === 'landed' ? t('drawer.freightAccount') : t('drawer.offsetAccount')
 
   async function submit() {
     if (!itemId || !stockLocationId || !quantity) {
@@ -66,6 +72,7 @@ export function InventoryActionDrawer({
         quantity,
         unitCost: unitCost || undefined,
         offsetAccountId: offsetAccountId || undefined,
+        basis: action === 'landed' ? basis : undefined,
         memo: memo || undefined,
       }),
     })
@@ -108,14 +115,14 @@ export function InventoryActionDrawer({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className={field}>
-            <Label>{t('labels.item')}<span className="text-red-500"> *</span></Label>
+            <Label>{itemLabel}<span className="text-red-500"> *</span></Label>
             <SearchSelect
               value={itemId}
               onChange={setItemId}
               options={itemOptions}
               placeholder={t('drawer.selectItem')}
-              sheetTitle={t('labels.item')}
-              ariaLabel={t('labels.item')}
+              sheetTitle={itemLabel}
+              ariaLabel={itemLabel}
             />
           </div>
           <div className={field}>
@@ -144,11 +151,23 @@ export function InventoryActionDrawer({
           ) : null}
           <div className={field}>
             <Label>
-              {action === 'adjust' ? t('drawer.quantityDelta') : t('labels.quantity')}
+              {quantityLabel}
               <span className="text-red-500"> *</span>
             </Label>
             <Input inputMode="decimal" className="text-right tabular-nums" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
           </div>
+          {action === 'landed' ? (
+            <div className={field}>
+              <Label>{t('drawer.basis')}</Label>
+              <Select value={basis} onChange={(e) => setBasis(e.target.value)}>
+                {BASES.map((b) => (
+                  <option key={b} value={b}>
+                    {t(`drawer.bases.${b}`)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
           {needsCost || action === 'adjust' ? (
             <div className={field}>
               <Label>
@@ -160,16 +179,18 @@ export function InventoryActionDrawer({
           ) : null}
           {needsOffset ? (
             <div className={`${field} sm:col-span-2`}>
-              <Label>{t('drawer.offsetAccount')}<span className="text-red-500"> *</span></Label>
+              <Label>{offsetLabel}<span className="text-red-500"> *</span></Label>
               <SearchSelect
                 value={offsetAccountId}
                 onChange={setOffsetAccountId}
                 options={accountOptions}
                 placeholder={t('drawer.selectAccount')}
-                sheetTitle={t('drawer.offsetAccount')}
-                ariaLabel={t('drawer.offsetAccount')}
+                sheetTitle={offsetLabel}
+                ariaLabel={offsetLabel}
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.offsetHint')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {action === 'landed' ? t('drawer.freightHint') : t('drawer.offsetHint')}
+              </p>
             </div>
           ) : null}
           <div className={`${field} sm:col-span-2`}>

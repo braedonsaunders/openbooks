@@ -41,13 +41,17 @@
       "receive": "Recibir",
       "issue": "Salida",
       "adjust": "Ajustar",
-      "transfer": "Trasladar"
+      "transfer": "Trasladar",
+      "build": "Ensamblar",
+      "landed": "Costo de importación"
     },
     "hint": {
       "receive": "Agregar stock al costo (DR inventario / CR contrapartida).",
       "issue": "Retirar stock a costo de ventas (DR costo de ventas / CR inventario).",
       "adjust": "Corregir la cantidad en existencia contra la cuenta de ajuste.",
-      "transfer": "Mover stock entre dos ubicaciones a su costo registrado."
+      "transfer": "Mover stock entre dos ubicaciones a su costo registrado.",
+      "build": "Consumir componentes según la lista de materiales y producir el artículo terminado al costo.",
+      "landed": "Capitalizar flete/aranceles sobre las capas en existencia de un artículo."
     },
     "selectItem": "Seleccionar un artículo",
     "selectLocation": "Seleccionar una ubicación",
@@ -60,6 +64,15 @@
     "failed": "Falló el movimiento",
     "posted": "Movimiento contabilizado ({value})",
     "fromLocation": "Ubicación origen",
-    "toLocation": "Ubicación destino"
+    "toLocation": "Ubicación destino",
+    "assemblyItem": "Artículo ensamblado",
+    "amount": "Importe",
+    "freightAccount": "Cuenta de flete / aranceles",
+    "freightHint": "La cuenta donde está el flete; se traslada al inventario.",
+    "basis": "Base de asignación",
+    "bases": {
+      "value": "Por valor",
+      "quantity": "Por cantidad"
+    }
   }
 }

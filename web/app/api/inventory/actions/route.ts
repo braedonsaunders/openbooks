@@ -3,6 +3,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   adjustInventory,
+  allocateLandedCost,
+  buildAssembly,
   issueInventory,
   receiveInventory,
   transferInventory,
@@ -16,13 +18,14 @@ export const runtime = 'nodejs'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 interface Body {
-  action?: 'receive' | 'issue' | 'adjust' | 'transfer'
+  action?: 'receive' | 'issue' | 'adjust' | 'transfer' | 'build' | 'landed'
   itemId?: string
   stockLocationId?: string
   toStockLocationId?: string
   quantity?: string
   unitCost?: string
   offsetAccountId?: string
+  basis?: 'value' | 'quantity'
   subsidiaryId?: string
   date?: string
   memo?: string
@@ -45,7 +48,7 @@ export async function POST(req: Request) {
   const user = gate.user
 
   const body = (await req.json().catch(() => ({}))) as Body
-  if (!body.action || !['receive', 'issue', 'adjust', 'transfer'].includes(body.action)) {
+  if (!body.action || !['receive', 'issue', 'adjust', 'transfer', 'build', 'landed'].includes(body.action)) {
     return NextResponse.json({ error: 'invalid action' }, { status: 422 })
   }
   if (!body.itemId || !isUuid(body.itemId)) return NextResponse.json({ error: 'item required' }, { status: 422 })
@@ -89,6 +92,33 @@ export async function POST(req: Request) {
         memo: body.memo ?? null,
       })
       return NextResponse.json({ ok: true, ...res })
+    }
+    if (body.action === 'build') {
+      const res = await buildAssembly(user.orgId, user.id, {
+        assemblyItemId: body.itemId,
+        quantity,
+        stockLocationId: body.stockLocationId,
+        subsidiaryId,
+        date,
+        memo: body.memo ?? null,
+      })
+      return NextResponse.json({ ok: true, ...res })
+    }
+    if (body.action === 'landed') {
+      if (!body.offsetAccountId || !isUuid(body.offsetAccountId)) {
+        return NextResponse.json({ error: 'freight account required' }, { status: 422 })
+      }
+      const res = await allocateLandedCost(user.orgId, user.id, {
+        itemId: body.itemId,
+        stockLocationId: body.stockLocationId,
+        amount: quantity,
+        basis: body.basis === 'quantity' ? 'quantity' : 'value',
+        freightAccountId: body.offsetAccountId,
+        subsidiaryId,
+        date,
+        memo: body.memo ?? null,
+      })
+      return NextResponse.json({ ok: true, entryId: res.entryId, value: quantity })
     }
     if (body.action === 'transfer') {
       if (!body.toStockLocationId || !isUuid(body.toStockLocationId)) {

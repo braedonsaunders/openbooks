@@ -41,13 +41,17 @@
       "receive": "Réceptionner",
       "issue": "Sortir",
       "adjust": "Ajuster",
-      "transfer": "Transférer"
+      "transfer": "Transférer",
+      "build": "Assembler",
+      "landed": "Coût de revient"
     },
     "hint": {
       "receive": "Ajouter du stock au coût (DR stock / CR contrepartie).",
       "issue": "Sortir du stock vers le CMV (DR CMV / CR stock).",
       "adjust": "Corriger la quantité en stock via le compte d'ajustement.",
-      "transfer": "Déplacer du stock entre deux emplacements à son coût porté."
+      "transfer": "Déplacer du stock entre deux emplacements à son coût porté.",
+      "build": "Consommer les composants selon la nomenclature et produire le produit fini au coût.",
+      "landed": "Capitaliser le fret/les droits sur les couches en stock d’un article."
     },
     "selectItem": "Sélectionner un article",
     "selectLocation": "Sélectionner un emplacement",
@@ -60,6 +64,15 @@
     "failed": "Échec du mouvement",
     "posted": "Mouvement comptabilisé ({value})",
     "fromLocation": "Emplacement source",
-    "toLocation": "Emplacement destination"
+    "toLocation": "Emplacement destination",
+    "assemblyItem": "Article assemblé",
+    "amount": "Montant",
+    "freightAccount": "Compte de fret / droits",
+    "freightHint": "Le compte où se trouve le fret ; il est transféré au stock.",
+    "basis": "Base de répartition",
+    "bases": {
+      "value": "Par valeur",
+      "quantity": "Par quantité"
+    }
   }
 }

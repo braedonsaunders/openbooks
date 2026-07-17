@@ -798,6 +798,29 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'preferredStockLevel', kind: 'decimal' },
     ],
   },
+  {
+    // Bill of materials — components consumed to build an assembly item.
+    key: 'bom-components',
+    table: 'bom_components',
+    actorCols: true,
+    groupKey: 'inventory',
+    iconKey: 'package',
+    orgScoped: true,
+    orderBy: 'assembly_item_id, sort_order',
+    hasActive: false,
+    columns: [
+      { key: 'assemblyItemId', kind: 'ref', ref: 'items' },
+      { key: 'componentItemId', kind: 'ref', ref: 'items' },
+      { key: 'quantityPer', kind: 'number' },
+      { key: 'sortOrder', kind: 'number' },
+    ],
+    fields: [
+      { key: 'assemblyItemId', kind: 'ref', ref: 'items', required: true },
+      { key: 'componentItemId', kind: 'ref', ref: 'items', required: true },
+      { key: 'quantityPer', kind: 'decimal', required: true },
+      { key: 'sortOrder', kind: 'integer', keepDefault: true },
+    ],
+  },
 
   // --- Workforce -----------------------------------------------------------
   {
