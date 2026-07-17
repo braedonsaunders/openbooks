@@ -8,6 +8,9 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
   const { ensureScheduler } = await import('@openbooks/engine/src/scheduler.ts')
+  const { registerContinuousCloseEnricher } = await import('@openbooks/engine/src/continuous-close.ts')
+  const { enrichContinuousCloseRun } = await import('./lib/assistant/continuous-close-agent')
+  registerContinuousCloseEnricher(enrichContinuousCloseRun)
   ensureScheduler()
   const { ensureSftpServer } = await import('@openbooks/engine/src/sftp/manager.ts')
   await ensureSftpServer()

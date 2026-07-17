@@ -22,13 +22,13 @@ export default async function FinancialHealthPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('analytics.financialHealth')
-  await requirePermission('reports.read')
+  const authz = await requirePermission('reports.read')
 
   const sp = await searchParams
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
-  const data = await healthData({ from: period.from, to: period.to, label: period.label })
+  const data = await healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId)
 
   return (
     <ListPageLayout

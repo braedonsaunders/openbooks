@@ -37,6 +37,10 @@ export interface NativeDocument {
   partyId: string | null;
   /** Source legal entity; undefined falls back to the tenant root. */
   subsidiaryId?: string | null;
+  /** Transaction currency; omitted = the source base currency (home). */
+  currency?: string;
+  /** Transaction→base fx rate; omitted = "1". Line amounts are in `currency`. */
+  fxRate?: string;
   documentDate: string; // ISO yyyy-mm-dd
   dueDate: string | null;
   memo: string | null;

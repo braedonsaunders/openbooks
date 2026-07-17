@@ -16,7 +16,16 @@
 const AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize";
 const TOKEN_URL = "https://identity.xero.com/connect/token";
 const API = "https://api.xero.com/api.xro/2.0";
-const SCOPE = "offline_access accounting.transactions accounting.settings accounting.contacts";
+// GRANULAR scopes (mandatory for apps created after 2 Mar 2026; broad scopes
+// like accounting.transactions no longer exist for them). Read-only set:
+//  - invoices.read       → Invoices, CreditNotes, Items
+//  - payments.read       → Payments (and batch/over/prepayments)
+//  - banktransactions.read → BankTransactions + BankTransfers
+//  - manualjournals.read / contacts.read / settings.read (accounts, tax rates, org)
+//  - reports.trialbalance.read → the TB report (the Journals endpoint is now
+//    Advanced-tier-gated, so verification reads the report instead)
+const SCOPE =
+  "offline_access accounting.settings.read accounting.contacts.read accounting.invoices.read accounting.payments.read accounting.banktransactions.read accounting.manualjournals.read accounting.reports.trialbalance.read";
 
 export interface XeroApp {
   clientId: string;
@@ -112,6 +121,42 @@ export class XeroClient {
     return this.tokens.accessToken;
   }
 
+  /**
+   * One HTTP call with a hard per-attempt timeout and bounded retry. Xero over
+   * a network tunnel can stall a socket indefinitely (a bare fetch has no
+   * timeout); we also retry Xero's 429 rate limit and transient 5xx. Non-retry
+   * 4xx errors surface immediately.
+   */
+  private async send(method: string, url: URL, headers: Record<string, string>, body?: unknown): Promise<Response> {
+    const TIMEOUT_MS = 30_000;
+    const MAX_ATTEMPTS = 4;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+      try {
+        const res = await fetch(url, {
+          method,
+          headers,
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: ctrl.signal,
+        });
+        if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS) {
+          const retryAfter = Number(res.headers.get("Retry-After"));
+          await new Promise((r) => setTimeout(r, retryAfter > 0 ? retryAfter * 1000 : attempt * 2000));
+          continue;
+        }
+        return res;
+      } catch (e) {
+        lastErr = e; // network error / timeout abort — retry with backoff
+        if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, attempt * 2000));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw new Error(`Xero ${method} ${url.pathname} failed after ${MAX_ATTEMPTS} attempts: ${String(lastErr)}`);
+  }
+
   async get<T>(path: string, params: Record<string, string> = {}, modifiedSince?: Date | null): Promise<T> {
     const token = await this.accessToken();
     const url = new URL(`${API}/${path}`);
@@ -122,7 +167,7 @@ export class XeroClient {
       Accept: "application/json",
     };
     if (modifiedSince) headers["If-Modified-Since"] = modifiedSince.toISOString();
-    const res = await fetch(url, { headers });
+    const res = await this.send("GET", url, headers);
     if (!res.ok) throw new Error(`Xero ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return (await res.json()) as T;
   }
@@ -138,16 +183,4 @@ export class XeroClient {
     }
   }
 
-  /** The Journals endpoint (the GL): paginates by offset=<last JournalNumber>. */
-  async journalsAll<T extends { JournalNumber: number }>(modifiedSince?: Date | null): Promise<T[]> {
-    const out: T[] = [];
-    let offset = 0;
-    for (;;) {
-      const data = await this.get<{ Journals: T[] }>("Journals", offset ? { offset: String(offset) } : {}, modifiedSince);
-      const rows = data.Journals ?? [];
-      out.push(...rows);
-      if (rows.length < 100) return out;
-      offset = rows[rows.length - 1]!.JournalNumber;
-    }
-  }
 }

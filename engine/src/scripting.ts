@@ -399,9 +399,9 @@ export async function runBulkScript(scriptId: string, orgId: string): Promise<Sc
   return outcome;
 }
 
-export function computeNextRunAt(cron: string, from: Date = new Date()): Date | null {
+export function computeNextRunAt(cron: string, from: Date = new Date(), timezone = "UTC"): Date | null {
   try {
-    const expr = CronExpressionParser.parse(cron, { currentDate: from, tz: "UTC" });
+    const expr = CronExpressionParser.parse(cron, { currentDate: from, tz: timezone });
     return expr.next().toDate();
   } catch {
     return null;

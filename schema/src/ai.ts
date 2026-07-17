@@ -73,6 +73,8 @@ export const aiAgentPolicies = pgTable(
     materialityThreshold: money("materiality_threshold").notNull().default("1000"),
     /** Canonical per-detector enablement, materiality overrides, and thresholds. */
     detectorSettings: jsonb("detector_settings").$type<Record<string, unknown>>().notNull().default({}),
+    /** Tenant controls for tool-using analysis, recommendations, and narratives. */
+    analysisSettings: jsonb("analysis_settings").$type<Record<string, unknown>>().notNull().default({}),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     ...auditColumns,

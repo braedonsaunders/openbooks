@@ -60,7 +60,7 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter) 
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
       from accounts a
-      left join (journal_lines l join journal_entries e on e.id = l.entry_id)
+      left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.status = 'posted')
         on l.account_id = a.id and ${where} and ${dimWhere(dims)}
      group by a.id
      order by a.number nulls last, a.name
@@ -138,7 +138,7 @@ export async function balanceSheet(asOf: string) {
     select coalesce(sum(l.amount), 0) as s
       from journal_lines l
       join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
      where a.type in ${PNL_TYPES} and e.posting_date <= ${asOf}
   `)) as any;
   const accumulatedEarnings = -Number(pl.rows[0].s);
@@ -159,7 +159,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter) {
            sum(l.amount) as balance
       from journal_lines l
       join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
      where e.posting_date <= ${asOf} and ${dimWhere(dims)}
      group by a.id having abs(sum(l.amount)) >= 0.005
      order by a.number nulls last, a.name
@@ -207,36 +207,84 @@ export interface AgingResult {
   asOf: string;
 }
 
+export interface FinancialTrendRow {
+  id: string;
+  name: string;
+  starts_on: string;
+  ends_on: string;
+  revenue: string;
+  cogs: string;
+  expenses: string;
+  gross_profit: string;
+  net_income: string;
+  gross_margin_percent: string | null;
+  closing_cash: string;
+}
+
+/** Exact posted-only performance and cash position for recent completed periods. */
+export async function financialTrends(orgId: string, limit = 15): Promise<FinancialTrendRow[]> {
+  const cappedLimit = Math.max(2, Math.min(limit, 15));
+  const rows = (await db.execute(sql`
+    with recent as (
+      select p.id, p.name, p.starts_on, p.ends_on
+        from accounting_periods p
+        join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+       where p.org_id = ${orgId} and fc.is_default and fc.is_active
+         and not p.is_adjustment and p.ends_on < current_date
+       order by p.ends_on desc limit ${cappedLimit}
+    ), activity as (
+      select p.id,
+             coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
+             coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
+             coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
+        from recent p
+        left join journal_entries e on e.org_id = ${orgId} and e.status = 'posted'
+          and e.posting_date between p.starts_on and p.ends_on
+        left join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+        left join accounts a on a.id = l.account_id and a.org_id = l.org_id
+       group by p.id
+    )
+    select p.id, p.name, p.starts_on::text, p.ends_on::text,
+           a.revenue::text, a.cogs::text, a.expenses::text,
+           (a.revenue - a.cogs)::text as gross_profit,
+           (a.revenue - a.cogs - a.expenses)::text as net_income,
+           case when a.revenue = 0 then null else round(((a.revenue - a.cogs) / a.revenue) * 100, 2)::text end as gross_margin_percent,
+           coalesce((
+             select sum(jl.amount)
+               from journal_lines jl
+               join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+               join accounts ba on ba.id = jl.account_id and ba.org_id = jl.org_id and ba.type = 'asset_bank'
+              where jl.org_id = ${orgId} and je.posting_date <= p.ends_on
+           ), 0)::text as closing_cash
+      from recent p join activity a on a.id = p.id
+     order by p.ends_on
+  `)) as unknown as { rows: FinancialTrendRow[] };
+  return rows.rows;
+}
+
 /**
- * Per-party open-item aging. Mirrors the payments open-item logic
- * (`engine/src/payments.ts#openItemsForParty`): an open item is an
- * `is_open_item` journal line on a POSTED entry with the right sign for the
- * side (AR = debit, AP = credit). Its remaining open balance is the absolute
- * line amount NET of live `applications` (unapplied_at is null) whose
- * `to_line_id` points at it — a payment applied to an invoice reduces what's
- * still owed. Only lines with a positive remaining balance are aged.
- *
- * Each open item is bucketed by age = (asOf − due_date), falling back to the
- * entry posting_date when the line carries no due date. All arithmetic is done
- * in Postgres against the netted remaining balance so it ties out exactly to
- * the payments open-items view and the Payables/Receivables-by-party report.
+ * Per-party document aging from the canonical maintained open balance. Source
+ * migrations often contain complete remaining balances but not the historical
+ * application rows needed to reconstruct them from gross ledger lines. Aging
+ * those lines therefore wildly overstates imported AR/AP. `documents.open_balance`
+ * is updated by native applications and imported from the source for cutover,
+ * so it is the only source that is correct for both paths. Credits reduce the
+ * party balance and all values are translated to base currency at document FX.
  */
 export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilter): Promise<AgingResult> {
-  const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
+  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
+  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
   const r = (await db.execute(sql`
     with open_items as (
-      select jl.party_id,
-             abs(jl.amount) - coalesce(ap.applied, 0) as open,
-             (${asOf}::date - coalesce(jl.due_date, je.posting_date)) as age_days
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-        left join lateral (
-          select sum(a.amount) as applied
-            from applications a
-           where a.to_line_id = jl.id and a.unapplied_at is null
-        ) ap on true
-       where jl.is_open_item and ${signFilter}
-         and je.posting_date <= ${asOf} and ${dimWhere(dims, sql`jl`)}
+      select d.party_id,
+             (case when d.kind = ${creditKind} then -1 else 1 end)
+               * d.open_balance * d.fx_rate as open,
+             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date)) as age_days
+        from documents d
+       where d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+         and d.open_balance > 0.005
+         and coalesce(d.posting_date, d.document_date) <= ${asOf}
+         and ${dimWhere(dims, sql`d`)}
     )
     select oi.party_id, p.display_name as party_name,
            coalesce(sum(oi.open) filter (where oi.age_days <= 0), 0) as current,
@@ -247,10 +295,9 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
            coalesce(sum(oi.open), 0) as total
       from open_items oi
       left join parties p on p.id = oi.party_id
-     where oi.open > 0.005
      group by oi.party_id, p.display_name
-    having sum(oi.open) > 0.005
-     order by sum(oi.open) desc
+    having abs(sum(oi.open)) > 0.005
+     order by abs(sum(oi.open)) desc
   `)) as unknown as {
     rows: {
       party_id: string | null; party_name: string | null;
@@ -681,33 +728,31 @@ function bucketOf(age: number): AgingBucket {
 }
 
 /**
- * Per-open-item aging: the same netted open-item logic as `agingByParty`, but
- * one row per invoice/bill (its entry reference, due date, age and bucket)
- * rather than aggregated per party. Ordered party then oldest-first.
+ * Per-open-item aging: the same canonical document-balance logic as
+ * `agingByParty`, but one row per document rather than aggregated per party.
+ * Credits are negative open items so the detail and summary always tie.
  */
 export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilter): Promise<AgingDetailResult> {
-  const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`
+  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice"
+  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit"
   const r = (await db.execute(sql`
     with open_items as (
-      select jl.party_id, je.entry_number,
-             coalesce(jl.due_date, je.posting_date)::text as due,
-             abs(jl.amount) - coalesce(ap.applied, 0) as open,
-             (${asOf}::date - coalesce(jl.due_date, je.posting_date))::int as age_days
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-        left join lateral (
-          select sum(a.amount) as applied
-            from applications a
-           where a.to_line_id = jl.id and a.unapplied_at is null
-        ) ap on true
-       where jl.is_open_item and ${signFilter}
-         and je.posting_date <= ${asOf} and ${dimWhere(dims, sql`jl`)}
+      select d.party_id, d.document_number,
+             coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
+             (case when d.kind = ${creditKind} then -1 else 1 end)
+               * d.open_balance * d.fx_rate as open,
+             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days
+        from documents d
+       where d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+         and d.open_balance > 0.005
+         and coalesce(d.posting_date, d.document_date) <= ${asOf}
+         and ${dimWhere(dims, sql`d`)}
     )
-    select oi.party_id, p.display_name as party_name, oi.entry_number as reference,
+    select oi.party_id, p.display_name as party_name, oi.document_number as reference,
            oi.due as due_date, oi.age_days, oi.open
       from open_items oi
       left join parties p on p.id = oi.party_id
-     where oi.open > 0.005
+     where abs(oi.open) > 0.005
      order by p.display_name nulls last, oi.age_days desc
   `)) as unknown as {
     rows: {

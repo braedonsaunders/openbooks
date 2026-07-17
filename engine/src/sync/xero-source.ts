@@ -12,10 +12,11 @@ import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods } from "./pe
  * Xero adapter — native transactions over the accounting API. Invoices (both
  * ACCREC and ACCPAY live in one endpoint), credit notes (whose `Allocations`
  * are credit applications), payments (each is itself an application), manual
- * journals, bank transactions and transfers. The `Journals` endpoint IS the
- * posted GL — it powers both the trial-balance and month-bucket gates
- * directly. `If-Modified-Since` drives incremental pulls; refresh tokens
- * rotate and re-seal via onRefresh.
+ * journals, bank transactions and transfers. The raw `Journals` endpoint is
+ * Advanced-tier-gated on new Xero plans, so the trial-balance and month-bucket
+ * gates read the TrialBalance REPORT instead (one call per month-end; see
+ * bucketsFromReports). `If-Modified-Since` drives incremental pulls; refresh
+ * tokens rotate and re-seal via onRefresh.
  *
  * Contacts are ONE party model (IsCustomer/IsSupplier flags) — no prefixing
  * needed, unlike QBO/ERPNext.
@@ -51,10 +52,14 @@ interface XeroItem {
   ItemID: string; Code?: string; Name: string; IsTrackedAsInventory?: boolean;
 }
 interface XeroTaxRate { Name: string; TaxType: string; EffectiveRate?: number; Status?: string }
-interface XeroJournal {
-  JournalID: string; JournalNumber: number; JournalDate: string;
-  JournalLines: { AccountID?: string; NetAmount?: number }[];
-}
+
+/** Xero report JSON (TrialBalance): header row + sections of account rows. */
+interface XeroReportCell { Value?: string; Attributes?: { Id?: string; Value?: string }[] }
+interface XeroReportRow { RowType?: string; Cells?: XeroReportCell[]; Rows?: XeroReportRow[] }
+interface XeroReport { Reports?: { Rows?: XeroReportRow[] }[] }
+
+/** How far back the report-based gates look (one TB report call per month). */
+const TB_LOOKBACK_MONTHS = 24;
 interface XeroOrganisation {
   FinancialYearEndDay?: number;
   FinancialYearEndMonth?: number;
@@ -102,15 +107,11 @@ export class XeroSource implements MigrationSource {
   }
 
   async accountingPeriods(): Promise<SourceEntity[]> {
-    const [organisation, journals] = await Promise.all([
-      this.client.get<{ Organisations?: XeroOrganisation[] }>("Organisation"),
-      this.client.journalsAll<XeroJournal>(),
-    ]);
+    const organisation = await this.client.get<{ Organisations?: XeroOrganisation[] }>("Organisation");
     const org = organisation.Organisations?.[0];
     if (!org?.FinancialYearEndMonth || !org.FinancialYearEndDay) {
       throw new Error("Xero organisation fiscal year end is required for period migration");
     }
-    const dates = journals.map((journal) => xeroDate(journal.JournalDate)?.slice(0, 10)).filter((value): value is string => Boolean(value)).sort();
     const now = new Date();
     const fallbackStart = new Date(Date.UTC(now.getUTCFullYear() - 7, 0, 1)).toISOString().slice(0, 10);
     const horizon = new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31)).toISOString().slice(0, 10);
@@ -118,7 +119,7 @@ export class XeroSource implements MigrationSource {
     const yearLock = xeroDate(org.EndOfYearLockDate)?.slice(0, 10) ?? null;
     return monthlySourcePeriods(
       "xero-period",
-      fiscalYearsForEndingRule(dates[0] ?? fallbackStart, horizon, org.FinancialYearEndMonth, org.FinancialYearEndDay),
+      fiscalYearsForEndingRule(fallbackStart, horizon, org.FinancialYearEndMonth, org.FinancialYearEndDay),
       (endsOn) => allModules(yearLock && endsOn <= yearLock ? "closed" : periodLock && endsOn <= periodLock ? "soft_closed" : "open"),
     );
   }
@@ -273,34 +274,67 @@ export class XeroSource implements MigrationSource {
   }
 
   // --- verification ---------------------------------------------------------------------
+  //
+  // The Journals endpoint (the raw GL) is Advanced-tier-gated on new Xero
+  // plans, so both gates read the TrialBalance REPORT instead: one call per
+  // month-end, taking the month-movement Debit/Credit columns per account.
+  // Cumulative TB = Σ monthly movements — identical semantics to our raw
+  // journal-line sums, and immune to Xero's retained-earnings year-close.
 
-  /** The Journals endpoint is the posted GL — sum NetAmount by account. */
-  async trialBalance(): Promise<SourceTrialBalanceRow[]> {
-    const journals = await this.client.journalsAll<XeroJournal>();
-    const byAccount = new Map<string, bigint>();
-    for (const j of journals) {
-      for (const l of j.JournalLines ?? []) {
-        if (!l.AccountID) continue;
-        const u = toUnits((l.NetAmount ?? 0).toFixed(2));
-        byAccount.set(l.AccountID, (byAccount.get(l.AccountID) ?? 0n) + u);
+  private monthlyBuckets: Promise<Map<string, bigint>> | null = null;
+
+  private bucketsFromReports(): Promise<Map<string, bigint>> {
+    this.monthlyBuckets ??= (async () => {
+      const buckets = new Map<string, bigint>(); // `${accountRef}|${YYYY-MM}` → units
+      const now = new Date();
+      for (let back = TB_LOOKBACK_MONTHS - 1; back >= 0; back--) {
+        const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back + 1, 0));
+        const month = monthEnd.toISOString().slice(0, 7);
+        const report = await this.client.get<XeroReport>("Reports/TrialBalance", {
+          date: monthEnd.toISOString().slice(0, 10),
+        });
+        const rows = report.Reports?.[0]?.Rows ?? [];
+        // Header row → column indices ("Debit"/"Credit" first pair = the month).
+        const header = rows.find((r) => r.RowType === "Header")?.Cells ?? [];
+        const debitCol = header.findIndex((c) => c.Value === "Debit");
+        const creditCol = header.findIndex((c) => c.Value === "Credit");
+        if (debitCol < 0 || creditCol < 0) continue;
+        const walk = (rr: XeroReportRow[]) => {
+          for (const row of rr) {
+            if (row.Rows) walk(row.Rows);
+            if (row.RowType !== "Row" || !row.Cells) continue;
+            const accountRef = row.Cells[0]?.Attributes?.find((a) => a.Id === "account")?.Value;
+            if (!accountRef) continue;
+            const num = (i: number) => {
+              const v = String(row.Cells?.[i]?.Value ?? "").replace(/,/g, "").trim();
+              return v === "" ? 0n : toUnits(Number(v).toFixed(2));
+            };
+            const movement = num(debitCol) - num(creditCol);
+            if (movement === 0n) continue;
+            const key = `${accountRef}|${month}`;
+            buckets.set(key, (buckets.get(key) ?? 0n) + movement);
+          }
+        };
+        walk(rows);
       }
+      return buckets;
+    })();
+    return this.monthlyBuckets;
+  }
+
+  async trialBalance(): Promise<SourceTrialBalanceRow[]> {
+    const buckets = await this.bucketsFromReports();
+    const byAccount = new Map<string, bigint>();
+    for (const [key, amt] of buckets) {
+      const accountRef = key.split("|")[0]!;
+      byAccount.set(accountRef, (byAccount.get(accountRef) ?? 0n) + amt);
     }
     return [...byAccount.entries()].map(([accountRef, bal]) => ({ accountRef, balance: fromUnits(bal) }));
   }
 
   async monthlyActivity(): Promise<{ accountRef: string; month: string; amount: string }[]> {
-    const journals = await this.client.journalsAll<XeroJournal>();
-    const byBucket = new Map<string, bigint>();
-    for (const j of journals) {
-      const month = (xeroDate(j.JournalDate) ?? "").slice(0, 7);
-      if (!month) continue;
-      for (const l of j.JournalLines ?? []) {
-        if (!l.AccountID) continue;
-        const key = `${l.AccountID}|${month}`;
-        byBucket.set(key, (byBucket.get(key) ?? 0n) + toUnits((l.NetAmount ?? 0).toFixed(2)));
-      }
-    }
-    return [...byBucket.entries()].map(([key, amt]) => {
+    const buckets = await this.bucketsFromReports();
+    return [...buckets.entries()].map(([key, amt]) => {
       const [accountRef, month] = key.split("|");
       return { accountRef: accountRef!, month: month!, amount: fromUnits(amt) };
     });
