@@ -2,6 +2,7 @@
   "modules": {
     "dashboard": "Tableau de bord",
     "assistant": "Assistant",
+    "continuous-close": "Clôture continue",
     "approvals": "Approbations",
     "insights": "Analyses",
     "purchase-orders": "Bons de commande",

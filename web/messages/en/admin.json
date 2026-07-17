@@ -745,6 +745,34 @@
     "removeKey": "Remove API key",
     "testConnection": "Test connection",
     "testFailed": "The test request failed.",
+    "agents": {
+      "title": "Continuous close agents",
+      "description": "Run deterministic accounting controls continuously. Findings include source evidence and never post or change financial records automatically.",
+      "reviewWork": "Review findings",
+      "globallyDisabled": "AI features are off. Both agents and their scheduled runs are stopped, regardless of the controls below.",
+      "enabled": "Enabled",
+      "automaticRuns": "Run automatically",
+      "cadence": "Schedule",
+      "materiality": "Materiality threshold",
+      "cadences": { "daily": "Daily", "weekly": "Weekly" },
+      "accounting": {
+        "title": "Accounting agent",
+        "description": "Continuous bookkeeping and close readiness controls.",
+        "coverage": "Checks unmatched bank activity, reconciliation differences, and stale draft or pending accounting documents."
+      },
+      "finance": {
+        "title": "Finance agent",
+        "description": "Continuous variance and performance controls.",
+        "coverage": "Checks approved-budget variances, revenue decline, gross-margin decline, and missing budget coverage."
+      },
+      "lastRun": "Last run: {date} · {status}",
+      "nextRun": "Next scheduled run: {date}",
+      "neverRun": "Not run yet",
+      "runNow": "Run now",
+      "scanComplete": "Scan complete: {detected} detected, {resolved} resolved.",
+      "scanFailed": "The agent scan failed.",
+      "runStatus": { "completed": "completed", "failed": "failed", "skipped": "skipped", "running": "running" }
+    },
     "models": {
       "load": "Load models",
       "reload": "Reload models",

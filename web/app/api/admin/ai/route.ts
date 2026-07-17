@@ -5,6 +5,7 @@ import {
   clearOrgAiKey,
   getOrgAiSettings,
   saveOrgAiSettings,
+  normalizeAgentSettingsInput,
   type AiSettingsInput,
 } from "../../../../lib/assistant/ai-config";
 
@@ -35,8 +36,10 @@ export async function PUT(req: Request) {
     modelSmart: String(body.modelSmart ?? "").trim(),
     baseUrl: String(body.baseUrl ?? "").trim(),
     apiKey: String(body.apiKey ?? "").trim() || undefined,
+    agents: [],
   };
   try {
+    input.agents = normalizeAgentSettingsInput(body.agents);
     await saveOrgAiSettings(gate.user.orgId, gate.user.id, input);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 422 });

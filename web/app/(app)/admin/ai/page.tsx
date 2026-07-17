@@ -39,7 +39,7 @@ export default async function AiSettingsPage() {
 
   return (
     <PageContainer>
-      <div className="max-w-2xl space-y-4">
+      <div className="max-w-5xl space-y-4">
         <PageHeader
           title={t('ai.title')}
           description={t('ai.description')}

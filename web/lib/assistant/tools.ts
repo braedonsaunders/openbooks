@@ -13,6 +13,7 @@ import {
   trialBalance,
 } from "../reports";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
+import { readableContinuousCloseAgents } from "../continuous-close";
 
 /**
  * Read/search tools for the agentic assistant — the openbooks replacement for
@@ -690,6 +691,77 @@ const cashFlowTool: AssistantToolDef = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Continuous close work queue
+// ---------------------------------------------------------------------------
+
+const continuousCloseFindings: AssistantToolDef = {
+  name: "continuous_close_findings",
+  description:
+    "List evidence-backed Accounting or Finance continuous-close findings. Defaults to active findings and returns exact materiality, detector summary, evidence count, and a link to review each item. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
+  inputSchema: z.object({
+    agent: z.enum(["accounting", "finance"]).optional(),
+    status: z.enum(["open", "in_review", "resolved", "dismissed"]).optional(),
+    severity: z.enum(["info", "warning", "critical"]).optional(),
+    query: z.string().max(100).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as {
+      agent?: "accounting" | "finance";
+      status?: "open" | "in_review" | "resolved" | "dismissed";
+      severity?: "info" | "warning" | "critical";
+      query?: string;
+      limit?: number;
+    };
+    const readable = readableContinuousCloseAgents(authz);
+    if (a.agent && !readable.includes(a.agent)) return { ok: false, error: "forbidden" };
+    const agents = a.agent ? [a.agent] : readable;
+    if (agents.length === 0) return { ok: false, error: "forbidden" };
+    const statuses = a.status ? [a.status] : ["open", "in_review"];
+    const limit = Math.min(a.limit ?? 20, 50);
+    const q = a.query?.trim();
+    const rows = (await db.execute(sql`
+      select w.id, w.agent_key, w.finding_type, w.severity, w.status,
+             w.confidence::text, w.materiality::text, w.summary,
+             w.last_detected_at,
+             (select count(*)::int from ai_work_item_evidence e
+               where e.org_id = w.org_id and e.work_item_id = w.id) as evidence_count
+        from ai_work_items w
+       where w.org_id = ${authz.user.orgId}
+         and w.agent_key in (${sql.join(agents.map((agent) => sql`${agent}`), sql`, `)})
+         and w.status in (${sql.join(statuses.map((status) => sql`${status}`), sql`, `)})
+         ${a.severity ? sql`and w.severity = ${a.severity}` : sql``}
+         ${q ? sql`and (w.finding_type ilike ${`%${q}%`} or w.summary::text ilike ${`%${q}%`})` : sql``}
+       order by case w.severity when 'critical' then 3 when 'warning' then 2 else 1 end desc,
+                w.materiality desc, w.last_detected_at desc
+       limit ${limit}
+    `)) as unknown as { rows: Record<string, unknown>[] };
+    return {
+      ok: true,
+      data: {
+        returned: rows.rows.length,
+        truncated: rows.rows.length === limit,
+        items: rows.rows.map((row) => ({
+          id: row.id,
+          agent: row.agent_key,
+          findingType: row.finding_type,
+          severity: row.severity,
+          status: row.status,
+          confidence: row.confidence,
+          materiality: row.materiality,
+          summary: row.summary,
+          evidenceCount: row.evidence_count,
+          lastDetectedAt: row.last_detected_at,
+          href: `/continuous-close?item=${row.id}`,
+        })),
+      },
+    };
+  },
+};
+
 export const READ_TOOLS: AssistantToolDef[] = [
   whoami,
   findAccounts,
@@ -704,4 +776,5 @@ export const READ_TOOLS: AssistantToolDef[] = [
   trialBalanceTool,
   agingTool,
   cashFlowTool,
+  continuousCloseFindings,
 ];

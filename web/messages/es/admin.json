@@ -686,6 +686,34 @@
     "removeKey": "Eliminar la clave API",
     "testConnection": "Probar la conexión",
     "testFailed": "La solicitud de prueba falló.",
+    "agents": {
+      "title": "Agentes de cierre continuo",
+      "description": "Ejecute controles contables deterministas continuamente. Los hallazgos incluyen evidencia fuente y nunca contabilizan ni modifican registros financieros de forma automática.",
+      "reviewWork": "Revisar hallazgos",
+      "globallyDisabled": "Las funciones de IA están desactivadas. Ambos agentes y sus ejecuciones programadas están detenidos, independientemente de los controles siguientes.",
+      "enabled": "Activado",
+      "automaticRuns": "Ejecutar automáticamente",
+      "cadence": "Frecuencia",
+      "materiality": "Umbral de materialidad",
+      "cadences": { "daily": "Diariamente", "weekly": "Semanalmente" },
+      "accounting": {
+        "title": "Agente contable",
+        "description": "Controles continuos de contabilidad y preparación del cierre.",
+        "coverage": "Comprueba actividad bancaria sin conciliar, diferencias de conciliación y documentos contables en borrador o pendientes."
+      },
+      "finance": {
+        "title": "Agente financiero",
+        "description": "Controles continuos de desviaciones y rendimiento.",
+        "coverage": "Comprueba desviaciones del presupuesto aprobado, disminución de ingresos y margen bruto, y ausencia de presupuesto."
+      },
+      "lastRun": "Última ejecución: {date} · {status}",
+      "nextRun": "Próxima ejecución programada: {date}",
+      "neverRun": "Aún no ejecutado",
+      "runNow": "Ejecutar ahora",
+      "scanComplete": "Análisis completado: {detected} detectados, {resolved} resueltos.",
+      "scanFailed": "El análisis del agente falló.",
+      "runStatus": { "completed": "completado", "failed": "fallido", "skipped": "omitido", "running": "en curso" }
+    },
     "models": {
       "load": "Cargar modelos",
       "reload": "Recargar modelos",

@@ -21,6 +21,7 @@ import assets from './assets.json'
 import banking from './banking.json'
 import budgets from './budgets.json'
 import close from './close.json'
+import continuousClose from './continuous-close.json'
 import customization from './customization.json'
 import pdfTemplates from './pdfTemplates.json'
 import entities from './entities.json'
@@ -64,6 +65,7 @@ export default {
   banking,
   budgets,
   close,
+  continuousClose,
   customization,
   pdfTemplates,
   entities,

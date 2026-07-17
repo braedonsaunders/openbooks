@@ -377,6 +377,11 @@ alter table file_attachments add foreign key (file_id) references files(id) on d
 -- ai assistant
 alter table ai_conversations add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade;
 alter table ai_messages add foreign key (org_id) references orgs(id), add foreign key (conversation_id) references ai_conversations(id) on delete cascade;
+alter table ai_agent_policies add foreign key (org_id) references orgs(id) on delete cascade;
+alter table ai_agent_runs add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (initiated_by) references users(id) on delete set null;
+alter table ai_work_items add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (last_detected_run_id) references ai_agent_runs(id) on delete set null, add foreign key (resolved_by) references users(id) on delete set null, add foreign key (dismissed_by) references users(id) on delete set null;
+alter table ai_work_item_evidence add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (work_item_id) references ai_work_items(id) on delete cascade;
+alter table ai_work_item_feedback add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (work_item_id) references ai_work_items(id) on delete cascade, add foreign key (user_id) references users(id) on delete cascade;
 
 -- dashboard layouts
 alter table user_dashboard_layouts add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade;
