@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download, FileText, Play } from 'lucide-react'
+import { Download, FileText, Play, Upload } from 'lucide-react'
 import {
   Button,
   Card,
@@ -17,7 +17,7 @@ import {
   Select,
 } from '@openbooks/ui'
 
-type Form = { code: string; name: string; submission_channel: string }
+type Form = { code: string; name: string; submission_channel: string; has_official: boolean }
 type Box = { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }
 type Result = {
   formCode: string
@@ -52,6 +52,38 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
   const [adjustments, setAdjustments] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [installing, setInstalling] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const selectedForm = forms.find((f) => f.code === code)
+
+  async function uploadOfficial(file: File) {
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.set('file', file)
+      const res = await fetch(`/api/tax/returns/${encodeURIComponent(code)}/official-pdf`, { method: 'POST', body: fd })
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(d.error)
+      }
+      toast.success(t('official.uploaded'))
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : tCommon('feedback.saveFailed'))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function removeOfficial() {
+    setUploading(true)
+    try {
+      await fetch(`/api/tax/returns/${encodeURIComponent(code)}/official-pdf`, { method: 'DELETE' })
+      toast.success(t('official.removed'))
+      router.refresh()
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const adjQuery = (adj: Record<string, string>) =>
     Object.entries(adj)
@@ -154,6 +186,35 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
                 </Button>
               ) : null}
             </CardContent>
+            {canManage ? (
+              <CardContent className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <span className="text-sm text-slate-600 dark:text-slate-300">
+                  {t('official.label')}: {selectedForm?.has_official ? t('official.present') : t('official.none')}
+                </span>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) uploadOfficial(f)
+                      e.target.value = ''
+                    }}
+                  />
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900">
+                    <Upload size={14} />
+                    {uploading ? t('official.uploading') : t('official.upload')}
+                  </span>
+                </label>
+                {selectedForm?.has_official ? (
+                  <Button variant="ghost" size="sm" onClick={removeOfficial} disabled={uploading}>
+                    {t('official.remove')}
+                  </Button>
+                ) : null}
+                <span className="text-xs text-slate-400 dark:text-slate-500">{t('official.hint')}</span>
+              </CardContent>
+            ) : null}
           </Card>
 
           {result ? (
@@ -183,6 +244,14 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
                         {t('export.csv')}
                       </Button>
                     </a>
+                    {selectedForm?.has_official ? (
+                      <a href={exportHref('official')}>
+                        <Button size="sm">
+                          <Download size={14} />
+                          {t('official.download')}
+                        </Button>
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               </CardHeader>

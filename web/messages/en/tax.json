@@ -29,6 +29,18 @@
     "csv": "CSV",
     "xlsx": "Excel"
   },
+  "official": {
+    "label": "Official form",
+    "present": "uploaded",
+    "none": "not uploaded",
+    "upload": "Upload official PDF",
+    "uploading": "Uploading…",
+    "uploaded": "Official form uploaded",
+    "remove": "Remove",
+    "removed": "Official form removed",
+    "download": "Official form (filled)",
+    "hint": "Upload your government's fillable PDF; map each box to its field in Setup → Tax Return Boxes."
+  },
   "channels": {
     "print_pdf": "Print & mail",
     "file_upload": "Electronic upload",

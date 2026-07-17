@@ -4,6 +4,7 @@ import { PageContainer } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
 import { AI_PROVIDER_SPECS } from '../../../../lib/assistant/client'
 import { getOrgAiSettings } from '../../../../lib/assistant/ai-config'
+import { CONTINUOUS_CLOSE_DETECTOR_SPECS, isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
 import { AiSettingsForm, type ProviderSpecLite } from './AiSettingsForm'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +20,7 @@ export async function generateMetadata() {
  * environment. The client form only ever sees non-secret fields (hasKey, not
  * the key itself).
  */
-export default async function AiSettingsPage() {
+export default async function AiSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const authz = await requirePermission('admin.ai.manage')
   const t = await getTranslations('admin')
 
@@ -36,6 +37,8 @@ export default async function AiSettingsPage() {
   }))
 
   const initial = await getOrgAiSettings(authz.user.orgId)
+  const requestedAgent = (await searchParams).agent
+  const selectedAgentKey = isContinuousCloseAgentKey(requestedAgent) ? requestedAgent : null
 
   return (
     <PageContainer>
@@ -47,7 +50,17 @@ export default async function AiSettingsPage() {
         />
         <Card>
           <CardContent className="pt-6">
-            <AiSettingsForm specs={specs} initial={initial} />
+            <AiSettingsForm
+              specs={specs}
+              detectorSpecs={CONTINUOUS_CLOSE_DETECTOR_SPECS.map((spec) => ({
+                ...spec,
+                parameters: spec.parameters.map((parameter) => ({
+                  ...parameter,
+                })),
+              }))}
+              initial={initial}
+              selectedAgentKey={selectedAgentKey}
+            />
           </CardContent>
         </Card>
       </div>

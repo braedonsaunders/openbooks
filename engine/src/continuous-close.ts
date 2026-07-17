@@ -1,6 +1,28 @@
 import { sql } from "drizzle-orm";
 import { db, schema, withOrg } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
+import {
+  CONTINUOUS_CLOSE_AGENT_KEYS,
+  defaultContinuousCloseDetectors,
+  effectiveDetectorMateriality,
+  enabledDetectorKeys,
+  normalizeContinuousCloseDetectors,
+  type ContinuousCloseAgentKey,
+  type ContinuousCloseDetectorKey,
+  type ContinuousCloseDetectorPolicy,
+} from "./continuous-close-config.ts";
+
+export {
+  CONTINUOUS_CLOSE_AGENT_KEYS,
+  CONTINUOUS_CLOSE_DETECTOR_SPECS,
+  defaultContinuousCloseDetectors,
+  normalizeContinuousCloseDetectors,
+  type ContinuousCloseAgentKey,
+  type ContinuousCloseDetectorKey,
+  type ContinuousCloseDetectorPolicy,
+  type ContinuousCloseDetectorSpec,
+  type DetectorParameterSpec,
+} from "./continuous-close-config.ts";
 
 /**
  * Continuous Close control plane.
@@ -12,13 +34,11 @@ import { fromUnits, toUnits } from "./money.ts";
  * reopens conditions that returned, and auto-resolves conditions that cleared.
  */
 
-export const CONTINUOUS_CLOSE_AGENT_KEYS = ["accounting", "finance"] as const;
-export type ContinuousCloseAgentKey = (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
 export type AgentCadence = "daily" | "weekly";
 export type AgentTrigger = "manual" | "scheduler";
 export type WorkItemSeverity = "info" | "warning" | "critical";
 
-export const CONTINUOUS_CLOSE_DETECTOR_VERSION = "2026.07.1";
+export const CONTINUOUS_CLOSE_DETECTOR_VERSION = "2026.07.2";
 
 export type ContinuousClosePolicy = {
   id: string | null;
@@ -27,6 +47,7 @@ export type ContinuousClosePolicy = {
   automaticRuns: boolean;
   cadence: AgentCadence;
   materialityThreshold: string;
+  detectors: ContinuousCloseDetectorPolicy[];
   lastRunAt: string | null;
   nextRunAt: string | null;
   lastRunStatus: "completed" | "failed" | "skipped" | "running" | null;
@@ -64,6 +85,7 @@ export function defaultContinuousClosePolicy(agentKey: ContinuousCloseAgentKey):
     automaticRuns: false,
     cadence: "daily",
     materialityThreshold: "1000.0000",
+    detectors: defaultContinuousCloseDetectors(agentKey),
     lastRunAt: null,
     nextRunAt: null,
     lastRunStatus: null,
@@ -79,7 +101,7 @@ export function nextContinuousCloseRunAt(cadence: AgentCadence, from = new Date(
 export async function getContinuousClosePolicies(orgId: string): Promise<ContinuousClosePolicy[]> {
   const rows = (await db.execute(sql`
     select p.id, p.agent_key, p.enabled, p.automatic_runs, p.cadence,
-           p.materiality_threshold, p.last_run_at, p.next_run_at,
+           p.materiality_threshold, p.detector_settings, p.last_run_at, p.next_run_at,
            (select r.status from ai_agent_runs r
              where r.org_id = p.org_id and r.agent_key = p.agent_key
              order by r.started_at desc limit 1) as last_run_status
@@ -97,6 +119,7 @@ export async function getContinuousClosePolicies(orgId: string): Promise<Continu
       automaticRuns: Boolean(row.automatic_runs),
       cadence: row.cadence === "weekly" ? "weekly" : "daily",
       materialityThreshold: String(row.materiality_threshold),
+      detectors: normalizeContinuousCloseDetectors(agentKey, row.detector_settings),
       lastRunAt: row.last_run_at ? new Date(row.last_run_at as string | Date).toISOString() : null,
       nextRunAt: row.next_run_at ? new Date(row.next_run_at as string | Date).toISOString() : null,
       lastRunStatus: (row.last_run_status as ContinuousClosePolicy["lastRunStatus"]) ?? null,
@@ -125,20 +148,24 @@ export function classifyUnmatchedBankActivity(args: {
   oldestDate: string;
   count: number;
   now?: Date;
+  criticalAgeDays?: number;
+  criticalItemCount?: number;
+  criticalMaterialityMultiple?: number;
 }): WorkItemSeverity {
   const age = dateAgeDays(args.oldestDate, args.now);
   const material = absoluteUnits(args.materiality);
   const threshold = absoluteUnits(args.threshold);
-  if (age >= 30 || material >= threshold * 5n || args.count >= 50) return "critical";
+  if (age >= (args.criticalAgeDays ?? 30) || material >= threshold * BigInt(args.criticalMaterialityMultiple ?? 5) || args.count >= (args.criticalItemCount ?? 50)) return "critical";
   return "warning";
 }
 
-export function classifyBudgetVariance(args: {
-  budget: string;
-  actual: string;
-  accountType: string;
-  threshold: string;
-}): { include: boolean; favorable: boolean; variance: string; varianceBps: number | null; severity: WorkItemSeverity } {
+export function classifyBudgetVariance(args: { budget: string; actual: string; accountType: string; threshold: string; minimumVarianceBps?: number; criticalVarianceBps?: number }): {
+  include: boolean;
+  favorable: boolean;
+  variance: string;
+  varianceBps: number | null;
+  severity: WorkItemSeverity;
+} {
   const budget = toUnits(args.budget);
   const actual = toUnits(args.actual);
   const variance = actual - budget;
@@ -148,51 +175,65 @@ export function classifyBudgetVariance(args: {
   const income = args.accountType === "income" || args.accountType === "income_other";
   const favorable = income ? variance >= 0n : variance <= 0n;
   const varianceBps = absBudget === 0n ? null : Number((absVariance * 10_000n) / absBudget);
-  const include = !favorable && absVariance >= threshold && (varianceBps === null || varianceBps >= 1_000);
-  const severity: WorkItemSeverity = varianceBps !== null && varianceBps >= 2_500 ? "critical" : "warning";
-  return { include, favorable, variance: fromUnits(variance), varianceBps, severity };
+  const include = !favorable && absVariance >= threshold && (varianceBps === null || varianceBps >= (args.minimumVarianceBps ?? 1_000));
+  const severity: WorkItemSeverity = varianceBps !== null && varianceBps >= (args.criticalVarianceBps ?? 2_500) ? "critical" : "warning";
+  return {
+    include,
+    favorable,
+    variance: fromUnits(variance),
+    varianceBps,
+    severity,
+  };
 }
 
-export function classifyPeriodPerformance(args: {
-  currentRevenue: string;
-  priorRevenue: string;
-  currentCogs: string;
-  priorCogs: string;
-  threshold: string;
-}): { revenueDecline: boolean; revenueChangeBps: number | null; grossMarginDropBps: number | null } {
+export function classifyPeriodPerformance(args: { currentRevenue: string; priorRevenue: string; currentCogs: string; priorCogs: string; threshold: string; minimumRevenueDeclineBps?: number }): {
+  revenueDecline: boolean;
+  revenueChangeBps: number | null;
+  grossMarginDropBps: number | null;
+} {
   const currentRevenue = toUnits(args.currentRevenue);
   const priorRevenue = toUnits(args.priorRevenue);
   const threshold = absoluteUnits(args.threshold);
   const decline = priorRevenue - currentRevenue;
-  const revenueChangeBps = priorRevenue === 0n
-    ? null
-    : Number(((currentRevenue - priorRevenue) * 10_000n) / (priorRevenue < 0n ? -priorRevenue : priorRevenue));
-  const marginBps = (revenue: bigint, cogs: bigint): bigint | null =>
-    revenue === 0n ? null : ((revenue - cogs) * 10_000n) / revenue;
+  const revenueChangeBps = priorRevenue === 0n ? null : Number(((currentRevenue - priorRevenue) * 10_000n) / (priorRevenue < 0n ? -priorRevenue : priorRevenue));
+  const marginBps = (revenue: bigint, cogs: bigint): bigint | null => (revenue === 0n ? null : ((revenue - cogs) * 10_000n) / revenue);
   const currentMargin = marginBps(currentRevenue, toUnits(args.currentCogs));
   const priorMargin = marginBps(priorRevenue, toUnits(args.priorCogs));
   const grossMarginDropBps = currentMargin === null || priorMargin === null ? null : Number(priorMargin - currentMargin);
   return {
-    revenueDecline: decline >= threshold && revenueChangeBps !== null && revenueChangeBps <= -1_000,
+    revenueDecline: decline >= threshold && revenueChangeBps !== null && revenueChangeBps <= -(args.minimumRevenueDeclineBps ?? 1_000),
     revenueChangeBps,
     grossMarginDropBps,
   };
 }
 
-async function accountingFindings(orgId: string, threshold: string): Promise<Finding[]> {
+async function accountingFindings(orgId: string, agentThreshold: string, detectors: ContinuousCloseDetectorPolicy[]): Promise<Finding[]> {
   const findings: Finding[] = [];
-  const unmatched = (await db.execute(sql`
-    select a.id as account_id, a.number, a.name, count(*)::int as line_count,
-           min(l.posted_on) as oldest_date, sum(abs(l.amount))::text as materiality
+  const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
+  const unmatchedPolicy = byKey.get("unmatched_bank_activity");
+  if (unmatchedPolicy?.enabled) {
+    const threshold = effectiveDetectorMateriality(unmatchedPolicy, agentThreshold);
+    const unmatched = (await db.execute(sql`
+      select a.id as account_id, a.number, a.name, count(*)::int as line_count,
+             min(l.posted_on) as oldest_date, sum(abs(l.amount))::text as materiality
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
-      join accounts a on a.id = s.account_id and a.org_id = s.org_id
-     where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= current_date
-     group by a.id, a.number, a.name
-  `)) as unknown as { rows: { account_id: string; number: string | null; name: string; line_count: number; oldest_date: string; materiality: string }[] };
+        join accounts a on a.id = s.account_id and a.org_id = s.org_id
+       where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= current_date
+       group by a.id, a.number, a.name
+    `)) as unknown as {
+      rows: {
+        account_id: string;
+        number: string | null;
+        name: string;
+        line_count: number;
+        oldest_date: string;
+        materiality: string;
+      }[];
+    };
 
-  for (const row of unmatched.rows) {
-    const top = (await db.execute(sql`
+    for (const row of unmatched.rows) {
+      const top = (await db.execute(sql`
       select l.id, l.posted_on, l.amount::text, l.description, l.counterparty_ref
         from bank_statement_lines l
         join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -203,13 +244,21 @@ async function accountingFindings(orgId: string, threshold: string): Promise<Fin
     `)) as unknown as { rows: Record<string, unknown>[] };
     const materiality = moneyAbs(row.materiality);
     findings.push({
-      agentKey: "accounting",
-      findingType: "unmatched_bank_activity",
-      fingerprint: `unmatched-bank:${row.account_id}`,
-      severity: classifyUnmatchedBankActivity({ materiality, threshold, oldestDate: row.oldest_date, count: Number(row.line_count) }),
-      confidence: "1.0000",
-      materiality,
-      subjectType: "account",
+        agentKey: "accounting",
+        findingType: "unmatched_bank_activity",
+        fingerprint: `unmatched-bank:${row.account_id}`,
+        severity: classifyUnmatchedBankActivity({
+          materiality,
+          threshold,
+          oldestDate: row.oldest_date,
+          count: Number(row.line_count),
+          criticalAgeDays: unmatchedPolicy.parameters.criticalAgeDays,
+          criticalItemCount: unmatchedPolicy.parameters.criticalItemCount,
+          criticalMaterialityMultiple: unmatchedPolicy.parameters.criticalMaterialityMultiple,
+        }),
+        confidence: "1.0000",
+        materiality,
+        subjectType: "account",
       subjectId: row.account_id,
       summary: {
         accountNumber: row.number,
@@ -228,13 +277,17 @@ async function accountingFindings(orgId: string, threshold: string): Promise<Fin
           description: item.description,
           counterpartyRef: item.counterparty_ref,
         },
-      })),
-    });
+        })),
+      });
+    }
   }
 
-  const reconciliations = (await db.execute(sql`
-    select r.id, r.account_id, r.through_date, r.statement_balance::text,
-           a.number, a.name,
+  const reconciliationPolicy = byKey.get("reconciliation_difference");
+  if (reconciliationPolicy?.enabled) {
+    const threshold = effectiveDetectorMateriality(reconciliationPolicy, agentThreshold);
+    const reconciliations = (await db.execute(sql`
+      select r.id, r.account_id, r.through_date, r.statement_balance::text,
+             a.number, a.name,
            (r.statement_balance - coalesce((
              select sum(jl.amount)
                from journal_lines jl
@@ -245,13 +298,23 @@ async function accountingFindings(orgId: string, threshold: string): Promise<Fin
                    where m.reconciliation_id = r.id and m.journal_line_id = jl.id
                 ))
            ), 0))::text as difference
-      from reconciliations r
-      join accounts a on a.id = r.account_id and a.org_id = r.org_id
-     where r.org_id = ${orgId} and r.status = 'in_progress'
-  `)) as unknown as { rows: { id: string; account_id: string; through_date: string; statement_balance: string; number: string | null; name: string; difference: string }[] };
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.org_id = ${orgId} and r.status = 'in_progress'
+    `)) as unknown as {
+      rows: {
+        id: string;
+        account_id: string;
+        through_date: string;
+        statement_balance: string;
+        number: string | null;
+        name: string;
+        difference: string;
+      }[];
+    };
 
-  for (const row of reconciliations.rows) {
-    if (toUnits(row.difference) === 0n) continue;
+    for (const row of reconciliations.rows) {
+      if (toUnits(row.difference) === 0n) continue;
     const materiality = moneyAbs(row.difference);
     findings.push({
       agentKey: "accounting",
@@ -267,49 +330,70 @@ async function accountingFindings(orgId: string, threshold: string): Promise<Fin
         accountName: row.name,
         throughDate: row.through_date,
         statementBalance: row.statement_balance,
-        difference: row.difference,
-        href: `/banking/${row.account_id}/reconcile/${row.id}`,
-      },
-      evidence: [{
-        kind: "reconciliation",
-        sourceType: "reconciliation",
-        sourceId: row.id,
-        data: { statementBalance: row.statement_balance, difference: row.difference, throughDate: row.through_date },
-      }],
-    });
+          difference: row.difference,
+          href: `/banking/${row.account_id}/reconcile/${row.id}`,
+        },
+        evidence: [
+          {
+            kind: "reconciliation",
+            sourceType: "reconciliation",
+            sourceId: row.id,
+            data: {
+              statementBalance: row.statement_balance,
+              difference: row.difference,
+              throughDate: row.through_date,
+            },
+          },
+        ],
+      });
+    }
   }
 
-  const stale = (await db.execute(sql`
-    select count(*)::int as document_count, min(document_date) as oldest_date,
-           coalesce(sum(abs(total)), 0)::text as materiality
-      from documents
-     where org_id = ${orgId} and status in ('draft','pending_approval')
-       and document_date <= current_date - interval '7 days'
-       and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
-  `)) as unknown as { rows: { document_count: number; oldest_date: string | null; materiality: string }[] };
-  const staleRow = stale.rows[0];
-  if (staleRow && Number(staleRow.document_count) > 0) {
-    const documents = (await db.execute(sql`
-      select id, kind, document_number, document_date, status, total::text
+  const stalePolicy = byKey.get("stale_accounting_documents");
+  if (stalePolicy?.enabled) {
+    const threshold = effectiveDetectorMateriality(stalePolicy, agentThreshold);
+    const staleAfterDays = stalePolicy.parameters.staleAfterDays;
+    const stale = (await db.execute(sql`
+      select count(*)::int as document_count, min(document_date) as oldest_date,
+             coalesce(sum(abs(total)), 0)::text as materiality
         from documents
        where org_id = ${orgId} and status in ('draft','pending_approval')
-         and document_date <= current_date - interval '7 days'
+         and document_date <= current_date - (${staleAfterDays} * interval '1 day')
          and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
-       order by document_date, abs(total) desc limit 10
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `)) as unknown as {
+      rows: {
+        document_count: number;
+        oldest_date: string | null;
+        materiality: string;
+      }[];
+    };
+    const staleRow = stale.rows[0];
+    if (staleRow && Number(staleRow.document_count) > 0) {
+      const documents = (await db.execute(sql`
+        select id, kind, document_number, document_date, status, total::text
+          from documents
+         where org_id = ${orgId} and status in ('draft','pending_approval')
+           and document_date <= current_date - (${staleAfterDays} * interval '1 day')
+           and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
+         order by document_date, abs(total) desc limit 10
+      `)) as unknown as { rows: Record<string, unknown>[] };
     const materiality = moneyAbs(staleRow.materiality);
     findings.push({
-      agentKey: "accounting",
-      findingType: "stale_accounting_documents",
-      fingerprint: "stale-accounting-documents",
-      severity: Number(staleRow.document_count) >= 20 || absoluteUnits(materiality) >= absoluteUnits(threshold) * 5n ? "critical" : "warning",
-      confidence: "1.0000",
-      materiality,
-      subjectType: "documents",
-      summary: { count: Number(staleRow.document_count), oldestDate: staleRow.oldest_date, href: "/close" },
-      evidence: documents.rows.map((item) => ({
-        kind: "document",
-        sourceType: "document",
+        agentKey: "accounting",
+        findingType: "stale_accounting_documents",
+        fingerprint: "stale-accounting-documents",
+        severity: Number(staleRow.document_count) >= stalePolicy.parameters.criticalItemCount || absoluteUnits(materiality) >= absoluteUnits(threshold) * BigInt(stalePolicy.parameters.criticalMaterialityMultiple) ? "critical" : "warning",
+        confidence: "1.0000",
+        materiality,
+        subjectType: "documents",
+        summary: {
+          count: Number(staleRow.document_count),
+          oldestDate: staleRow.oldest_date,
+          href: "/close",
+        },
+        evidence: documents.rows.map((item) => ({
+          kind: "document",
+          sourceType: "document",
         sourceId: String(item.id),
         data: {
           kind: item.kind,
@@ -318,42 +402,57 @@ async function accountingFindings(orgId: string, threshold: string): Promise<Fin
           status: item.status,
           total: item.total,
         },
-      })),
-    });
+        })),
+      });
+    }
   }
 
   return findings;
 }
 
-async function financeFindings(orgId: string, threshold: string): Promise<Finding[]> {
+async function financeFindings(orgId: string, agentThreshold: string, detectors: ContinuousCloseDetectorPolicy[]): Promise<Finding[]> {
   const findings: Finding[] = [];
-  const scenario = (await db.execute(sql`
-    select bs.id, bs.book_id, bs.name, bs.fiscal_year,
-           min(p.starts_on) as starts_on, least(current_date, max(p.ends_on)) as ends_on
+  const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
+  const missingBudgetPolicy = byKey.get("missing_approved_budget");
+  const budgetVariancePolicy = byKey.get("unfavorable_budget_variance");
+  if (missingBudgetPolicy?.enabled || budgetVariancePolicy?.enabled) {
+    const scenario = (await db.execute(sql`
+      select bs.id, bs.book_id, bs.name, bs.fiscal_year,
+             min(p.starts_on) as starts_on, least(current_date, max(p.ends_on)) as ends_on
       from budget_scenarios bs
       join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
       join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
      where bs.org_id = ${orgId} and bs.kind = 'budget' and bs.status = 'approved'
        and p.starts_on <= current_date
-     group by bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.updated_at
-     order by bs.fiscal_year desc, bs.updated_at desc
-     limit 1
-  `)) as unknown as { rows: { id: string; book_id: string; name: string; fiscal_year: number; starts_on: string; ends_on: string }[] };
-  const budget = scenario.rows[0];
-  if (!budget) {
-    findings.push({
-      agentKey: "finance",
-      findingType: "missing_approved_budget",
+       group by bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.updated_at
+       order by bs.fiscal_year desc, bs.updated_at desc
+       limit 1
+    `)) as unknown as {
+      rows: {
+        id: string;
+        book_id: string;
+        name: string;
+        fiscal_year: number;
+        starts_on: string;
+        ends_on: string;
+      }[];
+    };
+    const budget = scenario.rows[0];
+    if (!budget && missingBudgetPolicy?.enabled) {
+      findings.push({
+        agentKey: "finance",
+        findingType: "missing_approved_budget",
       fingerprint: "missing-approved-budget",
       severity: "info",
       confidence: "1.0000",
       materiality: "0.0000",
       subjectType: "budget",
-      summary: { href: "/budgets" },
-      evidence: [],
-    });
-  } else {
-    const variances = (await db.execute(sql`
+        summary: { href: "/budgets" },
+        evidence: [],
+      });
+    } else if (budget && budgetVariancePolicy?.enabled) {
+      const threshold = effectiveDetectorMateriality(budgetVariancePolicy, agentThreshold);
+      const variances = (await db.execute(sql`
       with b as (
         select bl.account_id,
                sum(case when a.type in ('income','income_other') then -bl.amount else bl.amount end) as budget
@@ -381,12 +480,28 @@ async function financeFindings(orgId: string, threshold: string): Promise<Findin
        where a.org_id = ${orgId}
          and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
          and (b.account_id is not null or actual.account_id is not null)
-    `)) as unknown as { rows: { id: string; number: string | null; name: string; type: string; budget: string; actual: string }[] };
-    for (const row of variances.rows) {
-      const classification = classifyBudgetVariance({ budget: row.budget, actual: row.actual, accountType: row.type, threshold });
-      if (!classification.include) continue;
-      findings.push({
-        agentKey: "finance",
+      `)) as unknown as {
+        rows: {
+          id: string;
+          number: string | null;
+          name: string;
+          type: string;
+          budget: string;
+          actual: string;
+        }[];
+      };
+      for (const row of variances.rows) {
+        const classification = classifyBudgetVariance({
+          budget: row.budget,
+          actual: row.actual,
+          accountType: row.type,
+          threshold,
+          minimumVarianceBps: budgetVariancePolicy.parameters.minimumVariancePercent * 100,
+          criticalVarianceBps: budgetVariancePolicy.parameters.criticalVariancePercent * 100,
+        });
+        if (!classification.include) continue;
+        findings.push({
+          agentKey: "finance",
         findingType: "unfavorable_budget_variance",
         fingerprint: `budget-variance:${budget.id}:${row.id}`,
         severity: classification.severity,
@@ -406,30 +521,43 @@ async function financeFindings(orgId: string, threshold: string): Promise<Findin
           budget: row.budget,
           actual: row.actual,
           variance: classification.variance,
-          varianceBps: classification.varianceBps,
-          href: `/budgets?budget=${budget.id}`,
-        },
-        evidence: [{
-          kind: "budget_variance",
-          sourceType: "budget_scenario",
-          sourceId: budget.id,
-          data: { budget: row.budget, actual: row.actual, variance: classification.variance, varianceBps: classification.varianceBps },
-        }],
-      });
+            varianceBps: classification.varianceBps,
+            href: `/budgets?budget=${budget.id}`,
+          },
+          evidence: [
+            {
+              kind: "budget_variance",
+              sourceType: "budget_scenario",
+              sourceId: budget.id,
+              data: {
+                budget: row.budget,
+                actual: row.actual,
+                variance: classification.variance,
+                varianceBps: classification.varianceBps,
+              },
+            },
+          ],
+        });
+      }
     }
   }
 
-  const periods = (await db.execute(sql`
+  const revenuePolicy = byKey.get("period_revenue_decline");
+  const marginPolicy = byKey.get("gross_margin_decline");
+  if (revenuePolicy?.enabled || marginPolicy?.enabled) {
+    const periods = (await db.execute(sql`
     select p.id, p.name, p.starts_on, p.ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${orgId} and fc.is_default and fc.is_active
        and not p.is_adjustment and p.ends_on < current_date
      order by p.ends_on desc limit 2
-  `)) as unknown as { rows: { id: string; name: string; starts_on: string; ends_on: string }[] };
-  if (periods.rows.length === 2) {
-    const [current, prior] = periods.rows;
-    const metrics = async (period: { starts_on: string; ends_on: string }) => {
+    `)) as unknown as {
+      rows: { id: string; name: string; starts_on: string; ends_on: string }[];
+    };
+    if (periods.rows.length === 2) {
+      const [current, prior] = periods.rows;
+      const metrics = async (period: { starts_on: string; ends_on: string }) => {
       const result = (await db.execute(sql`
         select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0)::text as revenue,
                coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs,
@@ -439,56 +567,82 @@ async function financeFindings(orgId: string, threshold: string): Promise<Findin
           join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.posting_date >= ${period.starts_on} and e.posting_date <= ${period.ends_on}
-      `)) as unknown as { rows: { revenue: string; cogs: string; opex: string }[] };
-      return result.rows[0] ?? { revenue: "0", cogs: "0", opex: "0" };
-    };
-    const [currentMetrics, priorMetrics] = await Promise.all([metrics(current), metrics(prior)]);
-    const performance = classifyPeriodPerformance({
-      currentRevenue: currentMetrics.revenue,
-      priorRevenue: priorMetrics.revenue,
-      currentCogs: currentMetrics.cogs,
-      priorCogs: priorMetrics.cogs,
-      threshold,
-    });
-    const comparison = {
-      currentPeriod: current.name,
+        `)) as unknown as {
+          rows: { revenue: string; cogs: string; opex: string }[];
+        };
+        return result.rows[0] ?? { revenue: "0", cogs: "0", opex: "0" };
+      };
+      const [currentMetrics, priorMetrics] = await Promise.all([metrics(current), metrics(prior)]);
+      const revenueThreshold = revenuePolicy?.enabled ? effectiveDetectorMateriality(revenuePolicy, agentThreshold) : agentThreshold;
+      const performance = classifyPeriodPerformance({
+        currentRevenue: currentMetrics.revenue,
+        priorRevenue: priorMetrics.revenue,
+        currentCogs: currentMetrics.cogs,
+        priorCogs: priorMetrics.cogs,
+        threshold: revenueThreshold,
+        minimumRevenueDeclineBps: revenuePolicy?.parameters.minimumDeclinePercent !== undefined ? revenuePolicy.parameters.minimumDeclinePercent * 100 : undefined,
+      });
+      const comparison = {
+        currentPeriod: current.name,
       priorPeriod: prior.name,
       currentRevenue: currentMetrics.revenue,
       priorRevenue: priorMetrics.revenue,
       currentCogs: currentMetrics.cogs,
       priorCogs: priorMetrics.cogs,
-      revenueChangeBps: performance.revenueChangeBps,
-      grossMarginDropBps: performance.grossMarginDropBps,
-    };
-    if (performance.revenueDecline) {
-      findings.push({
-        agentKey: "finance",
-        findingType: "period_revenue_decline",
-        fingerprint: `period-revenue-decline:${current.id}`,
-        severity: performance.revenueChangeBps !== null && performance.revenueChangeBps <= -2_500 ? "critical" : "warning",
-        confidence: "1.0000",
-        materiality: moneyAbs(fromUnits(toUnits(priorMetrics.revenue) - toUnits(currentMetrics.revenue))),
-        subjectType: "accounting_period",
-        subjectId: current.id,
-        summary: { ...comparison, href: `/reports/pnl?from=${current.starts_on}&to=${current.ends_on}` },
-        evidence: [{ kind: "period_comparison", sourceType: "accounting_period", sourceId: current.id, data: comparison }],
-      });
-    }
-    if (performance.grossMarginDropBps !== null && performance.grossMarginDropBps >= 500 && absoluteUnits(currentMetrics.revenue) >= absoluteUnits(threshold)) {
-      const currentGross = toUnits(currentMetrics.revenue) - toUnits(currentMetrics.cogs);
-      const priorGross = toUnits(priorMetrics.revenue) - toUnits(priorMetrics.cogs);
-      findings.push({
-        agentKey: "finance",
-        findingType: "gross_margin_decline",
-        fingerprint: `gross-margin-decline:${current.id}`,
-        severity: performance.grossMarginDropBps >= 1_000 ? "critical" : "warning",
-        confidence: "1.0000",
-        materiality: fromUnits(priorGross > currentGross ? priorGross - currentGross : 0n),
-        subjectType: "accounting_period",
-        subjectId: current.id,
-        summary: { ...comparison, href: `/reports/pnl?from=${current.starts_on}&to=${current.ends_on}` },
-        evidence: [{ kind: "period_comparison", sourceType: "accounting_period", sourceId: current.id, data: comparison }],
-      });
+        revenueChangeBps: performance.revenueChangeBps,
+        grossMarginDropBps: performance.grossMarginDropBps,
+      };
+      if (revenuePolicy?.enabled && performance.revenueDecline) {
+        findings.push({
+          agentKey: "finance",
+          findingType: "period_revenue_decline",
+          fingerprint: `period-revenue-decline:${current.id}`,
+          severity: performance.revenueChangeBps !== null && performance.revenueChangeBps <= -(revenuePolicy.parameters.criticalDeclinePercent * 100) ? "critical" : "warning",
+          confidence: "1.0000",
+          materiality: moneyAbs(fromUnits(toUnits(priorMetrics.revenue) - toUnits(currentMetrics.revenue))),
+          subjectType: "accounting_period",
+          subjectId: current.id,
+          summary: {
+            ...comparison,
+            href: `/reports/pnl?from=${current.starts_on}&to=${current.ends_on}`,
+          },
+          evidence: [
+            {
+              kind: "period_comparison",
+              sourceType: "accounting_period",
+              sourceId: current.id,
+              data: comparison,
+            },
+          ],
+        });
+      }
+      const marginThreshold = marginPolicy?.enabled ? effectiveDetectorMateriality(marginPolicy, agentThreshold) : agentThreshold;
+      if (marginPolicy?.enabled && performance.grossMarginDropBps !== null && performance.grossMarginDropBps >= marginPolicy.parameters.minimumDropPoints * 100 && absoluteUnits(currentMetrics.revenue) >= absoluteUnits(marginThreshold)) {
+        const currentGross = toUnits(currentMetrics.revenue) - toUnits(currentMetrics.cogs);
+        const priorGross = toUnits(priorMetrics.revenue) - toUnits(priorMetrics.cogs);
+        findings.push({
+          agentKey: "finance",
+          findingType: "gross_margin_decline",
+          fingerprint: `gross-margin-decline:${current.id}`,
+          severity: performance.grossMarginDropBps >= marginPolicy.parameters.criticalDropPoints * 100 ? "critical" : "warning",
+          confidence: "1.0000",
+          materiality: fromUnits(priorGross > currentGross ? priorGross - currentGross : 0n),
+          subjectType: "accounting_period",
+          subjectId: current.id,
+          summary: {
+            ...comparison,
+            href: `/reports/pnl?from=${current.starts_on}&to=${current.ends_on}`,
+          },
+          evidence: [
+            {
+              kind: "period_comparison",
+              sourceType: "accounting_period",
+              sourceId: current.id,
+              data: comparison,
+            },
+          ],
+        });
+      }
     }
   }
 
@@ -527,14 +681,16 @@ async function persistFinding(orgId: string, runId: string, finding: Finding): P
   const itemId = result.rows[0]!.id;
   await db.execute(sql`delete from ai_work_item_evidence where org_id = ${orgId} and work_item_id = ${itemId}`);
   if (finding.evidence.length > 0) {
-    await db.insert(schema.aiWorkItemEvidence).values(finding.evidence.map((evidence) => ({
-      orgId,
-      workItemId: itemId,
-      kind: evidence.kind,
-      sourceType: evidence.sourceType ?? null,
-      sourceId: evidence.sourceId ?? null,
-      data: evidence.data,
-    })));
+    await db.insert(schema.aiWorkItemEvidence).values(
+      finding.evidence.map((evidence) => ({
+        orgId,
+        workItemId: itemId,
+        kind: evidence.kind,
+        sourceType: evidence.sourceType ?? null,
+        sourceId: evidence.sourceId ?? null,
+        data: evidence.data,
+      })),
+    );
   }
   return itemId;
 }
@@ -547,65 +703,95 @@ export type ContinuousCloseRunResult = {
   autoResolved: number;
 };
 
-export async function runContinuousCloseAgent(args: {
-  orgId: string;
-  agentKey: ContinuousCloseAgentKey;
-  trigger: AgentTrigger;
-  initiatedBy?: string | null;
-}): Promise<ContinuousCloseRunResult> {
+export async function runContinuousCloseAgent(args: { orgId: string; agentKey: ContinuousCloseAgentKey; trigger: AgentTrigger; initiatedBy?: string | null }): Promise<ContinuousCloseRunResult> {
   return withOrg(args.orgId, async () => {
     const lock = (await db.execute(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${`${args.orgId}:${args.agentKey}`}, 0)) as acquired
     `)) as unknown as { rows: { acquired: boolean }[] };
     if (!lock.rows[0]?.acquired) {
-      const [skipped] = await db.insert(schema.aiAgentRuns).values({
-        orgId: args.orgId,
-        agentKey: args.agentKey,
-        trigger: args.trigger,
+      const [skipped] = await db
+        .insert(schema.aiAgentRuns)
+        .values({
+          orgId: args.orgId,
+          agentKey: args.agentKey,
+          trigger: args.trigger,
         status: "skipped",
         detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
-        initiatedBy: args.initiatedBy ?? null,
-        finishedAt: new Date(),
-        stats: { reason: "already_running" },
-      }).returning({ id: schema.aiAgentRuns.id });
-      return { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 };
+          initiatedBy: args.initiatedBy ?? null,
+          finishedAt: new Date(),
+          stats: { reason: "already_running" },
+        })
+        .returning({ id: schema.aiAgentRuns.id });
+      return {
+        runId: skipped!.id,
+        agentKey: args.agentKey,
+        status: "skipped",
+        detected: 0,
+        autoResolved: 0,
+      };
     }
     const global = (await db.execute(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${args.orgId}
     `)) as unknown as { rows: { enabled: boolean }[] };
     const policy = (await db.execute(sql`
-      select enabled, materiality_threshold::text
+      select enabled, materiality_threshold::text, detector_settings
         from ai_agent_policies where org_id = ${args.orgId} and agent_key = ${args.agentKey}
-    `)) as unknown as { rows: { enabled: boolean; materiality_threshold: string }[] };
+    `)) as unknown as {
+      rows: {
+        enabled: boolean;
+        materiality_threshold: string;
+        detector_settings: unknown;
+      }[];
+    };
     const configured = policy.rows[0];
-    const [run] = await db.insert(schema.aiAgentRuns).values({
-      orgId: args.orgId,
-      agentKey: args.agentKey,
-      trigger: args.trigger,
-      detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
-      initiatedBy: args.initiatedBy ?? null,
-    }).returning({ id: schema.aiAgentRuns.id });
+    const [run] = await db
+      .insert(schema.aiAgentRuns)
+      .values({
+        orgId: args.orgId,
+        agentKey: args.agentKey,
+        trigger: args.trigger,
+        detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
+        initiatedBy: args.initiatedBy ?? null,
+      })
+      .returning({ id: schema.aiAgentRuns.id });
     if (!global.rows[0]?.enabled || !configured?.enabled) {
       await db.execute(sql`
         update ai_agent_runs set status = 'skipped', finished_at = now(), stats = '{"reason":"disabled"}'::jsonb
          where id = ${run!.id} and org_id = ${args.orgId}
       `);
-      return { runId: run!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 };
+      return {
+        runId: run!.id,
+        agentKey: args.agentKey,
+        status: "skipped",
+        detected: 0,
+        autoResolved: 0,
+      };
     }
     try {
-      const findings = args.agentKey === "accounting"
-        ? await accountingFindings(args.orgId, configured.materiality_threshold)
-        : await financeFindings(args.orgId, configured.materiality_threshold);
+      const detectors = normalizeContinuousCloseDetectors(args.agentKey, configured.detector_settings);
+      const evaluatedDetectors = enabledDetectorKeys(detectors);
+      const findings = args.agentKey === "accounting" ? await accountingFindings(args.orgId, configured.materiality_threshold, detectors) : await financeFindings(args.orgId, configured.materiality_threshold, detectors);
       for (const finding of findings) await persistFinding(args.orgId, run!.id, finding);
-      const resolved = (await db.execute(sql`
-        update ai_work_items
-           set status = 'resolved', resolved_at = now(), resolved_by = null, updated_at = now()
-         where org_id = ${args.orgId} and agent_key = ${args.agentKey}
-           and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
-        returning id
-      `)) as unknown as { rows: { id: string }[] };
-      const stats = { detected: findings.length, autoResolved: resolved.rows.length };
+      const resolved =
+        evaluatedDetectors.length === 0
+          ? { rows: [] as { id: string }[] }
+          : ((await db.execute(sql`
+            update ai_work_items
+               set status = 'resolved', resolved_at = now(), resolved_by = null, updated_at = now()
+             where org_id = ${args.orgId} and agent_key = ${args.agentKey}
+               and finding_type in (${sql.join(
+                 evaluatedDetectors.map((key) => sql`${key}`),
+                 sql`, `,
+               )})
+               and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
+            returning id
+          `)) as unknown as { rows: { id: string }[] });
+      const stats = {
+        detected: findings.length,
+        autoResolved: resolved.rows.length,
+        evaluatedDetectors,
+      };
       await db.execute(sql`
         update ai_agent_runs set status = 'completed', finished_at = now(), stats = ${JSON.stringify(stats)}::jsonb
          where id = ${run!.id} and org_id = ${args.orgId}
@@ -614,14 +800,25 @@ export async function runContinuousCloseAgent(args: {
         update ai_agent_policies set last_run_at = now(), updated_at = now()
          where org_id = ${args.orgId} and agent_key = ${args.agentKey}
       `);
-      return { runId: run!.id, agentKey: args.agentKey, status: "completed", ...stats };
+      return {
+        runId: run!.id,
+        agentKey: args.agentKey,
+        status: "completed",
+        ...stats,
+      };
     } catch (error) {
       console.error(`[continuous-close] ${args.agentKey} scan failed`, error);
       await db.execute(sql`
         update ai_agent_runs set status = 'failed', finished_at = now(), error_code = 'detector_failed'
          where id = ${run!.id} and org_id = ${args.orgId}
       `);
-      return { runId: run!.id, agentKey: args.agentKey, status: "failed", detected: 0, autoResolved: 0 };
+      return {
+        runId: run!.id,
+        agentKey: args.agentKey,
+        status: "failed",
+        detected: 0,
+        autoResolved: 0,
+      };
     }
   });
 }
@@ -635,7 +832,15 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
      where p.enabled and p.automatic_runs and p.next_run_at <= ${now}
        and coalesce((o.settings->'ai'->>'enabled')::boolean, true)
      order by p.next_run_at
-  `)) as unknown as { rows: { id: string; org_id: string; agent_key: ContinuousCloseAgentKey; cadence: AgentCadence; next_run_at: Date }[] };
+  `)) as unknown as {
+    rows: {
+      id: string;
+      org_id: string;
+      agent_key: ContinuousCloseAgentKey;
+      cadence: AgentCadence;
+      next_run_at: Date;
+    }[];
+  };
   for (const policy of due.rows) {
     const next = nextContinuousCloseRunAt(policy.cadence, now);
     const claim = (await db.execute(sql`
@@ -644,6 +849,10 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
       returning id
     `)) as unknown as { rows: { id: string }[] };
     if (claim.rows.length === 0) continue;
-    await runContinuousCloseAgent({ orgId: policy.org_id, agentKey: policy.agent_key, trigger: "scheduler" });
+    await runContinuousCloseAgent({
+      orgId: policy.org_id,
+      agentKey: policy.agent_key,
+      trigger: "scheduler",
+    });
   }
 }

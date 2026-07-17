@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { db } from '@openbooks/engine/src/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import {
@@ -11,6 +13,8 @@ import {
   type Translator,
 } from '../../../../../../lib/report-pdf'
 import { taxReturnExportData } from '../../../../../../lib/tax-filing'
+import { fillOfficialTaxPdf } from '../../../../../../lib/tax-official-pdf'
+import { getFileBlob } from '../../../../../../lib/file-cabinet'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
 import { parseAdjustments } from '../route'
 
@@ -30,15 +34,31 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   if (!from || !to || !DATE_RE.test(from) || !DATE_RE.test(to)) {
     return NextResponse.json({ error: 'from and to dates (YYYY-MM-DD) are required' }, { status: 422 })
   }
-  if (!['pdf', 'xlsx', 'csv'].includes(format)) {
+  if (!['pdf', 'xlsx', 'csv', 'official'].includes(format)) {
     return NextResponse.json({ error: 'invalid format' }, { status: 422 })
   }
 
   try {
     const t = (await getTranslations('tax')) as unknown as Translator
     const result = await computeTaxReturn(gate.user.orgId, code, from, to, parseAdjustments(p))
-    const data = taxReturnExportData(result, t)
     const filename = `${safeName(code)}-${from}-${to}`
+
+    // Official overlay: fill the tenant-uploaded government AcroForm and flatten.
+    if (format === 'official') {
+      const f = (await db.execute(sql`
+        select official_pdf_file_id from tax_return_forms
+         where org_id = ${gate.user.orgId} and code = ${code} limit 1`)) as unknown as {
+        rows: { official_pdf_file_id: string | null }[]
+      }
+      const fileId = f.rows[0]?.official_pdf_file_id
+      if (!fileId) return NextResponse.json({ error: 'no official PDF uploaded for this form' }, { status: 422 })
+      const blob = await getFileBlob(gate.user.orgId, fileId, { userId: gate.user.id, isAdmin: true })
+      if (!blob) return NextResponse.json({ error: 'official PDF not found' }, { status: 404 })
+      const { bytes } = await fillOfficialTaxPdf(new Uint8Array(blob.bytes), result.boxes)
+      return pdfResponse(Buffer.from(bytes), `${filename}-official`)
+    }
+
+    const data = taxReturnExportData(result, t)
 
     if (format === 'csv') {
       return csvResponse(exportDataToCsv(data, { sectionHeader: data.title }), filename)

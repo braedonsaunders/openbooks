@@ -29,6 +29,18 @@
     "csv": "CSV",
     "xlsx": "Excel"
   },
+  "official": {
+    "label": "Formulario oficial",
+    "present": "cargado",
+    "none": "no cargado",
+    "upload": "Cargar PDF oficial",
+    "uploading": "Cargando…",
+    "uploaded": "Formulario oficial cargado",
+    "remove": "Quitar",
+    "removed": "Formulario oficial quitado",
+    "download": "Formulario oficial (rellenado)",
+    "hint": "Cargue el PDF rellenable de su gobierno; asigne cada casilla a su campo en Configuración → Casillas de la declaración."
+  },
   "channels": {
     "print_pdf": "Imprimir y enviar",
     "file_upload": "Carga electrónica",

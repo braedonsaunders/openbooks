@@ -1,7 +1,7 @@
 {
   "metaTitle": "Clôture continue",
   "title": "Clôture continue",
-  "description": "Exceptions comptables et financières étayées par des preuves, surveillées en continu et prêtes à être examinées.",
+  "description": "Surveille en continu la préparation à la clôture et présente les exceptions comptables et financières étayées par des preuves.",
   "search": "Rechercher des constats…",
   "agents": { "accounting": "Comptabilité", "finance": "Finance" },
   "metrics": { "active": "Actifs", "critical": "Critiques", "accounting": "Constats comptables", "finance": "Constats financiers" },
@@ -12,11 +12,11 @@
   "findings": {
     "unmatched_bank_activity": { "title": "Activité bancaire non appariée", "description": "Des opérations du relevé bancaire ne sont toujours pas appariées à des écritures du grand livre." },
     "reconciliation_difference": { "title": "Écart de rapprochement", "description": "Un rapprochement bancaire en cours ne concorde pas avec le solde du relevé." },
-    "stale_accounting_documents": { "title": "Documents comptables en attente", "description": "Des documents comptables brouillons ou en attente sont inachevés depuis plus de sept jours." },
+    "stale_accounting_documents": { "title": "Documents comptables en attente", "description": "Des documents comptables brouillons ou en attente dépassent l’âge configuré." },
     "missing_approved_budget": { "title": "Aucun budget approuvé", "description": "Le suivi financier ne peut pas comparer les résultats réels, car aucun budget approuvé n’est disponible." },
     "unfavorable_budget_variance": { "title": "Écart budgétaire défavorable", "description": "Les résultats réels sont sensiblement inférieurs au budget approuvé." },
     "period_revenue_decline": { "title": "Baisse du chiffre d’affaires", "description": "Le chiffre d’affaires a diminué de façon importante par rapport à la période comptable achevée précédente." },
-    "gross_margin_decline": { "title": "Baisse de la marge brute", "description": "La marge brute a reculé d’au moins cinq points de pourcentage par rapport à la période achevée précédente." }
+    "gross_margin_decline": { "title": "Baisse de la marge brute", "description": "La marge brute a reculé au-delà du seuil configuré par rapport à la période achevée précédente." }
   },
   "summary": { "records": "{count, plural, one {# enregistrement} other {# enregistrements}}", "review": "Examiner les preuves à l’appui" },
   "empty": { "title": "Aucun constat pour le moment", "description": "Activez un agent et lancez sa première analyse. Les situations corrigées sont automatiquement résolues lors des analyses suivantes.", "action": "Configurer les agents" },
