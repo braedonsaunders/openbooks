@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Drawer } from '@openbooks/ui'
 import {
   WIDGETS,
-  CATEGORY_LABELS,
+  CATEGORY_LABEL_KEYS,
   type WidgetCategory,
   type WidgetMeta,
 } from './_widget-registry'
@@ -66,7 +66,7 @@ export function WidgetPalette({
           {[...byCategory.entries()].map(([cat, widgets]) => (
             <div key={cat} className="mb-4">
               <h3 className="mb-2 px-1 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-                {CATEGORY_LABELS[cat]}
+                {t(CATEGORY_LABEL_KEYS[cat] as any)}
               </h3>
               <div className="space-y-1">
                 {widgets.map((w) => (
@@ -78,10 +78,10 @@ export function WidgetPalette({
                     <Plus size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {w.label}
+                        {t(w.labelKey as any)}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {w.description}
+                        {t(w.descriptionKey as any)}
                       </p>
                     </div>
                   </button>

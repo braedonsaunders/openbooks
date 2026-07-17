@@ -4,10 +4,8 @@ import { getTranslations } from 'next-intl/server'
 
 export async function DashboardHeader({
   greeting,
-  tenantSummary,
 }: {
   greeting: string
-  tenantSummary?: string | null
 }) {
   const t = await getTranslations('dashboard')
   return (
@@ -16,9 +14,6 @@ export async function DashboardHeader({
         <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
           {greeting}
         </h1>
-        {tenantSummary ? (
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{tenantSummary}</p>
-        ) : null}
       </div>
       <Link
         href="/dashboard/customize"

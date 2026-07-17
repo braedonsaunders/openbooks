@@ -6,12 +6,10 @@
     "afternoon": "Good afternoon",
     "evening": "Good evening"
   },
-  "tenantSummary": "{entries} journal entries",
   "header": {
     "customize": "Customize"
   },
   "widgets": {
-    "journalEntries": "Journal entries",
     "journalLines": "Journal lines",
     "activeAccounts": "Active accounts",
     "entriesToday": "Entries today",
@@ -20,7 +18,44 @@
     "recentEntries": "Recent journal entries",
     "pendingApprovalsList": "Pending approvals",
     "myApprovals": "My approvals",
-    "inProgress": "In progress"
+    "inProgress": "In progress",
+    "cashBalance": "Cash balance",
+    "openReceivables": "Open receivables",
+    "overdueReceivables": "Overdue receivables",
+    "openPayables": "Open payables",
+    "overduePayables": "Overdue payables"
+  },
+  "metricContext": {
+    "today": "Posted today",
+    "awaitingDecision": "Awaiting a decision",
+    "baseCurrency": "Base currency · {currency}",
+    "outstanding": "Outstanding",
+    "pastDue": "Past due"
+  },
+  "categories": {
+    "kpi": "Headlines",
+    "gl": "General ledger",
+    "ap": "Payables",
+    "ar": "Receivables",
+    "personal": "Personal",
+    "admin": "Administration"
+  },
+  "catalog": {
+    "journalLines": "Total posted journal lines.",
+    "activeAccounts": "Active accounts in the chart of accounts.",
+    "entriesToday": "Journal entries posted today.",
+    "pendingApprovals": "Approval requests awaiting a decision.",
+    "ledgerBalance": "Net of all journal lines; balanced books should be zero.",
+    "recentEntries": "The five most recently posted journal entries.",
+    "pendingApprovalsList": "The newest approval requests awaiting a decision.",
+    "inProgress": "Your draft bills, invoices, and journal entries.",
+    "myApprovals": "Approval requests assigned to your role.",
+    "quickActions": "Shortcuts for your most common tasks.",
+    "cashBalance": "Posted balance of bank accounts in base currency.",
+    "openReceivables": "Unpaid customer invoices in base currency.",
+    "overdueReceivables": "Customer invoices past their due date in base currency.",
+    "openPayables": "Unpaid vendor bills in base currency.",
+    "overduePayables": "Vendor bills past their due date in base currency."
   },
   "grid": {
     "customizing": "Customizing your dashboard",

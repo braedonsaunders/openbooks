@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/dashboard-defaults.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { guardPermission } from "../../../../lib/authz";
 import { isCataloguePermission, PERMISSION_CATALOGUE } from "../../../../lib/permissions";
@@ -143,6 +144,7 @@ export async function POST(req: Request) {
   if (!inserted.rows[0]) {
     return NextResponse.json({ error: `a role with key "${key}" already exists` }, { status: 409 });
   }
+  await seedDashboardDefaultsForOrg(actor.orgId, [key]);
   await audit({
     orgId: actor.orgId,
     rowId: inserted.rows[0].id,
@@ -254,6 +256,8 @@ export async function DELETE(req: Request) {
   // No DB-level FK cascade yet (informal FKs) — remove assignments explicitly.
   await db.execute(sql`
     delete from role_assignments where role_id = ${id} and org_id = ${actor.orgId}`);
+  await db.execute(sql`
+    delete from role_dashboard_layouts where role_key = ${role.key} and org_id = ${actor.orgId}`);
   await db.execute(sql`delete from app_roles where id = ${id} and org_id = ${actor.orgId}`);
   await audit({
     orgId: actor.orgId,

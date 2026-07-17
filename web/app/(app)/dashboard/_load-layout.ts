@@ -1,9 +1,11 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import type { DashboardLayoutData } from '@openbooks/schema'
+import {
+  DEFAULT_DASHBOARD_LAYOUTS,
+  type DashboardLayoutData,
+} from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'
-import { DEFAULT_LAYOUTS } from './_role-defaults'
 import {
   dashboardSourceKeyForTier,
   dashboardSourceKeyForRole,
@@ -40,7 +42,7 @@ export async function resolveDashboardDefault(
   const roleDefault = await loadAssignedRoleDefault(authz, role)
   if (roleDefault) return roleDefault
   return {
-    layout: DEFAULT_LAYOUTS[role] ?? DEFAULT_LAYOUTS.viewer,
+    layout: DEFAULT_DASHBOARD_LAYOUTS[role] ?? DEFAULT_DASHBOARD_LAYOUTS.viewer,
     sourceKey: dashboardSourceKeyForTier(role),
   }
 }

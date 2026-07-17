@@ -3,7 +3,7 @@ import { PageContainer } from '@/components/page-layout'
 import { getAuthz } from '@/lib/authz'
 import { loadDashboardLayout } from './dashboard/_load-layout'
 import { DashboardGrid } from './dashboard/_dashboard-grid'
-import { canSeeWidget, canSeeOrgAggregates } from './dashboard/_widget-access'
+import { canSeeWidget } from './dashboard/_widget-access'
 import { DashboardHeader } from './dashboard/_dashboard-header'
 import { saveQuickActions } from './dashboard/actions'
 import { loadDashboardView } from './dashboard/_edit-canvas'
@@ -21,7 +21,7 @@ export default async function Home() {
   const widgets = layout.widgets.filter((w) => canSeeWidget(authz, w.id))
   const visibleLayout = { ...layout, widgets }
 
-  const { nodes, data } = await loadDashboardView(authz, visibleLayout)
+  const { nodes } = await loadDashboardView(authz, visibleLayout)
 
   const greeting = buildGreeting(today, authz.user.name, {
     morning: t('greeting.morning'),
@@ -29,14 +29,10 @@ export default async function Home() {
     evening: t('greeting.evening'),
   })
 
-  const tenantSummary = canSeeOrgAggregates(authz)
-    ? t('tenantSummary', { entries: data.journalEntryCount })
-    : null
-
   return (
     <PageContainer>
       <div className="space-y-5">
-        <DashboardHeader greeting={greeting} tenantSummary={tenantSummary} />
+        <DashboardHeader greeting={greeting} />
         <DashboardGrid
           initialLayout={visibleLayout}
           nodes={nodes}

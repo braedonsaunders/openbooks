@@ -6,12 +6,10 @@
     "afternoon": "Buenas tardes",
     "evening": "Buenas noches"
   },
-  "tenantSummary": "{entries} asientos",
   "header": {
     "customize": "Personalizar"
   },
   "widgets": {
-    "journalEntries": "Asientos contables",
     "journalLines": "Líneas de asiento",
     "activeAccounts": "Cuentas activas",
     "entriesToday": "Asientos hoy",
@@ -20,7 +18,44 @@
     "recentEntries": "Asientos recientes",
     "pendingApprovalsList": "Aprobaciones pendientes",
     "myApprovals": "Mis aprobaciones",
-    "inProgress": "En curso"
+    "inProgress": "En curso",
+    "cashBalance": "Saldo de efectivo",
+    "openReceivables": "Cuentas por cobrar abiertas",
+    "overdueReceivables": "Cuentas por cobrar vencidas",
+    "openPayables": "Cuentas por pagar abiertas",
+    "overduePayables": "Cuentas por pagar vencidas"
+  },
+  "metricContext": {
+    "today": "Contabilizados hoy",
+    "awaitingDecision": "En espera de una decisión",
+    "baseCurrency": "Moneda base · {currency}",
+    "outstanding": "Pendiente",
+    "pastDue": "Vencido"
+  },
+  "categories": {
+    "kpi": "Indicadores clave",
+    "gl": "Libro mayor",
+    "ap": "Cuentas por pagar",
+    "ar": "Cuentas por cobrar",
+    "personal": "Personal",
+    "admin": "Administración"
+  },
+  "catalog": {
+    "journalLines": "Total de líneas de asiento contabilizadas.",
+    "activeAccounts": "Cuentas activas del plan de cuentas.",
+    "entriesToday": "Asientos contables contabilizados hoy.",
+    "pendingApprovals": "Solicitudes de aprobación pendientes de una decisión.",
+    "ledgerBalance": "Neto de todas las líneas; los libros cuadrados deben mostrar cero.",
+    "recentEntries": "Los cinco asientos contables contabilizados más recientes.",
+    "pendingApprovalsList": "Las solicitudes más recientes pendientes de una decisión.",
+    "inProgress": "Sus facturas, facturas de cliente y asientos en borrador.",
+    "myApprovals": "Solicitudes de aprobación asignadas a su rol.",
+    "quickActions": "Accesos directos a sus tareas más frecuentes.",
+    "cashBalance": "Saldo contabilizado de las cuentas bancarias en moneda base.",
+    "openReceivables": "Facturas de clientes sin pagar en moneda base.",
+    "overdueReceivables": "Facturas de clientes vencidas en moneda base.",
+    "openPayables": "Facturas de proveedores sin pagar en moneda base.",
+    "overduePayables": "Facturas de proveedores vencidas en moneda base."
   },
   "grid": {
     "customizing": "Personalizando tu panel",

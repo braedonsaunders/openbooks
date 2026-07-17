@@ -35,7 +35,12 @@ const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Respo
 }) as unknown as React.ComponentType<any>
 
 const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
-const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
+// react-grid-layout measures the content pane, not the browser viewport. With
+// the expanded sidebar a 1280px desktop has a ~980px grid, so a 996px `md`
+// cutoff incorrectly collapsed four KPI cards into a two-column stack. The
+// component already has dedicated tablet/phone rendering at <=1023 viewport
+// pixels; keep the measured desktop pane on the 12-column layout.
+const BREAKPOINTS = { lg: 1200, md: 768, sm: 640, xs: 480, xxs: 0 }
 const ROW_HEIGHT = 48
 const MARGIN: readonly [number, number] = [16, 16]
 const RESIZE_HANDLES = ['se'] as const
