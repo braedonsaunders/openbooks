@@ -487,6 +487,40 @@ export const RULES: Record<string, RuleFn> = {
       ...tax,
     ];
   },
+
+  /**
+   * Project charge / resource usage — allocate a pooled, already-incurred cost
+   * onto a project at a cost rate. Per line: DEBIT the target project-COGS
+   * account carrying the PROJECT dimension (the job now bears the cost), and
+   * CREDIT the source cost pool with NO project (relieve the untagged pool that
+   * the original bulk vendor bill posted into). When the item has no dedicated
+   * recovery account the credit is the same account as the debit — a pure
+   * dimensional reclass (net-zero to the account total, re-attributed to the
+   * project), so there is no double-count. A dedicated recovery account instead
+   * gives absorption tracking (e.g. owned-equipment recovery vs depreciation).
+   * The line's billable rate/markup rides on is_billable for T&M billing; it is
+   * NOT posted here (revenue posts at invoice time).
+   */
+  project_charge: (doc, lines) => {
+    const out: KernelLine[] = [];
+    for (const l of lines) {
+      const recovery = ((l.custom as Record<string, unknown> | null)?.recoveryAccountId as string | undefined) || l.accountId!;
+      // DR target project COGS — carries the project dimension (job cost).
+      out.push({ accountId: l.accountId!, amount: l.amount, memo: l.description, ...dims(doc, l) });
+      // CR source cost pool — untagged (relieve the general pool / recovery acct).
+      out.push({
+        accountId: recovery,
+        amount: neg(l.amount),
+        memo: l.description,
+        departmentId: doc.departmentId,
+        locationId: doc.locationId,
+        classId: doc.classId,
+        projectId: null,
+        extraDims: (doc.extraDims ?? {}) as Record<string, string>,
+      });
+    }
+    return out;
+  },
 };
 
 export class PostingError extends Error {}

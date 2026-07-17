@@ -187,7 +187,7 @@ export async function generateInvoiceFromBillingRequest(
           left join items i on i.id = dl.item_id
          where dl.org_id = ${orgId} and dl.project_id = ${req.project_id}
            and dl.is_billable and dl.billed_by_line_id is null
-           and d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')
+           and d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check', 'project_charge')
       `)) as unknown as { rows: any[] }
 
       for (const cl of costRows.rows) {
