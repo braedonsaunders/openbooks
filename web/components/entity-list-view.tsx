@@ -173,7 +173,11 @@ export async function EntityListView({
         const href = openHref(String(row.id))
         return (
           <TableCell key={c.key} className="font-medium">
-            <Link href={href as any} className="text-teal-700 hover:underline dark:text-teal-300">
+            <Link
+              href={href as any}
+              title={String(v ?? '')}
+              className="block max-w-[18rem] truncate text-teal-700 hover:underline dark:text-teal-300"
+            >
               {String(v ?? '')}
             </Link>
           </TableCell>
@@ -223,7 +227,7 @@ export async function EntityListView({
         const display = v == null || v === '' ? '—' : hasOptions ? optionLabel(c.key, String(v)) : String(v)
         return (
           <TableCell key={c.key} className={v == null || v === '' ? 'text-slate-400' : 'text-slate-600 dark:text-slate-400'}>
-            {display}
+            <span className="block max-w-[16rem] truncate" title={display}>{display}</span>
           </TableCell>
         )
       }
