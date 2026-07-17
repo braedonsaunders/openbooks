@@ -443,6 +443,7 @@ export function PartyDrawer({
     <UrlDrawer
       open
       closeHref={basePath}
+      contextualReturn={false}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
@@ -1313,7 +1314,20 @@ function TransactionSublist({ partyId, role }: { partyId: string; role?: 'custom
   }
   const transactionHref = (row: TransactionRow) => {
     const returnParams = new URLSearchParams(currentSearchParams.toString())
-    if (returnParams.has('party')) returnParams.set('partyTab', 'transactions')
+    if (returnParams.has('party')) {
+      returnParams.set('partyTab', 'transactions')
+      returnParams.set('partyTxn', row.id)
+      returnParams.set('partyTxnKind', row.kind)
+      returnParams.delete('drawerReturn')
+      returnParams.delete('relatedParty')
+      returnParams.delete('relatedPartyRole')
+      returnParams.delete('relatedPartyTab')
+      return `${pathname}?${returnParams.toString()}`
+    }
+
+    // Global related-party drawers can live over any transaction module, so
+    // retain their cross-module return flow. Dedicated party pages use the
+    // same-page branch above and never replace the underlying route.
     if (returnParams.has('relatedParty')) returnParams.set('relatedPartyTab', 'transactions')
     const returnQuery = returnParams.toString()
     const returnHref = returnQuery ? `${pathname}?${returnQuery}` : pathname

@@ -17,6 +17,7 @@ import { subsidiaryOptions } from '../../../lib/subsidiaries'
 import { NewPartyButton } from './NewPartyButton'
 import { NewPartyRedirect } from './NewPartyRedirect'
 import { PartyDrawer, type PartyTab } from './PartyDrawer'
+import { RelatedTransactionDrawer } from '../../../components/related-transaction-drawer'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,8 @@ export default async function Parties({
 
   const sp = await searchParams
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
+  const partyTransactionId = pickString(sp.partyTxn)
+  const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting'
@@ -201,6 +204,15 @@ export default async function Parties({
           salesReps={pickers[7].rows}
           canManage={canManage}
           initialTab={partyTab}
+        />
+      ) : null}
+      {openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind ? (
+        <RelatedTransactionDrawer
+          id={partyTransactionId}
+          kind={partyTransactionKind}
+          partyId={String(openParty.party.id)}
+          authz={authz}
+          formLayoutId={pickString(sp.form)}
         />
       ) : null}
     </ListPageLayout>

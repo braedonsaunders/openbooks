@@ -354,6 +354,7 @@ export function UrlDrawer({
   bodyClassName,
   panelClassName,
   stacked,
+  contextualReturn = true,
 }: {
   open: boolean
   closeHref: string
@@ -367,11 +368,33 @@ export function UrlDrawer({
   bodyClassName?: string
   panelClassName?: string
   stacked?: boolean
+  /** Whether this drawer should consume nested-record URL context. Base
+   * drawers set this false so only the child transaction becomes stacked. */
+  contextualReturn?: boolean
 }) {
   const navigate = React.useContext(DrawerNavigateContext)
   const [nestedContext, setNestedContext] = React.useState<{ closeHref: string; stacked: boolean } | null>(null)
   React.useEffect(() => {
+    if (!contextualReturn) {
+      setNestedContext(null)
+      return
+    }
     const currentParams = new URLSearchParams(window.location.search)
+
+    // Party transaction drill-through stays on the same page. Closing the
+    // child removes only its two selector params, leaving the underlying list
+    // and party drawer mounted with their existing filters and tab intact.
+    if (currentParams.has('partyTxn')) {
+      currentParams.delete('partyTxn')
+      currentParams.delete('partyTxnKind')
+      const query = currentParams.toString()
+      setNestedContext({
+        closeHref: query ? `${window.location.pathname}?${query}` : window.location.pathname,
+        stacked: true,
+      })
+      return
+    }
+
     const requestedReturn = currentParams.get('drawerReturn')
     const safeReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
       ? requestedReturn
@@ -385,7 +408,7 @@ export function UrlDrawer({
     setNestedContext(safeReturn && !isRelatedRecordHost
       ? { closeHref: safeReturn, stacked: currentParams.has('relatedParty') }
       : null)
-  }, [closeHref])
+  }, [closeHref, contextualReturn])
   const resolvedCloseHref = nestedContext?.closeHref ?? closeHref
   const resolvedStacked = stacked === true || nestedContext?.stacked === true
   // Local presence state: the URL says the drawer is open, but closing must
