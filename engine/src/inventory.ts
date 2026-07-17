@@ -538,6 +538,147 @@ export async function adjustInventory(orgId: string, actorId: string | null, inp
 }
 
 // ---------------------------------------------------------------------------
+// Transfer between stock locations (carried at cost)
+// ---------------------------------------------------------------------------
+
+/** Add quantity to a location's layers at a carried cost (blend for moving-avg). */
+async function addLayerAtCost(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+  stockLocationId: string,
+  quantity: string,
+  unitCost: string,
+  method: InventoryProfile["costingMethod"],
+  movementId: string,
+  date: string,
+): Promise<void> {
+  if (method === "moving_average") {
+    const existing = (await tx.execute(sql`
+      select id, remaining_quantity, unit_cost from cost_layers
+       where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}
+       order by received_at limit 1`)) as unknown as { rows: { id: string; remaining_quantity: string; unit_cost: string }[] };
+    if (existing.rows[0]) {
+      const cur = existing.rows[0];
+      const newQty = add(cur.remaining_quantity, quantity);
+      const newValue = add(extendCost(cur.remaining_quantity, cur.unit_cost), extendCost(quantity, unitCost));
+      const newCost = isZero(newQty) ? unitCost : fromUnits((toUnits(newValue) * 10_000n) / toUnits(newQty));
+      await tx.execute(sql`
+        update cost_layers set remaining_quantity = ${newQty}, original_quantity = original_quantity + ${quantity},
+           unit_cost = ${newCost}, updated_at = now() where id = ${cur.id}`);
+      return;
+    }
+  }
+  await tx.execute(sql`
+    insert into cost_layers
+      (org_id, item_id, stock_location_id, source_movement_id, received_at, original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
+    values (${orgId}, ${itemId}, ${stockLocationId}, ${movementId}, ${date}, ${quantity}, ${quantity}, ${unitCost}, null, null)`);
+}
+
+export interface TransferInput {
+  itemId: string;
+  fromStockLocationId: string;
+  toStockLocationId: string;
+  quantity: string;
+  subsidiaryId: string;
+  date: string;
+  memo?: string | null;
+}
+
+/**
+ * Move stock between two locations at its carried cost. Source layers are
+ * consumed (by the item's method), the destination gains the value, and a
+ * location-reclass entry posts only when the two locations map to different
+ * `locations` dimensions (else it's a pure subledger move). Value is unchanged.
+ */
+export async function transferInventory(orgId: string, actorId: string | null, input: TransferInput): Promise<{ fromMovementId: string; toMovementId: string; entryId: string | null; value: string }> {
+  if (cmp(input.quantity, "0") <= 0) throw new InventoryError("transfer quantity must be positive");
+  if (input.fromStockLocationId === input.toStockLocationId) throw new InventoryError("transfer needs two different locations");
+  const profile = await resolveProfile(orgId, input.itemId);
+  const period = await periodForDate(orgId, input.date);
+  if (!period) throw new InventoryError(`no accounting period for ${input.date}`);
+  const bookId = await primaryBookId(orgId);
+  const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
+  const onHand = await getOnHand(orgId, input.itemId, input.fromStockLocationId);
+  if (cmp(input.quantity, onHand.quantity) > 0) {
+    throw new InventoryError(`insufficient stock at source: need ${input.quantity}, on hand ${onHand.quantity}`);
+  }
+
+  const locDims = (await db.execute(sql`
+    select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`)) as unknown as {
+    rows: { id: string; location_id: string }[];
+  };
+  const fromDim = locDims.rows.find((r) => r.id === input.fromStockLocationId)?.location_id ?? null;
+  const toDim = locDims.rows.find((r) => r.id === input.toStockLocationId)?.location_id ?? null;
+
+  return await db.transaction(async (tx) => {
+    const layersRes = (await tx.execute(sql`
+      select id, remaining_quantity as remaining, unit_cost from cost_layers
+       where org_id = ${orgId} and item_id = ${input.itemId} and stock_location_id = ${input.fromStockLocationId}
+         and remaining_quantity > 0
+       order by received_at, id`)) as unknown as { rows: { id: string; remaining: string; unit_cost: string }[] };
+    const layers = layersRes.rows;
+
+    let cost: string;
+    let consumptions: { layerId: string; quantity: string; unitCost: string }[];
+    if (profile.costingMethod === "standard") {
+      cost = issueStandard(input.quantity, profile.standardCost ?? onHand.unitCost);
+      consumptions = planQuantityConsumption(layers, input.quantity);
+    } else if (profile.costingMethod === "moving_average") {
+      cost = issueMovingAverage({ quantity: onHand.quantity, value: onHand.value }, input.quantity).cost;
+      consumptions = layers[0] ? [{ layerId: layers[0].id, quantity: input.quantity, unitCost: layers[0].unit_cost }] : [];
+    } else {
+      const r = consumeFifo(
+        layers.map((l) => ({ id: l.id, remaining: l.remaining, unitCost: l.unit_cost })) as CostLayer[],
+        input.quantity,
+        onHand.unitCost,
+      );
+      cost = r.totalCost;
+      consumptions = r.consumptions.map((c) => ({ layerId: c.layerId, quantity: c.quantity, unitCost: c.unitCost }));
+    }
+    const unitCost = isZero(input.quantity) ? "0" : fromUnits((toUnits(cost) * 10_000n) / toUnits(input.quantity));
+
+    // Optional location-reclass entry (value nets to zero, dimensions differ).
+    let entryId: string | null = null;
+    if (fromDim && toDim && fromDim !== toDim && !isZero(cost)) {
+      entryId = await postInventoryEntry(tx, {
+        orgId, bookId, subsidiaryId: input.subsidiaryId, currency, periodId: period, date: input.date,
+        entryNumber: `INV-XFER-${input.date}-${input.itemId.slice(0, 8)}`,
+        memo: input.memo ?? "Inventory transfer",
+        lines: [
+          { accountId: profile.assetAccountId, amount: cost, locationId: toDim, memo: input.memo },
+          { accountId: profile.assetAccountId, amount: neg(cost), locationId: fromDim, memo: input.memo },
+        ],
+      });
+    }
+
+    const fromMv = (await tx.execute(sql`
+      insert into inventory_movements
+        (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
+      values (${orgId}, ${input.itemId}, 'transfer_out', ${input.date}, ${input.fromStockLocationId}, ${neg(input.quantity)}, ${unitCost}, ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
+      returning id`)) as unknown as { rows: { id: string }[] };
+    const fromMovementId = fromMv.rows[0].id;
+    const toMv = (await tx.execute(sql`
+      insert into inventory_movements
+        (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, paired_movement_id, status, memo, created_by, updated_by)
+      values (${orgId}, ${input.itemId}, 'transfer_in', ${input.date}, ${input.toStockLocationId}, ${input.quantity}, ${unitCost}, ${cost}, ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
+      returning id`)) as unknown as { rows: { id: string }[] };
+    const toMovementId = toMv.rows[0].id;
+    await tx.execute(sql`update inventory_movements set paired_movement_id = ${toMovementId} where id = ${fromMovementId}`);
+
+    for (const c of consumptions) {
+      await tx.execute(sql`update cost_layers set remaining_quantity = remaining_quantity - ${c.quantity}, updated_at = now() where id = ${c.layerId}`);
+      await tx.execute(sql`
+        insert into cost_layer_consumptions (org_id, cost_layer_id, issue_movement_id, quantity, unit_cost, created_by, updated_by)
+        values (${orgId}, ${c.layerId}, ${fromMovementId}, ${c.quantity}, ${c.unitCost}, ${actorId}, ${actorId})`);
+    }
+    await addLayerAtCost(tx, orgId, input.itemId, input.toStockLocationId, input.quantity, unitCost, profile.costingMethod, toMovementId, input.date);
+
+    return { fromMovementId, toMovementId, entryId, value: cost };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Document integration — bill receipts & invoice/shipment issues
 // ---------------------------------------------------------------------------
 

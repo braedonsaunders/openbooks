@@ -40,12 +40,14 @@
     "actions": {
       "receive": "Recibir",
       "issue": "Salida",
-      "adjust": "Ajustar"
+      "adjust": "Ajustar",
+      "transfer": "Trasladar"
     },
     "hint": {
       "receive": "Agregar stock al costo (DR inventario / CR contrapartida).",
       "issue": "Retirar stock a costo de ventas (DR costo de ventas / CR inventario).",
-      "adjust": "Corregir la cantidad en existencia contra la cuenta de ajuste."
+      "adjust": "Corregir la cantidad en existencia contra la cuenta de ajuste.",
+      "transfer": "Mover stock entre dos ubicaciones a su costo registrado."
     },
     "selectItem": "Seleccionar un artículo",
     "selectLocation": "Seleccionar una ubicación",
@@ -56,6 +58,8 @@
     "memoPlaceholder": "Nota opcional",
     "missingFields": "Artículo, ubicación y cantidad son obligatorios",
     "failed": "Falló el movimiento",
-    "posted": "Movimiento contabilizado ({value})"
+    "posted": "Movimiento contabilizado ({value})",
+    "fromLocation": "Ubicación origen",
+    "toLocation": "Ubicación destino"
   }
 }

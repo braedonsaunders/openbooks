@@ -10,7 +10,7 @@ interface ItemOpt { id: string; code?: string | null; name?: string | null }
 interface LocOpt { id: string; code?: string | null }
 interface AccountOpt { id: string; number?: string | null; name?: string | null }
 
-const ACTIONS = ['receive', 'issue', 'adjust'] as const
+const ACTIONS = ['receive', 'issue', 'adjust', 'transfer'] as const
 type Action = (typeof ACTIONS)[number]
 
 const field = 'space-y-1.5'
@@ -35,6 +35,7 @@ export function InventoryActionDrawer({
   const [action, setAction] = useState<Action>('receive')
   const [itemId, setItemId] = useState('')
   const [stockLocationId, setStockLocationId] = useState('')
+  const [toStockLocationId, setToStockLocationId] = useState('')
   const [quantity, setQuantity] = useState('')
   const [unitCost, setUnitCost] = useState('')
   const [offsetAccountId, setOffsetAccountId] = useState('')
@@ -61,6 +62,7 @@ export function InventoryActionDrawer({
         action,
         itemId,
         stockLocationId,
+        toStockLocationId: toStockLocationId || undefined,
         quantity,
         unitCost: unitCost || undefined,
         offsetAccountId: offsetAccountId || undefined,
@@ -117,7 +119,7 @@ export function InventoryActionDrawer({
             />
           </div>
           <div className={field}>
-            <Label>{t('labels.location')}<span className="text-red-500"> *</span></Label>
+            <Label>{action === 'transfer' ? t('drawer.fromLocation') : t('labels.location')}<span className="text-red-500"> *</span></Label>
             <SearchSelect
               value={stockLocationId}
               onChange={setStockLocationId}
@@ -127,6 +129,19 @@ export function InventoryActionDrawer({
               ariaLabel={t('labels.location')}
             />
           </div>
+          {action === 'transfer' ? (
+            <div className={field}>
+              <Label>{t('drawer.toLocation')}<span className="text-red-500"> *</span></Label>
+              <SearchSelect
+                value={toStockLocationId}
+                onChange={setToStockLocationId}
+                options={locOptions.filter((o) => o.value !== stockLocationId)}
+                placeholder={t('drawer.selectLocation')}
+                sheetTitle={t('drawer.toLocation')}
+                ariaLabel={t('drawer.toLocation')}
+              />
+            </div>
+          ) : null}
           <div className={field}>
             <Label>
               {action === 'adjust' ? t('drawer.quantityDelta') : t('labels.quantity')}

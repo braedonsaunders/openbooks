@@ -40,12 +40,14 @@
     "actions": {
       "receive": "Receive",
       "issue": "Issue",
-      "adjust": "Adjust"
+      "adjust": "Adjust",
+      "transfer": "Transfer"
     },
     "hint": {
       "receive": "Add stock at cost (DR inventory / CR offset).",
       "issue": "Remove stock to COGS (DR COGS / CR inventory).",
-      "adjust": "Correct on-hand quantity against the adjustment account."
+      "adjust": "Correct on-hand quantity against the adjustment account.",
+      "transfer": "Move stock between two locations at its carried cost."
     },
     "selectItem": "Select an item",
     "selectLocation": "Select a location",
@@ -56,6 +58,8 @@
     "memoPlaceholder": "Optional note",
     "missingFields": "Item, location, and quantity are required",
     "failed": "Movement failed",
-    "posted": "Posted movement ({value})"
+    "posted": "Posted movement ({value})",
+    "fromLocation": "From location",
+    "toLocation": "To location"
   }
 }
