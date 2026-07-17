@@ -15,6 +15,7 @@
     },
     "folderRow": "Dossier"
   },
+  "systemFolders": { "apCapture": "Capture fournisseurs" },
   "columns": {
     "name": "Nom",
     "size": "Taille",

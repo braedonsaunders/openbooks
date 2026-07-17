@@ -15,6 +15,7 @@
     },
     "folderRow": "Folder"
   },
+  "systemFolders": { "apCapture": "AP capture" },
   "columns": {
     "name": "Name",
     "size": "Size",

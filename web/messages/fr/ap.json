@@ -21,6 +21,7 @@
     "new": "Nouveau",
     "newBill": "Nouvelle facture",
     "newCredit": "Nouvelle note de crédit",
+    "capture": "Capturer des factures",
     "submitForApproval": "Soumettre pour approbation"
   },
   "drawer": {
@@ -53,6 +54,41 @@
     "formSetPreferredDone": "Formulaire préféré enregistré",
     "formPreferredCleared": "Formulaire préféré effacé",
     "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré"
+  },
+  "capture": {
+    "title": "Capture de factures",
+    "description": "Téléversez des factures par lots, révisez les données extraites à côté de la source et créez des brouillons fournisseurs contrôlés.",
+    "backToBills": "Factures",
+    "upload": "Téléverser des documents",
+    "uploading": "Téléversement…",
+    "uploadComplete": "{count, plural, one {# document mis en file} other {# documents mis en file}}.",
+    "uploadFailed": "Les documents n’ont pas pu être téléversés.",
+    "notConfigured": "La capture de documents n’est pas opérationnelle, car elle est désactivée ou la configuration fournisseur de l’organisation manque.",
+    "configure": "Configurez-la dans Plateforme → IA.",
+    "search": "Rechercher fichiers, fournisseurs, numéros de facture…",
+    "status": { "queued": "En file", "extracting": "Extraction", "needs_review": "À réviser", "ready": "Prêt", "duplicate": "Doublon possible", "failed": "Échec", "materialized": "Brouillon créé", "rejected": "Rejeté" },
+    "emptyTitle": "Aucun document capturé", "emptyDescription": "Téléversez des documents fournisseurs PDF, JPEG, PNG ou TIFF pour commencer.",
+    "selected": "{count, plural, =0 {Aucune sélection} one {# sélection} other {# sélections}}", "select": "Sélectionner", "selectDocument": "Sélectionner {name}",
+    "reprocess": "Retraiter", "reject": "Rejeter", "createDraft": "Créer le brouillon", "createDrafts": "Créer les brouillons",
+    "bulkComplete": "Action groupée terminée : {succeeded} réussies, {failed} échouées.", "actionFailed": "L’action de capture a échoué.",
+    "rejected": "Document rejeté.", "reprocessQueued": "Document mis en file pour retraitement.", "draftCreated": "Brouillon fournisseur créé.", "openDraft": "Ouvrir le brouillon fournisseur",
+    "bill": "Facture fournisseur", "credit": "Note de crédit fournisseur",
+    "columns": { "document": "Document", "vendor": "Fournisseur", "invoice": "N° de facture", "date": "Date de facture", "total": "Total", "status": "Statut", "received": "Reçu" },
+    "saving": "Enregistrement des corrections…", "unsaved": "Corrections non enregistrées", "saved": "Toutes les corrections sont enregistrées", "saveFailed": "Impossible d’enregistrer les corrections.",
+    "processing": "Extraction des preuves du document…", "processingFailed": "L’extraction du document a échoué. Vérifiez la configuration du fournisseur de l’organisation, puis retraitez le document.", "sourcePreview": "Aperçu du document source", "sourcePreviewAlt": "Document source {name}", "confidencePercent": "{percent} %", "highlightEvidence": "Surligner cette preuve dans le document source",
+    "fields": { "kind": "Type de document", "vendor": "Fournisseur", "vendorPlaceholder": "Sélectionner un fournisseur…", "invoiceNumber": "Numéro de facture", "invoiceDate": "Date de facture", "dueDate": "Date d’échéance", "currency": "Devise", "purchaseOrder": "Bon de commande", "purchaseOrderPlaceholder": "Sélectionner un bon de commande…", "memo": "Mémo", "subtotal": "Sous-total", "taxTotal": "Taxe", "total": "Total" },
+    "lines": { "title": "Lignes extraites", "add": "Ajouter une ligne", "description": "Description", "account": "Compte", "accountPlaceholder": "Sélectionner un compte…", "quantity": "Qté", "unitPrice": "Prix unitaire", "amount": "Montant", "tax": "Taxe", "remove": "Retirer la ligne {line}" },
+    "issues": {
+      "required_field": "Un champ obligatoire est manquant.", "invalid_date": "Saisissez une date ISO valide.", "invalid_currency": "Saisissez un code de devise valide à trois lettres.", "amount_out_of_range": "Le montant dépasse la plage comptable prise en charge.", "missing_lines": "Ajoutez au moins une ligne de facture.",
+      "missing_line_description": "La ligne {line} n’a ni description ni code de produit.", "line_math_mismatch": "La ligne {line} ne correspond pas à quantité × prix unitaire ({expected} attendu, {actual} trouvé).",
+      "low_confidence": "La ligne {line} est sous le seuil de confiance.", "document_low_confidence": "Le document est sous le seuil de confiance pour la révision.", "subtotal_mismatch": "Le sous-total des lignes est {expected}, mais le document indique {actual}.",
+      "line_tax_mismatch": "La taxe des lignes totalise {expected}, mais le document indique {actual}.",
+      "total_mismatch": "Le sous-total plus la taxe est {expected}, mais le document indique {actual}.", "vendor_unresolved": "Sélectionnez le fournisseur.",
+      "purchase_order_unresolved": "Le bon de commande ne peut pas être résolu de façon unique.", "account_unresolved": "Sélectionnez un compte pour la ligne {line}.",
+      "po_line_unmatched": "La ligne {line} ne peut pas être associée de façon unique au bon de commande.", "po_quantity_exceeded": "La ligne {line} dépasse la quantité non facturée du bon de commande ({expected}).",
+      "receipt_quantity_shortfall": "La ligne {line} dépasse la quantité reçue et non facturée ({expected}); réceptionnez d’abord les marchandises.",
+      "possible_duplicate": "Une capture ou un document fournisseur possède déjà ce fichier ou ce numéro de facture."
+    }
   },
   "toasts": {
     "actionFailed": "Échec de l’action",

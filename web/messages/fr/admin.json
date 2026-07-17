@@ -783,6 +783,17 @@
       "detectorMateriality": "Seuil d’importance relative du contrôle",
       "inheritedMateriality": "Utilise le seuil de l’agent de {amount}.",
       "disabledFindingBehavior": "La désactivation d’un contrôle arrête cette vérification. Les constats existants restent disponibles et ne sont pas marqués comme résolus.",
+      "reasoningTitle": "Raisonnement et récits de l’agent",
+      "reasoningDescription": "Donnez à cet agent les mêmes outils de lecture contrôlés que l’assistant afin qu’il puisse examiner les preuves, relier les facteurs et produire une analyse révisable. Il ne peut ni modifier ni comptabiliser d’enregistrements.",
+      "reasoning": {
+        "rootCauseAnalysis": { "title": "Analyse des causes fondamentales", "description": "Examine les opérations justificatives et explique les facteurs précis de chaque constat." },
+        "recommendations": { "title": "Mesures recommandées", "description": "Propose des prochaines étapes concrètes et révisables à partir des preuves recueillies." },
+        "narrative": { "title": "Récit de gestion", "description": "Crée une synthèse de préparation à la clôture ou de performance financière à partir des rapports et tendances actuels." }
+      },
+      "modelTier": "Modèle d’analyse",
+      "modelTiers": { "smart": "Modèle avancé — analyse approfondie", "fast": "Modèle rapide — coût réduit" },
+      "maxToolSteps": "Nombre maximal d’étapes d’outils",
+      "maxToolStepsHint": "Limite le nombre de consultations de rapports et d’enregistrements par exécution (4 à 30).",
       "resetRecommended": "Rétablir les valeurs recommandées",
       "cancel": "Annuler",
       "saveConfiguration": "Enregistrer l’agent",
@@ -834,6 +845,25 @@
       "scanComplete": "Analyse terminée : {detected} détectés, {resolved} résolus.",
       "scanFailed": "L’analyse de l’agent a échoué.",
       "runStatus": { "completed": "terminée", "failed": "échouée", "skipped": "ignorée", "running": "en cours" }
+    },
+    "documentCapture": {
+      "title": "Capture de documents fournisseurs",
+      "description": "Extrait les factures et avoirs fournisseurs dans une file de révision appuyée par des preuves. Le même arrêt général de l’IA de l’organisation s’applique, tandis que la clé du fournisseur documentaire reste chiffrée séparément.",
+      "openQueue": "Ouvrir la file de capture",
+      "enabled": "Activer la capture de documents fournisseurs",
+      "globallyDisabled": "Les fonctions d’IA sont désactivées. La capture de documents est arrêtée malgré ce réglage.",
+      "endpoint": "Point de terminaison du fournisseur documentaire",
+      "endpointHint": "Le point de terminaison public Azure AI Document Intelligence de votre organisation.",
+      "key": "Clé API du fournisseur documentaire",
+      "keyPlaceholder": "Collez la clé du fournisseur documentaire",
+      "removeKey": "Supprimer la clé du fournisseur documentaire",
+      "keyRemoved": "Clé du fournisseur documentaire supprimée.",
+      "model": "Modèle de facture",
+      "confidence": "Seuil de confiance pour la révision",
+      "confidenceHint": "Les valeurs sous ce seuil de 0 à 1 sont signalées pour révision.",
+      "autoDraft": "Créer automatiquement des brouillons uniquement pour les bons de commande entièrement appariés",
+      "test": "Tester le fournisseur documentaire",
+      "testResult": { "connected": "Connexion au fournisseur documentaire établie.", "failed": "Le test du fournisseur documentaire a échoué.", "missing": "Saisissez d’abord un point de terminaison et une clé API." }
     },
     "models": {
       "load": "Charger les modèles",

@@ -37,6 +37,15 @@ export async function PUT(req: Request) {
     baseUrl: String(body.baseUrl ?? "").trim(),
     apiKey: String(body.apiKey ?? "").trim() || undefined,
     agents: [],
+    documentCapture: {
+      enabled: body.documentCapture?.enabled === true,
+      provider: "azure_document_intelligence",
+      endpoint: String(body.documentCapture?.endpoint ?? "").trim(),
+      model: String(body.documentCapture?.model ?? "prebuilt-invoice").trim(),
+      confidenceThreshold: String(body.documentCapture?.confidenceThreshold ?? "0.9000").trim(),
+      autoCreatePoMatchedDrafts: body.documentCapture?.autoCreatePoMatchedDrafts === true,
+      apiKey: String(body.documentCapture?.apiKey ?? "").trim() || undefined,
+    },
   };
   try {
     input.agents = normalizeAgentSettingsInput(body.agents);

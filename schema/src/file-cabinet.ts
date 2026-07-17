@@ -66,7 +66,7 @@ export const folders = pgTable(
     isSystem: boolean("is_system").notNull().default(false),
     /**
      * System folder kind: 'attachments' (root for record attachment folders),
-     * 'user_documents' (per-user root).
+     * 'user_documents' (per-user root), or 'ap_capture' (AP intake evidence).
      */
     systemKind: text("system_kind"),
     /** When set, this folder is the auto-created attachment folder for a
