@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Pagos",
-    "description": "Pagos a proveedores aplicados a facturas de compra pendientes, y lotes de pagos EFT exportados como archivos CPA-005.",
+    "description": "Gestione los pagos a proveedores y los lotes de pagos, desde la selección hasta la contabilización.",
     "newPayment": "Nuevo pago",
     "newRun": "Nuevo lote de pagos",
     "tabs": {

@@ -105,7 +105,8 @@ export async function RunsSection({
       join parties p on p.id = d.party_id
       join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount < 0
-     where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.status = 'posted'`
+     where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
+       and d.payment_hold_reason is null`
 
   const [bills, billCount, runs, runCounts, runFilteredCount, bankAccounts] = await Promise.all([
     building ? db.execute(sql`
