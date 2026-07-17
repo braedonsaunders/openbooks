@@ -3,6 +3,7 @@
   "title": "Cierre continuo",
   "description": "Supervisa continuamente la preparación para el cierre y presenta excepciones contables y financieras respaldadas por evidencia.",
   "search": "Buscar hallazgos…",
+  "tabs": { "ariaLabel": "Secciones del cierre continuo", "findings": "Hallazgos", "reports": "Informes" },
   "agents": { "accounting": "Contabilidad", "finance": "Finanzas" },
   "metrics": { "active": "Activos", "critical": "Críticos", "accounting": "Hallazgos contables", "finance": "Hallazgos financieros" },
   "filters": { "agent": "Agente", "severity": "Gravedad" },
