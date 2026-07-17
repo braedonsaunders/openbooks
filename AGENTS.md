@@ -45,7 +45,8 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
    not a pattern to copy.
 9. Validation gates before any commit: `npx tsc -p web --noEmit` (web has its
    own TypeScript 5.9 — the root has TS7, use `web/node_modules/.bin/tsc`),
-   engine typecheck (`npx tsc -p engine --noEmit`), and a clean
+   engine typecheck (`npx tsc -p engine --noEmit`), the test suite (`npm test`
+   — 126 tests and climbing; see "Testing"), and a clean
    `cd web && npx next build`. Never commit on red.
 
 ## Accounting Kernel Discipline (never violate)
@@ -187,6 +188,38 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
 - No unreachable UI: navigation registry entry, permission key, and route land
   together. No orphaned schema: UI, actions, migration, FK, grants land as one
   complete change.
+
+## Testing (world-class financial software)
+
+This is accounting software: wrong numbers are the worst possible defect, and
+they are silent. Hold every change to the testing bar a world-class financial
+system would demand — tests are part of "complete production-grade code" (rule
+2), never a follow-up.
+
+- MANDATORY: any change that touches money math, the posting/kernel path,
+  tax, FX/revaluation, depreciation, close, payments/applications, consolidation,
+  inventory costing, or ANY GL-affecting or balance-affecting logic ships with
+  automated tests in the SAME change. No new financial logic lands untested.
+- Test the invariants, not just the happy path. Assert the properties a
+  reviewer would: entries balance to zero, debit/credit signs are correct,
+  runs are idempotent (re-running posts nothing new), reversals net to zero
+  against their source, revaluation/translation nets correctly across the pair,
+  rounding is exact at `numeric(19,4)`, and closed-period / immutability rules
+  refuse the write. Cover boundaries: zero, negative, multi-currency, rate
+  precision, period edges, empty inputs.
+- Two layers where risk justifies it: fast **unit tests** for the pure
+  calculation (colocated `*.test.ts`, e.g. `engine/src/money.test.ts`,
+  `web/lib/budget-math.test.ts`) AND a **contract/integration test** that posts
+  through the real engine and asserts the resulting ledger (see
+  `engine/src/journal-writes.test.ts`, `engine/src/sync/*.test.ts`). Prefer
+  invariant/property assertions over frozen golden values.
+- Runner: Node's built-in `node:test` + `node:assert/strict`, run via
+  `npm test` (`node --import tsx --test …`). Colocate `*.test.ts` next to the
+  code. DB-backed contract tests need `OPENBOOKS_DB_URL`; pure-logic tests must
+  run without a database. Never commit on red; never delete or weaken a test to
+  go green — fix the code or the assertion's premise.
+- UI/report changes still get preview-browser verification (below); that does
+  not substitute for tests on the numbers behind them.
 
 ## Search First Checklist
 
