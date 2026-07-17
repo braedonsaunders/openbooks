@@ -59,7 +59,7 @@
     "title": "Captura de facturas", "description": "Cargue facturas por lotes, revise los datos extraídos junto a la fuente y cree borradores de compras controlados.",
     "backToBills": "Facturas", "upload": "Cargar documentos", "uploading": "Cargando…",
     "uploadComplete": "{count, plural, one {# documento en cola} other {# documentos en cola}}.", "uploadFailed": "No se pudieron cargar los documentos.",
-    "notConfigured": "La captura de documentos no está operativa porque está desactivada o falta la configuración del proveedor de la organización.", "configure": "Configúrela en Plataforma → IA.",
+    "notConfigured": "La captura de documentos no está operativa porque está desactivada o falta la configuración del proveedor de la organización.", "configure": "Configúrela en Centro de administración → IA.",
     "search": "Buscar archivos, proveedores, números de factura…",
     "status": { "queued": "En cola", "extracting": "Extrayendo", "needs_review": "Requiere revisión", "ready": "Listo", "duplicate": "Posible duplicado", "failed": "Error", "materialized": "Borrador creado", "rejected": "Rechazado" },
     "emptyTitle": "No hay documentos capturados", "emptyDescription": "Cargue documentos de proveedor PDF, JPEG, PNG o TIFF para comenzar.",

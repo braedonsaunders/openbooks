@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
@@ -22,6 +23,7 @@ export default async function AppsAdminPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('apps.manage')
+  const tHub = await getTranslations('admin.hub')
   const orgId = authz.user.orgId
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 50 })
@@ -88,7 +90,7 @@ export default async function AppsAdminPage({
       header={
         <>
           <PageHeader
-            back={{ href: '/admin', label: 'Platform' }}
+            back={{ href: '/admin', label: tHub('title') }}
             title="Apps"
             description="Build and install app packages — a sandboxed frontend plus a governed backend, isolated per app."
             actions={<AppsToolbar />}

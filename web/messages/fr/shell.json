@@ -33,6 +33,10 @@
     "ariaLabel": "Principal",
     "more": "Plus"
   },
+  "apps": {
+    "ariaLabel": "Ouvrir les applications",
+    "title": "Applications"
+  },
   "globalCreate": {
     "ariaLabel": "Créer",
     "title": "Créer",

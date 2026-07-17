@@ -64,7 +64,7 @@
     "uploadComplete": "{count, plural, one {# document queued} other {# documents queued}}.",
     "uploadFailed": "The documents could not be uploaded.",
     "notConfigured": "Document capture is not operational because it is disabled or missing its organization provider configuration.",
-    "configure": "Configure it under Platform → AI.",
+    "configure": "Configure it under Admin Center → AI.",
     "search": "Search files, vendors, invoice numbers…",
     "status": {
       "queued": "Queued", "extracting": "Extracting", "needs_review": "Needs review", "ready": "Ready",

@@ -27,6 +27,10 @@ import { visibleTopNavGroupCount } from '../lib/top-nav-overflow'
 
 const MORE_MENU_INDEX = -1
 
+function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | null) {
+  return group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
+}
+
 export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   const t = useTranslations('shell.topNav')
   const pathname = usePathname() ?? ''
@@ -112,7 +116,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   const visibleGroups = navGroups.slice(0, visibleCount)
   const overflowGroups = navGroups.slice(visibleCount)
   const moreOpen = openIdx === MORE_MENU_INDEX
-  const moreActive = overflowGroups.some((group) => group.items.some((item) => item.href === activeHref))
+  const moreActive = overflowGroups.some((group) => groupContainsActiveHref(group, activeHref))
 
   return (
     <nav
@@ -146,7 +150,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
 
       {visibleGroups.map((group, i) => {
         const open = openIdx === i
-        const groupActive = group.items.some((item) => item.href === activeHref)
+        const groupActive = groupContainsActiveHref(group, activeHref)
         return (
           <Popover
             key={group.label}
@@ -267,7 +271,7 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
   const [flip, setFlip] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | null>(null)
-  const active = group.items.some((item) => item.href === activeHref)
+  const active = groupContainsActiveHref(group, activeHref)
 
   useEffect(
     () => () => {
@@ -309,6 +313,7 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
             : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
         )}
       >
+        <NavIcon iconKey={group.iconKey} size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
         <span className="flex-1 truncate text-left">{group.label}</span>
         <ChevronRight size={12} className={cn('shrink-0 opacity-50', flip && open && 'rotate-180')} />
       </button>
@@ -329,19 +334,14 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
 
 /** One dropdown entry — used both at the top level and inside flyouts. */
 function MenuItemLink({ item, active }: { item: SidebarNavItem; active: boolean }) {
-  return (
-    <Link
-      href={item.href as never}
-      aria-current={active ? 'page' : undefined}
-      role="menuitem"
-      data-walkthrough={`nav:${item.href}`}
-      className={cn(
-        'group flex items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
-        active
-          ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
-          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
-      )}
-    >
+  const className = cn(
+    'group flex items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
+    active
+      ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
+      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
+  )
+  const content = (
+    <>
       <NavIcon
         iconKey={item.iconKey}
         size={15}
@@ -353,6 +353,21 @@ function MenuItemLink({ item, active }: { item: SidebarNavItem; active: boolean 
         )}
       />
       <span className="truncate">{item.label}</span>
+    </>
+  )
+  return item.href.startsWith('https://') ? (
+    <a href={item.href} role="menuitem" data-walkthrough={`nav:${item.href}`} className={className}>
+      {content}
+    </a>
+  ) : (
+    <Link
+      href={item.href as never}
+      aria-current={active ? 'page' : undefined}
+      role="menuitem"
+      data-walkthrough={`nav:${item.href}`}
+      className={className}
+    >
+      {content}
     </Link>
   )
 }

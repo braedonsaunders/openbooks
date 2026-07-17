@@ -26,7 +26,7 @@ export function Popover({
   open: boolean
   onOpenChange: (open: boolean) => void
   align?: 'start' | 'end'
-  side?: 'top' | 'bottom'
+  side?: 'top' | 'bottom' | 'left' | 'right'
   className?: string
   children: React.ReactNode
 }) {
@@ -99,20 +99,49 @@ export function Popover({
                 <motion.div
                   ref={panelRef}
                   data-ui-overlay
-                  initial={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
+                  initial={{
+                    opacity: 0,
+                    x: side === 'right' ? -4 : side === 'left' ? 4 : 0,
+                    y: side === 'bottom' ? -4 : side === 'top' ? 4 : 0,
+                    scale: 0.97,
+                  }}
+                  animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                  exit={{
+                    opacity: 0,
+                    x: side === 'right' ? -4 : side === 'left' ? 4 : 0,
+                    y: side === 'bottom' ? -4 : side === 'top' ? 4 : 0,
+                    scale: 0.97,
+                  }}
                   transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
                   className={cn(
                     'fixed z-[60] min-w-[12rem] origin-top rounded-md border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900',
                     className,
                   )}
                   style={{
-                    top: side === 'bottom' ? rect.top + rect.height + 4 : undefined,
-                    bottom: side === 'top' ? window.innerHeight - rect.top + 4 : undefined,
-                    left: align === 'start' ? rect.left : undefined,
+                    top:
+                      side === 'bottom'
+                        ? rect.top + rect.height + 4
+                        : (side === 'left' || side === 'right') && align === 'start'
+                          ? rect.top
+                          : undefined,
+                    bottom:
+                      side === 'top'
+                        ? window.innerHeight - rect.top + 4
+                        : (side === 'left' || side === 'right') && align === 'end'
+                          ? window.innerHeight - (rect.top + rect.height)
+                          : undefined,
+                    left:
+                      side === 'right'
+                        ? rect.left + rect.width + 4
+                        : (side === 'top' || side === 'bottom') && align === 'start'
+                          ? rect.left
+                          : undefined,
                     right:
-                      align === 'end' ? window.innerWidth - (rect.left + rect.width) : undefined,
+                      side === 'left'
+                        ? window.innerWidth - rect.left + 4
+                        : (side === 'top' || side === 'bottom') && align === 'end'
+                          ? window.innerWidth - (rect.left + rect.width)
+                          : undefined,
                   }}
                   role="dialog"
                 >

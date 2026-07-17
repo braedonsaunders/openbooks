@@ -6,9 +6,11 @@ import {
   ADMIN_HUB_PERMISSIONS,
   ADMIN_MODULE_KEY,
   MODULE_BY_KEY,
+  NAV_GROUP_BY_KEY,
   NAV_MODULES,
   NAV_SUBGROUPS,
   defaultNavConfig,
+  type NavGroupKey,
   type OrgNavConfig,
 } from './registry'
 
@@ -34,21 +36,11 @@ export async function resolveNav(
   role: string | null | undefined,
   t: (key: string) => string,
 ): Promise<SidebarNavGroup[]> {
-  const r = (await db.execute(
-    sql`select config from org_nav_configs where org_id = ${orgId} limit 1`,
-  )) as unknown as { rows: { config: OrgNavConfig }[] }
+  const r = (await db.execute(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`)) as unknown as {
+    rows: { config: OrgNavConfig }[]
+  }
   const saved = r.rows[0]?.config
-  const config = saved?.version === 1 ? layerInNewModules(saved) : defaultNavConfig()
-
-  // Registry-default group names → nav.groups.* message keys. A saved config
-  // whose group label matches a default gets translated; anything else is an
-  // org's own wording.
-  const DEFAULT_GROUP_SLUGS = new Map(
-    [...new Set(NAV_MODULES.map((m) => m.group))].map((label) => [
-      label,
-      label.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-    ]),
-  )
+  const config = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
 
   const groups: SidebarNavGroup[] = []
   for (const g of config.groups) {
@@ -66,23 +58,23 @@ export async function resolveNav(
         } else if (!can(mod.requiredPermission)) continue
         items.push({
           href: mod.href,
-          label:
-            item.label && item.label !== mod.label
-              ? item.label
-              : t(`modules.${mod.key}`) || mod.label,
+          label: item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`) || mod.label,
           iconKey: item.iconKey ?? mod.iconKey,
           exact: mod.exact,
+          mobile: item.mobile,
           // Nested sub-menu label (registry-driven; desktop sidebar renders it
           // collapsible, the top nav as a flyout, flat consumers ignore it).
           // subgroupHref makes the sub-menu header itself navigate.
-          ...(mod.subgroup
+          ...(mod.subgroup && g.id === mod.group
             ? {
                 subgroup: t(`groups.${mod.subgroup.toLowerCase()}`) || mod.subgroup,
                 ...(NAV_SUBGROUPS[mod.subgroup]
                   ? {
                       subgroupHref: NAV_SUBGROUPS[mod.subgroup].href,
                       ...(NAV_SUBGROUPS[mod.subgroup].iconKey
-                        ? { subgroupIconKey: NAV_SUBGROUPS[mod.subgroup].iconKey }
+                        ? {
+                            subgroupIconKey: NAV_SUBGROUPS[mod.subgroup].iconKey,
+                          }
                         : {}),
                     }
                   : {}),
@@ -90,17 +82,34 @@ export async function resolveNav(
             : {}),
         })
       } else {
-        items.push({ href: item.href, label: item.label, iconKey: item.iconKey ?? 'link' })
+        items.push({
+          href: item.href,
+          label: item.label,
+          iconKey: item.iconKey ?? 'link',
+          mobile: item.mobile,
+        })
       }
     }
     if (items.length > 0) {
-      const slug = DEFAULT_GROUP_SLUGS.get(g.label)
-      groups.push({ label: slug ? t(`groups.${slug}`) : g.label, items })
+      const defaultGroup = NAV_GROUP_BY_KEY.get(g.id as NavGroupKey)
+      groups.push({
+        id: g.id,
+        label: defaultGroup && g.label === defaultGroup.label ? t(`groups.${g.id}`) : g.label,
+        iconKey: defaultGroup?.iconKey ?? 'grid',
+        items,
+      })
     }
   }
 
   const recordItems = await recordTypeNavItems(orgId, can, role ?? null)
-  if (recordItems.length > 0) groups.push({ label: t('groups.records'), items: recordItems })
+  if (recordItems.length > 0) {
+    groups.push({
+      id: 'records',
+      label: t('groups.records'),
+      iconKey: 'grid',
+      items: recordItems,
+    })
+  }
 
   return groups
 }
@@ -126,7 +135,12 @@ async function recordTypeNavItems(
        where org_id = ${orgId} and status = 'published' and show_in_nav
        order by sort_order, plural_name
     `)) as unknown as {
-      rows: { key: string; plural_name: string; icon_key: string; allowed_roles: string[] | null }[]
+      rows: {
+        key: string
+        plural_name: string
+        icon_key: string
+        allowed_roles: string[] | null
+      }[]
     }
     return r.rows
       .filter(
@@ -136,7 +150,11 @@ async function recordTypeNavItems(
           role === 'admin' ||
           (role !== null && t.allowed_roles.includes(role)),
       )
-      .map((t) => ({ href: `/records/${t.key}`, label: t.plural_name, iconKey: t.icon_key }))
+      .map((t) => ({
+        href: `/records/${t.key}`,
+        label: t.plural_name,
+        iconKey: t.icon_key,
+      }))
   } catch {
     // custom_record_types not migrated yet — the shell must keep rendering.
     return []
@@ -152,12 +170,14 @@ function layerInNewModules(config: OrgNavConfig): OrgNavConfig {
   if (missing.length === 0) return config
   const groups = config.groups.map((g) => ({ ...g, items: [...g.items] }))
   for (const m of missing) {
-    let g = groups.find((x) => x.label === m.group)
+    let g = groups.find((x) => x.id === m.group)
     if (!g) {
-      g = { id: m.group.toLowerCase().replace(/\s+/g, '-'), label: m.group, items: [] }
+      const defaultGroup = NAV_GROUP_BY_KEY.get(m.group)
+      if (!defaultGroup) throw new Error(`Unknown navigation group: ${m.group}`)
+      g = { id: defaultGroup.key, label: defaultGroup.label, items: [] }
       groups.push(g)
     }
     g.items.push({ kind: 'module', moduleKey: m.key })
   }
-  return { version: 1, groups }
+  return { version: 2, groups }
 }

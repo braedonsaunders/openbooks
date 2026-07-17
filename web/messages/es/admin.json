@@ -1,7 +1,7 @@
 {
   "hub": {
-    "metaTitle": "Plataforma",
-    "title": "Plataforma",
+    "metaTitle": "Centro de administración",
+    "title": "Centro de administración",
     "subtitle": "Todo lo que configura este espacio de trabajo: configuración de la empresa, personas y sistema.",
     "groups": {
       "company": "Empresa",
@@ -33,7 +33,7 @@
       },
       "navigation": {
         "title": "Navegación",
-        "description": "Reordene la barra lateral y renombre los módulos por organización"
+        "description": "Organice espacios de trabajo, etiquetas y accesos móviles"
       },
       "records": {
         "title": "Registros personalizados",
@@ -281,7 +281,7 @@
   },
   "navigation": {
     "title": "Navegación",
-    "description": "Personalice la barra lateral para toda la organización: renombre, reordene, oculte módulos o agregue enlaces. Los controles de permisos se siguen aplicando además de esto.",
+    "description": "Personalice todas las disposiciones del menú de la organización: organice espacios de trabajo, cambie nombres u oculte destinos, agregue enlaces y elija hasta cuatro accesos móviles. Los controles de permisos se siguen aplicando.",
     "groupLabelAria": "Etiqueta del grupo",
     "moveGroupUp": "Subir grupo",
     "moveGroupDown": "Bajar grupo",
@@ -290,9 +290,17 @@
     "hideItem": "Ocultar elemento",
     "moveItemUp": "Subir elemento",
     "moveItemDown": "Bajar elemento",
+    "moveToGroup": "Mover al espacio de trabajo",
+    "pinMobile": "Fijar en la navegación móvil",
+    "unpinMobile": "Quitar de la navegación móvil",
+    "mobileLimit": "La navegación móvil admite hasta cuatro destinos fijados",
     "linkUrlPrompt": "URL del enlace (ruta interna o https://…):",
     "linkLabelPrompt": "Etiqueta:",
     "addLink": "Agregar enlace",
+    "deleteLink": "Eliminar enlace",
+    "newGroupPrompt": "Nombre del espacio de trabajo:",
+    "addGroup": "Agregar espacio de trabajo",
+    "deleteGroup": "Eliminar espacio de trabajo",
     "save": "Guardar navegación",
     "saved": "Navegación guardada",
     "saveFailed": "No se pudo guardar",

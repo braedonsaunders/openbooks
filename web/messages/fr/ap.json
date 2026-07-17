@@ -64,7 +64,7 @@
     "uploadComplete": "{count, plural, one {# document mis en file} other {# documents mis en file}}.",
     "uploadFailed": "Les documents n’ont pas pu être téléversés.",
     "notConfigured": "La capture de documents n’est pas opérationnelle, car elle est désactivée ou la configuration fournisseur de l’organisation manque.",
-    "configure": "Configurez-la dans Plateforme → IA.",
+    "configure": "Configurez-la dans Centre d’administration → IA.",
     "search": "Rechercher fichiers, fournisseurs, numéros de facture…",
     "status": { "queued": "En file", "extracting": "Extraction", "needs_review": "À réviser", "ready": "Prêt", "duplicate": "Doublon possible", "failed": "Échec", "materialized": "Brouillon créé", "rejected": "Rejeté" },
     "emptyTitle": "Aucun document capturé", "emptyDescription": "Téléversez des documents fournisseurs PDF, JPEG, PNG ou TIFF pour commencer.",

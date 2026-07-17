@@ -18,7 +18,8 @@ export default async function NavigationAdmin() {
   const r = (await db.execute(
     sql`select config from org_nav_configs where org_id = ${user.orgId} limit 1`,
   )) as unknown as { rows: { config: OrgNavConfig }[] }
-  const config = r.rows[0]?.config ?? defaultNavConfig()
+  const saved = r.rows[0]?.config
+  const config = saved?.version === 2 ? saved : defaultNavConfig()
 
   return (
     <PageContainer className="max-w-3xl">

@@ -1,7 +1,7 @@
 {
   "hub": {
-    "metaTitle": "Plateforme",
-    "title": "Plateforme",
+    "metaTitle": "Centre d’administration",
+    "title": "Centre d’administration",
     "subtitle": "Tout ce qui configure cet espace de travail — profil de l’entreprise, personnes et système.",
     "groups": {
       "company": "Entreprise",
@@ -25,7 +25,7 @@
       },
       "navigation": {
         "title": "Navigation",
-        "description": "Réorganisez la barre latérale et renommez les modules par organisation"
+        "description": "Organisez les espaces de travail, les libellés et les raccourcis mobiles"
       },
       "records": {
         "title": "Enregistrements personnalisés",
@@ -281,7 +281,7 @@
   },
   "navigation": {
     "title": "Navigation",
-    "description": "Personnalisez la barre latérale pour toute l’organisation : renommez, réorganisez, masquez des modules ou ajoutez des liens. Les restrictions de permissions s’appliquent toujours en plus.",
+    "description": "Personnalisez toutes les dispositions de menu de l’organisation : organisez les espaces de travail, renommez ou masquez des destinations, ajoutez des liens et choisissez jusqu’à quatre raccourcis mobiles. Les restrictions de permissions s’appliquent toujours.",
     "groupLabelAria": "Libellé du groupe",
     "moveGroupUp": "Monter le groupe",
     "moveGroupDown": "Descendre le groupe",
@@ -290,9 +290,17 @@
     "hideItem": "Masquer l’élément",
     "moveItemUp": "Monter l’élément",
     "moveItemDown": "Descendre l’élément",
+    "moveToGroup": "Déplacer vers l’espace de travail",
+    "pinMobile": "Épingler dans la navigation mobile",
+    "unpinMobile": "Retirer de la navigation mobile",
+    "mobileLimit": "La navigation mobile accepte jusqu’à quatre destinations épinglées",
     "linkUrlPrompt": "URL du lien (route interne ou https://…) :",
     "linkLabelPrompt": "Libellé :",
     "addLink": "Ajouter un lien",
+    "deleteLink": "Supprimer le lien",
+    "newGroupPrompt": "Nom de l’espace de travail :",
+    "addGroup": "Ajouter un espace de travail",
+    "deleteGroup": "Supprimer l’espace de travail",
     "save": "Enregistrer la navigation",
     "saved": "Navigation enregistrée",
     "saveFailed": "Impossible d’enregistrer",
