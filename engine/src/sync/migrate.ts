@@ -122,7 +122,7 @@ export async function loadEntities(
     const s: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
 
     if (stream.resource === "accounting_periods") {
-      await loadAccountingPeriods(stream.records, ctx, s);
+      await loadAccountingPeriods(stream.records, ctx.orgId, s);
       stats[stream.resource] = s;
       continue;
     }
@@ -178,13 +178,13 @@ export async function loadEntities(
  */
 async function loadAccountingPeriods(
   records: SourceEntity[],
-  ctx: Ctx,
+  orgId: string,
   s: ResourceLoadStats,
 ): Promise<void> {
-  const defaults = await ensureCloseDefaults(ctx.orgId);
+  const defaults = await ensureCloseDefaults(orgId);
   const books = (await db.execute(sql`
     select id from accounting_books
-     where org_id = ${ctx.orgId} and is_active
+     where org_id = ${orgId} and is_active
      order by is_primary desc, created_at
   `)) as { rows: { id: string }[] };
   if (books.rows.length === 0) {
@@ -210,7 +210,7 @@ async function loadAccountingPeriods(
 
     const existing = (await db.execute(sql`
       select id from accounting_periods
-       where org_id = ${ctx.orgId}
+       where org_id = ${orgId}
          and fiscal_calendar_id = ${defaults.calendarId}
          and fiscal_year = ${fiscalYear}
          and period_number = ${periodNumber}
@@ -220,7 +220,7 @@ async function loadAccountingPeriods(
       insert into accounting_periods
         (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
          starts_on, ends_on, is_adjustment)
-      values (${ctx.orgId}, ${defaults.calendarId}, ${fiscalYear}, ${periodNumber},
+      values (${orgId}, ${defaults.calendarId}, ${fiscalYear}, ${periodNumber},
               ${name}, ${startsOn}, ${endsOn}, ${f.isAdjustment === true})
       on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number)
       do update set name = excluded.name, starts_on = excluded.starts_on,
@@ -252,7 +252,7 @@ async function loadAccountingPeriods(
         await db.execute(sql`
           insert into period_locks
             (org_id, period_id, book_id, module, state, locked_at, reason)
-          values (${ctx.orgId}, ${periodId}, ${book.id}, ${module},
+          values (${orgId}, ${periodId}, ${book.id}, ${module},
                   ${state},
                   ${state !== "open" ? closedAt : null},
                   'close.importedPeriodLockReason')
@@ -269,6 +269,16 @@ async function loadAccountingPeriods(
       }
     }
   }
+}
+
+/** Refresh only period definitions and lock state; safe for a live mirror. */
+export async function syncSourceAccountingPeriods(
+  source: MigrationSource,
+  orgId: string,
+): Promise<ResourceLoadStats> {
+  const stats: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
+  await loadAccountingPeriods(await source.accountingPeriods(), orgId, stats);
+  return stats;
 }
 
 async function findByRef(table: string, orgId: string, refKey: string, sourceRef: string) {

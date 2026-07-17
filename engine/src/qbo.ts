@@ -144,4 +144,9 @@ export class QboClient {
   async report<T = Record<string, unknown>>(name: string, params: Record<string, string> = {}): Promise<T> {
     return this.get<T>(`reports/${name}`, params);
   }
+
+  /** Company accounting preferences, including fiscal year and close date. */
+  async preferences<T = Record<string, unknown>>(): Promise<T> {
+    return this.get<T>("preferences");
+  }
 }

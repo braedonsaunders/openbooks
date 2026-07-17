@@ -89,7 +89,8 @@ export class QboSource implements MigrationSource {
 
   async accountingPeriods(): Promise<SourceEntity[]> {
     const [company] = await this.client.queryAll<QboCompanyInfo>("CompanyInfo");
-    const [preferences] = await this.client.queryAll<QboPreferences>("Preferences");
+    const preferenceResponse = await this.client.preferences<{ Preferences?: QboPreferences }>();
+    const preferences = preferenceResponse.Preferences;
     const start = company?.CompanyStartDate;
     if (!start) throw new Error("QBO CompanyInfo.CompanyStartDate is required for period migration");
     const firstMonth = preferences?.AccountingInfoPrefs?.FirstMonthOfFiscalYear
