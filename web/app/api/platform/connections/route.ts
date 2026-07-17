@@ -54,6 +54,7 @@ export async function GET() {
       blurb: s.blurb,
       configFields: s.configFields,
       secretFields: s.secretFields.map((f) => ({ ...f })),
+      oauthSetup: s.oauthSetup ?? null,
     })),
   })
 }

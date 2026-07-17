@@ -45,6 +45,16 @@ alter table projects
   add foreign key (manager_id) references parties(id);
 -- intercompany_pairs FKs live in generated/0028_subsidiaries.sql (the table
 -- was rebuilt there from org refs to subsidiary refs, with its FK set).
+alter table fx_provider_configs
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (base_currency) references currencies(code) on delete restrict,
+  add foreign key (created_by) references users(id) on delete set null,
+  add foreign key (updated_by) references users(id) on delete set null;
+alter table fx_provider_runs
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (provider_config_id) references fx_provider_configs(id) on delete cascade,
+  add foreign key (created_by) references users(id) on delete set null;
+alter table fx_rates add foreign key (provider_config_id) references fx_provider_configs(id) on delete set null;
 alter table payment_cards
   add foreign key (holder_party_id) references parties(id),
   add foreign key (liability_account_id) references accounts(id);

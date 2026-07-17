@@ -4,12 +4,13 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Drawer, Input, Label, Textarea } from '@openbooks/ui'
+import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import {
   PERMISSION_GROUPS,
   type CataloguePermission,
 } from '@/lib/permissions'
+import type { SubsidiaryRestriction } from '@openbooks/schema'
 
 export type RoleRow = {
   id: string
@@ -18,20 +19,32 @@ export type RoleRow = {
   description: string | null
   isBuiltIn: boolean
   permissions: string[]
+  subsidiaryRestriction: SubsidiaryRestriction
 }
 
-export function NewRoleButton() {
+/** Depth-first subsidiary tree flattened for pickers (subsidiaryOptions()). */
+export type SubsidiaryPickerOption = { id: string; name: string; depth: number }
+
+export function NewRoleButton({ subsidiaries }: { subsidiaries: SubsidiaryPickerOption[] | null }) {
   const t = useTranslations('admin.roles')
   const [open, setOpen] = useState(false)
   return (
     <>
       <Button onClick={() => setOpen(true)}>{t('newRole')}</Button>
-      {open ? <RoleDrawer role={null} onClose={() => setOpen(false)} /> : null}
+      {open ? (
+        <RoleDrawer role={null} subsidiaries={subsidiaries} onClose={() => setOpen(false)} />
+      ) : null}
     </>
   )
 }
 
-export function EditRoleButton({ role }: { role: RoleRow }) {
+export function EditRoleButton({
+  role,
+  subsidiaries,
+}: {
+  role: RoleRow
+  subsidiaries: SubsidiaryPickerOption[] | null
+}) {
   const tCommon = useTranslations('common')
   const [open, setOpen] = useState(false)
   const locked = role.isBuiltIn && role.key === 'admin'
@@ -40,7 +53,9 @@ export function EditRoleButton({ role }: { role: RoleRow }) {
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         {locked ? tCommon('actions.view') : tCommon('actions.edit')}
       </Button>
-      {open ? <RoleDrawer role={role} onClose={() => setOpen(false)} /> : null}
+      {open ? (
+        <RoleDrawer role={role} subsidiaries={subsidiaries} onClose={() => setOpen(false)} />
+      ) : null}
     </>
   )
 }
@@ -50,7 +65,16 @@ export function EditRoleButton({ role }: { role: RoleRow }) {
  * allow only permission changes; the built-in Administrator role is read-only
  * (it always carries the full catalogue so an org can't lock itself out).
  */
-function RoleDrawer({ role, onClose }: { role: RoleRow | null; onClose: () => void }) {
+function RoleDrawer({
+  role,
+  subsidiaries,
+  onClose,
+}: {
+  role: RoleRow | null
+  /** null = single-subsidiary org: the whole subsidiary-access section is hidden. */
+  subsidiaries: SubsidiaryPickerOption[] | null
+  onClose: () => void
+}) {
   const t = useTranslations('admin.roles')
   const tCommon = useTranslations('common')
   // Permission group/label keys in PERMISSION_GROUPS are relative to `admin`.
@@ -63,6 +87,14 @@ function RoleDrawer({ role, onClose }: { role: RoleRow | null; onClose: () => vo
   const [keyTouched, setKeyTouched] = useState(isEdit)
   const [description, setDescription] = useState(role?.description ?? '')
   const [selected, setSelected] = useState<Set<string>>(new Set(role?.permissions ?? []))
+  const restriction = role?.subsidiaryRestriction ?? { mode: 'all' as const }
+  const [subMode, setSubMode] = useState<SubsidiaryRestriction['mode']>(restriction.mode)
+  const [subtreeId, setSubtreeId] = useState(
+    restriction.mode === 'subtree' ? restriction.subsidiaryId : '',
+  )
+  const [subList, setSubList] = useState<Set<string>>(
+    new Set(restriction.mode === 'list' ? restriction.subsidiaryIds : []),
+  )
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
@@ -98,26 +130,51 @@ function RoleDrawer({ role, onClose }: { role: RoleRow | null; onClose: () => vo
     })
   }
 
+  /** The restriction the form currently describes, or a validation error. */
+  function buildRestriction(): SubsidiaryRestriction | { error: string } {
+    if (subMode === 'subtree') {
+      if (!subtreeId) return { error: t('drawer.subsidiaryRequired') }
+      return { mode: 'subtree', subsidiaryId: subtreeId }
+    }
+    if (subMode === 'list') {
+      if (subList.size === 0) return { error: t('drawer.subsidiaryListRequired') }
+      return { mode: 'list', subsidiaryIds: [...subList] }
+    }
+    return { mode: 'all' }
+  }
+
   async function save() {
     if (!isEdit && !name.trim()) {
       toast.error(t('drawer.nameRequired'))
       return
     }
+    // Only multi-subsidiary orgs (subsidiaries != null) send a restriction.
+    let subsidiaryRestriction: SubsidiaryRestriction | undefined
+    if (subsidiaries) {
+      const built = buildRestriction()
+      if ('error' in built) {
+        toast.error(built.error)
+        return
+      }
+      subsidiaryRestriction = built
+    }
     setBusy(true)
     const payload = isEdit
       ? role.isBuiltIn
-        ? { id: role.id, permissions: [...selected] }
+        ? { id: role.id, permissions: [...selected], subsidiaryRestriction }
         : {
             id: role.id,
             name: name.trim(),
             description: description.trim(),
             permissions: [...selected],
+            subsidiaryRestriction,
           }
       : {
           name: name.trim(),
           key: key.trim() || undefined,
           description: description.trim(),
           permissions: [...selected],
+          subsidiaryRestriction,
         }
     const res = await fetch('/api/admin/roles', {
       method: isEdit ? 'PATCH' : 'POST',
@@ -311,6 +368,65 @@ function RoleDrawer({ role, onClose }: { role: RoleRow | null; onClose: () => vo
             )
           })}
         </div>
+
+        {subsidiaries ? (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t('drawer.subsidiaryHeading')}
+            </h3>
+            <Select
+              value={subMode}
+              disabled={locked}
+              onChange={(e) => setSubMode(e.target.value as SubsidiaryRestriction['mode'])}
+            >
+              <option value="all">{t('drawer.subsidiaryModeAll')}</option>
+              <option value="subtree">{t('drawer.subsidiaryModeSubtree')}</option>
+              <option value="list">{t('drawer.subsidiaryModeList')}</option>
+            </Select>
+            {subMode === 'subtree' ? (
+              <SearchSelect
+                value={subtreeId}
+                onChange={setSubtreeId}
+                options={subsidiaries.map((s) => ({
+                  value: s.id,
+                  label: `${'— '.repeat(s.depth)}${s.name}`,
+                }))}
+                placeholder={t('drawer.subsidiaryPlaceholder')}
+                searchPlaceholder={t('drawer.subsidiarySearchPlaceholder')}
+                sheetTitle={t('drawer.subsidiaryHeading')}
+                ariaLabel={t('drawer.subsidiaryHeading')}
+              />
+            ) : null}
+            {subMode === 'list' ? (
+              <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+                {subsidiaries.map((s) => (
+                  <label key={s.id} className="flex cursor-pointer items-center gap-2.5 py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={subList.has(s.id)}
+                      disabled={locked}
+                      onChange={(e) =>
+                        setSubList((prev) => {
+                          const next = new Set(prev)
+                          if (e.target.checked) next.add(s.id)
+                          else next.delete(s.id)
+                          return next
+                        })
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
+                    />
+                    <span
+                      className="text-sm text-slate-800 dark:text-slate-200"
+                      style={{ paddingLeft: `${s.depth * 16}px` }}
+                    >
+                      {s.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </Drawer>
   )

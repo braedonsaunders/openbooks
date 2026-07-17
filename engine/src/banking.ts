@@ -614,7 +614,7 @@ export async function importStatement(
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id
      where s.account_id = ${account.id} and s.org_id = ${ctx.orgId}
-       and l.bank_transaction_id = any(${sql.param(ids)})
+       and l.bank_transaction_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
   `)) as unknown as { rows: { id: string }[] };
   const dupes = new Set(existing.rows.map((r) => r.id));
 
@@ -935,7 +935,7 @@ export async function createMatch(
     select jl.id
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-     where jl.id = any(${sql.param(journalLineIds)}) and jl.org_id = ${ctx.orgId}
+     where jl.id = any(${`{${journalLineIds.join(",")}}`}::uuid[]) and jl.org_id = ${ctx.orgId}
        and jl.account_id = ${recon.account_id} and jl.reconciled_at is null
        and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
   `)) as unknown as { rows: { id: string }[] };
@@ -1040,7 +1040,7 @@ export async function discardReconciliation(reconciliationId: string, ctx: Banki
       await tx.execute(sql`
         update bank_statement_lines l
            set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
-         where l.id = any(${sql.param(stmtIds)})
+         where l.id = any(${`{${stmtIds.join(",")}}`}::uuid[])
            and not exists (select 1 from reconciliation_matches m where m.statement_line_id = l.id)
       `);
     }

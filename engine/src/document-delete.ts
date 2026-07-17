@@ -22,9 +22,15 @@ import { db, schema } from "./db.ts";
 
 export class DeleteError extends Error {}
 
-export async function deleteDocument(documentId: string, userId: string): Promise<{ documentId: string }> {
+export async function deleteDocument(
+  documentId: string,
+  userId: string,
+): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
-    const [doc] = await tx.select().from(schema.documents).where(eq(schema.documents.id, documentId));
+    const [doc] = await tx
+      .select()
+      .from(schema.documents)
+      .where(eq(schema.documents.id, documentId));
     if (!doc) throw new DeleteError("document not found");
 
     const entryId = doc.status === "posted" ? doc.postedEntryId : null;
@@ -44,7 +50,9 @@ export async function deleteDocument(documentId: string, userId: string): Promis
              )
            )`)) as unknown as { rows: unknown[] };
       if (closed.rows.length > 0) {
-        throw new DeleteError(`${doc.documentNumber} is posted into a closed period — reopen the period to delete it`);
+        throw new DeleteError(
+          `${doc.documentNumber} is posted into a closed period — reopen the period to delete it`,
+        );
       }
 
       // 2. does another transaction settle THIS document's open item?
@@ -55,7 +63,9 @@ export async function deleteDocument(documentId: string, userId: string): Promis
          where jl.entry_id = ${entryId} and a.unapplied_at is null
          limit 1`)) as unknown as { rows: unknown[] };
       if (settled.rows.length > 0) {
-        throw new DeleteError(`${doc.documentNumber} has payments applied to it — unapply them before deleting`);
+        throw new DeleteError(
+          `${doc.documentNumber} has payments applied to it — unapply them before deleting`,
+        );
       }
 
       // 3. converted into a downstream posted document?
@@ -65,7 +75,9 @@ export async function deleteDocument(documentId: string, userId: string): Promis
          where dl.from_document_id = ${documentId} and d2.status = 'posted'
          limit 1`)) as unknown as { rows: unknown[] };
       if (converted.rows.length > 0) {
-        throw new DeleteError(`${doc.documentNumber} was converted into a posted document — delete that first`);
+        throw new DeleteError(
+          `${doc.documentNumber} was converted into a posted document — delete that first`,
+        );
       }
     }
 
@@ -84,15 +96,23 @@ export async function deleteDocument(documentId: string, userId: string): Promis
       await tx.execute(sql`
         delete from reconciliation_matches
          where journal_line_id in (select id from journal_lines where entry_id = ${entryId})`);
-      await tx.execute(sql`delete from journal_lines where entry_id = ${entryId}`);
+      await tx.execute(
+        sql`delete from journal_lines where entry_id = ${entryId}`,
+      );
       // Drop the document's back-reference before removing the entry, else the
       // still-live documents.posted_entry_id FK blocks the entry delete.
-      await tx.execute(sql`update documents set posted_entry_id = null where id = ${documentId}`);
+      await tx.execute(
+        sql`update documents set posted_entry_id = null where id = ${documentId}`,
+      );
       await tx.execute(sql`delete from journal_entries where id = ${entryId}`);
     }
 
-    await tx.execute(sql`delete from document_links where from_document_id = ${documentId} or to_document_id = ${documentId}`);
-    await tx.execute(sql`delete from document_lines where document_id = ${documentId}`);
+    await tx.execute(
+      sql`delete from document_links where from_document_id = ${documentId} or to_document_id = ${documentId}`,
+    );
+    await tx.execute(
+      sql`delete from document_lines where document_id = ${documentId}`,
+    );
     await tx.execute(sql`delete from documents where id = ${documentId}`);
 
     return { documentId };

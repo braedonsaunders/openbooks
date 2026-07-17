@@ -5,6 +5,7 @@ import { dimensionOptions, trialBalance } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { currencySymbol } from '../../../../lib/statement-format'
 import { orgBranding } from '../../../../lib/report-pdf'
 import { ReportFilterBar } from '../ReportFilterBar'
@@ -24,7 +25,8 @@ export default async function TrialBalance({
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const date = period.to
-  const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
+  const subView = await reportSubsidiaryView(q.subsidiaryId, date)
+  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [rows, opts, org, branding] = await Promise.all([trialBalance(date, dims), dimensionOptions(), orgInfo(), orgBranding()])
   const sym = currencySymbol(org?.base_currency)
   const totalDebits = rows.reduce((a, r) => a + Number(r.debits), 0)
@@ -43,7 +45,8 @@ export default async function TrialBalance({
         <>
           <PageHeader title={t('trialBalance.title')} back={{ href: '/reports', label: t('hub.title') }} />
           <ReportFilterBar
-            controls={{ period: true, asOf: true, dimensions: true }}
+            controls={{ period: true, asOf: true, dimensions: true, subsidiary: true }}
+            subsidiaries={subView.picker}
             dimensions={opts}
             actions={<><SaveViewButton /><ExportMenu kind="trial-balance" params={sp} /></>}
           />

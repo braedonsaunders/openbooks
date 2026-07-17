@@ -18,6 +18,7 @@ import {
   taxCodeOptions,
 } from '../../../lib/documents'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 
 export const dynamic = 'force-dynamic'
@@ -57,7 +58,9 @@ export default async function AR({
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
   const loadedDoc = docId ? await loadDocument(docId) : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null
+  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
+    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
+    ? loadedDoc : null
   const openKind = openDoc?.doc.kind as string | undefined
   const drawerOpen = !!(openDoc && openKind && (AR_KINDS as readonly string[]).includes(openKind))
   const [headerDefs, lineDefs] = drawerOpen
@@ -71,6 +74,14 @@ export default async function AR({
           taxCodeOptions(),
           dimensionOptions(),
           itemOptions(),
+          // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
+          isMultiSubsidiary().then(async (multi) => {
+            if (!multi) return null
+            const options = await subsidiaryOptions()
+            return authz.allowedSubsidiaryIds
+              ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+              : options
+          }),
         ])
       : null,
     drawerOpen
@@ -99,7 +110,10 @@ export default async function AR({
         projects={(pickers[3] as any).projects}
         locations={(pickers[3] as any).locations}
         classes={(pickers[3] as any).classes}
+        segments={(pickers[3] as any).segments}
+        builtinSegments={(pickers[3] as any).builtinSegments}
         items={pickers[4] as any}
+        subsidiaries={(pickers[5] as any) ?? undefined}
         headerDefs={headerDefs as any}
         lineDefs={lineDefs as any}
         canCreate={canCreate}
@@ -123,7 +137,7 @@ export default async function AR({
         sp={sp}
         drawer={drawer}
         emptyAction={newButton}
-        renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]} />}
+        renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]} openHref={`/ar?doc=${row.id}`} />}
       />
     </ListPageLayout>
   )

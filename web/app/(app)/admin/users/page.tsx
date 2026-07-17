@@ -100,7 +100,7 @@ export default async function AdminUsersPage({
           select a.user_id, r.id as role_id, r.name as role_name
             from role_assignments a
             join app_roles r on r.id = a.role_id
-           where a.org_id = ${orgId} and a.user_id = any(${sql.param(userIds)})
+           where a.org_id = ${orgId} and a.user_id = any(${`{${userIds.join(',')}}`}::uuid[])
            order by r.name asc`)) as any)
   const assignments = assignmentsR.rows as { user_id: string; role_id: string; role_name: string }[]
   const rolesByUser = new Map<string, { id: string; name: string }[]>()

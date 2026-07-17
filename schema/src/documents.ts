@@ -33,6 +33,12 @@ export const documents = pgTable(
     kind: text("kind").notNull(),
     documentNumber: text("document_number").notNull(),
     partyId: uuid("party_id"), // customer/vendor/employee, per kind
+    /**
+     * The legal entity this document belongs to (→ subsidiaries); null means
+     * the org's root subsidiary (posting resolves it). Defaulted from the
+     * party's primary subsidiary in the editor; locked once posted.
+     */
+    subsidiaryId: uuid("subsidiary_id"),
     documentDate: date("document_date").notNull(),
     postingDate: date("posting_date"),
     dueDate: date("due_date"),
@@ -61,6 +67,8 @@ export const documents = pgTable(
     projectId: uuid("project_id"),
     locationId: uuid("location_id"),
     classId: uuid("class_id"),
+    /** Custom segment assignments keyed by segment_definitions.key. */
+    extraDims: jsonb("extra_dims").notNull().default({}),
     paymentCardId: uuid("payment_card_id"), // card_charge/refund docs
 
     // Promoted from Rassaun custbody fields:
@@ -113,6 +121,10 @@ export const documentLines = pgTable(
     projectId: uuid("project_id"),
     locationId: uuid("location_id"),
     classId: uuid("class_id"),
+    /** Line-level subsidiary override — intercompany journals only. */
+    subsidiaryId: uuid("subsidiary_id"),
+    /** Line overrides for custom segment assignments. */
+    extraDims: jsonb("extra_dims").notNull().default({}),
 
     // Promoted from Rassaun custcols — job-costing/billing chain:
     employeeId: uuid("employee_id"), // labor line: who worked it

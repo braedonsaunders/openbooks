@@ -41,6 +41,10 @@
     "disposed": "Disposed",
     "written_off": "Written off"
   },
+  "errors": {
+    "invalidSubsidiary": "Choose an active, non-elimination subsidiary.",
+    "noAvailableSubsidiary": "Your role has no active subsidiary available for this asset."
+  },
   "drawer": {
     "newAsset": "New asset",
     "editing": "Editing — Save to apply changes",

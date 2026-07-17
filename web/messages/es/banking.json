@@ -325,7 +325,12 @@
     },
     "deleteTitle": "¿Eliminar este documento?",
     "deleteDraftBody": "Esto elimina permanentemente el borrador. No se puede deshacer.",
-    "deletePostedBody": "Esto elimina permanentemente el documento y su impacto en el libro mayor. No se puede deshacer."
+    "deletePostedBody": "Esto elimina permanentemente el documento y su impacto en el libro mayor. No se puede deshacer.",
+    "formLabel": "Formulario",
+    "formSetPreferred": "Definir como preferido",
+    "formSetPreferredDone": "Formulario preferido guardado",
+    "formPreferredCleared": "Formulario preferido borrado",
+    "formPreferredFailed": "No se pudo guardar el formulario preferido"
   },
   "reconcile": {
     "title": "Conciliar hasta {date}",

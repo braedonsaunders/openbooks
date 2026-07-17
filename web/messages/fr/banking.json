@@ -325,7 +325,12 @@
     },
     "deleteTitle": "Supprimer ce document ?",
     "deleteDraftBody": "Cela supprime définitivement le brouillon. Cette action est irréversible.",
-    "deletePostedBody": "Cela supprime définitivement le document et son impact au grand livre. Cette action est irréversible."
+    "deletePostedBody": "Cela supprime définitivement le document et son impact au grand livre. Cette action est irréversible.",
+    "formLabel": "Formulaire",
+    "formSetPreferred": "Définir comme préféré",
+    "formSetPreferredDone": "Formulaire préféré enregistré",
+    "formPreferredCleared": "Formulaire préféré effacé",
+    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré"
   },
   "reconcile": {
     "title": "Rapprochement jusqu’au {date}",

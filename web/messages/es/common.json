@@ -45,8 +45,28 @@
     "select": "Seleccionar",
     "newRecord": "Nuevo",
     "more": "Más acciones",
+    "pdf": "PDF",
+    "workflowActions": "Acciones del flujo de trabajo",
+    "approvalActions": "Acciones de aprobación",
+    "submitForApproval": "Enviar para aprobación",
+    "glImpact": "Impacto en el libro mayor",
     "done": "Listo",
     "sending": "Enviando…"
+  },
+  "transactionTypes": {
+    "vendorBill": "Factura de proveedor", "bill": "Factura",
+    "vendorCredit": "Crédito de proveedor", "credit": "Crédito",
+    "purchaseOrder": "Orden de compra", "purchaseOrderShort": "OC",
+    "customerInvoice": "Factura de cliente", "invoice": "Factura",
+    "customerCredit": "Crédito de cliente", "customerCreditShort": "Crédito cliente",
+    "salesOrder": "Orden de venta", "salesOrderShort": "OV",
+    "estimate": "Presupuesto", "expenseReport": "Informe de gastos", "expense": "Gasto",
+    "journalEntry": "Asiento contable", "journal": "Asiento",
+    "vendorPayment": "Pago a proveedor", "vendorPaymentShort": "Pago proveedor",
+    "customerPayment": "Pago de cliente", "customerPaymentShort": "Pago cliente",
+    "check": "Cheque", "bankDeposit": "Depósito bancario", "deposit": "Depósito",
+    "transfer": "Transferencia", "cardCharge": "Cargo de tarjeta", "cardChargeShort": "Tarjeta",
+    "cardRefund": "Reembolso de tarjeta", "cardRefundShort": "Reemb. tarjeta"
   },
   "labels": {
     "name": "Nombre",
@@ -77,6 +97,7 @@
     "department": "Departamento",
     "location": "Ubicación",
     "class": "Clase",
+    "subsidiary": "Subsidiaria",
     "project": "Proyecto",
     "customer": "Cliente",
     "vendor": "Proveedor",
@@ -99,6 +120,16 @@
     "to": "Hasta",
     "of": "de",
     "settings": "Configuración",
+    "item": "Artículo",
+    "unit": "Unidad",
+    "unitPrice": "Precio unitario",
+    "postingDate": "Fecha de contabilización",
+    "dueDate": "Fecha de vencimiento",
+    "internalNotes": "Notas internas",
+    "billingMethod": "Método de facturación",
+    "finalInvoice": "Factura final",
+    "paymentHold": "Retención de pago",
+    "expectedPayDate": "Fecha de pago prevista",
     "openBalance": "Saldo pendiente"
   },
   "status": {
@@ -145,6 +176,10 @@
     "deleteBody": "Esta acción no se puede deshacer.",
     "confirm": "Confirmar",
     "cancel": "Cancelar"
+  },
+  "billingMethods": {
+    "timeAndMaterials": "Tiempo y materiales",
+    "fixedPrice": "Precio fijo"
   },
   "empty": {
     "title": "Aún no hay nada",

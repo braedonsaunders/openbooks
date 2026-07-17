@@ -16,7 +16,9 @@ import { ExpenseDrawer } from './ExpenseDrawer'
 import { NewExpenseButton } from './NewExpenseButton'
 import { loadExpenseReport } from '../../../lib/expenses'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { customSegmentOptions } from '../../../lib/segments'
 import { RelatedPartyLink } from '../../../components/related-party-link'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
 
 export const dynamic = 'force-dynamic'
 
@@ -134,9 +136,21 @@ export default async function Expenses({
           db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
           loadFieldDefs('documents', 'expense_report'),
           loadFieldDefs('document_lines', 'expense_report'),
+          customSegmentOptions(authz.user.orgId),
         ])
       : null,
   ])
+  const resolvedForm = openReport && pickers
+    ? await resolveFormLayout({
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        recordType: 'expense_report',
+        userRoles: [authz.user.role],
+        headerDefs: pickers[5] as any,
+        lineDefs: pickers[6] as any,
+        explicitLayoutId: pickString(sp.form),
+      })
+    : null
 
   const statusOptions = statusCounts.rows.map((r: any) => ({
     value: r.status,
@@ -183,7 +197,7 @@ export default async function Expenses({
                 <TableHead>{tCommon('labels.memo')}</TableHead>
                 <SortTh basePath="/expenses" currentParams={sp} column="total" sort={params.sort} dir={params.dir} align="right">{tCommon('labels.total')}</SortTh>
                 <SortTh basePath="/expenses" currentParams={sp} column="status" sort={params.sort} dir={params.dir}>{tCommon('labels.status')}</SortTh>
-                <TableHead>{tCommon('labels.actions')}</TableHead>
+                <TableHead className="w-16 px-2 text-center">{tCommon('labels.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -211,8 +225,8 @@ export default async function Expenses({
                       {statusLabel(String(r.status))}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <ExpenseActions id={r.id} status={r.status} canSubmit={canSubmit} canPost={canPost} />
+                  <TableCell className="w-11">
+                    <ExpenseActions id={r.id} status={r.status} canSubmit={canSubmit} canPost={canPost} openHref={`/expenses?expense=${r.id}`} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -233,8 +247,10 @@ export default async function Expenses({
           projects={pickers[4].rows}
           headerDefs={pickers[5] as any}
           lineDefs={pickers[6] as any}
+          segments={pickers[7] as any}
           canSubmit={canSubmit}
           canPost={canPost}
+          layout={resolvedForm?.layout}
         />
       ) : null}
     </ListPageLayout>

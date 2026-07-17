@@ -26,6 +26,7 @@ export interface ListColDesc {
   expr?: SQL
   sortable: boolean
   sortKey?: string
+  width?: number | null
   /** For custom columns: the custom field def key. */
   defKey?: string
   defType?: CustomFieldDef["fieldType"]
@@ -87,7 +88,7 @@ export function columnDescriptors(
   for (const c of view.columns) {
     if (!c.visible) continue
     if (c.key === "_actions") {
-      out.push({ key: "_actions", kind: "actions", label: labels.actions ?? "Actions", sortable: false })
+      out.push({ key: "_actions", kind: "actions", label: labels.actions ?? "Actions", sortable: false, width: 44 })
       continue
     }
     if (isCustomFieldKey(c.key)) {
@@ -102,6 +103,7 @@ export function columnDescriptors(
         sortable: false,
         defKey,
         defType: def.fieldType,
+        width: c.width,
       })
       continue
     }
@@ -115,6 +117,7 @@ export function columnDescriptors(
       expr,
       sortable: !!meta.sortable,
       sortKey: meta.sortKey,
+      width: c.width ?? meta.defaultWidth ?? null,
     })
   }
   return out
@@ -215,10 +218,12 @@ function filterPredicate(clause: FilterClause): SQL | null {
     case "status":
       if (operator === "eq") return sql`d.status = ${single(value)}`
       if (operator === "ne") return sql`d.status <> ${single(value)}`
-      if (operator === "in")
-        return sql`d.status = any(${sql.param(Array.isArray(value) ? value : [String(value ?? "")])})`
-      if (operator === "not_in")
-        return sql`d.status <> all(${sql.param(Array.isArray(value) ? value : [String(value ?? "")])})`
+      if (operator === "in" || operator === "not_in") {
+        const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String)
+        if (values.length === 0) return operator === "in" ? sql`false` : sql`true`
+        const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
+        return operator === "in" ? sql`d.status in (${list})` : sql`d.status not in (${list})`
+      }
       return null
     case "party_id":
       if (operator === "eq") return sql`d.party_id = ${single(value)}`
@@ -246,16 +251,25 @@ function filterPredicate(clause: FilterClause): SQL | null {
  * scope, the saved view's structured filters, and the ad-hoc toolbar filters.
  * Every documents list (bills, invoices, orders, payments…) shares this — pass
  * the record type's `kinds`. `orgId` is mandatory: every query is tenant-scoped.
+ *
+ * `allowedSubsidiaryIds` is the caller's role-based subsidiary visibility
+ * (authz.allowedSubsidiaryIds): a non-null Set narrows the list to those
+ * subsidiaries; null/undefined = unrestricted.
  */
 export function documentWhere(
   kinds: readonly string[],
   view: ListViewConfig,
   adhoc: AdhocFilters,
   orgId: string,
+  allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
   const parts: SQL[] = [
     sql`d.org_id = ${orgId} and d.kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})`,
   ]
+  if (allowedSubsidiaryIds) {
+    const ids = [...allowedSubsidiaryIds]
+    parts.push(ids.length ? sql`and d.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])` : sql`and false`)
+  }
   for (const f of view.filters) {
     const p = filterPredicate(f)
     if (p) parts.push(sql`and ${p}`)

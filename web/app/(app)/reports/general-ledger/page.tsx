@@ -26,7 +26,7 @@ export default async function GeneralLedgerPage({
   const sp = await searchParams
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
+  const dims = q.dims
   const [gl, opts, org] = await Promise.all([
     generalLedger(period.from, period.to, { accountId: sp.account, dims }),
     dimensionOptions(),

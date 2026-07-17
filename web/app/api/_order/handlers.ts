@@ -5,6 +5,7 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { guardPermission } from '../../../lib/authz'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, loadOrder, orderTaxRateMap, type OrderLineInput } from './lib'
+import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -39,6 +40,7 @@ interface OrderPatchBody {
   memo?: string | null
   departmentId?: string | null
   projectId?: string | null
+  extraDims?: Record<string, string | null>
   lines?: OrderLineInput[]
   status?: 'approved' | 'voided'
 }
@@ -99,43 +101,64 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       return NextResponse.json({ error: 'only draft orders can be edited' }, { status: 422 })
     }
 
+    const segments = await segmentRegistry(user.orgId)
+    const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
+    if (headerDims && !headerDims.ok) {
+      return NextResponse.json({ error: headerDims.error }, { status: 422 })
+    }
+
     let totals: { subtotal: string; taxTotal: string; total: string } | null = null
+    let preparedLines: (ReturnType<typeof computeOrderTotals>['lines'][number] & { extraDims: Record<string, string> })[] | null = null
     if (body.lines) {
       const valid = body.lines.filter(
         (l) => (l.itemId || l.accountId) && Number(l.quantity) > 0 && Number(l.unitPrice) >= 0,
       )
       const computed = computeOrderTotals(valid, await orderTaxRateMap())
       totals = { subtotal: computed.subtotal, taxTotal: computed.taxTotal, total: computed.total }
-
-      await db.execute(sql`delete from document_lines where document_id = ${id}`)
+      preparedLines = []
       for (let i = 0; i < computed.lines.length; i++) {
         const l = computed.lines[i]!
-        await db.execute(sql`
-          insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-                                      quantity, unit, unit_price, amount, tax_code_id, tax_amount,
-                                      department_id, project_id)
-          values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
-                  ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
-                  ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxAmount},
-                  ${l.departmentId ?? null}, ${l.projectId ?? null})
-        `)
+        const lineDims = validateExtraDims(l.extraDims, segments)
+        if (!lineDims.ok) {
+          return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
+        }
+        preparedLines.push({ ...l, extraDims: lineDims.cleaned })
       }
     }
 
-    await db.execute(sql`
-      update documents set
-        party_id = ${body.partyId !== undefined ? body.partyId : sql`party_id`},
-        document_date = coalesce(${body.documentDate ?? null}, document_date),
-        due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
-        memo = ${body.memo !== undefined ? body.memo : sql`memo`},
-        department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},
-        project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
-        subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
-        tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
-        total = coalesce(${totals?.total ?? null}, total),
-        updated_at = now(), updated_by = ${user.id}
-      where id = ${id}
-    `)
+    await db.transaction(async (tx) => {
+      if (preparedLines) {
+        await tx.execute(sql`delete from document_lines where document_id = ${id}`)
+        for (let i = 0; i < preparedLines.length; i++) {
+          const l = preparedLines[i]!
+          await tx.execute(sql`
+            insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
+                                        quantity, unit, unit_price, amount, tax_code_id, tax_amount,
+                                        department_id, project_id, extra_dims)
+            values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
+                    ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
+                    ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxAmount},
+                    ${l.departmentId ?? null}, ${l.projectId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb)
+          `)
+        }
+      }
+
+      await tx.execute(sql`
+        update documents set
+          party_id = ${body.partyId !== undefined ? body.partyId : sql`party_id`},
+          document_date = coalesce(${body.documentDate ?? null}, document_date),
+          due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
+          memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+          department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},
+          project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
+          extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
+          subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
+          tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
+          total = coalesce(${totals?.total ?? null}, total),
+          updated_at = now(), updated_by = ${user.id}
+        where id = ${id} and org_id = ${user.orgId}
+      `)
+    })
 
     const order = await loadOrder(id, user.orgId, cfg.kind)
     return NextResponse.json(order)

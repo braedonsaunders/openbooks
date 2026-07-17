@@ -1,8 +1,14 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
-import { add, isZero, neg, sum, toUnits } from "./money.ts";
+import { add, isZero, mulRate, neg, sum, toUnits } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
+import {
+  intercompanyBalancingLegs,
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  validateSubsidiaryRestrictions,
+} from "./subsidiaries.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "./close.ts";
 
 /**
@@ -18,12 +24,20 @@ type DocLine = typeof schema.documentLines.$inferSelect;
 
 export interface KernelLine {
   accountId: string;
-  amount: string; // signed base currency: + debit / − credit
+  /** Signed transaction-currency amount; translated before ledger insertion. */
+  amount: string;
+  currency?: string;
+  txnAmount?: string;
+  fxRate?: string;
+  /** Legal entity; defaults to the document's subsidiary (journals may span). */
+  subsidiaryId?: string | null;
   partyId?: string | null;
   departmentId?: string | null;
   projectId?: string | null;
   locationId?: string | null;
   classId?: string | null;
+  /** Custom segment assignments keyed by segment_definitions.key. */
+  extraDims?: Record<string, string>;
   paymentCardId?: string | null;
   taxCodeId?: string | null;
   memo?: string | null;
@@ -52,6 +66,32 @@ export interface PostingDeps {
    * NetSuite's own receipt journals settle invoices.
    */
   openItemAccountIds?: Set<string>;
+  /**
+   * Per-tax-code control accounts (tax_codes.collected/paid_account_id).
+   * Resolved lazily by postDocument / regenerateGlImpactTx; codes without an
+   * account fall back to the org control (taxCollected / taxPaid).
+   */
+  taxCollectedByCode?: Map<string, string>;
+  taxPaidByCode?: Map<string, string>;
+}
+
+/** tax code id → its own collected/paid control accounts, when configured. */
+async function resolveTaxAccounts(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+): Promise<{ collected: Map<string, string>; paid: Map<string, string> }> {
+  const r = (await runner.execute(sql`
+    select id, collected_account_id, paid_account_id from tax_codes
+     where org_id = ${orgId} and (collected_account_id is not null or paid_account_id is not null)`)) as unknown as {
+    rows: { id: string; collected_account_id: string | null; paid_account_id: string | null }[];
+  };
+  const collected = new Map<string, string>();
+  const paid = new Map<string, string>();
+  for (const row of r.rows) {
+    if (row.collected_account_id) collected.set(row.id, row.collected_account_id);
+    if (row.paid_account_id) paid.set(row.id, row.paid_account_id);
+  }
+  return { collected, paid };
 }
 
 type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
@@ -72,7 +112,7 @@ const cardRule: RuleFn = (doc, lines, deps) => {
     paymentCardId: doc.paymentCardId,
     ...dims(doc, l),
   }));
-  const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1);
+  const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
   const total = sum([...expense, ...tax].map((l) => l.amount));
   const cardLiability = controlOverride(doc) ?? deps.cardLiabilityAccountId;
   if (!cardLiability) throw new PostingError("card_charge requires a payment card");
@@ -93,7 +133,53 @@ const dims = (d: Doc, l?: DocLine) => ({
   projectId: l?.projectId ?? d.projectId,
   locationId: l?.locationId ?? d.locationId,
   classId: l?.classId ?? d.classId,
+  extraDims: {
+    ...((d.extraDims ?? {}) as Record<string, string>),
+    ...((l?.extraDims ?? {}) as Record<string, string>),
+  },
 });
+
+async function validateRequiredDimensions(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  lines: KernelLine[],
+): Promise<void> {
+  const accountIds = [...new Set(lines.map((line) => line.accountId))];
+  const rows = (await runner.execute(sql`
+    select a.id, a.number, a.name, a.required_dimensions,
+           coalesce(jsonb_object_agg(sd.key, sd.name) filter (where sd.key is not null), '{}'::jsonb) as segment_names
+      from accounts a
+      left join segment_definitions sd on sd.org_id = a.org_id and sd.is_active
+     where a.org_id = ${orgId}
+       and a.id = any(${`{${accountIds.join(",")}}`}::uuid[])
+     group by a.id
+  `)) as unknown as {
+    rows: { id: string; number: string | null; name: string; required_dimensions: string[]; segment_names: Record<string, string> }[];
+  };
+  const byAccount = new Map(rows.rows.map((row) => [row.id, row]));
+  const builtin: Record<string, keyof KernelLine> = {
+    subsidiary: "subsidiaryId",
+    department: "departmentId",
+    project: "projectId",
+    location: "locationId",
+    class: "classId",
+    party: "partyId",
+  };
+  for (const line of lines) {
+    const account = byAccount.get(line.accountId);
+    for (const key of account?.required_dimensions ?? []) {
+      const present = builtin[key]
+        ? Boolean(line[builtin[key]!])
+        : Boolean(line.extraDims?.[key]);
+      if (!present) {
+        const label = account?.segment_names?.[key] ?? (key === "party" ? "Party" : key);
+        throw new PostingError(
+          `${label} is required for account ${account?.number ? `${account.number} · ` : ""}${account?.name ?? line.accountId}`,
+        );
+      }
+    }
+  }
+}
 
 const lineTotal = (l: DocLine) => add(l.amount, l.taxAmount ?? "0");
 
@@ -109,15 +195,26 @@ const controlOverride = (doc: Doc): string | undefined => {
   return typeof c === "string" && c ? c : undefined;
 };
 
-/** Group line tax by tax code → one kernel line per code. */
-function taxLines(doc: Doc, lines: DocLine[], accountId: string, sign: 1 | -1): KernelLine[] {
+/**
+ * Group line tax by tax code → one kernel line per code. Each code may carry
+ * its OWN control account (tax_codes.collected/paid_account_id — sources like
+ * ERPNext post each rate to its own account); the passed account is the
+ * org-control fallback when the code doesn't specify one.
+ */
+function taxLines(
+  doc: Doc,
+  lines: DocLine[],
+  accountId: string,
+  sign: 1 | -1,
+  accountByCode?: Map<string, string>,
+): KernelLine[] {
   const byCode = new Map<string, string>();
   for (const l of lines) {
     if (!l.taxCodeId || isZero(l.taxAmount ?? "0")) continue;
     byCode.set(l.taxCodeId, add(byCode.get(l.taxCodeId) ?? "0", l.taxAmount!));
   }
   return [...byCode.entries()].map(([taxCodeId, amt]) => ({
-    accountId,
+    accountId: accountByCode?.get(taxCodeId) ?? accountId,
     amount: sign === 1 ? amt : neg(amt),
     taxCodeId,
     ...dims(doc),
@@ -133,7 +230,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1);
+    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
@@ -157,7 +254,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, -1);
+    const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, -1, deps.taxCollectedByCode);
     const total = sum([...income, ...tax].map((l) => l.amount));
     return [
       {
@@ -178,7 +275,9 @@ export const RULES: Record<string, RuleFn> = {
     return [
       // The AP leg is an OPEN ITEM: it settles against the bills it paid, so it
       // must carry is_open_item to be a valid application source (from_line).
-      { accountId: deps.control.ap, amount: total, partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // debit AP
+      // controlOverride: a payment against a non-default payable account (a
+      // financing sub-account, or a source system with several AP accounts).
+      { accountId: controlOverride(doc) ?? deps.control.ap, amount: total, partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // debit AP
       { accountId: lines[0]?.accountId ?? deps.control.bank, amount: neg(total), ...dims(doc) }, // credit bank
     ];
   },
@@ -188,7 +287,7 @@ export const RULES: Record<string, RuleFn> = {
     return [
       { accountId: lines[0]?.accountId ?? deps.control.bank, amount: total, ...dims(doc) }, // debit bank
       // The AR leg is an OPEN ITEM: it settles the invoices it paid (from_line).
-      { accountId: deps.control.ar, amount: neg(total), partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // credit AR
+      { accountId: controlOverride(doc) ?? deps.control.ar, amount: neg(total), partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // credit AR
     ];
   },
 
@@ -200,7 +299,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1);
+    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
@@ -219,11 +318,14 @@ export const RULES: Record<string, RuleFn> = {
   /** Card refund: the arithmetic reverse of a charge, same posting rule. */
   card_refund: cardRule,
 
-  /** Manual journal: lines carry signed amounts + accounts directly. */
+  /** Manual journal: lines carry signed amounts + accounts directly. A line
+   *  may name its own subsidiary (intercompany journal); the engine injects
+   *  the due-to/due-from legs that keep every subsidiary balanced. */
   journal: (doc, lines, deps) =>
     lines.map((l) => ({
       accountId: l.accountId!,
       amount: l.amount,
+      subsidiaryId: l.subsidiaryId,
       memo: l.description,
       partyId: doc.partyId,
       // An AR/AP leg on a journal is an OPEN ITEM: a credit can settle
@@ -245,7 +347,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1);
+    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
@@ -296,7 +398,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, -1);
+    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, -1, deps.taxPaidByCode);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       {
@@ -321,7 +423,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, 1);
+    const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, 1, deps.taxCollectedByCode);
     const total = sum([...income, ...tax].map((l) => l.amount));
     return [
       {
@@ -356,6 +458,103 @@ async function resolveOpenItemAccounts(
   return new Set(r.rows.map((x) => x.id));
 }
 
+/**
+ * Resolve every kernel line to a legal entity and make the entry balance per
+ * subsidiary: stamp doc-default subsidiaries, inject intercompany due-to/
+ * due-from legs when lines span entities, and validate account / dimension /
+ * party subsidiary restrictions. Shared by first posting and regeneration.
+ */
+async function applySubsidiaries(
+  runner: Pick<typeof db, "execute">,
+  doc: Doc,
+  kernelLines: KernelLine[],
+): Promise<{
+  lines: (KernelLine & { subsidiaryId: string; currency: string; txnAmount: string; fxRate: string })[];
+  docSubId: string;
+  multi: boolean;
+}> {
+  try {
+    const ctx = await loadSubsidiaryContext(runner, doc.orgId);
+    const docSubId = doc.subsidiaryId ?? ctx.rootId;
+    const origin = ctx.byId.get(docSubId);
+    if (!origin) throw new SubsidiaryError(`subsidiary ${docSubId} does not exist`);
+    const postingDate = doc.postingDate ?? doc.documentDate;
+    const rateCache = new Map<string, string>();
+
+    const functionalRate = async (targetCurrency: string): Promise<string> => {
+      if (doc.currency === targetCurrency) return "1";
+      if (targetCurrency === origin.baseCurrency) return doc.fxRate;
+      const cached = rateCache.get(targetCurrency);
+      if (cached) return cached;
+      const r = (await runner.execute(sql`
+        select rate::text from (
+          select rate, as_of from fx_rates
+           where org_id = ${doc.orgId} and from_currency = ${doc.currency}
+             and to_currency = ${targetCurrency} and rate_type = 'spot'
+             and as_of <= ${postingDate}
+          union all
+          select (1 / rate)::numeric(19,10) as rate, as_of from fx_rates
+           where org_id = ${doc.orgId} and from_currency = ${targetCurrency}
+             and to_currency = ${doc.currency} and rate_type = 'spot'
+             and as_of <= ${postingDate}
+        ) candidates order by as_of desc limit 1`)) as unknown as { rows: { rate: string }[] };
+      const rate = r.rows[0]?.rate;
+      if (!rate) {
+        throw new SubsidiaryError(
+          `no spot rate for ${doc.currency}→${targetCurrency} on or before ${postingDate}`,
+        );
+      }
+      rateCache.set(targetCurrency, rate);
+      return rate;
+    };
+
+    const stamped = await Promise.all(kernelLines.map(async (line) => {
+      const subsidiaryId = line.subsidiaryId ?? docSubId;
+      const subsidiary = ctx.byId.get(subsidiaryId);
+      if (!subsidiary) throw new SubsidiaryError(`subsidiary ${subsidiaryId} does not exist`);
+      const fxRate = await functionalRate(subsidiary.baseCurrency);
+      return {
+        ...line,
+        subsidiaryId,
+        amount: mulRate(line.amount, fxRate),
+        currency: doc.currency,
+        txnAmount: line.amount,
+        fxRate,
+      };
+    }));
+    const legs = await intercompanyBalancingLegs(runner, {
+      orgId: doc.orgId,
+      ctx,
+      originSubId: docSubId,
+      originFxRate: await functionalRate(origin.baseCurrency),
+      lines: stamped,
+    });
+    const all = [
+      ...stamped,
+      ...legs.map((leg) => ({
+        accountId: leg.accountId,
+        amount: leg.amount,
+        currency: leg.currency,
+        txnAmount: leg.txnAmount,
+        fxRate: leg.fxRate,
+        subsidiaryId: leg.subsidiaryId,
+        memo: leg.memo,
+      })),
+    ];
+    await validateSubsidiaryRestrictions(runner, {
+      orgId: doc.orgId,
+      ctx,
+      lines: all,
+      partyId: doc.partyId,
+      docSubsidiaryId: docSubId,
+    });
+    return { lines: all, docSubId, multi: new Set(all.map((l) => l.subsidiaryId)).size > 1 };
+  } catch (err) {
+    if (err instanceof SubsidiaryError) throw new PostingError(err.message);
+    throw err;
+  }
+}
+
 export async function postDocument(documentId: string, deps: PostingDeps): Promise<string> {
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
@@ -363,6 +562,10 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   if (doc.status === "voided") throw new PostingError(`document ${doc.documentNumber} is voided`);
   if (doc.kind === "journal" && !deps.openItemAccountIds) {
     deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(db, doc.orgId) };
+  }
+  if (!deps.taxCollectedByCode && doc.kind !== "journal") {
+    const tax = await resolveTaxAccounts(db, doc.orgId);
+    deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
   }
 
   const lines = await db
@@ -433,6 +636,10 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
     throw new PostingError(`posting rule for ${doc.kind} does not balance (sum=${total})`);
   }
 
+  // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----
+  const subApplied = await applySubsidiaries(db, effectiveDoc, kernelLines);
+  await validateRequiredDimensions(db, doc.orgId, subApplied.lines);
+
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
   const periodRes = (await db.execute(sql`
     select id from accounting_periods
@@ -448,7 +655,13 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
     .where(sql`${schema.accountingBooks.orgId} = ${doc.orgId} and ${schema.accountingBooks.isPrimary} = true`);
   if (!book) throw new PostingError("primary accounting book is not configured");
   try {
-    await assertPeriodModulesOpen(db, { orgId: doc.orgId, periodId: period.id, bookId: book.id, subsidiaryIds: [], modules: [closeModuleForDocument(doc.kind)] });
+    await assertPeriodModulesOpen(db, {
+      orgId: doc.orgId,
+      periodId: period.id,
+      bookId: book.id,
+      subsidiaryIds: subApplied.lines.map((line) => line.subsidiaryId),
+      modules: [closeModuleForDocument(doc.kind)],
+    });
   } catch (error) {
     if (error instanceof CloseError) throw new PostingError(error.message);
     throw error;
@@ -461,31 +674,34 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
       .values({
         orgId: doc.orgId,
         bookId: book.id,
+        subsidiaryId: subApplied.docSubId,
         entryNumber: `${effectiveDoc.documentNumber}`,
         postingDate,
         periodId: period.id,
         memo: effectiveDoc.memo,
         status: "draft",
         sourceDocumentId: doc.id,
-        origin: "document",
+        origin: subApplied.multi ? "intercompany" : "document",
       })
       .returning({ id: schema.journalEntries.id });
 
     await tx.insert(schema.journalLines).values(
-      kernelLines.map((l, i) => ({
+      subApplied.lines.map((l, i) => ({
         orgId: doc.orgId,
         entryId: entry.id,
         lineNumber: i + 1,
         accountId: l.accountId,
+        subsidiaryId: l.subsidiaryId,
         amount: l.amount,
-        currency: effectiveDoc.currency,
-        txnAmount: l.amount,
-        fxRate: effectiveDoc.fxRate,
+        currency: l.currency,
+        txnAmount: l.txnAmount,
+        fxRate: l.fxRate,
         partyId: l.partyId ?? null,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
+        extraDims: l.extraDims ?? {},
         paymentCardId: l.paymentCardId ?? null,
         taxCodeId: l.taxCodeId ?? null,
         memo: l.memo ?? null,
@@ -550,11 +766,13 @@ function glKey(
   lines: {
     accountId: string;
     amount: string;
+    subsidiaryId?: string | null;
     partyId?: string | null;
     departmentId?: string | null;
     projectId?: string | null;
     locationId?: string | null;
     classId?: string | null;
+    extraDims?: Record<string, string> | null;
     taxCodeId?: string | null;
     paymentCardId?: string | null;
     dueDate?: string | null;
@@ -565,11 +783,13 @@ function glKey(
     lines.map((l) => [
       l.accountId,
       toUnits(l.amount).toString(),
+      l.subsidiaryId ?? null,
       l.partyId ?? null,
       l.departmentId ?? null,
       l.projectId ?? null,
       l.locationId ?? null,
       l.classId ?? null,
+      JSON.stringify(Object.fromEntries(Object.entries(l.extraDims ?? {}).sort(([a], [b]) => a.localeCompare(b)))),
       l.taxCodeId ?? null,
       l.paymentCardId ?? null,
       l.dueDate ?? null,
@@ -610,6 +830,10 @@ export async function regenerateGlImpactTx(
   if (doc.kind === "journal" && !deps.openItemAccountIds) {
     deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(tx, doc.orgId) };
   }
+  if (!deps.taxCollectedByCode && doc.kind !== "journal") {
+    const tax = await resolveTaxAccounts(tx, doc.orgId);
+    deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
+  }
 
   const lines = await tx
     .select()
@@ -617,7 +841,9 @@ export async function regenerateGlImpactTx(
     .where(eq(schema.documentLines.documentId, documentId))
     .orderBy(asc(schema.documentLines.lineNumber));
 
-  const kernelLines = buildProjection(doc, lines, deps);
+  const projection = buildProjection(doc, lines, deps);
+  const { lines: kernelLines, docSubId } = await applySubsidiaries(tx, doc, projection);
+  await validateRequiredDimensions(tx, doc.orgId, kernelLines);
   const postingDate = doc.postingDate ?? doc.documentDate;
 
   const periodRes = (await tx.execute(sql`
@@ -647,10 +873,22 @@ export async function regenerateGlImpactTx(
     glKey(kernelLines) === glKey(existing as unknown as Parameters<typeof glKey>[0]);
   if (unchanged) return { entryId: entry.id, changed: false };
 
-  // GL projection changed → both its old and new book scopes must be open.
+  // GL projection changed → both its old and new book/entity scopes must be open.
   try {
-    await assertPeriodModulesOpen(tx, { orgId: doc.orgId, periodId: period.id, bookId: entry.bookId, subsidiaryIds: [], modules: [closeModuleForDocument(doc.kind)] });
-    await assertPeriodModulesOpen(tx, { orgId: doc.orgId, periodId: entry.periodId, bookId: entry.bookId, subsidiaryIds: [], modules: [closeModuleForDocument(doc.kind)] });
+    await assertPeriodModulesOpen(tx, {
+      orgId: doc.orgId,
+      periodId: period.id,
+      bookId: entry.bookId,
+      subsidiaryIds: kernelLines.map((line) => line.subsidiaryId),
+      modules: [closeModuleForDocument(doc.kind)],
+    });
+    await assertPeriodModulesOpen(tx, {
+      orgId: doc.orgId,
+      periodId: entry.periodId,
+      bookId: entry.bookId,
+      subsidiaryIds: existing.map((line) => line.subsidiaryId),
+      modules: [closeModuleForDocument(doc.kind)],
+    });
   } catch (error) {
     if (error instanceof CloseError) throw new ClosedPeriodError(error.message);
     throw error;
@@ -661,20 +899,25 @@ export async function regenerateGlImpactTx(
   // stay linked. Overlapping lines are UPDATEd by position; extra new lines are
   // inserted; surplus old lines are deleted (a delete of a still-referenced line
   // FK-fails and rolls the whole edit back — you can't drop an applied line).
-  const vals = (l: KernelLine, i: number) => ({
+  const vals = (
+    l: KernelLine & { subsidiaryId: string; currency: string; txnAmount: string; fxRate: string },
+    i: number,
+  ) => ({
     orgId: doc.orgId,
     entryId: entry.id,
     lineNumber: i + 1,
     accountId: l.accountId,
+    subsidiaryId: l.subsidiaryId,
     amount: l.amount,
-    currency: doc.currency,
-    txnAmount: l.amount,
-    fxRate: doc.fxRate,
+    currency: l.currency,
+    txnAmount: l.txnAmount,
+    fxRate: l.fxRate,
     partyId: l.partyId ?? null,
     departmentId: l.departmentId ?? null,
     projectId: l.projectId ?? null,
     locationId: l.locationId ?? null,
     classId: l.classId ?? null,
+    extraDims: l.extraDims ?? {},
     paymentCardId: l.paymentCardId ?? null,
     taxCodeId: l.taxCodeId ?? null,
     memo: l.memo ?? null,
@@ -704,7 +947,7 @@ export async function regenerateGlImpactTx(
   }
   await tx
     .update(schema.journalEntries)
-    .set({ postingDate, periodId: period.id, memo: doc.memo })
+    .set({ postingDate, periodId: period.id, memo: doc.memo, subsidiaryId: docSubId })
     .where(eq(schema.journalEntries.id, entry.id));
 
   return { entryId: entry.id, changed: true };

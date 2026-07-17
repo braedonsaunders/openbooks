@@ -10,7 +10,6 @@ import { loadAccount } from '../_lib'
 export const runtime = 'nodejs'
 
 const CURRENCY_RE = /^[A-Z]{3}$/
-const DIMENSIONS = ['department', 'location', 'class', 'project', 'party'] as const
 
 interface PatchBody {
   number?: string | null
@@ -133,7 +132,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   let requiredDimensions: string[] | undefined
   if (body.requiredDimensions !== undefined) {
-    if (!Array.isArray(body.requiredDimensions) || body.requiredDimensions.some((d) => !DIMENSIONS.includes(d as (typeof DIMENSIONS)[number]))) {
+    const definitions = (await db.execute(sql`
+      select key from segment_definitions
+       where org_id = ${gate.user.orgId} and is_active and allow_account_requirement
+    `)) as unknown as { rows: { key: string }[] }
+    const allowed = new Set(['party', ...definitions.rows.map((row) => row.key)])
+    if (!Array.isArray(body.requiredDimensions) || body.requiredDimensions.some((d) => typeof d !== 'string' || !allowed.has(d))) {
       return bad('invalid_dimensions', 'requiredDimensions')
     }
     requiredDimensions = [...new Set(body.requiredDimensions)]

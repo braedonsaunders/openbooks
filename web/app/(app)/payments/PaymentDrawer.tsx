@@ -6,12 +6,15 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Wand2 } from 'lucide-react'
-import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { AttachmentPanel } from '../../../components/attachment-panel'
-import { DocTypeBadge } from '../../../components/doc-type-badge'
+import { TransactionDrawer } from '../../../components/transaction-drawer'
+import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
+import { HeaderFields } from '../../../components/transaction-form/header-fields'
+import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
 
 /**
  * Shared payment/receipt flyout. side='ap' → vendor payment applying open
@@ -83,6 +86,7 @@ export function PaymentDrawer({
   bankAccounts,
   side,
   basePath,
+  layout,
 }: {
   payment: PaymentPayload
   initialOpenItems: OpenItemClient[]
@@ -90,6 +94,7 @@ export function PaymentDrawer({
   bankAccounts: Opt[]
   side: 'ap' | 'ar'
   basePath: string
+  layout?: FormLayoutConfig
 }) {
   const t = useTranslations('payments.drawer')
   const tCommon = useTranslations('common')
@@ -315,6 +320,23 @@ export function PaymentDrawer({
   }
 
   const field = 'space-y-1.5'
+  const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
+    const label = placement.labelOverride?.trim()
+    switch (placement.key) {
+      case 'party_id':
+        return <><Label>{label || partyLabel}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { side })} /> : <p className="text-sm">{doc.party_name}</p>}</>
+      case 'bank_account_id':
+        return <><Label>{label || t('bankAccount')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={bankAccounts.map((account) => ({ value: account.id, label: `${account.number ?? ''} ${account.name ?? ''}`.trim() }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={t('selectBankAccountPlaceholder')} /> : <p className="text-sm">{`${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
+      case 'document_date':
+        return <><Label>{label || tCommon('labels.date')}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+      case 'reference_number':
+        return <><Label>{label || tCommon('labels.reference')}</Label>{isEditable ? <Input value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} placeholder={t('referencePlaceholder')} /> : <p className="text-sm">{doc.reference_number ?? '—'}</p>}</>
+      case 'memo':
+        return <><Label>{label || tCommon('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+      default:
+        return null
+    }
+  }
   const canPost =
     isDraft &&
     !busy &&
@@ -326,10 +348,9 @@ export function PaymentDrawer({
     total > 0
 
   return (
-    <UrlDrawer
-      open
+    <TransactionDrawer
       closeHref={basePath}
-      size="2xl"
+      panelClassName={docTypeMeta(String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))} />
@@ -340,15 +361,22 @@ export function PaymentDrawer({
         </span>
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
-      headerActions={
+      primaryAction={
+        mode === 'view' && canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
+            {tCommon('actions.edit')}
+          </Button>
+        ) : null
+      }
+      actions={
         <>
           {mode === 'edit' ? (
             <>
               <Button disabled={busy} onClick={save}>
-                {busy ? 'Saving…' : 'Save'}
+                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
               </Button>
               <Button variant="outline" disabled={busy} onClick={cancel}>
-                Cancel
+                {tCommon('actions.cancel')}
               </Button>
             </>
           ) : (
@@ -357,11 +385,6 @@ export function PaymentDrawer({
                 recordType={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))}
                 recordId={String(doc.id)}
               />
-              {canEditStatus ? (
-                <Button variant="outline" onClick={() => setMode('edit')}>
-                  Edit
-                </Button>
-              ) : null}
               {isDraft ? (
                 <Button disabled={!canPost} onClick={post}>
                   {busy ? tCommon('actions.posting') : t('postAction', { side })}
@@ -374,7 +397,7 @@ export function PaymentDrawer({
               ) : null}
               {doc.status !== 'voided' ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                  Delete
+                  {tCommon('actions.delete')}
                 </Button>
               ) : null}
             </>
@@ -419,7 +442,7 @@ export function PaymentDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
               {partyLabel}
@@ -485,7 +508,7 @@ export function PaymentDrawer({
               <p className="text-sm">{doc.memo ?? '—'}</p>
             )}
           </div>
-        </div>
+        </div>}
 
         {isDraft ? (
           <div className="space-y-2">
@@ -640,6 +663,6 @@ export function PaymentDrawer({
 
         <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
-    </UrlDrawer>
+    </TransactionDrawer>
   )
 }

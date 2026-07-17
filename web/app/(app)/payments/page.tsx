@@ -61,9 +61,10 @@ export default async function Payments({
           orgId={authz.user.orgId}
           userId={authz.user.id}
           canManage={can(authz, 'admin.customization.manage')}
+          userRole={authz.user.role}
         />
       ) : (
-        <RunsSection sp={sp} orgId={authz.user.orgId} />
+        <RunsSection sp={sp} orgId={authz.user.orgId} canApprove={can(authz, 'ap.approve')} />
       )}
     </ListPageLayout>
   )

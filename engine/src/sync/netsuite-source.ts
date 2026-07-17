@@ -6,6 +6,7 @@ import type {
   EntityStream,
   MigrationSource,
   NativeChanges,
+  SourceAccountMonthRow,
   SourceEntity,
   SourceOpenItem,
   SourceTrialBalanceRow,
@@ -56,12 +57,55 @@ const NS_ITEM_KIND: Record<string, string> = {
   Kit: "kit",
 };
 
+// NetSuite job entitystatus → openbooks projects.status enum.
+const NS_PROJECT_STATUS: Record<string, string> = {
+  "1": "closed", "2": "active", "3": "cancelled", "18": "substantially_complete",
+  "19": "closed", "21": "substantially_complete", "22": "active", "23": "awarded",
+};
+// NetSuite jobbillingtype → openbooks projects.billing_method enum.
+const NS_BILLING: Record<string, string> = {
+  TM: "time_and_materials", FBI: "fixed_price", FBM: "fixed_price",
+};
+// NetSuite standard contact-role internal ids → label.
+const NS_CONTACT_ROLE: Record<string, string> = { "-10": "Primary" };
+// The payment terms actually used here (SuiteQL can't read the `term` record).
+const NS_TERM_LABELS: Record<string, string> = {
+  "2": "Net 30", "3": "Net 60", "4": "Due on receipt", "7": "Net 15",
+  "8": "2%/10, Net 30", "9": "1%/10, Net 30", "10": "Net 7", "11": "Net 45",
+  "12": "Net 30th Following", "13": "Net 90", "14": "Net 25", "15": "1.5%/10, Net 30",
+  "16": "1%/15, Net 30", "17": "Net 10th Following", "18": "Net 15th Following",
+  "19": "Net 20th Following", "20": "Net 5", "21": "Net 10", "22": "0.5%/10, Net 30",
+  "23": "2%/15, Net 30", "24": "Net 30th Following", "25": "Net 1st Following",
+  "26": "Net 30, 1st Following", "27": "Net 5th Following",
+};
+
 const isT = (v: unknown) => v === "T" || v === true;
+const s = (v: unknown): string | null => {
+  const t = (v == null ? "" : String(v)).trim();
+  return t === "" ? null : t;
+};
+/** MM/DD/YYYY → ISO YYYY-MM-DD (NetSuite date columns come back US-formatted). */
+const isoDate = (v: unknown): string | null => {
+  const t = s(v);
+  if (!t) return null;
+  const [m, d, y] = t.split("/");
+  return m && d && y ? `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}` : t;
+};
+const parseTerm = (label: string) => {
+  const netM = label.match(/Net\s+(\d+)/i);
+  const disc = label.match(/([\d.]+)%\/(\d+)/);
+  return {
+    netDays: /due on receipt/i.test(label) ? 0 : netM ? Number(netM[1]) : 30,
+    discountPercent: disc ? disc[1] : null,
+    discountDays: disc ? Number(disc[2]) : null,
+  };
+};
 const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD/YYYY') AS trandate,
   TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, t.memo, t.status,
   t.otherrefnum, t.posting`;
 const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.account,
-  tl.expenseaccount, tl.netamount, tl.foreignamount, tl.department, tl.entity, tl.memo, tl.taxrate1`;
+  tl.expenseaccount, tl.netamount, tl.foreignamount, tl.department, tl.entity, tl.subsidiary,
+  tl.memo, tl.taxrate1`;
 
 export class NetSuiteSource implements MigrationSource {
   readonly name = "netsuite";
@@ -85,14 +129,72 @@ export class NetSuiteSource implements MigrationSource {
 
   // --- master data ------------------------------------------------------------
 
-  async entities(): Promise<EntityStream[]> {
+  async entities(since?: Date | null): Promise<EntityStream[]> {
+    // Dependency order: a stream's foreign refs must be landable from earlier
+    // streams (parties before projects/addresses/contacts; accounts/terms/depts
+    // before party roles; timeTypes before time entries).
     return [
+      { resource: "subsidiaries", records: await this.subsidiaries() },
       { resource: "accounts", records: await this.accounts() },
       { resource: "departments", records: await this.departments() },
-      { resource: "projects", records: await this.projects() },
-      { resource: "parties", records: await this.parties() },
+      { resource: "payment_terms", records: this.paymentTerms() },
+      { resource: "time_types", records: await this.timeTypes() },
       { resource: "items", records: await this.items() },
+      { resource: "parties", records: await this.parties() },
+      { resource: "projects", records: await this.projects() },
+      { resource: "addresses", records: await this.addresses() },
+      { resource: "contacts", records: await this.contacts() },
+      { resource: "time_entries", records: await this.timeEntries(since ?? null) },
     ];
+  }
+
+  private async subsidiaries(): Promise<SourceEntity[]> {
+    const rows = await this.q<Record<string, string>>(`
+      SELECT id, name, legalname, parent, currency,
+             BUILTIN.DF(currency) AS currencylabel,
+             country, isinactive, iselimination
+        FROM subsidiary`);
+    const currencyById = new Map<string, string>();
+    try {
+      const currencies = await this.q<Record<string, string>>(
+        "SELECT id, symbol, name FROM currency",
+      );
+      for (const currency of currencies) {
+        const symbol = s(currency.symbol)?.toUpperCase();
+        if (symbol && /^[A-Z]{3}$/.test(symbol)) currencyById.set(String(currency.id), symbol);
+      }
+    } catch {
+      // Single-currency accounts do not expose the currency record to SuiteQL.
+      // Their one root is unambiguously the connection's configured base.
+    }
+    const aliases: Record<string, string> = {
+      CAN: "CAD", CDN: "CAD", "CANADIAN DOLLAR": "CAD",
+      USA: "USD", "US DOLLAR": "USD", "U.S. DOLLAR": "USD",
+    };
+    return rows.map((row) => {
+      const label = s(row.currencylabel)?.toUpperCase() ?? "";
+      const detected = currencyById.get(String(row.currency))
+        ?? aliases[label]
+        ?? (/^[A-Z]{3}$/.test(label) ? label : null);
+      const baseCurrency = detected ?? (!s(row.parent) ? this.baseCurrency : null);
+      if (!baseCurrency) {
+        throw new Error(
+          `cannot resolve ISO currency for subsidiary ${row.name ?? row.id} (${row.currencylabel ?? row.currency})`,
+        );
+      }
+      return {
+        sourceRef: String(row.id),
+        parentRef: s(row.parent),
+        fields: {
+          name: s(row.name) ?? `Subsidiary ${row.id}`,
+          legalName: s(row.legalname),
+          baseCurrency,
+          country: s(row.country) ?? "US",
+          isActive: !isT(row.isinactive),
+          isElimination: isT(row.iselimination),
+        },
+      };
+    });
   }
 
   private async accounts(): Promise<SourceEntity[]> {
@@ -138,18 +240,34 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async projects(): Promise<SourceEntity[]> {
-    const rows = await this.q<{ id: string; companyname?: string; entityid?: string }>(
-      "SELECT id, companyname, entityid FROM job",
-    );
+    const rows = await this.q<Record<string, string>>(`
+      SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype,
+             customer, projectmanager, custentityproject_foreman AS foreman,
+             custentityproject_po_number AS ponumber,
+             TO_CHAR(startdate, 'MM/DD/YYYY') AS startdate,
+             TO_CHAR(scheduledenddate, 'MM/DD/YYYY') AS enddate
+        FROM job`);
     return rows.map((j) => ({
       sourceRef: String(j.id),
-      fields: { name: String(j.companyname ?? j.entityid ?? `Job ${j.id}`).slice(0, 500) },
+      fields: {
+        code: s(j.entityid),
+        name: String(j.companyname ?? j.entityid ?? `Job ${j.id}`).slice(0, 500),
+        isActive: !isT(j.isinactive),
+        status: NS_PROJECT_STATUS[String(j.entitystatus)] ?? "active",
+        billingMethod: NS_BILLING[String(j.jobbillingtype)] ?? null,
+        customerRef: s(j.customer),
+        foremanRef: s(j.foreman),
+        managerRef: s(j.projectmanager),
+        customerPoNumber: s(j.ponumber),
+        startsOn: isoDate(j.startdate),
+        endsOn: isoDate(j.enddate),
+      },
     }));
   }
 
   private async items(): Promise<SourceEntity[]> {
-    const rows = await this.q<{ id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string }>(
-      "SELECT id, itemid, displayname, itemtype, isinactive FROM item",
+    const rows = await this.q<{ id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string; category?: string }>(
+      "SELECT id, itemid, displayname, itemtype, isinactive, BUILTIN.DF(custitem_category) AS category FROM item",
     );
     const out: SourceEntity[] = [];
     for (const i of rows) {
@@ -162,6 +280,7 @@ export class NetSuiteSource implements MigrationSource {
           code: i.itemid || `ns-${i.id}`,
           name: String(i.displayname ?? i.itemid ?? `Item ${i.id}`).slice(0, 500),
           kind,
+          category: s(i.category),
           isActive: !isT(i.isinactive),
         },
       });
@@ -169,40 +288,162 @@ export class NetSuiteSource implements MigrationSource {
     return out;
   }
 
-  private async parties(): Promise<SourceEntity[]> {
-    const [customers, vendors, employees] = [
-      await this.q<{ id: string; entityid?: string; companyname?: string; altname?: string; isinactive?: string }>(
-        "SELECT id, entityid, companyname, altname, isinactive FROM customer",
-      ),
-      await this.q<{ id: string; entityid?: string; companyname?: string; altname?: string; isinactive?: string }>(
-        "SELECT id, entityid, companyname, altname, isinactive FROM vendor",
-      ),
-      await this.q<{ id: string; entityid?: string; firstname?: string; lastname?: string; isinactive?: string }>(
-        "SELECT id, entityid, firstname, lastname, isinactive FROM employee",
-      ),
-    ];
-    const company = (r: { id: string; entityid?: string; companyname?: string; altname?: string; isinactive?: string }): SourceEntity => ({
-      sourceRef: String(r.id),
-      fields: {
-        displayName: String(r.altname ?? r.companyname ?? r.entityid ?? `Party ${r.id}`).slice(0, 500),
-        kind: "company",
-        isActive: !isT(r.isinactive),
-      },
+  private paymentTerms(): SourceEntity[] {
+    return Object.entries(NS_TERM_LABELS).map(([id, label]) => {
+      const p = parseTerm(label);
+      return {
+        sourceRef: id,
+        naturalKey: label,
+        fields: { name: label, netDays: p.netDays, discountDays: p.discountDays, discountPercent: p.discountPercent },
+      };
     });
-    return [
-      ...customers.map(company),
-      ...vendors.map(company),
-      ...employees.map((e) => ({
+  }
+
+  private async timeTypes(): Promise<SourceEntity[]> {
+    const rows = await this.q<{ id: string; name?: string; multiplier?: string; isinactive?: string }>(
+      "SELECT id, name, custrecord_bit_cost_multiplier AS multiplier, isinactive FROM customrecord_bit_time_type",
+    );
+    return rows.map((t) => ({
+      sourceRef: String(t.id),
+      fields: { name: s(t.name) ?? `Time type ${t.id}`, costMultiplier: s(t.multiplier) ?? "1", isActive: !isT(t.isinactive) },
+    }));
+  }
+
+  private async parties(): Promise<SourceEntity[]> {
+    const customers = await this.q<Record<string, string>>(`
+      SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
+             url, terms, creditlimit, salesrep, taxitem, receivablesaccount, subsidiary,
+             custentitycustomer_shortform AS shortform
+        FROM customer`);
+    const vendors = await this.q<Record<string, string>>(`
+      SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
+             terms, legalname, taxidnum, is1099eligible, payablesaccount, expenseaccount, subsidiary
+        FROM vendor`);
+    const employees = await this.q<Record<string, string>>(`
+      SELECT id, entityid, firstname, lastname, isinactive, email, homephone,
+             mobilephone, phone, department, supervisor,
+             subsidiary,
+             TO_CHAR(hiredate, 'MM/DD/YYYY') AS hiredate,
+             TO_CHAR(releasedate, 'MM/DD/YYYY') AS releasedate,
+             custentityemployee_has_benefits AS benefits, initials
+        FROM employee`);
+
+    const out: SourceEntity[] = [];
+    for (const c of customers) {
+      out.push({
+        sourceRef: String(c.id),
+        fields: {
+          displayName: String(c.companyname ?? c.altname ?? c.entityid ?? `Customer ${c.id}`).slice(0, 500),
+          kind: isT(c.isperson) ? "person" : "company",
+          isActive: !isT(c.isinactive),
+          email: s(c.email), phone: s(c.phone), website: s(c.url), shortCode: s(c.shortform),
+          subsidiaryRef: s(c.subsidiary),
+          customerRole: {
+            arAccountRef: s(c.receivablesaccount), termsRef: s(c.terms),
+            creditLimit: s(c.creditlimit), salesRepRef: s(c.salesrep), taxCodeRef: s(c.taxitem),
+          },
+        },
+      });
+    }
+    for (const v of vendors) {
+      const taxIds: Record<string, string> = {};
+      if (s(v.taxidnum)) taxIds.businessNumber = String(v.taxidnum).trim();
+      out.push({
+        sourceRef: String(v.id),
+        fields: {
+          displayName: String(v.companyname ?? v.altname ?? v.entityid ?? `Vendor ${v.id}`).slice(0, 500),
+          kind: isT(v.isperson) ? "person" : "company",
+          isActive: !isT(v.isinactive),
+          email: s(v.email), phone: s(v.phone), legalName: s(v.legalname), taxIds,
+          subsidiaryRef: s(v.subsidiary),
+          vendorRole: {
+            apAccountRef: s(v.payablesaccount), termsRef: s(v.terms),
+            defaultExpenseAccountRef: s(v.expenseaccount), is1099OrT4a: isT(v.is1099eligible),
+          },
+        },
+      });
+    }
+    for (const e of employees) {
+      out.push({
         sourceRef: String(e.id),
         fields: {
-          displayName: String(
-            e.entityid ?? [e.firstname, e.lastname].filter(Boolean).join(" ") ?? `Employee ${e.id}`,
-          ).slice(0, 500),
+          displayName: String(e.entityid ?? [e.firstname, e.lastname].filter(Boolean).join(" ") ?? `Employee ${e.id}`).slice(0, 500),
           kind: "person",
           isActive: !isT(e.isinactive),
+          email: s(e.email), phone: s(e.mobilephone) ?? s(e.phone) ?? s(e.homephone),
+          subsidiaryRef: s(e.subsidiary),
+          employeeRole: {
+            employeeNumber: s(e.initials), departmentRef: s(e.department), supervisorRef: s(e.supervisor),
+            hiredOn: isoDate(e.hiredate), terminatedOn: isoDate(e.releasedate), hasBenefits: isT(e.benefits),
+          },
         },
-      })),
-    ];
+      });
+    }
+    return out;
+  }
+
+  private async addresses(): Promise<SourceEntity[]> {
+    const out: SourceEntity[] = [];
+    for (const kind of ["customer", "vendor", "employee"] as const) {
+      const label = kind === "vendor" ? "" : "ab.label,";
+      const rows = await this.q<Record<string, string>>(`
+        SELECT ab.internalid AS abid, ab.entity, ab.defaultbilling, ab.defaultshipping, ${label}
+               ea.addr1, ea.addr2, ea.addr3, ea.city, ea.state, ea.zip, ea.country
+          FROM ${kind}addressbook ab
+          JOIN ${kind}addressbookentityaddress ea ON ea.nkey = ab.addressbookaddress`);
+      for (const a of rows) {
+        out.push({
+          sourceRef: `${kind}:${a.abid}`,
+          fields: {
+            entityRef: s(a.entity),
+            label: s(a.label), line1: s(a.addr1),
+            line2: [s(a.addr2), s(a.addr3)].filter(Boolean).join(", ") || null,
+            city: s(a.city), region: s(a.state), postalCode: s(a.zip), country: s(a.country),
+            isDefaultBilling: isT(a.defaultbilling), isDefaultShipping: isT(a.defaultshipping),
+          },
+        });
+      }
+    }
+    return out;
+  }
+
+  private async contacts(): Promise<SourceEntity[]> {
+    const rows = await this.q<Record<string, string>>(`
+      SELECT id, company, contactrole, email, phone, officephone, mobilephone,
+             title, entityid, firstname, lastname, fax, isinactive
+        FROM contact`);
+    return rows.map((c) => ({
+      sourceRef: String(c.id),
+      fields: {
+        companyRef: s(c.company),
+        name: s(c.entityid) ?? ([s(c.firstname), s(c.lastname)].filter(Boolean).join(" ") || "Contact"),
+        firstName: s(c.firstname), lastName: s(c.lastname), title: s(c.title),
+        role: c.contactrole ? NS_CONTACT_ROLE[String(c.contactrole)] ?? null : null,
+        email: s(c.email), phone: s(c.phone) ?? s(c.officephone), mobilePhone: s(c.mobilephone),
+        fax: s(c.fax), isPrimary: String(c.contactrole) === "-10", isActive: !isT(c.isinactive),
+      },
+    }));
+  }
+
+  private async timeEntries(since: Date | null): Promise<SourceEntity[]> {
+    const where = since
+      ? `WHERE tb.lastmodifieddate >= TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`
+      : "";
+    const rows = await this.q<Record<string, string>>(`
+      SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
+             tb.rate, tb.laborcost, tb.isbillable,
+             tb.custcol_bit_cost_multiplier AS timetype,
+             TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
+        FROM timebill tb ${where}`);
+    return rows.map((tb) => ({
+      sourceRef: String(tb.id),
+      fields: {
+        employeeRef: s(tb.employee), projectRef: s(tb.customer), itemRef: s(tb.item),
+        departmentRef: s(tb.department), timeTypeRef: s(tb.timetype),
+        workedOn: isoDate(tb.trandate), hours: s(tb.hours) ?? "0",
+        costRate: s(tb.laborcost), billRate: s(tb.rate), isBillable: isT(tb.isbillable),
+      },
+    }));
   }
 
   // --- native transactions -------------------------------------------------------
@@ -293,6 +534,23 @@ export class NetSuiteSource implements MigrationSource {
     return rows
       .filter((r) => r.acct)
       .map((r) => ({ accountRef: String(r.acct), balance: fromUnits(toUnits(r.d) - toUnits(r.c)) }));
+  }
+
+  async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
+    const rows = await this.q<{ acct?: string; m: string; d: string; c: string }>(`
+      SELECT tal.account AS acct, TO_CHAR(t.trandate, 'YYYY-MM') AS m,
+             SUM(COALESCE(tal.debit, 0)) AS d, SUM(COALESCE(tal.credit, 0)) AS c
+        FROM transactionaccountingline tal
+        JOIN transaction t ON t.id = tal.transaction
+       WHERE tal.posting = 'T'
+       GROUP BY tal.account, TO_CHAR(t.trandate, 'YYYY-MM')`);
+    return rows
+      .filter((r) => r.acct)
+      .map((r) => ({
+        accountRef: String(r.acct),
+        month: r.m,
+        amount: fromUnits(toUnits(r.d ?? "0") - toUnits(r.c ?? "0")),
+      }));
   }
 
   async openItems(): Promise<SourceOpenItem[]> {

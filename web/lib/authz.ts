@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { currentUser, type SessionUser } from "./auth";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions";
+import { allowedSubsidiaryIds } from "./subsidiaries";
 
 /**
  * Server-side authorization on top of the existing HMAC-cookie session.
@@ -20,6 +21,8 @@ import { permissionSetCovers, resolveEffectivePermissions } from "./permissions"
 export interface Authz {
   user: SessionUser;
   permissions: Set<string>;
+  /** Subsidiaries the user may see, from their roles' restrictions; null = unrestricted. */
+  allowedSubsidiaryIds: Set<string> | null;
 }
 
 export async function getAuthz(): Promise<Authz | null> {
@@ -27,9 +30,9 @@ export async function getAuthz(): Promise<Authz | null> {
   if (!user) return null;
   // Super admins hold every permission in whatever org they're currently in.
   if (user.isSuperAdmin) {
-    return { user, permissions: new Set<string>(["*"]) };
+    return { user, permissions: new Set<string>(["*"]), allowedSubsidiaryIds: null };
   }
-  const [assignments, overrides] = (await Promise.all([
+  const [assignments, overrides, allowedSubs] = (await Promise.all([
     db.execute(sql`
       select r.permissions
         from role_assignments a
@@ -39,7 +42,8 @@ export async function getAuthz(): Promise<Authz | null> {
       select permission, effect
         from user_permission_overrides
        where user_id = ${user.id} and org_id = ${user.orgId}`),
-  ])) as any[];
+    allowedSubsidiaryIds(user.id),
+  ])) as [any, any, Set<string> | null];
   const permissions = resolveEffectivePermissions({
     rolePermissionSets: assignments.rows.map((r: any) =>
       Array.isArray(r.permissions) ? r.permissions : [],
@@ -47,7 +51,7 @@ export async function getAuthz(): Promise<Authz | null> {
     legacyRole: user.role,
     overrides: overrides.rows,
   });
-  return { user, permissions };
+  return { user, permissions, allowedSubsidiaryIds: allowedSubs };
 }
 
 /** Wildcard-aware permission check (`ap.*` covers `ap.post`, `*` covers all). */

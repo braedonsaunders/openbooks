@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download, Send } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Label, Select, UrlDrawer } from '@openbooks/ui'
+import { Check, Download, FileCheck2, RotateCcw, Send, X } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 
@@ -18,7 +18,13 @@ import { money } from '../../../lib/format'
 
 const RUN_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline' | 'default'> = {
   confirmed: 'success',
-  exported: 'default',
+  generated: 'default',
+  delivered: 'default',
+  settled: 'success',
+  returned: 'warning',
+  partially_failed: 'warning',
+  rejected: 'outline',
+  rolled_back: 'outline',
   approved: 'default',
   pending_approval: 'warning',
   draft: 'secondary',
@@ -34,7 +40,7 @@ const INSTRUCTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 
 }
 
 // payment_instructions.status enum values with a translated display label.
-const INSTRUCTION_STATUS_KEYS = ['pending', 'sent', 'settled', 'returned', 'cancelled']
+const INSTRUCTION_STATUS_KEYS = ['pending', 'approved', 'generated', 'sent', 'settled', 'returned', 'rejected', 'failed', 'reversed', 'cancelled']
 
 // payment_runs.status enum → common.status.* message keys (confirmed/exported
 // live in payments.runs.status.*; fallback: raw value).
@@ -57,12 +63,20 @@ export function RunDrawer({
   eftConfigured,
   eftMissing,
   blockers,
+  files,
+  events,
+  items,
+  canApprove,
 }: {
   run: Record<string, any>
   instructions: Record<string, any>[]
   eftConfigured: boolean
   eftMissing: string[]
   blockers: RunBlockerClient[]
+  files: Record<string, any>[]
+  events: Record<string, any>[]
+  items: Record<string, any>[]
+  canApprove: boolean
 }) {
   const t = useTranslations('payments')
   const tCommon = useTranslations('common')
@@ -71,6 +85,10 @@ export function RunDrawer({
   const [deliverOpen, setDeliverOpen] = useState(false)
   const [sftpServers, setSftpServers] = useState<{ id: string; name: string }[]>([])
   const [sftpServerId, setSftpServerId] = useState('')
+  const [instructionQ, setInstructionQ] = useState('')
+  const [instructionPage, setInstructionPage] = useState(1)
+  const [decision, setDecision] = useState<{ kind: 'rejectRun' | 'rejectFile' | 'rollback'; fileId?: string } | null>(null)
+  const [reason, setReason] = useState('')
   const closeHref = '/payments?view=runs'
 
   async function openDeliver() {
@@ -100,16 +118,48 @@ export function RunDrawer({
     } finally { setBusy(false) }
   }
   const runStatusLabel = (status: string) => {
-    if (status === 'confirmed' || status === 'exported') return t(`runs.status.${status}`)
+    if (['confirmed', 'generated', 'delivered', 'settled', 'returned', 'partially_failed', 'rejected', 'rolled_back'].includes(status)) return t(`runs.status.${status}`)
     const key = RUN_STATUS_COMMON_KEY[status]
     return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
   }
   const blockerByInstruction = new Map(blockers.map((b) => [b.instructionId, b.reason]))
   const live = instructions.filter((i) => i.status !== 'cancelled')
+  const filteredInstructions = instructions.filter((i) => !instructionQ || String(i.payee).toLowerCase().includes(instructionQ.toLowerCase()) || String(i.document_number ?? '').toLowerCase().includes(instructionQ.toLowerCase()))
+  const instructionPages = Math.max(1, Math.ceil(filteredInstructions.length / 10))
+  const shownInstructions = filteredInstructions.slice((instructionPage - 1) * 10, instructionPage * 10)
   const total = live.reduce((acc, i) => acc + Number(i.amount), 0)
-  const canExport = eftConfigured && blockers.length === 0 && (run.status === 'draft' || run.status === 'exported')
-  const canPost = run.status === 'exported'
-  const canCancel = run.status === 'draft' || run.status === 'exported'
+  const latestFile = files[0]
+  const hasApprovedFile = latestFile && (latestFile.status === 'approved' || latestFile.status === 'delivered')
+  const canGenerate = eftConfigured && blockers.length === 0 && run.status === 'approved'
+  const canPost = hasApprovedFile && ['generated', 'delivered', 'partially_failed'].includes(run.status)
+  const canCancel = run.status === 'draft'
+
+  async function action(path: string, body?: Record<string, unknown>, success?: string) {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payments/runs/${run.id}/${path}`, { method: 'POST', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(data.error ?? t('runDrawer.toasts.actionFailed')); return false }
+      if (success) toast.success(success)
+      router.refresh()
+      return true
+    } finally { setBusy(false) }
+  }
+
+  async function generateFile() {
+    const ok = await action('file', undefined, t('runDrawer.toasts.fileGenerated'))
+    if (ok) router.refresh()
+  }
+
+  async function decideRun(decisionValue: 'approve' | 'reject', rejectionReason?: string) {
+    const ok = await action('decision', { decision: decisionValue, reason: rejectionReason }, t(`runDrawer.toasts.run${decisionValue === 'approve' ? 'Approved' : 'Rejected'}`))
+    if (ok) { setDecision(null); setReason('') }
+  }
+
+  async function decideFile(fileId: string, decisionValue: 'approve' | 'reject', rejectionReason?: string) {
+    const ok = await action(`files/${fileId}/decision`, { decision: decisionValue, reason: rejectionReason }, t(`runDrawer.toasts.file${decisionValue === 'approve' ? 'Approved' : 'Rejected'}`))
+    if (ok) { setDecision(null); setReason('') }
+  }
 
   async function postRun() {
     const ok = await confirmDialog({
@@ -181,28 +231,16 @@ export function RunDrawer({
               {t('runDrawer.cancelRun')}
             </Button>
           ) : null}
-          {run.status === 'draft' || run.status === 'exported' ? (
-            canExport ? (
-              <>
-                <Button variant={canPost ? 'outline' : 'default'} asChild>
-                  <a
-                    href={`/api/payments/runs/${run.id}/file`}
-                    download
-                    onClick={() => setTimeout(() => router.refresh(), 800)}
-                  >
-                    <Download size={15} /> {t('runDrawer.downloadFile')}
-                  </a>
-                </Button>
-                <Button variant="outline" disabled={busy} onClick={openDeliver}>
-                  <Send size={15} /> {t('runDrawer.deliverSftp')}
-                </Button>
-              </>
-            ) : (
-              <Button disabled title={t('runDrawer.downloadBlockedTitle')}>
-                <Download size={15} /> {t('runDrawer.downloadFile')}
-              </Button>
-            )
-          ) : null}
+          {run.status === 'draft' ? <Button disabled={busy} onClick={() => action('submit', undefined, t('runDrawer.toasts.submitted'))}>{t('runDrawer.submitRun')}</Button> : null}
+          {run.status === 'pending_approval' && canApprove ? <><Button variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'rejectRun' }) }}><X size={15} />{t('runDrawer.reject')}</Button><Button disabled={busy} onClick={() => decideRun('approve')}><Check size={15} />{t('runDrawer.approve')}</Button></> : null}
+          {canGenerate ? <Button disabled={busy} onClick={generateFile}><FileCheck2 size={15} />{t('runDrawer.generateFile')}</Button> : null}
+          {hasApprovedFile ? <>
+            <Button variant="outline" asChild><a href={`/api/payments/runs/${run.id}/file`} download onClick={() => setTimeout(() => router.refresh(), 800)}><Download size={15} />{t('runDrawer.downloadFile')}</a></Button>
+            <Button variant="outline" disabled={busy} onClick={openDeliver}><Send size={15} />{t('runDrawer.deliverSftp')}</Button>
+          </> : null}
+          {latestFile?.status === 'pending_approval' && canApprove ? <><Button variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'rejectFile', fileId: latestFile.id }) }}><X size={15} />{t('runDrawer.rejectFile')}</Button><Button disabled={busy} onClick={() => decideFile(latestFile.id, 'approve')}><Check size={15} />{t('runDrawer.approveFile')}</Button></> : null}
+          {latestFile && ['rejected', 'delivered', 'approved'].includes(latestFile.status) && ['generated', 'delivered', 'partially_failed'].includes(run.status) ? <Button variant="outline" disabled={busy} onClick={() => action(`files/${latestFile.id}/reprocess`, undefined, t('runDrawer.toasts.fileReprocessed'))}><RotateCcw size={15} />{t('runDrawer.reprocess')}</Button> : null}
+          {['approved', 'generated', 'delivered', 'partially_failed'].includes(run.status) && !live.some((i) => ['sent', 'settled', 'returned'].includes(i.status)) ? <Button variant="outline" disabled={busy} onClick={() => { setReason(''); setDecision({ kind: 'rollback' }) }}>{t('runDrawer.rollback')}</Button> : null}
           {canPost ? (
             <Button disabled={busy} onClick={postRun}>
               {busy ? tCommon('actions.posting') : t('runDrawer.postPayments')}
@@ -225,9 +263,9 @@ export function RunDrawer({
       <div className="space-y-4 p-1">
         {!eftConfigured ? (
           <Alert variant="warning">
-            <AlertTitle>{t('eft.notConfiguredTitle')}</AlertTitle>
+            <AlertTitle>{t('configuration.runNotReadyTitle')}</AlertTitle>
             <AlertDescription>
-              {t('eft.notConfiguredDrawerDescription', { missing: eftMissing.join(', ') })}
+              {t('configuration.runNotReadyDescription', { missing: eftMissing.join(', ') })}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -246,6 +284,11 @@ export function RunDrawer({
           </Alert>
         ) : null}
 
+        {files.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.filesTitle')}</h3><div className="grid gap-2">{files.map((file) => <div key={file.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"><div><p className="text-sm font-medium">{file.filename}</p><p className="font-mono text-[11px] text-slate-500">{String(file.content_hash).slice(0, 16)}… · v{file.sequence_number}</p></div><div className="flex items-center gap-2"><span className="text-xs tabular-nums text-slate-500">{file.payment_count} · {money(file.total_amount)} {file.currency}</span><Badge variant={file.status === 'approved' || file.status === 'delivered' ? 'success' : file.status === 'rejected' ? 'destructive' : 'secondary'}>{t(`runDrawer.fileStatus.${file.status}`)}</Badge></div></div>)}</div></section> : null}
+
+        {items.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.sourcesTitle')}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"><div className="flex justify-between gap-3"><span className="font-mono text-xs font-semibold">{item.document_number}</span><span className="tabular-nums">{money(item.payment_amount)} {item.currency}</span></div><p className="mt-1 text-xs text-slate-500">{item.party_name}</p>{Number(item.discount_amount) || Number(item.credit_amount) ? <p className="mt-1 text-xs text-slate-500">{t('runDrawer.adjustments', { discount: money(item.discount_amount), credit: money(item.credit_amount) })}</p> : null}</div>)}</div></section> : null}
+
+        <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.instructionsTitle')}</h3><Input value={instructionQ} onChange={(e) => { setInstructionQ(e.target.value); setInstructionPage(1) }} placeholder={t('runDrawer.searchInstructions')} className="max-w-64" /></div>
         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
           <table className="w-full text-sm">
             <thead>
@@ -258,7 +301,7 @@ export function RunDrawer({
               </tr>
             </thead>
             <tbody>
-              {instructions.map((i) => (
+              {shownInstructions.map((i) => (
                 <tr key={i.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
                   <td className="px-3 py-2">{i.payee}</td>
                   <td className="px-3 py-2 font-mono text-[13px] font-semibold">
@@ -295,6 +338,9 @@ export function RunDrawer({
             </tbody>
           </table>
         </div>
+        {instructionPages > 1 ? <div className="flex items-center justify-end gap-2"><Button size="sm" variant="outline" disabled={instructionPage <= 1} onClick={() => setInstructionPage((p) => p - 1)}>{tCommon('actions.previous')}</Button><span className="text-xs text-slate-500">{instructionPage} / {instructionPages}</span><Button size="sm" variant="outline" disabled={instructionPage >= instructionPages} onClick={() => setInstructionPage((p) => p + 1)}>{tCommon('actions.next')}</Button></div> : null}
+
+        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t(`runDrawer.events.${event.event_type}` as any)}</p><p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()}</time></div>)}</div></section> : null}
       </div>
 
       <Drawer
@@ -325,6 +371,7 @@ export function RunDrawer({
           )}
         </div>
       </Drawer>
+      <Drawer open={decision !== null} onClose={() => setDecision(null)} size="sm" title={decision?.kind === 'rollback' ? t('runDrawer.rollback') : decision?.kind === 'rejectFile' ? t('runDrawer.rejectFile') : t('runDrawer.reject')} description={t('runDrawer.reasonRequired')} headerActions={<><Button variant="outline" onClick={() => setDecision(null)}>{tCommon('actions.cancel')}</Button><Button variant="destructive" disabled={busy || !reason.trim()} onClick={async () => { if (decision?.kind === 'rejectRun') await decideRun('reject', reason); else if (decision?.kind === 'rejectFile' && decision.fileId) await decideFile(decision.fileId, 'reject', reason); else if (decision?.kind === 'rollback') { const ok = await action('rollback', { reason }, t('runDrawer.toasts.rolledBack')); if (ok) { setDecision(null); setReason('') } } }}>{tCommon('actions.confirm')}</Button></>}><div className="space-y-1.5 p-1"><Label>{t('runDrawer.reason')}</Label><Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} /></div></Drawer>
     </UrlDrawer>
   )
 }

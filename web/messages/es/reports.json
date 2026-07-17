@@ -51,7 +51,8 @@
     "sectionTotal": "Total {section}",
     "other": "Otros",
     "otherTotal": "Total Otros",
-    "accumulatedEarnings": "Utilidades acumuladas (calculadas)"
+    "accumulatedEarnings": "Utilidades acumuladas (calculadas)",
+    "translationAdjustment": "Ajuste de conversión acumulado"
   },
   "saveView": {
     "namePrompt": "Nombre para esta vista:",
@@ -67,6 +68,7 @@
   },
   "filterBar": {
     "period": "Período",
+    "subsidiary": "Subsidiaria",
     "asOf": "A fecha de",
     "from": "Desde",
     "to": "Hasta",
@@ -95,6 +97,7 @@
     "allProjects": "Todos los proyectos",
     "allLocations": "Todas las ubicaciones",
     "allClasses": "Todas las clases",
+    "allSegment": "Todos los elementos de {name}",
     "scale": "Escala",
     "scaleActual": "Real",
     "scaleThousands": "Miles",

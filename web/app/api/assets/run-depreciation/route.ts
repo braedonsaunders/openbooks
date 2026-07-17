@@ -29,7 +29,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await runDepreciation(user.orgId, asOfDate, user.id, body.assetId)
+    const result = await runDepreciation(
+      user.orgId,
+      asOfDate,
+      user.id,
+      body.assetId,
+      gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
+    )
     return NextResponse.json(result)
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)

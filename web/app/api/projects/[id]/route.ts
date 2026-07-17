@@ -60,6 +60,8 @@ interface PatchBody {
   endsOn?: string | null
   notes?: string | null
   contractValue?: string | null
+  subsidiaryId?: string | null
+  subsidiaryIncludeChildren?: boolean
   isActive?: boolean
   tasks?: TaskInput[]
 }
@@ -147,6 +149,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     managerId = v
   }
 
+  let subsidiaryId: string | null | undefined
+  if (body.subsidiaryId !== undefined) {
+    const value = uuidOrNull(body.subsidiaryId)
+    if (value === 'invalid') return bad('Invalid subsidiary')
+    if (value) {
+      const subsidiary = (await db.execute(sql`
+        select 1 from subsidiaries
+         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`)) as any
+      if (!subsidiary.rows.length) return bad('Subsidiary not found')
+    }
+    subsidiaryId = value
+  }
+
   // -- dates ---------------------------------------------------------------
   let startsOn: string | null | undefined
   if (body.startsOn !== undefined) {
@@ -205,6 +220,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       customer_id = ${customerId !== undefined ? customerId : sql`customer_id`},
       foreman_id = ${foremanId !== undefined ? foremanId : sql`foreman_id`},
       manager_id = ${managerId !== undefined ? managerId : sql`manager_id`},
+      subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
+      subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
       status = coalesce(${body.status ?? null}, status),
       billing_method = ${body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`},
       customer_po_number = ${body.customerPoNumber !== undefined ? strOrNull(body.customerPoNumber) : sql`customer_po_number`},

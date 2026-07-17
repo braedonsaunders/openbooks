@@ -26,6 +26,7 @@ import { NewAssetButton } from './NewAssetButton'
 import { NewAssetRedirect } from './NewAssetRedirect'
 import { RunDepreciationButton } from './RunDepreciationButton'
 import { AssetDrawer } from './AssetDrawer'
+import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,13 @@ export default async function Assets({
   const authz = await requirePermission('assets.read')
   const canManage = can(authz, 'assets.manage')
   const orgId = authz.user.orgId
+  const [multiSub, allSubsidiaries] = await Promise.all([isMultiSubsidiary(), subsidiaryOptions()])
+  const subsidiaries = authz.allowedSubsidiaryIds
+    ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
+    : allSubsidiaries
+  const allowedSubsidiaries = authz.allowedSubsidiaryIds
+    ? sql`and a.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])`
+    : sql``
 
   const sp = await searchParams
   const assetId = typeof sp.asset === 'string' ? sp.asset : undefined
@@ -68,6 +76,7 @@ export default async function Assets({
   const status = statusParam && (STATUS_VALUES as readonly string[]).includes(statusParam) ? statusParam : undefined
 
   const where = sql`a.org_id = ${orgId}
+    ${allowedSubsidiaries}
     ${
       params.q
         ? sql` and (a.name ilike ${'%' + params.q + '%'} or a.asset_number ilike ${'%' + params.q + '%'} or a.serial_number ilike ${'%' + params.q + '%'})`
@@ -95,7 +104,7 @@ export default async function Assets({
     db.execute(sql`
       select count(*) as total, a.status, count(*) as status_count
         from fixed_assets a
-       where a.org_id = ${orgId}
+       where a.org_id = ${orgId} ${allowedSubsidiaries}
        group by rollup (a.status)
     `) as any,
   ])
@@ -205,12 +214,13 @@ export default async function Assets({
         </>
       )}
       {assetId === 'new' && canManage ? <NewAssetRedirect /> : null}
-      {openAsset && pickers ? (
+      {openAsset && pickers && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(openAsset.asset.subsidiary_id))) ? (
         <AssetDrawer
           key={String(openAsset.asset.id)}
           payload={openAsset}
           categories={pickers[0].rows}
           accounts={pickers[1].rows}
+          subsidiaries={multiSub ? subsidiaries : []}
           canManage={canManage}
         />
       ) : null}

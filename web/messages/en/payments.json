@@ -90,6 +90,12 @@
     "notConfiguredListDescription": "Payment runs can still be assembled, but bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}.",
     "notConfiguredDrawerDescription": "Bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}."
   },
+  "configuration": {
+    "notConfiguredTitle": "Payment setup is incomplete",
+    "notConfiguredDescription": "Create a funding profile in <setup>Payments & Banking setup</setup> before assembling a payment run.",
+    "runNotReadyTitle": "This payment run is not ready",
+    "runNotReadyDescription": "Complete the profile configuration before generating a file. Missing or invalid: {missing}."
+  },
   "runBuilder": {
     "title": "New payment run",
     "description": "Choose the funding account and bills, then create a draft run for review.",
@@ -105,9 +111,9 @@
     },
     "bankApproved": "approved",
     "bankMissing": "missing",
-    "payFromBankAccount": "Pay from bank account",
-    "selectBankAccountPlaceholder": "Select bank account…",
-    "noBankAccounts": "No active bank accounts",
+    "payFromBankAccount": "Payment bank profile",
+    "selectBankAccountPlaceholder": "Select a payment profile…",
+    "noBankAccounts": "No active payment profiles",
     "fundsDate": "Funds date",
     "selectedForPayment": "Selected for payment",
     "selectionSummary": "{count, plural, one {# bill} other {# bills}} · <total>{amount}</total>",
@@ -137,23 +143,49 @@
       "ach": "ACH",
       "sepa": "SEPA",
       "wire": "Wire",
-      "cheque": "Cheque"
+      "cheque": "Cheque",
+      "direct_debit": "Direct debit",
+      "positive_pay": "Positive Pay",
+      "custom": "Custom"
     },
     "status": {
       "confirmed": "Confirmed",
-      "exported": "Exported"
+      "generated": "File generated",
+      "delivered": "Delivered",
+      "settled": "Settled",
+      "returned": "Returned",
+      "partially_failed": "Partially failed",
+      "rejected": "Rejected",
+      "rolled_back": "Rolled back"
     }
   },
   "runDrawer": {
-    "descriptionEft": "EFT from {bank}",
-    "descriptionEftWithDate": "EFT from {bank} · funds {date}",
+    "descriptionEft": "Payment run from {bank}",
+    "descriptionEftWithDate": "Payment run from {bank} · funds {date}",
     "bankAccountFallback": "bank account",
     "cancelRun": "Cancel run",
-    "downloadFile": "Download CPA-005 file",
-    "downloadBlockedTitle": "Resolve the EFT configuration / bank-detail issues first",
+    "downloadFile": "Download file",
+    "downloadBlockedTitle": "Resolve the profile and bank-detail issues first",
+    "submitRun": "Submit for approval",
+    "approve": "Approve run",
+    "reject": "Reject run",
+    "generateFile": "Generate file",
+    "approveFile": "Approve file",
+    "rejectFile": "Reject file",
+    "reprocess": "Reprocess",
+    "rollback": "Roll back",
     "postPayments": "Post payments",
     "paymentsSummary": "{count, plural, one {# payment} other {# payments}} · <total>Total {amount}</total>",
-    "payeesMissingBankDetails": "Payees missing approved bank details",
+    "payeesMissingBankDetails": "Counterparties with invalid bank details",
+    "filesTitle": "Payment files",
+    "sourcesTitle": "Source transactions",
+    "instructionsTitle": "Payment instructions",
+    "searchInstructions": "Search instructions…",
+    "activityTitle": "Recent activity",
+    "systemActor": "System",
+    "adjustments": "Discount {discount} · credit {credit}",
+    "reason": "Reason",
+    "reasonRequired": "Enter a reason. It is retained in the payment audit trail.",
     "columns": {
       "payee": "Payee",
       "payment": "Payment",
@@ -162,10 +194,22 @@
     "bankApproved": "approved",
     "instructionStatus": {
       "pending": "pending",
+      "approved": "approved",
+      "generated": "generated",
       "sent": "sent",
       "settled": "settled",
       "returned": "returned",
+      "rejected": "rejected",
+      "failed": "failed",
+      "reversed": "reversed",
       "cancelled": "cancelled"
+    },
+    "fileStatus": { "generated": "generated", "pending_approval": "pending approval", "approved": "approved", "rejected": "rejected", "delivered": "delivered", "superseded": "superseded", "voided": "voided" },
+    "events": {
+      "run_created": "Payment run created", "run_submitted": "Payment run submitted", "run_approved": "Payment run approved", "run_rejected": "Payment run rejected",
+      "file_generated": "Payment file generated", "file_reprocessed": "Payment file reprocessed", "file_approved": "Payment file approved", "file_rejected": "Payment file rejected",
+      "file_downloaded": "Payment file downloaded", "file_delivered_sftp": "Payment file delivered by SFTP", "run_rolled_back": "Payment run rolled back",
+      "instruction_settled": "Payment settled", "instruction_returned": "Payment returned", "instruction_rejected": "Payment rejected"
     },
     "confirmPost": "{count, plural, one {Post # payment} other {Post # payments}} totalling {total} to the ledger and apply them to the selected bills?",
     "confirmCancel": "Cancel run {number}? Its draft payments are deleted; nothing has posted.",
@@ -177,6 +221,15 @@
       "cancelled": "Run cancelled",
       "deliverFailed": "Could not deliver the file",
       "delivered": "Delivered to {path}"
+      ,"actionFailed": "The payment action failed"
+      ,"submitted": "Payment run submitted"
+      ,"fileGenerated": "Payment file generated"
+      ,"runApproved": "Payment run approved"
+      ,"runRejected": "Payment run rejected"
+      ,"fileApproved": "Payment file approved"
+      ,"fileRejected": "Payment file rejected"
+      ,"fileReprocessed": "Payment file reprocessed"
+      ,"rolledBack": "Payment run rolled back"
     },
     "deliverSftp": "Deliver to SFTP",
     "deliverHint": "Write this run's bank file to an SFTP server's outbound folder for the bank to fetch.",

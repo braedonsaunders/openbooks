@@ -16,6 +16,7 @@ import {
   type DimFilter,
 } from './reports'
 import { balanceSheetView, profitAndLossView, type StatementView } from './statement-matrix'
+import { reportSubsidiaryView } from './consolidation'
 import { budgetVsActualView } from './budget-report'
 import {
   agingExportData,
@@ -128,11 +129,16 @@ export type ResolveReportCtx = {
  */
 export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
   const { t, period, query: q } = ctx
+  // Subsidiary context: exports and scheduled runs honor the same picker value
+  // as the on-screen report (consolidated subtree + translation included).
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const dims: DimFilter = {
     departmentId: q.dims.departmentId,
     projectId: q.dims.projectId,
     locationId: q.dims.locationId,
     classId: q.dims.classId,
+    segments: q.dims.segments,
+    subsidiaryIds: subView.subsidiary?.ids,
   }
   const secTotal = (section: string) => t('statement.sectionTotal', { section })
 
@@ -141,7 +147,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     let view: StatementView | null = null
     let title = ''
     let periodPhrase = ''
-    const matrixOpts = { breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, showZero: q.showZero }
+    const matrixOpts = { breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero }
     if (kind === 'pnl') {
       title = t('pnl.title')
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
@@ -172,6 +178,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
           totalLiabilities: secTotal(t('balanceSheet.liabilities')),
           totalEquity: secTotal(t('balanceSheet.equity')),
           accumulatedEarnings: t('statement.accumulatedEarnings'),
+          translationAdjustment: t('statement.translationAdjustment'),
           liabilitiesAndEquity: t('balanceSheet.liabilitiesAndEquity'),
           totalOf: secTotal,
         },

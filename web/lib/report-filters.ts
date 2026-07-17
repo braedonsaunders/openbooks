@@ -26,6 +26,8 @@ export type ReportQuery = {
   compare: StatementCompare
   basis: StatementBasis
   dims: StatementDimFilter
+  /** Subsidiary context node; unset = the root (consolidated). */
+  subsidiaryId?: string
   showZero: boolean
   scale: ReportScale
 }
@@ -47,6 +49,7 @@ export const REPORT_PARAM_KEYS = {
   project: 'project',
   location: 'location',
   class: 'class',
+  sub: 'sub',
   zero: 'zero',
   scale: 'scale',
 } as const
@@ -62,6 +65,15 @@ function oneOf<T extends string>(v: string | undefined, allowed: T[], fallback: 
   return v && (allowed as string[]).includes(v) ? (v as T) : fallback
 }
 
+function segmentFilters(sp: ParamSource): Record<string, string> {
+  const entries = sp instanceof URLSearchParams ? [...sp.entries()] : Object.entries(sp)
+  return Object.fromEntries(
+    entries
+      .filter(([key, value]) => key.startsWith('seg_') && /^[a-z][a-z0-9_]{0,62}$/.test(key.slice(4)) && typeof value === 'string' && value)
+      .map(([key, value]) => [key.slice(4), String(value)]),
+  )
+}
+
 /** Parse a filter query from search params, applying safe defaults. */
 export function parseReportQuery(sp: ParamSource): ReportQuery {
   const periodRaw = read(sp, REPORT_PARAM_KEYS.period)
@@ -69,7 +81,12 @@ export function parseReportQuery(sp: ParamSource): ReportQuery {
     period: isPeriodPreset(periodRaw) ? periodRaw! : DEFAULT_PERIOD_PRESET,
     from: read(sp, REPORT_PARAM_KEYS.from) || undefined,
     to: read(sp, REPORT_PARAM_KEYS.to) || undefined,
-    breakout: oneOf(read(sp, REPORT_PARAM_KEYS.breakout), BREAKOUTS, 'none'),
+    breakout: (() => {
+      const value = read(sp, REPORT_PARAM_KEYS.breakout)
+      return value?.startsWith('segment:') && /^[a-z][a-z0-9_]{0,62}$/.test(value.slice(8))
+        ? value as StatementBreakout
+        : oneOf(value, BREAKOUTS, 'none')
+    })(),
     compare: oneOf(read(sp, REPORT_PARAM_KEYS.compare), COMPARES, 'none'),
     basis: oneOf(read(sp, REPORT_PARAM_KEYS.basis), BASES, 'accrual'),
     dims: {
@@ -77,7 +94,9 @@ export function parseReportQuery(sp: ParamSource): ReportQuery {
       projectId: read(sp, REPORT_PARAM_KEYS.project) || undefined,
       locationId: read(sp, REPORT_PARAM_KEYS.location) || undefined,
       classId: read(sp, REPORT_PARAM_KEYS.class) || undefined,
+      segments: segmentFilters(sp),
     },
+    subsidiaryId: read(sp, REPORT_PARAM_KEYS.sub) || undefined,
     showZero: read(sp, REPORT_PARAM_KEYS.zero) === '1',
     scale: oneOf(read(sp, REPORT_PARAM_KEYS.scale), SCALES, 'actual'),
   }
@@ -99,6 +118,10 @@ export function toSearchParams(q: ReportQuery): URLSearchParams {
   if (q.dims.projectId) p.set(k.project, q.dims.projectId)
   if (q.dims.locationId) p.set(k.location, q.dims.locationId)
   if (q.dims.classId) p.set(k.class, q.dims.classId)
+  for (const [key, value] of Object.entries(q.dims.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+    p.set(`seg_${key}`, value)
+  }
+  if (q.subsidiaryId) p.set(k.sub, q.subsidiaryId)
   if (q.showZero) p.set(k.zero, '1')
   if (q.scale !== 'actual') p.set(k.scale, q.scale)
   return p
@@ -130,6 +153,7 @@ export type DrillColumn = {
   to?: string
   dimField?: 'department' | 'project' | 'location' | 'class'
   dimValue?: string | null
+  segmentKey?: string
 }
 
 /** Build the `/reports/detail` href for one statement cell, or null if the cell
@@ -142,6 +166,8 @@ export function buildDrillHref(args: {
   mode: StatementMode
   reportDims: StatementDimFilter
   basis: StatementBasis
+  /** Subsidiary context node — the detail page re-resolves the same view. */
+  subsidiaryId?: string
   back: string
   backLabel: string
   label: string
@@ -150,7 +176,7 @@ export function buildDrillHref(args: {
   if (column.kind !== 'amount') return null
   if (!column.to) return null
   // Unassigned breakout bucket needs an "is null" filter we don't express in URLs.
-  if (column.dimField && (column.dimValue === null || column.dimValue === undefined)) return null
+  if ((column.dimField || column.segmentKey) && (column.dimValue === null || column.dimValue === undefined)) return null
   if (!args.accountId && !(args.drillTypes && args.drillTypes.length)) return null
 
   const p = new URLSearchParams()
@@ -168,10 +194,15 @@ export function buildDrillHref(args: {
     else if (key === 'location') dims.locationId = column.dimValue
     else if (key === 'class') dims.classId = column.dimValue
   }
+  if (column.segmentKey && column.dimValue) {
+    dims.segments = { ...(dims.segments ?? {}), [column.segmentKey]: column.dimValue }
+  }
   if (dims.departmentId) p.set('dept', dims.departmentId)
   if (dims.projectId) p.set('project', dims.projectId)
   if (dims.locationId) p.set('location', dims.locationId)
   if (dims.classId) p.set('class', dims.classId)
+  for (const [key, value] of Object.entries(dims.segments ?? {})) p.set(`seg_${key}`, value)
+  if (args.subsidiaryId) p.set('sub', args.subsidiaryId)
   if (args.basis !== 'accrual') p.set('basis', args.basis)
   p.set('label', args.label)
   p.set('backLabel', args.backLabel)
@@ -186,6 +217,7 @@ export type DrillQuery = {
   to: string
   mode: StatementMode
   dims: StatementDimFilter
+  subsidiaryId?: string
   basis: StatementBasis
   label: string
   backLabel: string
@@ -207,7 +239,9 @@ export function parseDrillQuery(sp: ParamSource): DrillQuery {
       projectId: read(sp, 'project') || undefined,
       locationId: read(sp, 'location') || undefined,
       classId: read(sp, 'class') || undefined,
+      segments: segmentFilters(sp),
     },
+    subsidiaryId: read(sp, 'sub') || undefined,
     basis: read(sp, 'basis') === 'cash' ? 'cash' : 'accrual',
     label: read(sp, 'label') || '',
     backLabel: read(sp, 'backLabel') || '',

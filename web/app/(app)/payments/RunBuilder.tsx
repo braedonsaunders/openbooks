@@ -29,7 +29,7 @@ export interface RunBill {
 
 export function RunBuilder({
   bills,
-  bankAccounts,
+  bankProfiles,
   sp,
   sort,
   dir,
@@ -37,7 +37,14 @@ export function RunBuilder({
   pagination,
 }: {
   bills: RunBill[]
-  bankAccounts: { id: string; number: string | null; name: string }[]
+  bankProfiles: {
+    id: string
+    name: string
+    currency: string
+    format_name: string
+    bank_number: string | null
+    bank_name: string
+  }[]
   sp: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
@@ -49,7 +56,7 @@ export function RunBuilder({
   const router = useRouter()
   /** Selected bills (whole row kept so totals survive pagination). */
   const [selected, setSelected] = useState<Record<string, RunBill>>({})
-  const [bankAccountId, setBankAccountId] = useState('')
+  const [paymentBankProfileId, setPaymentBankProfileId] = useState('')
   const [scheduledFor, setScheduledFor] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -80,7 +87,7 @@ export function RunBuilder({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        bankAccountId,
+        paymentBankProfileId,
         billDocumentIds: selectedList.map((b) => b.id),
         scheduledFor: scheduledFor || null,
       }),
@@ -117,11 +124,14 @@ export function RunBuilder({
               {t('payFromBankAccount')}<span className="text-red-500"> *</span>
             </Label>
             <SearchSelect
-              options={bankAccounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name}`.trim() }))}
-              value={bankAccountId}
-              onChange={(v) => setBankAccountId(v ?? '')}
-              placeholder={bankAccounts.length > 0 ? t('selectBankAccountPlaceholder') : t('noBankAccounts')}
-              disabled={bankAccounts.length === 0}
+              options={bankProfiles.map((profile) => ({
+                value: profile.id,
+                label: `${profile.name} · ${`${profile.bank_number ?? ''} ${profile.bank_name}`.trim()} · ${profile.currency} · ${profile.format_name}`,
+              }))}
+              value={paymentBankProfileId}
+              onChange={(v) => setPaymentBankProfileId(v ?? '')}
+              placeholder={bankProfiles.length > 0 ? t('selectBankAccountPlaceholder') : t('noBankAccounts')}
+              disabled={bankProfiles.length === 0}
             />
           </div>
           <div className="space-y-1.5">
@@ -141,7 +151,7 @@ export function RunBuilder({
                 })}
               </p>
             </div>
-            <Button disabled={busy || selectedList.length === 0 || !bankAccountId} onClick={createRun}>
+            <Button disabled={busy || selectedList.length === 0 || !paymentBankProfileId} onClick={createRun}>
               {busy ? tCommon('actions.creating') : t('createRun')}
             </Button>
           </div>

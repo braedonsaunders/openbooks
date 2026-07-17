@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { guardPermission } from "../../../../lib/authz";
 import { isCataloguePermission, PERMISSION_CATALOGUE } from "../../../../lib/permissions";
 import { isUuid } from "../../../../lib/list-params";
@@ -36,6 +37,57 @@ function normalizePermissions(input: unknown): string[] | null {
   return PERMISSION_CATALOGUE.filter((p) => set.has(p));
 }
 
+/**
+ * Strictly shape-check a subsidiaryRestriction payload against the union
+ * ({mode:'all'} | {mode:'subtree', subsidiaryId} | {mode:'list', subsidiaryIds})
+ * and verify every referenced subsidiary exists in the org. Returns the
+ * normalized value or an error string.
+ */
+async function normalizeSubsidiaryRestriction(
+  input: unknown,
+  orgId: string,
+): Promise<{ value: SubsidiaryRestriction } | { error: string }> {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return { error: "subsidiaryRestriction must be an object" };
+  }
+  const { mode } = input as { mode?: unknown };
+  if (mode === "all") return { value: { mode: "all" } };
+
+  const checkExist = async (ids: string[]): Promise<string | null> => {
+    const found = (await db.execute(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)) as any;
+    const known = new Set(found.rows.map((r: any) => r.id as string));
+    const missing = ids.find((id) => !known.has(id));
+    return missing ? `unknown subsidiary: ${missing}` : null;
+  };
+
+  if (mode === "subtree") {
+    const { subsidiaryId } = input as { subsidiaryId?: unknown };
+    if (typeof subsidiaryId !== "string" || !isUuid(subsidiaryId)) {
+      return { error: "subsidiaryRestriction.subsidiaryId must be a uuid" };
+    }
+    const missing = await checkExist([subsidiaryId]);
+    if (missing) return { error: missing };
+    return { value: { mode: "subtree", subsidiaryId } };
+  }
+  if (mode === "list") {
+    const { subsidiaryIds } = input as { subsidiaryIds?: unknown };
+    if (
+      !Array.isArray(subsidiaryIds) ||
+      subsidiaryIds.length === 0 ||
+      !subsidiaryIds.every((id): id is string => typeof id === "string" && isUuid(id))
+    ) {
+      return { error: "subsidiaryRestriction.subsidiaryIds must be a non-empty array of uuids" };
+    }
+    const ids = [...new Set(subsidiaryIds)];
+    const missing = await checkExist(ids);
+    if (missing) return { error: missing };
+    return { value: { mode: "list", subsidiaryIds: ids } };
+  }
+  return { error: "subsidiaryRestriction.mode must be all, subtree, or list" };
+}
+
 async function audit(args: {
   orgId: string;
   rowId: string;
@@ -59,6 +111,7 @@ export async function POST(req: Request) {
     key?: string;
     description?: string;
     permissions?: unknown;
+    subsidiaryRestriction?: unknown;
   };
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -73,11 +126,18 @@ export async function POST(req: Request) {
   if (!permissions) {
     return NextResponse.json({ error: "permissions must be known catalogue keys" }, { status: 400 });
   }
+  let restriction: SubsidiaryRestriction = { mode: "all" };
+  if (body.subsidiaryRestriction !== undefined) {
+    const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
+    if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
+    restriction = norm.value;
+  }
 
   const inserted = (await db.execute(sql`
-    insert into app_roles (org_id, key, name, description, is_built_in, permissions, created_by, updated_by)
+    insert into app_roles (org_id, key, name, description, is_built_in, permissions,
+                           subsidiary_restriction, created_by, updated_by)
     values (${actor.orgId}, ${key}, ${name}, ${body.description?.trim() || null}, false,
-            ${JSON.stringify(permissions)}, ${actor.id}, ${actor.id})
+            ${JSON.stringify(permissions)}, ${JSON.stringify(restriction)}, ${actor.id}, ${actor.id})
     on conflict (org_id, key) do nothing
     returning id`)) as any;
   if (!inserted.rows[0]) {
@@ -87,7 +147,12 @@ export async function POST(req: Request) {
     orgId: actor.orgId,
     rowId: inserted.rows[0].id,
     action: "insert",
-    changes: { key: [null, key], name: [null, name], permissions: [null, permissions] },
+    changes: {
+      key: [null, key],
+      name: [null, name],
+      permissions: [null, permissions],
+      subsidiaryRestriction: [null, restriction],
+    },
     actorId: actor.id,
   });
   return NextResponse.json({ ok: true, id: inserted.rows[0].id });
@@ -103,12 +168,13 @@ export async function PATCH(req: Request) {
     name?: string;
     description?: string;
     permissions?: unknown;
+    subsidiaryRestriction?: unknown;
   };
   if (!body.id || !isUuid(body.id)) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
   const existing = (await db.execute(sql`
-    select id, key, name, description, is_built_in, permissions
+    select id, key, name, description, is_built_in, permissions, subsidiary_restriction
       from app_roles where id = ${body.id} and org_id = ${actor.orgId}`)) as any;
   const role = existing.rows[0];
   if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
@@ -129,6 +195,13 @@ export async function PATCH(req: Request) {
     }
     sets.push(sql`permissions = ${JSON.stringify(permissions)}`);
     changes.permissions = [role.permissions, permissions];
+  }
+  // Like permissions, subsidiary access may change on built-in roles too.
+  if (body.subsidiaryRestriction !== undefined) {
+    const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
+    if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
+    sets.push(sql`subsidiary_restriction = ${JSON.stringify(norm.value)}`);
+    changes.subsidiaryRestriction = [role.subsidiary_restriction, norm.value];
   }
   if (body.name !== undefined || body.description !== undefined) {
     if (role.is_built_in) {

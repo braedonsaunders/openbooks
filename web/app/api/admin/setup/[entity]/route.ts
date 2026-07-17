@@ -58,6 +58,144 @@ function resolveEntity(entityKey: string): SetupEntity | null {
   return SETUP_ENTITY_BY_KEY.get(entityKey) ?? null
 }
 
+/** Domain checks that cannot be expressed by the generic field coercer. */
+async function validateEntityIntegrity(
+  entity: SetupEntity,
+  body: Record<string, unknown>,
+  orgId: string,
+  rowId?: string,
+): Promise<string | null> {
+  if (entity.key === 'segment-definitions') {
+    const key = String(body.key ?? '')
+    if (!rowId && !/^[a-z][a-z0-9_]{0,62}$/.test(key)) {
+      return 'The key must start with a lowercase letter and contain only lowercase letters, numbers, and underscores'
+    }
+    if (rowId) {
+      const existing = (await db.execute(sql`
+        select source_kind from segment_definitions where id = ${rowId} and org_id = ${orgId}`)) as any
+      if (!existing.rows[0]) return 'not found'
+    }
+  }
+
+  if (entity.key === 'segment-values') {
+    const existing = rowId
+      ? ((await db.execute(sql`
+          select segment_id from segment_values where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !existing) return 'not found'
+    const segmentId = String(body.segmentId ?? existing?.segment_id ?? '')
+    const segment = (await db.execute(sql`
+      select id, is_hierarchical from segment_definitions
+       where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`)) as any
+    if (!segment.rows[0]) return 'Values can only be created for a custom segment'
+    const parentId = body.parentId === undefined ? null : body.parentId || null
+    if (parentId) {
+      if (!segment.rows[0].is_hierarchical) return 'This segment is not hierarchical'
+      const parent = (await db.execute(sql`
+        select id from segment_values where id = ${String(parentId)} and org_id = ${orgId}
+         and segment_id = ${segmentId}`)) as any
+      if (!parent.rows[0]) return 'Choose a parent value from the same segment'
+    }
+  }
+
+  if (entity.key === 'subsidiaries') {
+    const existing = rowId
+      ? ((await db.execute(sql`
+          select id, parent_id, is_active, is_elimination from subsidiaries
+           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !existing) return 'not found'
+    const parentId = body.parentId === undefined ? existing?.parent_id : body.parentId || null
+    if (!rowId && !parentId) return 'A new subsidiary must have a parent'
+    if (existing?.parent_id === null && parentId) return 'The root subsidiary cannot be moved'
+    if (existing?.parent_id === null && body.isActive === false) return 'The root subsidiary cannot be archived'
+    if (parentId) {
+      if (!UUID_RE.test(String(parentId))) return 'Invalid parent subsidiary'
+      const parent = (await db.execute(sql`
+        select id from subsidiaries
+         where id = ${String(parentId)} and org_id = ${orgId} and is_active`)) as any
+      if (!parent.rows[0]) return 'Parent subsidiary not found'
+      if (rowId) {
+        const cycle = (await db.execute(sql`
+          with recursive descendants as (
+            select id from subsidiaries where id = ${rowId} and org_id = ${orgId}
+            union all
+            select s.id from subsidiaries s join descendants d on s.parent_id = d.id
+             where s.org_id = ${orgId}
+          ) select 1 from descendants where id = ${String(parentId)} limit 1`)) as any
+        if (cycle.rows.length) return 'A subsidiary cannot be parented beneath itself'
+      }
+    }
+    if (rowId && body.isElimination !== undefined && body.isElimination !== existing.is_elimination) {
+      const used = (await db.execute(sql`
+        select 1 from journal_entries where org_id = ${orgId} and subsidiary_id = ${rowId} limit 1`)) as any
+      if (used.rows.length) return 'Elimination status cannot change after the subsidiary has ledger activity'
+    }
+  }
+
+  if (entity.key === 'intercompany-pairs') {
+    const current = rowId
+      ? ((await db.execute(sql`
+          select * from intercompany_pairs where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    const fromId = String(body.fromSubsidiaryId ?? current?.from_subsidiary_id ?? '')
+    const toId = String(body.toSubsidiaryId ?? current?.to_subsidiary_id ?? '')
+    const dueFromId = String(body.dueFromAccountId ?? current?.due_from_account_id ?? '')
+    const dueToId = String(body.dueToAccountId ?? current?.due_to_account_id ?? '')
+    if (fromId === toId) return 'Intercompany subsidiaries must be different'
+    const subsidiaries = (await db.execute(sql`
+      select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
+       and id = any(${`{${[fromId, toId].join(',')}}`}::uuid[])`)) as any
+    if (subsidiaries.rows.length !== 2) return 'Choose two active, non-elimination subsidiaries'
+    const accounts = (await db.execute(sql`
+      select id, type, eliminate from accounts where org_id = ${orgId} and is_active and not is_summary
+       and id = any(${`{${[dueFromId, dueToId].join(',')}}`}::uuid[])`)) as any
+    const byId = new Map<string, { id: string; type: string; eliminate: boolean }>(
+      accounts.rows.map((a: any) => [a.id as string, a]),
+    )
+    const dueFrom = byId.get(dueFromId)
+    const dueTo = byId.get(dueToId)
+    if (!dueFrom || !dueTo) return 'Choose active posting accounts from this organization'
+    if (!String(dueFrom.type).startsWith('asset_')) return 'The due-from account must be an asset'
+    if (!String(dueTo.type).startsWith('liability_')) return 'The due-to account must be a liability'
+    if (!dueFrom.eliminate || !dueTo.eliminate) return 'Both intercompany accounts must be marked for elimination'
+    const duplicate = (await db.execute(sql`
+      select 1 from intercompany_pairs where org_id = ${orgId}
+       and id is distinct from ${rowId ?? null}
+       and ((from_subsidiary_id = ${fromId} and to_subsidiary_id = ${toId})
+         or (from_subsidiary_id = ${toId} and to_subsidiary_id = ${fromId})) limit 1`)) as any
+    if (duplicate.rows.length) return 'An intercompany pair already exists for these subsidiaries'
+  }
+  if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
+    const from = String(body.fromCurrency ?? '')
+    const to = String(body.toCurrency ?? '')
+    if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to) || from === to) {
+      return 'Choose two different ISO currency codes'
+    }
+    const currencies = (await db.execute(sql`
+      select code from currencies where code = any(${`{${[from, to].join(',')}}`}::text[])`)) as any
+    if (currencies.rows.length !== 2) return 'Unknown currency code'
+    const rateFields = entity.key === 'fx-rates'
+      ? ['rate']
+      : ['currentRate', 'averageRate', 'historicalRate']
+    if (rateFields.some((key) => body[key] !== undefined && Number(body[key]) <= 0)) {
+      return 'Exchange rates must be greater than zero'
+    }
+    if (entity.key === 'consolidated-fx-rates') {
+      const periodId = String(body.periodId ?? '')
+      if (!rowId) {
+        const period = (await db.execute(sql`
+          select 1 from accounting_periods where id = ${periodId} and org_id = ${orgId}`)) as any
+        if (!period.rows.length) return 'Choose an accounting period from this organization'
+      }
+      if (rowId && body.source !== 'manual') {
+        return 'Set the source to Manual before overriding a consolidated rate'
+      }
+    }
+  }
+  return null
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ entity: string }> }) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
@@ -68,6 +206,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const built = buildRow(entity, body, { forCreate: true })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
+  const integrityError = await validateEntityIntegrity(entity, body, orgId)
+  if (integrityError) return NextResponse.json({ error: integrityError }, { status: 400 })
 
   // Natural-key uniqueness (these tables mostly lack a DB unique constraint).
   if (entity.naturalKey) {
@@ -80,7 +220,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     if (dup.rows.length > 0) return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
   }
 
-  const cols = [...built.cols]
+  const cols = entity.key === 'fx-rates'
+    ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
+    : [...built.cols]
+  if (entity.key === 'fx-rates') cols.push({ column: 'source', value: 'manual' })
   if (entity.orgScoped) cols.push({ column: 'org_id', value: orgId })
   if (entity.actorCols) {
     cols.push({ column: 'created_by', value: actorId })
@@ -108,7 +251,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       table: entity.table,
       rowId: String(newId),
       action: 'insert',
-      changes: Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
+      changes: {
+        ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
+        ...(entity.key === 'fx-rates' ? { source: 'manual' } : {}),
+      },
       actorId,
     })
     return NextResponse.json({ id: newId })
@@ -130,8 +276,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 
   const built = buildRow(entity, body, { forCreate: false })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
+  const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
+  if (integrityError) return NextResponse.json({ error: integrityError }, { status: integrityError === 'not found' ? 404 : 400 })
 
-  const setParts = built.cols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+  const updateCols = entity.key === 'fx-rates'
+    ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
+    : built.cols
+  const setParts = updateCols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+  if (entity.key === 'fx-rates') {
+    // Any human edit is an explicit override. Provider synchronization never
+    // replaces manual rows, so detach the imported provenance atomically.
+    setParts.push(sql`source = 'manual'`)
+    setParts.push(sql`provider_config_id = null`)
+    setParts.push(sql`imported_at = null`)
+  }
   if (entity.actorCols) {
     setParts.push(sql`updated_by = ${actorId}`)
     setParts.push(sql`updated_at = now()`)
@@ -140,6 +298,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
+    if (entity.key === 'subsidiaries') {
+      const root = (await db.execute(sql`
+        select parent_id from subsidiaries where id = ${id} and org_id = ${orgId}`)) as any
+      if (!root.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (root.rows[0].parent_id === null) {
+        return NextResponse.json({ error: 'The root subsidiary cannot be deleted' }, { status: 400 })
+      }
+    }
     const updated = (await db.execute(sql`
       update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
        where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
@@ -155,7 +321,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       table: entity.table,
       rowId: id,
       action: 'update',
-      changes: Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
+      changes: {
+        ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
+        ...(entity.key === 'fx-rates' ? { source: 'manual', provider_config_id: null, imported_at: null } : {}),
+      },
       actorId,
     })
     return NextResponse.json({ id })

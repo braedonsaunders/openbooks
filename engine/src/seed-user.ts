@@ -17,7 +17,15 @@ const password = supplied ?? randomBytes(9).toString("base64url");
 const salt = randomBytes(16);
 const hash = `${salt.toString("hex")}:${scryptSync(password, salt, 64).toString("hex")}`;
 
-const org = (await db.execute(sql`select id from orgs limit 1`)) as any;
+const org = (await db.execute(sql`
+  select id from orgs
+   where env_kind = 'production'
+   order by created_at, id
+   limit 1
+`)) as any;
+if (!org.rows[0]) {
+  throw new Error("no production organization exists; create one before seeding a login user");
+}
 await db.execute(sql`
   insert into users (org_id, email, name, password_hash, role)
   values (${org.rows[0].id}, ${email.toLowerCase()}, ${name}, ${hash}, ${role})

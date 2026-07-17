@@ -6,6 +6,7 @@ import { buildNativeContext, type NativeContext, type NativeDocument } from "./n
 import { loadEntities, type EntityLoadStats } from "./migrate.ts";
 import { reconcileApplications, type ApplyStats } from "./applications.ts";
 import type { MigrationSource } from "./source.ts";
+import { verifyAccountMonths, type AccountMonthVerification } from "./verification.ts";
 
 /**
  * NATIVE sync engine — migration and mirror are one code path.
@@ -39,6 +40,8 @@ export interface SyncResult {
   applications: ApplyStats | null;
   tb: { accounts: number; matches: number; mismatches: { accountRef: string; ours: string; theirs: string }[] };
   openItems: { checked: number; matches: number; mismatches: { ref: string; ours: string; theirs: string }[] } | null;
+  /** Mandatory month-bucketed activity gate (catches date-allocation drift). */
+  periods: AccountMonthVerification;
   syncedThrough: string;
   durationMs: number;
 }
@@ -50,6 +53,16 @@ export interface SyncOptions {
   /** "auto" resumes from the watermark; null = all history; Date = explicit. */
   since?: Date | null | "auto";
   loadEntitiesFirst?: boolean;
+}
+
+class AccountMonthVerificationError extends Error {
+  constructor(readonly result: SyncResult) {
+    const mismatchCount = result.periods.checked - result.periods.matches;
+    super(
+      `account-month verification failed: ${mismatchCount} of ${result.periods.checked} buckets differ from the source`,
+    );
+    this.name = "AccountMonthVerificationError";
+  }
 }
 
 /** One-click migration: master data, then every native transaction, verified. */
@@ -69,10 +82,10 @@ export function runFullMigration(
 /** Canonical content key of a native document (change detection). */
 function nativeKey(d: NativeDocument): string {
   return JSON.stringify([
-    d.kind, d.partyId, d.documentDate, d.dueDate, d.memo, d.referenceNumber, d.controlAccountId,
+    d.kind, d.partyId, d.subsidiaryId, d.documentDate, d.dueDate, d.memo, d.referenceNumber, d.controlAccountId, d.extraDims ?? {},
     d.lines.map((l) => [
       l.accountId, l.itemId, toUnits(l.amount).toString(), toUnits(l.taxAmount).toString(),
-      l.taxOverridden, l.taxCodeId, l.departmentId, l.projectId, l.description,
+      l.taxOverridden, l.taxCodeId, l.departmentId, l.projectId, l.subsidiaryId, l.extraDims ?? {}, l.description,
     ]),
   ]);
 }
@@ -81,29 +94,29 @@ function nativeKey(d: NativeDocument): string {
 async function storedKey(docId: string): Promise<string> {
   const [d] = (
     (await db.execute(sql`
-      select kind, party_id, document_date::text as ddate, due_date::text as due,
-             memo, reference_number, custom->>'controlAccountId' as ctrl
+      select kind, party_id, subsidiary_id, posting_date::text as ddate, due_date::text as due,
+             memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims
         from documents where id = ${docId}`)) as unknown as {
-      rows: { kind: string; party_id: string | null; ddate: string; due: string | null; memo: string | null; reference_number: string | null; ctrl: string | null }[];
+      rows: { kind: string; party_id: string | null; subsidiary_id: string | null; ddate: string; due: string | null; memo: string | null; reference_number: string | null; ctrl: string | null; extra_dims: Record<string, string> }[];
     }
   ).rows;
   const lines = (
     (await db.execute(sql`
       select account_id, item_id, amount, tax_amount, tax_overridden, tax_code_id,
-             department_id, project_id, description
+             department_id, project_id, subsidiary_id, extra_dims, description
         from document_lines where document_id = ${docId} order by line_number`)) as unknown as {
       rows: {
         account_id: string | null; item_id: string | null; amount: string; tax_amount: string;
         tax_overridden: boolean; tax_code_id: string | null; department_id: string | null;
-        project_id: string | null; description: string | null;
+        project_id: string | null; subsidiary_id: string | null; extra_dims: Record<string, string>; description: string | null;
       }[];
     }
   ).rows;
   return JSON.stringify([
-    d!.kind, d!.party_id, d!.ddate, d!.due, d!.memo, d!.reference_number, d!.ctrl,
+    d!.kind, d!.party_id, d!.subsidiary_id, d!.ddate, d!.due, d!.memo, d!.reference_number, d!.ctrl, d!.extra_dims ?? {},
     lines.map((l) => [
       l.account_id, l.item_id, toUnits(l.amount).toString(), toUnits(l.tax_amount).toString(),
-      l.tax_overridden, l.tax_code_id, l.department_id, l.project_id, l.description,
+      l.tax_overridden, l.tax_code_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims ?? {}, l.description,
     ]),
   ]);
 }
@@ -142,18 +155,8 @@ export async function runSync(
     .returning();
 
   try {
-    // -- 1. master data, so every reference in new transactions resolves.
-    //    Default ON for mirrors too: the upsert-by-ref loader is idempotent,
-    //    and a new customer/account/item referenced by a new transaction must
-    //    exist before the document builds.
-    let entityStats: EntityLoadStats | undefined;
-    if ((opts.loadEntitiesFirst ?? true) && source.entities) {
-      entityStats = await loadEntities(source, org.id);
-    }
-    const ctx: NativeContext = await buildNativeContext(org.id, refKey, source.baseCurrency);
-    const deps: PostingDeps = { control: ctx.control, cardLiabilityAccountId: ctx.control.ap };
-
-    // -- 2. watermark ----------------------------------------------------------
+    // -- 1. watermark (computed first so high-volume master-data streams — e.g.
+    //    time entries — can pull incrementally on a mirror instead of full).
     const [lastOk] = await db
       .select()
       .from(schema.syncRuns)
@@ -168,6 +171,47 @@ export async function runSync(
       opts.since === undefined || opts.since === "auto"
         ? (lastOk?.syncedThrough ?? new Date(Date.now() - 3 * 24 * 3600 * 1000))
         : opts.since;
+
+    // -- 2. master data, so every reference in new transactions resolves.
+    //    Default ON for mirrors too: the upsert-by-ref loader is idempotent, and
+    //    a new customer/account/item referenced by a new transaction must exist
+    //    before the document builds.
+    let entityStats: EntityLoadStats | undefined;
+    if ((opts.loadEntitiesFirst ?? true) && source.entities) {
+      entityStats = await loadEntities(source, org.id, since);
+    }
+
+    // Fresh org: derive control accounts from the source so posting rules
+    // route AR/AP/bank/tax to exactly the accounts the source used.
+    if (source.controlAccounts) {
+      const existingCtrl = (
+        (await db.execute(sql`select settings->'controlAccounts' as ctrl from orgs where id = ${org.id}`)) as unknown as {
+          rows: { ctrl: Record<string, string> | null }[];
+        }
+      ).rows[0]?.ctrl;
+      if (!existingCtrl?.ar || !existingCtrl?.ap) {
+        const refs = await source.controlAccounts();
+        const resolved: Record<string, string> = { ...(existingCtrl ?? {}) };
+        for (const [key, ref] of Object.entries(refs)) {
+          if (!ref) continue;
+          const row = (
+            (await db.execute(sql`
+              select id from accounts where org_id = ${org.id} and custom->>${refKey} = ${ref} limit 1`)) as unknown as {
+              rows: { id: string }[];
+            }
+          ).rows[0];
+          if (row) resolved[key] = row.id;
+        }
+        if (resolved.ar && resolved.ap) {
+          await db.execute(sql`
+            update orgs set settings = settings || ${JSON.stringify({ controlAccounts: resolved })}::jsonb
+             where id = ${org.id}`);
+        }
+      }
+    }
+
+    const ctx: NativeContext = await buildNativeContext(org.id, refKey, source.baseCurrency);
+    const deps: PostingDeps = { control: ctx.control, cardLiabilityAccountId: ctx.control.ap };
 
     // -- 3. pull native changes -------------------------------------------------
     const changes = await source.nativeChanges(since, ctx);
@@ -188,7 +232,11 @@ export async function runSync(
     const skipped: string[] = [];
     for (const u of changes.unbuildable) skipped.push(`${u.ref}: ${u.reason}`);
 
-    for (const doc of changes.documents) {
+    for (const sourceDoc of changes.documents) {
+      const doc: NativeDocument = {
+        ...sourceDoc,
+        subsidiaryId: sourceDoc.subsidiaryId ?? ctx.rootSubsidiaryId,
+      };
       try {
         const have = existing.get(doc.sourceRef);
         if (!have) {
@@ -204,6 +252,8 @@ export async function runSync(
               kind: doc.kind,
               documentNumber: doc.sourceRef,
               partyId: doc.partyId,
+              subsidiaryId: doc.subsidiaryId,
+              extraDims: doc.extraDims ?? {},
               documentDate: doc.documentDate,
               dueDate: doc.dueDate,
               currency: source.baseCurrency,
@@ -231,6 +281,8 @@ export async function runSync(
                 taxOverridden: l.taxOverridden,
                 departmentId: l.departmentId,
                 projectId: l.projectId,
+                subsidiaryId: l.subsidiaryId,
+                extraDims: l.extraDims ?? {},
                 description: l.description,
               })),
             );
@@ -267,9 +319,10 @@ export async function runSync(
           await tx.execute(sql`set local openbooks.migration = on`);
           await tx.execute(sql`
             update documents set
-              kind = ${doc.kind}, party_id = ${doc.partyId},
-              document_date = ${doc.documentDate}, due_date = ${doc.dueDate},
+              kind = ${doc.kind}, party_id = ${doc.partyId}, subsidiary_id = ${doc.subsidiaryId},
+              document_date = ${doc.documentDate}, posting_date = ${doc.documentDate}, due_date = ${doc.dueDate},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
+              extra_dims = ${JSON.stringify(doc.extraDims ?? {})}::jsonb,
               custom = custom || ${JSON.stringify(
                 doc.controlAccountId ? { controlAccountId: doc.controlAccountId } : {},
               )}::jsonb,
@@ -289,6 +342,8 @@ export async function runSync(
               taxOverridden: l.taxOverridden,
               departmentId: l.departmentId,
               projectId: l.projectId,
+              subsidiaryId: l.subsidiaryId,
+              extraDims: l.extraDims ?? {},
               description: l.description,
             })),
           );
@@ -307,6 +362,11 @@ export async function runSync(
     // previously-imported ref that vanished was deleted at source (our books
     // only ever contain refs the source once returned).
     const deletedAtSource = changes.deletedRefs.filter((r) => existing.has(r));
+    // A source-CANCELLED transaction that we imported while it was posted is a
+    // ledger divergence: flag it like a deletion (report-only, never auto-void).
+    for (const u of changes.unbuildable) {
+      if (u.reason === "cancelled" && existing.get(u.ref)?.posted) deletedAtSource.push(u.ref);
+    }
     if (since === null) {
       const pulled = new Set(changes.documents.map((d) => d.sourceRef));
       for (const u of changes.unbuildable) pulled.add(u.ref);
@@ -362,6 +422,25 @@ export async function runSync(
       openItems = { checked: matches + mismatches.length, matches, mismatches: mismatches.slice(0, 50) };
     }
 
+    // -- 8b. verify: month-bucketed activity (period-allocation exactness) --------
+    // The cumulative TB proves totals; this proves WHEN. Together they subsume
+    // any statement check (P&L / BS are projections of per-period balances).
+    // This method is mandatory on MigrationSource, so a new adapter cannot ship
+    // a one-click migration or mirror that silently skips the period gate.
+    const truth = await source.monthlyActivity();
+    const mine = (await db.execute(sql`
+      select a.custom->>${refKey} as "accountRef",
+             to_char(e.posting_date, 'YYYY-MM') as month,
+             sum(l.amount) as amount
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id
+        join accounts a on a.id = l.account_id
+       where l.org_id = ${org.id} and a.custom->>${refKey} is not null
+       group by 1, 2`)) as unknown as {
+      rows: { accountRef: string; month: string; amount: string }[];
+    };
+    const periods = verifyAccountMonths(truth, mine.rows);
+
     const result: SyncResult = {
       runId: run!.id,
       kind,
@@ -372,9 +451,14 @@ export async function runSync(
       applications,
       tb: { accounts: theirs.length, matches: tbMatches, mismatches: tbMismatches.slice(0, 50) },
       openItems,
+      periods,
       syncedThrough: changes.syncedThrough.toISOString(),
       durationMs: Date.now() - started,
     };
+
+    if (periods.matches !== periods.checked) {
+      throw new AccountMonthVerificationError(result);
+    }
 
     await db.update(schema.syncRuns).set({
       status: "ok",
@@ -392,6 +476,7 @@ export async function runSync(
     }
     return result;
   } catch (e) {
+    const verificationResult = e instanceof AccountMonthVerificationError ? e.result : null;
     if (connectionId) {
       await db.execute(sql`
         update connections set status = 'error', last_error = ${(e as Error).message}, last_run_at = now()
@@ -400,6 +485,7 @@ export async function runSync(
     await db.update(schema.syncRuns).set({
       status: "failed",
       finishedAt: new Date(),
+      ...(verificationResult ? { stats: verificationResult as unknown as Record<string, unknown> } : {}),
       errorMessage: (e as Error).message,
     }).where(eq(schema.syncRuns.id, run!.id));
     throw e;

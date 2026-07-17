@@ -23,7 +23,7 @@ export function NewAssetButton({ label }: { label?: string } = {}) {
     })
     const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? t('list.createDraftFailed'))
+      toast.error(data.error === 'no_available_subsidiary' ? t('errors.noAvailableSubsidiary') : (data.error ?? t('list.createDraftFailed')))
       setBusy(false)
       return
     }

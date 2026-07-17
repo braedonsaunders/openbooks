@@ -65,6 +65,13 @@ export interface SourceTrialBalanceRow {
   balance: string; // signed decimal string, debit-positive
 }
 
+/** Source-ledger activity for one account in one calendar posting month. */
+export interface SourceAccountMonthRow {
+  accountRef: string;
+  month: string; // YYYY-MM
+  amount: string; // signed decimal string, debit-positive, in home currency
+}
+
 /** Source ground truth for one open item (invoice/bill): remaining unpaid. */
 export interface SourceOpenItem {
   ref: string;
@@ -83,8 +90,20 @@ export interface MigrationSource {
   /** Cheap connectivity/credential probe for the "Test connection" button. */
   ping?(): Promise<{ ok: boolean; detail?: string }>;
 
-  /** Master data, in dependency order (accounts, dimensions, parties, items…). */
-  entities?(): Promise<EntityStream[]>;
+  /**
+   * The source's control accounts, by source ref. Used on a FRESH org (no
+   * controlAccounts configured yet): after the entity streams load, the engine
+   * resolves these refs to openbooks ids and writes org.settings.controlAccounts
+   * so the posting rules route AR/AP/bank/tax exactly like the source did.
+   */
+  controlAccounts?(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>>;
+
+  /**
+   * Master data, in dependency order (accounts, dimensions, parties, items…).
+   * `since` lets high-volume streams (e.g. time entries) pull incrementally on a
+   * mirror; low-volume master data may ignore it and return everything.
+   */
+  entities?(since?: Date | null): Promise<EntityStream[]>;
 
   /**
    * Native transactions created/modified after `since` (null = everything),
@@ -94,6 +113,15 @@ export interface MigrationSource {
 
   /** Live per-account trial balance for verification after sync. */
   trialBalance(): Promise<SourceTrialBalanceRow[]>;
+
+  /**
+   * Per-account activity bucketed by posting MONTH ("YYYY-MM"). This is a
+   * mandatory part of the connector contract for both full migrations and
+   * mirrors: two ledgers can match all-time yet differ in period allocation
+   * (a date-shifted posting nets out cumulatively but corrupts every monthly
+   * P&L / balance sheet). Values are source-ledger home-currency amounts.
+   */
+  monthlyActivity(): Promise<SourceAccountMonthRow[]>;
 
   /** Live per-document unpaid balances (AR/AP aging verification). */
   openItems?(): Promise<SourceOpenItem[]>;

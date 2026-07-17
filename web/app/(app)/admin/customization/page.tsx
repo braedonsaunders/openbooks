@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
@@ -12,6 +12,7 @@ import { RECORD_TYPES, RECORD_TYPE_BY_KEY, defaultFormLayout, type FormLayoutCon
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
+import { ensureCustomizationDefaults } from '../../../../lib/customization/seed-defaults'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,30 +33,46 @@ export default async function CustomizationPage({
   const sp = await searchParams
   // Whitelist the record type — an unknown key must not reach the designer.
   const requestedType = pickString(sp.recordType)
-  const recordType = requestedType && requestedType in RECORD_TYPE_BY_KEY ? requestedType : RECORD_TYPES[0]!.key
-  // Some record types (e.g. payments) have a bespoke editor, not a customizable
-  // transaction form — only their list views are customizable.
-  const supportsForms = RECORD_TYPE_BY_KEY[recordType]?.supportsForms !== false
+  const recordType = requestedType && requestedType in RECORD_TYPE_BY_KEY ? requestedType : null
+  // The registry may eventually include list-only entities; every built-in
+  // transaction kind currently exposes a configurable form.
+  const supportsForms = !recordType || RECORD_TYPE_BY_KEY[recordType]?.supportsForms !== false
   const tab = !supportsForms ? 'views' : pickString(sp.tab) === 'views' ? 'views' : 'forms'
   const formId = pickString(sp.form)
   const viewId = pickString(sp.view)
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 100 })
 
-  const [forms, views] = await Promise.all([
+  // Provision every baseline in one pass so Forms & Views always exposes an
+  // editable default for the full catalog, not a virtual one-off fallback.
+  await ensureCustomizationDefaults({ orgId: authz.user.orgId, actorId: authz.user.id })
+
+  const typeFilter = recordType ? sql`record_type = ${recordType}` : sql`true`
+  const searchFilter = params.q ? sql`name ilike ${`%${params.q}%`}` : sql`true`
+  const [forms, views, formCount, viewCount] = await Promise.all([
     db.execute(sql`
-      select id, name, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles"
+      select id, name, record_type as "recordType", is_default as "isDefault",
+             is_active as "isActive", allowed_roles as "allowedRoles"
         from form_layouts
-       where org_id = ${authz.user.orgId} and record_type = ${recordType}
-       order by is_default desc, name
+       where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
+       order by record_type, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
     db.execute(sql`
-      select id, name, scope, is_default as "isDefault", is_active as "isActive"
+      select id, name, record_type as "recordType", scope, is_default as "isDefault", is_active as "isActive"
         from list_views
-       where org_id = ${authz.user.orgId} and record_type = ${recordType}
+       where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
          and (scope = 'org' or owner_id = ${authz.user.id})
-       order by scope asc, is_default desc, name
+       order by record_type, scope asc, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
+    `) as any,
+    db.execute(sql`
+      select count(*) as n from form_layouts
+       where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
+    `) as any,
+    db.execute(sql`
+      select count(*) as n from list_views
+       where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
+         and (scope = 'org' or owner_id = ${authz.user.id})
     `) as any,
   ])
 
@@ -70,9 +87,9 @@ export default async function CustomizationPage({
 
   // Copy source when creating a new form from an existing/standard baseline.
   const fromParam = pickString(sp.from)
-  const typeLabel = t(`recordTypes.${recordType}` as never)
+  const typeLabel = recordType ? t(`recordTypes.${recordType}` as never) : ''
   let duplicateFrom: { name: string; layout: FormLayoutConfig } | null = null
-  if (formId === 'new' && fromParam) {
+  if (recordType && formId === 'new' && fromParam) {
     if (fromParam === 'standard') {
       duplicateFrom = { name: t('designer.forms.copyName', { name: t('designer.forms.standardName', { type: typeLabel }) }), layout: defaultFormLayout(recordType) }
     } else {
@@ -82,15 +99,20 @@ export default async function CustomizationPage({
   }
 
   // Live custom-field defs feed the designer palette (header + line).
-  const [designerHeaderDefs, designerLineDefs] = formId || viewId
+  const designerRecordType = openForm?.recordType ?? openView?.recordType ?? recordType
+  const [designerHeaderDefs, designerLineDefs] = (formId || viewId) && designerRecordType
     ? await Promise.all([
-        loadFieldDefs('documents', recordType === 'vendor_bill' ? 'vendor_bill' : recordType),
-        loadFieldDefs('document_lines', recordType === 'vendor_bill' ? 'vendor_bill' : recordType),
+        loadFieldDefs('documents', designerRecordType),
+        loadFieldDefs('document_lines', designerRecordType),
       ])
     : [null, null]
   const viewShowInList = (designerHeaderDefs ?? []).filter((d) => d.config.showInList)
 
-  const tabHref = (t2: 'forms' | 'views') => `/admin/customization?recordType=${recordType}&tab=${t2}`
+  const tabHref = (t2: 'forms' | 'views') => recordType
+    ? `/admin/customization?recordType=${recordType}&tab=${t2}`
+    : `/admin/customization?tab=${t2}`
+  const totalForms = Number(formCount.rows[0]?.n ?? 0)
+  const totalViews = Number(viewCount.rows[0]?.n ?? 0)
 
   return (
     <ListPageLayout
@@ -100,9 +122,19 @@ export default async function CustomizationPage({
             back={{ href: '/admin', label: tHub('title') }}
             title={t('designer.title')}
             description={t('designer.description')}
-            actions={tab === 'forms' ? <NewFormButton recordType={recordType} /> : <NewViewButton recordType={recordType} />}
+            actions={recordType ? (tab === 'forms' ? <NewFormButton recordType={recordType} /> : <NewViewButton recordType={recordType} />) : undefined}
           />
           <div className="flex flex-wrap items-center gap-1.5">
+            <Link
+              href={`/admin/customization?tab=${tab}`}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                !recordType
+                  ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
+                  : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300'
+              }`}
+            >
+              {t('designer.allRecordTypes')}
+            </Link>
             {RECORD_TYPES.map((rt) => (
               <Link
                 key={rt.key}
@@ -134,7 +166,7 @@ export default async function CustomizationPage({
                 {t('designer.tabs.views')}
               </Link>
             </div>
-            <SearchInput placeholder={recordType} />
+            <SearchInput placeholder={t('designer.searchPlaceholder')} />
           </div>
         </>
       }
@@ -145,36 +177,21 @@ export default async function CustomizationPage({
             <TableHeader>
               <TableRow>
                 <TableHead>{t('designer.forms.name')}</TableHead>
-                <TableHead>{tCommon('labels.status')}</TableHead>
                 <TableHead>{tCommon('labels.type')}</TableHead>
+                <TableHead>{tCommon('labels.status')}</TableHead>
+                <TableHead>{t('views.defaultBadge')}</TableHead>
                 <TableHead className="text-right">{tCommon('labels.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* Always-present read-only baseline: the system default for this type. */}
-              <TableRow>
-                <TableCell>
-                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('designer.forms.standardName', { type: typeLabel })}</span>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{t('designer.forms.systemDefault')}</Badge>
-                </TableCell>
-                <TableCell>
-                  {forms.rows.some((f: any) => f.isDefault) ? null : <Badge variant="default">{t('designer.forms.isDefault')}</Badge>}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Link href={`/admin/customization?recordType=${recordType}&tab=forms&form=new&from=standard`} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
-                    {t('designer.forms.duplicate')}
-                  </Link>
-                </TableCell>
-              </TableRow>
               {forms.rows.map((f: any) => (
                 <TableRow key={f.id}>
                   <TableCell>
-                    <Link href={`/admin/customization?recordType=${recordType}&tab=forms&form=${f.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href={`/admin/customization?recordType=${f.recordType}&tab=forms&form=${f.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                       {f.name}
                     </Link>
                   </TableCell>
+                  <TableCell><Badge variant="secondary">{t(`recordTypes.${f.recordType}` as never)}</Badge></TableCell>
                   <TableCell>
                     <Badge variant={f.isActive ? 'success' : 'outline'}>{f.isActive ? tCommon('labels.active') : tCommon('labels.inactive')}</Badge>
                   </TableCell>
@@ -183,7 +200,7 @@ export default async function CustomizationPage({
                     {f.allowedRoles && f.allowedRoles.length ? <span className="text-xs text-slate-400">{f.allowedRoles.join(', ')}</span> : null}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link href={`/admin/customization?recordType=${recordType}&tab=forms&form=new&from=${f.id}`} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href={`/admin/customization?recordType=${f.recordType}&tab=forms&form=new&from=${f.id}`} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
                       {t('designer.forms.duplicate')}
                     </Link>
                   </TableCell>
@@ -191,20 +208,21 @@ export default async function CustomizationPage({
               ))}
             </TableBody>
           </Table>
-          {forms.rows.length > 0 ? (
+          {totalForms > params.perPage ? (
             <div className="mt-3">
-              <Pagination basePath="/admin/customization" currentParams={sp} total={forms.rows.length} page={params.page} perPage={params.perPage} />
+              <Pagination basePath="/admin/customization" currentParams={sp} total={totalForms} page={params.page} perPage={params.perPage} />
             </div>
           ) : null}
         </>
       ) : views.rows.length === 0 ? (
-        <EmptyState title={t('designer.list.newTitle')} description={t('designer.description')} action={<NewViewButton recordType={recordType} />} />
+        <EmptyState title={t('designer.list.newTitle')} description={t('designer.description')} action={recordType ? <NewViewButton recordType={recordType} /> : undefined} />
       ) : (
         <>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{t('designer.list.name')}</TableHead>
+                <TableHead>{tCommon('labels.type')}</TableHead>
                 <TableHead>{t('designer.list.scope')}</TableHead>
                 <TableHead>{tCommon('labels.status')}</TableHead>
               </TableRow>
@@ -213,10 +231,11 @@ export default async function CustomizationPage({
               {views.rows.map((v: any) => (
                 <TableRow key={v.id}>
                   <TableCell>
-                    <Link href={`/admin/customization?recordType=${recordType}&tab=views&view=${v.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href={`/admin/customization?recordType=${v.recordType}&tab=views&view=${v.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                       {v.name}
                     </Link>
                   </TableCell>
+                  <TableCell><Badge variant="secondary">{t(`recordTypes.${v.recordType}` as never)}</Badge></TableCell>
                   <TableCell>
                     <Badge variant={v.scope === 'org' ? 'default' : 'secondary'}>
                       {v.scope === 'org' ? t('designer.list.scopeOrg') : t('designer.list.scopeUser')}
@@ -230,14 +249,16 @@ export default async function CustomizationPage({
               ))}
             </TableBody>
           </Table>
-          <div className="mt-3">
-            <Pagination basePath="/admin/customization" currentParams={sp} total={views.rows.length} page={params.page} perPage={params.perPage} />
-          </div>
+          {totalViews > params.perPage ? (
+            <div className="mt-3">
+              <Pagination basePath="/admin/customization" currentParams={sp} total={totalViews} page={params.page} perPage={params.perPage} />
+            </div>
+          ) : null}
         </>
       )}
 
-      {formId ? <FormDesigner recordType={recordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} /> : null}
-      {viewId ? <ListViewDesigner recordType={recordType} def={openView} canManageOrg={true} userId={authz.user.id} showInListDefs={viewShowInList as any} /> : null}
+      {formId && designerRecordType ? <FormDesigner recordType={designerRecordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} /> : null}
+      {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={true} userId={authz.user.id} showInListDefs={viewShowInList as any} /> : null}
     </ListPageLayout>
   )
 }

@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { BookCheck, Eye, LoaderCircle, Send } from 'lucide-react'
 import type { DocKindConfig } from '../lib/document-kinds'
 
 /**
@@ -16,10 +18,12 @@ export function DocumentRowActions({
   id,
   status,
   config,
+  openHref,
 }: {
   id: string
   status: string
   config: DocKindConfig
+  openHref: string
 }) {
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
@@ -41,18 +45,23 @@ export function DocumentRowActions({
   }
 
   if (status === 'draft') {
+    const label = config.directPost ? tCommon('actions.post') : t('actions.submitForApproval')
     return (
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => act(config.directPost ? 'post' : 'submit')}>
-        {config.directPost ? tCommon('actions.post') : t('actions.submitForApproval')}
+      <Button variant="outline" size="icon" className="h-7 w-7" disabled={busy} onClick={() => act(config.directPost ? 'post' : 'submit')} aria-label={label} title={label}>
+        {busy ? <LoaderCircle size={14} className="animate-spin" /> : config.directPost ? <BookCheck size={14} /> : <Send size={14} />}
       </Button>
     )
   }
   if (status === 'approved' && !config.directPost) {
     return (
-      <Button size="sm" disabled={busy} onClick={() => act('post')}>
-        {tCommon('actions.post')}
+      <Button size="icon" className="h-7 w-7" disabled={busy} onClick={() => act('post')} aria-label={tCommon('actions.post')} title={tCommon('actions.post')}>
+        {busy ? <LoaderCircle size={14} className="animate-spin" /> : <BookCheck size={14} />}
       </Button>
     )
   }
-  return null
+  return (
+    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+      <Link href={openHref} aria-label={tCommon('actions.open')} title={tCommon('actions.open')}><Eye size={14} /></Link>
+    </Button>
+  )
 }

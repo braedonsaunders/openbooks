@@ -33,6 +33,7 @@ interface CategoryOpt {
   id: string
   name: string
 }
+interface SubsidiaryOpt { id: string; name: string; depth: number }
 
 const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'units_of_production', 'manual'] as const
 
@@ -50,11 +51,13 @@ export function AssetDrawer({
   payload,
   categories,
   accounts,
+  subsidiaries,
   canManage,
 }: {
   payload: AssetPayload
   categories: CategoryOpt[]
   accounts: AccountOpt[]
+  subsidiaries: SubsidiaryOpt[]
   canManage: boolean
 }) {
   const t = useTranslations('assets')
@@ -78,6 +81,7 @@ export function AssetDrawer({
   const [assetNumber, setAssetNumber] = useState<string>(a.asset_number ?? '')
   const [description, setDescription] = useState<string>(a.description ?? '')
   const [categoryId, setCategoryId] = useState<string>(a.category_id ?? '')
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(a.subsidiary_id ?? '')
   const [cost, setCost] = useState<string>(a.acquisition_cost != null ? Number(a.acquisition_cost).toFixed(2) : '')
   const [salvage, setSalvage] = useState<string>(a.salvage_value != null ? Number(a.salvage_value).toFixed(2) : '0.00')
   const [acquiredOn, setAcquiredOn] = useState<string>(a.acquired_on ?? '')
@@ -101,6 +105,10 @@ export function AssetDrawer({
     () => accounts.map((x) => ({ value: x.id, label: `${x.number ?? ''} ${x.name ?? ''}`.trim() })),
     [accounts],
   )
+  const subsidiaryOptions = useMemo(
+    () => subsidiaries.map((x) => ({ value: x.id, label: `${'\u2003'.repeat(x.depth)}${x.name}` })),
+    [subsidiaries],
+  )
 
   const showRate = method === 'declining_balance'
 
@@ -111,6 +119,7 @@ export function AssetDrawer({
       assetNumber: assetNumber.trim(),
       description: description || null,
       categoryId: categoryId || null,
+      subsidiaryId: subsidiaryId || null,
       acquisitionCost: cost || '0',
       salvageValue: salvage || '0',
       acquiredOn: acquiredOn || null,
@@ -123,7 +132,7 @@ export function AssetDrawer({
       accumulatedDepreciationAccountId: accumAccountId || null,
       depreciationExpenseAccountId: expenseAccountId || null,
     }),
-    [name, assetNumber, description, categoryId, cost, salvage, acquiredOn, inServiceOn, serialNumber, method, lifeMonths, ratePercent, assetAccountId, accumAccountId, expenseAccountId],
+    [name, assetNumber, description, categoryId, subsidiaryId, cost, salvage, acquiredOn, inServiceOn, serialNumber, method, lifeMonths, ratePercent, assetAccountId, accumAccountId, expenseAccountId],
   )
   const first = useRef(true)
   useEffect(() => {
@@ -140,6 +149,7 @@ export function AssetDrawer({
     setAssetNumber(a.asset_number ?? '')
     setDescription(a.description ?? '')
     setCategoryId(a.category_id ?? '')
+    setSubsidiaryId(a.subsidiary_id ?? '')
     setCost(a.acquisition_cost != null ? Number(a.acquisition_cost).toFixed(2) : '')
     setSalvage(a.salvage_value != null ? Number(a.salvage_value).toFixed(2) : '0.00')
     setAcquiredOn(a.acquired_on ?? '')
@@ -161,7 +171,7 @@ export function AssetDrawer({
     })
     if (!res.ok) {
       const err = (await res.json()).error ?? t('drawer.saveFailed')
-      throw new Error(err)
+      throw new Error(err === 'invalid_subsidiary' ? t('errors.invalidSubsidiary') : err)
     }
     return res.json()
   }
@@ -373,6 +383,21 @@ export function AssetDrawer({
                 <p className="text-sm">{a.serial_number ?? '—'}</p>
               )}
             </div>
+            {subsidiaries.length > 0 ? (
+              <div className={field}>
+                <Label>{tCommon('labels.subsidiary')}</Label>
+                {editable ? (
+                  <SearchSelect
+                    value={subsidiaryId}
+                    onChange={(value) => setSubsidiaryId(value ?? '')}
+                    options={subsidiaryOptions}
+                    ariaLabel={tCommon('labels.subsidiary')}
+                  />
+                ) : (
+                  <p className="text-sm">{subsidiaryOptions.find((option) => option.value === subsidiaryId)?.label.trim() ?? '—'}</p>
+                )}
+              </div>
+            ) : null}
             <div className={`${field} lg:col-span-3`}>
               <Label>{t('labels.description')}</Label>
               {editable ? (

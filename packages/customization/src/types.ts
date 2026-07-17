@@ -83,11 +83,23 @@ export interface LineColumnPlacement {
   labelOverride?: string | null
 }
 
+/** A lifecycle or utility action rendered in a transaction flyout header. */
+export interface FormActionPlacement {
+  key: string
+  visible: boolean
+}
+
 export interface FormLayoutConfig {
   schemaVersion: 1
+  /** One-time marker for the baseline-form visibility defaults applied by the
+   * tenant provisioner. It prevents later user choices from being reset. */
+  defaultVisibilityVersion?: 1
   recordType: RecordTypeKey
   header: { groups: HeaderGroup[] }
   lines: { columns: LineColumnPlacement[] }
+  /** Ordered flyout actions. Runtime permissions/status still decide whether
+   * an enabled action is currently available. */
+  actions: FormActionPlacement[]
 }
 
 /* ------------------------------------------------------------------ */
@@ -148,13 +160,6 @@ export interface FieldMeta {
   locked?: boolean
   /** The form designer may toggle `required` for this field. */
   requiredOverridable?: boolean
-  /**
-   * Available but off by default: the field is placed on the system-default
-   * layout as `visible: false`, so it shows in the designer palette (admins can
-   * turn it on) without appearing on live forms until they do. Used for the
-   * full-schema built-ins beyond the core set.
-   */
-  defaultHidden?: boolean
 }
 
 export type ListColumnKind =

@@ -11,7 +11,7 @@ import {
   type ParsedStatement,
   type ParsedStatementLine,
 } from "../banking.ts";
-import { loadRunFile } from "../payments.ts";
+import { generatePaymentFileArtifact, recordPaymentFileSftpDelivery } from "../payment-operations.ts";
 import { backendFor } from "./backend.ts";
 
 /**
@@ -115,14 +115,19 @@ export async function runDueSftpImports(): Promise<ScheduleRun[]> {
 }
 
 /** Outbound: write a payment run's bank file into an SFTP server's outbound folder. */
-export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, now: Date): Promise<{ filename: string; path: string }> {
+export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, userId: string, now: Date): Promise<{ filename: string; path: string }> {
   const svr = (await db.execute(sql`
     select backend, bucket, root_prefix from sftp_servers where id = ${sftpServerId} and org_id = ${orgId} and is_active
   `)) as unknown as { rows: { backend: string; bucket: string | null; root_prefix: string }[] };
   if (!svr.rows[0]) throw new Error("SFTP server not found or inactive");
-  const file = await loadRunFile(runId, orgId, now);
+  const file = await generatePaymentFileArtifact(runId, orgId, userId, { now });
+  const approval = (await db.execute(sql`select status from payment_files where id = ${file.id}`)) as unknown as { rows: { status: string }[] };
+  if (!approval.rows[0] || !["approved", "delivered"].includes(approval.rows[0].status)) {
+    throw new Error("the generated payment file requires approval before SFTP delivery");
+  }
   const backend = backendFor({ backend: svr.rows[0].backend, bucket: svr.rows[0].bucket, rootPrefix: svr.rows[0].root_prefix });
   const path = `outbound/${file.filename}`;
-  await backend.write(path, Buffer.from(file.content, "utf8"));
+  await backend.write(path, file.content);
+  await recordPaymentFileSftpDelivery({ fileId: file.id, orgId, userId, targetRef: `${sftpServerId}:${path}`, response: { path } });
   return { filename: file.filename, path };
 }

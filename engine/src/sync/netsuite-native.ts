@@ -41,6 +41,7 @@ export interface NsLine {
   taxrate1?: string | null;
   department?: string | null;
   entity?: string | null;
+  subsidiary?: string | null;
   memo?: string | null;
 }
 
@@ -123,10 +124,22 @@ export function buildNativeFromNetSuite(
   };
 
   const partyId = h.entity ? ctx.partyByRef.get(h.entity) ?? null : null;
+  const sourceSubsidiaryRef = rawLines.find((line) => line.mainline === "T" && line.subsidiary)?.subsidiary
+    ?? rawLines.find((line) => line.subsidiary)?.subsidiary
+    ?? null;
+  const subsidiaryId = sourceSubsidiaryRef ? ctx.subsidiaryByRef.get(sourceSubsidiaryRef) ?? null : null;
+  if (sourceSubsidiaryRef && !subsidiaryId) {
+    return { skip: `unmapped subsidiary ${sourceSubsidiaryRef}` };
+  }
+  const unmappedLineSubsidiary = rawLines.find(
+    (line) => line.subsidiary && !ctx.subsidiaryByRef.has(line.subsidiary),
+  )?.subsidiary;
+  if (unmappedLineSubsidiary) return { skip: `unmapped subsidiary ${unmappedLineSubsidiary}` };
   const base: Omit<NativeDocument, "kind" | "lines"> = {
     sourceRef: h.id,
     posting: true,
     partyId,
+    subsidiaryId,
     documentDate: parseNsDate(h.trandate),
     dueDate: h.duedate ? parseNsDate(h.duedate) : null,
     memo: h.memo ?? null,
@@ -146,6 +159,8 @@ export function buildNativeFromNetSuite(
   };
   const dept = (l: NsLine): string | null => (l.department ? ctx.deptByRef.get(l.department) ?? null : null);
   const proj = (l: NsLine): string | null => (l.entity ? ctx.projectByRef.get(l.entity) ?? null : null);
+  const sub = (l: NsLine): string | null =>
+    l.subsidiary ? ctx.subsidiaryByRef.get(l.subsidiary) ?? null : subsidiaryId;
 
   const lines: NativeDocLine[] = [];
   let lineNo = 0;
@@ -154,6 +169,7 @@ export function buildNativeFromNetSuite(
     const row: NativeDocLine = {
       accountId, itemId: null, amount: fromUnits(amtUnits), taxAmount: "0", taxOverridden: false,
       taxCodeId, departmentId: dept(l), projectId: proj(l), description: l.memo ?? null, lineNumber: ++lineNo,
+      subsidiaryId: sub(l),
     };
     lines.push(row);
     return row;
@@ -188,6 +204,7 @@ export function buildNativeFromNetSuite(
     lines.push({
       accountId: sAcct, itemId: null, amount: "0", taxAmount: "0", taxOverridden: false, taxCodeId: null,
       departmentId: dept(src.l), projectId: proj(src.l), description: src.l.memo ?? null, lineNumber: ++lineNo,
+      subsidiaryId: sub(src.l),
     });
     return finish(nsTaxUnits === 0n);
   }
@@ -352,6 +369,7 @@ function buildOrder(
       taxCodeId: code?.id ?? null,
       departmentId: l.department ? ctx.deptByRef.get(l.department) ?? null : null,
       projectId: l.entity ? ctx.projectByRef.get(l.entity) ?? null : null,
+      subsidiaryId: l.subsidiary ? ctx.subsidiaryByRef.get(l.subsidiary) ?? null : null,
       description: l.memo ?? null,
       lineNumber: ++n,
     });
@@ -365,6 +383,9 @@ function buildOrder(
       kind: orderKind,
       posting: false,
       partyId: h.entity ? ctx.partyByRef.get(h.entity) ?? null : null,
+      subsidiaryId: rawLines.find((line) => line.subsidiary)?.subsidiary
+        ? ctx.subsidiaryByRef.get(rawLines.find((line) => line.subsidiary)!.subsidiary!) ?? null
+        : null,
       documentDate: parseNsDate(h.trandate),
       dueDate: h.duedate ? parseNsDate(h.duedate) : null,
       memo: h.memo ?? null,

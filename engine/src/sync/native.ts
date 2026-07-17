@@ -19,6 +19,10 @@ export interface NativeDocLine {
   taxCodeId: string | null;
   departmentId: string | null;
   projectId: string | null;
+  /** Resolved custom segment value ids keyed by segment definition key. */
+  extraDims?: Record<string, string>;
+  /** Optional legal-entity override (advanced intercompany journals). */
+  subsidiaryId?: string | null;
   description: string | null;
   lineNumber: number;
 }
@@ -31,12 +35,16 @@ export interface NativeDocument {
   /** false = order/quote — document only, no GL. */
   posting: boolean;
   partyId: string | null;
+  /** Source legal entity; undefined falls back to the tenant root. */
+  subsidiaryId?: string | null;
   documentDate: string; // ISO yyyy-mm-dd
   dueDate: string | null;
   memo: string | null;
   referenceNumber: string | null;
   /** Per-document AR/AP/card control override (stored in custom). */
   controlAccountId: string | null;
+  /** Header defaults for registry-defined custom segments. */
+  extraDims?: Record<string, string>;
   /** Non-posting docs carry their totals (posting docs derive from the entry). */
   subtotal?: string;
   total?: string;
@@ -55,8 +63,14 @@ export interface NativeContext {
   deptByRef: Map<string, string>;
   projectByRef: Map<string, string>;
   itemByRef: Map<string, string>;
+  subsidiaryByRef: Map<string, string>;
+  /** segment key → source value ref → openbooks segment value id. */
+  segmentValueByRef: Map<string, Map<string, string>>;
+  rootSubsidiaryId: string;
   /** Rounded-percent → tax code (rate-keyed: source systems key tax by rate). */
   taxByRate: Map<string, { id: string; rate: string }>;
+  /** Source ref → tax code id (ref-keyed: sources whose taxes are entities). */
+  taxCodeByRef: Map<string, string>;
   periodFor(date: string): string | undefined;
 }
 
@@ -102,23 +116,43 @@ export async function buildNativeContext(
     };
     return new Map(rows.rows.map((r) => [r.ref, r.id]));
   };
-  const [partyByRef, deptByRef, projectByRef, itemByRef] = await Promise.all([
+  const [partyByRef, deptByRef, projectByRef, itemByRef, subsidiaryByRef] = await Promise.all([
     idMap("parties"),
     idMap("departments"),
     idMap("projects"),
     idMap("items"),
+    idMap("subsidiaries"),
   ]);
 
+  const segmentValueByRef = new Map<string, Map<string, string>>();
+  const segmentRows = (await db.execute(sql`
+    select sd.key, sv.id, sv.custom->>${refKey} as ref
+      from segment_definitions sd
+      join segment_values sv on sv.segment_id = sd.id and sv.org_id = sd.org_id
+     where sd.org_id = ${orgId} and sd.source_kind = 'custom'
+       and sv.custom->>${refKey} is not null
+  `)) as unknown as { rows: { key: string; id: string; ref: string }[] };
+  for (const row of segmentRows.rows) {
+    const values = segmentValueByRef.get(row.key) ?? new Map<string, string>();
+    values.set(row.ref, row.id);
+    segmentValueByRef.set(row.key, values);
+  }
+
   const taxByRate = new Map<string, { id: string; rate: string }>();
+  const taxCodeByRef = new Map<string, string>();
   for (const r of (
     (await db.execute(sql`
-      select tc.id, tr.rate_percent as rate from tax_codes tc
+      select tc.id, tr.rate_percent as rate, tc.custom->>${refKey} as ref from tax_codes tc
         left join tax_rates tr on tr.tax_code_id = tc.id
-       where tc.org_id = ${orgId}`)) as unknown as { rows: { id: string; rate: string | null }[] }
+       where tc.org_id = ${orgId}
+       order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`)) as unknown as {
+      rows: { id: string; rate: string | null; ref: string | null }[];
+    }
   ).rows) {
     const rate = r.rate ?? "0";
     const key = String(Math.round(Number(rate)));
     if (!taxByRate.has(key)) taxByRate.set(key, { id: r.id, rate });
+    if (r.ref) taxCodeByRef.set(r.ref, r.id);
   }
 
   const periods = (
@@ -129,6 +163,11 @@ export async function buildNativeContext(
     }
   ).rows;
   const periodFor = (d: string) => periods.find((p) => p.starts_on <= d && p.ends_on >= d)?.id;
+  const root = (await db.execute(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`)) as unknown as {
+    rows: { id: string }[];
+  };
+  if (!root.rows[0]) throw new Error(`org ${orgId} has no root subsidiary`);
 
   return {
     orgId,
@@ -141,7 +180,11 @@ export async function buildNativeContext(
     deptByRef,
     projectByRef,
     itemByRef,
+    subsidiaryByRef,
+    segmentValueByRef,
+    rootSubsidiaryId: root.rows[0].id,
     taxByRate,
+    taxCodeByRef,
     periodFor,
   };
 }

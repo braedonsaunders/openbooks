@@ -41,6 +41,12 @@ export function NewViewButton({ recordType }: { recordType: string }) {
 
 function ensureCustomColumns(view: ListViewConfig, showInListDefs: CustomFieldDefClient[]): ListViewConfig {
   const placed = new Set(view.columns.map((c) => c.key))
+  for (const column of getRecordType(view.recordType)?.listColumns ?? []) {
+    if (!placed.has(column.key)) {
+      view.columns.push({ key: column.key, visible: true, width: column.defaultWidth ?? null, labelOverride: null })
+      placed.add(column.key)
+    }
+  }
   for (const d of showInListDefs) {
     const k = `cf_${d.key}`
     if (!placed.has(k)) view.columns.push({ key: k, visible: true, width: null, labelOverride: null })

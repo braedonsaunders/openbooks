@@ -39,6 +39,7 @@ export default async function Receipts({
         orgId={authz.user.orgId}
         userId={authz.user.id}
         canManage={can(authz, 'admin.customization.manage')}
+        userRole={authz.user.role}
       />
     </ListPageLayout>
   )

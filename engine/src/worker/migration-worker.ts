@@ -8,8 +8,9 @@ import { runFullMigration, runSync } from "../sync/sync.ts";
 /**
  * Consumes the `migration` queue: build the tenant's adapter from its stored
  * connection, then run a full migration or an incremental mirror. The sync
- * engine records a sync_runs row (progress + TB verification) that the platform
- * page reads; on failure the connection is flagged and BullMQ retries.
+ * engine records a sync_runs row (progress + TB and mandatory account-month
+ * verification) that the platform page reads; on failure the connection is
+ * flagged and BullMQ retries.
  */
 export function createMigrationWorker(): Worker<MigrationJobData> {
   return new Worker<MigrationJobData>(
@@ -32,6 +33,11 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
         docsNew: result.docsNew,
         docsAmended: result.docsAmended,
         tb: { accounts: result.tb.accounts, matches: result.tb.matches, mismatches: result.tb.mismatches.length },
+        periods: {
+          checked: result.periods.checked,
+          matches: result.periods.matches,
+          mismatches: result.periods.checked - result.periods.matches,
+        },
         openItems: result.openItems
           ? { checked: result.openItems.checked, matches: result.openItems.matches }
           : null,

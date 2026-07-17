@@ -8,24 +8,27 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, fxRate, id, orgRef } from "./helpers";
 
 /**
- * An org is a legal entity that keeps books (NetSuite: subsidiary).
- * Single-org installs have exactly one row. Hierarchy supports consolidation.
+ * An org is a TENANT (NetSuite: account) — one sealed data space, one login
+ * realm, one RLS boundary. Legal entities that keep books live INSIDE it as
+ * subsidiaries (subsidiaries.ts, NetSuite OneWorld model); every org has
+ * exactly one root subsidiary and single-subsidiary orgs see no subsidiary UI.
+ * `baseCurrency`/`country` remain as the root subsidiary's defaults and the
+ * tenant-level fallback.
  */
 export const orgs = pgTable("orgs", {
   id: id(),
-  parentId: uuid("parent_id"),
   name: text("name").notNull(),
   legalName: text("legal_name"),
   baseCurrency: currencyCode("base_currency").notNull(),
   country: text("country").notNull(), // ISO 3166-1 alpha-2
   taxIds: jsonb("tax_ids").$type<Record<string, string>>().default({}), // e.g. { "CA_BN": "..." }
-  isElimination: boolean("is_elimination").notNull().default(false),
   settings: jsonb("settings").notNull().default({}),
   /**
    * Environment kind. `production` is the live book. `sandbox` is a clone of a
@@ -64,20 +67,22 @@ export const accountingBooks = pgTable(
 
 /**
  * Intercompany relationships: the due-to/due-from account pair used to
- * auto-balance cross-org postings, and elimination in consolidation.
+ * auto-balance postings that span two subsidiaries, and elimination in
+ * consolidation. Both accounts should be flagged `accounts.eliminate`.
  */
 export const intercompanyPairs = pgTable(
   "intercompany_pairs",
   {
     id: id(),
-    fromOrgId: uuid("from_org_id").notNull(),
-    toOrgId: uuid("to_org_id").notNull(),
-    dueFromAccountId: uuid("due_from_account_id").notNull(), // asset on from-org
-    dueToAccountId: uuid("due_to_account_id").notNull(), // liability on to-org
+    orgId: orgRef(),
+    fromSubsidiaryId: uuid("from_subsidiary_id").notNull(),
+    toSubsidiaryId: uuid("to_subsidiary_id").notNull(),
+    dueFromAccountId: uuid("due_from_account_id").notNull(), // asset on from-subsidiary
+    dueToAccountId: uuid("due_to_account_id").notNull(), // liability on to-subsidiary
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("intercompany_org_pair").on(t.fromOrgId, t.toOrgId)],
+  (t) => [uniqueIndex("intercompany_subsidiary_pair").on(t.fromSubsidiaryId, t.toSubsidiaryId)],
 );
 
 export const currencies = pgTable("currencies", {
@@ -90,6 +95,8 @@ export const fxRates = pgTable(
   "fx_rates",
   {
     id: id(),
+    /** Tenant-owned rate table; rates and manual overrides never cross orgs. */
+    orgId: orgRef(),
     fromCurrency: currencyCode("from_currency").notNull(),
     toCurrency: currencyCode("to_currency").notNull(),
     asOf: date("as_of").notNull(),
@@ -102,10 +109,13 @@ export const fxRates = pgTable(
       .default("spot"),
     rate: fxRate("rate").notNull(),
     source: text("source").notNull().default("manual"),
+    /** Null for manual overrides; set for automatic feed observations. */
+    providerConfigId: uuid("provider_config_id"),
+    importedAt: timestamp("imported_at", { withTimezone: true }),
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("fx_rates_pair_date_type").on(t.fromCurrency, t.toCurrency, t.asOf, t.rateType),
+    uniqueIndex("fx_rates_org_pair_date_type").on(t.orgId, t.fromCurrency, t.toCurrency, t.asOf, t.rateType),
   ],
 );
 
@@ -142,13 +152,17 @@ export const numberSequences = pgTable(
     id: id(),
     orgId: orgRef(),
     documentKind: text("document_kind").notNull(),
+    /** Per-subsidiary numbering when set; null = the org-wide sequence. */
+    subsidiaryId: uuid("subsidiary_id"),
     prefix: text("prefix").notNull().default(""),
     nextNumber: integer("next_number").notNull().default(1),
     padding: integer("padding").notNull().default(5),
     gapless: boolean("gapless").notNull().default(false),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("sequences_org_kind").on(t.orgId, t.documentKind)],
+  (t) => [
+    unique("sequences_org_kind_sub").on(t.orgId, t.documentKind, t.subsidiaryId).nullsNotDistinct(),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -164,6 +178,9 @@ const dimensionColumns = {
   code: text("code"),
   name: text("name").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  /** Restrict to one subsidiary('s subtree); null = usable in all. */
+  subsidiaryId: uuid("subsidiary_id"),
+  subsidiaryIncludeChildren: boolean("subsidiary_include_children").notNull().default(true),
   custom: jsonb("custom").notNull().default({}),
   ...auditColumns,
 };

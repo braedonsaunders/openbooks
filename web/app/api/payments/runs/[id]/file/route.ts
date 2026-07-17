@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { loadRunFile } from '@openbooks/engine/src/payments.ts'
+import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/src/payment-operations.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { paymentErrorResponse } from '../../../lib'
@@ -9,9 +9,8 @@ import { paymentErrorResponse } from '../../../lib'
 export const runtime = 'nodejs'
 
 /**
- * CPA-005 EFT file download (fixed-width text). Generating the file flips a
- * draft run to 'exported' and stamps exported_at on first download — posting
- * the run is only allowed after this step.
+ * Download the latest approved immutable file artifact. Generation is a
+ * separate POST so profiles that require file approval cannot leak bytes.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ap.pay')
@@ -20,22 +19,38 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   try {
-    const file = await loadRunFile(id, gate.user.orgId, new Date())
-    await db.execute(sql`
-      update payment_runs
-         set status = case when status = 'draft' then 'exported' else status end,
-             exported_at = coalesce(exported_at, now()),
-             exported_file_ref = coalesce(exported_file_ref, ${file.filename}),
-             updated_at = now(), updated_by = ${gate.user.id}
-       where id = ${id} and org_id = ${gate.user.orgId}
-    `)
-    return new NextResponse(file.content, {
+    const result = (await db.execute(sql`
+      select pf.id, pf.filename, pf.content_type, fb.bytes
+        from payment_files pf join file_blobs fb on fb.version_id = pf.file_version_id
+       where pf.payment_run_id = ${id} and pf.org_id = ${gate.user.orgId}
+         and pf.status in ('approved', 'delivered')
+       order by pf.sequence_number desc limit 1
+    `)) as unknown as { rows: { id: string; filename: string; content_type: string; bytes: Buffer }[] }
+    const file = result.rows[0]
+    if (!file) return NextResponse.json({ error: 'no approved payment file is available' }, { status: 409 })
+    await recordPaymentFileDownload(file.id, gate.user.orgId, gate.user.id)
+    return new NextResponse(new Uint8Array(file.bytes), {
       headers: {
-        'Content-Type': file.contentType,
+        'Content-Type': file.content_type,
         'Content-Disposition': `attachment; filename="${file.filename}"`,
         'Cache-Control': 'no-store',
       },
     })
+  } catch (e) {
+    return paymentErrorResponse(e)
+  }
+}
+
+/** Generate and persist a new file artifact for an approved run. */
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('ap.pay')
+  if (gate instanceof NextResponse) return gate
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  try {
+    const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id)
+    const state = (await db.execute(sql`select status from payment_files where id = ${file.id}`)) as unknown as { rows: { status: string }[] }
+    return NextResponse.json({ id: file.id, filename: file.filename, status: state.rows[0]?.status })
   } catch (e) {
     return paymentErrorResponse(e)
   }

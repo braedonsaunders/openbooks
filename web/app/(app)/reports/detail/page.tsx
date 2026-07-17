@@ -6,6 +6,7 @@ import { DocTypeBadge } from '../../../../components/doc-type-badge'
 import { transactionDetail } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { parseDrillQuery } from '../../../../lib/report-filters'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { currencySymbol } from '../../../../lib/statement-format'
 import { money } from '../../../../lib/format'
 import { TxnLink } from '../TxnLink'
@@ -25,6 +26,9 @@ export default async function DrillDetail({
   const q = parseDrillQuery(sp)
   const page = Math.max(1, Number(sp.page ?? '1') || 1)
 
+  // Drill-through re-resolves the report's subsidiary context; detail amounts
+  // stay in each entity's functional currency (translation is statement-only).
+  const subView = await reportSubsidiaryView(q.subsidiaryId, q.to)
   const [result, org] = await Promise.all([
     transactionDetail({
       accountIds: q.accountIds.length ? q.accountIds : undefined,
@@ -32,7 +36,7 @@ export default async function DrillDetail({
       from: q.from,
       to: q.to,
       mode: q.mode,
-      dims: q.dims,
+      dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       basis: q.basis,
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,

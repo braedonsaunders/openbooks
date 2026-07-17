@@ -372,6 +372,7 @@ export function SearchSelect({
         ? createPortal(
             <div
               ref={dropRef}
+              data-ui-overlay
               style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 208) }}
               className="z-[60] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
             >
@@ -387,7 +388,7 @@ export function SearchSelect({
         ? createPortal(
             <AnimatePresence>
               {open ? (
-                <div className="fixed inset-0 z-[60]">
+                <div data-ui-overlay className="fixed inset-0 z-[60]">
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

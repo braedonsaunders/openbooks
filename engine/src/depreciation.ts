@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
+import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
  * Fixed-asset depreciation.
@@ -357,8 +358,10 @@ export async function runDepreciation(
   asOfDate: string,
   actorId: string | null,
   assetId?: string,
+  allowedSubsidiaryIds?: string[],
 ): Promise<RunDepreciationResult> {
   const bookId = await primaryBookId();
+  const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
 
   // Due, unposted lines with their asset + resolved accounts + period window.
   const due = (await db.execute(sql`
@@ -368,9 +371,11 @@ export async function runDepreciation(
            l.period_id     as period_id,
            p.name          as period_name,
            p.ends_on       as period_ends_on,
-           (period_module_is_closed(${orgId}, p.id, ${bookId}, null, 'assets')
-             or period_module_is_closed(${orgId}, p.id, ${bookId}, null, 'gl')) as period_closed,
+           (period_module_is_closed(${orgId}, p.id, ${bookId}, a.subsidiary_id, 'assets')
+             or period_module_is_closed(${orgId}, p.id, ${bookId}, a.subsidiary_id, 'gl')) as period_closed,
            a.id            as asset_id,
+           a.subsidiary_id as subsidiary_id,
+           sub.base_currency as base_currency,
            a.asset_number  as asset_number,
            a.name          as asset_name,
            a.custom        as asset_custom,
@@ -383,12 +388,14 @@ export async function runDepreciation(
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
       join fixed_assets a on a.id = s.asset_id
+      join subsidiaries sub on sub.id = a.subsidiary_id
       join asset_categories c on c.id = a.category_id
       join accounting_periods p on p.id = l.period_id
      where l.org_id = ${orgId}
        and l.journal_entry_id is null
        and a.status not in ('disposed', 'written_off')
        and p.ends_on <= ${asOfDate}
+       ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
        ${assetId ? sql`and a.id = ${assetId}` : sql``}
      order by a.asset_number, l.sequence`)) as unknown as {
     rows: any[];
@@ -432,6 +439,23 @@ export async function runDepreciation(
       { accountId: accounts.depreciationExpenseAccountId, amount: planned },
       { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
     ];
+    try {
+      await validateSubsidiaryRestrictions(db, {
+        orgId,
+        ctx: subsidiaryContext,
+        docSubsidiaryId: row.subsidiary_id,
+        lines: lines.map((line) => ({
+          ...line,
+          subsidiaryId: row.subsidiary_id,
+          departmentId: row.department_id,
+          projectId: row.project_id,
+          locationId: row.location_id,
+        })),
+      });
+    } catch (error) {
+      result.problems.push(`${row.asset_number} ${row.period_name}: ${(error as Error).message}`);
+      continue;
+    }
     const bal = sum(lines.map((l) => l.amount));
     if (!isZero(bal)) {
       result.problems.push(`${row.asset_number} ${row.period_name}: unbalanced (${bal})`);
@@ -443,8 +467,8 @@ export async function runDepreciation(
       const entryId = await db.transaction(async (tx) => {
         const entryRes = (await tx.execute(sql`
           insert into journal_entries
-            (org_id, book_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-          values (${orgId}, ${bookId},
+            (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
+          values (${orgId}, ${bookId}, ${row.subsidiary_id},
                   ${`DEP-${row.asset_number}-${row.period_name}`},
                   ${postingDate}, ${row.period_id},
                   ${`Depreciation — ${row.asset_name} (${row.period_name})`},
@@ -456,9 +480,9 @@ export async function runDepreciation(
           const l = lines[i];
           await tx.execute(sql`
             insert into journal_lines
-              (org_id, entry_id, line_number, account_id, amount, currency, txn_amount, fx_rate,
+              (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
                department_id, project_id, location_id, memo)
-            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${l.amount}, 'CAD', ${l.amount}, 1,
+            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${row.subsidiary_id}, ${l.amount}, ${row.base_currency}, ${l.amount}, 1,
                     ${row.department_id}, ${row.project_id}, ${row.location_id},
                     ${`Depreciation ${row.period_name}`})`);
         }

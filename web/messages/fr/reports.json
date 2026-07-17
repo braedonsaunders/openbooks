@@ -51,7 +51,8 @@
     "sectionTotal": "Total {section}",
     "other": "Autres",
     "otherTotal": "Total Autres",
-    "accumulatedEarnings": "Bénéfices accumulés (calculés)"
+    "accumulatedEarnings": "Bénéfices accumulés (calculés)",
+    "translationAdjustment": "Écart de conversion cumulatif"
   },
   "saveView": {
     "namePrompt": "Nommez cette vue :",
@@ -67,6 +68,7 @@
   },
   "filterBar": {
     "period": "Période",
+    "subsidiary": "Filiale",
     "asOf": "Au",
     "from": "Du",
     "to": "Au",
@@ -95,6 +97,7 @@
     "allProjects": "Tous les projets",
     "allLocations": "Tous les emplacements",
     "allClasses": "Toutes les classes",
+    "allSegment": "Tous les éléments de {name}",
     "scale": "Échelle",
     "scaleActual": "Réel",
     "scaleThousands": "Milliers",

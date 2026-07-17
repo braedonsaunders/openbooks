@@ -111,7 +111,7 @@ export async function loadDashboardEmbed(
   const res = (await db.execute(sql`
     select id, name, description, query, viz_type, viz_settings, status
       from insight_cards
-     where org_id = ${orgId} and id = any(${sql.param(cardIds)})
+     where org_id = ${orgId} and id = any(${`{${cardIds.join(',')}}`}::uuid[])
        ${publishedOnly ? sql`and status = 'published'` : sql``}
   `)) as unknown as { rows: DashboardCard[] }
 

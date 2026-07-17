@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { loadEftSettings, paymentRunReadiness } from '@openbooks/engine/src/payments.ts'
+import { paymentRunReadiness } from '@openbooks/engine/src/payments.ts'
 import { Alert, AlertDescription, AlertTitle, Badge, Table, TableBody, TableCell, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
@@ -56,9 +56,11 @@ const RUN_SORTS = {
 export async function RunsSection({
   sp,
   orgId,
+  canApprove,
 }: {
   sp: Record<string, string | string[] | undefined>
   orgId: string
+  canApprove: boolean
 }) {
   const t = await getTranslations('payments')
   const tCommon = await getTranslations('common')
@@ -68,7 +70,10 @@ export async function RunsSection({
     const key = RUN_STATUS_COMMON_KEY[status]
     return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
   }
-  const eft = await loadEftSettings(orgId)
+  const profileCount = (await db.execute(sql`
+    select count(*)::int as n from payment_bank_profiles where org_id = ${orgId} and is_active
+  `)) as any
+  const hasPaymentProfile = Number(profileCount.rows[0]?.n ?? 0) > 0
 
   const billParams = parsePrefixedListParams(sp, 'bills', {
     sort: 'due',
@@ -108,7 +113,7 @@ export async function RunsSection({
      where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
        and d.payment_hold_reason is null`
 
-  const [bills, billCount, runs, runCounts, runFilteredCount, bankAccounts] = await Promise.all([
+  const [bills, billCount, runs, runCounts, runFilteredCount, bankProfiles] = await Promise.all([
     building ? db.execute(sql`
       with open_bills as (${openBillsCte})
       select * from open_bills where open > 0 ${billWhere}
@@ -142,9 +147,14 @@ export async function RunsSection({
        where r.org_id = ${orgId} ${runStatusWhere} ${runSearchWhere}
     `) as any,
     building ? db.execute(sql`
-      select id, number, name from accounts
-       where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
-       order by number nulls last, name
+      select p.id, p.name, p.currency, f.name as format_name,
+             a.number as bank_number, a.name as bank_name
+        from payment_bank_profiles p
+        join payment_formats f on f.id = p.payment_format_id and f.is_active
+        join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
+                           and a.type = 'asset_bank' and a.is_active and not a.is_summary
+       where p.org_id = ${orgId} and p.is_active and f.direction <> 'debit'
+       order by p.name
     `) as any : Promise.resolve({ rows: [] }),
   ])
 
@@ -165,13 +175,17 @@ export async function RunsSection({
   let drawer: React.ReactNode = null
   if (runId && !building) {
     const run = (await db.execute(sql`
-      select r.*, a.number as bank_number, a.name as bank_name
+      select r.*, a.number as bank_number, a.name as bank_name,
+             p.name as profile_name, f.name as format_name, f.rail,
+             p.sftp_server_id as profile_sftp_server_id
         from payment_runs r
         left join accounts a on a.id = r.bank_account_id
+        left join payment_bank_profiles p on p.id = r.payment_bank_profile_id
+        left join payment_formats f on f.id = p.payment_format_id
        where r.id = ${runId} and r.org_id = ${orgId}
     `)) as any
     if (run.rows[0]) {
-      const [instructions, readiness] = await Promise.all([
+      const [instructions, readiness, files, events, items] = await Promise.all([
         db.execute(sql`
           select i.id, i.amount, i.currency, i.status, p.display_name as payee,
                  i.payment_document_id, d.document_number, d.status as payment_status
@@ -182,6 +196,33 @@ export async function RunsSection({
            order by p.display_name
         `) as any,
         paymentRunReadiness(runId, orgId),
+        db.execute(sql`
+          select pf.id, pf.sequence_number, pf.filename, pf.content_hash, pf.status,
+                 pf.payment_count, pf.total_amount, pf.currency, pf.generated_at,
+                 pf.approved_at, pf.rejection_reason,
+                 count(d.id)::int as delivery_count,
+                 max(d.delivered_at) as last_delivered_at
+            from payment_files pf
+            left join payment_file_deliveries d on d.payment_file_id = pf.id
+           where pf.payment_run_id = ${runId}
+           group by pf.id order by pf.sequence_number desc
+        `) as any,
+        db.execute(sql`
+          select e.id, e.event_type, e.from_status, e.to_status, e.details, e.created_at,
+                 u.name as actor_name
+            from payment_events e left join users u on u.id = e.actor_id
+           where e.payment_run_id = ${runId} order by e.created_at desc limit 100
+        `) as any,
+        db.execute(sql`
+          select ri.id, ri.kind, ri.gross_amount, ri.discount_amount, ri.credit_amount,
+                 ri.payment_amount, ri.currency, ri.status, d.document_number,
+                 p.display_name as party_name
+            from payment_run_items ri
+            join documents d on d.id = ri.source_document_id
+            left join parties p on p.id = d.party_id
+           where ri.payment_run_id = ${runId}
+           order by p.display_name, d.document_number
+        `) as any,
       ])
       drawer = (
         <RunDrawer
@@ -190,6 +231,10 @@ export async function RunsSection({
           eftConfigured={readiness.eft.ok}
           eftMissing={readiness.eft.ok ? [] : readiness.eft.missing}
           blockers={readiness.blockers as RunBlockerClient[]}
+          files={files.rows}
+          events={events.rows}
+          items={items.rows}
+          canApprove={canApprove}
         />
       )
     }
@@ -197,11 +242,13 @@ export async function RunsSection({
 
   return (
     <div className="space-y-4">
-      {!eft.ok ? (
+      {!hasPaymentProfile ? (
         <Alert variant="warning">
-          <AlertTitle>{t('eft.notConfiguredTitle')}</AlertTitle>
+          <AlertTitle>{t('configuration.notConfiguredTitle')}</AlertTitle>
           <AlertDescription>
-            {t('eft.notConfiguredListDescription', { missing: eft.missing.join(', ') })}
+            {t.rich('configuration.notConfiguredDescription', {
+              setup: (chunks) => <Link href="/admin/setup/payment-operations" className="font-medium underline">{chunks}</Link>,
+            })}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -303,7 +350,7 @@ export async function RunsSection({
         >
           <RunBuilder
             bills={bills.rows as RunBill[]}
-            bankAccounts={bankAccounts.rows}
+            bankProfiles={bankProfiles.rows}
             sp={sp}
             sort={billParams.sort}
             dir={billParams.dir}
