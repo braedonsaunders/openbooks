@@ -10,9 +10,10 @@ import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { dateTime, money } from '../../../lib/format'
-import { parseListParams, pickString } from '../../../lib/list-params'
-import { BUDGET_KINDS, BUDGET_STATUSES, loadBudgetBooksAndYears } from '../../../lib/budgets'
+import { isUuid, mergeHref, parseListParams, parsePrefixedListParams, pickString } from '../../../lib/list-params'
+import { BUDGET_KINDS, BUDGET_STATUSES, loadBudgetBooksAndYears, loadBudgetWorkspace, type BudgetDimensions } from '../../../lib/budgets'
 import { NewBudgetButton } from './NewBudgetButton'
+import { BudgetDrawer } from './BudgetDrawer'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,19 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
   const orgId = authz.user.orgId
   const canManage = can(authz, 'budgets.manage')
   const sp = await searchParams
+  const budgetId = pickString(sp.budget)
   const params = parseListParams(sp, { sort: 'updated', dir: 'desc', perPage: 25, allowedSorts: ['name', 'year', 'updated', 'total'] as const })
+  const budgetList = parsePrefixedListParams(sp, 'budget', { sort: 'account', dir: 'asc', perPage: 50, allowedSorts: ['account'] as const })
+  const dimension = (key: string) => {
+    const value = pickString(sp[key])
+    return value && isUuid(value) ? value : null
+  }
+  const dims: BudgetDimensions = {
+    departmentId: dimension('budgetDepartment'),
+    projectId: dimension('budgetProject'),
+    locationId: dimension('budgetLocation'),
+    classId: dimension('budgetClass'),
+  }
   const rawStatus = pickString(sp.status)
   const status = BUDGET_STATUSES.includes(rawStatus as any) ? rawStatus : undefined
   const rawKind = pickString(sp.kind)
@@ -43,30 +56,62 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
     ${kind ? sql`and bs.kind = ${kind}` : sql``}
     ${year ? sql`and bs.fiscal_year = ${year}` : sql``}
     ${bookId ? sql`and bs.book_id = ${bookId}` : sql``}`
-  const [rows, count, sources] = await Promise.all([
+  const [rows, count, sources, workspace] = await Promise.all([
     db.execute(sql`
       select bs.id, bs.name, bs.fiscal_year, bs.kind, bs.status, bs.updated_at,
-             b.name as book_name, coalesce(sum(bl.amount), 0)::text as total_amount
+             b.name as book_name,
+             coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total_amount
         from budget_scenarios bs
         join accounting_books b on b.id = bs.book_id and b.org_id = bs.org_id
         left join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
+        left join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
        where ${where}
        group by bs.id, b.name
        order by ${SORTS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as Promise<{ rows: Record<string, any>[] }>,
     db.execute(sql`select count(*) as n from budget_scenarios bs where ${where}`) as Promise<{ rows: { n: string }[] }>,
-    canManage ? db.execute(sql`
+    budgetId && isUuid(budgetId) ? db.execute(sql`
       select id, name, fiscal_year from budget_scenarios
        where org_id = ${orgId} and status <> 'archived' order by updated_at desc limit 50
     `) as Promise<{ rows: { id: string; name: string; fiscal_year: number }[] }> : Promise.resolve({ rows: [] }),
+    budgetId && isUuid(budgetId) ? loadBudgetWorkspace(budgetId, orgId, {
+      q: budgetList.q,
+      page: budgetList.page,
+      perPage: budgetList.perPage,
+      dims,
+    }) : Promise.resolve(null),
   ])
   const total = Number(count.rows[0]?.n ?? 0)
   const statusVariant = (value: string) => value === 'approved' ? 'success' : value === 'pending_approval' ? 'warning' : value === 'archived' ? 'outline' : 'secondary'
+  const closeHref = mergeHref('/budgets', sp, {
+    budget: null,
+    budgetNew: null,
+    budgetQ: null,
+    budgetPage: null,
+    budgetDepartment: null,
+    budgetProject: null,
+    budgetLocation: null,
+    budgetClass: null,
+    budgetImport: null,
+    budgetView: null,
+  })
+  const budgetHref = (id: string) => mergeHref('/budgets', sp, {
+    budget: id,
+    budgetNew: null,
+    budgetQ: null,
+    budgetPage: null,
+    budgetDepartment: null,
+    budgetProject: null,
+    budgetLocation: null,
+    budgetClass: null,
+    budgetImport: null,
+    budgetView: null,
+  })
 
   return (
     <ListPageLayout header={<>
-      <PageHeader title={t('list.title')} description={t('list.description')} actions={canManage ? <NewBudgetButton books={books} years={years} sources={sources.rows} /> : undefined} />
+      <PageHeader title={t('list.title')} description={t('list.description')} actions={canManage ? <NewBudgetButton currentParams={sp} /> : undefined} />
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t('list.search')} />
         <FilterChips basePath="/budgets" currentParams={sp} paramKey="status" label={t('list.statusFilter')} options={BUDGET_STATUSES.map((value) => ({ value, label: t(`status.${value}`) }))} />
@@ -75,7 +120,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
         <FilterChips basePath="/budgets" currentParams={sp} paramKey="book" label={t('list.bookFilter')} options={books.map((book) => ({ value: book.id, label: book.name }))} />
       </div>
     </>}>
-      {total === 0 ? <EmptyState title={t('list.emptyTitle')} description={t('list.emptyDescription')} action={canManage ? <NewBudgetButton books={books} years={years} sources={sources.rows} /> : undefined} /> : <>
+      {total === 0 ? <EmptyState title={t('list.emptyTitle')} description={t('list.emptyDescription')} action={canManage ? <NewBudgetButton currentParams={sp} /> : undefined} /> : <>
         <Table>
           <TableHeader><TableRow>
             <SortTh basePath="/budgets" currentParams={sp} column="name" sort={params.sort} dir={params.dir}>{t('columns.name')}</SortTh>
@@ -87,7 +132,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
             <SortTh basePath="/budgets" currentParams={sp} column="updated" sort={params.sort} dir={params.dir}>{t('columns.updated')}</SortTh>
           </TableRow></TableHeader>
           <TableBody>{rows.rows.map((row) => <TableRow key={row.id}>
-            <TableCell className="font-semibold"><Link href={`/budgets/${row.id}`} className="text-teal-700 hover:underline dark:text-teal-300">{row.name}</Link></TableCell>
+            <TableCell className="font-semibold"><Link href={budgetHref(row.id) as any} className="text-teal-700 hover:underline dark:text-teal-300">{row.name}</Link></TableCell>
             <TableCell>{row.book_name}</TableCell>
             <TableCell className="tabular-nums">{row.fiscal_year}</TableCell>
             <TableCell><Badge variant="outline">{t(`kind.${row.kind}`)}</Badge></TableCell>
@@ -98,6 +143,20 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
         </Table>
         <Pagination basePath="/budgets" currentParams={sp} total={total} page={params.page} perPage={params.perPage} />
       </>}
+      {workspace ? <BudgetDrawer
+        key={`${workspace.scenario.id}-${workspace.scenario.revision}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`}
+        initial={workspace}
+        currentParams={sp}
+        dims={dims}
+        closeHref={closeHref}
+        books={books}
+        years={years}
+        sources={sources.rows}
+        newlyCreated={pickString(sp.budgetNew) === '1'}
+        canManage={canManage}
+        canApprove={can(authz, 'budgets.approve')}
+        canExport={can(authz, 'data.export')}
+      /> : null}
     </ListPageLayout>
   )
 }

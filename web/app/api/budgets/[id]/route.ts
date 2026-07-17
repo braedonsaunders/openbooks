@@ -33,27 +33,55 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ? body.description.trim().slice(0, 4_000) || null
       : undefined
   const kind = body.kind === undefined ? undefined : BUDGET_KINDS.includes(body.kind as any) ? body.kind as string : null
+  const bookId = body.bookId === undefined ? undefined : typeof body.bookId === 'string' && isUuid(body.bookId) ? body.bookId : null
+  const fiscalYearValue = Number(body.fiscalYear)
+  const fiscalYear = body.fiscalYear === undefined
+    ? undefined
+    : Number.isInteger(fiscalYearValue) && fiscalYearValue >= 1900 && fiscalYearValue <= 9999
+      ? fiscalYearValue
+      : null
   if (name !== undefined && (name.length === 0 || name.length > 200)) {
     return NextResponse.json({ error: 'invalid_name' }, { status: 422 })
   }
   if (kind === null) return NextResponse.json({ error: 'invalid_kind' }, { status: 422 })
+  if (bookId === null || fiscalYear === null) return NextResponse.json({ error: 'invalid_book_or_fiscal_year' }, { status: 422 })
 
   try {
     const result = await db.transaction(async (tx) => {
       const locked = (await tx.execute(sql`
-        select name, description, kind, status, revision
+        select name, description, kind, book_id, fiscal_year, status, revision,
+               exists (select 1 from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}) as has_lines
           from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
       `)) as unknown as { rows: Record<string, any>[] }
       const before = locked.rows[0]
       if (!before) throw new BudgetMutationError('not_found', 404)
       if (before.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
       if (Number(before.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+      const nextBookId = bookId ?? before.book_id
+      const nextFiscalYear = fiscalYear ?? Number(before.fiscal_year)
+      const scopeChanged = nextBookId !== before.book_id || nextFiscalYear !== Number(before.fiscal_year)
+      if (nextBookId !== before.book_id) {
+        const validBook = (await tx.execute(sql`
+          select 1 from accounting_books where id = ${nextBookId} and org_id = ${user.orgId} and is_active
+        `)) as unknown as { rows: unknown[] }
+        if (!validBook.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
+      }
+      if (nextFiscalYear !== Number(before.fiscal_year)) {
+        if (before.has_lines) throw new BudgetMutationError('budget_scope_has_lines', 409)
+        const validYear = (await tx.execute(sql`
+          select 1 from accounting_periods
+           where org_id = ${user.orgId} and fiscal_year = ${nextFiscalYear} and not is_adjustment limit 1
+        `)) as unknown as { rows: unknown[] }
+        if (!validYear.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
+      }
       const nextRevision = expectedRevision + 1
       await tx.execute(sql`
         update budget_scenarios set
           name = ${name !== undefined ? name : sql`name`},
           description = ${description !== undefined ? description : sql`description`},
           kind = ${kind !== undefined ? kind : sql`kind`},
+          book_id = ${nextBookId},
+          fiscal_year = ${nextFiscalYear},
           revision = ${nextRevision}, updated_at = now(), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
       `)
@@ -61,13 +89,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
           ${JSON.stringify({
-            before: { name: before.name, description: before.description, kind: before.kind },
-            after: { name: name ?? before.name, description: description === undefined ? before.description : description, kind: kind ?? before.kind },
+            before: { name: before.name, description: before.description, kind: before.kind, bookId: before.book_id, fiscalYear: Number(before.fiscal_year) },
+            after: { name: name ?? before.name, description: description === undefined ? before.description : description, kind: kind ?? before.kind, bookId: nextBookId, fiscalYear: nextFiscalYear },
             revisionBefore: expectedRevision,
             revisionAfter: nextRevision,
           })}::jsonb, ${user.id})
       `)
-      return { revision: nextRevision }
+      return { revision: nextRevision, scopeChanged }
     })
     return NextResponse.json(result)
   } catch (error) {

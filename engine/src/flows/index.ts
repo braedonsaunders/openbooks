@@ -59,6 +59,11 @@ export {
   bankAccountsFlowAdapter,
   bankAccountSubjectProfile,
 } from "./bank-accounts-adapter.ts";
+export {
+  BUDGET_SCENARIO_SUBJECT_KIND,
+  budgetScenariosFlowAdapter,
+  budgetScenarioSubjectProfile,
+} from "./budget-scenarios-adapter.ts";
 export { lintFlowGraphForSubject } from "./lint.ts";
 export {
   BUILT_IN_ROLE_NAMES,

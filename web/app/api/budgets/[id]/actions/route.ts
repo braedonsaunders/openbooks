@@ -7,7 +7,7 @@ import { BudgetMutationError } from '../../../../../lib/budget-mutations'
 
 export const runtime = 'nodejs'
 
-type Action = 'submit' | 'withdraw' | 'approve' | 'reject' | 'archive' | 'copy' | 'copy_prior_actuals'
+type Action = 'archive' | 'copy' | 'copy_prior_actuals' | 'apply_source'
 
 function dims(body: Record<string, unknown>) {
   const value = (key: string) => typeof body[key] === 'string' && isUuid(body[key] as string) ? body[key] as string : null
@@ -27,12 +27,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const action = body.action as Action
-  if (!['submit', 'withdraw', 'approve', 'reject', 'archive', 'copy', 'copy_prior_actuals'].includes(action)) {
+  if (!['archive', 'copy', 'copy_prior_actuals', 'apply_source'].includes(action)) {
     return NextResponse.json({ error: 'invalid_action' }, { status: 422 })
   }
-  const needsApproval = action === 'approve' || action === 'reject'
-  if (!can(gate, needsApproval ? 'budgets.approve' : 'budgets.manage')) {
-    return NextResponse.json({ error: `missing permission: ${needsApproval ? 'budgets.approve' : 'budgets.manage'}` }, { status: 403 })
+  if (!can(gate, 'budgets.manage')) {
+    return NextResponse.json({ error: 'missing permission: budgets.manage' }, { status: 403 })
   }
   const expectedRevision = Number(body.expectedRevision)
   if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
@@ -148,56 +147,65 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return { revision: nextRevision }
       }
 
-      const lineCount = (await tx.execute(sql`
-        select count(*) as n from budget_lines where org_id = ${user.orgId} and scenario_id = ${id} and amount <> 0
-      `)) as unknown as { rows: { n: string }[] }
-      const hasLines = Number(lineCount.rows[0]?.n ?? 0) > 0
-      let status: string
-      let auditAction: 'update' | 'approve' | 'reject' = 'update'
-      if (action === 'submit') {
-        if (scenario.status !== 'draft') throw new BudgetMutationError('invalid_status_transition', 409)
-        if (!hasLines) throw new BudgetMutationError('budget_has_no_lines')
-        status = 'pending_approval'
-      } else if (action === 'withdraw') {
-        if (scenario.status !== 'pending_approval') throw new BudgetMutationError('invalid_status_transition', 409)
-        status = 'draft'
-      } else if (action === 'approve') {
-        if (scenario.status !== 'pending_approval') throw new BudgetMutationError('invalid_status_transition', 409)
-        if (!hasLines) throw new BudgetMutationError('budget_has_no_lines')
-        status = 'approved'
-        auditAction = 'approve'
-      } else if (action === 'reject') {
-        if (scenario.status !== 'pending_approval') throw new BudgetMutationError('invalid_status_transition', 409)
-        const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
-        if (!reason) throw new BudgetMutationError('rejection_reason_required')
-        status = 'draft'
-        auditAction = 'reject'
-      } else {
-        if (!['draft', 'pending_approval', 'approved'].includes(scenario.status)) {
-          throw new BudgetMutationError('invalid_status_transition', 409)
-        }
-        if (scenario.status === 'approved' && !can(gate, 'budgets.approve')) {
-          throw new BudgetMutationError('approved_budget_requires_approver', 403)
-        }
-        status = 'archived'
+      if (action === 'apply_source') {
+        if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
+        const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId)
+          ? body.sourceScenarioId
+          : null
+        if (!sourceScenarioId || sourceScenarioId === id) throw new BudgetMutationError('invalid_source_scenario')
+        const source = (await tx.execute(sql`
+          select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
+        `)) as unknown as { rows: { id: string }[] }
+        if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
+        await tx.execute(sql`delete from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}`)
+        await tx.execute(sql`
+          insert into budget_lines
+            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+             amount, note, created_by, updated_by)
+          select ${user.orgId}, ${id}, bl.account_id, destination.id,
+                 bl.department_id, bl.project_id, bl.location_id, bl.class_id,
+                 bl.amount, bl.note, ${user.id}, ${user.id}
+            from budget_lines bl
+            join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
+            join accounting_periods destination
+              on destination.org_id = ${user.orgId}
+             and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
+             and destination.fiscal_year = ${scenario.fiscal_year}
+             and destination.period_number = source_period.period_number
+           where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
+        `)
+        const nextRevision = expectedRevision + 1
+        await tx.execute(sql`
+          update budget_scenarios set revision = ${nextRevision}, updated_at = now(), updated_by = ${user.id}
+           where id = ${id} and org_id = ${user.orgId}
+        `)
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
+            ${JSON.stringify({ action, sourceScenarioId })}::jsonb, ${user.id})
+        `)
+        return { revision: nextRevision, status: 'draft' }
+      }
+
+      if (!['draft', 'pending_approval', 'approved'].includes(scenario.status)) {
+        throw new BudgetMutationError('invalid_status_transition', 409)
+      }
+      if (scenario.status === 'approved' && !can(gate, 'budgets.approve')) {
+        throw new BudgetMutationError('approved_budget_requires_approver', 403)
       }
       const nextRevision = expectedRevision + 1
       await tx.execute(sql`
         update budget_scenarios set
-          status = ${status}, revision = ${nextRevision},
-          submitted_at = case when ${action} = 'submit' then now() when ${status} = 'draft' then null else submitted_at end,
-          submitted_by = case when ${action} = 'submit' then ${user.id} when ${status} = 'draft' then null else submitted_by end,
-          approved_at = case when ${action} = 'approve' then now() else approved_at end,
-          approved_by = case when ${action} = 'approve' then ${user.id} else approved_by end,
+          status = 'archived', revision = ${nextRevision},
           updated_at = now(), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
       `)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'budget_scenarios', ${id}, ${auditAction},
-          ${JSON.stringify({ action, from: scenario.status, to: status, reason: body.reason ?? null })}::jsonb, ${user.id})
+        values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
+          ${JSON.stringify({ action: 'archive', from: scenario.status, to: 'archived' })}::jsonb, ${user.id})
       `)
-      return { revision: nextRevision, status }
+      return { revision: nextRevision, status: 'archived' }
     })
     return NextResponse.json(result)
   } catch (error) {
