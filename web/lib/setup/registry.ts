@@ -164,6 +164,11 @@ const DEPRECIATION_CONVENTIONS = [
   { value: 'half_year', labelKey: 'options.convention.halfYear' },
 ]
 
+const END_OF_LIFE = [
+  { value: 'fully_depreciate', labelKey: 'options.endOfLife.fullyDepreciate' },
+  { value: 'retain_balance', labelKey: 'options.endOfLife.retainBalance' },
+]
+
 const BURDEN_METHODS = [
   { value: 'live', labelKey: 'options.burdenMethod.live' },
   { value: 'standard', labelKey: 'options.burdenMethod.standard' },
@@ -713,6 +718,32 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'defaultMethod', kind: 'select', options: DEPRECIATION_METHODS },
       { key: 'defaultConvention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
       { key: 'defaultLifeMonths', kind: 'integer' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // The depreciation formula builder — user-authored methods (formula over the
+    // depreciation variable set: NB, OC, RV, AL, CP, …). Referenced by code from
+    // an asset category's Default method.
+    key: 'depreciation-methods',
+    table: 'depreciation_methods',
+    actorCols: true,
+    groupKey: 'assets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'formula', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'formula', kind: 'textarea', required: true },
+      { key: 'endOfLife', kind: 'select', options: END_OF_LIFE, keepDefault: true },
       { key: 'isActive', kind: 'boolean' },
     ],
   },

@@ -1090,6 +1090,10 @@
         "title": "Asset Categories",
         "description": "Default depreciation method and accounts for fixed assets."
       },
+      "depreciation-methods": {
+        "title": "Méthodes d’amortissement",
+        "description": "Créez des formules d’amortissement personnalisées — le générateur de formules."
+      },
       "currencies": {
         "title": "Currencies",
         "description": "Currency codes and their minor-unit precision."
@@ -1168,6 +1172,7 @@
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultConvention": "Convention d’amortissement",
+      "endOfLife": "Fin de vie",
       "defaultLifeMonths": "Default life (months)",
       "assetAccountId": "Asset account",
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
@@ -1240,6 +1245,10 @@
         "fullMonth": "Mois complet",
         "midMonth": "Demi-mois",
         "halfYear": "Demi-année"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "Amortir entièrement",
+        "retainBalance": "Conserver le solde"
       },
       "burdenMethod": {
         "live": "Live",

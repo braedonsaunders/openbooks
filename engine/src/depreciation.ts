@@ -249,15 +249,43 @@ export async function buildSchedule(
 
   const bookId = await primaryBookId();
 
-  const plan = computeSchedule({
-    cost: asset.acquisition_cost,
-    salvage: asset.salvage_value,
-    inServiceOn: asset.in_service_on,
-    lifeMonths,
-    method,
-    ratePercent,
-    convention,
-  });
+  // A user-authored formula method (the formula builder) resolves by code; if
+  // none matches, fall back to the built-in method path unchanged.
+  const custom2 = (await db.execute(sql`
+    select formula, end_of_life from depreciation_methods
+     where org_id = ${orgId} and code = ${method} and is_active limit 1`)) as unknown as {
+    rows: { formula: string; end_of_life: "fully_depreciate" | "retain_balance" }[];
+  };
+  const firstPeriodFraction = convention === "mid_month" || convention === "half_year" ? 0.5 : 1;
+
+  let plan: ScheduleLinePlan[];
+  if (custom2.rows[0]) {
+    const start = monthStart(asset.in_service_on);
+    plan = computeScheduleByFormula({
+      cost: asset.acquisition_cost,
+      salvage: asset.salvage_value,
+      lifePeriods: Math.max(1, Math.trunc(lifeMonths)),
+      formula: custom2.rows[0].formula,
+      endOfLife: custom2.rows[0].end_of_life,
+      firstPeriodFraction,
+    }).map((r) => ({
+      sequence: r.sequence,
+      periodMonth: addMonths(start, r.sequence),
+      planned: r.planned,
+      accumulated: r.accumulated,
+      netBookValue: r.netBookValue,
+    }));
+  } else {
+    plan = computeSchedule({
+      cost: asset.acquisition_cost,
+      salvage: asset.salvage_value,
+      inServiceOn: asset.in_service_on,
+      lifeMonths,
+      method,
+      ratePercent,
+      convention,
+    });
+  }
 
   return await db.transaction(async (tx) => {
     // find (or create) the primary-book schedule for this asset

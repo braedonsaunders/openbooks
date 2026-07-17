@@ -6,9 +6,32 @@ import {
   jsonb,
   pgTable,
   text,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
+
+/**
+ * User-authored depreciation methods — the "formula builder". A method is a
+ * formula over the depreciation variable set (engine/src/depreciation-formula.ts:
+ * NB, OC, RV, AL, CP, …) evaluated each period. Together with the built-ins these
+ * make depreciation methods DATA. A category/asset references one by `code`.
+ */
+export const depreciationMethods = pgTable(
+  "depreciation_methods",
+  {
+    id: id(),
+    orgId: orgRef(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    /** Expression over the variable set, e.g. "(OC-RV)*(AL-CP+1)/(AL*(AL+1)/2)". */
+    formula: text("formula").notNull(),
+    endOfLife: text("end_of_life", { enum: ["fully_depreciate", "retain_balance"] }).notNull().default("fully_depreciate"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("depreciation_methods_org_code").on(t.orgId, t.code)],
+);
 
 /**
  * Fixed assets. Replaces the locked NetSuite FAM bundle with an open
