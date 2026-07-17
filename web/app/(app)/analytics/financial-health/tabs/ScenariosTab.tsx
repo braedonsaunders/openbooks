@@ -16,13 +16,15 @@ interface Inputs {
   opex: number
 }
 
+// Template values are Gantry's (rev growth / price / cogs / opex; its volume
+// input maps onto our growth-driven COGS scaling).
 const TEMPLATES: Record<string, { label: string; inputs: Inputs }> = {
-  recession: { label: '📉 Recession', inputs: { growth: -15, price: -5, cogs: 5, opex: 2 } },
-  growth: { label: '📈 Growth Push', inputs: { growth: 20, price: 0, cogs: 5, opex: 10 } },
-  cost_cut: { label: '✂️ Cost Cutting', inputs: { growth: 0, price: 0, cogs: -10, opex: -15 } },
-  price_war: { label: '⚔️ Price War', inputs: { growth: 10, price: -15, cogs: 0, opex: 0 } },
-  expansion: { label: '🚀 Expansion', inputs: { growth: 30, price: 5, cogs: 10, opex: 20 } },
-  stagflation: { label: '📊 Stagflation', inputs: { growth: -5, price: 8, cogs: 12, opex: 8 } },
+  recession: { label: '📉 Recession', inputs: { growth: -15, price: -5, cogs: -5, opex: -10 } },
+  growth: { label: '📈 Growth Push', inputs: { growth: 20, price: 5, cogs: 10, opex: 15 } },
+  cost_cut: { label: '✂️ Cost Cutting', inputs: { growth: 0, price: 0, cogs: -10, opex: -20 } },
+  price_war: { label: '⚔️ Price War', inputs: { growth: -10, price: -15, cogs: 0, opex: 0 } },
+  expansion: { label: '🚀 Expansion', inputs: { growth: 30, price: 0, cogs: 25, opex: 30 } },
+  stagflation: { label: '📊 Stagflation', inputs: { growth: 0, price: 5, cogs: 15, opex: 10 } },
 }
 
 const NUM = 'h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
@@ -43,7 +45,8 @@ export function ScenariosTab({ data }: { data: HealthData }) {
     const gmPct = revenue > 0 ? grossProfit / revenue : 0
     const breakeven = gmPct > 0 ? opex / gmPct : null
     const safety = breakeven !== null && revenue > 0 ? (revenue - breakeven) / revenue : null
-    const risk = safety === null ? 'unknown' : safety >= 0.3 ? 'low' : safety >= 0.15 ? 'moderate' : safety >= 0 ? 'high' : 'critical'
+    // Gantry risk tiers: low ≥ 0.30, moderate ≥ 0.10 safety margin.
+    const risk = safety === null ? 'unknown' : safety >= 0.3 ? 'low' : safety >= 0.1 ? 'moderate' : safety >= 0 ? 'high' : 'critical'
     return { revenue, cogs, opex, grossProfit, operatingIncome, netIncome, gmPct, breakeven, safety, risk }
   }, [inp, f])
 

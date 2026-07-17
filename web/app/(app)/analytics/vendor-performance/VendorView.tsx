@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star } from 'lucide-react'
+import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { VendorData, VendorRow, SpendTier, Grade, Quadrant } from '../../../../lib/analytics/vendor-data'
 import { Gauge } from '../_ui/Gauge'
@@ -100,6 +100,15 @@ function OverviewTab({ data }: { data: VendorData }) {
       <Panel title="Spend Trend (12mo)" icon={BarChart3}>
         <TrendChart labels={data.monthly.map((m) => m.label)} area height={200} series={[{ name: 'Spend', data: data.monthly.map((m) => m.spend), color: '#8b5cf6' }]} />
       </Panel>
+      <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
+        <Info size={14} className="mt-0.5 shrink-0" />
+        <span>
+          <span className="font-semibold">Not measurable on this ledger:</span> OTIF (on-time in-full delivery), lead-time
+          reliability, purchase-price variance and maverick (off-PO) spend all require purchase-order → receipt → bill line
+          linkage, which this data does not carry (no document links, no line-level items on bills). Payment behavior,
+          concentration and relationship scorecards are computed from complete data.
+        </span>
+      </p>
     </div>
   )
 }
@@ -262,7 +271,7 @@ function matrixOption(rows: VendorRow[]): Record<string, unknown> {
       { type: 'scatter', data: byQuad('commodity'), name: 'Commodity' },
       { type: 'scatter', data: byQuad('niche'), name: 'Niche' },
       { type: 'scatter', data: byQuad('transactional'), name: 'Transactional' },
-      { type: 'line', markLine: { silent: true, symbol: 'none', lineStyle: { color: 'rgba(148,163,184,0.35)', type: 'dashed' }, data: [{ yAxis: 50 }] }, data: [] },
+      { type: 'line', markLine: { silent: true, symbol: 'none', lineStyle: { color: 'rgba(148,163,184,0.35)', type: 'dashed' }, data: [{ yAxis: 75 }] }, data: [] },
     ],
   }
 }

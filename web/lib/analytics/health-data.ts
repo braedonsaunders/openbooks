@@ -164,8 +164,11 @@ async function segmentsBy(
   const pTo = priorYear(to);
   const col = sql.raw(`l.${dimCol}`);
   const tbl = sql.raw(dimTable);
+  // LEFT JOIN so untagged GL activity lands in an "Unassigned" bucket (Gantry
+  // parity) — segment totals then tie out to the P&L instead of silently
+  // dropping lines with no dimension.
   const r = (await db.execute(sql`
-    select d.id, d.name,
+    select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
       -sum(case when a.type in ('income','income_other') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as revenue,
       sum(case when a.type = 'cogs' and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as cogs,
       sum(case when a.type in ('expense','expense_deferred') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as opex,
@@ -173,13 +176,17 @@ async function segmentsBy(
     from journal_lines l
     join accounts a on a.id = l.account_id
     join journal_entries e on e.id = l.entry_id
-    join ${tbl} d on d.id = ${col}
+    left join ${tbl} d on d.id = ${col}
     where a.type in ('income','income_other','cogs','expense','expense_deferred')
       and e.posting_date >= ${pFrom} and e.posting_date <= ${to}
-    group by d.id, d.name
+    group by 1, 2
     having abs(-sum(case when a.type in ('income','income_other') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end)) > 0.005
+        or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end)) > 0.005
   `)) as any;
   const rows = r.rows as any[];
+  // A dimension nobody tags is unused, not "one big Unassigned segment" — keep
+  // the empty state in that case.
+  if (rows.every((x) => x.id === "unassigned")) return [];
   const totalRev = rows.reduce((a, x) => a + Number(x.revenue), 0) || 1;
   return rows
     .map((x): SegmentRow => {

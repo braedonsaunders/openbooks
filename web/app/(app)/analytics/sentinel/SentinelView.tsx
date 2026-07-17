@@ -78,6 +78,7 @@ const FLAG_BADGE: Record<FlaggedDoc['flagType'], { label: string; cls: string }>
   rsf: { label: 'RSF', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' },
   zscore: { label: 'Z-Score', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400' },
   trap: { label: '99-Trap', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' },
+  sequential: { label: 'Sequential', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400' },
 }
 
 function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showReason?: boolean }) {
@@ -213,7 +214,7 @@ function OverviewTab({ data }: { data: SentinelData }) {
                   <li key={a.area} className="flex items-start gap-2.5 px-4 py-3">
                     <AlertTriangle size={15} className={cn('mt-0.5 shrink-0', a.severity === 'critical' ? 'text-rose-500' : a.severity === 'high' ? 'text-amber-500' : 'text-sky-500')} />
                     <div className="min-w-0">
-                      <p className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">{a.area}<Badge variant={a.severity === 'critical' ? 'destructive' : a.severity === 'high' ? 'warning' : 'secondary'}>{a.severity}</Badge></p>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">{a.area}<Badge variant={a.severity === 'critical' ? 'destructive' : a.severity === 'high' ? 'warning' : 'secondary'}>{a.severity}</Badge></div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{a.message}</p>
                     </div>
                   </li>
@@ -622,7 +623,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">Ghost vendors</span> are payee companies controlled by employees. Matching is name-based (exact + employee-name-contained-in-vendor-name) across the full party registry; this dataset carries no vendor/employee addresses, emails or phone numbers, so address matching is unavailable.</span>
+            <span><span className="font-semibold">Ghost vendors</span> are payee companies controlled by employees. Two-phase matching across the full party registry: employee names against vendor names, and normalized street addresses (line 1 + postal code) shared between a paid vendor and an employee. Name match scores 75, shared address 90, both 95.</span>
           </p>
           {data.ghosts.length ? (
             <Panel title={`Ghost Vendor Matches (${data.ghosts.length})`} icon={Ghost} bodyClassName="p-0">
@@ -640,7 +641,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
                     <tr key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{g.vendorName}</td>
                       <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{g.employeeName}</td>
-                      <td className="px-4 py-2 text-center"><Badge variant={g.matchType === 'exact' ? 'destructive' : 'warning'}>{g.matchType}</Badge></td>
+                      <td className="px-4 py-2 text-center"><Badge variant={g.matchType === 'name' ? 'warning' : 'destructive'}>{g.matchType}</Badge></td>
                       <td className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></td>
                     </tr>
                   ))}
@@ -648,7 +649,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
               </table>
             </Panel>
           ) : (
-            <Panel title="Ghost Vendors" icon={Ghost}><p className="py-6 text-center text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={18} className="mx-auto mb-1.5" />No vendor–employee name matches found</p></Panel>
+            <Panel title="Ghost Vendors" icon={Ghost}><p className="py-6 text-center text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={18} className="mx-auto mb-1.5" />No vendor–employee name or address matches found</p></Panel>
           )}
         </div>
       ) : null}
@@ -669,7 +670,7 @@ function VendorsTab({ data }: { data: SentinelData }) {
               <th className="px-4 py-2 text-right font-medium">Flags</th>
               <th className="px-4 py-2 text-right font-medium">Flagged Amount</th>
               <th className="px-4 py-2 text-left font-medium">Flag Types</th>
-              <th className="px-4 py-2 text-right font-medium">Max Risk</th>
+              <th className="px-4 py-2 text-right font-medium">Risk Score</th>
             </tr>
           </thead>
           <tbody>
@@ -685,7 +686,7 @@ function VendorsTab({ data }: { data: SentinelData }) {
                     ))}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-right"><RiskPill score={v.maxRiskScore} /></td>
+                <td className="px-4 py-2 text-right"><RiskPill score={v.compositeScore} /></td>
               </tr>
             ))}
           </tbody>

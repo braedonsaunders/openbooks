@@ -293,8 +293,12 @@ export async function financialHealth(period: {
 
   const months = monthsBetween(from, to);
   const grossMarginPct = revenue > 0 ? grossProfit / revenue : 0;
-  // Monthly revenue needed to cover fixed costs (opex) at current gross margin.
-  const breakevenMonthly = grossMarginPct > 0 ? opex / months / grossMarginPct : null;
+  // Monthly revenue needed to cover fixed costs (opex) at the target gross
+  // margin. Gantry's chooseTargetGMPct: use actual range GM when it's above 5%,
+  // else fall back to a 20% planning default; clamp to 5–60% so distressed or
+  // windfall margins don't produce absurd breakevens.
+  const targetGM = Math.min(0.6, Math.max(0.05, grossMarginPct > 0.05 ? grossMarginPct : 0.2));
+  const breakevenMonthly = opex > 0 ? opex / months / targetGM : null;
 
   const M = (n: number) => (n < 0 ? `-$${fmtCompact(Math.abs(n))}` : `$${fmtCompact(n)}`);
 

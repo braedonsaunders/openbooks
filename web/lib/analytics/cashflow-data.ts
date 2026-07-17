@@ -93,7 +93,7 @@ export interface CashflowData {
     burnRate: number; // avg weekly outflow
     runwayWeeks: number | null;
     runwayStatus: "healthy" | "caution" | "critical";
-    arCoverage: number | null; // receivables / outflows
+    arCoverage: number | null; // (cash + AR outstanding) / AP outstanding
     dso: number | null;
     dpo: number | null;
   };
@@ -150,13 +150,19 @@ async function openItems(side: Side, asOf: string): Promise<OpenItem[]> {
   }));
 }
 
-/** Per-party avg days (+ σ) from invoice/bill date to the applied payment. */
-async function paymentStats(side: Side): Promise<{ map: Map<string, { avg: number; sd: number }>; globalAvg: number }> {
+/**
+ * Per-party avg days (+ σ) from invoice/bill date to the applied payment.
+ * Gantry parity: history restricted to the trailing 365 days (paymentHistoryDays),
+ * global average weighted by data point (globalSum/globalCount over all payments,
+ * not an average of per-party averages), and 45-day default when no history exists.
+ */
+async function paymentStats(side: Side, asOfIso: string): Promise<{ map: Map<string, { avg: number; sd: number }>; globalAvg: number }> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const r = (await db.execute(sql`
     select bl.party_id as id,
       avg(pe.posting_date - be.posting_date) as avg_days,
-      coalesce(stddev_pop(pe.posting_date - be.posting_date), 0) as sd_days
+      coalesce(stddev_pop(pe.posting_date - be.posting_date), 0) as sd_days,
+      count(*) as n
     from applications a
     join journal_lines bl on bl.id = a.to_line_id
     join journal_entries be on be.id = bl.entry_id
@@ -164,6 +170,8 @@ async function paymentStats(side: Side): Promise<{ map: Map<string, { avg: numbe
     join journal_entries pe on pe.id = pl.entry_id
     join accounts ba on ba.id = bl.account_id
     where ba.type = ${acctType} and a.unapplied_at is null and bl.party_id is not null
+      and pe.posting_date >= ${asOfIso}::date - interval '365 days'
+      and pe.posting_date <= ${asOfIso}::date
     group by bl.party_id
   `)) as any;
   const map = new Map<string, { avg: number; sd: number }>();
@@ -171,11 +179,12 @@ async function paymentStats(side: Side): Promise<{ map: Map<string, { avg: numbe
   let count = 0;
   for (const x of r.rows as any[]) {
     const avg = Number(x.avg_days);
+    const n = Number(x.n);
     map.set(x.id, { avg, sd: Number(x.sd_days) });
-    sum += avg;
-    count++;
+    sum += avg * n;
+    count += n;
   }
-  return { map, globalAvg: count > 0 ? Math.round(sum / count) : 30 };
+  return { map, globalAvg: count > 0 ? Math.round(sum / count) : 45 };
 }
 
 async function bankBalances(asOf: string) {
@@ -261,8 +270,8 @@ export async function cashflowData(horizonWeeks: number, asOfDate?: string): Pro
   const [arItems, apItems, arStats, apStats, banks] = await Promise.all([
     openItems("ar", asOfIso),
     openItems("ap", asOfIso),
-    paymentStats("ar"),
-    paymentStats("ap"),
+    paymentStats("ar", asOfIso),
+    paymentStats("ap", asOfIso),
     bankBalances(asOfIso),
   ]);
 
@@ -371,7 +380,8 @@ export async function cashflowData(horizonWeeks: number, asOfDate?: string): Pro
       burnRate,
       runwayWeeks,
       runwayStatus,
-      arCoverage: totalOut > 0 ? arSummary.outstanding / totalOut : null,
+      // Gantry formula: (starting cash + AR outstanding) / AP outstanding.
+      arCoverage: apSummary.outstanding > 0 ? (startingCash + arSummary.outstanding) / apSummary.outstanding : null,
       dso: arStats.globalAvg,
       dpo: apStats.globalAvg,
     },

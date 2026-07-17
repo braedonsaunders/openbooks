@@ -365,7 +365,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         sum(l.amount) filter (where e.posting_date >= ${twoBackFrom} and e.posting_date < ${priorFrom}) as two_back_amount
       ${spendBase(twoBackFrom, to)}
       group by 1, 2
-      having sum(l.amount) filter (where e.posting_date >= ${from}) > 0.005
+      having sum(l.amount) > 0.005
     `) as Promise<any>,
   ]);
 

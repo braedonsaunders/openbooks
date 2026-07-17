@@ -28,8 +28,9 @@ import { db } from "@openbooks/engine/src/db.ts";
  *  - Z-score: |amount − vendor mean| / vendor σ ≥ 3 (baseline ≥ 5 txns, σ>10).
  *  - Sequential invoices: gap-free vendor reference-number runs spread over
  *    7+ days — the shell-company / sole-customer indicator.
- *  - Ghost vendors: company-vendor names matching employee names (openbooks
- *    parties carry no addresses/emails in this dataset — name rules only).
+ *  - Ghost vendors: Gantry's two-phase detector — employee names matched
+ *    against vendor names AND normalized street addresses (line1 + postal)
+ *    shared between a paid vendor and an employee (name 75 / addr 90 / both 95).
  *  - Audit trail: native audit_log events on parties/documents (deletes,
  *    banking/contact changes).
  */
@@ -61,7 +62,7 @@ export interface FlaggedDoc {
   amount: number;
   partyId: string | null;
   partyName: string;
-  flagType: "duplicate" | "weekend" | "rsf" | "zscore" | "trap";
+  flagType: "duplicate" | "weekend" | "rsf" | "zscore" | "trap" | "sequential";
   reason: string;
   riskScore: number;
 }
@@ -93,7 +94,7 @@ export interface SequentialGroup {
 
 export interface GhostVendor {
   vendorId: string; vendorName: string; employeeId: string; employeeName: string;
-  matchType: "exact" | "contains"; riskScore: number; reason: string;
+  matchType: "name" | "address" | "name+address"; riskScore: number; reason: string;
 }
 
 export interface AuditEvent {
@@ -132,7 +133,7 @@ export interface SentinelData {
   ghosts: GhostVendor[];
   auditTrail: { total: number; deletes: number; sensitiveChanges: number; events: AuditEvent[] };
   flagged: FlaggedDoc[];
-  vendorRisk: { partyId: string | null; partyName: string; flagCount: number; totalAmount: number; flagTypes: string[]; maxRiskScore: number }[];
+  vendorRisk: { partyId: string | null; partyName: string; flagCount: number; totalAmount: number; flagTypes: string[]; maxRiskScore: number; compositeScore: number }[];
   calendar: { date: string; count: number; amount: number }[];
 }
 
@@ -363,25 +364,51 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       limit 50
     `) as Promise<any>,
 
-    // Ghost vendors — company-vendor names vs employee names (SQL, full sets).
+    // Ghost vendors — Gantry's full two-phase detector, both phases in SQL.
+    // Phase 1: company-vendor names vs employee names. Phase 2: shared street
+    // address — line1 normalized (punctuation stripped, directional/street-type
+    // words abbreviated) + postal code. Weights per Gantry: name 75 /
+    // address 90 / name+address 95.
     db.execute(sql`
+      with norm_addr as (
+        select a.party_id,
+          regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+            regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+              regexp_replace(lower(trim(a.line1)), '[^a-z0-9 ]', '', 'g'),
+            '\mstreet\M', 'st'), '\mroad\M', 'rd'), '\mavenue\M', 'ave'), '\mdrive\M', 'dr'),
+            '\mcourt\M', 'ct'), '\mboulevard\M', 'blvd'), '\mlane\M', 'ln'), '\mplace\M', 'pl'),
+            '\mnorth\M', 'n'), '\msouth\M', 's'), '\meast\M', 'e'), '\mwest\M', 'w')
+            || '|' || coalesce(regexp_replace(upper(a.postal_code), '\s', '', 'g'), '') as addr_key
+        from addresses a
+        where a.org_id = ${orgId} and a.line1 is not null and length(trim(a.line1)) >= 5
+      )
       select v.id as vendor_id, v.display_name as vendor_name,
         e.id as employee_id, e.display_name as employee_name,
-        (upper(trim(v.display_name)) = upper(trim(e.display_name))) as exact_match
+        bool_or(
+          length(trim(e.display_name)) >= 7 and (
+            upper(trim(v.display_name)) = upper(trim(e.display_name))
+            or upper(v.display_name) like '%' || upper(trim(e.display_name)) || '%'
+          )
+        ) as name_match,
+        bool_or(va.addr_key is not null and va.addr_key = ea.addr_key) as address_match
       from parties v
-      join parties e on e.org_id = v.org_id and e.kind = 'person' and e.id != v.id
-        and length(trim(e.display_name)) >= 7
-        and (
-          upper(trim(v.display_name)) = upper(trim(e.display_name))
-          or upper(v.display_name) like '%' || upper(trim(e.display_name)) || '%'
-        )
+      join parties e on e.org_id = v.org_id and e.kind = 'person' and e.id != v.id and e.is_active
+      left join norm_addr va on va.party_id = v.id
+      left join norm_addr ea on ea.party_id = e.id
       where v.org_id = ${orgId} and v.kind = 'company' and v.is_active
-        and e.is_active
         and exists (
           select 1 from documents dv
           where dv.org_id = v.org_id and dv.party_id = v.id
             and dv.kind in ('vendor_bill', 'check', 'vendor_payment')
         )
+      group by v.id, v.display_name, e.id, e.display_name
+      having bool_or(
+          length(trim(e.display_name)) >= 7 and (
+            upper(trim(v.display_name)) = upper(trim(e.display_name))
+            or upper(v.display_name) like '%' || upper(trim(e.display_name)) || '%'
+          )
+        )
+        or bool_or(va.addr_key is not null and va.addr_key = ea.addr_key)
       limit 50
     `) as Promise<any>,
 
@@ -580,15 +607,22 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     };
   });
 
-  // ---- Ghost vendors -----------------------------------------------------------------------------
-  const ghosts: GhostVendor[] = (ghostRows.rows as any[]).map((r) => ({
-    vendorId: r.vendor_id, vendorName: r.vendor_name, employeeId: r.employee_id, employeeName: r.employee_name,
-    matchType: r.exact_match ? "exact" : "contains",
-    riskScore: r.exact_match ? 90 : 75,
-    reason: r.exact_match
-      ? `Vendor "${r.vendor_name}" exactly matches employee "${r.employee_name}"`
-      : `Vendor "${r.vendor_name}" contains employee name "${r.employee_name}"`,
-  }));
+  // ---- Ghost vendors (Gantry tiers: name 75 / address 90 / name+address 95) -----------------------
+  const ghosts: GhostVendor[] = (ghostRows.rows as any[]).map((r) => {
+    const name = Boolean(r.name_match);
+    const addr = Boolean(r.address_match);
+    const matchType: GhostVendor["matchType"] = name && addr ? "name+address" : addr ? "address" : "name";
+    return {
+      vendorId: r.vendor_id, vendorName: r.vendor_name, employeeId: r.employee_id, employeeName: r.employee_name,
+      matchType,
+      riskScore: name && addr ? 95 : addr ? 90 : 75,
+      reason: name && addr
+        ? `Vendor "${r.vendor_name}" matches employee "${r.employee_name}" by BOTH name and street address`
+        : addr
+          ? `Vendor "${r.vendor_name}" shares a street address with employee "${r.employee_name}"`
+          : `Vendor "${r.vendor_name}" matches employee name "${r.employee_name}"`,
+    };
+  }).sort((a, b) => b.riskScore - a.riskScore);
 
   // ---- Audit trail ---------------------------------------------------------------------------------
   const auditEvents: AuditEvent[] = (auditRows.rows as any[]).map((r) => ({
@@ -607,7 +641,11 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   for (const w of weekendItems) push(w);
   for (const r of rsfItems) push(r);
   for (const z of zItems) push(z);
-  for (const t of trapItems) push(t);
+  // Gantry composition: duplicates + weekend + RSF + z-score + sequential-run
+  // invoices (threshold-trap docs stay in their own tab, NOT in the aggregate).
+  for (const s of sequential)
+    for (const inv of s.invoices)
+      push({ docId: inv.docId, docNumber: inv.docNumber, kind: "vendor_bill", date: inv.date, amount: inv.amount, partyId: s.partyId, partyName: s.partyName, flagType: "sequential", reason: s.reason, riskScore: s.riskScore });
   flagged.sort((a, b) => b.riskScore - a.riskScore);
 
   // ---- Vendor risk roll-up ---------------------------------------------------------------------------
@@ -615,13 +653,19 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   for (const f of flagged) {
     const key = f.partyId ?? f.partyName ?? "unknown";
     let v = vendorMap.get(key);
-    if (!v) { v = { partyId: f.partyId, partyName: f.partyName || "Unknown", flagCount: 0, totalAmount: 0, flagTypes: [], maxRiskScore: 0 }; vendorMap.set(key, v); }
+    if (!v) { v = { partyId: f.partyId, partyName: f.partyName || "Unknown", flagCount: 0, totalAmount: 0, flagTypes: [], maxRiskScore: 0, compositeScore: 0 }; vendorMap.set(key, v); }
     v.flagCount++;
     v.totalAmount += Math.abs(f.amount);
     v.maxRiskScore = Math.max(v.maxRiskScore, f.riskScore);
     if (!v.flagTypes.includes(f.flagType)) v.flagTypes.push(f.flagType);
   }
-  const vendorRisk = [...vendorMap.values()].sort((a, b) => b.maxRiskScore - a.maxRiskScore || b.totalAmount - a.totalAmount).slice(0, 50);
+  // Gantry composite vendor score: flag volume (cap 40) + amount tier + flag-type
+  // diversity + 30% of the worst single flag, capped at 100. Sorted by it.
+  for (const v of vendorMap.values()) {
+    const amountTier = v.totalAmount >= 50_000 ? 25 : v.totalAmount >= 10_000 ? 15 : 5;
+    v.compositeScore = Math.min(100, Math.round(Math.min(v.flagCount * 8, 40) + amountTier + v.flagTypes.length * 8 + v.maxRiskScore * 0.3));
+  }
+  const vendorRisk = [...vendorMap.values()].sort((a, b) => b.compositeScore - a.compositeScore || b.totalAmount - a.totalAmount).slice(0, 50);
 
   // ---- Summary (verbatim Gantry risk model) ------------------------------------------------------------
   let risk = 0;

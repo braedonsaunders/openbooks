@@ -220,7 +220,7 @@ export async function vendorData(period: { from: string; to: string; label: stri
     // payment history → neutral 50.
     const performance = r.onTimePct === null ? 50 : r.onTimePct * 100;
     const highSpend = r.spend >= highSpendThreshold;
-    const highPerf = performance >= 50;
+    const highPerf = performance >= 75; // Gantry highPerformanceThreshold
     const quadrant: Quadrant = highSpend
       ? highPerf ? "strategic" : "commodity"
       : highPerf ? "niche" : "transactional";
