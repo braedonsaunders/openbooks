@@ -22,6 +22,7 @@
     "installing": "Installing…"
   },
   "installed": "Installed {boxes} boxes ({sales} sales / {purchases} purchase codes mapped)",
+  "reinstall": "Reinstall GST34 pack",
   "export": {
     "label": "Export",
     "pdf": "Facsimile PDF",

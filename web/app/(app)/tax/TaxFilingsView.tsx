@@ -71,6 +71,7 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
       const data = (await res.json()) as { boxRows: number; mappedSalesCodes: number; mappedPurchaseCodes: number }
       toast.success(t('installed', { boxes: data.boxRows, sales: data.mappedSalesCodes, purchases: data.mappedPurchaseCodes }))
       router.refresh()
+      if (result) await compute()
     } catch {
       toast.error(tCommon('feedback.saveFailed'))
     } finally {
@@ -146,6 +147,12 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
                 <Play size={15} />
                 {busy ? t('computing') : t('compute')}
               </Button>
+              {canManage ? (
+                <Button variant="outline" onClick={install} disabled={installing}>
+                  <FileText size={15} />
+                  {installing ? t('noForms.installing') : t('reinstall')}
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
 

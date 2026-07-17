@@ -22,6 +22,7 @@
     "installing": "Instalando…"
   },
   "installed": "{boxes} casillas instaladas ({sales} códigos de venta / {purchases} códigos de compra asignados)",
+  "reinstall": "Reinstalar el paquete GST34",
   "export": {
     "label": "Exportar",
     "pdf": "Facsímil PDF",
