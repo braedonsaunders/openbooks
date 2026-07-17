@@ -15,6 +15,7 @@
     "cron-parser": "^5.6.2"
   },
   "scripts": {
-    "worker": "tsx engine/src/worker/index.ts"
+    "worker": "tsx engine/src/worker/index.ts",
+    "test": "node --import tsx --test 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'"
   }
 }
