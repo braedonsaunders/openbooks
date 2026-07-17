@@ -19,52 +19,6 @@ export interface CrmImportReport {
 type NsRef = { id?: string | number; refName?: string }
 type NsRecord = Record<string, unknown> & { id?: string | number }
 
-export interface NetSuiteMessageRow {
-  id: string
-  activity?: string
-  author?: string
-  authorname?: string
-  authoremail?: string
-  bcc?: string
-  cc?: string
-  datetime?: string
-  emailed?: string | boolean
-  entity?: string
-  hasattachment?: string | boolean
-  htmlmessage?: string | boolean
-  incoming?: string | boolean
-  internalonly?: string | boolean
-  lastmodifieddate?: string
-  message?: string
-  messagedate?: string
-  messagetype?: string
-  primaryrecipient?: string
-  recipient?: string
-  recipientname?: string
-  recipientemail?: string
-  record?: string
-  recordtype?: string
-  relatedentity?: string
-  subject?: string
-  time?: string
-  to?: string
-  transaction?: string
-}
-
-export interface NormalizedNetSuiteMessage {
-  sourceId: string
-  kind: 'task' | 'call' | 'event' | 'email' | 'note'
-  subject: string
-  body: string | null
-  occurredAt: string | null
-  accountSourceId: string | null
-  opportunitySourceId: string | null
-  authorSourceId: string | null
-  recipientSourceId: string | null
-  participantEmails: string[]
-  metadata: Record<string, unknown>
-}
-
 export interface NetSuiteRecentActivityNoteRow {
   id: string
   entity?: string
@@ -76,37 +30,19 @@ export interface NetSuiteRecentActivityNoteRow {
   subdetails?: string
 }
 
+export interface NormalizedNetSuiteRecentActivityNote {
+  sourceId: string
+  kind: 'call' | 'event' | 'note'
+  subject: string
+  body: string | null
+  occurredAt: string | null
+  accountSourceId: string | null
+  metadata: Record<string, unknown>
+}
+
 const sourceText = (value: unknown): string | null => {
   const valueText = value == null ? '' : String(value).trim()
   return valueText || null
-}
-
-const sourceBoolean = (value: unknown): boolean => value === true || String(value ?? '').toUpperCase() === 'T'
-
-function plainText(value: string): string {
-  return value
-    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
-    .replace(/<\s*\/\s*(?:p|div|li)\s*>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/\r\n?/g, '\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function messageKind(row: NetSuiteMessageRow): NormalizedNetSuiteMessage['kind'] {
-  const sourceType = `${row.messagetype ?? ''} ${row.recordtype ?? ''}`.toLowerCase()
-  if (/phone|call/.test(sourceType)) return 'call'
-  if (/visit|meeting|event|calendar/.test(sourceType)) return 'event'
-  if (/task|todo|to-do/.test(sourceType)) return 'task'
-  if (/email|mail/.test(sourceType) || sourceBoolean(row.emailed)) return 'email'
-  return 'note'
 }
 
 function sourceTimestamp(dateValue: unknown, timeValue?: unknown): string | null {
@@ -124,77 +60,27 @@ function sourceTimestamp(dateValue: unknown, timeValue?: unknown): string | null
   return `${day}T${String(hour).padStart(2, '0')}:${match[2]}:${match[3] ?? '00'}Z`
 }
 
-function emailList(...values: unknown[]): string[] {
-  return [...new Set(values
-    .flatMap((value) => String(value ?? '').split(/[;,]/))
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)))]
+function recentActivityKind(row: NetSuiteRecentActivityNoteRow): NormalizedNetSuiteRecentActivityNote['kind'] | 'email' {
+  const sourceType = sourceText(row.typecode) ?? sourceText(row.type) ?? 'Note'
+  const searchable = `${sourceType} ${row.details ?? ''} ${row.subdetails ?? ''}`.toLowerCase()
+  if (sourceType === 'Note : 9' || /\b(meet|meeting|visit|site tour|plant tour|delivered|delivery|parking lot)\b/.test(searchable)) return 'event'
+  if (/\b(call|called|phone|voicemail|voice mail|vm)\b/.test(searchable)) return 'call'
+  if (/\b(email|emailed|e-mail)\b/.test(searchable)) return 'email'
+  return 'note'
 }
 
-/** Convert a SuiteAnalytics Message row into the shared CRM activity model. */
-export function normalizeNetSuiteMessage(row: NetSuiteMessageRow): NormalizedNetSuiteMessage | null {
-  const sourceId = sourceText(row.id)
-  if (!sourceId) return null
-  const isHtml = sourceBoolean(row.htmlmessage)
-  const rawBody = sourceText(row.message)
-  const body = rawBody ? (isHtml ? plainText(rawBody) : rawBody) : null
-  const sourceSubject = sourceText(row.subject)
-  if (!sourceSubject && !body) return null
-  const sourceType = sourceText(row.messagetype) ?? sourceText(row.recordtype) ?? 'MESSAGE'
-  return {
-    sourceId,
-    kind: messageKind(row),
-    subject: sourceSubject ?? body!.slice(0, 120),
-    body,
-    occurredAt: sourceTimestamp(row.datetime ?? row.messagedate, row.time),
-    accountSourceId: sourceText(row.relatedentity) ?? sourceText(row.entity),
-    opportunitySourceId: sourceText(row.transaction),
-    authorSourceId: sourceText(row.author),
-    recipientSourceId: sourceText(row.primaryrecipient) ?? sourceText(row.recipient),
-    participantEmails: emailList(row.authoremail, row.recipientemail, row.to, row.cc, row.bcc),
-    metadata: {
-      id: sourceId,
-      recordType: 'message',
-      sourceType,
-      activityId: sourceText(row.activity),
-      authorId: sourceText(row.author),
-      authorName: sourceText(row.authorname),
-      authorEmail: sourceText(row.authoremail),
-      recipientId: sourceText(row.primaryrecipient) ?? sourceText(row.recipient),
-      recipientName: sourceText(row.recipientname),
-      recipientEmail: sourceText(row.recipientemail),
-      cc: sourceText(row.cc),
-      bcc: sourceText(row.bcc),
-      to: sourceText(row.to),
-      incoming: sourceBoolean(row.incoming),
-      internalOnly: sourceBoolean(row.internalonly),
-      emailed: sourceBoolean(row.emailed),
-      hasAttachment: sourceBoolean(row.hasattachment),
-      htmlMessage: isHtml,
-      recordId: sourceText(row.record),
-      relatedRecordType: sourceText(row.recordtype),
-      transactionId: sourceText(row.transaction),
-      sourceTime: sourceText(row.time),
-      lastModifiedAt: sourceText(row.lastmodifieddate),
-    },
-  }
+export function isNetSuiteRecentActivityEmail(row: NetSuiteRecentActivityNoteRow): boolean {
+  return recentActivityKind(row) === 'email'
 }
 
 /** RecentActivity is the only analytics surface that exposes legacy note text and note type. */
-export function normalizeNetSuiteRecentActivityNote(row: NetSuiteRecentActivityNoteRow): NormalizedNetSuiteMessage | null {
+export function normalizeNetSuiteRecentActivityNote(row: NetSuiteRecentActivityNoteRow): NormalizedNetSuiteRecentActivityNote | null {
   const sourceId = sourceText(row.id)
   const body = sourceText(row.subdetails)
   const rawSubject = sourceText(row.details)
-  if (!sourceId || (!body && !rawSubject)) return null
+  if (!sourceId || (!body && !rawSubject) || isNetSuiteRecentActivityEmail(row)) return null
   const sourceType = sourceText(row.typecode) ?? sourceText(row.type) ?? 'Note'
-  const searchable = `${sourceType} ${rawSubject ?? ''} ${body ?? ''}`.toLowerCase()
-  const kind: NormalizedNetSuiteMessage['kind'] = sourceType === 'Note : 9' || /\b(meet|meeting|visit|site tour|plant tour|delivered|delivery|parking lot)\b/.test(searchable)
-    ? 'event'
-    : /\b(call|called|phone|voicemail|voice mail|vm)\b/.test(searchable)
-      ? 'call'
-      : /\b(email|emailed|e-mail)\b/.test(searchable)
-        ? 'email'
-        : 'note'
+  const kind = recentActivityKind(row) as NormalizedNetSuiteRecentActivityNote['kind']
   const generatedSubject = rawSubject && /^Note\s*-\s*\d{4}-\d{2}-\d{2}/i.test(rawSubject) ? null : rawSubject
   return {
     sourceId,
@@ -203,10 +89,6 @@ export function normalizeNetSuiteRecentActivityNote(row: NetSuiteRecentActivityN
     body,
     occurredAt: sourceTimestamp(row.createddate),
     accountSourceId: sourceText(row.entity),
-    opportunitySourceId: null,
-    authorSourceId: null,
-    recipientSourceId: null,
-    participantEmails: [],
     metadata: {
       id: sourceId,
       recordType: 'recentActivityNote',
@@ -259,31 +141,14 @@ function refId(value: unknown): string | null {
   return value == null || value === '' ? null : String(value)
 }
 
-interface ActivityImportContext {
-  partyBySourceId: Map<string, string>
-  contactBySourceId: Map<string, string>
-  userByPartyId: Map<string, string>
-  opportunityBySourceId: Map<string, string>
-}
-
-async function activityImportContext(orgId: string): Promise<ActivityImportContext> {
-  const [parties, contacts, users, opportunities] = await Promise.all([
-    db.execute(sql`select id,custom->>'nsId' source_id from parties where org_id=${orgId} and custom->>'nsId' is not null`),
-    db.execute(sql`select id,custom->>'nsId' source_id from contacts where org_id=${orgId} and custom->>'nsId' is not null`),
-    db.execute(sql`select id,party_id from users where org_id=${orgId} and party_id is not null and is_active`),
-    db.execute(sql`select id,custom->'netsuite'->>'id' source_id from crm_opportunities where org_id=${orgId} and custom->'netsuite'->>'id' is not null`),
-  ]) as unknown as [
-    { rows: { id: string; source_id: string }[] },
-    { rows: { id: string; source_id: string }[] },
-    { rows: { id: string; party_id: string }[] },
-    { rows: { id: string; source_id: string }[] },
-  ]
-  return {
-    partyBySourceId: new Map(parties.rows.map((row) => [row.source_id, row.id])),
-    contactBySourceId: new Map(contacts.rows.map((row) => [row.source_id, row.id])),
-    userByPartyId: new Map(users.rows.map((row) => [row.party_id, row.id])),
-    opportunityBySourceId: new Map(opportunities.rows.map((row) => [row.source_id, row.id])),
+async function activityPartyBySourceId(orgId: string): Promise<Map<string, string>> {
+  const parties = (await db.execute(sql`
+    select id,custom->>'nsId' source_id
+      from parties
+     where org_id=${orgId} and custom->>'nsId' is not null`)) as unknown as {
+    rows: { id: string; source_id: string }[]
   }
+  return new Map(parties.rows.map((row) => [row.source_id, row.id]))
 }
 
 function batches<T>(rows: T[], size = 500): T[][] {
@@ -292,139 +157,12 @@ function batches<T>(rows: T[], size = 500): T[][] {
   return result
 }
 
-async function importMessageActivities(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport) {
-  let rows: NetSuiteMessageRow[]
-  try {
-    rows = await suiteql<NetSuiteMessageRow>(`
-      select m.id,m.activity,m.author,m.authoremail,m.bcc,m.cc,m.datetime,m.emailed,
-             m.entity,m.hasattachment,m.htmlmessage,m.incoming,m.internalonly,
-             m.lastmodifieddate,m.message,m.messagedate,m.messagetype,m.recipient,
-             m.primaryrecipient,m.recipientemail,m.record,m.recordtype,m.subject,m.time,
-             m.to,m.transaction,coalesce(m.entity,t.entity) relatedentity
-        from message m
-        left join transaction t on t.id=m.transaction`, creds)
-  } catch (error) {
-    report.activities.message = 0
-    const detail = error instanceof Error ? error.message : String(error)
-    report.warnings.push(detail.includes("Record 'message' was not found")
-      ? "message: the source integration role needs the 'Messages for Analytics and REST' permission at View level; no message content was imported."
-      : `message: ${detail}`)
-    return
-  }
-
-  const context = await activityImportContext(orgId)
-  const existingRows = (await db.execute(sql`
-    select id,custom->'netsuite'->>'id' source_id
-      from crm_activities
-     where org_id=${orgId} and custom->'netsuite'->>'recordType'='message'`)) as unknown as {
-    rows: { id: string; source_id: string }[]
-  }
-  const existingBySourceId = new Map(existingRows.rows.map((row) => [row.source_id, row.id]))
-  const activities: Array<{
-    id: string; kind: NormalizedNetSuiteMessage['kind']; subject: string; body: string | null;
-    ownerUserId: string | null; occurredAt: string | null; custom: Record<string, unknown>
-  }> = []
-  const links: Array<{ activityId: string; subjectKind: 'account' | 'opportunity'; subjectId: string }> = []
-  const participants: Array<{ activityId: string; userId: string | null; contactId: string | null; email: string | null }> = []
-  const participantKeys = new Set<string>()
-  for (const row of rows) {
-    const activity = normalizeNetSuiteMessage(row)
-    if (!activity) continue
-    const partyId = activity.accountSourceId ? context.partyBySourceId.get(activity.accountSourceId) ?? null : null
-    const opportunityId = activity.opportunitySourceId ? context.opportunityBySourceId.get(activity.opportunitySourceId) ?? null : null
-    const authorPartyId = activity.authorSourceId ? context.partyBySourceId.get(activity.authorSourceId) ?? null : null
-    const ownerUserId = authorPartyId ? context.userByPartyId.get(authorPartyId) ?? null : null
-    const activityId = existingBySourceId.get(activity.sourceId) ?? randomUUID()
-    existingBySourceId.set(activity.sourceId, activityId)
-    activities.push({ id: activityId, kind: activity.kind, subject: activity.subject, body: activity.body, ownerUserId, occurredAt: activity.occurredAt, custom: { netsuite: activity.metadata } })
-    if (partyId) links.push({ activityId, subjectKind: 'account', subjectId: partyId })
-    if (opportunityId) links.push({ activityId, subjectKind: 'opportunity', subjectId: opportunityId })
-
-    const representedEmails = new Set<string>()
-    for (const participant of [
-      { sourceId: activity.authorSourceId, email: sourceText(row.authoremail) },
-      { sourceId: activity.recipientSourceId, email: sourceText(row.recipientemail) },
-    ]) {
-      const participantPartyId = participant.sourceId ? context.partyBySourceId.get(participant.sourceId) : null
-      const userId = participantPartyId ? context.userByPartyId.get(participantPartyId) : null
-      const contactId = !userId && participant.sourceId ? context.contactBySourceId.get(participant.sourceId) : null
-      const target = userId
-        ? { activityId, userId, contactId: null, email: null }
-        : contactId
-          ? { activityId, userId: null, contactId, email: null }
-          : participant.email
-            ? { activityId, userId: null, contactId: null, email: participant.email.toLowerCase() }
-            : null
-      if (target) {
-        const key = `${activityId}:${target.userId ?? ''}:${target.contactId ?? ''}:${target.email ?? ''}`
-        if (!participantKeys.has(key)) { participantKeys.add(key); participants.push(target) }
-      }
-      if ((userId || contactId) && participant.email) representedEmails.add(participant.email.toLowerCase())
-    }
-    for (const email of activity.participantEmails) {
-      const key = `${activityId}:::${email}`
-      if (!representedEmails.has(email) && !participantKeys.has(key)) {
-        participantKeys.add(key)
-        participants.push({ activityId, userId: null, contactId: null, email })
-      }
-    }
-  }
-
-  for (const batch of batches(activities)) {
-    await db.execute(sql`
-      insert into crm_activities(id,org_id,kind,status,subject,body,owner_user_id,assigned_user_id,starts_at,completed_at,custom,created_by,updated_by)
-      select x.id,${orgId},x.kind,'completed',x.subject,x.body,x."ownerUserId",x."ownerUserId",
-             x."occurredAt",x."occurredAt",x.custom,${actorId},${actorId}
-        from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-          as x(id uuid,kind text,subject text,body text,"ownerUserId" uuid,"occurredAt" timestamptz,custom jsonb)
-      on conflict(id) do update set
-        kind=excluded.kind,status='completed',subject=excluded.subject,body=excluded.body,
-        owner_user_id=excluded.owner_user_id,assigned_user_id=excluded.assigned_user_id,
-        starts_at=excluded.starts_at,completed_at=excluded.completed_at,
-        custom=crm_activities.custom||excluded.custom,updated_at=now(),updated_by=${actorId}`)
-  }
-  for (const batch of batches(links, 1000)) {
-    await db.execute(sql`
-      insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by)
-      select ${orgId},x."activityId",x."subjectKind",x."subjectId",${actorId},${actorId}
-        from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-          as x("activityId" uuid,"subjectKind" text,"subjectId" uuid)
-      on conflict(activity_id,subject_kind,subject_id) do nothing`)
-  }
-  for (const batch of batches(participants, 1000)) {
-    await db.execute(sql`
-      insert into crm_activity_participants(org_id,activity_id,user_id,contact_id,email,created_by,updated_by)
-      select ${orgId},x."activityId",x."userId",x."contactId",x.email,${actorId},${actorId}
-        from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-          as x("activityId" uuid,"userId" uuid,"contactId" uuid,email text)
-       where not exists (
-         select 1 from crm_activity_participants p
-          where p.activity_id=x."activityId"
-            and p.user_id is not distinct from x."userId"
-            and p.contact_id is not distinct from x."contactId"
-            and p.email is not distinct from x.email)`)
-  }
-  await db.execute(sql`
-    update crm_account_profiles cp
-       set last_activity_at=greatest(coalesce(cp.last_activity_at,'-infinity'::timestamptz),recent.latest),
-           updated_at=now(),updated_by=${actorId}
-      from (
-        select l.subject_id party_id,max(a.starts_at) latest
-          from crm_activity_links l join crm_activities a on a.id=l.activity_id
-         where l.org_id=${orgId} and l.subject_kind='account'
-           and a.custom->'netsuite'->>'recordType'='message' and a.starts_at is not null
-         group by l.subject_id
-      ) recent
-     where cp.org_id=${orgId} and cp.party_id=recent.party_id`)
-  report.activities.message = activities.length
-}
-
 async function importRecentActivityNotes(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport) {
   const rows = await suiteql<NetSuiteRecentActivityNoteRow>(`
     select ra.id,ra.entity,ra.type,ra.typecode,ra.createddate,ra.lastmodifieddate,ra.details,ra.subdetails
       from recentactivity ra
      where ra.type like 'Note :%'`, creds)
-  const context = await activityImportContext(orgId)
+  const partyBySourceId = await activityPartyBySourceId(orgId)
   const existingRows = (await db.execute(sql`
     select id,custom->'netsuite'->>'id' source_id
       from crm_activities
@@ -433,18 +171,23 @@ async function importRecentActivityNotes(orgId: string, actorId: string, creds: 
   }
   const existingBySourceId = new Map(existingRows.rows.map((row) => [row.source_id, row.id]))
   const activities: Array<{
-    id: string; kind: NormalizedNetSuiteMessage['kind']; subject: string; body: string | null;
+    id: string; kind: NormalizedNetSuiteRecentActivityNote['kind']; subject: string; body: string | null;
     occurredAt: string | null; custom: Record<string, unknown>
   }> = []
   const links: Array<{ activityId: string; subjectKind: 'account'; subjectId: string }> = []
   let salesVisits = 0
+  let skippedEmails = 0
   for (const row of rows) {
+    if (isNetSuiteRecentActivityEmail(row)) {
+      skippedEmails++
+      continue
+    }
     const activity = normalizeNetSuiteRecentActivityNote(row)
     if (!activity) continue
     const activityId = existingBySourceId.get(activity.sourceId) ?? randomUUID()
     existingBySourceId.set(activity.sourceId, activityId)
     activities.push({ id: activityId, kind: activity.kind, subject: activity.subject, body: activity.body, occurredAt: activity.occurredAt, custom: { netsuite: activity.metadata } })
-    const partyId = activity.accountSourceId ? context.partyBySourceId.get(activity.accountSourceId) : null
+    const partyId = activity.accountSourceId ? partyBySourceId.get(activity.accountSourceId) : null
     if (partyId) links.push({ activityId, subjectKind: 'account', subjectId: partyId })
     if (activity.metadata.sourceType === 'Note : 9') salesVisits++
   }
@@ -480,6 +223,8 @@ async function importRecentActivityNotes(orgId: string, actorId: string, creds: 
       ) recent
      where cp.org_id=${orgId} and cp.party_id=recent.party_id`)
   report.activities.recentActivityNote = activities.length
+  report.activities.recentActivityNoteSource = rows.length
+  report.activities.skippedEmail = skippedEmails
   report.activities.salesVisit = salesVisits
 }
 
@@ -586,10 +331,9 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
     await db.execute(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${opportunity.memo || opportunity.tranid || `NS-${opportunity.id}`},${party.id},${defaultStatus.id},${date(opportunity.duedate)},${currency},${opportunity.foreigntotal || '0'},0,${opportunity.memo ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId}`)
     report.opportunities++
   }
-  await importMessageActivities(orgId, actorId, creds, report)
   await importRecentActivityNotes(orgId, actorId, creds, report)
-  if (report.activities.recentActivityNote !== report.sourceNoteLinks) {
-    report.warnings.push(`Source note coverage: the note-link table contains ${report.sourceNoteLinks} rows, while RecentActivity exposes ${report.activities.recentActivityNote ?? 0} typed notes with activity content. Link-only rows without activity content were not fabricated as CRM activities.`)
+  if (report.activities.recentActivityNoteSource !== report.sourceNoteLinks) {
+    report.warnings.push(`Source note coverage: the note-link table contains ${report.sourceNoteLinks} rows, while RecentActivity exposes ${report.activities.recentActivityNoteSource ?? 0} typed notes with activity content. Link-only rows without activity content were not fabricated as CRM activities.`)
   }
   await importNativeActivities(orgId, actorId, creds, report)
   return report

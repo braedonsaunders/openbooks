@@ -30,6 +30,7 @@
       "ariaLabel": "Sections du dossier du tiers",
       "overview": "Aperçu",
       "transactions": "Transactions",
+      "activities": "Activités",
       "contacts": "Contacts",
       "addresses": "Adresses",
       "accounting": "Comptabilité"
@@ -113,6 +114,7 @@
     "allStatuses": "Tous les statuts",
     "noTransactions": "Aucune transaction ne correspond à ces filtres.",
     "transactionCount": "{count, plural, one {# transaction} other {# transactions}}",
+    "activityCount": "{count, plural, one {# activité} other {# activités}}",
     "bankAccountsHeading": "Comptes bancaires",
     "noBankAccounts": "Aucun compte bancaire au dossier.",
     "bankAccountFallback": "Compte bancaire",

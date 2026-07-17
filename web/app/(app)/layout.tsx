@@ -70,6 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           }}
           canReadParties={can(authz, 'parties.read')}
           canManageParties={can(authz, 'parties.manage')}
+          canReadActivities={can(authz, 'crm.activities.read')}
         >
           {authz.user.envKind !== 'production' && (
             <SandboxBanner name={authz.user.sandboxName} />

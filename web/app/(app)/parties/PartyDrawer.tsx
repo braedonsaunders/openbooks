@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Building2, CalendarDays, CircleDollarSign, FileText, Landmark, Plus, Search, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -105,7 +105,7 @@ const emptyContact = (): ContactRow => ({
   mobilePhone: '', isPrimary: 'false', isActive: 'true',
 })
 
-export type PartyTab = 'overview' | 'transactions' | 'contacts' | 'addresses' | 'accounting' | 'audit'
+export type PartyTab = 'overview' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'audit'
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -121,6 +121,7 @@ export function PartyDrawer({
   fieldDefs,
   subsidiaries,
   canManage,
+  canReadActivities = false,
   role,
   initialTab = 'overview',
   basePath = '/parties',
@@ -135,6 +136,7 @@ export function PartyDrawer({
   fieldDefs: CustomFieldDefClient[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
+  canReadActivities?: boolean
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -435,6 +437,7 @@ export function PartyDrawer({
   const tabs: Array<{ key: PartyTab; label: string; count?: number }> = [
     { key: 'overview', label: t('tabs.overview') },
     { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
+    ...(role === 'customer' && canReadActivities ? [{ key: 'activities' as const, label: t('tabs.activities') }] : []),
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
     { key: 'accounting', label: t('tabs.accounting') },
@@ -899,6 +902,7 @@ export function PartyDrawer({
         ) : null}
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}
+        {tab === 'activities' && role === 'customer' && canReadActivities ? <ActivitySublist partyId={String(p.id)} /> : null}
 
         {tab === 'contacts' ? (
           <section className="space-y-3">
@@ -1224,6 +1228,115 @@ function BankAccountsPanel({
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>{tc('actions.previous')}</Button>
             <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
             <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>{tc('actions.next')}</Button>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+interface ActivityRow {
+  id: string
+  kind: 'task' | 'call' | 'event' | 'email' | 'note'
+  status: 'planned' | 'in_progress' | 'completed' | 'cancelled'
+  subject: string
+  activity_date: string
+}
+
+interface ActivityResponse {
+  rows: ActivityRow[]
+  total: number
+  page: number
+  perPage: number
+  kinds: ActivityRow['kind'][]
+  statuses: ActivityRow['status'][]
+}
+
+function ActivitySublist({ partyId }: { partyId: string }) {
+  const t = useTranslations('parties.drawer')
+  const tcrm = useTranslations('crm')
+  const tc = useTranslations('common')
+  const locale = useLocale()
+  const [q, setQ] = useState('')
+  const [kind, setKind] = useState('')
+  const [status, setStatus] = useState('')
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState<ActivityResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      const params = new URLSearchParams({ page: String(page) })
+      if (q.trim()) params.set('q', q.trim())
+      if (kind) params.set('kind', kind)
+      if (status) params.set('status', status)
+      fetch(`/api/parties/${partyId}/activities?${params}`, { signal: controller.signal })
+        .then(async (response) => {
+          const body = await response.json()
+          if (!response.ok) throw new Error(tc('feedback.loadFailed'))
+          setData(body as ActivityResponse)
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return
+          toast.error(error instanceof Error ? error.message : tc('feedback.loadFailed'))
+        })
+        .finally(() => setLoading(false))
+    }, q ? 200 : 0)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [kind, page, partyId, q, status, tc])
+
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)))
+  return (
+    <section className="space-y-3">
+      <SublistHeading title={tcrm('activities.title')} description={tcrm('activities.description')} icon={<CalendarDays size={16} />} />
+      <div className="flex flex-wrap gap-2">
+        <div className="relative min-w-56 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
+          <Input value={q} onChange={(event) => { setQ(event.target.value); setPage(1) }} placeholder={tcrm('activities.search')} className="pl-8" />
+        </div>
+        <Select value={kind} onChange={(event) => { setKind(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tcrm('fields.activityType')}>
+          <option value="">{t('allTypes')}</option>
+          {(data?.kinds ?? []).map((value) => <option key={value} value={value}>{tcrm(`activityKinds.${value}`)}</option>)}
+        </Select>
+        <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tcrm('fields.status')}>
+          <option value="">{t('allStatuses')}</option>
+          {(data?.statuses ?? []).map((value) => <option key={value} value={value}>{tcrm(`activityStatuses.${value}`)}</option>)}
+        </Select>
+      </div>
+      {loading && !data ? (
+        <div className="h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
+      ) : !data?.rows.length ? (
+        <SublistEmpty icon={<CalendarDays size={22} />} text={tcrm('activities.emptyDescription')} />
+      ) : (
+        <>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>{tcrm('fields.subject')}</TableHead><TableHead>{tcrm('fields.activityType')}</TableHead>
+              <TableHead>{tcrm('fields.status')}</TableHead><TableHead>{tcrm('fields.date')}</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {data.rows.map((row) => (
+                <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
+                  <TableCell><Link href={`/crm/activities?activity=${row.id}`} className="font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.subject}</Link></TableCell>
+                  <TableCell>{tcrm(`activityKinds.${row.kind}`)}</TableCell>
+                  <TableCell><Badge variant={row.status === 'completed' ? 'success' : 'outline'}>{tcrm(`activityStatuses.${row.status}`)}</Badge></TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">{new Date(row.activity_date).toLocaleString(locale)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('activityCount', { count: data.total })}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>{tc('actions.previous')}</Button>
+              <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
+              <Button variant="outline" size="sm" disabled={page >= pages || loading} onClick={() => setPage((value) => value + 1)}>{tc('actions.next')}</Button>
+            </div>
           </div>
         </>
       )}
