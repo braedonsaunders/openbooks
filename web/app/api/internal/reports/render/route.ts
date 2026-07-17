@@ -33,9 +33,13 @@ export async function GET(req: Request) {
   try {
     const t = (await getTranslations('reports')) as unknown as Translator
     const q = parseReportQuery(p)
-    const period = await resolvePeriod(q.period, { customFrom: p.get('from') ?? undefined, customTo: p.get('to') ?? undefined })
+    const period = await resolvePeriod(q.period, {
+      customFrom: p.get('from') ?? undefined,
+      customTo: p.get('to') ?? undefined,
+      orgId,
+    })
     const data = await resolveDefinitionToExportData(orgId, definitionId, p, { orgId, t, period, query: q })
-    const branding = await orgBranding()
+    const branding = await orgBranding(orgId)
     const { page, showSummary } = resolveLayout(null)
     const pdf = await exportDataToPdf(data, branding, page, { showSummary })
     return new NextResponse(new Uint8Array(pdf), {

@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, schema, withOrg } from "../db.ts";
-import { deletionOrder, loadCatalog, PARENT_FILTER, selfRefColumns } from "./catalog.ts";
+import {
+  deferredDeletionTables,
+  deletionOrder,
+  loadCatalog,
+  PARENT_FILTER,
+  SANDBOX_CYCLE_BREAKERS,
+  selfRefColumns,
+} from "./catalog.ts";
 import { CUSTOMIZATION_LAYER, runClone, type SandboxTier } from "./clone.ts";
 import { neuterSandbox } from "./guard.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
@@ -37,28 +44,49 @@ async function asOfPeriodOf(
  * Runs unscoped with the kernel-migration GUC so posted rows can be removed. */
 async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promise<void> {
   const cat = await loadCatalog();
-  const byName = new Map(cat.tables.map((t) => [t.name, t]));
-  const order = deletionOrder(cat).filter((n) => tableNames.has(n));
+  const targetTables = cat.tenantTables.filter(
+    (t) => tableNames.has(t.name) && t.name !== "sandboxes",
+  );
+  const byName = new Map(targetTables.map((t) => [t.name, t]));
+  const targetCatalog = { ...cat, tables: targetTables };
+  const order = deletionOrder(targetCatalog);
+  const deferred = deferredDeletionTables(targetCatalog);
   await withOrg(null, async () => {
-    await db.execute(sql`set constraints all deferred`);
+    await db.execute(sql`set constraints all immediate`);
     await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
     await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+    await db.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
+    for (const [table, columns] of Object.entries(SANDBOX_CYCLE_BREAKERS)) {
+      if (!byName.has(table)) continue;
+      await db.execute(sql.raw(
+        `update "${table}" set ${columns.map((column) => `"${column}" = null`).join(", ")} `
+          + `where org_id = '${sandboxOrgId}'`,
+      ));
+    }
     // Pre-null self-referential FK columns (e.g. folders.parent_folder_id, which
     // is ON DELETE RESTRICT) so a single delete-all can't trip its own hierarchy.
-    for (const t of cat.tables) {
-      if (!tableNames.has(t.name) || !t.hasOrgId) continue;
+    for (const t of targetTables) {
+      if (!t.hasOrgId) continue;
       for (const col of selfRefColumns(t)) {
         await db.execute(sql.raw(`update "${t.name}" set "${col}" = null where org_id = '${sandboxOrgId}'`));
       }
     }
-    // Delete referencers before referenced (topological order).
-    for (const name of order) {
+    const remove = async (name: string) => {
       const t = byName.get(name)!;
       if (t.hasOrgId) {
         await db.execute(sql.raw(`delete from "${name}" where org_id = '${sandboxOrgId}'`));
       } else if (PARENT_FILTER[name]) {
         await db.execute(sql.raw(`delete from "${name}" where ${PARENT_FILTER[name](sandboxOrgId)}`));
       }
+    };
+    // Delete the acyclic portion with immediate FK checks. Only the graph tail
+    // containing real cycles is deferred, keeping commit validation bounded.
+    for (const name of order) {
+      if (!deferred.has(name)) await remove(name);
+    }
+    if (deferred.size) await db.execute(sql`set constraints all deferred`);
+    for (const name of order) {
+      if (deferred.has(name)) await remove(name);
     }
   });
 }
@@ -73,15 +101,22 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   const seed = randomUUID();
 
   const prod = (await db.execute(sql`
-    select name, legal_name, base_currency, country from orgs where id = ${input.productionOrgId}`)) as any;
+    select name, legal_name, base_currency, country, tax_ids, settings
+      from orgs where id = ${input.productionOrgId}`)) as any;
   const p = prod.rows[0];
   if (!p) throw new Error(`production org not found: ${input.productionOrgId}`);
 
   // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped).
   await db.execute(sql`
-    insert into orgs (id, name, legal_name, base_currency, country, env_kind, sandbox_of, sandbox_seed, created_by)
-    values (${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
-            'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null})`);
+    insert into orgs (
+      id, name, legal_name, base_currency, country, tax_ids, settings,
+      env_kind, sandbox_of, sandbox_seed, created_by
+    )
+    values (
+      ${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
+      ${JSON.stringify(p.tax_ids ?? {})}::jsonb, ${JSON.stringify(p.settings ?? {})}::jsonb,
+      'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
+    )`);
 
   const [sb] = await db
     .insert(schema.sandboxes)
@@ -110,11 +145,14 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
     await neuterSandbox(sandboxOrgId);
     await db.execute(sql`
       update sandboxes
-         set status = 'ready', storage_rows = ${result.rowsCopied}, last_refresh_at = now(), last_error = null
+         set status = 'ready', storage_rows = ${result.rowsCopied}, last_refresh_at = now(),
+             last_error = null, updated_at = now()
        where id = ${sb.id}`);
   } catch (err) {
     await db.execute(sql`
-      update sandboxes set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)}
+      update sandboxes
+         set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
+             updated_at = now()
        where id = ${sb.id}`);
     throw err;
   }
@@ -143,7 +181,10 @@ export async function refreshSandbox(
   const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`)) as any;
   const sandboxSeed = seed.rows[0]?.sandbox_seed as string;
 
-  await db.execute(sql`update sandboxes set status = 'refreshing' where id = ${sandboxId}`);
+  await db.execute(sql`
+    update sandboxes
+       set status = 'refreshing', last_error = null, updated_at = now()
+     where id = ${sandboxId}`);
   try {
     const { rebaseSet } = await loadCatalog();
     // Which tables to wipe + re-copy. Keeping customizations means leaving the
@@ -166,10 +207,14 @@ export async function refreshSandbox(
     });
 
     await db.execute(sql`
-      update sandboxes set status = 'ready', last_refresh_at = now(), last_error = null where id = ${sandboxId}`);
+      update sandboxes
+         set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
+       where id = ${sandboxId}`);
   } catch (err) {
     await db.execute(sql`
-      update sandboxes set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)}
+      update sandboxes
+         set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
+             updated_at = now()
        where id = ${sandboxId}`);
     throw err;
   }
@@ -185,10 +230,22 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`)) as any;
   const orgId = row.rows[0]?.org_id as string | undefined;
   if (!orgId) return;
-  await db.execute(sql`update sandboxes set status = 'deleting' where id = ${sandboxId}`);
-  const { rebaseSet } = await loadCatalog();
-  await wipeSandbox(orgId, new Set(rebaseSet));
-  await withOrg(null, async () => {
-    await db.execute(sql`delete from orgs where id = ${orgId}`);
-  });
+  await db.execute(sql`
+    update sandboxes
+       set status = 'deleting', last_error = null, updated_at = now()
+     where id = ${sandboxId}`);
+  try {
+    const { tenantTables } = await loadCatalog();
+    await wipeSandbox(orgId, new Set(tenantTables.map((t) => t.name)));
+    await withOrg(null, async () => {
+      await db.execute(sql`delete from orgs where id = ${orgId}`);
+    });
+  } catch (err) {
+    await db.execute(sql`
+      update sandboxes
+         set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
+             updated_at = now()
+       where id = ${sandboxId}`);
+    throw err;
+  }
 }

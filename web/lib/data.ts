@@ -1,14 +1,18 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { resolveOrgId } from "./org-scope";
 
 export const runtime = "nodejs";
 
-export async function orgInfo() {
+export async function orgInfo(orgId?: string) {
+  const activeOrgId = await resolveOrgId(orgId);
   const r = (await db.execute(sql`
     select o.name, o.base_currency,
-           (select b.name from accounting_books b where b.is_primary limit 1) as book
-      from orgs o limit 1
+           (select b.name from accounting_books b
+             where b.org_id = o.id and b.is_primary limit 1) as book
+      from orgs o
+     where o.id = ${activeOrgId}
   `)) as any;
   return r.rows[0] as { name: string; base_currency: string; book: string } | undefined;
 }

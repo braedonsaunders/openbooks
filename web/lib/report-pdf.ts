@@ -27,6 +27,7 @@ import type {
 } from '@openbooks/reports'
 import { resolveReportLayout } from '@openbooks/reports'
 import { money } from './format'
+import { resolveOrgId } from './org-scope'
 
 /**
  * Export pipeline for reports: a single intermediate shape (ExportData) feeds
@@ -48,12 +49,14 @@ export type ExportData = {
 
 // --- branding ---------------------------------------------------------------
 
-export async function orgBranding(): Promise<PdfBranding & { reportPdfStyle: StatementPdfStyle }> {
+export async function orgBranding(orgId?: string): Promise<PdfBranding & { reportPdfStyle: StatementPdfStyle }> {
+  const activeOrgId = await resolveOrgId(orgId)
   const r = (await db.execute(sql`
     select name,
            settings ->> 'brandPrimary' as brand_primary,
            settings ->> 'reportPdfStyle' as report_pdf_style
-      from orgs limit 1
+      from orgs
+     where id = ${activeOrgId}
   `)) as unknown as { rows: { name: string; brand_primary: string | null; report_pdf_style: string | null }[] }
   const row = r.rows[0]
   return {

@@ -3,11 +3,21 @@
 -- background jobs, imports, or future code from crossing tenant/entity scope.
 set local app.bypass_rls = 'on';
 --> statement-breakpoint
+create or replace function openbooks_sandbox_wipe_allowed(p_org_id uuid) returns boolean
+language sql stable as $$
+  select coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on'
+     and exists (
+       select 1 from orgs where id = p_org_id and env_kind = 'sandbox'
+     )
+$$;
+--> statement-breakpoint
 create or replace function subsidiary_tree_guard() returns trigger
 language plpgsql as $$
 begin
   if tg_op = 'DELETE' then
-    if old.parent_id is null and exists (select 1 from orgs where id = old.org_id) then
+    if old.parent_id is null
+       and exists (select 1 from orgs where id = old.org_id)
+       and not openbooks_sandbox_wipe_allowed(old.org_id) then
       raise exception 'the root subsidiary cannot be deleted' using errcode = '23514';
     end if;
     return old;

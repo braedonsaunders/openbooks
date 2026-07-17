@@ -13,6 +13,14 @@ import { db } from "../db.ts";
  * must be rebased too. Each needs a bespoke source filter (see PARENT_FILTER). */
 const EXTRA_REBASE = ["file_versions", "file_blobs", "tax_group_members"] as const;
 
+/** Nullable back-links cleared only inside the guarded sandbox-wipe transaction
+ * to break genuine NO ACTION cycles before immediate FK-ordered deletion. */
+export const SANDBOX_CYCLE_BREAKERS: Record<string, readonly string[]> = {
+  documents: ["posted_entry_id"],
+  payment_schedules: ["last_payment_run_id"],
+  time_entries: ["invoiced_by_line_id"],
+};
+
 /** Tables never copied into a sandbox: sandbox-management tables, real-world
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
@@ -50,11 +58,16 @@ export interface TableInfo {
   columns: ColumnInfo[];
   /** column name → referenced table (foreign keys). */
   fks: Record<string, string>;
+  /** column name → FK ON DELETE rule (NO ACTION, RESTRICT, CASCADE, ...). */
+  fkDeleteRules: Record<string, string>;
 }
 
 export interface Catalog {
   /** Tables the clone engine copies, in no particular order (FKs are deferred). */
   tables: TableInfo[];
+  /** Every tenant-owned table that can contain sandbox rows, including tables
+   * intentionally not copied from production. */
+  tenantTables: TableInfo[];
   /** Fast membership test: is this table rebased (its ids remapped)? */
   rebaseSet: Set<string>;
 }
@@ -77,21 +90,31 @@ export async function loadCatalog(): Promise<Catalog> {
      where c.table_schema = 'public' and t.table_type = 'BASE TABLE'
      order by c.table_name, c.ordinal_position`)) as any;
 
-  // Foreign-key edges: (table, column) → referenced table.
+  // Foreign-key edges: (table, column) → referenced table + delete behavior.
   const fkRes = (await db.execute(sql`
-    select tc.table_name, kcu.column_name, ccu.table_name as ref_table
+    select tc.table_name, kcu.column_name, ccu.table_name as ref_table,
+           rc.delete_rule
       from information_schema.table_constraints tc
       join information_schema.key_column_usage kcu
         on kcu.constraint_name = tc.constraint_name and kcu.table_schema = tc.table_schema
       join information_schema.constraint_column_usage ccu
         on ccu.constraint_name = tc.constraint_name and ccu.table_schema = tc.table_schema
+      join information_schema.referential_constraints rc
+        on rc.constraint_name = tc.constraint_name and rc.constraint_schema = tc.table_schema
      where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = 'public'`)) as any;
 
   const byTable = new Map<string, TableInfo>();
   for (const r of colsRes.rows as any[]) {
     let t = byTable.get(r.table_name);
     if (!t) {
-      t = { name: r.table_name, hasOrgId: false, hasId: false, columns: [], fks: {} };
+      t = {
+        name: r.table_name,
+        hasOrgId: false,
+        hasId: false,
+        columns: [],
+        fks: {},
+        fkDeleteRules: {},
+      };
       byTable.set(r.table_name, t);
     }
     const isUuid = r.udt_name === "uuid";
@@ -101,17 +124,24 @@ export async function loadCatalog(): Promise<Catalog> {
   }
   for (const r of fkRes.rows as any[]) {
     const t = byTable.get(r.table_name);
-    if (t) t.fks[r.column_name] = r.ref_table;
+    if (t) {
+      t.fks[r.column_name] = r.ref_table;
+      t.fkDeleteRules[r.column_name] = r.delete_rule;
+    }
   }
 
-  // Rebase set = tenant tables (org_id) + explicit extras − excludes.
-  const rebaseSet = new Set<string>();
-  for (const t of byTable.values()) if (t.hasOrgId) rebaseSet.add(t.name);
-  for (const e of EXTRA_REBASE) if (byTable.has(e)) rebaseSet.add(e);
+  // Tenant set = every org-owned table + org-less children. Rebase set is the
+  // cloneable subset; clone exclusions can still gain sandbox-owned rows later
+  // and therefore remain in tenantTables for deletion.
+  const tenantSet = new Set<string>();
+  for (const t of byTable.values()) if (t.hasOrgId) tenantSet.add(t.name);
+  for (const e of EXTRA_REBASE) if (byTable.has(e)) tenantSet.add(e);
+  const rebaseSet = new Set(tenantSet);
   for (const e of EXCLUDE) rebaseSet.delete(e);
 
   const tables = [...rebaseSet].map((n) => byTable.get(n)!).filter(Boolean);
-  return { tables, rebaseSet };
+  const tenantTables = [...tenantSet].map((n) => byTable.get(n)!).filter(Boolean);
+  return { tables, tenantTables, rebaseSet };
 }
 
 /**
@@ -133,7 +163,10 @@ export function deletionOrder(cat: Catalog): string[] {
     indeg.set(n, 0);
   }
   for (const t of cat.tables) {
-    for (const ref of Object.values(t.fks)) {
+    for (const [column, ref] of Object.entries(t.fks)) {
+      const rule = t.fkDeleteRules[column];
+      if (rule === "CASCADE" || rule === "SET NULL") continue;
+      if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
       if (ref === t.name || !inSet.has(ref)) continue;
       if (!deps.get(t.name)!.has(ref)) {
         deps.get(t.name)!.add(ref);
@@ -155,12 +188,49 @@ export function deletionOrder(cat: Catalog): string[] {
     }
   }
   for (const n of names) if (!seen.has(n)) order.push(n);
+
   return order;
 }
 
-/** Self-referential FK columns per table (pre-nulled before an org wipe). */
+/** Tables left after Kahn's acyclic pass. Their FK graph contains a cycle (or
+ * depends on one), so only this tail needs deferred constraint checking during
+ * a sandbox wipe. */
+export function deferredDeletionTables(cat: Catalog): Set<string> {
+  const names = cat.tables.map((t) => t.name);
+  const inSet = new Set(names);
+  const indeg = new Map(names.map((name) => [name, 0]));
+  const deps = new Map(names.map((name) => [name, new Set<string>()]));
+  for (const t of cat.tables) {
+    for (const [column, ref] of Object.entries(t.fks)) {
+      const rule = t.fkDeleteRules[column];
+      if (rule === "CASCADE" || rule === "SET NULL") continue;
+      if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
+      if (ref === t.name || !inSet.has(ref) || deps.get(t.name)!.has(ref)) continue;
+      deps.get(t.name)!.add(ref);
+      indeg.set(ref, (indeg.get(ref) ?? 0) + 1);
+    }
+  }
+  const queue = names.filter((name) => (indeg.get(name) ?? 0) === 0);
+  const seen = new Set<string>();
+  while (queue.length) {
+    const name = queue.shift()!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    for (const ref of deps.get(name) ?? []) {
+      indeg.set(ref, (indeg.get(ref) ?? 0) - 1);
+      if ((indeg.get(ref) ?? 0) === 0) queue.push(ref);
+    }
+  }
+  const deferred = new Set(names.filter((name) => !seen.has(name)));
+  return deferred;
+}
+
+/** Self-referential ON DELETE RESTRICT columns per table. Those must be
+ * pre-nulled before an org wipe because RESTRICT is checked immediately.
+ * Deferred NO ACTION references must stay intact: nulling them can violate
+ * root-only partial unique indexes (for example subsidiaries). */
 export function selfRefColumns(t: TableInfo): string[] {
   return Object.entries(t.fks)
-    .filter(([, ref]) => ref === t.name)
+    .filter(([col, ref]) => ref === t.name && t.fkDeleteRules[col] === "RESTRICT")
     .map(([col]) => col);
 }
