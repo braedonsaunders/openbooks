@@ -51,6 +51,7 @@ export function Drawer({
   bodyClassName,
   panelClassName,
   stacked = false,
+  initialFullscreen = false,
   onExitComplete,
 }: {
   open: boolean
@@ -73,6 +74,8 @@ export function Drawer({
   panelClassName?: string
   /** Raise this drawer above another open drawer in a deliberate nested flow. */
   stacked?: boolean
+  /** Open at viewport width. The user can still collapse the drawer. */
+  initialFullscreen?: boolean
   /** Fires after the exit animation finishes — used by UrlDrawer to defer the
    *  close navigation until the slide-out has played. */
   onExitComplete?: () => void
@@ -85,10 +88,10 @@ export function Drawer({
   // "expand" affordance). Width animates via the max-width transition below;
   // height is already 100%. Resets when the drawer closes so the next open
   // starts at its designed size.
-  const [fullscreen, setFullscreen] = React.useState(false)
+  const [fullscreen, setFullscreen] = React.useState(initialFullscreen)
   React.useEffect(() => {
-    if (!open) setFullscreen(false)
-  }, [open])
+    if (!open) setFullscreen(initialFullscreen)
+  }, [initialFullscreen, open])
 
   const panelRef = React.useRef<HTMLElement>(null)
 
@@ -96,6 +99,7 @@ export function Drawer({
     if (!open) return
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
+      if (document.querySelector('[data-ui-overlay]')) return
       if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
       onClose()
     }
@@ -354,6 +358,7 @@ export function UrlDrawer({
   bodyClassName,
   panelClassName,
   stacked,
+  initialFullscreen,
   contextualReturn = true,
 }: {
   open: boolean
@@ -368,6 +373,7 @@ export function UrlDrawer({
   bodyClassName?: string
   panelClassName?: string
   stacked?: boolean
+  initialFullscreen?: boolean
   /** Whether this drawer should consume nested-record URL context. Base
    * drawers set this false so only the child transaction becomes stacked. */
   contextualReturn?: boolean
@@ -440,6 +446,7 @@ export function UrlDrawer({
       bodyClassName={bodyClassName}
       panelClassName={panelClassName}
       stacked={resolvedStacked}
+      initialFullscreen={initialFullscreen}
     >
       {children}
     </Drawer>

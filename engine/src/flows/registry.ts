@@ -7,6 +7,11 @@ import {
   bankAccountsFlowAdapter,
 } from "./bank-accounts-adapter.ts";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
+import {
+  BUDGET_SCENARIO_SUBJECT_KIND,
+  budgetScenarioSubjectProfile,
+  budgetScenariosFlowAdapter,
+} from "./budget-scenarios-adapter.ts";
 
 /**
  * subjectKind → FlowSubjectAdapter. Ported from beaconhs-platform's
@@ -21,6 +26,7 @@ const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
+  if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
   if (!DOCUMENT_FLOW_KINDS.includes(subjectKind)) return null;
   let adapter = adapterCache.get(subjectKind);
   if (!adapter) {
@@ -35,5 +41,6 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
     bankAccountSubjectProfile,
+    budgetScenarioSubjectProfile,
   ];
 }
