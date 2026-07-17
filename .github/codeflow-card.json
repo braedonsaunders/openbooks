@@ -918,6 +918,108 @@
           "total": 1210
         }
       ]
+    },
+    {
+      "at": "2026-07-17T23:39:40.765Z",
+      "sha": "f8cc94a9afa06127697507fbc840eca2c2d0da5d",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1339,
+      "functions": 3740,
+      "loc": 508635,
+      "languages": 13,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 58,
+          "lines": 292748
+        },
+        {
+          "ext": "ts",
+          "pct": 21,
+          "lines": 109229
+        },
+        {
+          "ext": "tsx",
+          "pct": 15,
+          "lines": 78203
+        },
+        {
+          "ext": "sql",
+          "pct": 4,
+          "lines": 20647
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 66,
+      "deadPct": 1.8,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 4.9,
+      "securityIssues": 140,
+      "patterns": 8,
+      "duplicates": 51,
+      "layerViolations": 1392,
+      "connections": 6496,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 51,
+      "testRatio": 3.8,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 967
+        },
+        {
+          "name": "engine",
+          "count": 158
+        },
+        {
+          "name": "packages",
+          "count": 106
+        },
+        {
+          "name": "schema",
+          "count": 70
+        },
+        {
+          "name": "extraction",
+          "count": 20
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 67,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 365,
+        "transitive": 1045,
+        "total": 1410
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 365,
+          "transitive": 1045,
+          "total": 1410
+        },
+        {
+          "path": "engine/src/depreciation-formula.ts",
+          "direct": 166,
+          "transitive": 1045,
+          "total": 1211
+        },
+        {
+          "path": "web/lib/authz.ts",
+          "direct": 330,
+          "transitive": 880,
+          "total": 1210
+        }
+      ]
     }
   ]
 }
