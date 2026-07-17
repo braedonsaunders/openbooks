@@ -31,6 +31,52 @@
     "substantially_complete": "Substantiellement achevé"
   },
   "billing": {
+    "availableToBill": "Disponible à facturer",
+    "requestBilling": "Demander la facturation",
+    "unbilledDetail": "{entries} entrées de temps · {hours}h · {lines} lignes de coût",
+    "requestCreated": "Demande de facturation créée",
+    "requestFailed": "Impossible de créer la demande",
+    "invoiceCreated": "Facture {number} créée",
+    "invoiceFailed": "Impossible de créer la facture",
+    "invoiceType": "Type",
+    "basis": "Base",
+    "drawAmount": "Montant du tirage",
+    "startDate": "Date de début",
+    "cutoffDate": "Date limite",
+    "description": "Description",
+    "customerPo": "BC du client",
+    "backupRequired": "Justificatif requis",
+    "backupType": "Type de justificatif",
+    "createRequest": "Créer la demande",
+    "requests": "Demandes de facturation",
+    "noRequests": "Aucune demande de facturation pour le moment.",
+    "invoice": "Facture",
+    "createInvoice": "Créer la facture",
+    "downloadBackup": "Télécharger le justificatif",
+    "type": {
+      "progress": "Progression",
+      "final": "Finale"
+    },
+    "basisOpt": {
+      "date_range": "Plage de dates",
+      "draw_amount": "Montant du tirage",
+      "time_selection": "Sélection de temps",
+      "milestone": "Jalon"
+    },
+    "backup": {
+      "none": "Aucun",
+      "costed_timesheets": "Feuilles de temps chiffrées",
+      "timesheets_purchases": "Feuilles + achats",
+      "purchases": "Achats",
+      "purchases_shop_time": "Achats + temps d'atelier",
+      "quote_only": "Devis seulement"
+    },
+    "status": {
+      "open": "Ouverte",
+      "invoiced": "Facturée",
+      "closed": "Fermée",
+      "cancelled": "Annulée"
+    },
     "time_and_materials": "Temps et matériaux",
     "fixed_price": "Prix fixe",
     "cost_plus": "Coût majoré"
@@ -115,7 +161,8 @@
       "overview": "Aperçu",
       "financials": "Finances",
       "cost_time": "Coût et temps",
-      "documents": "Documents"
+      "documents": "Documents",
+      "billing": "Facturation"
     },
     "unbilled": "Non facturé",
     "totalHours": "Heures totales",

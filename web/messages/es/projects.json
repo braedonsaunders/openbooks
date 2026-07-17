@@ -31,6 +31,52 @@
     "substantially_complete": "Sustancialmente completo"
   },
   "billing": {
+    "availableToBill": "Disponible para facturar",
+    "requestBilling": "Solicitar facturación",
+    "unbilledDetail": "{entries} registros de tiempo · {hours}h · {lines} líneas de costo",
+    "requestCreated": "Solicitud de facturación creada",
+    "requestFailed": "No se pudo crear la solicitud",
+    "invoiceCreated": "Factura {number} creada",
+    "invoiceFailed": "No se pudo crear la factura",
+    "invoiceType": "Tipo",
+    "basis": "Base",
+    "drawAmount": "Monto de anticipo",
+    "startDate": "Fecha inicio",
+    "cutoffDate": "Fecha corte",
+    "description": "Descripción",
+    "customerPo": "OC del cliente",
+    "backupRequired": "Respaldo requerido",
+    "backupType": "Tipo de respaldo",
+    "createRequest": "Crear solicitud",
+    "requests": "Solicitudes de facturación",
+    "noRequests": "Aún no hay solicitudes de facturación.",
+    "invoice": "Factura",
+    "createInvoice": "Crear factura",
+    "downloadBackup": "Descargar respaldo",
+    "type": {
+      "progress": "Progreso",
+      "final": "Final"
+    },
+    "basisOpt": {
+      "date_range": "Rango de fechas",
+      "draw_amount": "Monto de anticipo",
+      "time_selection": "Selección de tiempo",
+      "milestone": "Hito"
+    },
+    "backup": {
+      "none": "Ninguno",
+      "costed_timesheets": "Partes de horas costeados",
+      "timesheets_purchases": "Partes + compras",
+      "purchases": "Compras",
+      "purchases_shop_time": "Compras + tiempo de taller",
+      "quote_only": "Solo cotización"
+    },
+    "status": {
+      "open": "Abierta",
+      "invoiced": "Facturada",
+      "closed": "Cerrada",
+      "cancelled": "Cancelada"
+    },
     "time_and_materials": "Tiempo y materiales",
     "fixed_price": "Precio fijo",
     "cost_plus": "Costo más margen"
@@ -115,7 +161,8 @@
       "overview": "Resumen",
       "financials": "Finanzas",
       "cost_time": "Costo y tiempo",
-      "documents": "Documentos"
+      "documents": "Documentos",
+      "billing": "Facturación"
     },
     "unbilled": "Sin facturar",
     "totalHours": "Horas totales",

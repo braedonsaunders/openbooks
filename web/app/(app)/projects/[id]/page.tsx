@@ -23,9 +23,12 @@ import { requirePermission } from '../../../../lib/authz'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { money } from '../../../../lib/format'
 import { projectCostSummary, projectTimeSummary, projectUnbilled } from '../../../../lib/project-costing'
+import { listBillingRequests } from '../../../../lib/billing-requests'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
+import { can } from '../../../../lib/authz'
 import { loadProject } from '../../../api/projects/_lib'
+import { BillingSection } from './BillingSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,11 +130,12 @@ export default async function ProjectCockpit({
   const { id } = await params
   if (!isUuid(id)) notFound()
 
-  const [payload, summary, time, unbilled, layoutRes] = await Promise.all([
+  const [payload, summary, time, unbilled, billingReqs, layoutRes] = await Promise.all([
     loadProject(id, orgId),
     projectCostSummary(orgId, id),
     projectTimeSummary(orgId, id),
     projectUnbilled(orgId, id),
+    listBillingRequests(orgId, id),
     (async () =>
       resolveFormLayout({
         orgId,
@@ -143,6 +147,7 @@ export default async function ProjectCockpit({
       }))(),
   ])
   if (!payload) notFound()
+  const canManage = can(authz, 'projects.manage')
 
   const pr = payload.project
   const s = summary
@@ -150,7 +155,7 @@ export default async function ProjectCockpit({
   const cfByKey = new Map((payload.customFieldDefs ?? []).map((d) => [`cf_${d.key}`, d]))
 
   const sp = await searchParams
-  const TAB_KEYS = ['overview', 'financials', 'cost_time', 'documents'] as const
+  const TAB_KEYS = ['overview', 'financials', 'cost_time', 'billing', 'documents'] as const
   const tabParam = pickString(sp.tab)
   const activeTab = (TAB_KEYS as readonly string[]).includes(tabParam ?? '') ? tabParam! : 'overview'
   const tabs = TAB_KEYS.map((key) => ({ key, label: t(`cockpit.tabs.${key}`) }))
@@ -369,6 +374,15 @@ export default async function ProjectCockpit({
             <TimeTable title={t('cockpit.timeByEmployee')} rows={time.byEmployee} unlabeled={t('cockpit.unassignedEmployee')} labelHead={tCommon('labels.employee')} hoursHead={t('cockpit.hoursHead')} billableHead={t('cockpit.billableHead')} costHead={t('labels.actualCost')} billHead={t('cockpit.billValue')} money={money} hours={hours} empty={t('cockpit.noTime')} />
           </section>
         </div>
+      ) : null}
+
+      {activeTab === 'billing' ? (
+        <BillingSection
+          projectId={id}
+          unbilled={unbilled}
+          requests={billingReqs as any}
+          canManage={canManage}
+        />
       ) : null}
 
       {activeTab === 'documents' ? (
