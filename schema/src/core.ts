@@ -105,7 +105,7 @@ export const fxRates = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("fx_rates_pair_date_type").on(t.fromCurrency, t.toCurrency, t.asOf, t.rateType),
+    uniqueIndex("fx_rates_org_pair_date_type").on(t.orgId, t.fromCurrency, t.toCurrency, t.asOf, t.rateType),
   ],
 );
 

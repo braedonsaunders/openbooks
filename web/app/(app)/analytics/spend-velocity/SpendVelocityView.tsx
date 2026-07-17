@@ -517,9 +517,9 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
 
   const rows = useMemo(() => {
     let list = cmp.accounts
-    if (filter === 'increases') list = list.filter((a) => a.changePct > 0)
-    else if (filter === 'decreases') list = list.filter((a) => a.changePct < 0)
-    else if (filter === 'highvel') list = list.filter((a) => a.velocity > 15)
+    if (filter === 'increases') list = list.filter((a) => a.changePct > 5)
+    else if (filter === 'decreases') list = list.filter((a) => a.changePct < -5)
+    else if (filter === 'highvel') list = list.filter((a) => Math.abs(a.velocity) > 10)
     else if (filter === 'new') list = list.filter((a) => a.isNew)
     if (search) list = list.filter((a) => a.accountName.toLowerCase().includes(search.toLowerCase()))
     return [...list].sort((a, b) => Math.abs((b as any)[sortBy] ?? 0) - Math.abs((a as any)[sortBy] ?? 0))
@@ -550,7 +550,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
           ))}
         </div>
         <div className="ml-auto">
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} triggerClassName="h-8 w-40 text-sm">
+          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-40" triggerClassName="h-8 text-sm">
             <option value="currentAmount">Sort: Spend</option>
             <option value="velocity">Sort: Velocity</option>
             <option value="changePct">Sort: Change %</option>

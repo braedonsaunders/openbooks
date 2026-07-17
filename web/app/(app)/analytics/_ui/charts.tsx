@@ -225,12 +225,19 @@ export function Waterfall({
 export function Donut({
   data,
   height = 200,
+  valueFormat,
+  colors,
 }: {
   data: { name: string; value: number }[]
   height?: number
+  /** Tooltip value rendering — defaults to money; pass a formatter for non-currency values (e.g. hours). */
+  valueFormat?: (v: number) => string
+  /** Per-slice color override (positional); falls back to the shared palette. */
+  colors?: string[]
 }) {
+  const fmt = valueFormat ?? money
   const option: EChartsOption = {
-    tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: any) => `${p.name}: ${money(p.value)} (${p.percent}%)` },
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: any) => `${p.name}: ${fmt(p.value)} (${p.percent}%)` },
     legend: { type: 'scroll', orient: 'vertical', right: 0, top: 'center', textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 8 },
     series: [
       {
@@ -240,7 +247,7 @@ export function Donut({
         avoidLabelOverlap: true,
         itemStyle: { borderColor: 'transparent', borderWidth: 2 },
         label: { show: false },
-        data: data.map((d, i) => ({ ...d, itemStyle: { color: PALETTE[i % PALETTE.length] } })),
+        data: data.map((d, i) => ({ ...d, itemStyle: { color: colors?.[i] ?? PALETTE[i % PALETTE.length] } })),
       },
     ],
   }

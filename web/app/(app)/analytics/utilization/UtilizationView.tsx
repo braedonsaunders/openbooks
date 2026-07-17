@@ -290,7 +290,12 @@ function OverviewTab({ data }: { data: UtilizationData }) {
           </Panel>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Panel title="Hours Distribution" icon={PieIcon}>
-              <Donut data={[{ name: 'Billable', value: c.billableHours }, { name: 'Non-Billable', value: c.nonBillableHours }]} height={200} />
+              <Donut
+                data={[{ name: 'Billable', value: c.billableHours }, { name: 'Non-Billable', value: c.nonBillableHours }]}
+                height={200}
+                valueFormat={(v) => `${Math.round(v).toLocaleString()} hrs`}
+                colors={['#10b981', '#ef4444']}
+              />
             </Panel>
             <Panel title="Top Departments" icon={BarChart3} hint="By non-billable cost">
               <div className="space-y-2.5">
@@ -1251,7 +1256,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={dept} onChange={(e) => setDept(e.target.value)} triggerClassName="h-8 w-48 text-sm">
+        <Select value={dept} onChange={(e) => setDept(e.target.value)} className="w-48" triggerClassName="h-8 text-sm">
           <option value="__ALL__">All Departments</option>
           {data.departments.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>

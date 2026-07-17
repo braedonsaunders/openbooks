@@ -74,17 +74,23 @@ export function OverviewTab({ data }: { data: HealthData }) {
                 </tr>
               </thead>
               <tbody>
-                {data.pnlSummary.map((l) => (
+                {data.pnlSummary.map((l) => {
+                  // Favorability, not sign: a COGS/OpEx/Other-Expense increase is bad.
+                  const isCost = l.key === 'cogs' || l.key === 'opex' || l.key === 'otherExpense'
+                  const good = isCost ? l.change <= 0 : l.change >= 0
+                  const changeCls = good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                  return (
                   <tr key={l.key} className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', l.strong && 'bg-slate-50/50 dark:bg-slate-800/20')}>
                     <td className={cn('px-4 py-2', l.strong ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400')}>{l.label}</td>
                     <td className={cn('px-4 py-2 text-right tabular-nums', l.strong ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300')}>{fmtMoney(l.current)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(l.prior)}</td>
-                    <td className={cn('px-4 py-2 text-right tabular-nums', l.change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(l.change)}</td>
-                    <td className={cn('px-4 py-2 text-right tabular-nums', (l.changePct ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+                    <td className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>{fmtMoney(l.change)}</td>
+                    <td className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>
                       {l.changePct === null ? '—' : fmtPct(l.changePct)}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </Panel>
