@@ -83,6 +83,24 @@ export interface Insight {
   detail: string;
 }
 
+export interface BudgetRow {
+  accountId: string;
+  name: string;
+  type: string;
+  budget: number;
+  actual: number;
+  variance: number; // actual − budget (income sign-normalised positive)
+  variancePct: number | null;
+  favorable: boolean;
+  status: "on-track" | "watch" | "over" | "no-budget";
+}
+
+export interface BudgetVariance {
+  scenario: { id: string; name: string; fiscalYear: number; status: string } | null;
+  rows: BudgetRow[];
+  totals: { budget: number; actual: number; variance: number };
+}
+
 export interface HealthData extends FinancialHealth {
   monthly: MonthPoint[];
   pnlSummary: PnlLine[];
@@ -91,6 +109,7 @@ export interface HealthData extends FinancialHealth {
   drivers: { revenue: DriverRow[]; cost: DriverRow[] };
   items: { rows: ItemRow[]; gainers: ItemRow[]; decliners: ItemRow[]; totalCurrent: number; totalChange: number };
   insights: Insight[];
+  budget: BudgetVariance;
 }
 
 const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"] as const;
@@ -415,12 +434,12 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[]): Insight[] 
   return out;
 }
 
-export async function healthData(period: { from: string; to: string; label: string }): Promise<HealthData> {
+export async function healthData(period: { from: string; to: string; label: string }, orgId: string): Promise<HealthData> {
   const { from, to } = period;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
 
-  const [base, priorBase, monthly, dept, cls, loc, drv, items] = await Promise.all([
+  const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
     financialHealth(period),
     financialHealth({ from: pFrom, to: pTo, label: "prior" }),
     monthlySeries(to),
@@ -429,6 +448,7 @@ export async function healthData(period: { from: string; to: string; label: stri
     segmentsBy("location_id", "locations", from, to).catch(() => []),
     drivers(from, to),
     itemAnalysis(from, to),
+    budgetVariance(orgId, from, to).catch((): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } })),
   ]);
 
   return {
@@ -439,6 +459,86 @@ export async function healthData(period: { from: string; to: string; label: stri
     segments: { department: dept, class: cls, location: loc },
     drivers: drv,
     items,
+    budget,
     insights: buildInsights(base, monthly),
+  };
+}
+
+/**
+ * Real budget-vs-actual from budget_scenarios / budget_lines (dimensional,
+ * account × period). Scenario choice: an approved budget covering the range,
+ * else the newest non-archived one; null when no scenario covers the range —
+ * the tab then falls back to benchmark targets with an honest note.
+ * Statuses (Gantry ±10% variance rule): on-track when favorable or within
+ * 10%, watch to 25%, over beyond; income favours actual ≥ budget, cost
+ * accounts the reverse.
+ */
+async function budgetVariance(orgId: string, from: string, to: string): Promise<BudgetVariance> {
+  const scen = (await db.execute(sql`
+    select bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.status
+    from budget_scenarios bs
+    where bs.org_id = ${orgId} and bs.kind = 'budget' and bs.status != 'archived'
+      and exists (
+        select 1 from budget_lines bl
+        join accounting_periods p on p.id = bl.period_id
+        where bl.org_id = ${orgId} and bl.scenario_id = bs.id and p.starts_on <= ${to} and p.ends_on >= ${from}
+      )
+    order by case bs.status when 'approved' then 0 else 1 end, bs.fiscal_year desc, bs.updated_at desc nulls last
+    limit 1
+  `)) as any;
+  const s = scen.rows[0];
+  if (!s) return { scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } };
+
+  const r = (await db.execute(sql`
+    with b as (
+      select bl.account_id, sum(case when acc.type in ('income','income_other') then -bl.amount else bl.amount end) as budget
+      from budget_lines bl
+      join accounting_periods p on p.id = bl.period_id
+      join accounts acc on acc.id = bl.account_id
+      where bl.org_id = ${orgId} and bl.scenario_id = ${s.id} and p.starts_on <= ${to} and p.ends_on >= ${from}
+      group by 1
+    ), a as (
+      select l.account_id,
+        sum(case when acc.type in ('income','income_other') then -l.amount else l.amount end) as actual
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+      join accounts acc on acc.id = l.account_id
+      where l.org_id = ${orgId} and e.book_id = ${s.book_id}
+        and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+        and e.posting_date >= ${from} and e.posting_date <= ${to}
+      group by 1
+    )
+    select acc.id, acc.name, acc.type,
+      coalesce(b.budget, 0) as budget, coalesce(a.actual, 0) as actual
+    from accounts acc
+    left join b on b.account_id = acc.id
+    left join a on a.account_id = acc.id
+    where acc.org_id = ${orgId} and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+      and (b.budget is not null or abs(coalesce(a.actual, 0)) > 0.005)
+    order by abs(coalesce(a.actual, 0) - coalesce(b.budget, 0)) desc
+  `)) as any;
+
+  const isIncome = (t: string) => t === "income" || t === "income_other";
+  const rows: BudgetRow[] = (r.rows as any[]).map((x) => {
+    const budget = Number(x.budget);
+    const actual = Number(x.actual);
+    const variance = actual - budget;
+    const variancePct = Math.abs(budget) > 0.005 ? variance / Math.abs(budget) : null;
+    const favorable = isIncome(x.type) ? variance >= 0 : variance <= 0;
+    let status: BudgetRow["status"];
+    if (Math.abs(budget) <= 0.005) status = "no-budget";
+    else if (favorable || Math.abs(variancePct ?? 0) <= 0.1) status = "on-track";
+    else if (Math.abs(variancePct ?? 0) <= 0.25) status = "watch";
+    else status = "over";
+    return { accountId: x.id, name: x.name, type: x.type, budget, actual, variance, variancePct, favorable, status };
+  });
+  return {
+    scenario: { id: s.id, name: s.name, fiscalYear: Number(s.fiscal_year), status: s.status },
+    rows,
+    totals: {
+      budget: rows.reduce((a, x) => a + x.budget, 0),
+      actual: rows.reduce((a, x) => a + x.actual, 0),
+      variance: rows.reduce((a, x) => a + x.variance, 0),
+    },
   };
 }
