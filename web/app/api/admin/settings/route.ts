@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../lib/authz";
-import { clearFiscalCache } from "../../../../lib/fiscal";
 import { isUuid } from "../../../../lib/list-params";
 import { DEFAULT_LOCALE, isLocale } from "../../../../i18n/config";
 
@@ -330,9 +329,6 @@ export async function PUT(req: Request) {
   });
 
   await audit({ orgId, changes, actorId: actor.id });
-
-  // Anything holding the cached fiscal start month must re-read it now.
-  if (startMonthChanged) clearFiscalCache();
 
   return NextResponse.json({ ok: true, changed: true, periodsRederived: startMonthChanged });
 }

@@ -23,6 +23,23 @@ alter table applications
   add foreign key (from_line_id) references journal_lines(id),
   add foreign key (to_line_id) references journal_lines(id),
   add foreign key (fx_gain_loss_entry_id) references journal_entries(id);
+create index if not exists doc_lines_billed_by on document_lines (billed_by_line_id);
+create index if not exists doc_lines_time_entry on document_lines (time_entry_id);
+create index if not exists assets_source_document_line on fixed_assets (source_document_line_id);
+create index if not exists obligations_document_line on performance_obligations (document_line_id);
+create index if not exists time_entries_invoiced_line on time_entries (invoiced_by_line_id);
+create index if not exists allocation_runs_journal_entry on allocation_runs (journal_entry_id);
+create index if not exists applications_fx_journal_entry on applications (fx_gain_loss_entry_id);
+create index if not exists asset_events_journal_entry on asset_events (journal_entry_id);
+create index if not exists depreciation_lines_journal_entry on depreciation_schedule_lines (journal_entry_id);
+create index if not exists documents_posted_entry on documents (posted_entry_id);
+create index if not exists inventory_movements_journal_entry on inventory_movements (journal_entry_id);
+create index if not exists journal_entries_reverses on journal_entries (reverses_entry_id);
+create index if not exists landed_cost_journal_entry on landed_cost_allocations (journal_entry_id);
+create index if not exists payment_settlements_reversal_entry on payment_settlements (reversal_entry_id);
+create index if not exists recognition_lines_journal_entry on recognition_schedule_lines (journal_entry_id);
+create index if not exists stock_counts_posted_entry on stock_counts (posted_entry_id);
+create index if not exists time_entries_cost_journal_entry on time_entries (cost_journal_entry_id);
 
 -- org structure (orgs.parent_id was dropped in 0028 — subsidiaries carry the
 -- consolidation hierarchy now)
@@ -325,7 +342,7 @@ create or replace function inv_move_guard() returns trigger
 language plpgsql as $$
 begin
   if tg_op = 'DELETE' then
-    if old.status = 'posted' then
+    if old.status = 'posted' and not openbooks_sandbox_wipe_allowed(old.org_id) then
       raise exception 'inventory movement % is posted and cannot be deleted', old.id;
     end if;
     return old;

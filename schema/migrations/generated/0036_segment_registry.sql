@@ -84,7 +84,8 @@ create trigger seed_builtin_segments_on_org_insert
 create or replace function segment_definition_guard() returns trigger
 language plpgsql as $$
 begin
-  if tg_op = 'DELETE' and old.source_kind = 'builtin' then
+  if tg_op = 'DELETE' and old.source_kind = 'builtin'
+     and not openbooks_sandbox_wipe_allowed(old.org_id) then
     raise exception 'built-in segment definitions cannot be deleted' using errcode = '23514';
   end if;
   if tg_op = 'UPDATE' and old.source_kind = 'builtin' and

@@ -79,7 +79,7 @@ create or replace function openbooks_guard_budget_scenario()
 returns trigger language plpgsql as $$
 begin
   if tg_op = 'DELETE' then
-    if old.status <> 'draft' then
+    if old.status <> 'draft' and not openbooks_sandbox_wipe_allowed(old.org_id) then
       raise exception 'only draft budget scenarios may be deleted';
     end if;
     return old;

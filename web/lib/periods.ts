@@ -8,6 +8,7 @@ import {
   type DateRange,
 } from '@openbooks/reports'
 import { fiscalStartMonth } from './fiscal'
+import { resolveOrgId } from './org-scope'
 
 /**
  * Server-side period resolution. Turns a preset id (from `PERIOD_PRESETS`) plus
@@ -34,11 +35,15 @@ const PERIOD_FAMILY: Record<string, number> = {
 
 /** Real accounting-period window shifted `offset` periods from the one holding
  *  `today` (non-adjustment periods only). Null when no periods are configured. */
-async function accountingPeriodWindow(offset: number, today: string): Promise<DateRange | null> {
+async function accountingPeriodWindow(
+  offset: number,
+  today: string,
+  orgId: string,
+): Promise<DateRange | null> {
   const r = (await db.execute(sql`
     select name, starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods
-     where is_adjustment = false
+     where org_id = ${orgId} and is_adjustment = false
      order by starts_on
   `)) as unknown as { rows: { name: string; starts_on: string; ends_on: string }[] }
   const rows = r.rows
@@ -66,19 +71,20 @@ async function accountingPeriodWindow(offset: number, today: string): Promise<Da
  */
 export async function resolvePeriod(
   presetId: string | null | undefined,
-  opts: { customFrom?: string | null; customTo?: string | null; today?: string } = {},
+  opts: { customFrom?: string | null; customTo?: string | null; today?: string; orgId?: string } = {},
 ): Promise<ResolvedPeriod> {
   const today = opts.today ?? new Date().toISOString().slice(0, 10)
   const id = isPeriodPreset(presetId) ? presetId! : DEFAULT_PERIOD_PRESET
-  const startMonth = await fiscalStartMonth()
+  const orgId = await resolveOrgId(opts.orgId)
+  const startMonth = await fiscalStartMonth(orgId)
 
   // Accounting-period-aware presets: prefer real period rows.
   if (id in PERIOD_FAMILY) {
-    const win = await accountingPeriodWindow(PERIOD_FAMILY[id]!, today)
+    const win = await accountingPeriodWindow(PERIOD_FAMILY[id]!, today, orgId)
     if (win) return { presetId: id, ...win }
   }
   if (id === 'this_period_to_date') {
-    const win = await accountingPeriodWindow(0, today)
+    const win = await accountingPeriodWindow(0, today, orgId)
     if (win) return { presetId: id, from: win.from, to: today, label: `${win.label} to date` }
   }
 

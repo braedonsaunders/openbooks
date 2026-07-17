@@ -68,6 +68,9 @@ $$;
 create or replace function close_append_only_guard() returns trigger
 language plpgsql as $$
 begin
+  if tg_op = 'DELETE' and openbooks_sandbox_wipe_allowed(old.org_id) then
+    return old;
+  end if;
   raise exception '% is append-only', tg_table_name;
 end $$;
 
@@ -190,6 +193,9 @@ create trigger jl_guard before insert or update or delete on journal_lines
 create or replace function audit_log_append_only_guard() returns trigger
 language plpgsql as $$
 begin
+  if tg_op = 'DELETE' and openbooks_sandbox_wipe_allowed(old.org_id) then
+    return old;
+  end if;
   raise exception 'audit_log is append-only';
 end $$;
 
@@ -302,12 +308,40 @@ create constraint trigger app_check_open
   deferrable initially deferred
   for each row execute function app_check_open();
 
+-- Application changes normally refresh denormalized document open balances.
+-- A sandbox wipe removes both sides, so the private, sandbox-verified lifecycle
+-- context skips those otherwise quadratic and meaningless recomputations.
+create or replace function trg_application_open_balance() returns trigger
+language plpgsql as $$
+declare v_doc uuid;
+begin
+  if openbooks_sandbox_wipe_allowed(
+       case when tg_op = 'DELETE' then old.org_id else new.org_id end
+     ) then
+    return null;
+  end if;
+  for v_doc in
+    select distinct d.id
+      from documents d
+      join journal_lines jl on jl.entry_id = d.posted_entry_id
+     where jl.is_open_item
+       and jl.id in (coalesce(new.to_line_id, old.to_line_id),
+                     coalesce(new.from_line_id, old.from_line_id))
+  loop
+    perform recompute_document_open_balance(v_doc);
+  end loop;
+  return null;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- 6. Payment artifacts and lifecycle evidence are immutable.
 -- ---------------------------------------------------------------------------
 create or replace function payment_event_immutable() returns trigger
 language plpgsql as $$
 begin
+  if tg_op = 'DELETE' and openbooks_sandbox_wipe_allowed(old.org_id) then
+    return old;
+  end if;
   raise exception 'payment events are append-only';
 end $$;
 
@@ -345,7 +379,8 @@ language plpgsql as $$
 declare v_status text;
 begin
   select status into v_status from payment_runs where id = coalesce(new.payment_run_id, old.payment_run_id);
-  if tg_op = 'DELETE' and v_status not in ('draft', 'pending_approval') then
+  if tg_op = 'DELETE' and v_status not in ('draft', 'pending_approval')
+     and not openbooks_sandbox_wipe_allowed(old.org_id) then
     raise exception 'payment run items are immutable once the run is approved';
   end if;
   if tg_op = 'UPDATE' and v_status not in ('draft', 'pending_approval') and (
