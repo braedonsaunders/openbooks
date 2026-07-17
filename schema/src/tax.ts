@@ -1,10 +1,15 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
+  timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
@@ -85,6 +90,15 @@ export const taxReturnForms = pgTable("tax_return_forms", {
   })
     .notNull()
     .default("portal_manual"),
+  /** What the government actually accepts; exports remain working papers unless
+   *  the configured method explicitly supports a certified file or API. */
+  governmentFormat: text("government_format", {
+    enum: ["portal_entry", "certified_file", "api", "paper"],
+  })
+    .notNull()
+    .default("portal_entry"),
+  /** Public government filing/instructions page. Credentials never live here. */
+  submissionUrl: text("submission_url"),
   /** Legally-required not-for-filing watermark on the facsimile (CRA/ATO/BMF). */
   watermark: text("watermark"),
   /**
@@ -96,6 +110,49 @@ export const taxReturnForms = pgTable("tax_return_forms", {
   isActive: boolean("is_active").notNull().default(true),
   ...auditColumns,
 });
+
+export interface TaxFilingSnapshotBox {
+  lineCode: string;
+  label: string;
+  value: string;
+  computed: boolean;
+  editable: boolean;
+}
+
+/**
+ * Immutable computed return snapshots. Preparing again creates a new version;
+ * filing only adds the submission timestamp/reference. This preserves exactly
+ * what a user relied on even if tax mappings or ledger data later change.
+ */
+export const taxFilings = pgTable(
+  "tax_filings",
+  {
+    id: id(),
+    orgId: orgRef(),
+    formCode: text("form_code").notNull(),
+    formName: text("form_name").notNull(),
+    country: text("country"),
+    periodFrom: date("period_from").notNull(),
+    periodTo: date("period_to").notNull(),
+    version: integer("version").notNull(),
+    status: text("status", { enum: ["prepared", "filed"] }).notNull().default("prepared"),
+    submissionChannel: text("submission_channel").notNull(),
+    boxes: jsonb("boxes").$type<TaxFilingSnapshotBox[]>().notNull(),
+    adjustments: jsonb("adjustments").$type<Record<string, string>>().notNull().default({}),
+    snapshotHash: text("snapshot_hash").notNull(),
+    filingReference: text("filing_reference"),
+    filedAt: timestamp("filed_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_filings_period_version").on(t.orgId, t.formCode, t.periodFrom, t.periodTo, t.version),
+    index("tax_filings_org_period").on(t.orgId, t.periodTo),
+    index("tax_filings_org_status").on(t.orgId, t.status),
+    check("tax_filings_dates_check", sql`${t.periodFrom} <= ${t.periodTo}`),
+    check("tax_filings_version_check", sql`${t.version} > 0`),
+    check("tax_filings_boxes_check", sql`jsonb_typeof(${t.boxes}) = 'array'`),
+  ],
+);
 
 /**
  * Maps GL activity to tax return lines (GST34: line 101 sales, 103 collected,

@@ -15,12 +15,14 @@ test("evalFormula handles parentheses, unary minus, and true numeric literals", 
   assert.equal(evalFormula("-105", values, codes("105")), "-9000.0000");
   // 200 is not a box code → a literal
   assert.equal(evalFormula("108 + 200", values, codes("105", "108")), "4200.0000");
+  assert.equal(evalFormula("abs(108 - 105)", values, codes("105", "108")), "5000.0000");
 });
 
 test("evalFormula rejects unsupported operators and unknown boxes", () => {
   assert.throws(() => evalFormula("105 * 2", new Map(), codes("105")), TaxReturnError);
   assert.throws(() => evalFormula("105 - 108", new Map([["105", "1.0000"]]), codes("105", "108")), /not-yet-computed box "108"/);
   assert.throws(() => evalFormula("105 +", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
+  assert.throws(() => evalFormula("abs 105", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
 });
 
 // A realistic GST34: 101 sales, 103 GST/HST collected (a credit in the ledger,

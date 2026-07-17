@@ -899,6 +899,29 @@
   "setup": {
     "title": "Setup",
     "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "taxLibrary": {
+      "title": "Tax return library",
+      "description": "Import maintained return structures for Canada, the United Kingdom, Australia, New Zealand, and a United States state/local workpaper.",
+      "pack": "Jurisdiction pack",
+      "optionInstalled": "{country} · {name} · installed",
+      "optionAvailable": "{country} · {name}",
+      "import": "Import pack",
+      "reset": "Reset to library defaults",
+      "working": "Importing…",
+      "importSuccess": "Tax return pack imported",
+      "resetSuccess": "Tax return pack reset to library defaults",
+      "usNotice": "The United States has no federal sales-tax return. This workpaper must be customized for every state and local filing jurisdiction."
+    },
+    "taxOfficial": {
+      "title": "Official filing form",
+      "description": "Upload an official fillable PDF only when the jurisdiction accepts or requires that form. Map its fields under Tax Return Boxes.",
+      "upload": "Upload official PDF",
+      "uploading": "Uploading…",
+      "uploaded": "Official form uploaded",
+      "remove": "Remove",
+      "removed": "Official form removed",
+      "none": "No official PDF uploaded"
+    },
     "new": "New",
     "empty": "Nothing here yet.",
     "statusActive": "Active",
@@ -923,6 +946,7 @@
       "primaryRequired": "Choose another accounting book as primary before removing primary status from this one.",
       "primaryActiveRequired": "The primary accounting book must remain active.",
       "archiveOnly": "Accounting books are retained for ledger history and can only be archived."
+      ,"invalidUrl": "Enter a valid http:// or https:// government filing URL."
     },
     "groups": {
       "company": "Company",
@@ -1161,6 +1185,9 @@
       "basis": "Basis",
       "sign": "Sign",
       "submissionChannel": "Submission channel",
+      "governmentFormat": "Government format",
+      "submissionUrl": "Government filing URL",
+      "officialPdfFileId": "Official PDF",
       "watermark": "Watermark",
       "sequence": "Order",
       "formula": "Formula",
@@ -1240,6 +1267,12 @@
         "fileUpload": "Electronic file upload",
         "efileApi": "E-file (API)",
         "portalManual": "Government portal (enter by hand)"
+      },
+      "governmentFormat": {
+        "portalEntry": "Online portal entry",
+        "certifiedFile": "Certified government file",
+        "api": "Compatible software / API",
+        "paper": "Official paper form"
       },
       "method": {
         "straightLine": "Straight line",

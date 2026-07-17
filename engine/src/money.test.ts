@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mulRate } from "./money.ts";
+import { abs, mulRate } from "./money.ts";
+
+test("abs preserves exact four-decimal money units", () => {
+  assert.equal(abs("-0.0001"), "0.0001");
+  assert.equal(abs("12.3400"), "12.3400");
+  assert.equal(abs("0"), "0.0000");
+});
 
 test("mulRate translates money exactly at numeric(19,10) precision", () => {
   assert.equal(mulRate("100.0000", "1.3512345678"), "135.1235");

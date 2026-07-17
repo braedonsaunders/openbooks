@@ -84,7 +84,7 @@ accounts match NetSuite exactly**.
 ### M4 — Close the books in openbooks
 - [x] Bank reconciliation: OFX/CSV import → dedupe → auto-match → two-pane
       workspace → zero-difference sign-off *(2026-07-14)*
-- [ ] GST/HST return (tax report lines → GST34 numbers)
+- [x] GST/HST return (tax report lines → GST34 numbers, immutable filing history, and government-channel guidance)
 - [ ] Fixed assets + depreciation runs (replace the locked FAM bundle)
 - [ ] Payroll journal import + labor burden runs (Paymate bridge)
 - [x] Period close operating system: Setup owns fiscal calendars, generated

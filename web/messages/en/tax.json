@@ -1,50 +1,69 @@
 {
   "title": "Tax Filings",
-  "description": "Compute government tax returns from your ledger and produce a filing-ready facsimile.",
-  "period": "{from} to {to}",
+  "description": "Prepare government tax returns from the ledger and preserve what was filed.",
+  "setup": "Tax filing setup",
   "notice": "Notice",
+  "period": "{from} to {to}",
   "form": "Return",
-  "selectForm": "Select a return",
   "from": "From",
   "to": "To",
   "compute": "Compute",
   "computing": "Computing…",
   "empty": "Choose a return and a period, then compute.",
-  "columns": {
-    "line": "Line",
-    "description": "Description",
-    "amount": "Amount"
-  },
+  "adjustmentAria": "Adjustment for {label}",
+  "adjustmentPlaceholder": "0.00",
+  "columns": { "line": "Line", "description": "Description", "amount": "Amount" },
   "noForms": {
     "title": "No tax returns configured",
-    "description": "Install a jurisdiction pack to get started, or build one in Setup → Taxes.",
-    "install": "Install Canada GST34",
-    "installing": "Installing…"
+    "description": "Import a jurisdiction pack or create a return in Setup → Taxes.",
+    "openSetup": "Open tax filing setup"
   },
-  "installed": "Installed {boxes} boxes ({sales} sales / {purchases} purchase codes mapped)",
-  "reinstall": "Reinstall GST34 pack",
-  "export": {
-    "label": "Export",
-    "pdf": "Facsimile PDF",
-    "csv": "CSV",
-    "xlsx": "Excel"
-  },
-  "official": {
-    "label": "Official form",
-    "present": "uploaded",
-    "none": "not uploaded",
-    "upload": "Upload official PDF",
-    "uploading": "Uploading…",
-    "uploaded": "Official form uploaded",
-    "remove": "Remove",
-    "removed": "Official form removed",
-    "download": "Official form (filled)",
-    "hint": "Upload your government's fillable PDF; map each box to its field in Setup → Tax Return Boxes."
+  "export": { "label": "Working-copy export", "pdf": "Working-copy PDF", "csv": "Working-copy CSV", "xlsx": "Working-copy Excel" },
+  "official": { "download": "Filled official form" },
+  "submission": {
+    "title": "Government submission",
+    "openGovernment": "Open filing instructions",
+    "exportNotice": "Working-copy exports are for review and records. They are not government submission files unless the configured filing method explicitly says otherwise.",
+    "gst34Notice": "GST34 is normally entered in CRA Account or NETFILE. CRA's uploadable .tax file can only be produced by CRA-certified software; PDF, CSV, and Excel are not accepted filing formats."
   },
   "channels": {
-    "print_pdf": "Print & mail",
-    "file_upload": "Electronic upload",
-    "efile_api": "E-file (API)",
-    "portal_manual": "Government portal"
+    "print_pdf": "Print and mail",
+    "file_upload": "Electronic file upload",
+    "efile_api": "Government e-file API",
+    "portal_manual": "Government online portal"
+  },
+  "governmentFormats": {
+    "portal_entry": "Enter the return online",
+    "certified_file": "Certified government file",
+    "api": "Compatible software/API required",
+    "paper": "Official paper form"
+  },
+  "history": {
+    "title": "Previous filings",
+    "description": "Versioned, immutable snapshots of prepared and submitted returns.",
+    "search": "Search filing history…",
+    "statusLabel": "Status",
+    "empty": "No saved filings match these filters.",
+    "save": "Save to history",
+    "saving": "Saving…",
+    "saved": "Return snapshot saved",
+    "status": { "prepared": "Prepared", "filed": "Filed" },
+    "columns": { "form": "Return", "period": "Period", "version": "Version", "status": "Status", "reference": "Reference", "saved": "Saved" },
+    "drawerDescription": "{from} to {to} · version {version}",
+    "formCode": "Return code",
+    "country": "Country",
+    "reference": "Government confirmation/reference",
+    "referencePlaceholder": "Confirmation number or receipt reference",
+    "filedAt": "Filed at",
+    "markFiledHint": "Only mark this snapshot filed after the government accepts it. This action cannot be undone.",
+    "markFiled": "Mark as filed",
+    "markingFiled": "Marking filed…",
+    "filedSuccess": "Filing marked as filed",
+    "line": "Line",
+    "lineDescription": "Description",
+    "amount": "Amount",
+    "hash": "Snapshot SHA-256: {hash}"
+    ,"snapshotWatermark": "Saved immutable snapshot · SHA-256 {hash}"
+    ,"export": { "pdf": "PDF", "xlsx": "Excel", "csv": "CSV" }
   }
 }

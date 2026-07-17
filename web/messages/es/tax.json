@@ -1,50 +1,69 @@
 {
   "title": "Presentaciones fiscales",
-  "description": "Calcule las declaraciones de impuestos gubernamentales a partir de su libro mayor y produzca un facsímil listo para presentar.",
-  "period": "del {from} al {to}",
+  "description": "Prepare declaraciones gubernamentales desde el libro mayor y conserve lo presentado.",
+  "setup": "Configuración de presentaciones",
   "notice": "Aviso",
+  "period": "del {from} al {to}",
   "form": "Declaración",
-  "selectForm": "Seleccionar una declaración",
   "from": "Desde",
   "to": "Hasta",
   "compute": "Calcular",
   "computing": "Calculando…",
-  "empty": "Elija una declaración y un período, luego calcule.",
-  "columns": {
-    "line": "Casilla",
-    "description": "Descripción",
-    "amount": "Importe"
-  },
+  "empty": "Elija una declaración y un período, y luego calcule.",
+  "adjustmentAria": "Ajuste para {label}",
+  "adjustmentPlaceholder": "0,00",
+  "columns": { "line": "Casilla", "description": "Descripción", "amount": "Importe" },
   "noForms": {
     "title": "No hay declaraciones configuradas",
-    "description": "Instale un paquete de jurisdicción para empezar, o cree una en Configuración → Impuestos.",
-    "install": "Instalar GST34 (Canadá)",
-    "installing": "Instalando…"
+    "description": "Importe un paquete de jurisdicción o cree una declaración en Configuración → Impuestos.",
+    "openSetup": "Abrir configuración fiscal"
   },
-  "installed": "{boxes} casillas instaladas ({sales} códigos de venta / {purchases} códigos de compra asignados)",
-  "reinstall": "Reinstalar el paquete GST34",
-  "export": {
-    "label": "Exportar",
-    "pdf": "Facsímil PDF",
-    "csv": "CSV",
-    "xlsx": "Excel"
-  },
-  "official": {
-    "label": "Formulario oficial",
-    "present": "cargado",
-    "none": "no cargado",
-    "upload": "Cargar PDF oficial",
-    "uploading": "Cargando…",
-    "uploaded": "Formulario oficial cargado",
-    "remove": "Quitar",
-    "removed": "Formulario oficial quitado",
-    "download": "Formulario oficial (rellenado)",
-    "hint": "Cargue el PDF rellenable de su gobierno; asigne cada casilla a su campo en Configuración → Casillas de la declaración."
+  "export": { "label": "Exportación de trabajo", "pdf": "PDF de trabajo", "csv": "CSV de trabajo", "xlsx": "Excel de trabajo" },
+  "official": { "download": "Formulario oficial rellenado" },
+  "submission": {
+    "title": "Presentación gubernamental",
+    "openGovernment": "Abrir instrucciones de presentación",
+    "exportNotice": "Las exportaciones de trabajo sirven para revisión y archivo. No son archivos de presentación gubernamental salvo que el método configurado lo indique expresamente.",
+    "gst34Notice": "La GST34 normalmente se introduce en la cuenta de la CRA o NETFILE. El archivo .tax cargable solo puede producirlo software certificado por la CRA; no se aceptan PDF, CSV ni Excel."
   },
   "channels": {
     "print_pdf": "Imprimir y enviar",
     "file_upload": "Carga electrónica",
-    "efile_api": "Presentación electrónica (API)",
+    "efile_api": "API de presentación electrónica",
     "portal_manual": "Portal gubernamental"
+  },
+  "governmentFormats": {
+    "portal_entry": "Introducir la declaración en línea",
+    "certified_file": "Archivo gubernamental certificado",
+    "api": "Se requiere software o API compatible",
+    "paper": "Formulario oficial en papel"
+  },
+  "history": {
+    "title": "Presentaciones anteriores",
+    "description": "Instantáneas versionadas e inmutables de declaraciones preparadas y presentadas.",
+    "search": "Buscar historial…",
+    "statusLabel": "Estado",
+    "empty": "No hay presentaciones guardadas que coincidan con estos filtros.",
+    "save": "Guardar en el historial",
+    "saving": "Guardando…",
+    "saved": "Instantánea de la declaración guardada",
+    "status": { "prepared": "Preparada", "filed": "Presentada" },
+    "columns": { "form": "Declaración", "period": "Período", "version": "Versión", "status": "Estado", "reference": "Referencia", "saved": "Guardada" },
+    "drawerDescription": "del {from} al {to} · versión {version}",
+    "formCode": "Código de declaración",
+    "country": "País",
+    "reference": "Confirmación o referencia gubernamental",
+    "referencePlaceholder": "Número de confirmación o referencia del recibo",
+    "filedAt": "Presentada el",
+    "markFiledHint": "Marque esta instantánea como presentada solo después de que el gobierno la acepte. Esta acción no se puede deshacer.",
+    "markFiled": "Marcar como presentada",
+    "markingFiled": "Marcando…",
+    "filedSuccess": "Presentación marcada como presentada",
+    "line": "Casilla",
+    "lineDescription": "Descripción",
+    "amount": "Importe",
+    "hash": "SHA-256 de la instantánea: {hash}"
+    ,"snapshotWatermark": "Instantánea inmutable guardada · SHA-256 {hash}"
+    ,"export": { "pdf": "PDF", "xlsx": "Excel", "csv": "CSV" }
   }
 }

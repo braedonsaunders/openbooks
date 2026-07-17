@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download, FileText, Play, Upload } from 'lucide-react'
+import { Download, ExternalLink, FileCheck2, Play, Settings } from 'lucide-react'
 import {
   Button,
   Card,
@@ -17,7 +18,15 @@ import {
   Select,
 } from '@openbooks/ui'
 
-type Form = { code: string; name: string; submission_channel: string; has_official: boolean }
+type Form = {
+  code: string
+  name: string
+  country: string | null
+  submission_channel: string
+  government_format: string
+  submission_url: string | null
+  has_official: boolean
+}
 type Box = { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }
 type Result = {
   formCode: string
@@ -33,16 +42,32 @@ function monthBounds(): { from: string; to: string } {
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth(), 1)
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  const iso = (date: Date) => date.toISOString().slice(0, 10)
   return { from: iso(from), to: iso(to) }
 }
 
-const fmt = (v: string) =>
-  Number(v).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function safeGovernmentUrl(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null
+  } catch {
+    return null
+  }
+}
 
-export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage: boolean }) {
+export function TaxFilingsView({
+  forms,
+  canSave,
+  canManageSetup,
+}: {
+  forms: Form[]
+  canSave: boolean
+  canManageSetup: boolean
+}) {
   const t = useTranslations('tax')
   const tCommon = useTranslations('common')
+  const locale = useLocale()
   const router = useRouter()
   const bounds = monthBounds()
   const [code, setCode] = useState(forms[0]?.code ?? '')
@@ -51,91 +76,70 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
   const [result, setResult] = useState<Result | null>(null)
   const [adjustments, setAdjustments] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  const [installing, setInstalling] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const selectedForm = forms.find((f) => f.code === code)
+  const [saving, setSaving] = useState(false)
+  const selectedForm = forms.find((form) => form.code === code)
+  const governmentUrl = safeGovernmentUrl(selectedForm?.submission_url)
 
-  async function uploadOfficial(file: File) {
-    setUploading(true)
-    try {
-      const fd = new FormData()
-      fd.set('file', file)
-      const res = await fetch(`/api/tax/returns/${encodeURIComponent(code)}/official-pdf`, { method: 'POST', body: fd })
-      if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(d.error)
-      }
-      toast.success(t('official.uploaded'))
-      router.refresh()
-    } catch (e) {
-      toast.error(e instanceof Error && e.message ? e.message : tCommon('feedback.saveFailed'))
-    } finally {
-      setUploading(false)
-    }
-  }
+  const fmt = (value: string) =>
+    Number(value).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-  async function removeOfficial() {
-    setUploading(true)
-    try {
-      await fetch(`/api/tax/returns/${encodeURIComponent(code)}/official-pdf`, { method: 'DELETE' })
-      toast.success(t('official.removed'))
-      router.refresh()
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const adjQuery = (adj: Record<string, string>) =>
-    Object.entries(adj)
-      .filter(([, v]) => v.trim() !== '' && v.trim() !== '0')
-      .map(([k, v]) => `&adj_${encodeURIComponent(k)}=${encodeURIComponent(v.trim())}`)
+  const adjustmentQuery = (values: Record<string, string>) =>
+    Object.entries(values)
+      .filter(([, value]) => value.trim() !== '' && value.trim() !== '0')
+      .map(([key, value]) => `&adj_${encodeURIComponent(key)}=${encodeURIComponent(value.trim())}`)
       .join('')
 
-  async function install() {
-    setInstalling(true)
-    try {
-      const res = await fetch('/api/tax/returns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pack: 'CA_GST34' }),
-      })
-      if (!res.ok) throw new Error()
-      const data = (await res.json()) as { boxRows: number; mappedSalesCodes: number; mappedPurchaseCodes: number }
-      toast.success(t('installed', { boxes: data.boxRows, sales: data.mappedSalesCodes, purchases: data.mappedPurchaseCodes }))
-      router.refresh()
-      if (result) await compute()
-    } catch {
-      toast.error(tCommon('feedback.saveFailed'))
-    } finally {
-      setInstalling(false)
-    }
-  }
-
-  async function compute(adj: Record<string, string> = adjustments) {
+  async function compute(values: Record<string, string> = adjustments) {
     if (!code) return
     setBusy(true)
     try {
-      const res = await fetch(`/api/tax/returns/${encodeURIComponent(code)}?from=${from}&to=${to}${adjQuery(adj)}`)
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(err.error)
-      }
-      setResult((await res.json()) as Result)
-    } catch (e) {
-      toast.error(e instanceof Error && e.message ? e.message : tCommon('feedback.saveFailed'))
+      const response = await fetch(`/api/tax/returns/${encodeURIComponent(code)}?from=${from}&to=${to}${adjustmentQuery(values)}`)
+      if (!response.ok) throw new Error()
+      setResult((await response.json()) as Result)
+    } catch {
+      toast.error(tCommon('feedback.saveFailed'))
     } finally {
       setBusy(false)
     }
   }
 
+  async function saveSnapshot() {
+    if (!result) return
+    setSaving(true)
+    try {
+      const response = await fetch('/api/tax/filings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, from, to, adjustments }),
+      })
+      if (!response.ok) throw new Error()
+      toast.success(t('history.saved'))
+      router.refresh()
+    } catch {
+      toast.error(tCommon('feedback.saveFailed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const exportHref = (format: string) =>
-    `/api/tax/returns/${encodeURIComponent(code)}/export?from=${from}&to=${to}&format=${format}${adjQuery(adjustments)}`
+    `/api/tax/returns/${encodeURIComponent(code)}/export?from=${from}&to=${to}&format=${format}${adjustmentQuery(adjustments)}`
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
+        </div>
+        {canManageSetup ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/setup/tax-return-forms">
+              <Settings size={14} />
+              {t('setup')}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {forms.length === 0 ? (
@@ -144,11 +148,10 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
             <CardTitle>{t('noForms.title')}</CardTitle>
             <CardDescription>{t('noForms.description')}</CardDescription>
           </CardHeader>
-          {canManage ? (
+          {canManageSetup ? (
             <CardContent>
-              <Button onClick={install} disabled={installing}>
-                <FileText size={15} />
-                {installing ? t('noForms.installing') : t('noForms.install')}
+              <Button asChild>
+                <Link href="/admin/setup/tax-return-forms">{t('noForms.openSetup')}</Link>
               </Button>
             </CardContent>
           ) : null}
@@ -159,60 +162,49 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
             <CardContent className="flex flex-wrap items-end gap-3 pt-6">
               <div className="min-w-52 flex-1 space-y-1.5">
                 <Label htmlFor="tax-form">{t('form')}</Label>
-                <Select id="tax-form" value={code} onChange={(e) => setCode(e.target.value)}>
-                  {forms.map((f) => (
-                    <option key={f.code} value={f.code}>
-                      {f.name}
-                    </option>
+                <Select
+                  id="tax-form"
+                  value={code}
+                  onChange={(event) => {
+                    setCode(event.target.value)
+                    setAdjustments({})
+                    setResult(null)
+                  }}
+                >
+                  {forms.map((form) => (
+                    <option key={form.code} value={form.code}>{form.name}</option>
                   ))}
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="tax-from">{t('from')}</Label>
-                <Input id="tax-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                <Input id="tax-from" type="date" value={from} onChange={(event) => { setFrom(event.target.value); setResult(null) }} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="tax-to">{t('to')}</Label>
-                <Input id="tax-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                <Input id="tax-to" type="date" value={to} onChange={(event) => { setTo(event.target.value); setResult(null) }} />
               </div>
               <Button onClick={() => compute()} disabled={busy}>
                 <Play size={15} />
                 {busy ? t('computing') : t('compute')}
               </Button>
-              {canManage ? (
-                <Button variant="outline" onClick={install} disabled={installing}>
-                  <FileText size={15} />
-                  {installing ? t('noForms.installing') : t('reinstall')}
-                </Button>
-              ) : null}
             </CardContent>
-            {canManage ? (
-              <CardContent className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <span className="text-sm text-slate-600 dark:text-slate-300">
-                  {t('official.label')}: {selectedForm?.has_official ? t('official.present') : t('official.none')}
-                </span>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) uploadOfficial(f)
-                      e.target.value = ''
-                    }}
-                  />
-                  <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900">
-                    <Upload size={14} />
-                    {uploading ? t('official.uploading') : t('official.upload')}
-                  </span>
-                </label>
-                {selectedForm?.has_official ? (
-                  <Button variant="ghost" size="sm" onClick={removeOfficial} disabled={uploading}>
-                    {t('official.remove')}
-                  </Button>
+            {selectedForm ? (
+              <CardContent className="border-t border-slate-100 pt-4 dark:border-slate-800">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('submission.title')}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{t(`channels.${selectedForm.submission_channel}`)}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{t(`governmentFormats.${selectedForm.government_format}`)}</span>
+                  {governmentUrl ? (
+                    <a className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300" href={governmentUrl} target="_blank" rel="noreferrer">
+                      {t('submission.openGovernment')} <ExternalLink size={13} />
+                    </a>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('submission.exportNotice')}</p>
+                {code === 'CA_GST34' ? (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{t('submission.gst34Notice')}</p>
                 ) : null}
-                <span className="text-xs text-slate-400 dark:text-slate-500">{t('official.hint')}</span>
               </CardContent>
             ) : null}
           </Card>
@@ -226,40 +218,24 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
                     <CardDescription>{t('period', { from: result.from, to: result.to })}</CardDescription>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <a href={exportHref('pdf')}>
-                      <Button variant="outline" size="sm">
-                        <Download size={14} />
-                        {t('export.pdf')}
-                      </Button>
-                    </a>
-                    <a href={exportHref('xlsx')}>
-                      <Button variant="outline" size="sm">
-                        <Download size={14} />
-                        {t('export.xlsx')}
-                      </Button>
-                    </a>
-                    <a href={exportHref('csv')}>
-                      <Button variant="outline" size="sm">
-                        <Download size={14} />
-                        {t('export.csv')}
-                      </Button>
-                    </a>
+                    <a href={exportHref('pdf')}><Button variant="outline" size="sm"><Download size={14} />{t('export.pdf')}</Button></a>
+                    <a href={exportHref('xlsx')}><Button variant="outline" size="sm"><Download size={14} />{t('export.xlsx')}</Button></a>
+                    <a href={exportHref('csv')}><Button variant="outline" size="sm"><Download size={14} />{t('export.csv')}</Button></a>
                     {selectedForm?.has_official ? (
-                      <a href={exportHref('official')}>
-                        <Button size="sm">
-                          <Download size={14} />
-                          {t('official.download')}
-                        </Button>
-                      </a>
+                      <a href={exportHref('official')}><Button variant="outline" size="sm"><Download size={14} />{t('official.download')}</Button></a>
+                    ) : null}
+                    {canSave ? (
+                      <Button size="sm" onClick={saveSnapshot} disabled={saving}>
+                        <FileCheck2 size={14} />
+                        {saving ? t('history.saving') : t('history.save')}
+                      </Button>
                     ) : null}
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 {result.watermark ? (
-                  <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                    {result.watermark}
-                  </p>
+                  <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{result.watermark}</p>
                 ) : null}
                 <table className="w-full text-sm">
                   <thead>
@@ -270,31 +246,24 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
                     </tr>
                   </thead>
                   <tbody>
-                    {result.boxes.map((b) => (
-                      <tr
-                        key={b.lineCode}
-                        className={`border-b border-slate-100 dark:border-slate-900 ${b.computed ? 'font-semibold text-slate-900 dark:text-slate-100' : ''}`}
-                      >
-                        <td className="py-2 pr-4 tabular-nums text-slate-500">{b.lineCode}</td>
-                        <td className="py-2 pr-4">{b.label}</td>
+                    {result.boxes.map((box) => (
+                      <tr key={box.lineCode} className={`border-b border-slate-100 dark:border-slate-900 ${box.computed ? 'font-semibold text-slate-900 dark:text-slate-100' : ''}`}>
+                        <td className="py-2 pr-4 tabular-nums text-slate-500">{box.lineCode}</td>
+                        <td className="py-2 pr-4">{box.label}</td>
                         <td className="py-1.5 text-right tabular-nums">
-                          {b.editable ? (
+                          {box.editable ? (
                             <input
                               type="number"
                               step="0.01"
                               inputMode="decimal"
-                              aria-label={b.label}
+                              aria-label={t('adjustmentAria', { label: box.label })}
                               className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1 text-right tabular-nums focus:border-teal-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
-                              value={adjustments[b.lineCode] ?? ''}
-                              placeholder="0.00"
-                              onChange={(e) =>
-                                setAdjustments((a) => ({ ...a, [b.lineCode]: e.target.value }))
-                              }
+                              value={adjustments[box.lineCode] ?? ''}
+                              placeholder={t('adjustmentPlaceholder')}
+                              onChange={(event) => setAdjustments((current) => ({ ...current, [box.lineCode]: event.target.value }))}
                               onBlur={() => compute()}
                             />
-                          ) : (
-                            fmt(b.value)
-                          )}
+                          ) : fmt(box.value)}
                         </td>
                       </tr>
                     ))}

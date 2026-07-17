@@ -884,6 +884,29 @@
   "setup": {
     "title": "Setup",
     "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "taxLibrary": {
+      "title": "Bibliothèque de déclarations fiscales",
+      "description": "Importez les structures maintenues pour le Canada, le Royaume-Uni, l’Australie, la Nouvelle-Zélande et une feuille de travail américaine pour les taxes locales.",
+      "pack": "Module de juridiction",
+      "optionInstalled": "{country} · {name} · installé",
+      "optionAvailable": "{country} · {name}",
+      "import": "Importer le module",
+      "reset": "Rétablir les valeurs de la bibliothèque",
+      "working": "Importation…",
+      "importSuccess": "Module de déclaration importé",
+      "resetSuccess": "Module rétabli selon la bibliothèque",
+      "usNotice": "Les États-Unis n’ont pas de déclaration fédérale de taxe de vente. Cette feuille doit être adaptée à chaque juridiction étatique et locale."
+    },
+    "taxOfficial": {
+      "title": "Formulaire officiel de dépôt",
+      "description": "Téléversez un PDF officiel à remplir seulement si la juridiction l’accepte ou l’exige. Associez ses champs dans Cases de déclaration.",
+      "upload": "Téléverser le PDF officiel",
+      "uploading": "Téléversement…",
+      "uploaded": "Formulaire officiel téléversé",
+      "remove": "Retirer",
+      "removed": "Formulaire officiel retiré",
+      "none": "Aucun PDF officiel téléversé"
+    },
     "new": "New",
     "empty": "Nothing here yet.",
     "statusActive": "Active",
@@ -908,6 +931,7 @@
       "primaryRequired": "Choisissez un autre livre comptable comme livre principal avant de retirer ce statut à celui-ci.",
       "primaryActiveRequired": "Le livre comptable principal doit rester actif.",
       "archiveOnly": "Les livres comptables sont conservés pour l’historique du grand livre et peuvent seulement être archivés."
+      ,"invalidUrl": "Saisissez une URL gouvernementale valide commençant par http:// ou https://."
     },
     "groups": {
       "company": "Company",
@@ -1113,6 +1137,9 @@
       "basis": "Basis",
       "sign": "Sign",
       "submissionChannel": "Canal de dépôt",
+      "governmentFormat": "Format gouvernemental",
+      "submissionUrl": "URL de dépôt gouvernemental",
+      "officialPdfFileId": "PDF officiel",
       "watermark": "Filigrane",
       "sequence": "Ordre",
       "formula": "Formule",
@@ -1188,6 +1215,12 @@
         "fileUpload": "Téléversement de fichier électronique",
         "efileApi": "Télédéclaration (API)",
         "portalManual": "Portail gouvernemental (saisie manuelle)"
+      },
+      "governmentFormat": {
+        "portalEntry": "Saisie dans le portail en ligne",
+        "certifiedFile": "Fichier gouvernemental certifié",
+        "api": "Logiciel ou API compatible",
+        "paper": "Formulaire papier officiel"
       },
       "method": {
         "straightLine": "Straight line",
