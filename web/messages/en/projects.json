@@ -180,7 +180,16 @@
     "costBreakdownAria": "Cost breakdown",
     "timeBreakdownAria": "Time breakdown",
     "tabsAria": "Project sections",
-    "recognizeRevenue": "Recognize revenue"
+    "recognizeRevenue": "Recognize revenue",
+    "pnlTitle": "Profit & loss",
+    "invoicedToDate": "Invoiced to date",
+    "invoicedHint": "Revenue posted from customer invoices.",
+    "couldBeInvoiced": "Could be invoiced",
+    "couldBeInvoicedHint": "Billable work performed, not yet invoiced.",
+    "totalJobPrice": "Total job price",
+    "totalJobCost": "Total job cost",
+    "committedHint": "Open purchase-order commitments.",
+    "grossProfit": "Gross profit"
   },
   "charges": {
     "costRecovered": "Cost recovered",

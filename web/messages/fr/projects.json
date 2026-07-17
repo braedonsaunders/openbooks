@@ -180,7 +180,16 @@
     "costBreakdownAria": "Répartition des coûts",
     "timeBreakdownAria": "Répartition du temps",
     "tabsAria": "Sections du projet",
-    "recognizeRevenue": "Comptabiliser les revenus"
+    "recognizeRevenue": "Comptabiliser les revenus",
+    "pnlTitle": "Résultat",
+    "invoicedToDate": "Facturé à ce jour",
+    "invoicedHint": "Revenus comptabilisés des factures clients.",
+    "couldBeInvoiced": "Facturable",
+    "couldBeInvoicedHint": "Travaux facturables réalisés, pas encore facturés.",
+    "totalJobPrice": "Prix total du projet",
+    "totalJobCost": "Coût total du projet",
+    "committedHint": "Engagements de bons de commande ouverts.",
+    "grossProfit": "Bénéfice brut"
   },
   "charges": {
     "costRecovered": "Coût récupéré",
