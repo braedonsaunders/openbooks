@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { Activity, ArrowRight, Settings, Sparkles } from 'lucide-react'
+import { Activity, ArrowRight, FileText, Settings, Sparkles } from 'lucide-react'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
@@ -51,6 +51,13 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
   const status = ['open', 'in_review', 'resolved', 'dismissed'].includes(requestedStatus ?? '') ? requestedStatus : undefined
   const requestedSeverity = pickString(sp.severity)
   const severity = ['info', 'warning', 'critical'].includes(requestedSeverity ?? '') ? requestedSeverity : undefined
+  const reportQ = pickString(sp.reportQ)?.trim().slice(0, 200)
+  const requestedReportAgent = pickString(sp.reportAgent)
+  const reportAgent = requestedReportAgent === 'accounting' || requestedReportAgent === 'finance'
+    ? readable.includes(requestedReportAgent) ? requestedReportAgent : undefined
+    : undefined
+  const reportPage = Math.min(1_000_000, Math.max(1, Number.parseInt(pickString(sp.reportPage) ?? '1', 10) || 1))
+  const reportPerPage = 5
   const readableSql = sql.raw(`(${readable.map((key) => `'${key}'`).join(',')})`)
   const base = sql`w.org_id = ${authz.user.orgId} and w.agent_key in ${readableSql}`
   const where = sql`${base}
@@ -59,7 +66,7 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     ${severity ? sql`and w.severity = ${severity}` : sql``}
     ${params.q ? sql`and (w.finding_type ilike ${`%${params.q}%`} or w.summary::text ilike ${`%${params.q}%`})` : sql``}`
 
-  const [rows, totalResult, counts, statusCounts, severityCounts, narratives] = (await Promise.all([
+  const [rows, totalResult, counts, statusCounts, severityCounts] = (await Promise.all([
     db.execute(sql`
       select w.id, w.agent_key, w.finding_type, w.severity, w.status, w.confidence::text,
              w.materiality::text, w.summary, w.first_detected_at, w.last_detected_at
@@ -71,16 +78,28 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     db.execute(sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`),
     db.execute(sql`select status, count(*) as n from ai_work_items w where ${base} group by status`),
     db.execute(sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`),
-    db.execute(sql`
-      select distinct on (agent_key) id, agent_key,
-             stats->'enrichment'->'narrative' as narrative, finished_at
-        from ai_agent_runs
-       where org_id = ${authz.user.orgId} and agent_key in ${readableSql}
-         and status = 'completed' and jsonb_typeof(stats->'enrichment'->'narrative') = 'object'
-       order by agent_key, finished_at desc
-    `),
   ])) as unknown as { rows: Record<string, any>[] }[]
   const total = Number(totalResult.rows[0]?.n ?? 0)
+  const reportBase = sql`r.org_id = ${authz.user.orgId} and r.agent_key in ${readableSql}
+    and r.status = 'completed' and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'`
+  const reportWhere = sql`${reportBase}
+    ${reportAgent ? sql`and r.agent_key = ${reportAgent}` : sql``}
+    ${reportQ ? sql`and (
+      r.stats->'enrichment'->'narrative'->>'title' ilike ${`%${reportQ}%`}
+      or r.stats->'enrichment'->'narrative'->>'executiveSummary' ilike ${`%${reportQ}%`}
+      or r.stats->'enrichment'->'narrative'->>'periodLabel' ilike ${`%${reportQ}%`}
+    )` : sql``}`
+  const [reportRows, reportTotalResult, reportAgentCounts] = (await Promise.all([
+    db.execute(sql`
+      select r.id, r.agent_key, r.stats->'enrichment'->'narrative' as narrative, r.finished_at
+        from ai_agent_runs r where ${reportWhere}
+       order by r.finished_at desc, r.id desc
+       limit ${reportPerPage} offset ${(reportPage - 1) * reportPerPage}
+    `),
+    db.execute(sql`select count(*) as n from ai_agent_runs r where ${reportWhere}`),
+    db.execute(sql`select r.agent_key, count(*) as n from ai_agent_runs r where ${reportBase} group by r.agent_key`),
+  ])) as unknown as { rows: Record<string, any>[] }[]
+  const reportTotal = Number(reportTotalResult.rows[0]?.n ?? 0)
   const itemId = pickString(sp.item)
   let selected: ContinuousCloseWorkItem | null = null
   if (itemId && isUuid(itemId)) {
@@ -133,10 +152,6 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
   const canWrite = can(authz, 'assistant.write')
   const activeCount = statusCounts.rows.filter((row) => row.status === 'open' || row.status === 'in_review').reduce((sum, row) => sum + Number(row.n), 0)
   const criticalCount = severityCounts.rows.find((row) => row.severity === 'critical')?.n ?? 0
-  const preferredNarrative = narratives.rows.find((row) => row.agent_key === agent)
-    ?? narratives.rows.find((row) => row.agent_key === 'finance')
-    ?? narratives.rows[0]
-
   return (
     <ListPageLayout
       header={<>
@@ -145,12 +160,30 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
           description={t('description')}
           actions={canManage ? <Button variant="outline" asChild><Link href="/admin/ai"><Settings size={14} />{t('actions.settings')}</Link></Button> : undefined}
         />
-        {preferredNarrative ? <NarrativeEntry narrative={preferredNarrative.narrative} href={mergeHref('/continuous-close', sp, { report: preferredNarrative.id })} labels={{
-          agent: t('narrative.agent', { agent: t(`agents.${preferredNarrative.agent_key}`) }),
-          fallbackTitle: t('narrative.title'),
-          generated: t('narrative.generated', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(preferredNarrative.finished_at)) }),
-          open: t('narrative.open'),
-        }} /> : null}
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <FileText size={16} className="text-violet-600 dark:text-violet-400" />
+              <div><h2 className="text-sm font-semibold">{t('reports.title')}</h2><p className="text-xs text-slate-500">{t('reports.description')}</p></div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SearchInput placeholder={t('reports.search')} paramKey="reportQ" pageParamKey="reportPage" />
+              <FilterChips basePath="/continuous-close" currentParams={sp} paramKey="reportAgent" pageParamKey="reportPage" label={t('filters.agent')} options={reportAgentCounts.rows.map((row) => ({ value: row.agent_key, label: t(`agents.${row.agent_key}`), count: Number(row.n) }))} />
+            </div>
+          </div>
+          {reportRows.rows.length ? <div className="divide-y divide-slate-200 px-3 dark:divide-slate-800">{reportRows.rows.map((report) => <NarrativeEntry
+            key={report.id}
+            narrative={report.narrative}
+            href={mergeHref('/continuous-close', sp, { report: report.id })}
+            labels={{
+              agent: t('narrative.agent', { agent: t(`agents.${report.agent_key}`) }),
+              fallbackTitle: t('narrative.title'),
+              generated: t('narrative.generated', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(report.finished_at)) }),
+              open: t('narrative.open'),
+            }}
+          />)}</div> : <p className="px-4 py-6 text-center text-sm text-slate-500">{t('reports.empty')}</p>}
+          <Pagination basePath="/continuous-close" currentParams={sp} total={reportTotal} page={reportPage} perPage={reportPerPage} pageParamKey="reportPage" />
+        </section>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric locale={locale} label={t('metrics.active')} value={activeCount} />
           <Metric locale={locale} label={t('metrics.critical')} value={Number(criticalCount)} tone={Number(criticalCount) > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
@@ -230,7 +263,7 @@ function NarrativeEntry({ narrative, href, labels }: { narrative: Record<string,
   const title = typeof narrative.title === 'string' ? narrative.title : labels.fallbackTitle
   const executiveSummary = typeof narrative.executiveSummary === 'string' ? narrative.executiveSummary : ''
   return (
-    <section className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-900 dark:bg-violet-950/20">
+    <section className="py-3">
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"><Sparkles size={16} /></div>
         <div className="min-w-0 flex-1">

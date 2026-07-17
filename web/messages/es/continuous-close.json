@@ -19,6 +19,7 @@
     "gross_margin_decline": { "title": "Disminución del margen bruto", "description": "El margen bruto cayó más allá del umbral configurado frente al período completado anterior." }
   },
   "summary": { "records": "{count, plural, one {# registro} other {# registros}}", "review": "Revise la evidencia de respaldo" },
+  "reports": { "title": "Informes de agentes", "description": "Abra un resumen generado o expórtelo como PDF.", "search": "Buscar informes…", "empty": "Ningún informe generado coincide con estos filtros." },
   "narrative": {
     "title": "Último resumen del agente",
     "agent": "Generado por {agent}",
