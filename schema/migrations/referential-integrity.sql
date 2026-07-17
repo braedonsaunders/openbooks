@@ -69,6 +69,11 @@ alter table employee_roles
   add foreign key (worker_comp_group_id) references worker_comp_groups(id),
   add foreign key (expense_account_id) references accounts(id);
 alter table addresses add foreign key (party_id) references parties(id);
+alter table contacts
+  add foreign key (org_id) references orgs(id),
+  add foreign key (party_id) references parties(id) on delete cascade,
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
 alter table party_bank_accounts add foreign key (party_id) references parties(id);
 
 -- tax

@@ -29,6 +29,9 @@ const SIZE_CLASS: Record<DrawerSize, string> = {
   full: 'w-full',
 }
 
+let openDrawerCount = 0
+let originalBodyOverflow: string | null = null
+
 /**
  * Slide-in drawer for sub-entity create/edit forms and mobile flyouts.
  * Portals to body, spring slide-in, backdrop fade, Esc + click-out + scroll lock.
@@ -44,7 +47,10 @@ export function Drawer({
   children,
   footer,
   headerActions,
+  subtabs,
   bodyClassName,
+  panelClassName,
+  stacked = false,
   onExitComplete,
 }: {
   open: boolean
@@ -58,9 +64,15 @@ export function Drawer({
   /** Primary action buttons, pinned to the top of the drawer (in the header,
    *  before the close button) so they're always reachable without scrolling. */
   headerActions?: React.ReactNode
+  /** Record-detail navigation rendered directly below the title header. */
+  subtabs?: React.ReactNode
   /** Override the body wrapper's classes (default: scroll + px-6 py-5 padding).
    *  Pass e.g. "overflow-hidden" for a child that manages its own layout/scroll. */
   bodyClassName?: string
+  /** Optional visual treatment for the drawer panel (for record-type tinting). */
+  panelClassName?: string
+  /** Raise this drawer above another open drawer in a deliberate nested flow. */
+  stacked?: boolean
   /** Fires after the exit animation finishes — used by UrlDrawer to defer the
    *  close navigation until the slide-out has played. */
   onExitComplete?: () => void
@@ -83,16 +95,23 @@ export function Drawer({
   React.useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
+      onClose()
     }
     document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
+    if (openDrawerCount === 0) originalBodyOverflow = document.body.style.overflow
+    openDrawerCount += 1
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
+      openDrawerCount = Math.max(0, openDrawerCount - 1)
+      if (openDrawerCount === 0) {
+        document.body.style.overflow = originalBodyOverflow ?? ''
+        originalBodyOverflow = null
+      }
     }
-  }, [open, onClose])
+  }, [open, onClose, stacked])
 
   // Focus management: on open, remember the previously focused element and move
   // focus into the dialog; trap Tab within the panel; restore focus on close.
@@ -104,6 +123,7 @@ export function Drawer({
 
     // Defer the initial focus until the panel has mounted for this open cycle.
     const focusTimer = window.setTimeout(() => {
+      if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
       const panel = panelRef.current
       if (!panel) return
       const first = panel.querySelector<HTMLElement>(focusablesSelector)
@@ -112,6 +132,7 @@ export function Drawer({
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Tab') return
+      if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
       const panel = panelRef.current
       if (!panel) return
       const focusables = Array.from(panel.querySelectorAll<HTMLElement>(focusablesSelector)).filter(
@@ -145,7 +166,7 @@ export function Drawer({
         previouslyFocused.focus()
       }
     }
-  }, [open])
+  }, [open, stacked])
 
   if (typeof document === 'undefined') return null
 
@@ -158,7 +179,11 @@ export function Drawer({
   return createPortal(
     <AnimatePresence onExitComplete={onExitComplete}>
       {mounted && open ? (
-        <div key="drawer" className="fixed inset-0 z-50">
+        <div
+          key="drawer"
+          data-drawer-layer={stacked ? 'nested' : 'base'}
+          className={cn('fixed inset-0', stacked ? 'z-[55]' : 'z-50')}
+        >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -184,6 +209,7 @@ export function Drawer({
               // utilities on one element resolve by stylesheet order, not
               // class order, so stacking them makes the toggle a no-op.
               fullscreen ? 'w-full sm:max-w-[100vw]' : SIZE_CLASS[size],
+              panelClassName,
             )}
           >
             {title || description || headerActions ? (
@@ -266,6 +292,11 @@ export function Drawer({
                 </div>
               </header>
             ) : null}
+            {subtabs ? (
+              <div className="shrink-0 border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-900">
+                {subtabs}
+              </div>
+            ) : null}
             <div
               className={cn(
                 'app-scroll min-h-0 flex-1 text-slate-900 dark:text-slate-100',
@@ -311,7 +342,10 @@ export function UrlDrawer({
   children,
   footer,
   headerActions,
+  subtabs,
   bodyClassName,
+  panelClassName,
+  stacked,
 }: {
   open: boolean
   closeHref: string
@@ -321,9 +355,25 @@ export function UrlDrawer({
   children: React.ReactNode
   footer?: React.ReactNode
   headerActions?: React.ReactNode
+  subtabs?: React.ReactNode
   bodyClassName?: string
+  panelClassName?: string
+  stacked?: boolean
 }) {
   const navigate = React.useContext(DrawerNavigateContext)
+  const [nestedContext, setNestedContext] = React.useState<{ closeHref: string; stacked: boolean } | null>(null)
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const requestedReturn = params.get('drawerReturn')
+    const safeReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
+      ? requestedReturn
+      : null
+    setNestedContext(safeReturn
+      ? { closeHref: safeReturn, stacked: params.has('relatedParty') }
+      : null)
+  }, [closeHref])
+  const resolvedCloseHref = nestedContext?.closeHref ?? closeHref
+  const resolvedStacked = stacked === true || nestedContext?.stacked === true
   // Local presence state: the URL says the drawer is open, but closing must
   // first play the slide-out. `close()` just flips local `show` to false so
   // AnimatePresence runs the exit; the actual navigation is deferred to
@@ -336,8 +386,8 @@ export function UrlDrawer({
   }
   function afterExit() {
     if (typeof window === 'undefined') return
-    if (navigate) navigate(closeHref)
-    else window.location.assign(closeHref)
+    if (navigate) navigate(resolvedCloseHref)
+    else window.location.assign(resolvedCloseHref)
   }
   return (
     <Drawer
@@ -349,7 +399,10 @@ export function UrlDrawer({
       size={size}
       footer={footer}
       headerActions={headerActions}
+      subtabs={subtabs}
       bodyClassName={bodyClassName}
+      panelClassName={panelClassName}
+      stacked={resolvedStacked}
     >
       {children}
     </Drawer>
