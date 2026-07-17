@@ -2,181 +2,42 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { normalizeSectionsInput } from "../record-schema";
+import {
+  API_RECORD_TYPES,
+  RECORD_TYPE_BY_KEY,
+  READONLY_COLUMNS,
+  RW,
+  fieldTypeToApi,
+  pgTypeToOpenApi,
+  toResolved,
+  type ApiField,
+  type ApiRecordType,
+  type ApiRecordTypeSchema,
+  type ResolvedApiType,
+} from "./registry-data";
 
 /**
  * API schema registry — the self-documenting foundation.
  *
- * Static descriptors map record-type keys to their DB table, permission, and
- * available operations. At runtime, `loadApiSchema()` queries
- * `information_schema.columns` to produce the ACTUAL field list (name, type,
- * nullable) — so the schema is always in sync with the real DB, never stale.
- * Custom record types (defined by the org via the app builder) and custom
- * fields are layered on dynamically, producing a tenant-specific schema that
- * feeds both the OpenAPI spec and the in-shell docs browser.
+ * The static descriptors + type mappings live in the pure ./registry-data
+ * module (unit-testable). Here we add the db-backed runtime: `loadApiSchema()`
+ * reflects live `information_schema.columns`, layers on the org's custom fields
+ * (`custom_field_defs`) and custom record types, and `resolveApiType()` is the
+ * single resolver every /api/v1/records route uses — no per-route duplication.
  *
- * This mirrors NetSuite's OpenAPI 3.0 metadata (one source of truth) but
- * goes further: it's per-tenant and includes that org's custom records and
- * custom fields — something NetSuite can't do in its global spec.
+ * The schema is always in sync with the real DB, never stale, and feeds the
+ * OpenAPI spec, the docs browser, AND the write validators from one source of
+ * truth. This mirrors NetSuite's OpenAPI metadata but goes further: it's
+ * per-tenant and includes that org's custom records and fields.
  */
 
-export type ApiOperation = "list" | "get" | "create" | "update" | "delete";
-
-export interface ApiRecordType {
-  /** URL-safe slug used in /api/v1/records/<key>. */
-  key: string;
-  /** Human-readable label. */
-  label: string;
-  /** What this record type represents. */
-  description: string;
-  /** The DB table the records live in. Null for purely-dynamic (custom) types. */
-  table: string | null;
-  /** Permission required to read (list/get). */
-  readPermission: string;
-  /** Permission required to write (create/update/delete). Null = read-only. */
-  writePermission: string | null;
-  /** Operations available on this record type. */
-  operations: ApiOperation[];
-  /** True when this record type is dynamically defined by the org. */
-  dynamic: boolean;
-}
-
-/** Built-in record types exposed through the API. */
-export const API_RECORD_TYPES: ApiRecordType[] = [
-  {
-    key: "journal-entries",
-    label: "Journal Entries",
-    description:
-      "Balanced ledger entries enforced by the accounting kernel. Documents post exactly one entry; authorized open-period amendments re-materialize it with immutable before/after evidence, while closed-period corrections use reopening or reversal.",
-    table: "journal_entries",
-    readPermission: "gl.read",
-    writePermission: "gl.post",
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "bills",
-    label: "Vendor Bills",
-    description: "Accounts payable documents — invoices received from vendors, pending approval and posting.",
-    table: "documents",
-    readPermission: "ap.read",
-    // Write endpoints are not implemented in /api/v1 yet — the spec must not
-    // advertise them. Restore create/update (with ap.create) when they land.
-    writePermission: null,
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "invoices",
-    label: "Customer Invoices",
-    description: "Accounts receivable documents — sales invoices issued to customers.",
-    table: "documents",
-    readPermission: "ar.read",
-    // Not implemented in /api/v1 yet — see note on bills.
-    writePermission: null,
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "payments",
-    label: "Payments",
-    description: "Vendor payments and customer receipts, with open-item application.",
-    table: "documents",
-    readPermission: "ap.pay",
-    writePermission: "ap.pay",
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "parties",
-    label: "Parties",
-    description: "The unified party directory — customers, vendors, and employees. A single record can hold multiple roles.",
-    table: "parties",
-    readPermission: "parties.read",
-    // Not implemented in /api/v1 yet — see note on bills.
-    writePermission: null,
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "accounts",
-    label: "Chart of Accounts",
-    description: "The general-ledger chart of accounts — posting, summary, and header accounts.",
-    table: "accounts",
-    readPermission: "gl.read",
-    writePermission: null,
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "items",
-    label: "Items & Services",
-    description: "The catalog of items and services that sales and purchase lines reference.",
-    table: "items",
-    readPermission: "items.read",
-    // Not implemented in /api/v1 yet — see note on bills.
-    writePermission: null,
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "projects",
-    label: "Projects",
-    description: "Jobs and projects for job costing and dimension tracking.",
-    table: "projects",
-    readPermission: "projects.read",
-    // Not implemented in /api/v1 yet — see note on bills.
-    writePermission: null,
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-  {
-    key: "assets",
-    label: "Fixed Assets",
-    description: "Fixed assets and their depreciation schedules.",
-    table: "fixed_assets",
-    readPermission: "assets.read",
-    writePermission: "assets.manage",
-    operations: ["list", "get"],
-    dynamic: false,
-  },
-];
-
-export interface ApiField {
-  /** Column/field name (snake_case for DB columns, field id for custom). */
-  name: string;
-  /** Data type string from information_schema or the field type. */
-  type: string;
-  /** Whether the field is required (NOT NULL and no default). */
-  required: boolean;
-  /** Human-readable description, when available. */
-  description: string | null;
-  /** True for custom fields (appended by the org). */
-  custom: boolean;
-}
-
-export interface ApiRecordTypeSchema extends ApiRecordType {
-  fields: ApiField[];
-  /** URL path for this record type in the v1 API. */
-  path: string;
-}
-
-/** Map a Postgres data type to an OpenAPI type string. */
-export function pgTypeToOpenApi(pgType: string): string {
-  if (pgType === "uuid") return "string (uuid)";
-  if (pgType.startsWith("timestamp")) return "string (date-time)";
-  if (pgType === "date") return "string (date)";
-  if (pgType === "boolean") return "boolean";
-  if (pgType.startsWith("numeric") || pgType === "integer" || pgType === "bigint" || pgType === "real" || pgType === "double precision") return "number";
-  if (pgType === "jsonb" || pgType === "json") return "object";
-  if (pgType.startsWith("text") || pgType.startsWith("character")) return "string";
-  return "string";
-}
+export * from "./registry-data";
 
 /**
  * Load the full API schema for an org: built-in record types (with live DB
- * columns) + the org's published custom record types (with their FormField[]
- * definitions). This is the single source of truth that powers the OpenAPI
- * spec and the docs browser.
+ * columns + the org's custom fields on those tables) and the org's published
+ * custom record types (with their FormField[] definitions). Single source of
+ * truth for the OpenAPI spec, the docs browser, and write validation.
  */
 export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[]> {
   const builtIn = API_RECORD_TYPES.filter((t) => t.table);
@@ -196,17 +57,61 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
     byTable.set(row.table_name, arr);
   }
 
-  const result: ApiRecordTypeSchema[] = builtIn.map((t) => ({
-    ...t,
-    path: `/api/v1/records/${t.key}`,
-    fields: (byTable.get(t.table!) ?? []).map((c): ApiField => ({
+  // Custom fields on built-in tables (custom_field_defs), keyed by table and
+  // optional kind. Surfaced as `cf_<key>` so bills/parties/etc. advertise and
+  // accept their org custom fields — like NetSuite's `custentity_*`.
+  const cfDefs = (await db.execute(sql`
+    select target_table, target_kind, key, label, field_type, is_required
+      from custom_field_defs
+     where org_id = ${orgId} and is_active
+     order by sort_order, label`)) as any;
+
+  const cfByTargetKind = new Map<string, any[]>();
+  for (const row of cfDefs.rows) {
+    const k = `${row.target_table}::${row.target_kind ?? ""}`;
+    const arr = cfByTargetKind.get(k) ?? [];
+    arr.push(row);
+    cfByTargetKind.set(k, arr);
+  }
+
+  function customFieldsFor(table: string, docKind?: string): ApiField[] {
+    const keys = docKind ? [`${table}::`, `${table}::${docKind}`] : [`${table}::`];
+    const seen = new Set<string>();
+    const out: ApiField[] = [];
+    for (const k of keys) {
+      for (const d of cfByTargetKind.get(k) ?? []) {
+        const name = `cf_${d.key}`;
+        if (seen.has(name)) continue;
+        seen.add(name);
+        out.push({
+          name,
+          type: fieldTypeToApi(d.field_type),
+          required: Boolean(d.is_required),
+          writable: true,
+          description: d.label ? String(d.label) : null,
+          custom: true,
+        });
+      }
+    }
+    return out;
+  }
+
+  const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
+    const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
+    const physical = (byTable.get(t.table!) ?? []).map((c): ApiField => ({
       name: c.column_name,
       type: pgTypeToOpenApi(c.data_type),
-      required: c.is_nullable === "NO" && !c.column_default,
+      required: c.is_nullable === "NO" && !c.column_default && !READONLY_COLUMNS.has(c.column_name),
+      writable: !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom",
       description: null,
       custom: false,
-    })),
-  }));
+    }));
+    return {
+      ...t,
+      path: `/api/v1/records/${t.key}`,
+      fields: [...physical, ...customFieldsFor(t.table!, docKind)],
+    };
+  });
 
   // Layer on custom record types (dynamically defined by the org).
   const custom = (await db.execute(sql`
@@ -224,6 +129,7 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
       name: String(f.id ?? f.key ?? ""),
       type: fieldTypeToApi(f.type ?? "text"),
       required: Boolean(f.required),
+      writable: true,
       description: f.label ? String(f.label) : null,
       custom: true,
     }));
@@ -232,10 +138,11 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
       label: row.name,
       description: row.description ?? "Custom record type",
       table: "custom_records",
+      searchColumn: "search_text",
       readPermission: "records.read",
-      // Not implemented in /api/v1 yet — see note on bills.
-      writePermission: null,
-      operations: ["list", "get"],
+      writePermission: "records.create",
+      operations: RW,
+      writer: { kind: "custom_record" },
       dynamic: true,
       path: `/api/v1/records/${row.key}`,
       fields,
@@ -245,18 +152,30 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
   return result;
 }
 
-function fieldTypeToApi(t: string): string {
-  switch (t) {
-    case "number":
-    case "currency":
-      return "number";
-    case "boolean":
-      return "boolean";
-    case "date":
-      return "string (date)";
-    case "longText":
-      return "string";
-    default:
-      return "string";
-  }
+/**
+ * Resolve a record-type slug to its route-facing descriptor. Checks the
+ * built-in registry first, then the org's published custom record types.
+ * Returns null for an unknown type.
+ */
+export async function resolveApiType(
+  orgId: string,
+  typeKey: string,
+): Promise<ResolvedApiType | null> {
+  const builtIn = RECORD_TYPE_BY_KEY.get(typeKey) as ApiRecordType | undefined;
+  if (builtIn && builtIn.table) return toResolved(builtIn);
+
+  const r = (await db.execute(sql`
+    select key from custom_record_types
+     where org_id = ${orgId} and key = ${typeKey} and status = 'published'`)) as any;
+  if (!r.rows[0]) return null;
+  return {
+    key: typeKey,
+    table: "custom_records",
+    searchColumn: "search_text",
+    readPermission: "records.read",
+    writePermission: "records.create",
+    operations: RW,
+    writer: { kind: "custom_record" },
+    dynamic: true,
+  };
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardApiKey } from "../../../../lib/api-auth";
-import { generateOpenApiSpec } from "../../../../lib/api/openapi";
+import { generateOpenApiSpec } from "../../../../lib/api/openapi-server";
 
 export const runtime = "nodejs";
 

@@ -17,5 +17,26 @@
     "required": "Required",
     "description": "Description",
     "yes": "yes"
+  },
+  "console": {
+    "referenceTab": "Reference",
+    "consoleTab": "Console",
+    "recordTypes": "Record types",
+    "tokenLabel": "API key",
+    "tokenPlaceholder": "ob_live_…",
+    "tokenNote": "Paste a key from API Keys. It stays in this browser tab and is sent only to this API.",
+    "needToken": "Enter an API key above to send requests.",
+    "method": "Method",
+    "requestBody": "Request body",
+    "send": "Send",
+    "sending": "Sending…",
+    "resetBody": "Reset body",
+    "response": "Response",
+    "responseIdle": "Send a request to see the response here.",
+    "readOnly": "This record type is read-only through the API.",
+    "status": "Status",
+    "time": "Time",
+    "idPlaceholder": "record id (uuid)",
+    "selectType": "Select a record type to build a request."
   }
 }

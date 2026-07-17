@@ -17,5 +17,26 @@
     "required": "Requis",
     "description": "Description",
     "yes": "oui"
+  },
+  "console": {
+    "referenceTab": "Référence",
+    "consoleTab": "Console",
+    "recordTypes": "Types d'enregistrement",
+    "tokenLabel": "Clé API",
+    "tokenPlaceholder": "ob_live_…",
+    "tokenNote": "Collez une clé depuis Clés API. Elle reste dans cet onglet du navigateur et n'est envoyée qu'à cette API.",
+    "needToken": "Saisissez une clé API ci-dessus pour envoyer des requêtes.",
+    "method": "Méthode",
+    "requestBody": "Corps de la requête",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "resetBody": "Réinitialiser le corps",
+    "response": "Réponse",
+    "responseIdle": "Envoyez une requête pour voir la réponse ici.",
+    "readOnly": "Ce type d'enregistrement est en lecture seule via l'API.",
+    "status": "Statut",
+    "time": "Temps",
+    "idPlaceholder": "id de l'enregistrement (uuid)",
+    "selectType": "Sélectionnez un type d'enregistrement pour construire une requête."
   }
 }
