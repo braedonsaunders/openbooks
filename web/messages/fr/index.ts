@@ -40,6 +40,7 @@ import records from './records.json'
 import reports from './reports.json'
 import salesOrders from './salesOrders.json'
 import sync from './sync.json'
+import tax from './tax.json'
 import timesheets from './timesheets.json'
 
 export default {
@@ -82,5 +83,6 @@ export default {
   reports,
   salesOrders,
   sync,
+  tax,
   timesheets,
 } as const

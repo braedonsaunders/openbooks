@@ -1,0 +1,37 @@
+{
+  "title": "Tax Filings",
+  "description": "Compute government tax returns from your ledger and produce a filing-ready facsimile.",
+  "period": "{from} to {to}",
+  "notice": "Notice",
+  "form": "Return",
+  "selectForm": "Select a return",
+  "from": "From",
+  "to": "To",
+  "compute": "Compute",
+  "computing": "Computing…",
+  "empty": "Choose a return and a period, then compute.",
+  "columns": {
+    "line": "Line",
+    "description": "Description",
+    "amount": "Amount"
+  },
+  "noForms": {
+    "title": "No tax returns configured",
+    "description": "Install a jurisdiction pack to get started, or build one in Setup → Taxes.",
+    "install": "Install Canada GST34",
+    "installing": "Installing…"
+  },
+  "installed": "Installed {boxes} boxes ({sales} sales / {purchases} purchase codes mapped)",
+  "export": {
+    "label": "Export",
+    "pdf": "Facsimile PDF",
+    "csv": "CSV",
+    "xlsx": "Excel"
+  },
+  "channels": {
+    "print_pdf": "Print & mail",
+    "file_upload": "Electronic upload",
+    "efile_api": "E-file (API)",
+    "portal_manual": "Government portal"
+  }
+}

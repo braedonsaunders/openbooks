@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assembleReturn, evalFormula, TaxReturnError, type TaxReturnBoxDef } from "./tax-return.ts";
+import { assembleReturn, evalFormula, planReturn, TaxReturnError, type TaxReturnBoxDef, type TaxReportLineRow } from "./tax-return.ts";
 
 const codes = (...c: string[]) => new Set(c);
 
@@ -67,6 +67,25 @@ test("assembleReturn evaluates strictly in sequence order (a forward reference t
     { lineCode: "105", label: "Total", sign: 1, sequence: 2, formula: null },
   ];
   assert.throws(() => assembleReturn(bad, new Map([["105", "1.0000"]])), /not-yet-computed box "105"/);
+});
+
+test("planReturn collapses multi-code boxes and collects every GL source", () => {
+  // Line 103 (GST/HST collected) sums two tax codes; 105 is computed.
+  const rows: TaxReportLineRow[] = [
+    { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 5, taxCodeId: "gst", basis: "tax_amount", formula: null },
+    { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 2, taxCodeId: "hst-on", basis: "tax_amount", formula: null },
+    { lineCode: "105", label: "Total", sign: 1, sequence: 6, taxCodeId: null, basis: null, formula: "103" },
+  ];
+  const { boxes, glSources } = planReturn(rows);
+  // One box per line code; 103 takes the earliest sequence.
+  assert.deepEqual(boxes.map((b) => b.lineCode).sort(), ["103", "105"]);
+  assert.equal(boxes.find((b) => b.lineCode === "103")!.sequence, 2);
+  // Both tax codes feed line 103; the computed box is not a GL source.
+  assert.deepEqual(
+    glSources.filter((s) => s.lineCode === "103").map((s) => s.taxCodeId).sort(),
+    ["gst", "hst-on"],
+  );
+  assert.equal(glSources.length, 2);
 });
 
 test("a GL-mapped box with no ledger activity is zero, not missing", () => {

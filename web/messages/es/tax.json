@@ -1,0 +1,37 @@
+{
+  "title": "Presentaciones fiscales",
+  "description": "Calcule las declaraciones de impuestos gubernamentales a partir de su libro mayor y produzca un facsímil listo para presentar.",
+  "period": "del {from} al {to}",
+  "notice": "Aviso",
+  "form": "Declaración",
+  "selectForm": "Seleccionar una declaración",
+  "from": "Desde",
+  "to": "Hasta",
+  "compute": "Calcular",
+  "computing": "Calculando…",
+  "empty": "Elija una declaración y un período, luego calcule.",
+  "columns": {
+    "line": "Casilla",
+    "description": "Descripción",
+    "amount": "Importe"
+  },
+  "noForms": {
+    "title": "No hay declaraciones configuradas",
+    "description": "Instale un paquete de jurisdicción para empezar, o cree una en Configuración → Impuestos.",
+    "install": "Instalar GST34 (Canadá)",
+    "installing": "Instalando…"
+  },
+  "installed": "{boxes} casillas instaladas ({sales} códigos de venta / {purchases} códigos de compra asignados)",
+  "export": {
+    "label": "Exportar",
+    "pdf": "Facsímil PDF",
+    "csv": "CSV",
+    "xlsx": "Excel"
+  },
+  "channels": {
+    "print_pdf": "Imprimir y enviar",
+    "file_upload": "Carga electrónica",
+    "efile_api": "Presentación electrónica (API)",
+    "portal_manual": "Portal gubernamental"
+  }
+}
