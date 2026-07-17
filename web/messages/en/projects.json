@@ -95,7 +95,6 @@
   "drawer": {
     "newProject": "New project",
     "autosaveHint": "Changes save automatically.",
-    "openCockpit": "Open cockpit",
     "activate": "Activate",
     "deactivate": "Deactivate",
     "nameToActivate": "Name the project to activate it",
@@ -179,7 +178,9 @@
     "billValue": "Bill value",
     "noTime": "No approved time on this project yet.",
     "costBreakdownAria": "Cost breakdown",
-    "timeBreakdownAria": "Time breakdown"
+    "timeBreakdownAria": "Time breakdown",
+    "tabsAria": "Project sections",
+    "recognizeRevenue": "Recognize revenue"
   },
   "charges": {
     "costRecovered": "Cost recovered",

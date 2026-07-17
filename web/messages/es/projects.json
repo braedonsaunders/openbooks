@@ -95,7 +95,6 @@
   "drawer": {
     "newProject": "Nuevo proyecto",
     "autosaveHint": "Los cambios se guardan automáticamente.",
-    "openCockpit": "Abrir panel de control",
     "activate": "Activar",
     "deactivate": "Desactivar",
     "nameToActivate": "Asigne un nombre al proyecto para activarlo",
@@ -179,7 +178,9 @@
     "billValue": "Valor a facturar",
     "noTime": "Aún no hay tiempo aprobado en este proyecto.",
     "costBreakdownAria": "Desglose de costos",
-    "timeBreakdownAria": "Desglose de tiempo"
+    "timeBreakdownAria": "Desglose de tiempo",
+    "tabsAria": "Secciones del proyecto",
+    "recognizeRevenue": "Reconocer ingresos"
   },
   "charges": {
     "costRecovered": "Costo recuperado",

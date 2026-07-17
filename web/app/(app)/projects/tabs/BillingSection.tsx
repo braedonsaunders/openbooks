@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { PagedTable } from '../../../../components/paged-table'
 import { money } from '../../../../lib/format'
 
 export interface UnbilledClient {
@@ -47,16 +48,20 @@ export function BillingSection({
   unbilled,
   requests,
   canManage,
+  formOpen,
+  onFormOpenChange,
 }: {
   projectId: string
   unbilled: UnbilledClient
   requests: BillingRequestClient[]
   canManage: boolean
+  /** Request-billing form is opened from the flyout Actions menu. */
+  formOpen: boolean
+  onFormOpenChange: (open: boolean) => void
 }) {
   const t = useTranslations('projects.billing')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const [showForm, setShowForm] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const [invoiceType, setInvoiceType] = useState('progress')
@@ -89,7 +94,7 @@ export function BillingSection({
     })
     if (res.ok) {
       toast.success(t('requestCreated'))
-      setShowForm(false)
+      onFormOpenChange(false)
       router.refresh()
     } else {
       toast.error((await res.json()).error ?? t('requestFailed'))
@@ -110,7 +115,7 @@ export function BillingSection({
     }
   }
 
-  async function cancel(id: string) {
+  async function cancelRequest(id: string) {
     setBusy(true)
     const res = await fetch(`/api/billing-requests/${id}`, {
       method: 'PATCH',
@@ -132,37 +137,33 @@ export function BillingSection({
 
   return (
     <div className="space-y-6">
-      {/* Unbilled banner */}
+      {/* Unbilled banner (no inline trigger — Request billing lives in the Actions menu). */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
-          <div>
-            <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              {t('availableToBill')}
-            </div>
-            <div className="text-2xl font-semibold tabular-nums text-teal-700 dark:text-teal-300">
-              {money(unbilled.revenue)}
-            </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {t('unbilledDetail', {
-                entries: unbilled.timeEntryCount,
-                hours: unbilled.hours.toFixed(1),
-                lines: unbilled.costLineCount,
-              })}
-            </div>
+        <CardContent className="p-4">
+          <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+            {t('availableToBill')}
           </div>
-          {canManage ? (
-            <Button onClick={() => setShowForm((v) => !v)} disabled={busy}>
-              {t('requestBilling')}
-            </Button>
-          ) : null}
+          <div className="text-2xl font-semibold tabular-nums text-teal-700 dark:text-teal-300">
+            {money(unbilled.revenue)}
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {t('unbilledDetail', {
+              entries: unbilled.timeEntryCount,
+              hours: unbilled.hours.toFixed(1),
+              lines: unbilled.costLineCount,
+            })}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Request billing form */}
-      {showForm ? (
+      {/* Request-billing form — opened from the Actions menu. */}
+      {formOpen ? (
         <Card>
           <CardContent className="space-y-4 p-4">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('requestBilling')}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('requestBilling')}</h3>
+              <Button variant="ghost" size="sm" onClick={() => onFormOpenChange(false)} disabled={busy}>{tCommon('actions.cancel')}</Button>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className={field}>
                 <Label>{t('invoiceType')}</Label>
@@ -226,14 +227,9 @@ export function BillingSection({
                 </div>
               ) : null}
             </div>
-            <div className="flex gap-2">
-              <Button onClick={submit} disabled={busy}>
-                {busy ? tCommon('actions.saving') : t('createRequest')}
-              </Button>
-              <Button variant="outline" onClick={() => setShowForm(false)} disabled={busy}>
-                {tCommon('actions.cancel')}
-              </Button>
-            </div>
+            <Button onClick={submit} disabled={busy}>
+              {busy ? tCommon('actions.saving') : t('createRequest')}
+            </Button>
           </CardContent>
         </Card>
       ) : null}
@@ -241,64 +237,43 @@ export function BillingSection({
       {/* Requests table */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('requests')}</h3>
-        {requests.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('noRequests')}</p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  <th className="px-3 py-2">{tCommon('labels.number')}</th>
-                  <th className="px-3 py-2">{t('invoiceType')}</th>
-                  <th className="px-3 py-2">{t('basis')}</th>
-                  <th className="px-3 py-2">{t('backupType')}</th>
-                  <th className="px-3 py-2">{tCommon('labels.status')}</th>
-                  <th className="px-3 py-2">{t('invoice')}</th>
-                  <th className="px-3 py-2 text-right">{tCommon('labels.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
-                    <td className="px-3 py-2 font-mono text-[13px] font-semibold">{r.requestNumber}</td>
-                    <td className="px-3 py-2">{t(`type.${r.invoiceType}`)}</td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{t(`basisOpt.${r.basis}`)}</td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{r.backupRequired ? t(`backup.${r.backupType}`) : '—'}</td>
-                    <td className="px-3 py-2"><Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>{statusLabel(r.status)}</Badge></td>
-                    <td className="px-3 py-2">
-                      {r.invoiceDocumentId ? (
-                        <Link href={`/ar?invoice=${r.invoiceDocumentId}`} className="font-mono text-[13px] text-teal-700 hover:underline dark:text-teal-300">
-                          {r.invoiceNumber}
-                        </Link>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center justify-end gap-2">
-                        {r.status === 'open' && canManage ? (
-                          <>
-                            <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>
-                              {t('createInvoice')}
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => cancel(r.id)} disabled={busy}>
-                              {tCommon('actions.cancel')}
-                            </Button>
-                          </>
-                        ) : null}
-                        {r.status === 'invoiced' && r.backupRequired ? (
-                          <a href={`/api/billing-requests/${r.id}/backup`} target="_blank" rel="noreferrer">
-                            <Button size="sm" variant="outline">{t('downloadBackup')}</Button>
-                          </a>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <PagedTable
+          rows={requests}
+          rowKey={(r) => r.id}
+          searchable
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('noRequests')}</p>}
+          columns={[
+            { key: 'number', header: tCommon('labels.number'), cell: (r) => <span className="font-mono text-[13px] font-semibold">{r.requestNumber}</span>, search: (r) => r.requestNumber },
+            { key: 'type', header: t('invoiceType'), cell: (r) => t(`type.${r.invoiceType}`) },
+            { key: 'basis', header: t('basis'), cell: (r) => <span className="text-slate-600 dark:text-slate-300">{t(`basisOpt.${r.basis}`)}</span> },
+            { key: 'backup', header: t('backupType'), cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.backupRequired ? t(`backup.${r.backupType}`) : '—'}</span> },
+            { key: 'status', header: tCommon('labels.status'), cell: (r) => <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>{statusLabel(r.status)}</Badge> },
+            {
+              key: 'invoice', header: t('invoice'),
+              cell: (r) => r.invoiceDocumentId ? (
+                <Link href={`/ar?invoice=${r.invoiceDocumentId}`} className="font-mono text-[13px] text-teal-700 hover:underline dark:text-teal-300">{r.invoiceNumber}</Link>
+              ) : '—',
+            },
+            {
+              key: 'actions', header: tCommon('labels.actions'), align: 'right',
+              cell: (r) => (
+                <div className="flex items-center justify-end gap-2">
+                  {r.status === 'open' && canManage ? (
+                    <>
+                      <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>{t('createInvoice')}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => cancelRequest(r.id)} disabled={busy}>{tCommon('actions.cancel')}</Button>
+                    </>
+                  ) : null}
+                  {r.status === 'invoiced' && r.backupRequired ? (
+                    <a href={`/api/billing-requests/${r.id}/backup`} target="_blank" rel="noreferrer">
+                      <Button size="sm" variant="outline">{t('downloadBackup')}</Button>
+                    </a>
+                  ) : null}
+                </div>
+              ),
+            },
+          ]}
+        />
       </div>
     </div>
   )

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, SearchSelect } from '@openbooks/ui'
+import { KpiStrip } from '../../../../components/kpi-strip'
+import { PagedTable } from '../../../../components/paged-table'
 import { money } from '../../../../lib/format'
 
 export interface ChargeItemOption {
@@ -31,13 +33,17 @@ export function ChargesSection({
   charges,
   items,
   absorption,
-  canManage,
+  formOpen,
+  onFormOpenChange,
 }: {
   projectId: string
   charges: ChargeRow[]
   items: ChargeItemOption[]
   absorption: { recovered: string; billValue: string }
-  canManage: boolean
+  /** The add-charge form is driven by the flyout Actions menu (AGENTS.md:
+   *  secondary creates live behind the Actions menu, not a bolted-on section). */
+  formOpen: boolean
+  onFormOpenChange: (open: boolean) => void
 }) {
   const t = useTranslations('projects.charges')
   const tCommon = useTranslations('common')
@@ -74,6 +80,7 @@ export function ChargesSection({
     if (res.ok) {
       toast.success(t('created'))
       setItemId(''); setQuantity('1'); setCostRate(''); setBillRate('')
+      onFormOpenChange(false)
       router.refresh()
     } else {
       toast.error((await res.json()).error ?? t('failed'))
@@ -85,27 +92,22 @@ export function ChargesSection({
 
   return (
     <div className="space-y-6">
-      {/* Absorption / recovery summary */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Card><CardContent className="p-4">
-          <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('costRecovered')}</span>
-          <span className="block text-xl font-semibold tabular-nums text-teal-700 dark:text-teal-300">{money(absorption.recovered)}</span>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('billValue')}</span>
-          <span className="block text-xl font-semibold tabular-nums">{money(absorption.billValue)}</span>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <span className="block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('count')}</span>
-          <span className="block text-xl font-semibold tabular-nums">{charges.length}</span>
-        </CardContent></Card>
-      </section>
+      <KpiStrip
+        items={[
+          { label: t('costRecovered'), value: money(absorption.recovered), tone: 'good' },
+          { label: t('billValue'), value: money(absorption.billValue) },
+          { label: t('count'), value: String(charges.length) },
+        ]}
+      />
 
-      {/* Add a charge */}
-      {canManage ? (
+      {/* Add-charge form — opened from the Actions menu, not always-on. */}
+      {formOpen ? (
         <Card>
           <CardContent className="space-y-4 p-4">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('addTitle')}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('addTitle')}</h3>
+              <Button variant="ghost" size="sm" onClick={() => onFormOpenChange(false)}>{tCommon('actions.cancel')}</Button>
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('addHint')}</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div className={`${field} lg:col-span-2`}>
@@ -133,36 +135,20 @@ export function ChargesSection({
       {/* Charges list */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-        {charges.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('none')}</p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  <th className="px-3 py-2">{tCommon('labels.number')}</th>
-                  <th className="px-3 py-2">{tCommon('labels.date')}</th>
-                  <th className="px-3 py-2">{tCommon('labels.status')}</th>
-                  <th className="px-3 py-2 text-right">{t('cost')}</th>
-                  <th className="px-3 py-2 text-right">{t('billValue')}</th>
-                  <th className="px-3 py-2">{t('billed')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {charges.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
-                    <td className="px-3 py-2 font-mono text-[13px] font-semibold">{c.documentNumber}</td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{c.documentDate}</td>
-                    <td className="px-3 py-2"><Badge variant={statusVariant(c.status)}>{c.status}</Badge></td>
-                    <td className="px-3 py-2 text-right tabular-nums">{money(c.cost)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{money(c.billValue)}</td>
-                    <td className="px-3 py-2">{c.billed ? <Badge variant="success">{t('billedYes')}</Badge> : <span className="text-slate-400">—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <PagedTable
+          rows={charges}
+          rowKey={(r) => r.id}
+          searchable
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('none')}</p>}
+          columns={[
+            { key: 'number', header: tCommon('labels.number'), cell: (c) => <span className="font-mono text-[13px] font-semibold">{c.documentNumber}</span>, search: (c) => c.documentNumber },
+            { key: 'date', header: tCommon('labels.date'), cell: (c) => <span className="text-slate-600 dark:text-slate-300">{c.documentDate}</span> },
+            { key: 'status', header: tCommon('labels.status'), cell: (c) => <Badge variant={statusVariant(c.status)}>{c.status}</Badge> },
+            { key: 'cost', header: t('cost'), align: 'right', cell: (c) => money(c.cost) },
+            { key: 'billValue', header: t('billValue'), align: 'right', cell: (c) => money(c.billValue) },
+            { key: 'billed', header: t('billed'), cell: (c) => (c.billed ? <Badge variant="success">{t('billedYes')}</Badge> : <span className="text-slate-400">—</span>) },
+          ]}
+        />
       </div>
     </div>
   )

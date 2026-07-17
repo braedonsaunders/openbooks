@@ -95,7 +95,6 @@
   "drawer": {
     "newProject": "Nouveau projet",
     "autosaveHint": "Les modifications s’enregistrent automatiquement.",
-    "openCockpit": "Ouvrir le poste de pilotage",
     "activate": "Activer",
     "deactivate": "Désactiver",
     "nameToActivate": "Nommez le projet pour l’activer",
@@ -179,7 +178,9 @@
     "billValue": "Valeur à facturer",
     "noTime": "Aucun temps approuvé sur ce projet pour le moment.",
     "costBreakdownAria": "Répartition des coûts",
-    "timeBreakdownAria": "Répartition du temps"
+    "timeBreakdownAria": "Répartition du temps",
+    "tabsAria": "Sections du projet",
+    "recognizeRevenue": "Comptabiliser les revenus"
   },
   "charges": {
     "costRecovered": "Coût récupéré",

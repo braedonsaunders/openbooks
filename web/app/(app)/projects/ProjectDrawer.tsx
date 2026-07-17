@@ -1,16 +1,20 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { LayoutDashboard, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, Pencil, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, Popover, SearchSelect, Select, Textarea, UrlDrawer, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
+import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
+import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
+import { TransactionsTab } from './tabs/TransactionsTab'
+import { ChargesSection, type ChargeRow, type ChargeItemOption } from './tabs/ChargesSection'
+import { BillingSection, type BillingRequestClient, type UnbilledClient } from './tabs/BillingSection'
 
 interface PartyOpt {
   id: string
@@ -46,7 +50,30 @@ interface ProjectPayload {
   customFieldDefs?: CustomFieldDefClient[]
 }
 
+/** Everything the cockpit tabs need — loaded server-side alongside the project. */
+export interface ProjectCockpitData {
+  financials: FinancialsData
+  time: CostTimeData
+  unbilled: UnbilledClient
+  billingRequests: BillingRequestClient[]
+  charges: ChargeRow[]
+  items: ChargeItemOption[]
+  absorption: { recovered: string; billValue: string }
+  recognizedToDate: string
+  transactions: {
+    id: string
+    kind: string
+    documentNumber: string
+    documentDate: string
+    partyName: string | null
+    status: string
+    amount: string | number
+  }[]
+}
+
 const field = 'space-y-1.5'
+const TAB_KEYS = ['overview', 'financials', 'cost_time', 'charges', 'billing', 'transactions'] as const
+type TabKey = (typeof TAB_KEYS)[number]
 
 const emptyTask = (): TaskRow => ({
   id: null,
@@ -64,25 +91,24 @@ export function ProjectDrawer({
   canManage,
   basePath = '/projects',
   layout,
+  cockpit,
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   basePath?: string
-  /** Resolved form layout (custom fields already merged in). Falls back to the
-   *  system default so custom fields still render if none is passed. */
+  /** Resolved form layout (custom fields already merged in). */
   layout?: FormLayoutConfig
+  /** Cockpit data for the financial/time/charges/billing/transactions tabs. */
+  cockpit: ProjectCockpitData
 }) {
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const pr = payload.project
-  // 'New project' is the server-side draft sentinel stored in the DB — compared
-  // and saved verbatim; only its *display* goes through the catalog.
   const isPlaceholderName = pr.name === 'New project'
 
-  // Enum option lists — values are API codes, labels come from the catalogs.
   const statusOptions = useMemo(
     () => [
       { value: 'quoted', label: t('status.quoted') },
@@ -130,13 +156,13 @@ export function ProjectDrawer({
     (pr.custom as Record<string, unknown> | null) ?? {},
   )
   const [tasks, setTasks] = useState<TaskRow[]>(
-    payload.tasks.map((t) => ({
-      id: t.id,
-      code: t.code ?? '',
-      name: t.name ?? '',
-      status: t.status ?? 'open',
-      estimatedHours: t.estimated_hours != null ? Number(t.estimated_hours).toString() : '',
-      estimatedCost: t.estimated_cost != null ? Number(t.estimated_cost).toFixed(2) : '',
+    payload.tasks.map((task) => ({
+      id: task.id,
+      code: task.code ?? '',
+      name: task.name ?? '',
+      status: task.status ?? 'open',
+      estimatedHours: task.estimated_hours != null ? Number(task.estimated_hours).toString() : '',
+      estimatedCost: task.estimated_cost != null ? Number(task.estimated_cost).toFixed(2) : '',
     })),
   )
   const [isActive, setIsActive] = useState<boolean>(pr.is_active === true)
@@ -148,11 +174,15 @@ export function ProjectDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
-  // — even for drafts — with an Edit button in the header. Save is EXPLICIT —
-  // one Save button, no per-field autosave.
+  // NetSuite-style record: opens READ-ONLY; Edit switches to an explicit-save form.
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canManage
+
+  // Flyout chrome: subtabs + Actions-menu-driven create forms (AGENTS.md).
+  const [tab, setTab] = useState<TabKey>('overview')
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [chargeFormOpen, setChargeFormOpen] = useState(false)
+  const [billingFormOpen, setBillingFormOpen] = useState(false)
 
   const nameValid = name.trim().length > 0 && name.trim() !== 'New project'
 
@@ -165,7 +195,6 @@ export function ProjectDrawer({
     setTasks((rows) => rows.map((row, j) => (j === i ? { ...row, ...patch } : row)))
   }
 
-  // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
     () => ({
       name: name.trim() || (isActive ? name : 'New project'),
@@ -184,19 +213,18 @@ export function ProjectDrawer({
       subsidiaryId: subsidiaries.length > 1 ? subsidiaryId || null : undefined,
       subsidiaryIncludeChildren: subsidiaries.length > 1 ? subsidiaryIncludeChildren : undefined,
       tasks: tasks
-        .filter((t) => t.name.trim().length > 0)
-        .map((t) => ({
-          id: t.id,
-          code: t.code || null,
-          name: t.name,
-          status: t.status,
-          estimatedHours: t.estimatedHours || null,
-          estimatedCost: t.estimatedCost || null,
+        .filter((task) => task.name.trim().length > 0)
+        .map((task) => ({
+          id: task.id,
+          code: task.code || null,
+          name: task.name,
+          status: task.status,
+          estimatedHours: task.estimatedHours || null,
+          estimatedCost: task.estimatedCost || null,
         })),
     }),
     [name, code, customerId, foremanId, managerId, status, billingMethod, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
   )
-  // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
   useEffect(() => {
@@ -208,7 +236,6 @@ export function ProjectDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload])
 
-  /** Reset every field back to the loaded project (used by Cancel). */
   function resetForm() {
     setName(isPlaceholderName ? '' : (pr.name ?? ''))
     setCode(pr.code ?? '')
@@ -226,13 +253,13 @@ export function ProjectDrawer({
     setSubsidiaryId(pr.subsidiary_id ?? '')
     setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false)
     setTasks(
-      payload.tasks.map((t) => ({
-        id: t.id,
-        code: t.code ?? '',
-        name: t.name ?? '',
-        status: t.status ?? 'open',
-        estimatedHours: t.estimated_hours != null ? Number(t.estimated_hours).toString() : '',
-        estimatedCost: t.estimated_cost != null ? Number(t.estimated_cost).toFixed(2) : '',
+      payload.tasks.map((task) => ({
+        id: task.id,
+        code: task.code ?? '',
+        name: task.name ?? '',
+        status: task.status ?? 'open',
+        estimatedHours: task.estimated_hours != null ? Number(task.estimated_hours).toString() : '',
+        estimatedCost: task.estimated_cost != null ? Number(task.estimated_cost).toFixed(2) : '',
       })),
     )
   }
@@ -282,16 +309,12 @@ export function ProjectDrawer({
   }
 
   const ro = !editable
-  // Custom fields render inline among the native fields via the form layout —
-  // they are placed wherever the form designer puts them (default: a trailing
-  // group), never in a bolted-on section.
   const effectiveLayout = layout ?? defaultFormLayout('project')
   const cfByKey = useMemo(
     () => new Map(customFieldDefs.map((d) => [`cf_${d.key}`, d])),
     [customFieldDefs],
   )
 
-  /** Render one placement's full cell (label + control) for the header layout. */
   function renderProjectField(placement: HeaderFieldPlacement): React.ReactNode {
     const lbl = placement.labelOverride?.trim() || undefined
     switch (placement.key) {
@@ -405,7 +428,6 @@ export function ProjectDrawer({
           </>
         )
       default: {
-        // Custom field (cf_<key>) — rendered inline exactly like a built-in.
         const def = cfByKey.get(placement.key)
         if (!def) return null
         const overridden = lbl ? { ...def, label: lbl } : def
@@ -421,6 +443,21 @@ export function ProjectDrawer({
     }
   }
 
+  function menuItem(icon: React.ReactNode, label: string, onClick: () => void) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setActionsOpen(false); onClick() }}
+        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+      >
+        {icon}
+        {label}
+      </button>
+    )
+  }
+
+  const tabs = TAB_KEYS.map((key) => ({ key, label: t(`cockpit.tabs.${key}`) }))
+
   return (
     <UrlDrawer
       open
@@ -435,151 +472,186 @@ export function ProjectDrawer({
         </span>
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
+      subtabs={
+        <nav className="-mb-px flex flex-wrap gap-1" aria-label={t('cockpit.tabsAria')}>
+          {tabs.map((tb) => (
+            <button
+              key={tb.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === tb.key}
+              onClick={() => setTab(tb.key)}
+              className={cn(
+                'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+                tab === tb.key
+                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
+              )}
+            >
+              {tb.label}
+            </button>
+          ))}
+        </nav>
+      }
       headerActions={
-        <>
-          {mode === 'edit' ? (
-            <>
-              <Button disabled={busy} onClick={save}>
-                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+        mode === 'edit' ? (
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" disabled={busy} onClick={save}>
+              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+            </Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>
+              {tCommon('actions.cancel')}
+            </Button>
+          </div>
+        ) : canManage ? (
+          <Popover
+            open={actionsOpen}
+            onOpenChange={setActionsOpen}
+            align="end"
+            trigger={
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 px-2.5 text-xs"
+                onClick={() => setActionsOpen((o) => !o)}
+                aria-expanded={actionsOpen}
+              >
+                {tCommon('labels.actions')}
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', actionsOpen && 'rotate-180')} aria-hidden />
               </Button>
-              <Button variant="outline" disabled={busy} onClick={cancel}>
-                {tCommon('actions.cancel')}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Link href={`/projects/${pr.id}`}>
-                <Button variant="outline">
-                  <LayoutDashboard size={15} /> {t('drawer.openCockpit')}
-                </Button>
-              </Link>
-              {canManage ? (
-                <>
-                  <Button variant="outline" onClick={() => setMode('edit')}>
-                    {tCommon('actions.edit')}
-                  </Button>
-                  {isActive ? (
-                    <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                      {t('drawer.deactivate')}
-                    </Button>
-                  ) : (
-                    <>
-                      {!nameValid ? (
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
-                      ) : null}
-                      <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                        {t('drawer.activate')}
-                      </Button>
-                    </>
-                  )}
-                </>
-              ) : null}
-            </>
-          )}
-        </>
+            }
+            className="w-56 p-1.5"
+          >
+            <div className="space-y-0.5">
+              {menuItem(<Pencil className="h-3.5 w-3.5" aria-hidden />, tCommon('actions.edit'), () => { setTab('overview'); setMode('edit') })}
+              {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('charges'); setChargeFormOpen(true) })}
+              {menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
+              {billingMethod === 'fixed_price'
+                ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('cockpit.recognizeRevenue'), () => setTab('financials'))
+                : null}
+              <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+              {isActive
+                ? menuItem(<Trash2 className="h-3.5 w-3.5" aria-hidden />, t('drawer.deactivate'), () => setActiveState(false))
+                : nameValid
+                  ? menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('drawer.activate'), () => setActiveState(true))
+                  : null}
+            </div>
+          </Popover>
+        ) : undefined
       }
       footer={
-        <div className="flex w-full items-center gap-3">
-          <span
-            className={
-              'text-xs ' +
-              (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
-            }
-          >
-            {mode === 'edit'
-              ? saveState === 'saving'
+        tab === 'overview' && mode === 'edit' ? (
+          <div className="flex w-full items-center gap-3">
+            <span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>
+              {saveState === 'saving'
                 ? tCommon('actions.saving')
                 : saveState === 'error'
                   ? t('drawer.saveFailedRetry')
                   : dirty
                     ? t('drawer.unsavedChanges')
-                    : null
-              : null}
-          </span>
-        </div>
+                    : null}
+            </span>
+          </div>
+        ) : undefined
       }
     >
-      <div className="space-y-7 p-1">
-        {/* Header fields (native + custom) driven by the resolved form layout. */}
-        <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderProjectField} />
+      {tab === 'overview' ? (
+        <div className="space-y-7 p-1">
+          <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderProjectField} />
 
-        {/* -- WBS tasks (cost budget) --------------------------------- */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.wbsTitle')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {t('drawer.wbsDescription')}
-              </p>
+          {/* WBS tasks (cost budget) */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.wbsTitle')}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.wbsDescription')}</p>
+              </div>
+              {!ro ? (
+                <Button variant="outline" size="sm" onClick={() => setTasks([...tasks, emptyTask()])}>
+                  <Plus size={14} /> {t('drawer.addTask')}
+                </Button>
+              ) : null}
             </div>
-            {!ro ? (
-              <Button variant="outline" size="sm" onClick={() => setTasks([...tasks, emptyTask()])}>
-                <Plus size={14} /> {t('drawer.addTask')}
-              </Button>
-            ) : null}
-          </div>
-          {tasks.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('drawer.noTasks')}</p>
-          ) : (
-            <div className="space-y-2">
-              {tasks.map((task, i) => (
-                <div key={task.id ?? `new-${i}`} className="grid items-end gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-12 dark:border-slate-800">
-                  <div className={`${field} sm:col-span-2`}>
-                    <Label>{t('labels.code')}</Label>
-                    <Input value={task.code} onChange={(e) => setTask(i, { code: e.target.value })} className="font-mono" disabled={ro} />
-                  </div>
-                  <div className={`${field} sm:col-span-4`}>
-                    <Label>{t('labels.task')}</Label>
-                    <Input value={task.name} onChange={(e) => setTask(i, { name: e.target.value })} placeholder={t('drawer.taskNamePlaceholder')} disabled={ro} />
-                  </div>
-                  <div className={`${field} sm:col-span-2`}>
-                    <Label>{t('labels.estHours')}</Label>
-                    <Input
-                      inputMode="decimal"
-                      className="text-right tabular-nums"
-                      value={task.estimatedHours}
-                      onChange={(e) => setTask(i, { estimatedHours: e.target.value })}
-                      disabled={ro}
-                    />
-                  </div>
-                  <div className={`${field} sm:col-span-2`}>
-                    <Label>{t('labels.estCost')}</Label>
-                    <Input
-                      inputMode="decimal"
-                      className="text-right tabular-nums"
-                      value={task.estimatedCost}
-                      onChange={(e) => setTask(i, { estimatedCost: e.target.value })}
-                      disabled={ro}
-                    />
-                  </div>
-                  <div className={`${field} sm:col-span-2`}>
-                    <Label>{tCommon('labels.status')}</Label>
-                    <Select value={task.status} onChange={(e) => setTask(i, { status: e.target.value })} disabled={ro}>
-                      {taskStatusOptions.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  {!ro ? (
-                    <div className="sm:col-span-12 flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setTasks(tasks.filter((_, j) => j !== i))}
-                        aria-label={t('drawer.removeTaskAria')}
-                      >
-                        <Trash2 size={14} /> {tCommon('actions.remove')}
-                      </Button>
+            {tasks.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t('drawer.noTasks')}</p>
+            ) : (
+              <div className="space-y-2">
+                {tasks.map((task, i) => (
+                  <div key={task.id ?? `new-${i}`} className="grid items-end gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-12 dark:border-slate-800">
+                    <div className={`${field} sm:col-span-2`}>
+                      <Label>{t('labels.code')}</Label>
+                      <Input value={task.code} onChange={(e) => setTask(i, { code: e.target.value })} className="font-mono" disabled={ro} />
                     </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+                    <div className={`${field} sm:col-span-4`}>
+                      <Label>{t('labels.task')}</Label>
+                      <Input value={task.name} onChange={(e) => setTask(i, { name: e.target.value })} placeholder={t('drawer.taskNamePlaceholder')} disabled={ro} />
+                    </div>
+                    <div className={`${field} sm:col-span-2`}>
+                      <Label>{t('labels.estHours')}</Label>
+                      <Input inputMode="decimal" className="text-right tabular-nums" value={task.estimatedHours} onChange={(e) => setTask(i, { estimatedHours: e.target.value })} disabled={ro} />
+                    </div>
+                    <div className={`${field} sm:col-span-2`}>
+                      <Label>{t('labels.estCost')}</Label>
+                      <Input inputMode="decimal" className="text-right tabular-nums" value={task.estimatedCost} onChange={(e) => setTask(i, { estimatedCost: e.target.value })} disabled={ro} />
+                    </div>
+                    <div className={`${field} sm:col-span-2`}>
+                      <Label>{tCommon('labels.status')}</Label>
+                      <Select value={task.status} onChange={(e) => setTask(i, { status: e.target.value })} disabled={ro}>
+                        {taskStatusOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                      </Select>
+                    </div>
+                    {!ro ? (
+                      <div className="sm:col-span-12 flex justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => setTasks(tasks.filter((_, j) => j !== i))} aria-label={t('drawer.removeTaskAria')}>
+                          <Trash2 size={14} /> {tCommon('actions.remove')}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {tab === 'financials' ? (
+        <FinancialsTab
+          data={cockpit.financials}
+          projectId={pr.id}
+          billingMethod={billingMethod || null}
+          recognizedToDate={cockpit.recognizedToDate}
+          canManage={canManage}
+        />
+      ) : null}
+
+      {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} /> : null}
+
+      {tab === 'charges' ? (
+        <ChargesSection
+          projectId={pr.id}
+          charges={cockpit.charges}
+          items={cockpit.items}
+          absorption={cockpit.absorption}
+          formOpen={chargeFormOpen}
+          onFormOpenChange={setChargeFormOpen}
+        />
+      ) : null}
+
+      {tab === 'billing' ? (
+        <BillingSection
+          projectId={pr.id}
+          unbilled={cockpit.unbilled}
+          requests={cockpit.billingRequests}
+          canManage={canManage}
+          formOpen={billingFormOpen}
+          onFormOpenChange={setBillingFormOpen}
+        />
+      ) : null}
+
+      {tab === 'transactions' ? (
+        <TransactionsTab tasks={payload.tasks} transactions={cockpit.transactions} />
+      ) : null}
     </UrlDrawer>
   )
 }
