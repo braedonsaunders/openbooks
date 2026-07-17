@@ -48,6 +48,7 @@ export interface ForecastEntry {
   entryId: string;
   docKind: string | null;
   docId: string | null;
+  partyId: string | null;
   partyName: string;
   amount: number;
   tranDate: string;
@@ -446,6 +447,7 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
         entryId: it.entryId,
         docKind: it.docKind,
         docId: it.docId,
+        partyId: it.partyId,
         partyName: it.partyName,
         amount: it.remaining,
         tranDate: toISO(it.tranDate),
