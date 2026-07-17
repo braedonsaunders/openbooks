@@ -1215,6 +1215,7 @@
       "method": "Method",
       "departmentId": "Department",
       "defaultMethod": "Default method",
+      "defaultConvention": "Depreciation convention",
       "defaultLifeMonths": "Default life (months)",
       "assetAccountId": "Asset account",
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
@@ -1286,6 +1287,11 @@
         "straightLine": "Straight line",
         "decliningBalance": "Declining balance",
         "doubleDeclining": "Double declining"
+      },
+      "convention": {
+        "fullMonth": "Full month",
+        "midMonth": "Mid-month",
+        "halfYear": "Half-year"
       },
       "burdenMethod": {
         "live": "Live",

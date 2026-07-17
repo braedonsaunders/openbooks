@@ -158,6 +158,12 @@ const DEPRECIATION_METHODS = [
   { value: 'double_declining', labelKey: 'options.method.doubleDeclining' },
 ]
 
+const DEPRECIATION_CONVENTIONS = [
+  { value: 'full_month', labelKey: 'options.convention.fullMonth' },
+  { value: 'mid_month', labelKey: 'options.convention.midMonth' },
+  { value: 'half_year', labelKey: 'options.convention.halfYear' },
+]
+
 const BURDEN_METHODS = [
   { value: 'live', labelKey: 'options.burdenMethod.live' },
   { value: 'standard', labelKey: 'options.burdenMethod.standard' },
@@ -705,6 +711,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'depreciationExpenseAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'gainLossAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'defaultMethod', kind: 'select', options: DEPRECIATION_METHODS },
+      { key: 'defaultConvention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
       { key: 'defaultLifeMonths', kind: 'integer' },
       { key: 'isActive', kind: 'boolean' },
     ],

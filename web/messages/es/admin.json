@@ -1123,6 +1123,7 @@
       "method": "Method",
       "departmentId": "Department",
       "defaultMethod": "Default method",
+      "defaultConvention": "Convención de depreciación",
       "defaultLifeMonths": "Default life (months)",
       "assetAccountId": "Asset account",
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
@@ -1190,6 +1191,11 @@
         "straightLine": "Straight line",
         "decliningBalance": "Declining balance",
         "doubleDeclining": "Double declining"
+      },
+      "convention": {
+        "fullMonth": "Mes completo",
+        "midMonth": "Medio mes",
+        "halfYear": "Medio año"
       },
       "burdenMethod": {
         "live": "Live",
