@@ -3,6 +3,7 @@
     "title": "Paiements",
     "description": "Paiements fournisseurs appliqués aux factures fournisseurs ouvertes, et lots de paiements EFT exportés en fichiers CPA-005.",
     "newPayment": "Nouveau paiement",
+    "newRun": "Nouveau lot de paiements",
     "tabs": {
       "payments": "Paiements",
       "runs": "Lots de paiements"
@@ -86,10 +87,12 @@
   },
   "eft": {
     "notConfiguredTitle": "L’émission EFT n’est pas configurée",
-    "notConfiguredListDescription": "Les lots de paiements peuvent être assemblés, mais le fichier CPA-005 ne peut pas être généré tant qu’un administrateur n’a pas défini <code>orgs.settings.eft</code> — manquant : {missing}. Amorcez des valeurs provisoires avec <code>engine/src/seed-eft-settings.ts</code>, puis renseignez les coordonnées d’initiateur attribuées par la banque.",
-    "notConfiguredDrawerDescription": "Le fichier CPA-005 ne peut pas être généré tant qu’un administrateur n’a pas défini <code>orgs.settings.eft</code> — manquant : {missing}. Des valeurs provisoires peuvent être amorcées avec <code>engine/src/seed-eft-settings.ts</code>, puis remplies avec les coordonnées d’initiateur attribuées par la banque."
+    "notConfiguredListDescription": "Les lots peuvent toujours être assemblés, mais l’exportation du fichier bancaire est désactivée tant qu’un administrateur n’a pas terminé la configuration de l’émission EFT. Champs manquants : {missing}.",
+    "notConfiguredDrawerDescription": "L’exportation du fichier bancaire est désactivée tant qu’un administrateur n’a pas terminé la configuration de l’émission EFT. Champs manquants : {missing}."
   },
   "runBuilder": {
+    "title": "Nouveau lot de paiements",
+    "description": "Choisissez le compte de financement et les factures, puis créez un lot brouillon à vérifier.",
     "noOpenBills": "Aucune facture fournisseur comptabilisée avec un solde ouvert ne correspond.",
     "selectAllAriaLabel": "Sélectionner toutes les factures de cette page",
     "selectAriaLabel": "Sélectionner {document}",
@@ -104,7 +107,9 @@
     "bankMissing": "manquantes",
     "payFromBankAccount": "Payer depuis le compte bancaire",
     "selectBankAccountPlaceholder": "Sélectionner un compte bancaire…",
+    "noBankAccounts": "Aucun compte bancaire actif",
     "fundsDate": "Date des fonds",
+    "selectedForPayment": "Sélectionné pour paiement",
     "selectionSummary": "{count, plural, one {# facture} other {# factures}} · <total>{amount}</total>",
     "createRun": "Créer un lot de paiements",
     "toasts": {
@@ -114,14 +119,25 @@
   },
   "runs": {
     "openBillsHeading": "Factures fournisseurs ouvertes à payer",
+    "openBillsDescription": "Sélectionnez des factures de plusieurs fournisseurs; chaque fournisseur devient une instruction de paiement.",
     "billsSearchPlaceholder": "Rechercher des factures, fournisseurs, réf…",
     "runsHeading": "Lots de paiements",
-    "noRunsYet": "Aucun lot de paiements pour l’instant — sélectionnez des factures ci-dessus pour créer le premier.",
+    "description": "Vérifiez les brouillons, exportez les fichiers bancaires et confirmez les paiements comptabilisés.",
+    "searchPlaceholder": "Rechercher des lots ou des comptes bancaires…",
+    "noRunsYet": "Aucun lot de paiements pour l’instant. Créez le premier lorsque des factures sont prêtes à être payées.",
     "columns": {
       "run": "Lot",
       "bankAccount": "Compte bancaire",
+      "method": "Mode",
       "fundsDate": "Date des fonds",
       "payments": "Paiements"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "Virement",
+      "cheque": "Chèque"
     },
     "status": {
       "confirmed": "Confirmé",

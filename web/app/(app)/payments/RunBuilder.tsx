@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -32,12 +33,16 @@ export function RunBuilder({
   sp,
   sort,
   dir,
+  toolbar,
+  pagination,
 }: {
   bills: RunBill[]
   bankAccounts: { id: string; number: string | null; name: string }[]
   sp: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
+  toolbar: ReactNode
+  pagination: ReactNode
 }) {
   const t = useTranslations('payments.runBuilder')
   const tCommon = useTranslations('common')
@@ -104,89 +109,106 @@ export function RunBuilder({
   }
 
   return (
-    <div className="space-y-3">
-      {bills.length === 0 ? (
-        <p className="rounded-md border border-dashed border-slate-300 px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          {t('noOpenBills')}
-        </p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-teal-600"
-                  checked={allOnPage}
-                  onChange={toggleAll}
-                  aria-label={t('selectAllAriaLabel')}
-                />
-              </TableHead>
-              <SortTh {...thProps} column="number">{t('columns.bill')}</SortTh>
-              <SortTh {...thProps} column="vendor">{tCommon('labels.vendor')}</SortTh>
-              <SortTh {...thProps} column="due">{t('columns.due')}</SortTh>
-              <TableHead>{t('columns.ref')}</TableHead>
-              <TableHead>{t('columns.bankDetails')}</TableHead>
-              <SortTh {...thProps} column="open" align="right">{t('columns.openBalance')}</SortTh>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {bills.map((b) => (
-              <TableRow key={b.id}>
-                <TableCell>
+    <div className="flex h-full min-h-0 flex-col bg-slate-50/50 dark:bg-slate-950/20">
+      <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
+        <div className="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_12rem_minmax(18rem,auto)] lg:items-end">
+          <div className="space-y-1.5">
+            <Label>
+              {t('payFromBankAccount')}<span className="text-red-500"> *</span>
+            </Label>
+            <SearchSelect
+              options={bankAccounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name}`.trim() }))}
+              value={bankAccountId}
+              onChange={(v) => setBankAccountId(v ?? '')}
+              placeholder={bankAccounts.length > 0 ? t('selectBankAccountPlaceholder') : t('noBankAccounts')}
+              disabled={bankAccounts.length === 0}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t('fundsDate')}</Label>
+            <Input type="date" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+          </div>
+          <div className="flex min-h-10 flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-900 dark:bg-teal-950/40">
+            <div>
+              <p className="text-[11px] font-medium tracking-wide text-teal-700 uppercase dark:text-teal-300">
+                {t('selectedForPayment')}
+              </p>
+              <p className="text-sm text-slate-700 tabular-nums dark:text-slate-200">
+                {t.rich('selectionSummary', {
+                  count: selectedList.length,
+                  amount: money(totalSelected),
+                  total: (chunks) => <strong className="text-slate-950 dark:text-white">{chunks}</strong>,
+                })}
+              </p>
+            </div>
+            <Button disabled={busy || selectedList.length === 0 || !bankAccountId} onClick={createRun}>
+              {busy ? tCommon('actions.creating') : t('createRun')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="shrink-0 px-4 py-3 sm:px-6">{toolbar}</div>
+
+      <div className="min-h-0 flex-1 px-4 pb-3 sm:px-6 [&>div]:h-full [&>div]:overflow-auto">
+        {bills.length === 0 ? (
+          <div className="flex h-full min-h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            {t('noOpenBills')}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-teal-600"
-                    checked={!!selected[b.id]}
-                    onChange={() => toggle(b)}
-                    aria-label={t('selectAriaLabel', { document: b.document_number })}
+                    checked={allOnPage}
+                    onChange={toggleAll}
+                    aria-label={t('selectAllAriaLabel')}
                   />
-                </TableCell>
-                <TableCell className="font-mono text-[13px] font-semibold">{b.document_number}</TableCell>
-                <TableCell>{b.vendor}</TableCell>
-                <TableCell>{b.due_date ?? '—'}</TableCell>
-                <TableCell className="text-slate-500 dark:text-slate-400">{b.reference_number}</TableCell>
-                <TableCell>
-                  {b.has_bank ? (
-                    <Badge variant="success">{t('bankApproved')}</Badge>
-                  ) : (
-                    <Badge variant="warning">{t('bankMissing')}</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{money(b.open)}</TableCell>
+                </TableHead>
+                <SortTh {...thProps} column="number">{t('columns.bill')}</SortTh>
+                <SortTh {...thProps} column="vendor">{tCommon('labels.vendor')}</SortTh>
+                <SortTh {...thProps} column="due">{t('columns.due')}</SortTh>
+                <TableHead>{t('columns.ref')}</TableHead>
+                <TableHead>{t('columns.bankDetails')}</TableHead>
+                <SortTh {...thProps} column="open" align="right">{t('columns.openBalance')}</SortTh>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+            </TableHeader>
+            <TableBody>
+              {bills.map((b) => (
+                <TableRow key={b.id} data-state={selected[b.id] ? 'selected' : undefined}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-teal-600"
+                      checked={!!selected[b.id]}
+                      onChange={() => toggle(b)}
+                      aria-label={t('selectAriaLabel', { document: b.document_number })}
+                    />
+                  </TableCell>
+                  <TableCell className="font-mono text-[13px] font-semibold">{b.document_number}</TableCell>
+                  <TableCell>{b.vendor}</TableCell>
+                  <TableCell>{b.due_date ?? '—'}</TableCell>
+                  <TableCell className="text-slate-500 dark:text-slate-400">{b.reference_number}</TableCell>
+                  <TableCell>
+                    {b.has_bank ? (
+                      <Badge variant="success">{t('bankApproved')}</Badge>
+                    ) : (
+                      <Badge variant="warning">{t('bankMissing')}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{money(b.open)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
-        <div className="w-64 space-y-1.5">
-          <Label>
-            {t('payFromBankAccount')}<span className="text-red-500"> *</span>
-          </Label>
-          <SearchSelect
-            options={bankAccounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name}`.trim() }))}
-            value={bankAccountId}
-            onChange={(v) => setBankAccountId(v ?? '')}
-            placeholder={t('selectBankAccountPlaceholder')}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>{t('fundsDate')}</Label>
-          <Input type="date" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
-        </div>
-        <span className="flex-1" />
-        <span className="pb-2 text-sm text-slate-600 tabular-nums dark:text-slate-300">
-          {t.rich('selectionSummary', {
-            count: selectedList.length,
-            amount: money(totalSelected),
-            total: (chunks) => <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>,
-          })}
-        </span>
-        <Button disabled={busy || selectedList.length === 0 || !bankAccountId} onClick={createRun}>
-          {busy ? tCommon('actions.creating') : t('createRun')}
-        </Button>
+      <div className="shrink-0 border-t border-slate-200 bg-white px-1 dark:border-slate-800 dark:bg-slate-900">
+        {pagination}
       </div>
     </div>
   )

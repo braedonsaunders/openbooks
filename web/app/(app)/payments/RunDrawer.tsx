@@ -227,10 +227,7 @@ export function RunDrawer({
           <Alert variant="warning">
             <AlertTitle>{t('eft.notConfiguredTitle')}</AlertTitle>
             <AlertDescription>
-              {t.rich('eft.notConfiguredDrawerDescription', {
-                missing: eftMissing.join(', '),
-                code: (chunks) => <code className="font-mono text-xs">{chunks}</code>,
-              })}
+              {t('eft.notConfiguredDrawerDescription', { missing: eftMissing.join(', ') })}
             </AlertDescription>
           </Alert>
         ) : null}

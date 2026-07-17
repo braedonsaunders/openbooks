@@ -3,6 +3,7 @@
     "title": "Payments",
     "description": "Vendor payments applied to open bills, and EFT payment runs exported as CPA-005 files.",
     "newPayment": "New payment",
+    "newRun": "New payment run",
     "tabs": {
       "payments": "Payments",
       "runs": "Payment runs"
@@ -86,10 +87,12 @@
   },
   "eft": {
     "notConfiguredTitle": "EFT origination is not configured",
-    "notConfiguredListDescription": "Payment runs can be assembled, but the CPA-005 file cannot be generated until an administrator sets <code>orgs.settings.eft</code> — missing: {missing}. Seed placeholders with <code>engine/src/seed-eft-settings.ts</code>, then fill in the originator details assigned by the bank.",
-    "notConfiguredDrawerDescription": "The CPA-005 file cannot be generated until an administrator sets <code>orgs.settings.eft</code> — missing: {missing}. Placeholders can be seeded with <code>engine/src/seed-eft-settings.ts</code>, then filled with the bank-assigned originator details."
+    "notConfiguredListDescription": "Payment runs can still be assembled, but bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}.",
+    "notConfiguredDrawerDescription": "Bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}."
   },
   "runBuilder": {
+    "title": "New payment run",
+    "description": "Choose the funding account and bills, then create a draft run for review.",
     "noOpenBills": "No posted bills with an open balance match.",
     "selectAllAriaLabel": "Select all bills on this page",
     "selectAriaLabel": "Select {document}",
@@ -104,7 +107,9 @@
     "bankMissing": "missing",
     "payFromBankAccount": "Pay from bank account",
     "selectBankAccountPlaceholder": "Select bank account…",
+    "noBankAccounts": "No active bank accounts",
     "fundsDate": "Funds date",
+    "selectedForPayment": "Selected for payment",
     "selectionSummary": "{count, plural, one {# bill} other {# bills}} · <total>{amount}</total>",
     "createRun": "Create payment run",
     "toasts": {
@@ -114,14 +119,25 @@
   },
   "runs": {
     "openBillsHeading": "Open bills to pay",
+    "openBillsDescription": "Select bills across vendors; each vendor becomes one payment instruction.",
     "billsSearchPlaceholder": "Search bills, vendors, refs…",
     "runsHeading": "Payment runs",
-    "noRunsYet": "No payment runs yet — select bills above to create the first one.",
+    "description": "Review drafts, export bank files, and confirm posted payments.",
+    "searchPlaceholder": "Search runs or bank accounts…",
+    "noRunsYet": "No payment runs yet. Create the first run when bills are ready to pay.",
     "columns": {
       "run": "Run",
       "bankAccount": "Bank account",
+      "method": "Method",
       "fundsDate": "Funds date",
       "payments": "Payments"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "Wire",
+      "cheque": "Cheque"
     },
     "status": {
       "confirmed": "Confirmed",
