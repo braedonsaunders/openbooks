@@ -172,7 +172,7 @@ export async function EntityListView({
       case 'reference': {
         const href = openHref(String(row.id))
         return (
-          <TableCell key={c.key} className="font-mono text-[13px] font-semibold">
+          <TableCell key={c.key} className="font-medium">
             <Link href={href as any} className="text-teal-700 hover:underline dark:text-teal-300">
               {String(v ?? '')}
             </Link>
@@ -189,6 +189,12 @@ export async function EntityListView({
         return (
           <TableCell key={c.key}>
             <Badge variant={STATUS_VARIANT[String(v)] ?? 'secondary'}>{optionLabel(c.key, String(v))}</Badge>
+          </TableCell>
+        )
+      case 'date':
+        return (
+          <TableCell key={c.key} className="whitespace-nowrap text-slate-600 dark:text-slate-400">
+            {v == null || v === '' ? <span className="text-slate-400">—</span> : String(v)}
           </TableCell>
         )
       case 'custom': {

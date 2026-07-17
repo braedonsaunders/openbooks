@@ -45,6 +45,7 @@ export const PROJECT_BUILT_IN_EXPR: Record<string, SQL> = {
   billing_method: sql`p.billing_method`,
   contract: CONTRACT_EXPR,
   actual: sql`actual.cost`,
+  created: sql`to_char(p.created_at, 'YYYY-MM-DD')`,
 }
 
 /** Sort key → ORDER BY expression for the projects list. */
@@ -55,6 +56,7 @@ export const PROJECT_SORTS: Record<string, SQL> = {
   status: sql`p.status`,
   contract: CONTRACT_EXPR,
   actual: sql`actual.cost`,
+  created: sql`p.created_at`,
 }
 
 function projectFilterPredicate(clause: FilterClause): SQL | null {
