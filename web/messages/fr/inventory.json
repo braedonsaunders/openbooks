@@ -40,12 +40,14 @@
     "actions": {
       "receive": "Réceptionner",
       "issue": "Sortir",
-      "adjust": "Ajuster"
+      "adjust": "Ajuster",
+      "transfer": "Transférer"
     },
     "hint": {
       "receive": "Ajouter du stock au coût (DR stock / CR contrepartie).",
       "issue": "Sortir du stock vers le CMV (DR CMV / CR stock).",
-      "adjust": "Corriger la quantité en stock via le compte d'ajustement."
+      "adjust": "Corriger la quantité en stock via le compte d'ajustement.",
+      "transfer": "Déplacer du stock entre deux emplacements à son coût porté."
     },
     "selectItem": "Sélectionner un article",
     "selectLocation": "Sélectionner un emplacement",
@@ -56,6 +58,8 @@
     "memoPlaceholder": "Note facultative",
     "missingFields": "Article, emplacement et quantité sont requis",
     "failed": "Échec du mouvement",
-    "posted": "Mouvement comptabilisé ({value})"
+    "posted": "Mouvement comptabilisé ({value})",
+    "fromLocation": "Emplacement source",
+    "toLocation": "Emplacement destination"
   }
 }

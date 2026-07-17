@@ -5,6 +5,7 @@ import {
   adjustInventory,
   issueInventory,
   receiveInventory,
+  transferInventory,
   InventoryError,
 } from '@openbooks/engine/src/inventory.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -15,9 +16,10 @@ export const runtime = 'nodejs'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 interface Body {
-  action?: 'receive' | 'issue' | 'adjust'
+  action?: 'receive' | 'issue' | 'adjust' | 'transfer'
   itemId?: string
   stockLocationId?: string
+  toStockLocationId?: string
   quantity?: string
   unitCost?: string
   offsetAccountId?: string
@@ -43,7 +45,7 @@ export async function POST(req: Request) {
   const user = gate.user
 
   const body = (await req.json().catch(() => ({}))) as Body
-  if (!body.action || !['receive', 'issue', 'adjust'].includes(body.action)) {
+  if (!body.action || !['receive', 'issue', 'adjust', 'transfer'].includes(body.action)) {
     return NextResponse.json({ error: 'invalid action' }, { status: 422 })
   }
   if (!body.itemId || !isUuid(body.itemId)) return NextResponse.json({ error: 'item required' }, { status: 422 })
@@ -83,6 +85,21 @@ export async function POST(req: Request) {
         unitCost,
         subsidiaryId,
         offsetAccountId: body.offsetAccountId,
+        date,
+        memo: body.memo ?? null,
+      })
+      return NextResponse.json({ ok: true, ...res })
+    }
+    if (body.action === 'transfer') {
+      if (!body.toStockLocationId || !isUuid(body.toStockLocationId)) {
+        return NextResponse.json({ error: 'destination location required' }, { status: 422 })
+      }
+      const res = await transferInventory(user.orgId, user.id, {
+        itemId: body.itemId,
+        fromStockLocationId: body.stockLocationId,
+        toStockLocationId: body.toStockLocationId,
+        quantity,
+        subsidiaryId,
         date,
         memo: body.memo ?? null,
       })
