@@ -114,6 +114,14 @@ alter table tax_group_members
   add foreign key (tax_code_id) references tax_codes(id);
 alter table tax_report_lines add foreign key (tax_code_id) references tax_codes(id);
 alter table tax_return_forms add foreign key (org_id) references orgs(id);
+alter table tax_depreciation_pools
+  add foreign key (org_id) references orgs(id),
+  add foreign key (book_id) references accounting_books(id),
+  add foreign key (subsidiary_id) references subsidiaries(id);
+alter table tax_pool_periods
+  add foreign key (org_id) references orgs(id),
+  add foreign key (pool_id) references tax_depreciation_pools(id);
+alter table tax_first_year_rules add foreign key (org_id) references orgs(id);
 alter table tax_return_forms add foreign key (official_pdf_file_id) references files(id);
 alter table tax_filings add foreign key (org_id) references orgs(id);
 
