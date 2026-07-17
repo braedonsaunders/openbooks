@@ -355,10 +355,37 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[]): Insight[] 
   const gm = f.revenue > 0 ? f.grossProfit / f.revenue : 0;
   const opm = f.revenue > 0 ? f.operatingIncome / f.revenue : 0;
 
-  if (gm < 0.4) out.push({ severity: "issue", title: "Gross margin below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs a 40% benchmark.` });
-  if (opm < 0.15) out.push({ severity: "issue", title: "Operating margin below target", detail: `Operating margin is ${(opm * 100).toFixed(1)}% vs a 15% benchmark.` });
+  // Gantry's issues engine — severity-tiered rules against the GM/Op targets
+  // (40% / 15%), critical at 50% of target, warning at 75%.
+  const GM_TARGET = 0.4;
+  const OP_TARGET = 0.15;
+  if (f.operatingIncome < 0) out.push({ severity: "issue", title: "Operating loss", detail: `Operating income is -$${Math.abs(Math.round(f.operatingIncome)).toLocaleString()} — the business loses money before other items.` });
+  if (gm < GM_TARGET * 0.5) out.push({ severity: "issue", title: "Gross margin critically low", detail: `Gross margin is ${(gm * 100).toFixed(1)}% — less than half the ${GM_TARGET * 100}% target.` });
+  else if (gm < GM_TARGET * 0.75) out.push({ severity: "issue", title: "Gross margin well below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs the ${GM_TARGET * 100}% target.` });
+  else if (gm < GM_TARGET) out.push({ severity: "issue", title: "Gross margin below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs a ${GM_TARGET * 100}% benchmark.` });
+  if (opm >= 0 && opm < OP_TARGET * 0.5) out.push({ severity: "issue", title: "Operating margin critically low", detail: `Operating margin is ${(opm * 100).toFixed(1)}% — less than half the ${OP_TARGET * 100}% target.` });
+  else if (opm >= 0 && opm < OP_TARGET) out.push({ severity: "issue", title: "Operating margin below target", detail: `Operating margin is ${(opm * 100).toFixed(1)}% vs a ${OP_TARGET * 100}% benchmark.` });
   if (f.netIncome < 0) out.push({ severity: "issue", title: "Net loss for the period", detail: `Net income is ${f.netIncome < 0 ? "-" : ""}$${Math.abs(f.netIncome).toLocaleString()}.` });
-  if (f.revenueGrowth < 0) out.push({ severity: "issue", title: "Revenue declined year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
+  if (f.revenueGrowth < -0.15) out.push({ severity: "issue", title: "Revenue falling sharply year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
+  else if (f.revenueGrowth < 0) out.push({ severity: "issue", title: "Revenue declined year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
+  // Trend rules over the trailing months: revenue slope and margin compression.
+  const recent = monthly.filter((m) => m.revenue > 0).slice(-3);
+  if (recent.length === 3) {
+    const [a, b, c] = recent;
+    if (a!.revenue > 0 && c!.revenue < a!.revenue * 0.9)
+      out.push({ severity: "issue", title: "Revenue trending down", detail: `Revenue fell ${(((a!.revenue - c!.revenue) / a!.revenue) * 100).toFixed(0)}% across the last three active months.` });
+    if (a!.grossMarginPct - c!.grossMarginPct > 0.03 && b!.grossMarginPct <= a!.grossMarginPct)
+      out.push({ severity: "issue", title: "Margin compression", detail: `Gross margin slid ${((a!.grossMarginPct - c!.grossMarginPct) * 100).toFixed(1)}pp over the last three active months.` });
+  }
+  // Safety margin via breakeven.
+  if (f.breakevenMonthly !== null && monthly.length > 0) {
+    const avgMonthlyRev = f.revenue / Math.max(1, monthly.filter((m) => m.revenue > 0).length);
+    const safety = avgMonthlyRev > 0 ? (avgMonthlyRev - f.breakevenMonthly) / avgMonthlyRev : 0;
+    if (safety < 0) out.push({ severity: "issue", title: "Below breakeven", detail: `Average monthly revenue is under the ~$${Math.round(f.breakevenMonthly).toLocaleString()} breakeven.` });
+    else if (safety < 0.1) out.push({ severity: "issue", title: "Thin safety margin", detail: `Only ${(safety * 100).toFixed(0)}% of monthly revenue separates you from breakeven.` });
+  }
+  if (f.revenue > 0 && f.opex / f.revenue > 0.4)
+    out.push({ severity: "issue", title: "Heavy overhead", detail: `Operating expenses are ${((f.opex / f.revenue) * 100).toFixed(0)}% of revenue (>40%).` });
 
   if (gm >= 0.4) out.push({ severity: "rec", title: "Healthy gross margin", detail: "Direct-cost discipline is on track — protect pricing." });
   if (opm < 0.15 && gm >= 0.3) out.push({ severity: "rec", title: "Trim operating expense", detail: "Gross margin is fine; the gap to operating margin is overhead — review OpEx." });

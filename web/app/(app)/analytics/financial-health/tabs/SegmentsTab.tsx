@@ -30,14 +30,19 @@ export function SegmentsTab({ data }: { data: HealthData }) {
   const totalRev = rows.reduce((a, r) => a + r.revenue, 0)
   const totalOp = rows.reduce((a, r) => a + r.operatingIncome, 0)
   const best = rows.slice().sort((a, b) => b.operatingMarginPct - a.operatingMarginPct)[0]
+  // Gantry's segment concentration: HHI = Σ(share×100)², classic 0–10,000
+  // scale (Unconcentrated <1500 / Moderate <2500 / Concentrated).
+  const hhi = Math.round(rows.reduce((a, r) => a + (totalRev > 0 ? (r.revenue / totalRev) * 100 : 0) ** 2, 0))
+  const hhiLabel = hhi >= 2500 ? 'Concentrated' : hhi >= 1500 ? 'Moderate' : 'Unconcentrated'
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiCard icon={Network} accent="teal" label="Segments" value={String(rows.length)} sub={dim} />
         <KpiCard icon={BarChart3} accent="emerald" label="Total Revenue" value={fmtMoney(totalRev, { compact: true })} sub="across segments" />
         <KpiCard icon={BarChart3} accent="violet" label="Operating Income" value={fmtMoney(totalOp, { compact: true })} sub={fmtPct(totalRev > 0 ? totalOp / totalRev : 0)} />
         <KpiCard icon={PieChart} accent="amber" label="Best Margin" value={best ? fmtPct(best.operatingMarginPct) : '—'} sub={best?.name ?? '—'} />
+        <KpiCard icon={Network} accent={hhi >= 2500 ? 'red' : hhi >= 1500 ? 'amber' : 'emerald'} label="Concentration (HHI)" value={String(hhi)} sub={hhiLabel} tone={hhi >= 2500 ? 'negative' : 'neutral'} />
       </div>
 
       <div className="flex justify-end">

@@ -49,7 +49,7 @@ export function RatiosTab({ data, defs }: { data: HealthData; defs: Record<strin
             </Panel>
           ))}
         </div>
-        <div>
+        <div className="space-y-5">
           <Panel title={t('score.title')} icon={Activity}>
             <HealthScore
               score={data.overallScore}
@@ -58,8 +58,47 @@ export function RatiosTab({ data, defs }: { data: HealthData; defs: Record<strin
               categories={data.categoryScores.map((c) => ({ label: t(`categories.${c.key}`), score: c.score }))}
             />
           </Panel>
+          <DuPontPanel data={data} />
         </div>
       </div>
     </div>
+  )
+}
+
+/** Gantry's DuPont decomposition: ROE = Net Margin × Asset Turnover × Equity Multiplier. */
+function DuPontPanel({ data }: { data: HealthData }) {
+  const f = data.figures
+  if (!data.hasBalanceSheet || Math.abs(f.totalEquity) < 0.005) {
+    return (
+      <Panel title="DuPont Analysis" icon={Scale}>
+        <p className="py-4 text-center text-xs text-slate-400">Needs balance sheet data (assets & equity) to decompose ROE.</p>
+      </Panel>
+    )
+  }
+  const netMargin = f.revenue > 0 ? f.netIncome / f.revenue : 0
+  const assetTurnover = f.totalAssets > 0 ? f.revenue / f.totalAssets : 0
+  const equityMultiplier = f.totalEquity !== 0 ? f.totalAssets / f.totalEquity : 0
+  const roe = netMargin * assetTurnover * equityMultiplier
+  const row = (label: string, value: string, sub: string) => (
+    <li className="flex items-center justify-between py-2">
+      <span>
+        <span className="block text-sm text-slate-600 dark:text-slate-300">{label}</span>
+        <span className="block text-[11px] text-slate-400 dark:text-slate-500">{sub}</span>
+      </span>
+      <span className="text-sm font-semibold text-slate-800 tabular-nums dark:text-slate-100">{value}</span>
+    </li>
+  )
+  return (
+    <Panel title="DuPont Analysis" icon={Scale} hint="ROE = Net Margin × Asset Turnover × Equity Multiplier">
+      <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+        {row('Net Margin', fmtPct(netMargin), 'Net income ÷ revenue')}
+        {row('Asset Turnover', `${assetTurnover.toFixed(2)}×`, 'Revenue ÷ total assets')}
+        {row('Equity Multiplier', `${equityMultiplier.toFixed(2)}×`, 'Assets ÷ equity (leverage)')}
+        <li className="flex items-center justify-between py-2">
+          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Return on Equity</span>
+          <span className={roe >= 0 ? 'text-sm font-bold text-emerald-600 tabular-nums dark:text-emerald-400' : 'text-sm font-bold text-red-600 tabular-nums dark:text-red-400'}>{fmtPct(roe)}</span>
+        </li>
+      </ul>
+    </Panel>
   )
 }

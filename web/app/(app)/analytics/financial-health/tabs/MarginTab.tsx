@@ -5,7 +5,7 @@ import { cn } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
-import { Waterfall, DivergingBar, TrendChart, Donut } from '../../_ui/charts'
+import { Waterfall, TrendChart, Donut } from '../../_ui/charts'
 import { fmtMoney, fmtPct } from '../../_ui/format'
 
 export function MarginTab({ data }: { data: HealthData }) {
@@ -16,13 +16,20 @@ export function MarginTab({ data }: { data: HealthData }) {
   const netPct = f.netIncome / rev
 
   const pnl = Object.fromEntries(data.pnlSummary.map((l) => [l.key, l]))
-  // YoY bridge: impact of each line on net income vs prior.
-  const bridge = [
-    { label: 'Δ Revenue', value: (pnl.revenue?.change ?? 0) },
-    { label: 'Δ COGS', value: -(pnl.cogs?.change ?? 0) },
-    { label: 'Δ OpEx', value: -(pnl.opex?.change ?? 0) },
-    { label: 'Δ Other', value: -(pnl.otherExpense?.change ?? 0) },
-    { label: 'Δ Net', value: (pnl.netIncome?.change ?? 0) },
+  // Gantry's GM volume/rate bridge: volume effect = ΔRevenue × prior GM%,
+  // rate effect = current Revenue × ΔGM%. The two effects reconcile prior
+  // gross margin to current exactly.
+  const priorRev = pnl.revenue?.prior ?? 0
+  const priorGP = pnl.grossProfit?.prior ?? 0
+  const curGP = pnl.grossProfit?.current ?? 0
+  const priorGmPct = priorRev > 0 ? priorGP / priorRev : 0
+  const volumeEffect = ((pnl.revenue?.change ?? 0)) * priorGmPct
+  const rateEffect = rev * (gmPct - priorGmPct)
+  const bridgeSteps: { label: string; amount: number; kind: 'start' | 'deduct' | 'subtotal' | 'total' }[] = [
+    { label: 'Prior GM', amount: priorGP, kind: 'start' },
+    { label: 'Volume Effect', amount: volumeEffect, kind: 'deduct' },
+    { label: 'Rate Effect', amount: rateEffect, kind: 'deduct' },
+    { label: 'Current GM', amount: curGP, kind: 'total' },
   ]
 
   const allocation = [
@@ -64,8 +71,12 @@ export function MarginTab({ data }: { data: HealthData }) {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Panel title="Year-over-Year Bridge" icon={ArrowLeftRight} hint="Impact on net income vs prior year">
-            <DivergingBar labels={bridge.map((b) => b.label)} values={bridge.map((b) => b.value)} height={220} />
+          <Panel
+            title="YoY Margin Bridge"
+            icon={ArrowLeftRight}
+            hint={`Volume = ΔRevenue × prior GM% · Rate = revenue × ΔGM% (${fmtPct(priorGmPct)} → ${fmtPct(gmPct)})`}
+          >
+            <Waterfall steps={bridgeSteps} height={220} />
           </Panel>
         </div>
         <div className="space-y-5">
