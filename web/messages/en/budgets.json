@@ -1,0 +1,121 @@
+{
+  "metaTitle": "Budgets",
+  "list": {
+    "title": "Budgets",
+    "description": "Build, approve, and revise account budgets and forecasts by accounting period and dimension.",
+    "search": "Search budgets…",
+    "new": "New budget",
+    "emptyTitle": "No budgets yet",
+    "emptyDescription": "Create a persisted draft and start entering account targets by period.",
+    "statusFilter": "Status",
+    "kindFilter": "Type",
+    "yearFilter": "Fiscal year",
+    "bookFilter": "Book"
+  },
+  "columns": {
+    "name": "Name",
+    "book": "Accounting book",
+    "fiscalYear": "Fiscal year",
+    "kind": "Type",
+    "status": "Status",
+    "total": "Budget total",
+    "updated": "Updated"
+  },
+  "kind": { "budget": "Budget", "forecast": "Forecast" },
+  "status": {
+    "draft": "Draft",
+    "pending_approval": "Pending approval",
+    "approved": "Approved",
+    "archived": "Archived"
+  },
+  "create": {
+    "title": "Create a budget draft",
+    "name": "Name",
+    "namePlaceholder": "FY27 operating budget",
+    "defaultName": "FY{year} {kind}",
+    "book": "Accounting book",
+    "year": "Fiscal year",
+    "kind": "Type",
+    "source": "Starting point",
+    "blank": "Blank budget",
+    "sourceOption": "{name} · FY{year}",
+    "creating": "Creating…",
+    "failed": "The budget draft could not be created."
+  },
+  "workspace": {
+    "back": "Budgets",
+    "subtitle": "{book} · FY{year}",
+    "sheetDescription": "Edit one dimensional slice at a time. Amounts save automatically as exact four-decimal values.",
+    "name": "Scenario name",
+    "description": "Description",
+    "descriptionPlaceholder": "Purpose, assumptions, and ownership…",
+    "account": "Account",
+    "annualTotal": "Annual total",
+    "sliceTotal": "Slice total",
+    "spread": "Spread",
+    "uplift": "Uplift %",
+    "applyUplift": "Apply uplift",
+    "clearPage": "Clear page",
+    "searchAccounts": "Search accounts…",
+    "emptyAccounts": "No posting accounts match this worksheet filter.",
+    "saved": "All changes saved",
+    "saving": "Saving…",
+    "unsaved": "Unsaved changes",
+    "saveFailed": "Changes could not be saved.",
+    "locked": "This version is locked. Copy it to create a new editable revision.",
+    "dimensions": {
+      "title": "Dimension slice",
+      "department": "Department",
+      "project": "Project",
+      "location": "Location",
+      "class": "Class",
+      "all": "Unspecified / consolidated"
+    }
+  },
+  "actions": {
+    "submit": "Submit for approval",
+    "withdraw": "Withdraw",
+    "approve": "Approve",
+    "reject": "Reject",
+    "archive": "Archive",
+    "copy": "Copy to draft",
+    "copyPriorActuals": "Copy prior-year actuals",
+    "delete": "Delete draft",
+    "openReport": "Budget vs Actual",
+    "exportCsv": "Export CSV",
+    "exportXlsx": "Export Excel"
+  },
+  "confirm": {
+    "submit": "Submit this budget for approval? Editing will be locked until it is withdrawn or rejected.",
+    "approve": "Approve this budget as the official version? Approved lines are immutable.",
+    "archive": "Archive this budget?",
+    "delete": "Delete this draft and all of its lines? This cannot be undone.",
+    "clearPage": "Clear every value on the current account page?",
+    "copyPriorActuals": "Replace this dimensional slice with prior-year posted actuals?",
+    "rejectReason": "Enter the reason for rejection:"
+  },
+  "feedback": {
+    "submitted": "Budget submitted for approval.",
+    "withdrawn": "Budget returned to draft.",
+    "approved": "Budget approved and locked.",
+    "rejected": "Budget rejected and returned to draft.",
+    "archived": "Budget archived.",
+    "copied": "Editable budget copy created.",
+    "actualsCopied": "Prior-year actuals copied into this slice.",
+    "deleted": "Budget draft deleted.",
+    "actionFailed": "The budget action failed.",
+    "revisionConflict": "This budget changed elsewhere. Reload to continue."
+  },
+  "import": {
+    "title": "Import worksheet",
+    "description": "CSV or Excel columns: Account Number, Period, Department, Project, Location, Class, Amount, Note.",
+    "choose": "Choose CSV or Excel file",
+    "preview": "Validate file",
+    "valid": "{count, plural, one {# row is ready} other {# rows are ready}}",
+    "invalid": "{count, plural, one {# validation error} other {# validation errors}}",
+    "apply": "Apply import",
+    "imported": "{count, plural, one {# budget cell imported} other {# budget cells imported}}",
+    "failed": "The worksheet could not be imported.",
+    "rowError": "Row {row}, {field}: {message}"
+  }
+}

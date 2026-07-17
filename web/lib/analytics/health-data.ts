@@ -466,9 +466,9 @@ export async function healthData(period: { from: string; to: string; label: stri
 
 /**
  * Real budget-vs-actual from budget_scenarios / budget_lines (dimensional,
- * account × period). Scenario choice: an approved budget covering the range,
- * else the newest non-archived one; null when no scenario covers the range —
- * the tab then falls back to benchmark targets with an honest note.
+ * account × period). Scenario choice: the newest approved budget covering the
+ * range. Drafts never masquerade as official targets; null renders a direct
+ * link to the budget authoring workflow.
  * Statuses (Gantry ±10% variance rule): on-track when favorable or within
  * 10%, watch to 25%, over beyond; income favours actual ≥ budget, cost
  * accounts the reverse.
@@ -477,13 +477,13 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
   const scen = (await db.execute(sql`
     select bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.status
     from budget_scenarios bs
-    where bs.org_id = ${orgId} and bs.kind = 'budget' and bs.status != 'archived'
+    where bs.org_id = ${orgId} and bs.kind = 'budget' and bs.status = 'approved'
       and exists (
         select 1 from budget_lines bl
         join accounting_periods p on p.id = bl.period_id
         where bl.org_id = ${orgId} and bl.scenario_id = bs.id and p.starts_on <= ${to} and p.ends_on >= ${from}
       )
-    order by case bs.status when 'approved' then 0 else 1 end, bs.fiscal_year desc, bs.updated_at desc nulls last
+    order by bs.fiscal_year desc, bs.updated_at desc nulls last
     limit 1
   `)) as any;
   const s = scen.rows[0];

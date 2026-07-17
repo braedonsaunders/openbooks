@@ -117,6 +117,7 @@ export type ResolvedReport =
   | { render: 'data'; data: ExportData }
 
 export type ResolveReportCtx = {
+  orgId: string
   t: Translator
   period: ResolvedPeriod
   query: ReportQuery
@@ -128,7 +129,7 @@ export type ResolveReportCtx = {
  * on-screen paper view, and scheduling share exactly one implementation.
  */
 export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
-  const { t, period, query: q } = ctx
+  const { orgId, t, period, query: q } = ctx
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
@@ -189,7 +190,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       periodPhrase = t('budget.description')
       const scenario = p.get('scenario')
       if (scenario) {
-        view = await budgetVsActualView(scenario, {
+        view = await budgetVsActualView(scenario, orgId, {
           actual: t('budget.actual'),
           budget: t('budget.budget'),
           variance: t('budget.variance'),
@@ -200,7 +201,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
           expenses: t('pnl.expenses'),
           netIncome: t('pnl.netIncome'),
           totalOf: secTotal,
-        })
+        }, q.dims)
       }
     }
     if (!view) throw new Error('no data')

@@ -97,6 +97,29 @@
       "otherIncome": "Other Income",
       "otherExpense": "Other Expense",
       "netIncome": "Net Income"
+    },
+    "budget": {
+      "measuredAgainst": "Measured against <strong>{name}</strong> (FY{year}, {status}) — budget lines over the selected range. Manage scenarios in <link>Budgets</link>.",
+      "totalBudget": "Total Budget",
+      "budgetedAccounts": "{count, plural, one {# budgeted account} other {# budgeted accounts}}",
+      "totalActual": "Total Actual",
+      "normalizedIncome": "income sign-normalized",
+      "overBudget": "Over Budget",
+      "onWatch": "{count} on watch",
+      "coverage": "Coverage",
+      "coverageSub": "accounts with a budget line",
+      "tableTitle": "Budget vs Actual ({count})",
+      "search": "Search accounts…",
+      "csv": "CSV",
+      "all": "All",
+      "status": { "on-track": "On Track", "watch": "Watch", "over": "Over", "no-budget": "No Budget" },
+      "columns": { "account": "Account", "type": "Type", "budget": "Budget", "actual": "Actual", "progress": "Progress", "variance": "Variance", "variancePct": "Variance %", "status": "Status" },
+      "showing": "Showing {from}–{to} of {total} accounts",
+      "previous": "Previous",
+      "next": "Next",
+      "noBudgetTitle": "No formal budget for this period",
+      "noBudgetDescription": "Create and approve a budget scenario to see real account-level variance. This dashboard does not substitute synthetic benchmark targets.",
+      "createBudget": "Create a budget"
     }
   },
   "customer": {

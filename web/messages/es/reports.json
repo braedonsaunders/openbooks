@@ -808,6 +808,8 @@
     "description": "Actividad real del mayor frente a un escenario de presupuesto, por cuenta.",
     "noScenarios": "Aún no hay escenarios de presupuesto. Cree uno para comparar con los valores reales.",
     "scenario": "Escenario",
+    "scenarioOption": "{name} · AF{year} · {status}",
+    "manage": "Gestionar presupuestos",
     "actual": "Real",
     "budget": "Presupuesto",
     "variance": "Variación",

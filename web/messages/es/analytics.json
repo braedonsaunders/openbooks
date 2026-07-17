@@ -97,6 +97,29 @@
       "otherIncome": "Otros ingresos",
       "otherExpense": "Otros gastos",
       "netIncome": "Resultado neto"
+    },
+    "budget": {
+      "measuredAgainst": "Medido con <strong>{name}</strong> (AF{year}, {status}) — líneas presupuestarias del intervalo seleccionado. Gestione los escenarios en <link>Presupuestos</link>.",
+      "totalBudget": "Presupuesto total",
+      "budgetedAccounts": "{count, plural, one {# cuenta presupuestada} other {# cuentas presupuestadas}}",
+      "totalActual": "Real total",
+      "normalizedIncome": "ingresos normalizados por signo",
+      "overBudget": "Sobre presupuesto",
+      "onWatch": "{count} en observación",
+      "coverage": "Cobertura",
+      "coverageSub": "cuentas con una línea presupuestaria",
+      "tableTitle": "Presupuesto vs. real ({count})",
+      "search": "Buscar cuentas…",
+      "csv": "CSV",
+      "all": "Todos",
+      "status": { "on-track": "En línea", "watch": "En observación", "over": "Excedido", "no-budget": "Sin presupuesto" },
+      "columns": { "account": "Cuenta", "type": "Tipo", "budget": "Presupuesto", "actual": "Real", "progress": "Progreso", "variance": "Variación", "variancePct": "Variación %", "status": "Estado" },
+      "showing": "Mostrando {from}–{to} de {total} cuentas",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "noBudgetTitle": "No hay presupuesto formal para este período",
+      "noBudgetDescription": "Cree y apruebe un escenario presupuestario para ver variaciones reales por cuenta. Este panel no sustituye datos con objetivos sintéticos.",
+      "createBudget": "Crear un presupuesto"
     }
   },
   "customer": {

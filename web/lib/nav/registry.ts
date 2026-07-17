@@ -59,6 +59,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'assets', href: '/assets', label: 'Fixed Assets', iconKey: 'building', group: 'Accounting', requiredPermission: 'assets.read' },
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Banking', requiredPermission: 'close.read' },
   { key: 'items', href: '/items', label: 'Items & Services', iconKey: 'grid', group: 'Accounting', requiredPermission: 'items.read' },
+  { key: 'budgets', href: '/budgets', label: 'Budgets', iconKey: 'target', group: 'Accounting', requiredPermission: 'budgets.read' },
 
   // People & Time — employees and timesheets. The unified party directory
   // (/parties) is intentionally NOT in the nav: parties are an internal

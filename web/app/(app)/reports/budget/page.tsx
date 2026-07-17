@@ -1,5 +1,6 @@
+import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
+import { Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { budgetScenarioOptions, budgetVsActualView } from '../../../../lib/budget-report'
 import { orgInfo } from '../../../../lib/data'
@@ -7,6 +8,10 @@ import { StatementMatrixTable } from '../StatementMatrixTable'
 import { ScenarioPicker } from './ScenarioPicker'
 import { SaveViewButton } from '../SaveViewButton'
 import { ExportMenu } from '../ExportMenu'
+import { ReportFilterBar } from '../ReportFilterBar'
+import { parseReportQuery } from '../../../../lib/report-filters'
+import { can, requirePermission } from '../../../../lib/authz'
+import { loadBudgetDimensionOptions } from '../../../../lib/budgets'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +21,14 @@ export default async function BudgetPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('reports')
+  const authz = await requirePermission('reports.read')
   const sp = await searchParams
-  const scenarios = await budgetScenarioOptions()
+  const q = parseReportQuery(sp)
+  const [scenarios, dimensions] = await Promise.all([
+    budgetScenarioOptions(authz.user.orgId),
+    loadBudgetDimensionOptions(authz.user.orgId),
+  ])
+  const manageAction = can(authz, 'budgets.read') ? <Button variant="outline" size="sm" asChild><Link href="/budgets">{t('budget.manage')}</Link></Button> : null
 
   if (scenarios.length === 0) {
     return (
@@ -26,6 +37,7 @@ export default async function BudgetPage({
           <PageHeader
             title={t('budget.title')}
             back={{ href: '/reports', label: t('hub.title') }}
+            actions={manageAction}
           />
         }
       >
@@ -47,7 +59,10 @@ export default async function BudgetPage({
     netIncome: t('pnl.netIncome'),
     totalOf: (section: string) => t('statement.sectionTotal', { section }),
   }
-  const [view, org] = await Promise.all([budgetVsActualView(scenarioId, labels), orgInfo()])
+  const [view, org] = await Promise.all([budgetVsActualView(scenarioId, authz.user.orgId, labels, q.dims), orgInfo()])
+  const backParams = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) if (value) backParams.set(key, value)
+  const backHref = `/reports/budget?${backParams.toString()}`
 
   return (
     <ListPageLayout
@@ -56,13 +71,15 @@ export default async function BudgetPage({
           <PageHeader
             title={t('budget.title')}
             back={{ href: '/reports', label: t('hub.title') }}
+            actions={manageAction}
           />
-          <div className="flex items-end justify-between gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             <ScenarioPicker scenarios={scenarios} value={scenarioId} />
-            <div className="flex items-center gap-1.5">
-              <SaveViewButton />
-              <ExportMenu kind="budget" params={{ scenario: scenarioId }} />
-            </div>
+            <ReportFilterBar
+              controls={{ dimensions: true }}
+              dimensions={dimensions}
+              actions={<><SaveViewButton /><ExportMenu kind="budget" params={{ ...sp, scenario: scenarioId }} /></>}
+            />
           </div>
         </>
       }
@@ -71,7 +88,7 @@ export default async function BudgetPage({
         <StatementMatrixTable
           view={view}
           currency={org?.base_currency}
-          drill={{ dims: {}, basis: 'accrual', back: `/reports/budget?scenario=${scenarioId}`, backLabel: t('budget.title') }}
+          drill={{ dims: q.dims, basis: 'accrual', back: backHref, backLabel: t('budget.title') }}
         />
       ) : (
         <p className="py-8 text-center text-slate-400 italic">{t('budget.noScenarios')}</p>

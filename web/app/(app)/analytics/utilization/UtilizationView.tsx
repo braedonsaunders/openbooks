@@ -13,6 +13,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
 import { ConfigEditor } from '../_ui/ConfigEditor'
+import { useSort } from '../_ui/useSort'
 import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
@@ -1197,9 +1198,9 @@ function TitlesTab({ data }: { data: UtilizationData }) {
       g.nonBillableCost += e.range.nonBillableCost
     }
     return [...groups.values()]
-      .map((g) => ({ ...g, percentBilled: g.hours > 0 ? (g.billableHours / g.hours) * 100 : 0 }))
-      .sort((a, b) => b.nonBillableCost - a.nonBillableCost)
+      .map((g) => ({ ...g, percentBilled: g.hours > 0 ? (g.billableHours / g.hours) * 100 : 0, employeeCount: g.employees.length }))
   }, [data.employees])
+  const { sorted: sortedTitles, SortTh } = useSort(titles, { key: 'nonBillableCost', dir: 'desc' })
 
   const sortedByPct = [...titles].sort((a, b) => b.percentBilled - a.percentBilled)
   const best = sortedByPct[0]
@@ -1221,15 +1222,15 @@ function TitlesTab({ data }: { data: UtilizationData }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <th className="px-4 py-2 text-left font-medium">Job Title</th>
-              <th className="px-4 py-2 text-right font-medium">Employees</th>
-              <th className="px-4 py-2 text-right font-medium">% Billed</th>
-              <th className="px-4 py-2 text-right font-medium">Total Hours</th>
-              <th className="px-4 py-2 text-right font-medium">Non-Bill Cost</th>
+              <SortTh label="Job Title" col="title" align="left" defaultDir="asc" />
+              <SortTh label="Employees" col="employeeCount" />
+              <SortTh label="% Billed" col="percentBilled" />
+              <SortTh label="Total Hours" col="hours" />
+              <SortTh label="Non-Bill Cost" col="nonBillableCost" />
             </tr>
           </thead>
           <tbody>
-            {titles.map((t) => (
+            {sortedTitles.map((t) => (
               <tr key={t.title} onClick={() => setOpen(t)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40">
                 <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">{t.title}</td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{t.employees.length}</td>

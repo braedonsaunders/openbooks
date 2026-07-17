@@ -9,10 +9,11 @@ export function ScenarioPicker({
   scenarios,
   value,
 }: {
-  scenarios: { id: string; name: string; fiscalYear: number; kind: string }[]
+  scenarios: { id: string; name: string; fiscalYear: number; kind: string; status: string }[]
   value: string
 }) {
   const t = useTranslations('reports.budget')
+  const tb = useTranslations('budgets')
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -32,7 +33,7 @@ export function ScenarioPicker({
       >
         {scenarios.map((s) => (
           <option key={s.id} value={s.id}>
-            {s.name} · FY {s.fiscalYear}
+            {t('scenarioOption', { name: s.name, year: s.fiscalYear, status: tb(`status.${s.status}`) })}
           </option>
         ))}
       </Select>
