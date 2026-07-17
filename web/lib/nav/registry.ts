@@ -70,6 +70,7 @@ export const NAV_MODULES: NavModule[] = [
 
   // Reports — every read surface: statements, analytics, views, docs, queries.
   { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', group: 'Reports', requiredPermission: 'reports.read' },
+  { key: 'tax-filings', href: '/tax', label: 'Tax Filings', iconKey: 'receipt', group: 'Reports', requiredPermission: 'reports.read' },
   // Analytics is ONE nav entry — the /analytics hub. The individual dashboards
   // (Financial Health, Customer Intelligence, …) are cards on the hub, not nav
   // modules (user directive 2026-07-16). No `exact` so it stays active on

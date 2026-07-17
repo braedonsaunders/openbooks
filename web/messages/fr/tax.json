@@ -1,0 +1,37 @@
+{
+  "title": "Déclarations fiscales",
+  "description": "Calculez les déclarations de taxes gouvernementales à partir de votre grand livre et produisez un fac-similé prêt à déposer.",
+  "period": "du {from} au {to}",
+  "notice": "Avis",
+  "form": "Déclaration",
+  "selectForm": "Sélectionner une déclaration",
+  "from": "Du",
+  "to": "Au",
+  "compute": "Calculer",
+  "computing": "Calcul…",
+  "empty": "Choisissez une déclaration et une période, puis calculez.",
+  "columns": {
+    "line": "Ligne",
+    "description": "Description",
+    "amount": "Montant"
+  },
+  "noForms": {
+    "title": "Aucune déclaration configurée",
+    "description": "Installez un module de juridiction pour commencer, ou créez-en une dans Configuration → Taxes.",
+    "install": "Installer GST34 (Canada)",
+    "installing": "Installation…"
+  },
+  "installed": "{boxes} cases installées ({sales} codes de vente / {purchases} codes d’achat associés)",
+  "export": {
+    "label": "Exporter",
+    "pdf": "Fac-similé PDF",
+    "csv": "CSV",
+    "xlsx": "Excel"
+  },
+  "channels": {
+    "print_pdf": "Imprimer et poster",
+    "file_upload": "Téléversement électronique",
+    "efile_api": "Télédéclaration (API)",
+    "portal_manual": "Portail gouvernemental"
+  }
+}

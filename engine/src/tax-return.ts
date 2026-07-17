@@ -133,6 +133,58 @@ export function assembleReturn(
   return result;
 }
 
+/** A row of tax_report_lines as configured (before GL sums). */
+export interface TaxReportLineRow {
+  lineCode: string;
+  label: string;
+  sign: number;
+  sequence: number;
+  taxCodeId: string | null;
+  basis: string | null;
+  formula: string | null;
+}
+
+/** Where a GL-mapped box pulls its raw value from (one per contributing row). */
+export interface TaxReturnGlSource {
+  lineCode: string;
+  taxCodeId: string;
+  basis: string;
+}
+
+/**
+ * Plan a return from its configured rows. Several rows may share a line code —
+ * a box like GST34 line 103 sums GST + every HST rate — so rows collapse to one
+ * box per line code (label/sign/formula from the box's defining row, sequence
+ * from the earliest), and every GL-mapped row becomes a source whose sum is
+ * accumulated into that box. Pure, so the grouping is unit-tested.
+ */
+export function planReturn(rows: TaxReportLineRow[]): {
+  boxes: TaxReturnBoxDef[];
+  glSources: TaxReturnGlSource[];
+} {
+  const byLine = new Map<string, TaxReturnBoxDef>();
+  const glSources: TaxReturnGlSource[] = [];
+  for (const row of rows) {
+    const existing = byLine.get(row.lineCode);
+    if (!existing) {
+      byLine.set(row.lineCode, {
+        lineCode: row.lineCode,
+        label: row.label,
+        sign: row.sign,
+        sequence: row.sequence,
+        formula: row.formula,
+      });
+    } else {
+      existing.sequence = Math.min(existing.sequence, row.sequence);
+      if (!existing.formula && row.formula) existing.formula = row.formula;
+    }
+    if (!row.formula?.trim() && row.taxCodeId && row.basis) {
+      glSources.push({ lineCode: row.lineCode, taxCodeId: row.taxCodeId, basis: row.basis });
+    }
+  }
+  return { boxes: [...byLine.values()], glSources };
+}
+
 export interface TaxReturnResult {
   formCode: string;
   formName: string;
@@ -179,45 +231,50 @@ export async function computeTaxReturn(
     throw new TaxReturnError(`tax return form "${formCode}" has no boxes configured`);
   }
 
-  // GL raw sums, once per box that maps to the ledger. tax_amount sums the tax
-  // lines for the code; taxable_base sums the base of the lines it was applied to.
-  const glRaw = new Map<string, string>();
-  for (const row of boxRes.rows) {
-    if (row.formula?.trim() || !row.tax_code_id || !row.basis) continue;
-    if (row.basis === "tax_amount") {
-      const r = (await db.execute(sql`
-        select coalesce(sum(l.amount), 0)::text as total
-          from journal_lines l
-          join journal_entries e on e.id = l.entry_id
-         where l.org_id = ${orgId} and l.tax_code_id = ${row.tax_code_id}
-           and e.status = 'posted' and e.posting_date between ${from} and ${to}`)) as unknown as {
-        rows: { total: string }[];
-      };
-      glRaw.set(row.line_code, r.rows[0]?.total ?? "0");
-    } else {
-      const r = (await db.execute(sql`
-        select coalesce(sum(dl.amount), 0)::text as total
-          from document_lines dl
-          join documents d on d.id = dl.document_id
-         where dl.org_id = ${orgId} and dl.tax_code_id = ${row.tax_code_id}
-           and d.status = 'posted'
-           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}`)) as unknown as {
-        rows: { total: string }[];
-      };
-      glRaw.set(row.line_code, r.rows[0]?.total ?? "0");
-    }
-  }
-
-  const boxes = assembleReturn(
+  const { boxes: boxDefs, glSources } = planReturn(
     boxRes.rows.map((r) => ({
       lineCode: r.line_code,
       label: r.label,
       sign: Number(r.sign),
       sequence: Number(r.sequence),
+      taxCodeId: r.tax_code_id,
+      basis: r.basis,
       formula: r.formula,
     })),
-    glRaw,
   );
+
+  // Accumulate each GL source into its box. tax_amount sums the tax lines for
+  // the code; taxable_base sums the base of the lines it was applied to. Several
+  // sources may feed one box (e.g. GST + every HST rate → line 103).
+  const glRaw = new Map<string, string>();
+  for (const src of glSources) {
+    let total: string;
+    if (src.basis === "tax_amount") {
+      const r = (await db.execute(sql`
+        select coalesce(sum(l.amount), 0)::text as total
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id
+         where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
+           and e.status = 'posted' and e.posting_date between ${from} and ${to}`)) as unknown as {
+        rows: { total: string }[];
+      };
+      total = r.rows[0]?.total ?? "0";
+    } else {
+      const r = (await db.execute(sql`
+        select coalesce(sum(dl.amount), 0)::text as total
+          from document_lines dl
+          join documents d on d.id = dl.document_id
+         where dl.org_id = ${orgId} and dl.tax_code_id = ${src.taxCodeId}
+           and d.status = 'posted'
+           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}`)) as unknown as {
+        rows: { total: string }[];
+      };
+      total = r.rows[0]?.total ?? "0";
+    }
+    glRaw.set(src.lineCode, add(glRaw.get(src.lineCode) ?? "0", total));
+  }
+
+  const boxes = assembleReturn(boxDefs, glRaw);
 
   return {
     formCode,
