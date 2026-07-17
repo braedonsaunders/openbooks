@@ -59,6 +59,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             taxCollected: control.taxCollected ?? '',
             taxPaid: control.taxPaid ?? '',
             employeePayable: control.employeePayable ?? '',
+            fxUnrealizedGainLoss: control.fxUnrealizedGainLoss ?? '',
           },
         }}
         accounts={accountOptions}

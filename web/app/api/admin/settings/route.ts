@@ -32,6 +32,7 @@ const CONTROL_ACCOUNT_KEYS = [
   "taxCollected",
   "taxPaid",
   "employeePayable",
+  "fxUnrealizedGainLoss",
 ] as const;
 type ControlAccountKey = (typeof CONTROL_ACCOUNT_KEYS)[number];
 

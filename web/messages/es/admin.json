@@ -501,6 +501,10 @@
         "employeePayable": {
           "label": "Por pagar a empleados",
           "hint": "Reembolsos de gastos adeudados al personal"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "Ganancia/pérdida cambiaria no realizada",
+          "hint": "Donde se registra la revaluación de fin de período de los saldos en moneda extranjera"
         }
       }
     },

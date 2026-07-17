@@ -58,6 +58,7 @@
     "resume": "Reprendre",
     "backToPeriods": "Retour aux périodes",
     "revalidate": "Revalider",
+    "runRevaluation": "Réévaluer les devises",
     "startTask": "Démarrer",
     "complete": "Terminer",
     "submitReview": "Soumettre à révision",
@@ -76,6 +77,7 @@
     "close": "Période verrouillée",
     "publish": "Dossier de clôture publié",
     "taskUpdated": "Tâche mise à jour",
+    "revaluationPosted": "Soldes en devises réévalués",
     "evidenceAdded": "Preuve jointe",
     "automationComplete": "Automatisation terminée"
   },
@@ -129,6 +131,10 @@
     "fx-missing": {
       "title": "Des taux de change manquent",
       "message": "{count, plural, one {# devise d’opération n’a pas de taux au comptant utilisable en fin de période.} other {# devises d’opération n’ont pas de taux au comptant utilisable en fin de période.}}"
+    },
+    "fx-unrevalued": {
+      "title": "Les soldes en devises ne sont pas réévalués",
+      "message": "{count, plural, one {# solde monétaire en devise n’a pas été réévalué au taux de fin de période.} other {# soldes monétaires en devises n’ont pas été réévalués au taux de fin de période.}}"
     },
     "intercompany-residual": {
       "title": "L’activité intersociétés ne s’élimine pas",
@@ -280,6 +286,10 @@
     "fx-ready": {
       "title": "Valider la couverture de change",
       "description": "Chaque devise d’opération doit avoir un taux de fin de période utilisable."
+    },
+    "fx-revalued": {
+      "title": "Réévaluer les soldes en devises",
+      "description": "Restater les soldes ouverts en devises (banque, clients et fournisseurs) au taux de fin de période."
     },
     "intercompany-balanced": {
       "title": "Rapprocher l’intersociétés",

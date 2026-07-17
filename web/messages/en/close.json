@@ -58,6 +58,7 @@
     "resume": "Resume",
     "backToPeriods": "Back to periods",
     "revalidate": "Revalidate",
+    "runRevaluation": "Run FX revaluation",
     "startTask": "Start",
     "complete": "Complete",
     "submitReview": "Submit for review",
@@ -76,6 +77,7 @@
     "close": "Period locked",
     "publish": "Close package published",
     "taskUpdated": "Task updated",
+    "revaluationPosted": "Foreign-currency balances revalued",
     "evidenceAdded": "Evidence attached",
     "automationComplete": "Close automation completed"
   },
@@ -129,6 +131,10 @@
     "fx-missing": {
       "title": "Foreign-exchange rates are missing",
       "message": "{count, plural, one {# transaction currency has no usable period-end spot rate.} other {# transaction currencies have no usable period-end spot rate.}}"
+    },
+    "fx-unrevalued": {
+      "title": "Foreign balances are not revalued",
+      "message": "{count, plural, one {# foreign-currency monetary balance has not been revalued to the period-end rate.} other {# foreign-currency monetary balances have not been revalued to the period-end rate.}}"
     },
     "intercompany-residual": {
       "title": "Intercompany activity does not eliminate",
@@ -276,6 +282,10 @@
     "fx-ready": {
       "title": "Validate foreign-exchange coverage",
       "description": "Every transaction currency must have a usable period-end rate."
+    },
+    "fx-revalued": {
+      "title": "Revalue foreign-currency balances",
+      "description": "Restate open foreign-currency bank, receivable and payable balances to the period-end rate."
     },
     "intercompany-balanced": {
       "title": "Reconcile intercompany activity",
