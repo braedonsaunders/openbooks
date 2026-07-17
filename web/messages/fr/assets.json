@@ -11,6 +11,14 @@
     "working": "Comptabilisation…",
     "done": "Cédé — gain/perte {gainLoss}"
   },
+  "remeasure": {
+    "label": "Réévaluer",
+    "newValue": "Nouvelle valeur comptable",
+    "date": "Date",
+    "action": "Appliquer",
+    "working": "Application…",
+    "done": "{kind} — {delta}"
+  },
   "taxPools": {
     "title": "Amortissement fiscal (DPA)",
     "description": "Calculez la déduction pour amortissement par catégorie pour une année d’imposition.",
