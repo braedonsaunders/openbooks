@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle, Building2, Calculator, ChartArea, CheckCircle2, Clock, Coins, DollarSign,
   Grid3X3, Info, Layers, Package, Percent, Pin, PlusCircle, RotateCcw, Scale, SlidersHorizontal,
-  TrendingDown, TrendingUp, Trophy, UserRound, Wand2, Gauge as GaugeIcon,
+  TrendingDown, TrendingUp, Trophy, UserRound, Wand2, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Drawer } from '@openbooks/ui'
 import type { TrueCostData } from '../../../../lib/analytics/true-cost-data'
@@ -13,6 +13,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
+import { exportCsv } from '../_ui/exportCsv'
 import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
@@ -577,6 +578,16 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Below avg</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-slate-400" />Average</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-500" />Above avg</span>
+          <button
+            type="button"
+            onClick={() => exportCsv('burden-rate-matrix', ['Category', 'Base', ...data.departments.map((d) => `${d.name} ($/hr)`), 'Overall ($/hr)'], [
+              ...data.categories.map((c) => [c.name, 'Hours', ...data.departments.map((d) => (c.byDept[d.id]?.rate ?? 0).toFixed(2)), c.rate.toFixed(2)]),
+              ['Total Burden', 'Hours', ...data.departments.map((d) => d.composite.toFixed(2)), data.kpis.compositeRate.toFixed(2)],
+            ])}
+            className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            <Download size={11} /> CSV
+          </button>
         </span>
       }
       bodyClassName="p-0"

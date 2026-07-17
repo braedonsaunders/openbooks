@@ -28,6 +28,7 @@ import {
   Undo2,
   Settings2,
   Timer,
+  Download,
 } from 'lucide-react'
 import { cn, Select } from '@openbooks/ui'
 import type {
@@ -46,6 +47,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, GroupedBar } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
+import { exportCsv } from '../_ui/exportCsv'
 import { fmtMoney, fmtPct } from '../_ui/format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
@@ -426,13 +428,22 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
         hint="Weighted 25% recency · 25% frequency · 30% monetary · 20% payment, minus friction penalty"
         bodyClassName="p-0"
         actions={
-          <Select value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); setPage(1) }} className="w-40" triggerClassName="h-7 text-xs">
-            <option value="none">No grouping</option>
-            <option value="segment">By Segment</option>
-            <option value="tier">By CLV Tier</option>
-            <option value="churn">By Churn Risk</option>
-            <option value="grade">By Health Grade</option>
-          </Select>
+          <span className="flex items-center gap-2">
+            <Select value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); setPage(1) }} className="w-40" triggerClassName="h-7 text-xs">
+              <option value="none">No grouping</option>
+              <option value="segment">By Segment</option>
+              <option value="tier">By CLV Tier</option>
+              <option value="churn">By Churn Risk</option>
+              <option value="grade">By Health Grade</option>
+            </Select>
+            <button
+              type="button"
+              onClick={() => exportCsv('customer-health', ['Customer', 'Health', 'Grade', 'Revenue', 'Projected CLV', 'Segment', 'Churn', 'Payment', 'Recommendation'], rows.map((r) => [r.name, r.healthScore, r.healthGrade, Math.round(r.revenue), Math.round(r.clv), SEGMENT_LABEL[r.segment], RISK_LABEL[r.churnLevel], r.paymentRating, REC_LABEL[r.recommendation]]))}
+              className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              <Download size={11} /> CSV
+            </button>
+          </span>
         }
       >
         <div className="overflow-x-auto">

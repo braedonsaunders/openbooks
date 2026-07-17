@@ -5,7 +5,7 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, BarChart3, Bolt, Bug, CalendarRange, ChartArea,
   CheckCircle2, DollarSign, Flame, Ghost, Info, Layers, Lightbulb, Mountain,
   PieChart as PieIcon, Puzzle, Search, SlidersHorizontal, Snowflake, Target, TrendingDown,
-  TrendingUp, UserRound, PiggyBank, Gauge as GaugeIcon,
+  TrendingUp, UserRound, PiggyBank, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Badge } from '@openbooks/ui'
 import type { SpendVelocityData, VelocityRow } from '../../../../lib/analytics/spend-velocity-data'
@@ -14,6 +14,7 @@ import { Panel } from '../_ui/Panel'
 import { Donut, Chart, TrendChart } from '../_ui/charts'
 import { DrillDrawer } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
+import { exportCsv } from '../_ui/exportCsv'
 import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
@@ -526,7 +527,21 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         </div>
       </div>
 
-      <Panel title="Account Deep Analysis" icon={Layers} hint={`${rows.length} accounts · click a row for transactions`} bodyClassName="p-0">
+      <Panel
+        title="Account Deep Analysis"
+        icon={Layers}
+        hint={`${rows.length} accounts · click a row for transactions`}
+        bodyClassName="p-0"
+        actions={
+          <button
+            type="button"
+            onClick={() => exportCsv('spend-accounts', ['Account', 'Current', 'Prior', '2 Back', 'Change %', 'Projected', 'Velocity %/mo', 'Accel', 'Trend'], rows.map((a) => [a.accountName, Math.round(a.currentAmount), Math.round(a.priorAmount), Math.round(a.twoBackAmount), a.changePct.toFixed(1), Math.round(a.projectedAmount), a.velocity.toFixed(1), a.acceleration.toFixed(1), a.trend]))}
+            className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            <Download size={11} /> CSV
+          </button>
+        }
+      >
         <div className="max-h-128 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
