@@ -2,17 +2,16 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cancelPaymentRun, paymentRunReadiness } from '@openbooks/engine/src/payments.ts'
-import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { paymentErrorResponse } from '../../lib'
+import { guardPaymentRunPermission, paymentErrorResponse } from '../../lib'
 
 export const runtime = 'nodejs'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.pay')
-  if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const gate = await guardPaymentRunPermission(id)
+  if (gate instanceof NextResponse) return gate
 
   const run = (await db.execute(sql`
     select r.*, a.number as bank_number, a.name as bank_name
@@ -46,10 +45,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /** Cancel a draft/exported run: deletes its draft payments, keeps the audit row. */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.pay')
-  if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const gate = await guardPaymentRunPermission(id)
+  if (gate instanceof NextResponse) return gate
 
   try {
     await cancelPaymentRun(id, gate.user.orgId)

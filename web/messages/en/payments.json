@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Payments",
-    "description": "Manage vendor payments and payment runs from selection through posting.",
+    "description": "Manage payment activity and bank runs from selection through settlement.",
     "newPayment": "New payment",
     "newRun": "New payment run",
     "tabs": {
@@ -93,24 +93,33 @@
   "configuration": {
     "notConfiguredTitle": "Payment setup is incomplete",
     "notConfiguredDescription": "Create a funding profile in <setup>Payments & Banking setup</setup> before assembling a payment run.",
+    "collectionsNotConfiguredTitle": "Direct-debit setup is incomplete",
+    "collectionsNotConfiguredDescription": "Create a debit bank profile and mandates in <setup>Payments & Banking setup</setup> before assembling a collection run.",
     "runNotReadyTitle": "This payment run is not ready",
     "runNotReadyDescription": "Complete the profile configuration before generating a file. Missing or invalid: {missing}."
   },
   "runBuilder": {
     "title": "New payment run",
     "description": "Choose the funding account and bills, then create a draft run for review.",
+    "collectionTitle": "New direct-debit run",
+    "collectionDescription": "Choose the collection profile and open invoices, then create a draft run for review.",
     "noOpenBills": "No posted bills with an open balance match.",
+    "noOpenInvoices": "No posted invoices with an open balance match.",
     "selectAllAriaLabel": "Select all bills on this page",
     "selectAriaLabel": "Select {document}",
     "columns": {
       "bill": "Bill",
+      "invoice": "Invoice",
       "due": "Due",
       "ref": "Ref",
       "bankDetails": "Bank details",
+      "mandate": "Debit mandate",
       "openBalance": "Open balance"
     },
     "bankApproved": "approved",
     "bankMissing": "missing",
+    "mandateActive": "active",
+    "mandateMissing": "missing",
     "payFromBankAccount": "Payment bank profile",
     "selectBankAccountPlaceholder": "Select a payment profile…",
     "noBankAccounts": "No active payment profiles",
@@ -118,14 +127,22 @@
     "captureDiscounts": "Capture available early-payment discounts",
     "applyCredits": "Apply available vendor credits",
     "selectedForPayment": "Selected for payment",
+    "selectedForCollection": "Selected for collection",
     "selectionSummary": "{count, plural, one {# bill} other {# bills}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# invoice} other {# invoices}} · <total>{amount}</total>",
     "createRun": "Create payment run",
+    "createCollectionRun": "Create collection run",
     "toasts": {
       "createFailed": "Could not create the payment run",
       "created": "Payment run {number} created"
     }
   },
   "runs": {
+    "collectionRunsHeading": "Direct-debit runs",
+    "collectionDescription": "Approve, generate, deliver, post, and settle customer collection files.",
+    "openInvoicesHeading": "Open invoices",
+    "openInvoicesDescription": "Review open invoices and debit-mandate readiness before selection.",
+    "invoicesSearchPlaceholder": "Search invoices or customers…",
     "openBillsHeading": "Open bills to pay",
     "openBillsDescription": "Select bills across vendors; each vendor becomes one payment instruction.",
     "billsSearchPlaceholder": "Search bills, vendors, refs…",
@@ -133,6 +150,7 @@
     "description": "Review drafts, export bank files, and confirm posted payments.",
     "searchPlaceholder": "Search runs or bank accounts…",
     "noRunsYet": "No payment runs yet. Create the first run when bills are ready to pay.",
+    "noCollectionRunsYet": "No direct-debit runs yet. Create the first run when authorized invoices are ready to collect.",
     "columns": {
       "run": "Run",
       "bankAccount": "Bank account",
@@ -213,6 +231,7 @@
       "run_created": "Payment run created", "run_submitted": "Payment run submitted", "run_approved": "Payment run approved", "run_rejected": "Payment run rejected",
       "file_generated": "Payment file generated", "file_reprocessed": "Payment file reprocessed", "file_approved": "Payment file approved", "file_rejected": "Payment file rejected",
       "file_downloaded": "Payment file downloaded", "file_delivered_sftp": "Payment file delivered by SFTP", "run_rolled_back": "Payment run rolled back",
+      "file_delivery_failed": "Payment file delivery failed",
       "instruction_settled": "Payment settled", "instruction_returned": "Payment returned", "instruction_rejected": "Payment rejected"
     },
     "confirmPost": "{count, plural, one {Post # payment} other {Post # payments}} totalling {total} to the ledger and apply them to the selected bills?",

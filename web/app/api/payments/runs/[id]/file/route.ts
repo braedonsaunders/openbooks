@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/src/payment-operations.ts'
-import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { paymentErrorResponse } from '../../../lib'
+import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
 
 export const runtime = 'nodejs'
 
@@ -13,10 +12,10 @@ export const runtime = 'nodejs'
  * separate POST so profiles that require file approval cannot leak bytes.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.pay')
-  if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const gate = await guardPaymentRunPermission(id)
+  if (gate instanceof NextResponse) return gate
 
   try {
     const result = (await db.execute(sql`
@@ -43,10 +42,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /** Generate and persist a new file artifact for an approved run. */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.pay')
-  if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const gate = await guardPaymentRunPermission(id)
+  if (gate instanceof NextResponse) return gate
   try {
     const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id)
     const state = (await db.execute(sql`select status from payment_files where id = ${file.id}`)) as unknown as { rows: { status: string }[] }

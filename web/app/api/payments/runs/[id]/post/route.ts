@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { postPaymentRun } from '@openbooks/engine/src/payments.ts'
-import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { paymentErrorResponse } from '../../../lib'
+import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
 
 export const runtime = 'nodejs'
 
@@ -12,10 +11,10 @@ export const runtime = 'nodejs'
  * leave the run 'exported' so the failed instructions can be retried.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.pay')
-  if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const gate = await guardPaymentRunPermission(id)
+  if (gate instanceof NextResponse) return gate
 
   try {
     const result = await postPaymentRun(id, gate.user.orgId, gate.user.id)

@@ -57,7 +57,7 @@ function isPaymentKind(kind: string): kind is PaymentKind {
   return kind === "vendor_payment" || kind === "customer_payment";
 }
 
-async function nextNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null): Promise<string> {
+export async function nextNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null): Promise<string> {
   const configured = subsidiaryId
     ? ((await db.execute(sql`
         select 1 from number_sequences
@@ -630,6 +630,7 @@ async function reversePostedEntry(
   documentId: string,
   orgId: string,
   memo: string,
+  unapplySourceEntry = false,
 ): Promise<string | null> {
   const [entry] = await db
     .select()
@@ -670,6 +671,13 @@ async function reversePostedEntry(
   }
 
   await db.transaction(async (tx) => {
+    if (unapplySourceEntry) {
+      await tx.execute(sql`
+        update applications a set unapplied_at = now()
+         where a.unapplied_at is null and exists (
+           select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${entryId})
+      `);
+    }
     const [rev] = await tx
       .insert(schema.journalEntries)
       .values({
@@ -746,28 +754,15 @@ export async function reversePaymentForReturn(
   `)) as unknown as { rows: { id: string; posted_entry_id: string; document_number: string }[] };
   const payment = row.rows[0];
   if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
-  await db.execute(sql`
-    update applications a set unapplied_at = now()
-     where a.unapplied_at is null and exists (
-       select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${payment.posted_entry_id})
-  `);
-  try {
-    const reversalId = await reversePostedEntry(
-      payment.posted_entry_id,
-      payment.id,
-      orgId,
-      `bank return: ${reason.trim() || payment.document_number}`,
-    );
-    if (!reversalId) throw new PaymentError("payment reversal could not be created");
-    return reversalId;
-  } catch (error) {
-    await db.execute(sql`
-      update applications a set unapplied_at = null
-       where a.unapplied_at is not null and exists (
-         select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${payment.posted_entry_id})
-    `);
-    throw error;
-  }
+  const reversalId = await reversePostedEntry(
+    payment.posted_entry_id,
+    payment.id,
+    orgId,
+    `bank return: ${reason.trim() || payment.document_number}`,
+    true,
+  );
+  if (!reversalId) throw new PaymentError("payment reversal could not be created");
+  return reversalId;
 }
 
 // ---------------------------------------------------------------------------
@@ -902,7 +897,7 @@ export async function createPaymentRun(opts: {
 
   // Selected bills → their open AP lines with current open balances.
   const bills = (await db.execute(sql`
-    select d.id as document_id, d.document_number, d.document_date, d.party_id, p.display_name as vendor,
+    select d.id as document_id, d.document_number, d.kind as document_kind, d.document_date, d.party_id, p.display_name as vendor,
            d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
            jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
            round((abs(jl.amount) - coalesce(ap.applied, 0)) / d.fx_rate, 4) as open,
@@ -918,12 +913,12 @@ export async function createPaymentRun(opts: {
          where a.to_line_id = jl.id and a.unapplied_at is null
       ) ap on true
      where d.id in ${opts.billDocumentIds}
-       and d.org_id = ${opts.orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
+       and d.org_id = ${opts.orgId} and d.kind in ('vendor_bill', 'expense_report') and d.status = 'posted'
        and d.payment_hold_reason is null
        and d.currency = ${profile.currency}
        and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
   `)) as unknown as {
-    rows: { document_id: string; document_number: string; document_date: string; party_id: string; vendor: string; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }[];
+    rows: { document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }[];
   };
 
   const found = new Set(bills.rows.map((b) => b.document_id));
@@ -1025,7 +1020,8 @@ export async function createPaymentRun(opts: {
         deadline.setUTCDate(deadline.getUTCDate() + bill.discount_days);
         if (paymentDate <= deadline.toISOString().slice(0, 10)) {
           const numerator = toUnits(remainingTxn) * toUnits(bill.discount_percent);
-          discountTxn = fromUnits((numerator + 500_000n) / 1_000_000n);
+          const rawDiscount = (numerator + 500_000n) / 1_000_000n;
+          discountTxn = fromUnits(((rawDiscount + 50n) / 100n) * 100n);
           if (!isZero(discountTxn) && !discountAccountId) {
             throw new PaymentError("an early-payment discount is available but the bank profile has no discount account");
           }
@@ -1097,7 +1093,7 @@ export async function createPaymentRun(opts: {
       paymentInstructionId: instruction.id,
       sourceDocumentId: bill.document_id,
       sourceOpenLineId: bill.open_line_id,
-      kind: "bill" as const,
+      kind: (bill.document_kind === "expense_report" ? "expense" : "bill") as "expense" | "bill",
       grossAmount: bill.open,
       discountAmount,
       creditAmount,
@@ -1340,7 +1336,11 @@ export async function postPaymentRun(
         .update(schema.paymentInstructions)
         .set({ status: "sent", updatedAt: new Date(), updatedBy: userId })
         .where(eq(schema.paymentInstructions.id, ins.id));
-      await queueAutomaticRemittance(ins.id, orgId, userId);
+      try {
+        await queueAutomaticRemittance(ins.id, orgId, userId);
+      } catch (error) {
+        console.error(`[payments] automatic remittance failed for instruction ${ins.id}:`, error);
+      }
       posted += 1;
     } catch (e) {
       failures.push({ payee: ins.payee, error: e instanceof Error ? e.message : String(e) });
@@ -1366,7 +1366,7 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
     select i.id, i.amount, i.currency, i.payment_reference, d.document_number,
            coalesce(r.scheduled_for, d.document_date) as payment_date,
            p.display_name as payee, vr.eft_notification_email as email,
-           bp.auto_remittance, o.name as org_name
+           bp.auto_remittance, r.direction, o.name as org_name
       from payment_instructions i
       join payment_runs r on r.id = i.payment_run_id
       join payment_bank_profiles bp on bp.id = r.payment_bank_profile_id
@@ -1375,9 +1375,9 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
       left join documents d on d.id = i.payment_document_id
       join orgs o on o.id = i.org_id
      where i.id = ${instructionId} and i.org_id = ${orgId}
-  `)) as unknown as { rows: Array<{ id: string; amount: string; currency: string; payment_reference: string | null; document_number: string | null; payment_date: string; payee: string; email: string | null; auto_remittance: boolean; org_name: string }> };
+  `)) as unknown as { rows: Array<{ id: string; amount: string; currency: string; payment_reference: string | null; document_number: string | null; payment_date: string; payee: string; email: string | null; auto_remittance: boolean; direction: string; org_name: string }> };
   const instruction = row.rows[0];
-  if (!instruction?.auto_remittance) return;
+  if (!instruction?.auto_remittance || instruction.direction !== "outbound") return;
   const already = (await db.execute(sql`
     select 1 from payment_remittances where payment_instruction_id = ${instructionId} and status = 'sent' limit 1
   `)) as unknown as { rows: unknown[] };
