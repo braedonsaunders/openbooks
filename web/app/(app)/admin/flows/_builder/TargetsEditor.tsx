@@ -4,7 +4,7 @@ import { Plus, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, RecipientTarget } from '@openbooks/forms-core'
-import type { OrgUser } from './graph'
+import type { OrgRole, OrgUser } from './graph'
 
 /**
  * Assignee / recipient target editors. One row = one target; the type select
@@ -49,6 +49,7 @@ export function TargetRow({
   onRemove,
   profile,
   users,
+  roles,
   allowEmail,
 }: {
   target: RecipientTarget
@@ -56,6 +57,7 @@ export function TargetRow({
   onRemove?: () => void
   profile: FlowSubjectProfile
   users: OrgUser[]
+  roles: OrgRole[]
   allowEmail: boolean
 }) {
   const t = useTranslations('admin.flows.targets')
@@ -102,7 +104,7 @@ export function TargetRow({
           <option value="">{t('pickRole')}</option>
           {(profile.roles ?? []).map((r) => (
             <option key={r} value={r}>
-              {r}
+              {roles.find((role) => role.key === r)?.name ?? r}
             </option>
           ))}
         </Select>
@@ -131,6 +133,7 @@ export function TargetsEditor({
   onChange,
   profile,
   users,
+  roles,
   allowEmail,
   addLabel,
 }: {
@@ -138,6 +141,7 @@ export function TargetsEditor({
   onChange: (value: RecipientTarget[]) => void
   profile: FlowSubjectProfile
   users: OrgUser[]
+  roles: OrgRole[]
   allowEmail: boolean
   addLabel: string
 }) {
@@ -152,6 +156,7 @@ export function TargetsEditor({
           onRemove={rows.length > 1 ? () => onChange(rows.filter((_, j) => j !== i)) : undefined}
           profile={profile}
           users={users}
+          roles={roles}
           allowEmail={allowEmail}
         />
       ))}

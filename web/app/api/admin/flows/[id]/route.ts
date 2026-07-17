@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { automationGraphSchema } from '@openbooks/forms-core'
-import { lintFlowGraphForSubject } from '@openbooks/engine/src/flows/index.ts'
+import { flowSubjectProfileForOrg, lintFlowGraphForSubject } from '@openbooks/engine/src/flows/index.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -79,9 +79,23 @@ export async function PATCH(req: Request, { params }: Params) {
       return NextResponse.json({ errors }, { status: 400 })
     }
     // Author-time lints are non-blocking: report, but store positions as-is.
-    const lint = lintFlowGraphForSubject(String(flow.subject_kind), parsed.data)
+    const profile = await flowSubjectProfileForOrg(user.orgId, String(flow.subject_kind))
+    const lint = lintFlowGraphForSubject(String(flow.subject_kind), parsed.data, profile ?? undefined)
     warnings = lint.ok ? [] : lint.errors
     sets.push(sql`graph = ${JSON.stringify(parsed.data)}::jsonb`)
+  }
+
+  // Drafts may retain authoring warnings, but an enabled flow must be fully
+  // executable against the tenant's current roles and custom fields.
+  if (body.enabled === true) {
+    const candidateGraph = body.graph ?? flow.graph
+    const profile = await flowSubjectProfileForOrg(user.orgId, String(flow.subject_kind))
+    const lint = lintFlowGraphForSubject(
+      String(flow.subject_kind),
+      candidateGraph,
+      profile ?? undefined,
+    )
+    if (!lint.ok) return NextResponse.json({ errors: lint.errors }, { status: 400 })
   }
 
   await db.execute(sql`

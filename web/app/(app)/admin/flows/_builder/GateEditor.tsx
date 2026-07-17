@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { Input, Label } from '@openbooks/ui'
 import type { AssigneeTarget, FlowSubjectProfile, GateData } from '@openbooks/forms-core'
-import type { OrgUser } from './graph'
+import type { OrgRole, OrgUser } from './graph'
 import { TargetRow, TargetsEditor, defaultTarget } from './TargetsEditor'
 
 /**
@@ -37,11 +37,13 @@ export function GateEditor({
   onChange,
   profile,
   users,
+  roles,
 }: {
   gate: GateData
   onChange: (gate: GateData) => void
   profile: FlowSubjectProfile
   users: OrgUser[]
+  roles: OrgRole[]
 }) {
   const t = useTranslations('admin.flows')
 
@@ -63,6 +65,7 @@ export function GateEditor({
           onChange={(assignees) => onChange({ ...gate, assignees: assignees as AssigneeTarget[] })}
           profile={profile}
           users={users}
+          roles={roles}
           allowEmail={false}
           addLabel={t('targets.addAssignee')}
         />
@@ -96,6 +99,21 @@ export function GateEditor({
         {t('gate.signature')}
       </label>
 
+      <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+        <input
+          type="checkbox"
+          checked={gate.preventSelfApproval ?? false}
+          onChange={(e) => onChange({ ...gate, preventSelfApproval: e.target.checked || undefined })}
+          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+        />
+        <span>
+          <span className="block font-medium">{t('gate.preventSelfApproval')}</span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400">
+            {t('gate.preventSelfApprovalHint')}
+          </span>
+        </span>
+      </label>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>{t('gate.reminderAfter')}</Label>
@@ -122,6 +140,7 @@ export function GateEditor({
             onRemove={() => onChange({ ...gate, escalateTo: undefined })}
             profile={profile}
             users={users}
+            roles={roles}
             allowEmail={false}
           />
         ) : (

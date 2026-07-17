@@ -2,7 +2,7 @@
 //
 // One graph per flow (stored in the `flows` table, one flow per subject kind).
 // It is the single canvas that models BOTH:
-//   • system automations (fire-and-forget Actions: email, notify, webhook, …)
+//   • system automations (fire-and-forget Actions: email, notify, …)
 //   • human sign-off (Gate nodes that PAUSE the flow until the assignee quorum
 //     approves/rejects — persisted as `flow_gates` rows by the engine).
 //
@@ -154,14 +154,6 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   }),
   // Adapter-mediated document lifecycle transition (draft → approved, …).
   z.object({ action: z.literal('change_status'), to: z.string().min(1).max(64) }),
-  // Outbound HTTP call, HMAC-signed by the engine. `includeRecord` attaches
-  // the record snapshot to the payload.
-  z.object({
-    action: z.literal('webhook'),
-    url: z.string().min(1).max(2_000),
-    method: z.enum(['POST', 'PUT']).default('POST'),
-    includeRecord: z.boolean().optional(),
-  }),
   // Post the document to the GL (runs the normal posting pipeline).
   z.object({ action: z.literal('post_document') }),
   // Hard-lock the record against edits/void/delete until `unlock_record` runs
@@ -554,7 +546,7 @@ const WORKER_ONLY_TRIGGERS = new Set<TriggerKind>(['scheduled'])
 const WORKER_SAFE_ACTIONS = new Set<ActionKind>(['send_email', 'notify'])
 // With a record fan-out (`select`) each scheduled run HAS a subject record, so
 // persisting into it is well-defined (the EFT "sent" latch pattern). Status
-// pipelines, gates, posting, and webhooks stay excluded from the tick.
+// pipelines, gates, and posting stay excluded from the tick.
 const WORKER_SAFE_ACTIONS_WITH_RECORD = new Set<ActionKind>(['send_email', 'notify', 'set_field'])
 
 /** The action vocabulary a scheduled trigger's branch may use at runtime. */
@@ -568,8 +560,7 @@ export function scheduledSafeActions(hasRecordSelect: boolean): Set<ActionKind> 
  * narrow — email + in-app notify, plus set_field when the trigger declares a
  * record `select` (fan-out gives each run a real record). Reject branches
  * that would otherwise save successfully and then silently no-op — gates
- * (nothing to pause), status pipelines (change_status / post_document), and
- * webhooks (no HMAC signing context in the tick).
+ * (nothing to pause) and status pipelines (change_status / post_document).
  */
 export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[] {
   const errors: string[] = []

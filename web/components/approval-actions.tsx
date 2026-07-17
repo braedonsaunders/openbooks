@@ -126,7 +126,10 @@ export function ApprovalActions({
     [state, router, t],
   )
 
-  if (!state || state.approvalState.status !== 'pending_approval') return null
+  if (
+    !state ||
+    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0)
+  ) return null
 
   if (state.approvalState.myActions) {
     return (

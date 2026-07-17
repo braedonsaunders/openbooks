@@ -52,8 +52,6 @@ export function actionSummary(t: (key: string) => string, d: ActionData): string
       return `${d.field} = …`
     case 'change_status':
       return `→ ${d.to}`
-    case 'webhook':
-      return d.url.replace(/^https?:\/\//, '') || t('action.kinds.webhook')
     case 'post_document':
       return t('action.kinds.post_document')
     case 'lock_record':

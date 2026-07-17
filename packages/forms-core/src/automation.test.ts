@@ -139,6 +139,33 @@ describe('graph schema', () => {
     )
     assert.throws(() => gateDataSchema.parse({ ...base, preventSelfApproval: 'yes' }))
   })
+
+  test('manual triggers preserve all record-button controls', () => {
+    const graph = graphOf([
+      {
+        trigger: {
+          trigger: 'manual',
+          buttonId: 'approve_exception',
+          label: 'Approve exception',
+          confirm: 'Approve this exception?',
+          requirePermission: 'transactions.vendor_bills.approve',
+          showIf: { op: 'eq', field: 'status', value: 'pending_approval' },
+        },
+        title: 'approved',
+      },
+    ])
+    const parsed = automationGraphSchema.parse(graph)
+    const trigger = parsed.nodes[0]?.data
+    assert.equal(trigger?.kind, 'trigger')
+    assert.deepEqual(trigger?.kind === 'trigger' ? trigger.trigger : null, {
+      trigger: 'manual',
+      buttonId: 'approve_exception',
+      label: 'Approve exception',
+      confirm: 'Approve this exception?',
+      requirePermission: 'transactions.vendor_bills.approve',
+      showIf: { op: 'eq', field: 'status', value: 'pending_approval' },
+    })
+  })
 })
 
 // --- {{field}} interpolation ---------------------------------------------------
@@ -383,7 +410,6 @@ describe('lintWorkerTriggerCompatibility', () => {
       { action: 'set_field', field: 'memo', value: { kind: 'literal', value: 'x' } },
       { action: 'change_status', to: 'approved' },
       { action: 'post_document' },
-      { action: 'webhook', url: 'https://example.com', method: 'POST' },
     ] as const satisfies readonly ActionData[]) {
       assert.ok(
         lintWorkerTriggerCompatibility(schedGraphWith({ kind: 'action', action })).includes(
@@ -554,10 +580,10 @@ describe('lintAutomationGraph', () => {
           {
             id: 'a3',
             position: { x: 300, y: 0 },
-            // webhook is not in the invoice profile's action list.
+            // lock_record is not in the invoice profile's action list.
             data: {
               kind: 'action',
-              action: { action: 'webhook', url: 'https://example.com', method: 'POST' },
+              action: { action: 'lock_record' },
             },
           },
         ],
@@ -573,7 +599,7 @@ describe('lintAutomationGraph', () => {
     assert.ok(errors.includes('Trigger t: "before_void" is not available for Invoice.'))
     assert.ok(errors.includes('Action a1: unknown destination status "voided".'))
     assert.ok(errors.includes('Action a2: field "total" is not writable by flows.'))
-    assert.ok(errors.includes('Action a3: "webhook" is not available for Invoice.'))
+    assert.ok(errors.includes('Action a3: "lock_record" is not available for Invoice.'))
   })
 
   test('flags unknown fields in conditions, on_field_value rules, and set_field', () => {

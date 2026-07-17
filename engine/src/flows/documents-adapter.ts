@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import {
@@ -102,9 +102,8 @@ function headerValues(doc: DocRow, partyName: string | null): Record<string, unk
     locationId: doc.locationId,
     classId: doc.classId,
     createdBy: doc.createdBy,
-    // Custom jsonb keys ride along for {{interpolation}} / conditions; they
-    // are NOT in the curated profile field list, so the lint flags authored
-    // references — authors opt in knowingly (same posture as scripts).
+    // Registered custom jsonb keys ride along for interpolation and conditions;
+    // the tenant-aware authoring profile exposes only active definitions.
     ...(typeof doc.custom === "object" && doc.custom !== null
       ? (doc.custom as Record<string, unknown>)
       : {}),
@@ -183,33 +182,33 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       await db
         .update(schema.documents)
         .set({ status: to as DocRow["status"], updatedBy: ctx.userId ?? null, updatedAt: new Date() })
-        .where(eq(schema.documents.id, subjectId));
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
     },
 
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
-      // `custom.<key>` writes one key of the custom jsonb blob — the NetSuite
-      // "workflow checkbox" pattern (e.g. an EFT sent-latch). The builder's
-      // lint flags these as unknown fields (custom keys aren't in the curated
-      // profile), which surfaces as a non-blocking warning — authors opt in
-      // knowingly, same posture as reading custom keys in conditions.
-      if (field.startsWith("custom.")) {
-        const key = field.slice("custom.".length);
-        if (!key) throw new Error(`empty custom field key`);
+      if (!WRITABLE_DOCUMENT_FIELDS.has(field)) {
+        const customField = (await db.execute(sql`
+          select 1 from custom_field_defs
+           where org_id = ${ctx.orgId} and target_table = 'documents'
+             and (target_kind is null or target_kind = ${kind})
+             and key = ${field} and is_active
+           limit 1
+        `)) as unknown as { rows: unknown[] };
+        if (customField.rows.length === 0) {
+          throw new Error(`field "${field}" is not writable by flows`);
+        }
         await db.execute(sql`
           update documents
-             set custom = jsonb_set(coalesce(custom, '{}'::jsonb), ${`{${key}}`}::text[], ${JSON.stringify(value ?? null)}::jsonb),
+             set custom = jsonb_set(coalesce(custom, '{}'::jsonb), array[${field}]::text[], ${JSON.stringify(value ?? null)}::jsonb),
                  updated_by = ${ctx.userId ?? null}, updated_at = now()
-           where id = ${subjectId}
+           where id = ${subjectId} and org_id = ${ctx.orgId}
         `);
         return;
-      }
-      if (!WRITABLE_DOCUMENT_FIELDS.has(field)) {
-        throw new Error(`field "${field}" is not writable by flows`);
       }
       await db
         .update(schema.documents)
         .set({ [field]: value, updatedBy: ctx.userId ?? null, updatedAt: new Date() })
-        .where(eq(schema.documents.id, subjectId));
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
     },
 
     async findCandidateIds(limit: number): Promise<string[]> {

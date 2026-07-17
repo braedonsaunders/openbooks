@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../db.ts";
-import { BUILT_IN_ROLE_NAMES } from "./subject-profiles.ts";
+import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 
 export const BUDGET_SCENARIO_SUBJECT_KIND = "budget_scenario";
@@ -17,7 +17,7 @@ export const budgetScenarioSubjectProfile: FlowSubjectProfile = {
   subjectKind: BUDGET_SCENARIO_SUBJECT_KIND,
   label: "Budget scenario",
   triggers: ["scheduled", "manual"],
-  actions: ["send_email", "notify", "change_status", "webhook", "lock_record", "unlock_record"],
+  actions: ["send_email", "notify", "change_status", "lock_record", "unlock_record"],
   statuses: [
     { value: "draft", label: "Draft" },
     { value: "pending_approval", label: "Pending approval" },
@@ -30,12 +30,30 @@ export const budgetScenarioSubjectProfile: FlowSubjectProfile = {
     { key: "bookId", label: "Accounting book", type: "text" },
     { key: "bookName", label: "Accounting book name", type: "text" },
     { key: "fiscalYear", label: "Fiscal year", type: "number" },
-    { key: "kind", label: "Type", type: "enum" },
-    { key: "status", label: "Status", type: "enum" },
+    {
+      key: "kind",
+      label: "Type",
+      type: "enum",
+      options: [
+        { value: "budget", label: "Budget" },
+        { value: "forecast", label: "Forecast" },
+      ],
+    },
+    {
+      key: "status",
+      label: "Status",
+      type: "enum",
+      options: [
+        { value: "draft", label: "Draft" },
+        { value: "pending_approval", label: "Pending approval" },
+        { value: "approved", label: "Approved" },
+        { value: "archived", label: "Archived" },
+      ],
+    },
     { key: "total", label: "Total", type: "number" },
     { key: "lineCount", label: "Line count", type: "number" },
     { key: "createdBy", label: "Created by (user)", type: "user" },
-    { key: "event_source", label: "Event source", type: "enum" },
+    { key: "event_source", label: "Event source", type: "enum", options: [...EVENT_SOURCE_OPTIONS] },
     { key: "current_user_id", label: "Current user (manual buttons)", type: "user" },
     { key: "is_submitter", label: "Viewer is submitter (manual buttons)", type: "bool" },
     { key: "is_pending_approver", label: "Viewer has a pending gate (manual buttons)", type: "bool" },
@@ -127,7 +145,9 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
   async changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void> {
     await db.transaction(async (tx) => {
       const locked = (await tx.execute(sql`
-        select id, name, status, revision from budget_scenarios where id = ${subjectId} for update
+        select id, name, status, revision from budget_scenarios
+         where id = ${subjectId} and org_id = ${ctx.orgId}
+         for update
       `)) as unknown as { rows: { id: string; name: string; status: string; revision: number }[] };
       const budget = locked.rows[0];
       if (!budget) throw new Error(`budget scenario ${subjectId} not found`);
@@ -146,7 +166,7 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
           approved_at = case when ${to} = 'approved' then now() when ${to} = 'draft' then null else approved_at end,
           approved_by = case when ${to} = 'approved' then ${ctx.userId ?? null} when ${to} = 'draft' then null else approved_by end,
           updated_at = now(), updated_by = ${ctx.userId ?? null}
-        where id = ${subjectId}
+        where id = ${subjectId} and org_id = ${ctx.orgId}
       `);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

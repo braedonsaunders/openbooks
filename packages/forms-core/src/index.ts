@@ -79,6 +79,7 @@ export type {
 export { profileFieldIds } from './flow-subjects'
 export type {
   FlowFieldDef,
+  FlowFieldOption,
   FlowFieldType,
   FlowStatusDef,
   FlowSubjectProfile,
