@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { analyticsConfig } from "./config";
 
 /**
  * Customer Intelligence — the data behind /analytics/customer-intelligence, a
@@ -47,9 +48,6 @@ const RECENCY_WARNING = 90;
 const RECENCY_CRITICAL = 180;
 const CHURN_HIGH_DAYS = 120;
 const CHURN_MEDIUM_DAYS = 60;
-const HHI_WARNING = 1500;
-const HHI_CRITICAL = 2500;
-const CLV_YEARS = 3;
 
 export type Tier = "platinum" | "gold" | "silver" | "bronze";
 export type Segment = "champions" | "loyal" | "potential" | "new" | "regular" | "hibernating" | "at-risk" | "lost";
@@ -195,6 +193,15 @@ export interface CustomerData {
   };
   cohorts: { list: Cohort[]; overallRetention: number };
   insights: Insight[];
+  /** Effective tunable thresholds (org overrides over defaults). */
+  config: {
+    churnCriticalScore: number;
+    churnHighScore: number;
+    churnMediumScore: number;
+    hhiWarning: number;
+    hhiCritical: number;
+    clvYears: number;
+  };
 }
 
 /* ------------------------------------------------------------ Profitability */
@@ -359,6 +366,15 @@ export async function customerData(period: { from: string; to: string; label: st
   const today = new Date().toISOString().slice(0, 10);
   const ref = to < today ? to : today;
 
+  // Per-org tunable thresholds (defaults reproduce the standard scoring exactly).
+  const cfg = await analyticsConfig(orgId, "customerIntelligence");
+  const churnCritical = cfg.churnCriticalScore;
+  const churnHigh = cfg.churnHighScore;
+  const churnMedium = cfg.churnMediumScore;
+  const hhiWarning = cfg.hhiWarning;
+  const hhiCritical = cfg.hhiCritical;
+  const clvYears = cfg.clvYears;
+
   const [baseRows, frictionRows, paymentRows, growthRows, cohortRows, profitData] = await Promise.all([
     // Base customer metrics — Gantry's header query over CustInvc(+CashSale):
     // per-customer count / revenue / avg / first / last / recency / tenure.
@@ -513,7 +529,7 @@ export async function customerData(period: { from: string; to: string; label: st
     const freqPerYear = c.txns / yearsActive;
     const annualValue = c.avgValue * freqPerYear;
     const retention = Math.max(0.1, Math.min(0.95, 0.95 * Math.exp(-c.recency / 120)));
-    return { annualValue: Math.round(annualValue), clv: Math.round(annualValue * CLV_YEARS * retention), retentionFactor: Math.round(retention * 100) };
+    return { annualValue: Math.round(annualValue), clv: Math.round(annualValue * clvYears * retention), retentionFactor: Math.round(retention * 100) };
   };
 
   /* ---- churn (Gantry analyzeChurnRisk) ---- */
@@ -529,7 +545,7 @@ export async function customerData(period: { from: string; to: string; label: st
     if (c.txns <= 1) { score += 30; factors.push("Single transaction customer"); }
     else if (c.txns <= 3) { score += 15; factors.push("Low transaction frequency"); }
     score = Math.min(100, score);
-    const level: RiskLevel = score >= 70 ? "critical" : score >= 50 ? "high" : score >= 30 ? "medium" : "low";
+    const level: RiskLevel = score >= churnCritical ? "critical" : score >= churnHigh ? "high" : score >= churnMedium ? "medium" : "low";
     return { score, level, factors, retentionProbability: Math.max(0, 100 - score), avgDaysBetween: Math.round(avgDaysBetween) };
   };
 
@@ -624,7 +640,7 @@ export async function customerData(period: { from: string; to: string; label: st
     shareMap.set(e.c.id, { sharePct: Math.round(sharePct * 100) / 100, risk });
   });
   const hhiScaled = Math.round(byRevenue.reduce((a, e) => a + ((totalRevenue > 0 ? e.c.revenue / totalRevenue : 0) * 100) ** 2, 0));
-  const hhiLevel: CustomerData["kpis"]["hhiLevel"] = hhiScaled >= HHI_CRITICAL ? "high" : hhiScaled >= HHI_WARNING ? "moderate" : "low";
+  const hhiLevel: CustomerData["kpis"]["hhiLevel"] = hhiScaled >= hhiCritical ? "high" : hhiScaled >= hhiWarning ? "moderate" : "low";
   const top10PctCount = Math.ceil(nAll * 0.1);
   const top10Share = totalRevenue > 0 ? (byRevenue.slice(0, top10PctCount).reduce((a, e) => a + e.c.revenue, 0) / totalRevenue) * 100 : 0;
 
@@ -838,7 +854,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const insights: Insight[] = [];
   const fmtM = (n: number) => `$${n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}K` : Math.round(n)}`;
   if (totalProjectedClv > 0)
-    insights.push({ type: "info", category: "lifetime-value", title: "Projected Customer Value", message: `${fmtM(totalProjectedClv)} projected CLV over ${CLV_YEARS} years from ${rows.length} customers`, impact: "high" });
+    insights.push({ type: "info", category: "lifetime-value", title: "Projected Customer Value", message: `${fmtM(totalProjectedClv)} projected CLV over ${clvYears} years from ${rows.length} customers`, impact: "high" });
   if (atRisk.length > 0)
     insights.push({ type: "warning", category: "churn", title: "Churn Risk Alert", message: `${atRisk.length} customers at high/critical churn risk representing ${fmtM(atRiskRevenue)} revenue`, impact: "high", action: "Initiate win-back campaigns for at-risk customers" });
   if (championsStat.count > 0)
@@ -891,5 +907,6 @@ export async function customerData(period: { from: string; to: string; label: st
     growth: { monthly, yoyGrowth, avgMonthlyGrowth, medianMonthlyRevenue: Math.round(medianRevenue), totalNewCustomers, trend },
     cohorts: { list: cohortList, overallRetention },
     insights,
+    config: { churnCriticalScore: churnCritical, churnHighScore: churnHigh, churnMediumScore: churnMedium, hhiWarning, hhiCritical, clvYears },
   };
 }

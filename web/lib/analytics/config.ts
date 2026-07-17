@@ -19,6 +19,48 @@ export interface ConfigField {
 }
 
 export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults: Record<string, number> }> = {
+  financialHealth: {
+    defaults: {
+      grossMarginTarget: 40,
+      operatingMarginTarget: 15,
+      ebitdaMarginTarget: 20,
+      netMarginTarget: 10,
+      roaTarget: 8,
+      roeTarget: 15,
+      roicTarget: 12,
+      revenuePerEmployee: 200_000,
+      gpPerEmployee: 80_000,
+    },
+    fields: [
+      { key: "grossMarginTarget", label: "Gross margin target (%)", help: "Benchmark for the Gross Margin grade", min: 0, max: 100, step: 1 },
+      { key: "operatingMarginTarget", label: "Operating margin target (%)", help: "Benchmark for the Operating Margin grade", min: 0, max: 100, step: 1 },
+      { key: "ebitdaMarginTarget", label: "EBITDA margin target (%)", help: "Benchmark for the EBITDA Margin grade", min: 0, max: 100, step: 1 },
+      { key: "netMarginTarget", label: "Net margin target (%)", help: "Bottom-line profitability benchmark", min: 0, max: 100, step: 1 },
+      { key: "roaTarget", label: "Return on assets target (%)", help: "Benchmark for the ROA grade (needs balance-sheet data)", min: 0, max: 100, step: 1 },
+      { key: "roeTarget", label: "Return on equity target (%)", help: "Benchmark for the ROE grade (needs balance-sheet data)", min: 0, max: 100, step: 1 },
+      { key: "roicTarget", label: "Return on invested capital target (%)", help: "Benchmark for the ROIC grade (needs balance-sheet data)", min: 0, max: 100, step: 1 },
+      { key: "revenuePerEmployee", label: "Revenue per employee ($)", help: "Workforce productivity benchmark", min: 0, max: 10_000_000, step: 5_000 },
+      { key: "gpPerEmployee", label: "Gross profit per employee ($)", help: "Workforce productivity benchmark", min: 0, max: 10_000_000, step: 5_000 },
+    ],
+  },
+  customerIntelligence: {
+    defaults: {
+      churnCriticalScore: 70,
+      churnHighScore: 50,
+      churnMediumScore: 30,
+      hhiWarning: 1500,
+      hhiCritical: 2500,
+      clvYears: 3,
+    },
+    fields: [
+      { key: "churnCriticalScore", label: "Churn — critical (score)", help: "Composite churn score at or above this reads as critical risk", min: 1, max: 100, step: 1 },
+      { key: "churnHighScore", label: "Churn — high (score)", help: "Composite churn score at or above this reads as high risk", min: 1, max: 100, step: 1 },
+      { key: "churnMediumScore", label: "Churn — medium (score)", help: "Composite churn score at or above this reads as medium risk", min: 1, max: 100, step: 1 },
+      { key: "hhiWarning", label: "Concentration warning (HHI)", help: "Herfindahl index at or above this flags a concentration warning", min: 0, max: 10_000, step: 100 },
+      { key: "hhiCritical", label: "Concentration critical (HHI)", help: "Herfindahl index at or above this flags critical concentration", min: 0, max: 10_000, step: 100 },
+      { key: "clvYears", label: "CLV projection horizon (years)", help: "Years of forward value in the customer lifetime value projection", min: 1, max: 10, step: 1 },
+    ],
+  },
   utilization: {
     defaults: { targetBillablePct: 70, costSpikeThreshold: 1000, minHours: 10 },
     fields: [

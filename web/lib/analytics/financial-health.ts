@@ -19,6 +19,35 @@ import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
 export type Grade = "A" | "B" | "C" | "D" | "F";
 export type RatioCategory = "profitability" | "efficiency" | "operating";
 
+/**
+ * Benchmark targets behind the letter grades — editable per organization from
+ * the Configuration tab. Margins/returns are decimals (0.4 = 40%); the two
+ * productivity benchmarks are dollars.
+ */
+export interface HealthBenchmarks {
+  grossMargin: number;
+  operatingMargin: number;
+  ebitdaMargin: number;
+  netMargin: number;
+  roa: number;
+  roe: number;
+  roic: number;
+  revenuePerEmployee: number;
+  gpPerEmployee: number;
+}
+
+export const DEFAULT_BENCHMARKS: HealthBenchmarks = {
+  grossMargin: 0.4,
+  operatingMargin: 0.15,
+  ebitdaMargin: 0.2,
+  netMargin: 0.1,
+  roa: 0.08,
+  roe: 0.15,
+  roic: 0.12,
+  revenuePerEmployee: 200_000,
+  gpPerEmployee: 80_000,
+};
+
 export interface RatioResult {
   id: string;
   /** value in native units — decimal for pct (0.25), dollars for money, x for num/raw */
@@ -235,12 +264,16 @@ async function activeHeadcount(): Promise<number> {
   return Number(r.rows[0]?.c ?? 0);
 }
 
-export async function financialHealth(period: {
-  from: string;
-  to: string;
-  label: string;
-}): Promise<FinancialHealth> {
+export async function financialHealth(
+  period: {
+    from: string;
+    to: string;
+    label: string;
+  },
+  benchmarks: HealthBenchmarks = DEFAULT_BENCHMARKS,
+): Promise<FinancialHealth> {
   const { from, to, label } = period;
+  const b = benchmarks;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
 
@@ -304,19 +337,19 @@ export async function financialHealth(period: {
 
   // ---- Ratio grids ---------------------------------------------------------
   const profitability: RatioResult[] = [
-    mk("gross_margin", grossMarginPct, "pct", 0.4, false, `${M(grossProfit)} / ${M(revenue)}`),
-    mk("operating_margin", operatingMargin, "pct", 0.15, false, `${M(operatingIncome)} / ${M(revenue)}`),
-    mk("ebitda_margin", ebitdaMargin, "pct", 0.2, false, `${M(ebitda)} / ${M(revenue)}`, !hasDA, "No depreciation/amortization accounts found"),
-    mk("net_margin", revenue > 0 ? netIncome / revenue : 0, "pct", 0.1, false, `${M(netIncome)} / ${M(revenue)}`),
-    mk("roa", roa, "pct", 0.08, false, roa !== null ? `${M(netIncome)} / ${M(totalAssets)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
-    mk("roe", roe, "pct", 0.15, false, roe !== null ? `${M(netIncome)} / ${M(totalEquity)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
-    mk("roic", roic, "pct", 0.12, false, roic !== null ? `${M(nopat)} (NOPAT) / ${M(investedCapital)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
+    mk("gross_margin", grossMarginPct, "pct", b.grossMargin, false, `${M(grossProfit)} / ${M(revenue)}`),
+    mk("operating_margin", operatingMargin, "pct", b.operatingMargin, false, `${M(operatingIncome)} / ${M(revenue)}`),
+    mk("ebitda_margin", ebitdaMargin, "pct", b.ebitdaMargin, false, `${M(ebitda)} / ${M(revenue)}`, !hasDA, "No depreciation/amortization accounts found"),
+    mk("net_margin", revenue > 0 ? netIncome / revenue : 0, "pct", b.netMargin, false, `${M(netIncome)} / ${M(revenue)}`),
+    mk("roa", roa, "pct", b.roa, false, roa !== null ? `${M(netIncome)} / ${M(totalAssets)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
+    mk("roe", roe, "pct", b.roe, false, roe !== null ? `${M(netIncome)} / ${M(totalEquity)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
+    mk("roic", roic, "pct", b.roic, false, roic !== null ? `${M(nopat)} (NOPAT) / ${M(investedCapital)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
     mk("roce", roce, "pct", 0.15, false, roce !== null ? `${M(operatingIncome)} / ${M(investedCapital)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
   ];
 
   const efficiency: RatioResult[] = [
-    mk("rev_per_employee", hasHeadcount ? revenue / headcount : null, "money", 200_000, false, hasHeadcount ? `${M(revenue)} / ${headcount} employees` : "N/A", !hasHeadcount, "No active employee records"),
-    mk("gp_per_employee", hasHeadcount ? grossProfit / headcount : null, "money", 80_000, false, hasHeadcount ? `${M(grossProfit)} / ${headcount} employees` : "N/A", !hasHeadcount, "No active employee records"),
+    mk("rev_per_employee", hasHeadcount ? revenue / headcount : null, "money", b.revenuePerEmployee, false, hasHeadcount ? `${M(revenue)} / ${headcount} employees` : "N/A", !hasHeadcount, "No active employee records"),
+    mk("gp_per_employee", hasHeadcount ? grossProfit / headcount : null, "money", b.gpPerEmployee, false, hasHeadcount ? `${M(grossProfit)} / ${headcount} employees` : "N/A", !hasHeadcount, "No active employee records"),
     mk("asset_turnover", assetTurnover, "num", 1.0, false, assetTurnover !== null ? `${M(revenue)} / ${M(totalAssets)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
   ];
 

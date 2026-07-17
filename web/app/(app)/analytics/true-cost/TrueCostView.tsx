@@ -203,13 +203,15 @@ function OverviewTab({ data, goTo, openCat, openDept }: { data: TrueCostData; go
                   <MiniDonut color={c.color ?? FALLBACK} slices={deptSlices.length ? deptSlices.map((s) => s.value) : [1]} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{c.name}</p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">Expense · {pct.toFixed(0)}%</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">{c.categoryType === 'expense' ? 'Expense' : c.categoryType === 'time' ? 'Time' : 'Custom'} · {pct.toFixed(0)}%</p>
                   </div>
                   <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(c.rate)}</p>
                 </div>
                 <div className="mt-2.5 flex justify-between border-t border-slate-200/70 pt-2 text-center dark:border-slate-700/60">
                   <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">Period</span><span className="text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">{money(c.totalAmount)}</span></span>
-                  <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">Accounts</span><span className="text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">{c.accounts.length}</span></span>
+                  {c.categoryType === 'expense'
+                    ? <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">Accounts</span><span className="text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">{c.accounts.length}</span></span>
+                    : <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">Source</span><span className="text-xs font-semibold capitalize text-slate-600 dark:text-slate-300">{c.categoryType === 'time' ? 'Timesheets' : c.categoryType}</span></span>}
                   <span className="flex-1"><span className="block text-[9px] uppercase text-slate-400">Base</span><span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Hours</span></span>
                 </div>
               </button>
@@ -283,33 +285,46 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
     run(() => mutateActiveProfile((profile) => { profile.categorySettings ??= {}; profile.categorySettings[cat.id] = { ...profile.categorySettings[cat.id], ...patch } }))
 
   const baseLabel = ALLOCATION_BASE_LABEL[cat.allocationBase] ?? cat.allocationBase
+  const isExpense = cat.categoryType === 'expense'
+  const TYPE_NOTE: Record<string, string> = {
+    time: 'Computed natively from time entries — the labour cost of non-billable hours (Σ hours × cost rate), spread over billed hours so unbilled time is recovered on billable work.',
+    manual: 'A manually-entered category — its total is set directly in the Configuration tab.',
+    derived: 'A derived category — its total is a percentage of another category.',
+    formula: 'A formula category — its total is evaluated from a custom expression.',
+  }
 
   return (
     <Drawer open onClose={onClose} size="lg" title={cat.name} description={`${money0(cat.totalAmount)} · ${cat.rateDisplay} · ${baseLabel} base · ${cat.allocationMethod}`} bodyClassName="p-0 overflow-y-auto">
-      {/* Definition / edit */}
-      <div className="border-b border-slate-100 dark:border-slate-800">
-        <button type="button" onClick={() => setEditOpen(!editOpen)} className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40">
-          <span className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200"><Wand2 size={14} className="text-slate-400" />Category definition</span>
-          <span className="text-xs text-teal-600 dark:text-teal-400">{editOpen ? 'Hide' : 'Edit'}</span>
-        </button>
-        {editOpen ? (
-          <div className="space-y-2.5 border-t border-slate-100 bg-slate-50/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/30">
-            <div className="flex items-center gap-2">
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950" aria-label="Category colour" />
-              <input value={name} onChange={(e) => setName(e.target.value)} className="h-8 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" placeholder="Category name" />
+      {/* Definition / edit — account-group categories only */}
+      {isExpense ? (
+        <div className="border-b border-slate-100 dark:border-slate-800">
+          <button type="button" onClick={() => setEditOpen(!editOpen)} className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40">
+            <span className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200"><Wand2 size={14} className="text-slate-400" />Category definition</span>
+            <span className="text-xs text-teal-600 dark:text-teal-400">{editOpen ? 'Hide' : 'Edit'}</span>
+          </button>
+          {editOpen ? (
+            <div className="space-y-2.5 border-t border-slate-100 bg-slate-50/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/30">
+              <div className="flex items-center gap-2">
+                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950" aria-label="Category colour" />
+                <input value={name} onChange={(e) => setName(e.target.value)} className="h-8 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" placeholder="Category name" />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">Auto-match rule — account-name regex (case-insensitive). Pins override it.</p>
+                <input value={pattern} onChange={(e) => setPattern(e.target.value)} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" placeholder="rent|property tax|building" />
+              </div>
+              <div className="flex justify-end">
+                <button type="button" disabled={!dirty || busy} onClick={() => run(() => patchGroup(cat.id, { name, color, match: { ...cat.match, namePattern: pattern || undefined } }))} className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+                  {busy ? 'Saving…' : 'Save'}
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">Auto-match rule — account-name regex (case-insensitive). Pins override it.</p>
-              <input value={pattern} onChange={(e) => setPattern(e.target.value)} className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" placeholder="rent|property tax|building" />
-            </div>
-            <div className="flex justify-end">
-              <button type="button" disabled={!dirty || busy} onClick={() => run(() => patchGroup(cat.id, { name, color, match: { ...cat.match, namePattern: pattern || undefined } }))} className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
-                {busy ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="border-b border-slate-100 bg-slate-50/40 px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-slate-800 dark:bg-slate-800/20 dark:text-slate-400">
+          {TYPE_NOTE[cat.categoryType] ?? 'A computed burden category.'}
+        </p>
+      )}
 
       {/* Allocation settings (Gantry rate engine) */}
       <div className="space-y-2.5 border-b border-slate-100 bg-slate-50/40 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/20">
@@ -360,7 +375,8 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
         </div>
       </div>
 
-      {/* Included accounts */}
+      {/* Included accounts — account-group categories only */}
+      {isExpense ? (
       <div className="border-b border-slate-100 dark:border-slate-800">
         <p className="px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Included accounts ({cat.accounts.length})</p>
         <table className="w-full text-sm">
@@ -404,9 +420,10 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
           </tbody>
         </table>
       </div>
+      ) : null}
 
-      {/* Add accounts (from unassigned) */}
-      {data.unassigned.length ? (
+      {/* Add accounts (from unassigned) — account-group categories only */}
+      {isExpense && data.unassigned.length ? (
         <div className="p-4">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Add unassigned accounts</p>
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
@@ -501,31 +518,41 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
           </div>
         ))}
       </div>
-      <p className="border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
-        {money0(taggedSum)} posted directly to {dept.name} + {money0(allocatedSum)} allocated from untagged expense ({(deptShare * 100).toFixed(1)}% billed-hours share), ÷ {hrs0(dept.billedHours)} billed hours.
-      </p>
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-white dark:bg-slate-900">
-          <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">Account</th>
-            <th className="px-4 py-2 text-right font-medium">Dept-tagged</th>
-            <th className="px-4 py-2 text-right font-medium">Allocated</th>
-            <th className="px-4 py-2 text-right font-medium">Total</th>
-            <th className="px-4 py-2 text-right font-medium">$/hr</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ a, tagged, allocated, total }) => (
-            <tr key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-              <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{tagged ? money0(tagged) : '—'}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-400">{allocated ? money0(allocated) : '—'}</td>
-              <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">${dept.billedHours > 0 ? (total / dept.billedHours).toFixed(2) : '0.00'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {cat.categoryType === 'expense' ? (
+        <>
+          <p className="border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
+            {money0(taggedSum)} posted directly to {dept.name} + {money0(allocatedSum)} allocated from untagged expense ({(deptShare * 100).toFixed(1)}% billed-hours share), ÷ {hrs0(dept.billedHours)} billed hours.
+          </p>
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white dark:bg-slate-900">
+              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <th className="px-4 py-2 text-left font-medium">Account</th>
+                <th className="px-4 py-2 text-right font-medium">Dept-tagged</th>
+                <th className="px-4 py-2 text-right font-medium">Allocated</th>
+                <th className="px-4 py-2 text-right font-medium">Total</th>
+                <th className="px-4 py-2 text-right font-medium">$/hr</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ a, tagged, allocated, total }) => (
+                <tr key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{tagged ? money0(tagged) : '—'}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-400">{allocated ? money0(allocated) : '—'}</td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">${dept.billedHours > 0 ? (total / dept.billedHours).toFixed(2) : '0.00'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : (
+        <p className="px-4 py-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          {cat.categoryType === 'time'
+            ? `Non-billable labour cost worked in ${dept.name} (Σ hours × cost rate), divided by the department's ${hrs0(dept.billedHours)} billed hours.`
+            : `${money0(cellData.amount)} allocated to ${dept.name}, divided by its ${hrs0(dept.billedHours)} billed hours.`}
+        </p>
+      )}
     </Drawer>
   )
 }
@@ -574,9 +601,9 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </span>
                 </td>
-                <td className="px-4 py-2.5"><span className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/50 dark:text-sky-400" style={{ borderLeft: `3px solid ${c.color ?? FALLBACK}` }}>Expense</span></td>
-                <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500">Hours</td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.accounts.length}</td>
+                <td className="px-4 py-2.5"><span className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-950/50 dark:text-sky-400" style={{ borderLeft: `3px solid ${c.color ?? FALLBACK}` }}>{c.categoryType === 'time' ? 'Time' : c.categoryType}</span></td>
+                <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500">{ALLOCATION_BASE_LABEL[c.allocationBase] ?? 'Hours'}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.categoryType === 'expense' ? c.accounts.length : '—'}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300">{money0(c.totalAmount)}</td>
                 <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{rate(c.rate)}</td>
               </tr>
@@ -1351,76 +1378,8 @@ function CompositePanel({ data }: { data: TrueCostData }) {
               return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
             }) }} className="rounded-md border border-teal-500/50 px-2 py-1 text-[11px] font-medium text-teal-600 hover:bg-teal-50 disabled:opacity-40 dark:text-teal-400 dark:hover:bg-teal-950/40">+ Duplicate active</button>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">A profile bundles the composite method, per-category allocation settings and custom categories (Gantry getActiveProfile).</p>
+          <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">A profile bundles the composite method, per-category allocation settings and custom categories.</p>
         </div>
-      </div>
-    </Panel>
-  )
-}
-
-/** What-if scenario modeler (Gantry calculateScenario — 6 types). */
-function ScenarioModeler({ data }: { data: TrueCostData }) {
-  const [type, setType] = useState<'hire' | 'terminate' | 'win_contract' | 'lose_contract' | 'cost_change' | 'utilization_change'>('hire')
-  const [employeeCount, setEmployeeCount] = useState('1')
-  const [avgSalary, setAvgSalary] = useState('75000')
-  const [expectedUtilization, setExpectedUtilization] = useState('75')
-  const [annualHours, setAnnualHours] = useState('2000')
-  const [changeType, setChangeType] = useState<'increase' | 'decrease'>('increase')
-  const [amount, setAmount] = useState('50000')
-  const [newUtilization, setNewUtilization] = useState('80')
-  const [busy, setBusy] = useState(false)
-  const [impact, setImpact] = useState<any>(null)
-
-  const compute = async () => {
-    setBusy(true)
-    const body: Record<string, unknown> = { scenarioType: type, period: 'custom', from: data.period.from, to: data.period.to }
-    if (type === 'hire' || type === 'terminate') { body.employeeCount = Number(employeeCount); body.avgSalary = Number(avgSalary); body.expectedUtilization = Number(expectedUtilization) / 100 }
-    else if (type === 'win_contract' || type === 'lose_contract') body.annualHours = Number(annualHours)
-    else if (type === 'cost_change') { body.changeType = changeType; body.amount = Number(amount) }
-    else body.newUtilization = Number(newUtilization) / 100
-    const res = await fetch('/api/analytics/true-cost/scenario', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    setImpact(res.ok ? (await res.json()).impact : null)
-    setBusy(false)
-  }
-
-  return (
-    <Panel title="Scenario Modeler" icon={Wand2} hint="What-if impact on the composite rate (Gantry calculateScenario)">
-      <div className="space-y-2.5">
-        <Select value={type} onChange={(e) => { setType(e.target.value as typeof type); setImpact(null) }} className="w-full" triggerClassName="h-8 text-sm">
-          <option value="hire">Hire employees</option>
-          <option value="terminate">Reduce staff</option>
-          <option value="win_contract">Win a contract</option>
-          <option value="lose_contract">Lose a contract</option>
-          <option value="cost_change">Change overhead cost</option>
-          <option value="utilization_change">Change utilization</option>
-        </Select>
-        <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-          {(type === 'hire' || type === 'terminate') && <>
-            <label>Employees<input type="number" value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
-            <label>Avg salary ($)<input type="number" value={avgSalary} onChange={(e) => setAvgSalary(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
-            <label>Utilization (%)<input type="number" value={expectedUtilization} onChange={(e) => setExpectedUtilization(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
-          </>}
-          {(type === 'win_contract' || type === 'lose_contract') &&
-            <label className="col-span-2">Annual hours<input type="number" value={annualHours} onChange={(e) => setAnnualHours(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>}
-          {type === 'cost_change' && <>
-            <label>Direction<Select value={changeType} onChange={(e) => setChangeType(e.target.value as 'increase' | 'decrease')} className="mt-0.5 w-full" triggerClassName="h-7 text-xs"><option value="increase">Increase</option><option value="decrease">Decrease</option></Select></label>
-            <label>Amount ($)<input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>
-          </>}
-          {type === 'utilization_change' &&
-            <label className="col-span-2">New utilization (%)<input type="number" value={newUtilization} onChange={(e) => setNewUtilization(e.target.value)} className="mt-0.5 h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /></label>}
-        </div>
-        <button type="button" disabled={busy} onClick={compute} className="w-full rounded-md bg-teal-600 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700">{busy ? 'Computing…' : 'Run scenario'}</button>
-        {impact && (
-          <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Current</p><p className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">{rate(impact.currentRate)}</p></div>
-              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Projected</p><p className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">{rate(impact.projectedRate)}</p></div>
-              <div><p className="text-[10px] uppercase tracking-wide text-slate-400">Change</p><p className={cn('text-sm font-semibold tabular-nums', impact.change > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{impact.change > 0 ? '+' : ''}{rate(impact.change)} ({impact.changePercent > 0 ? '+' : ''}{impact.changePercent.toFixed(1)}%)</p></div>
-            </div>
-            <p className="mt-2 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{impact.insight}</p>
-            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">Fringe rate {(impact.fringeRate * 100).toFixed(0)}% · 2080 hrs/yr · breakeven {Math.round(impact.breakeven.hoursNeeded).toLocaleString()} hrs</p>
-          </div>
-        )}
       </div>
     </Panel>
   )
@@ -1429,18 +1388,18 @@ function ScenarioModeler({ data }: { data: TrueCostData }) {
 function ConfigTab({ data }: { data: TrueCostData }) {
   const items = [
     { label: 'Composite method', value: data.config.compositeMethod, note: 'How category rates blend into the headline rate (sum / weighted / cascading)' },
-    { label: 'Burden categories', value: String(data.categories.length), note: 'Native Account Groups (`burden` dimension) + custom time/manual/derived/formula categories' },
+    { label: 'Burden categories', value: String(data.categories.length), note: 'Account Groups (`burden` dimension) + the native Non-Billable Time category + any custom manual/derived/formula categories' },
     { label: 'Burden centres', value: String(data.departments.length), note: 'Departments with billed hours; dept-tagged expense stays, untagged allocates by hours share' },
     { label: 'Allocation bases', value: '6 live', note: 'Billed/total hours, labour $, headcount, revenue, direct cost — per category, plus manual sqft/units/custom' },
-    { label: 'Direct labour', value: 'Excluded', note: 'Wage/salary accounts (cost_pool dimension) are labour, never burden; COGS is direct cost' },
+    { label: 'Non-billable time', value: 'Included', note: 'Labour cost of non-billable hours (Σ hours × cost rate) is a native burden category, recovered on billed hours' },
+    { label: 'Direct labour', value: 'Excluded', note: 'Billable wage/salary cost (cost_pool dimension) is direct, never burden; COGS is direct cost' },
     { label: 'Absorption model', value: data.hasBurdenGL ? 'GL applied' : 'Utilization', note: data.hasBurdenGL ? 'From the Overhead Burden GL account postings' : 'GL account 5200 "Overhead Burden" exists but carries no postings — applied = burden × utilization until it is used' },
     { label: 'Labour rates', value: `${data.labor.count} employees`, note: `Per-entry cost rates, $${Math.round(data.labor.min)}–$${Math.round(data.labor.max)}, weighted ${rate(data.labor.weighted)}` },
   ]
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <CompositePanel data={data} />
-        <ScenarioModeler data={data} />
         <CustomCategoryManager data={data} />
       </div>
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -1457,14 +1416,14 @@ function ConfigTab({ data }: { data: TrueCostData }) {
           ))}
         </ul>
       </Panel>
-      <Panel title="How this maps to Gantry's Rate Engine" icon={Info}>
+      <Panel title="How the Rate Engine Works" icon={Info}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>Gantry's configurable burden platform maps onto openbooks natively:</p>
+          <p>Every rate on this dashboard is computed live from your ledger:</p>
           <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Category manager</span> → Account Groups (<code>burden</code> dimension): rules auto-classify, pins override — both editable in the category flyout.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Rate matrix</span> → real department-tagged GL expense ÷ department billed hours; every cell drills into its accounts and math.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Labour rates</span> → per-entry time-sheet cost rates instead of an employee master field.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Gap modeler</span> → the four recovery levers work against the utilization-based gap; when the Overhead Burden GL account is used, absorption switches to actual applied postings automatically.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Categories</span> → Account Groups (<code>burden</code> dimension): rules auto-classify accounts, pins override — both editable in the category flyout.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Rate matrix</span> → department-tagged GL expense ÷ department billed hours; every cell drills into its accounts and the math behind it.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Labour rates</span> → per-entry time-sheet cost rates, not a single employee master field.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Gap modeler</span> → the four recovery levers work against the utilization-based gap; when the Overhead Burden GL account carries postings, absorption switches to actual applied amounts automatically.</li>
           </ul>
         </div>
       </Panel>
@@ -1497,7 +1456,7 @@ function CustomCategoryManager({ data }: { data: TrueCostData }) {
   const addDisabled = busy || !name.trim() || (type === 'manual' && !(Number(fixedTotal) > 0)) || (type === 'derived' && !sourceCategory) || (type === 'formula' && !formula.trim())
 
   return (
-    <Panel title="Custom Categories" icon={PlusCircle} hint="Time / manual / derived / formula categories (Gantry category types)">
+    <Panel title="Custom Categories" icon={PlusCircle} hint="Manual, derived or formula-based categories">
       {data.config.customCategories.length ? (
         <ul className="mb-3 divide-y divide-slate-50 dark:divide-slate-800/60">
           {data.config.customCategories.map((c) => (

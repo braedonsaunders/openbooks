@@ -47,6 +47,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, GroupedBar } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
+import { ConfigEditor } from '../_ui/ConfigEditor'
 import { exportCsv } from '../_ui/exportCsv'
 import { fmtMoney, fmtPct } from '../_ui/format'
 
@@ -1065,25 +1066,39 @@ function ConfigurationTab({ data }: { data: CustomerData }) {
       <span className="font-medium text-slate-700 tabular-nums dark:text-slate-300">{value}</span>
     </div>
   )
+  const c = data.config
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-      <Panel title="Model Parameters" icon={Settings2} hint="Gantry defaults — per-organization overrides are planned">
-        {item('Health weights', 'Recency 25% · Frequency 25% · Monetary 30% · Payment 20%')}
-        {item('Friction penalty', 'Critical −25 · High −15 · Medium −8')}
-        {item('RFM recency thresholds', '≤30d → 5 · ≤90d → 3 · ≤180d → 2 · else 1')}
-        {item('RFM frequency / monetary', '33rd & 66th percentile cuts → 1 / 3 / 5')}
-        {item('CLV projection', `${3} years · retention 0.95·e^(−days/120), clamped 10–95%`)}
-        {item('CLV tiers', 'Top 10% Platinum · next 20% Gold · next 30% Silver · rest Bronze')}
-        {item('Churn thresholds', 'Score ≥70 critical · ≥50 high · ≥30 medium')}
-        {item('Concentration (HHI)', 'Warning ≥ 1,500 · Critical ≥ 2,500')}
-        {item('Payment score', '100 − 40/20/10 by DSO >60/>30/>15d − min(40, overdue×10)')}
-        {item('Health grades', 'A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F below')}
-      </Panel>
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <ConfigEditor
+          dashboard="customerIntelligence"
+          fields={[
+            { key: 'churnCriticalScore', label: 'Churn — critical (score)', help: 'Composite churn score at or above this reads as critical risk', min: 1, max: 100, step: 1 },
+            { key: 'churnHighScore', label: 'Churn — high (score)', help: 'Composite churn score at or above this reads as high risk', min: 1, max: 100, step: 1 },
+            { key: 'churnMediumScore', label: 'Churn — medium (score)', help: 'Composite churn score at or above this reads as medium risk', min: 1, max: 100, step: 1 },
+            { key: 'hhiWarning', label: 'Concentration warning (HHI)', help: 'Herfindahl index at or above this flags a concentration warning', min: 0, max: 10_000, step: 100 },
+            { key: 'hhiCritical', label: 'Concentration critical (HHI)', help: 'Herfindahl index at or above this flags critical concentration', min: 0, max: 10_000, step: 100 },
+            { key: 'clvYears', label: 'CLV horizon (years)', help: 'Years of forward value in the lifetime-value projection', min: 1, max: 10, step: 1 },
+          ]}
+          values={{ churnCriticalScore: c.churnCriticalScore, churnHighScore: c.churnHighScore, churnMediumScore: c.churnMediumScore, hhiWarning: c.hhiWarning, hhiCritical: c.hhiCritical, clvYears: c.clvYears }}
+          defaults={{ churnCriticalScore: 70, churnHighScore: 50, churnMediumScore: 30, hhiWarning: 1500, hhiCritical: 2500, clvYears: 3 }}
+        />
+        <Panel title="Scoring Model" icon={Settings2} hint="How the composite scores are built">
+          {item('Health weights', 'Recency 25% · Frequency 25% · Monetary 30% · Payment 20%')}
+          {item('Friction penalty', 'Critical −25 · High −15 · Medium −8')}
+          {item('RFM recency thresholds', '≤30d → 5 · ≤90d → 3 · ≤180d → 2 · else 1')}
+          {item('RFM frequency / monetary', '33rd & 66th percentile cuts → 1 / 3 / 5')}
+          {item('CLV retention', 'retention 0.95·e^(−days/120), clamped 10–95%')}
+          {item('CLV tiers', 'Top 10% Platinum · next 20% Gold · next 30% Silver · rest Bronze')}
+          {item('Payment score', '100 − 40/20/10 by DSO >60/>30/>15d − min(40, overdue×10)')}
+          {item('Health grades', 'A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F below')}
+        </Panel>
+      </div>
       <Panel title="Data Sources & Derivations" icon={Timer}>
         <ul className="space-y-2.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Revenue basis:</span> posted customer-invoice document totals (Gantry summed CustInvc + CashSale headers; this ledger has no cash-sale kind).</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Revenue basis:</span> posted customer-invoice document totals.</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">Recency:</span> measured to today (or the period end when historical), never a future fiscal-year end.</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Friction:</span> credit memos only — this ledger has no return-authorization documents, so the returns×3 component is always 0.</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Friction:</span> credit memos only — this ledger has no return-authorization documents, so the returns component is always 0.</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">Payment behavior:</span> paid = invoice fully applied; days-to-pay = final payment application date − invoice date; overdue = past due date and not fully applied.</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">New customers:</span> no earlier invoice or sales order, lifetime, before the month of first activity.</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">Cohorts:</span> lifetime invoice history grouped by first-order year; active = ordered within the last 6 months.</li>

@@ -259,11 +259,15 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1, 2, 3, 4, 5
     `) as Promise<any>,
-    // Labour hours per department × month (billed = is_billable).
+    // Labour hours per department × month (billed = is_billable). Non-billable
+    // labour cost (Σ hours × cost rate on non-billable time) is a native burden
+    // category — the cost of paying people for unbilled time must be recovered
+    // on billable hours (Gantry's unbilled-labour / time category).
     db.execute(sql`
       select t.department_id, to_char(t.worked_on, 'YYYY-MM') as month,
         sum(t.hours) as total_hours,
-        coalesce(sum(t.hours) filter (where t.is_billable), 0) as billed_hours
+        coalesce(sum(t.hours) filter (where t.is_billable), 0) as billed_hours,
+        coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
       from time_entries t
       where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
       group by 1, 2
@@ -302,7 +306,9 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     db.execute(sql`
       select l.account_id, sum(l.amount) as amount,
         (select coalesce(sum(t.hours) filter (where t.is_billable), 0) from time_entries t
-          where t.org_id = ${orgId} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as billed_hours
+          where t.org_id = ${orgId} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as billed_hours,
+        (select coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) from time_entries t
+          where t.org_id = ${orgId} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as nonbill_cost
       from journal_lines l
       join accounts a on a.id = l.account_id
       join journal_entries e on e.id = l.entry_id
@@ -363,11 +369,16 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const deptHours = new Map<string, { billed: number; total: number }>();
   const monthHours = new Map<string, { billed: number; total: number }>();
   const deptMonthBilled = new Map<string, number>(); // `${dept}|${month}`
-  let billedHours = 0, totalHours = 0;
+  // Non-billable labour cost (the time category) by department and by month.
+  const nonbillCostByDept = new Map<string, number>();
+  const nonbillCostByMonth = new Map<string, number>();
+  const nonbillCostByDeptMonth = new Map<string, number>(); // `${dept}|${month}`
+  let billedHours = 0, totalHours = 0, nonbillCostTotal = 0;
   for (const r of hoursRows.rows as any[]) {
     const dept = r.department_id ?? "none";
     const billed = Number(r.billed_hours ?? 0);
     const total = Number(r.total_hours ?? 0);
+    const nonbill = Number(r.nonbill_cost ?? 0);
     const dh = deptHours.get(dept) ?? { billed: 0, total: 0 };
     dh.billed += billed; dh.total += total;
     deptHours.set(dept, dh);
@@ -375,7 +386,10 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     mh.billed += billed; mh.total += total;
     monthHours.set(r.month, mh);
     deptMonthBilled.set(`${dept}|${r.month}`, (deptMonthBilled.get(`${dept}|${r.month}`) ?? 0) + billed);
-    billedHours += billed; totalHours += total;
+    nonbillCostByDept.set(dept, (nonbillCostByDept.get(dept) ?? 0) + nonbill);
+    nonbillCostByMonth.set(r.month, (nonbillCostByMonth.get(r.month) ?? 0) + nonbill);
+    nonbillCostByDeptMonth.set(`${dept}|${r.month}`, (nonbillCostByDeptMonth.get(`${dept}|${r.month}`) ?? 0) + nonbill);
+    billedHours += billed; totalHours += total; nonbillCostTotal += nonbill;
   }
 
   // Burden centres = departments with BILLED hours (a dept that bills nothing
@@ -482,7 +496,37 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     }
   }
 
-  const totalOverhead = [...cats.values()].reduce((s, c) => s + c.total, 0);
+  // ---- native non-billable time category ---------------------------------------
+  // Distribute non-billable labour cost across burden centres (tagged dept kept,
+  // untagged/no-billed-hours allocated by billed-hours share) and fold it into
+  // the monthly burden series so trends, forecast and absorption all include it.
+  const TIME_ID = "__nonbillable_time__";
+  const TIME_KEY = "nonbillable_time";
+  const timeExpenseByDept: Record<string, number> = {};
+  for (const d of departmentsBase) timeExpenseByDept[d.id] = 0;
+  for (const [dept, cost] of nonbillCostByDept) {
+    if (cost === 0) continue;
+    if (dept !== "none" && billedShare.has(dept)) timeExpenseByDept[dept] += cost;
+    else for (const d of departmentsBase) timeExpenseByDept[d.id] += cost * (billedShare.get(d.id) ?? 0);
+  }
+  for (const [month, cost] of nonbillCostByMonth) {
+    if (cost === 0) continue;
+    monthBurden.set(month, (monthBurden.get(month) ?? 0) + cost);
+    if (!monthCatRate.has(month)) monthCatRate.set(month, new Map());
+    monthCatRate.get(month)!.set(TIME_KEY, (monthCatRate.get(month)!.get(TIME_KEY) ?? 0) + cost);
+  }
+  for (const [key, cost] of nonbillCostByDeptMonth) {
+    if (cost === 0) continue;
+    const sep = key.lastIndexOf("|");
+    const dept = key.slice(0, sep);
+    const month = key.slice(sep + 1);
+    if (!monthDeptBurden.has(month)) monthDeptBurden.set(month, new Map());
+    const md = monthDeptBurden.get(month)!;
+    if (dept !== "none" && billedShare.has(dept)) md.set(dept, (md.get(dept) ?? 0) + cost);
+    else for (const d of departmentsBase) md.set(d.id, (md.get(d.id) ?? 0) + cost * (billedShare.get(d.id) ?? 0));
+  }
+
+  const totalOverhead = [...cats.values()].reduce((s, c) => s + c.total, 0) + nonbillCostTotal;
   const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
 
   // Apply the Gantry rate engine to one category's expense-by-dept: allocation
@@ -524,10 +568,19 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, c.total, [...c.accounts.values()].sort((a, b) => b.amount - a.amount));
   }).filter((c) => Math.abs(c.totalAmount) > 0.005);
 
+  // ---- native non-billable time category ---------------------------------------
+  // A first-class burden category (not a hand-built custom one): the labour cost
+  // of non-billable hours, spread over billed hours like every other rate.
+  const timeCategories: BurdenCategory[] = [];
+  if (nonbillCostTotal > 0.005) {
+    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, "Non-Billable Time", "#8b5cf6", "time", {}, timeExpenseByDept, nonbillCostTotal, []));
+  }
+
   // ---- custom categories (manual / derived / formula) --------------------------
   // categoryTotals lets derived/formula reference other categories by id.
   const categoryTotals: Record<string, { expenseOverall: number }> = {};
   for (const c of expenseCategories) categoryTotals[c.id] = { expenseOverall: c.totalAmount };
+  for (const c of timeCategories) categoryTotals[c.id] = { expenseOverall: c.totalAmount };
   const customCategories: BurdenCategory[] = [];
   for (const cc of profile.customCategories) {
     let calc: { expense: Record<string, number>; totalExpense: number };
@@ -541,7 +594,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     if (Math.abs(built.totalAmount) > 0.005) customCategories.push(built);
   }
 
-  const categories: BurdenCategory[] = [...expenseCategories, ...customCategories];
+  const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
 
   // ---- composite rate via the configured method (Gantry calculateCompositeRate) ---
   const laborHoursSumForComposite = employeesWeightedRate(empRows.rows as any[]);
@@ -575,6 +628,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     if (directLabor.has(r.account_id)) continue;
     if (burdenGroups.byAccount.has(r.account_id)) priorBurden += Number(r.amount ?? 0);
   }
+  priorBurden += Number(priorRows.rows[0]?.nonbill_cost ?? 0); // native time category
   const priorComposite = priorBilled > 0 ? priorBurden / priorBilled : 0;
   const compositeRateChangePct = priorComposite > 0 ? ((compositeRate - priorComposite) / priorComposite) * 100 : null;
 

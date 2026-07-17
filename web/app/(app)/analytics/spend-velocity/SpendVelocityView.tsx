@@ -809,7 +809,7 @@ function ConfigTab({ data }: { data: SpendVelocityData }) {
       </div>
       <Panel title="Data sources" icon={Info}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>Spend = expense/COGS journal lines from the four spend document types (the Gantry set):</p>
+          <p>Spend = expense/COGS journal lines from the four spend document types:</p>
           <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
             <li><span className="font-medium text-slate-700 dark:text-slate-200">Vendor bills, expense reports, checks</span> add to spend; <span className="font-medium text-slate-700 dark:text-slate-200">vendor credits</span> net against it.</li>
             <li><span className="font-medium text-slate-700 dark:text-slate-200">Commitment cliff</span> compares purchase-order vs sales-order monthly velocity.</li>

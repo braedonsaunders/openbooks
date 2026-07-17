@@ -656,7 +656,7 @@ function CategoryManager({ data }: { data: CashflowData }) {
           {msg ? <span className="text-xs text-slate-400 dark:text-slate-500">{msg}</span> : null}
         </div>
         <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
-          Gantry&apos;s credit-card-cycle, formula and bank-register strategies aren&apos;t portable to this ledger (no statement cycles or formula variables) and are intentionally not offered.
+          Categories forecast recurring cash flows outside the AR/AP pipeline — from GL history, vendor payment cadence, or a fixed recurring schedule.
         </p>
       </div>
     </Panel>

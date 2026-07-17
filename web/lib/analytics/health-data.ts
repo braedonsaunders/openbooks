@@ -1,7 +1,8 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { financialHealth, type FinancialHealth } from "./financial-health";
+import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
+import { analyticsConfig } from "./config";
 
 /**
  * Full data payload for the Financial Health dashboard — everything the 10
@@ -110,6 +111,8 @@ export interface HealthData extends FinancialHealth {
   items: { rows: ItemRow[]; gainers: ItemRow[]; decliners: ItemRow[]; totalCurrent: number; totalChange: number };
   insights: Insight[];
   budget: BudgetVariance;
+  /** Effective benchmark targets driving the grades (org overrides over defaults). */
+  benchmarks: HealthBenchmarks;
 }
 
 const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"] as const;
@@ -368,22 +371,22 @@ function buildMarginFlow(f: FinancialHealth["figures"]): MarginStage[] {
 }
 
 /** Derive Issues / Recommendations / Anomalies from ratios + trend. */
-function buildInsights(base: FinancialHealth, monthly: MonthPoint[]): Insight[] {
+function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks: HealthBenchmarks): Insight[] {
   const out: Insight[] = [];
   const f = base.figures;
   const gm = f.revenue > 0 ? f.grossProfit / f.revenue : 0;
   const opm = f.revenue > 0 ? f.operatingIncome / f.revenue : 0;
 
-  // Gantry's issues engine — severity-tiered rules against the GM/Op targets
-  // (40% / 15%), critical at 50% of target, warning at 75%.
-  const GM_TARGET = 0.4;
-  const OP_TARGET = 0.15;
+  // Severity-tiered issues engine, graded against the configured GM/Op
+  // benchmarks: critical at 50% of target, warning at 75%.
+  const GM_TARGET = benchmarks.grossMargin;
+  const OP_TARGET = benchmarks.operatingMargin;
   if (f.operatingIncome < 0) out.push({ severity: "issue", title: "Operating loss", detail: `Operating income is -$${Math.abs(Math.round(f.operatingIncome)).toLocaleString()} — the business loses money before other items.` });
-  if (gm < GM_TARGET * 0.5) out.push({ severity: "issue", title: "Gross margin critically low", detail: `Gross margin is ${(gm * 100).toFixed(1)}% — less than half the ${GM_TARGET * 100}% target.` });
-  else if (gm < GM_TARGET * 0.75) out.push({ severity: "issue", title: "Gross margin well below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs the ${GM_TARGET * 100}% target.` });
-  else if (gm < GM_TARGET) out.push({ severity: "issue", title: "Gross margin below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs a ${GM_TARGET * 100}% benchmark.` });
-  if (opm >= 0 && opm < OP_TARGET * 0.5) out.push({ severity: "issue", title: "Operating margin critically low", detail: `Operating margin is ${(opm * 100).toFixed(1)}% — less than half the ${OP_TARGET * 100}% target.` });
-  else if (opm >= 0 && opm < OP_TARGET) out.push({ severity: "issue", title: "Operating margin below target", detail: `Operating margin is ${(opm * 100).toFixed(1)}% vs a ${OP_TARGET * 100}% benchmark.` });
+  if (gm < GM_TARGET * 0.5) out.push({ severity: "issue", title: "Gross margin critically low", detail: `Gross margin is ${(gm * 100).toFixed(1)}% — less than half the ${Math.round(GM_TARGET * 100)}% target.` });
+  else if (gm < GM_TARGET * 0.75) out.push({ severity: "issue", title: "Gross margin well below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs the ${Math.round(GM_TARGET * 100)}% target.` });
+  else if (gm < GM_TARGET) out.push({ severity: "issue", title: "Gross margin below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs a ${Math.round(GM_TARGET * 100)}% benchmark.` });
+  if (opm >= 0 && opm < OP_TARGET * 0.5) out.push({ severity: "issue", title: "Operating margin critically low", detail: `Operating margin is ${(opm * 100).toFixed(1)}% — less than half the ${Math.round(OP_TARGET * 100)}% target.` });
+  else if (opm >= 0 && opm < OP_TARGET) out.push({ severity: "issue", title: "Operating margin below target", detail: `Operating margin is ${(opm * 100).toFixed(1)}% vs a ${Math.round(OP_TARGET * 100)}% benchmark.` });
   if (f.netIncome < 0) out.push({ severity: "issue", title: "Net loss for the period", detail: `Net income is ${f.netIncome < 0 ? "-" : ""}$${Math.abs(f.netIncome).toLocaleString()}.` });
   if (f.revenueGrowth < -0.15) out.push({ severity: "issue", title: "Revenue falling sharply year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
   else if (f.revenueGrowth < 0) out.push({ severity: "issue", title: "Revenue declined year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
@@ -406,8 +409,8 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[]): Insight[] 
   if (f.revenue > 0 && f.opex / f.revenue > 0.4)
     out.push({ severity: "issue", title: "Heavy overhead", detail: `Operating expenses are ${((f.opex / f.revenue) * 100).toFixed(0)}% of revenue (>40%).` });
 
-  if (gm >= 0.4) out.push({ severity: "rec", title: "Healthy gross margin", detail: "Direct-cost discipline is on track — protect pricing." });
-  if (opm < 0.15 && gm >= 0.3) out.push({ severity: "rec", title: "Trim operating expense", detail: "Gross margin is fine; the gap to operating margin is overhead — review OpEx." });
+  if (gm >= GM_TARGET) out.push({ severity: "rec", title: "Healthy gross margin", detail: "Direct-cost discipline is on track — protect pricing." });
+  if (opm < OP_TARGET && gm >= GM_TARGET * 0.75) out.push({ severity: "rec", title: "Trim operating expense", detail: "Gross margin is fine; the gap to operating margin is overhead — review OpEx." });
   if (f.operatingLeverage > 1) out.push({ severity: "rec", title: "Positive operating leverage", detail: `Operating income scales ${f.operatingLeverage.toFixed(1)}× revenue — lean into growth.` });
   if (f.rule40 >= 40) out.push({ severity: "rec", title: "Passing the Rule of 40", detail: `Growth + margin = ${f.rule40.toFixed(0)}.` });
 
@@ -439,9 +442,23 @@ export async function healthData(period: { from: string; to: string; label: stri
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
 
+  // Per-org benchmark targets (percent-scale in the store → decimals here).
+  const cfg = await analyticsConfig(orgId, "financialHealth");
+  const benchmarks: HealthBenchmarks = {
+    grossMargin: cfg.grossMarginTarget / 100,
+    operatingMargin: cfg.operatingMarginTarget / 100,
+    ebitdaMargin: cfg.ebitdaMarginTarget / 100,
+    netMargin: cfg.netMarginTarget / 100,
+    roa: cfg.roaTarget / 100,
+    roe: cfg.roeTarget / 100,
+    roic: cfg.roicTarget / 100,
+    revenuePerEmployee: cfg.revenuePerEmployee,
+    gpPerEmployee: cfg.gpPerEmployee,
+  };
+
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
-    financialHealth(period),
-    financialHealth({ from: pFrom, to: pTo, label: "prior" }),
+    financialHealth(period, benchmarks),
+    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks),
     monthlySeries(to),
     segmentsBy("department_id", "departments", from, to).catch(() => []),
     segmentsBy("class_id", "classes", from, to).catch(() => []),
@@ -460,7 +477,8 @@ export async function healthData(period: { from: string; to: string; label: stri
     drivers: drv,
     items,
     budget,
-    insights: buildInsights(base, monthly),
+    insights: buildInsights(base, monthly, benchmarks),
+    benchmarks,
   };
 }
 
