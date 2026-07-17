@@ -15,7 +15,8 @@
     "customer_payment": "Customer payment",
     "quote": "Estimate",
     "sales_order": "Sales order",
-    "purchase_order": "Purchase order"
+    "purchase_order": "Purchase order",
+    "project": "Project"
   },
   "views": {
     "defaultName": "Default view",

@@ -76,7 +76,8 @@
     "addTask": "Agregar tarea",
     "noTasks": "Aún no hay tareas.",
     "taskNamePlaceholder": "Nombre de la tarea…",
-    "removeTaskAria": "Quitar tarea"
+    "removeTaskAria": "Quitar tarea",
+    "customFields": "Campos personalizados"
   },
   "cockpit": {
     "subtitle": "Panel de control de costos de obra",
@@ -109,6 +110,25 @@
     "noWbsTasks": "No hay tareas de EDT. Agréguelas desde el editor del proyecto.",
     "transactions": "Transacciones",
     "noTransactionsTitle": "No hay transacciones etiquetadas a esta obra",
-    "noTransactionsDescription": "Las facturas de proveedor, facturas, gastos, órdenes y asientos con una línea etiquetada a este proyecto aparecerán aquí."
+    "noTransactionsDescription": "Las facturas de proveedor, facturas, gastos, órdenes y asientos con una línea etiquetada a este proyecto aparecerán aquí.",
+    "tabs": {
+      "overview": "Resumen",
+      "financials": "Finanzas",
+      "cost_time": "Costo y tiempo",
+      "documents": "Documentos"
+    },
+    "unbilled": "Sin facturar",
+    "totalHours": "Horas totales",
+    "billableHours": "Horas facturables",
+    "laborCost": "Costo de mano de obra",
+    "laborBill": "Valor facturable de mano de obra",
+    "timeByTask": "Horas por tarea",
+    "timeByEmployee": "Horas por empleado",
+    "unassignedTask": "Sin asignar",
+    "unassignedEmployee": "Sin asignar",
+    "hoursHead": "Horas",
+    "billableHead": "Facturable",
+    "billValue": "Valor a facturar",
+    "noTime": "Aún no hay tiempo aprobado en este proyecto."
   }
 }

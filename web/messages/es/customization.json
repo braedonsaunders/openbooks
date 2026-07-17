@@ -15,7 +15,8 @@
     "customer_payment": "Pago de cliente",
     "quote": "Presupuesto",
     "sales_order": "Orden de venta",
-    "purchase_order": "Orden de compra"
+    "purchase_order": "Orden de compra",
+    "project": "Proyecto"
   },
   "views": {
     "defaultName": "Vista predeterminada",

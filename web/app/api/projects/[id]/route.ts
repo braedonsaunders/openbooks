@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -60,6 +61,7 @@ interface PatchBody {
   endsOn?: string | null
   notes?: string | null
   contractValue?: string | null
+  custom?: Record<string, unknown>
   subsidiaryId?: string | null
   subsidiaryIncludeChildren?: boolean
   isActive?: boolean
@@ -176,14 +178,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     endsOn = s
   }
 
-  // -- contract value → merged into custom ---------------------------------
+  // -- custom jsonb: contract value + admin-defined custom fields -----------
+  // Both live in the same `custom` blob, so build one merged object: start
+  // from the existing custom, apply the contractValue delta, then overlay the
+  // validated custom-field values (unknown keys already stripped by validate).
   let mergedCustom: Record<string, unknown> | undefined
-  if (body.contractValue !== undefined) {
-    const v = moneyOrNull(body.contractValue)
-    if (v === 'invalid') return bad('Contract value must be a number')
+  if (body.contractValue !== undefined || body.custom !== undefined) {
     const base = { ...(existing.rows[0].custom ?? {}) }
-    if (v === null) delete base.contractValue
-    else base.contractValue = v
+    if (body.contractValue !== undefined) {
+      const v = moneyOrNull(body.contractValue)
+      if (v === 'invalid') return bad('Contract value must be a number')
+      if (v === null) delete base.contractValue
+      else base.contractValue = v
+    }
+    if (body.custom !== undefined) {
+      const defs = await loadFieldDefs('projects')
+      const result = validateCustomValues(defs, body.custom)
+      if (!result.ok) return bad(Object.values(result.errors)[0]!, result.errors)
+      // Rebuild the custom-field portion from the validated payload (the drawer
+      // sends the full set): drop every def key first so cleared fields vanish,
+      // then overlay cleaned. Non-def keys (e.g. contractValue) are preserved.
+      for (const d of defs) delete base[d.key]
+      Object.assign(base, result.cleaned)
+    }
     mergedCustom = base
   }
 

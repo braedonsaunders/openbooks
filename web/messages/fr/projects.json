@@ -76,7 +76,8 @@
     "addTask": "Ajouter une tâche",
     "noTasks": "Aucune tâche pour l’instant.",
     "taskNamePlaceholder": "Nom de la tâche…",
-    "removeTaskAria": "Retirer la tâche"
+    "removeTaskAria": "Retirer la tâche",
+    "customFields": "Champs personnalisés"
   },
   "cockpit": {
     "subtitle": "Poste de pilotage des coûts de chantier",
@@ -109,6 +110,25 @@
     "noWbsTasks": "Aucune tâche de SDP. Ajoutez-les depuis l’éditeur de projet.",
     "transactions": "Transactions",
     "noTransactionsTitle": "Aucune transaction rattachée à ce chantier",
-    "noTransactionsDescription": "Les factures fournisseurs, factures, notes de frais, commandes et écritures dont une ligne est rattachée à ce projet apparaissent ici."
+    "noTransactionsDescription": "Les factures fournisseurs, factures, notes de frais, commandes et écritures dont une ligne est rattachée à ce projet apparaissent ici.",
+    "tabs": {
+      "overview": "Aperçu",
+      "financials": "Finances",
+      "cost_time": "Coût et temps",
+      "documents": "Documents"
+    },
+    "unbilled": "Non facturé",
+    "totalHours": "Heures totales",
+    "billableHours": "Heures facturables",
+    "laborCost": "Coût de main-d'œuvre",
+    "laborBill": "Valeur facturable de main-d'œuvre",
+    "timeByTask": "Heures par tâche",
+    "timeByEmployee": "Heures par employé",
+    "unassignedTask": "Non attribué",
+    "unassignedEmployee": "Non attribué",
+    "hoursHead": "Heures",
+    "billableHead": "Facturable",
+    "billValue": "Valeur à facturer",
+    "noTime": "Aucun temps approuvé sur ce projet pour le moment."
   }
 }

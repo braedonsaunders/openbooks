@@ -15,7 +15,8 @@
     "customer_payment": "Paiement client",
     "quote": "Devis",
     "sales_order": "Commande client",
-    "purchase_order": "Bon de commande"
+    "purchase_order": "Bon de commande",
+    "project": "Projet"
   },
   "views": {
     "defaultName": "Vue par défaut",

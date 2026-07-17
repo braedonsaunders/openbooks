@@ -8,7 +8,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
-import { RECORD_TYPES, RECORD_TYPE_BY_KEY, defaultFormLayout, type FormLayoutConfig } from '@openbooks/customization'
+import { RECORD_TYPES, RECORD_TYPE_BY_KEY, customFieldTargetFor, defaultFormLayout, type FormLayoutConfig } from '@openbooks/customization'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
@@ -98,12 +98,16 @@ export default async function CustomizationPage({
     }
   }
 
-  // Live custom-field defs feed the designer palette (header + line).
+  // Live custom-field defs feed the designer palette (header + line). The target
+  // table + kind depend on the record type: documents-backed transactions key
+  // defs by kind; entity types (e.g. projects) use their own table with a null
+  // kind and have no line grid.
   const designerRecordType = openForm?.recordType ?? openView?.recordType ?? recordType
-  const [designerHeaderDefs, designerLineDefs] = (formId || viewId) && designerRecordType
+  const cfTarget = designerRecordType ? customFieldTargetFor(designerRecordType) : null
+  const [designerHeaderDefs, designerLineDefs] = (formId || viewId) && designerRecordType && cfTarget
     ? await Promise.all([
-        loadFieldDefs('documents', designerRecordType),
-        loadFieldDefs('document_lines', designerRecordType),
+        loadFieldDefs(cfTarget.table, cfTarget.kind),
+        cfTarget.lineTable ? loadFieldDefs(cfTarget.lineTable, cfTarget.lineKind) : Promise.resolve([]),
       ])
     : [null, null]
   const viewShowInList = (designerHeaderDefs ?? []).filter((d) => d.config.showInList)

@@ -107,6 +107,10 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
     `) as any,
   ])
 
+  return assembleSummary(proj, actualRows, committedRows, byAccountRows, docRows)
+}
+
+function assembleSummary(proj: any, actualRows: any, committedRows: any, byAccountRows: any, docRows: any): ProjectCostSummary {
   const p = proj.rows[0] ?? { contract_value: 0, cost_budget: 0 }
   const contractValue = n(p.contract_value)
   const costBudget = n(p.cost_budget)
@@ -150,5 +154,154 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       partyName: r.party_name,
       amount: n(r.amount),
     })),
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Time summary — labor hours/cost/bill by task and by employee        */
+/* ------------------------------------------------------------------ */
+
+export interface ProjectTimeRow {
+  key: string | null
+  label: string
+  hours: number
+  billableHours: number
+  cost: number
+  bill: number
+}
+
+export interface ProjectTimeSummary {
+  byTask: ProjectTimeRow[]
+  byEmployee: ProjectTimeRow[]
+  totals: { hours: number; billableHours: number; cost: number; bill: number }
+}
+
+/**
+ * Approved labor tagged to a project, rolled up two ways (by WBS task and by
+ * employee) plus totals. Cost = Σ hours × cost_rate; bill value = Σ hours ×
+ * bill_rate; billableHours counts only is_billable entries. This is the labor
+ * surface the cockpit's Cost & Time tab renders — the atom of job costing that
+ * was previously invisible on the project view.
+ */
+export async function projectTimeSummary(orgId: string, projectId: string): Promise<ProjectTimeSummary> {
+  const [byTaskRows, byEmpRows, totalRow] = await Promise.all([
+    db.execute(sql`
+      select te.project_task_id as key, coalesce(pt.name, '') as label,
+             coalesce(sum(te.hours), 0) as hours,
+             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
+             coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill
+        from time_entries te
+        left join project_tasks pt on pt.id = te.project_task_id
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+       group by te.project_task_id, pt.name
+       order by hours desc
+    `) as any,
+    db.execute(sql`
+      select te.employee_party_id as key, coalesce(pty.display_name, '') as label,
+             coalesce(sum(te.hours), 0) as hours,
+             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
+             coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill
+        from time_entries te
+        left join parties pty on pty.id = te.employee_party_id
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+       group by te.employee_party_id, pty.display_name
+       order by hours desc
+    `) as any,
+    db.execute(sql`
+      select coalesce(sum(te.hours), 0) as hours,
+             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
+             coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill
+        from time_entries te
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+    `) as any,
+  ])
+  const row = (r: any): ProjectTimeRow => ({
+    key: r.key,
+    label: r.label || '',
+    hours: n(r.hours),
+    billableHours: n(r.billable_hours),
+    cost: n(r.cost),
+    bill: n(r.bill),
+  })
+  const tot = totalRow.rows[0] ?? {}
+  return {
+    byTask: (byTaskRows.rows as any[]).map(row),
+    byEmployee: (byEmpRows.rows as any[]).map(row),
+    totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: n(tot.cost), bill: n(tot.bill) },
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Unbilled — "available to bill" (NetSuite CouldBeInvoiced)           */
+/* ------------------------------------------------------------------ */
+
+export interface ProjectUnbilled {
+  /** Billable value of work performed but not yet invoiced (bill rate / markup). */
+  revenue: number
+  /** Cost basis of that unbilled work. */
+  cost: number
+  hours: number
+  timeEntryCount: number
+  costLineCount: number
+}
+
+export interface UnbilledOpts {
+  /** Restrict to time worked on/after this date (YYYY-MM-DD). */
+  startDate?: string
+  /** Restrict to time worked on/before this date (YYYY-MM-DD). */
+  cutoffDate?: string
+}
+
+/**
+ * "Available to bill" — the forward-looking figure the billing modal and cockpit
+ * show, and the same rows the invoice generator consumes (so what you see is what
+ * gets billed). Two sources, both provenance-gated so re-billing is safe:
+ *   • approved billable time_entries not yet invoiced (invoiced_by_line_id null),
+ *     valued at bill_rate (revenue) / cost_rate (cost);
+ *   • billable cost lines on posted cost documents not yet billed
+ *     (billed_by_line_id null), valued at amount × markup (cost_multiplier).
+ * This is a statistical projection, NOT a ledger balance (see the WIP note in the
+ * plan) — idempotency rests on the provenance columns, not this number.
+ */
+export async function projectUnbilled(orgId: string, projectId: string, opts: UnbilledOpts = {}): Promise<ProjectUnbilled> {
+  const dateFilter = sql.join(
+    [
+      opts.startDate ? sql` and te.worked_on >= ${opts.startDate}` : sql``,
+      opts.cutoffDate ? sql` and te.worked_on <= ${opts.cutoffDate}` : sql``,
+    ],
+    sql``,
+  )
+  const [timeRow, lineRow] = await Promise.all([
+    db.execute(sql`
+      select coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as revenue,
+             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
+             coalesce(sum(te.hours), 0) as hours,
+             count(*) as cnt
+        from time_entries te
+       where te.org_id = ${orgId} and te.project_id = ${projectId}
+         and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null${dateFilter}
+    `) as any,
+    db.execute(sql`
+      select coalesce(sum(dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1)), 0) as revenue,
+             coalesce(sum(dl.amount), 0) as cost,
+             count(*) as cnt
+        from document_lines dl
+        join documents d on d.id = dl.document_id
+       where dl.org_id = ${orgId} and dl.project_id = ${projectId}
+         and dl.is_billable and dl.billed_by_line_id is null
+         and d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')
+    `) as any,
+  ])
+  const tr = timeRow.rows[0] ?? {}
+  const lr = lineRow.rows[0] ?? {}
+  return {
+    revenue: n(tr.revenue) + n(lr.revenue),
+    cost: n(tr.cost) + n(lr.cost),
+    hours: n(tr.hours),
+    timeEntryCount: Number(tr.cnt ?? 0),
+    costLineCount: Number(lr.cnt ?? 0),
   }
 }

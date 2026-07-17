@@ -82,6 +82,9 @@ export function columnDescriptors(
   showInListDefs: CustomFieldDef[],
   builtInExpr: Record<string, SQL>,
   labels: Record<string, string>,
+  /** Table alias whose `custom` jsonb backs cf_ columns (code-controlled; never
+   *  user input). 'd' for documents-backed lists, e.g. 'p' for projects. */
+  tableAlias = "d",
 ): ListColDesc[] {
   const cfByDefKey = SHOW_IN_LIST_BY_KEY(showInListDefs)
   const out: ListColDesc[] = []
@@ -99,7 +102,7 @@ export function columnDescriptors(
         key: c.key,
         kind: "custom",
         label: c.labelOverride?.trim() ? c.labelOverride.trim() : def.label,
-        expr: sql`d.custom->>${defKey}`,
+        expr: sql`${sql.raw(tableAlias)}.custom->>${defKey}`,
         sortable: false,
         defKey,
         defType: def.fieldType,
