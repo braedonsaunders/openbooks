@@ -114,7 +114,6 @@ export async function CloseSetupPage({
     calendarOptions,
     periods,
     periodCount,
-    subsidiaries,
     blueprints,
     blueprintCount,
     steps,
@@ -163,9 +162,6 @@ export async function CloseSetupPage({
       select count(*) as count from accounting_periods p join fiscal_calendars c on c.id = p.fiscal_calendar_id
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
          ${q ? sql`and (p.name ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
-    db.execute(
-      sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`,
-    ),
     db.execute(sql`
       select * from close_blueprints
        where org_id = ${orgId}
@@ -280,7 +276,6 @@ export async function CloseSetupPage({
       books={books.rows}
       selectedBookId={selectedBookId}
       canReopen={canReopen}
-      subsidiaries={subsidiaries.rows}
       blueprints={(blueprints.rows as any[]).map((blueprint) => ({
         ...blueprint,
         steps: stepRows.filter((step) => step.blueprint_id === blueprint.id),

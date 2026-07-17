@@ -5,6 +5,7 @@
     "subtitle": "Everything that configures this workspace — company setup, people, and system.",
     "groups": {
       "company": "Company",
+      "accounting": "Accounting",
       "people": "People & access",
       "workspace": "Workspace",
       "activity": "Activity & data",
@@ -614,6 +615,7 @@
   "permissions": {
     "groups": {
       "gl": "General ledger",
+      "close": "Periods & close",
       "ap": "Accounts payable",
       "ar": "Accounts receivable",
       "reports": "Reports",
@@ -636,7 +638,11 @@
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
     "gl_post": "Post journal entries",
-    "gl_close": "Close accounting periods",
+    "periods_manage": "Configure fiscal calendars, periods, and locks",
+    "close_read": "View close runs and evidence",
+    "close_run": "Execute close tasks and validation",
+    "close_approve": "Review, approve, and lock close runs",
+    "close_reopen": "Request and approve controlled reopenings",
     "ap_read": "View bills",
     "ap_create": "Create and submit bills",
     "ap_approve": "Approve or reject bills",

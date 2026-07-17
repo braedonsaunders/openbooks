@@ -119,19 +119,16 @@ export const accountingPeriods = pgTable(
   {
     id: id(),
     orgId: orgRef(),
+    fiscalCalendarId: uuid("fiscal_calendar_id").notNull(),
     fiscalYear: integer("fiscal_year").notNull(),
     periodNumber: integer("period_number").notNull(), // 1..13
     name: text("name").notNull(), // "2026-07", "FY26 ADJ"
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
     isAdjustment: boolean("is_adjustment").notNull().default(false),
-    // module-level close; null = open, timestamp = closed at
-    arClosedAt: timestamp("ar_closed_at", { withTimezone: true }),
-    apClosedAt: timestamp("ap_closed_at", { withTimezone: true }),
-    glClosedAt: timestamp("gl_closed_at", { withTimezone: true }),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("periods_org_year_num").on(t.orgId, t.fiscalYear, t.periodNumber)],
+  (t) => [uniqueIndex("periods_calendar_year_num").on(t.orgId, t.fiscalCalendarId, t.fiscalYear, t.periodNumber)],
 );
 
 /**

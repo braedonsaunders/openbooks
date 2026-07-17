@@ -18,7 +18,12 @@ export const PERMISSION_CATALOGUE = [
   "gl.read",
   "gl.manage",
   "gl.post",
-  "gl.close",
+  // Period configuration and close operations are independent duties.
+  "periods.manage",
+  "close.read",
+  "close.run",
+  "close.approve",
+  "close.reopen",
   // Accounts payable
   "ap.read",
   "ap.create",
@@ -133,7 +138,17 @@ export const PERMISSION_GROUPS: {
       { key: "gl.read", labelKey: permissionLabelKey("gl.read") },
       { key: "gl.manage", labelKey: permissionLabelKey("gl.manage") },
       { key: "gl.post", labelKey: permissionLabelKey("gl.post") },
-      { key: "gl.close", labelKey: permissionLabelKey("gl.close") },
+    ],
+  },
+  {
+    key: "close",
+    labelKey: "permissions.groups.close",
+    permissions: [
+      { key: "periods.manage", labelKey: permissionLabelKey("periods.manage") },
+      { key: "close.read", labelKey: permissionLabelKey("close.read") },
+      { key: "close.run", labelKey: permissionLabelKey("close.run") },
+      { key: "close.approve", labelKey: permissionLabelKey("close.approve") },
+      { key: "close.reopen", labelKey: permissionLabelKey("close.reopen") },
     ],
   },
   {
@@ -323,7 +338,11 @@ export const BUILT_IN_ROLES: Record<
       "gl.read",
       "gl.manage",
       "gl.post",
-      "gl.close",
+      "periods.manage",
+      "close.read",
+      "close.run",
+      "close.approve",
+      "close.reopen",
       "ap.read",
       "ap.create",
       "ap.approve",
@@ -384,6 +403,8 @@ export const BUILT_IN_ROLES: Record<
       "gl.read",
       "gl.manage",
       "gl.post",
+      "close.read",
+      "close.run",
       "ap.read",
       "ap.create",
       "ap.post",
@@ -421,6 +442,8 @@ export const BUILT_IN_ROLES: Record<
       "Reviews and decides approval requests for bills and invoices; read access to the ledger and reports.",
     permissions: [
       "gl.read",
+      "close.read",
+      "close.approve",
       "ap.read",
       "ap.approve",
       "ar.read",
@@ -440,7 +463,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read", "data.export", "apps.use"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read", "data.export", "apps.use"],
   },
 };
 

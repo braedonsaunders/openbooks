@@ -54,14 +54,16 @@ export async function assertPeriodModulesOpen(
   },
 ): Promise<void> {
   const modules = [...new Set<CloseModule>([...args.modules, "gl"])];
-  const subsidiaryIds = [...new Set(args.subsidiaryIds)];
+  const subsidiaryIds: (string | null)[] = args.subsidiaryIds.length
+    ? [...new Set(args.subsidiaryIds)]
+    : [null];
   for (const subsidiaryId of subsidiaryIds) {
     for (const module of modules) {
       const result = (await executor.execute(sql`
         select coalesce(
           (select state = 'closed' or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now())
              from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
-              and book_id = ${args.bookId} and subsidiary_id = ${subsidiaryId} and module = ${module}),
+              and book_id = ${args.bookId} and subsidiary_id is not distinct from ${subsidiaryId} and module = ${module}),
           (select state = 'closed' or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now())
              from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
               and book_id = ${args.bookId} and subsidiary_id is null and module = ${module}),

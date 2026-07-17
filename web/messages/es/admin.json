@@ -556,6 +556,7 @@
   "permissions": {
     "groups": {
       "gl": "Libro mayor",
+      "close": "Períodos y cierre",
       "ap": "Cuentas por pagar",
       "ar": "Cuentas por cobrar",
       "reports": "Informes",
@@ -578,7 +579,11 @@
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
     "gl_post": "Contabilizar asientos contables",
-    "gl_close": "Cerrar períodos contables",
+    "periods_manage": "Configurar calendarios, períodos y bloqueos",
+    "close_read": "Ver cierres y evidencia",
+    "close_run": "Ejecutar tareas y validaciones de cierre",
+    "close_approve": "Revisar, aprobar y bloquear cierres",
+    "close_reopen": "Solicitar y aprobar reaperturas controladas",
     "ap_read": "Ver facturas de proveedor",
     "ap_create": "Crear y enviar facturas de proveedor",
     "ap_approve": "Aprobar o rechazar facturas de proveedor",
@@ -708,6 +713,7 @@
     },
     "groups": {
       "company": "Company",
+      "accounting": "Contabilidad",
       "taxes": "Taxes",
       "dimensions": "Dimensions",
       "billing": "Billing & numbering",

@@ -43,8 +43,10 @@ begin
 
   if old.status = 'posted' and new.status = 'posted'
      and coalesce(current_setting('openbooks.amend', true), 'off') = 'on' then
-    if period_module_is_closed(old.org_id, old.period_id, old.book_id, old.subsidiary_id, 'gl')
-       or period_module_is_closed(new.org_id, new.period_id, new.book_id, new.subsidiary_id, 'gl') then
+    if period_module_is_closed(old.org_id, old.period_id, old.book_id,
+         nullif(to_jsonb(old)->>'subsidiary_id', '')::uuid, 'gl')
+       or period_module_is_closed(new.org_id, new.period_id, new.book_id,
+         nullif(to_jsonb(new)->>'subsidiary_id', '')::uuid, 'gl') then
       raise exception 'period is closed for GL posting';
     end if;
     return new;
@@ -58,11 +60,13 @@ begin
   end if;
 
   if old.status = 'draft' and new.status = 'posted' then
-    if period_module_is_closed(new.org_id, new.period_id, new.book_id, new.subsidiary_id, 'gl')
+    if period_module_is_closed(new.org_id, new.period_id, new.book_id,
+         nullif(to_jsonb(new)->>'subsidiary_id', '')::uuid, 'gl')
        or exists (
          select 1 from journal_lines l
           where l.entry_id = new.id
-            and period_module_is_closed(new.org_id, new.period_id, new.book_id, l.subsidiary_id, 'gl')
+            and period_module_is_closed(new.org_id, new.period_id, new.book_id,
+              nullif(to_jsonb(l)->>'subsidiary_id', '')::uuid, 'gl')
        ) then
       raise exception 'period is closed for GL posting';
     end if;
