@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHash } from 'node:crypto'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { activeStorageKind, deleteS3Blobs, getS3Blob, putS3Blob } from './file-storage'
@@ -136,6 +137,25 @@ export async function ensureAttachmentsRoot(orgId: string): Promise<string> {
     returning id
   `)) as unknown as { rows: { id: string }[] }
   return ins.rows[0].id
+}
+
+/** System intake folder for AP capture source packets. */
+export async function ensureApCaptureRoot(orgId: string, createdBy: string): Promise<string> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`ap-capture:${orgId}`}))`)
+    const existing = (await tx.execute(sql`
+      select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
+    `)) as unknown as { rows: { id: string }[] }
+    if (existing.rows[0]) return existing.rows[0].id
+    const inserted = (await tx.execute(sql`
+      insert into folders (org_id, name, is_system, system_kind, is_private, owner_id,
+                           created_by, updated_by, created_at, updated_at)
+      values (${orgId}, 'AP Capture', true, 'ap_capture', false, null,
+              ${createdBy}, ${createdBy}, now(), now())
+      returning id
+    `)) as unknown as { rows: { id: string }[] }
+    return inserted.rows[0].id
+  })
 }
 
 /**
@@ -469,14 +489,15 @@ export async function createFile(input: {
 }): Promise<FileMeta> {
   const extension = deriveExtension(input.filename)
   const fileType = deriveFileType(input.contentType)
+  const contentHash = createHash('sha256').update(input.bytes).digest('hex')
   const kind = activeStorageKind()
   return db.transaction(async (tx) => {
     const fileIns = (await tx.execute(sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type,
-                         size_bytes, storage_kind, created_by, updated_by,
+                         size_bytes, storage_kind, content_hash, created_by, updated_by,
                          created_at, updated_at)
       values (${input.orgId}, ${input.folderId}, ${input.filename}, ${extension}, ${fileType},
-              ${input.contentType}, ${input.bytes.length}, ${kind}, ${input.createdBy}, ${input.createdBy},
+              ${input.contentType}, ${input.bytes.length}, ${kind}, ${contentHash}, ${input.createdBy}, ${input.createdBy},
               now(), now())
       returning id
     `)) as unknown as { rows: { id: string }[] }
@@ -484,8 +505,8 @@ export async function createFile(input: {
 
     const verIns = (await tx.execute(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
-                                  created_by, created_at)
-      values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind}, ${input.createdBy}, now())
+                                  content_hash, created_by, created_at)
+      values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash}, ${input.createdBy}, now())
       returning id
     `)) as unknown as { rows: { id: string }[] }
     const versionId = verIns.rows[0].id
@@ -529,11 +550,14 @@ export async function replaceFile(input: {
   updatedBy: string
 }): Promise<boolean> {
   return db.transaction(async (tx) => {
+    const contentHash = createHash('sha256').update(input.bytes).digest('hex')
     const current = (await tx.execute(sql`
       select current_version_id as vid, (
         select max(version_number) from file_versions where file_id = ${input.fileId}
       ) as max_ver
         from files where id = ${input.fileId} and org_id = ${input.orgId}
+          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+        for update
     `)) as unknown as { rows: { vid: string | null; max_ver: number | null }[] }
     if (current.rows.length === 0) return false
     const nextVer = (current.rows[0].max_ver ?? 0) + 1
@@ -541,8 +565,8 @@ export async function replaceFile(input: {
 
     const verIns = (await tx.execute(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
-                                  created_by, created_at)
-      values (${input.fileId}, ${nextVer}, ${input.bytes.length}, ${input.contentType}, ${kind},
+                                  content_hash, created_by, created_at)
+      values (${input.fileId}, ${nextVer}, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash},
               ${input.updatedBy}, now())
       returning id
     `)) as unknown as { rows: { id: string }[] }
@@ -560,6 +584,7 @@ export async function replaceFile(input: {
                        file_type = ${deriveFileType(input.contentType)},
                        content_type = ${input.contentType},
                        size_bytes = ${input.bytes.length},
+                       content_hash = ${contentHash},
                        updated_by = ${input.updatedBy}, updated_at = now()
        where id = ${input.fileId} and org_id = ${input.orgId}
     `)
@@ -577,6 +602,7 @@ export async function renameFile(
     update files set name = ${name}, extension = ${deriveExtension(name)},
                      updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId}
+       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
     returning id
   `)) as unknown as { rows: { id: string }[] }
   return r.rows.length > 0
@@ -592,6 +618,7 @@ export async function moveFile(
   const r = (await db.execute(sql`
     update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId}
+       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
        and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
     returning id
   `)) as unknown as { rows: { id: string }[] }
@@ -607,6 +634,8 @@ export async function deleteFile(orgId: string, id: string): Promise<boolean> {
   const deleted = await db.transaction(async (tx) => {
     const owned = (await tx.execute(sql`
       select id from files where id = ${id} and org_id = ${orgId}
+        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+      for update
     `)) as unknown as { rows: { id: string }[] }
     if (owned.rows.length === 0) return null
     const s3Versions = (await tx.execute(sql`

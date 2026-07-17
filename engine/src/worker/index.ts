@@ -13,6 +13,7 @@ import { createSandboxWorker } from "./sandbox-worker.ts";
 import { createScriptsWorker } from "./scripts-worker.ts";
 import { startReportScheduler } from "./scheduler.ts";
 import { startSandboxScheduler } from "./sandbox-scheduler.ts";
+import { createApCaptureWorker } from "./ap-capture-worker.ts";
 
 const workers = [
   createEmailWorker(),
@@ -20,6 +21,7 @@ const workers = [
   createMigrationWorker(),
   createSandboxWorker(),
   createScriptsWorker(),
+  createApCaptureWorker(),
 ];
 startReportScheduler();
 startSandboxScheduler();
@@ -28,7 +30,7 @@ startMirrorScheduler();
 for (const w of workers) {
   w.on("failed", (job, err) => console.error(`[worker] ${w.name} job ${job?.id} failed:`, err?.message));
 }
-console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts; report + sandbox schedulers ticking");
+console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture; report + sandbox schedulers ticking");
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {

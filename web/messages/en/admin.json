@@ -798,6 +798,17 @@
       "detectorMateriality": "Control materiality threshold",
       "inheritedMateriality": "Uses the agent threshold of {amount}.",
       "disabledFindingBehavior": "Turning a control off stops that check. Existing findings remain available and are not marked resolved.",
+      "reasoningTitle": "Agent reasoning and narratives",
+      "reasoningDescription": "Give this agent the same governed read tools as the assistant so it can investigate evidence, connect drivers, and create reviewable analysis. It cannot change or post records.",
+      "reasoning": {
+        "rootCauseAnalysis": { "title": "Root-cause analysis", "description": "Investigate supporting transactions and explain the specific drivers behind each finding." },
+        "recommendations": { "title": "Recommended actions", "description": "Suggest concrete, reviewable next steps based on the evidence gathered." },
+        "narrative": { "title": "Management narrative", "description": "Create a close-readiness brief or financial performance summary from current reports and trends." }
+      },
+      "modelTier": "Analysis model",
+      "modelTiers": { "smart": "Smart model — deeper analysis", "fast": "Fast model — lower cost" },
+      "maxToolSteps": "Maximum tool steps",
+      "maxToolStepsHint": "Caps how many report and record lookups one run may perform (4–30).",
       "resetRecommended": "Reset recommended defaults",
       "cancel": "Cancel",
       "saveConfiguration": "Save agent",
@@ -849,6 +860,25 @@
       "scanComplete": "Scan complete: {detected} detected, {resolved} resolved.",
       "scanFailed": "The agent scan failed.",
       "runStatus": { "completed": "completed", "failed": "failed", "skipped": "skipped", "running": "running" }
+    },
+    "documentCapture": {
+      "title": "AP document capture",
+      "description": "Extract vendor bills and credits into an evidence-backed review queue. This uses the same organization AI kill switch, while its document provider credential remains independently encrypted.",
+      "openQueue": "Open capture queue",
+      "enabled": "Enable AP document capture",
+      "globallyDisabled": "AI features are off. Document capture is stopped regardless of this control.",
+      "endpoint": "Document provider endpoint",
+      "endpointHint": "Your organization's public Azure AI Document Intelligence endpoint.",
+      "key": "Document provider API key",
+      "keyPlaceholder": "Paste the document provider key",
+      "removeKey": "Remove document provider key",
+      "keyRemoved": "Document provider key removed.",
+      "model": "Invoice model",
+      "confidence": "Review confidence threshold",
+      "confidenceHint": "Values below this 0–1 threshold are flagged for review.",
+      "autoDraft": "Automatically create drafts only for fully matched purchase orders",
+      "test": "Test document provider",
+      "testResult": { "connected": "Connected to the document provider.", "failed": "The document provider test failed.", "missing": "Enter an endpoint and API key first." }
     },
     "models": {
       "load": "Load models",

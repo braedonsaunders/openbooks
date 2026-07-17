@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
+import Link from 'next/link'
+import { ScanLine } from 'lucide-react'
+import { Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { RecordListView } from '../../../components/record-list-view'
 import { DocumentDrawer } from '../../../components/document-drawer'
@@ -54,6 +56,14 @@ export default async function AP({
       failedLabel={t('toasts.createDraftFailed')}
     />
   ) : undefined
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button variant="outline" asChild>
+        <Link href="/ap/capture"><ScanLine size={14} />{t('actions.capture')}</Link>
+      </Button>
+      {newButton}
+    </div>
+  )
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
@@ -127,7 +137,7 @@ export default async function AP({
     ) : null
 
   return (
-    <ListPageLayout header={<PageHeader title={t('list.title')} description={t('list.description')} actions={newButton} />}>
+    <ListPageLayout header={<PageHeader title={t('list.title')} description={t('list.description')} actions={headerActions} />}>
       <RecordListView
         recordType="vendor_bill"
         basePath="/ap"

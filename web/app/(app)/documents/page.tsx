@@ -92,11 +92,15 @@ export default async function Documents({
       offset: (params.page - 1) * params.perPage,
     }),
   ])
+  const localizedTree = tree.map((folder) => ({
+    ...folder,
+    name: folder.systemKind === 'ap_capture' ? t('systemFolders.apCapture') : folder.name,
+  }))
 
   const [openFile, openFolder] = await Promise.all([
     fileId && isUuid(fileId) ? getFile(orgId, fileId, viewer) : null,
     folderParam && folderParam !== 'new' && isUuid(folderParam)
-      ? tree.find((f) => f.id === folderParam) ?? null
+      ? localizedTree.find((f) => f.id === folderParam) ?? null
       : null,
   ])
 
@@ -104,11 +108,11 @@ export default async function Documents({
   // file browser. Hidden while searching (search spans the whole cabinet).
   const childFolders = params.q
     ? []
-    : tree
+    : localizedTree
         .filter((f) => f.parentId === (activeFolderId ?? null))
         .sort((a, b) => a.name.localeCompare(b.name))
 
-  const crumbs = folderPath(tree, activeFolderId)
+  const crumbs = folderPath(localizedTree, activeFolderId)
   const isEmpty = files.length === 0 && childFolders.length === 0
   const newFolderParent = activeFolderId
 
@@ -131,7 +135,7 @@ export default async function Documents({
 
       {/* Body — folder tree + file listing fill the viewport */}
       <div className="flex min-h-0 flex-1">
-        <FolderTree folders={tree} activeFolderId={activeFolderId} />
+        <FolderTree folders={localizedTree} activeFolderId={activeFolderId} />
         <div className="app-scroll flex min-w-0 flex-1 flex-col overflow-auto">
           {/* Breadcrumb path */}
           <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-200 bg-white/95 px-3 py-2 text-sm backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-900/95">
@@ -184,7 +188,7 @@ export default async function Documents({
                     sizeLabel: formatSize(f.sizeBytes),
                     modifiedLabel: dateTime(f.updatedAt),
                     versionCount: f.versionCount,
-                    folderName: f.folderName,
+                    folderName: localizedTree.find((folder) => folder.id === f.folderId)?.name ?? f.folderName,
                   }))}
                   activeFolderId={activeFolderId}
                   showLocation={!activeFolderId}
@@ -210,10 +214,10 @@ export default async function Documents({
 
       {openFile ? <FileDrawer file={openFile as any} canManage={canManage} /> : null}
       {folderParam === 'new' && canManage ? (
-        <FolderDrawer mode="create" folders={tree} parentId={newFolderParent} />
+        <FolderDrawer mode="create" folders={localizedTree} parentId={newFolderParent} />
       ) : null}
       {openFolder ? (
-        <FolderDrawer mode="edit" folder={openFolder as any} folders={tree} canManage={canManage} />
+        <FolderDrawer mode="edit" folder={openFolder as any} folders={localizedTree} canManage={canManage} />
       ) : null}
     </div>
   )

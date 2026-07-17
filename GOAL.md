@@ -54,6 +54,11 @@ accounts match NetSuite exactly**.
 - [x] Vendor bill entry: line editor, GST/HST tax codes with dated rates,
       auto-numbering, draft lifecycle *(2026-07-14 — dimensions + file
       attachments on lines still to add)*
+- [x] AP document capture: tenant-configured extraction under Platform → AI,
+      50-file batch intake, immutable source/evidence and correction history,
+      side-by-side review, vendor/account/PO resolution, duplicate and receipt
+      controls, exact-money validation, learned mappings, and draft-only
+      materialization *(2026-07-17)*
 - [x] Approval engine live: policies → requests/steps, amount-threshold
       routing, role worklists, approve/reject with notes; full lifecycle
       verified draft → submit → approve → post (correct AP + ITC entry)

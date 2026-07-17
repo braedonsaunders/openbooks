@@ -4,6 +4,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { nextDocumentNumber } from './bills'
 import { ORDER_KINDS, type OrderKind, CONVERSION_TARGETS } from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
+import { add, sum } from '@openbooks/engine/src/money.ts'
+import { remainingOrderLine } from './order-cycle-math'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
@@ -90,14 +92,16 @@ export async function convertOrder(
 
     // Remaining (un-pulled) quantity per line.
     const remaining = lines.rows
-      .map((l) => {
-        const qty = Number(l.quantity)
-        const billed = Number(l.quantity_billed)
-        const rem = qty - billed
-        const unitTax = qty !== 0 ? Number(l.tax_amount) / qty : 0
-        return { line: l, rem, unitTax }
-      })
-      .filter((r) => r.rem > 0.00005)
+      .map((line) => ({
+        line,
+        remainder: remainingOrderLine({
+          quantity: String(line.quantity),
+          quantityBilled: String(line.quantity_billed),
+          unitPrice: String(line.unit_price),
+          taxAmount: String(line.tax_amount),
+        }),
+      }))
+      .filter((row): row is { line: any; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
     if (remaining.length === 0) throw new ConversionError('Every line is already fully converted')
 
     const documentNumber = await nextDocumentNumber(orgId, target.kind, target.prefix)
@@ -105,8 +109,8 @@ export async function convertOrder(
     // Downstream orders (quote→SO) start issued; posting docs start as drafts.
     const targetStatus = isOrder ? 'approved' : 'draft'
 
-    let subtotal = 0
-    let taxTotal = 0
+    const convertedAmounts: string[] = []
+    const convertedTaxes: string[] = []
     const [created] = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, due_date,
                              currency, fx_rate, status, department_id, project_id, location_id,
@@ -123,31 +127,30 @@ export async function convertOrder(
     let lineNo = 1
     for (const r of remaining) {
       const l = r.line
-      const unitPrice = Number(l.unit_price)
-      const amount = r.rem * unitPrice
-      const taxAmount = r.unitTax * r.rem
-      subtotal += amount
-      taxTotal += taxAmount
+      const amount = r.remainder.amount
+      const taxAmount = r.remainder.taxAmount
+      convertedAmounts.push(amount)
+      convertedTaxes.push(taxAmount)
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_amount, department_id, project_id,
               location_id, class_id, extra_dims, is_billable, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
-              ${r.rem.toFixed(4)}, ${l.unit}, ${unitPrice.toFixed(4)}, ${amount.toFixed(4)},
-              ${l.tax_code_id}, ${taxAmount.toFixed(4)}, ${l.department_id}, ${l.project_id},
+              ${r.remainder.quantity}, ${l.unit}, ${l.unit_price}, ${amount},
+              ${l.tax_code_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.is_billable}, ${userId})
       `)
       // advance billed qty on the source line
       await tx.execute(sql`
-        update document_lines set quantity_billed = quantity_billed + ${r.rem.toFixed(4)}, updated_by = ${userId}
+        update document_lines set quantity_billed = quantity_billed + ${r.remainder.quantity}, updated_by = ${userId}
         where id = ${l.id}
       `)
       lineNo++
     }
 
     await tx.execute(sql`
-      update documents set subtotal = ${subtotal.toFixed(4)}, tax_total = ${taxTotal.toFixed(4)},
-             total = ${(subtotal + taxTotal).toFixed(4)}, updated_by = ${userId}
+      update documents set subtotal = ${sum(convertedAmounts)}, tax_total = ${sum(convertedTaxes)},
+             total = ${add(sum(convertedAmounts), sum(convertedTaxes))}, updated_by = ${userId}
       where id = ${newId}
     `)
 

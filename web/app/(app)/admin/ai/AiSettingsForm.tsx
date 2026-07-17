@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { Activity, CheckCircle2, ChevronRight, Loader2, Play, RefreshCw, RotateCcw, SlidersHorizontal, XCircle, Zap } from 'lucide-react'
+import { Activity, CheckCircle2, ChevronRight, FileScan, Loader2, Play, RefreshCw, RotateCcw, SlidersHorizontal, XCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer, cn, type SelectOption } from '@openbooks/ui'
 
@@ -35,6 +35,17 @@ type AiFormInitial = {
   baseUrl: string
   hasKey: boolean
   agents: AgentPolicy[]
+  documentCapture: DocumentCapturePolicy
+}
+
+type DocumentCapturePolicy = {
+  enabled: boolean
+  provider: 'azure_document_intelligence'
+  endpoint: string
+  model: string
+  confidenceThreshold: string
+  autoCreatePoMatchedDrafts: boolean
+  hasKey: boolean
 }
 
 type AgentPolicy = {
@@ -45,6 +56,13 @@ type AgentPolicy = {
   cadence: 'daily' | 'weekly'
   materialityThreshold: string
   detectors: DetectorPolicy[]
+  analysis: {
+    rootCauseAnalysis: boolean
+    recommendations: boolean
+    narrative: boolean
+    modelTier: 'fast' | 'smart'
+    maxToolSteps: number
+  }
   lastRunAt: string | null
   nextRunAt: string | null
   lastRunStatus: 'completed' | 'failed' | 'skipped' | 'running' | null
@@ -88,6 +106,10 @@ export function AiSettingsForm({ specs, detectorSpecs, initial, selectedAgentKey
   const [savedProviderValue, setSavedProviderValue] = useState(initial.provider)
   const [agents, setAgents] = useState<AgentPolicy[]>(initial.agents)
   const [runningAgent, setRunningAgent] = useState<string | null>(null)
+  const [documentCapture, setDocumentCapture] = useState(initial.documentCapture)
+  const [documentCaptureKey, setDocumentCaptureKey] = useState('')
+  const [testingCapture, startCaptureTest] = useTransition()
+  const [captureTestResult, setCaptureTestResult] = useState<{ ok: boolean; code: 'connected' | 'failed' | 'missing' } | null>(null)
   const selectedAgent = selectedAgentKey ? (agents.find((agent) => agent.agentKey === selectedAgentKey) ?? null) : null
 
   const [models, setModels] = useState<ModelListItem[]>([])
@@ -185,6 +207,7 @@ export function AiSettingsForm({ specs, detectorSpecs, initial, selectedAgentKey
             baseUrl,
             apiKey: apiKey || undefined,
             agents,
+            documentCapture: { ...documentCapture, apiKey: documentCaptureKey || undefined },
           }),
         })
         const body = (await res.json()) as AiFormInitial & { error?: string }
@@ -195,6 +218,8 @@ export function AiSettingsForm({ specs, detectorSpecs, initial, selectedAgentKey
         setHasKey(body.hasKey)
         setSavedProviderValue(body.provider)
         setAgents(body.agents)
+        setDocumentCapture(body.documentCapture)
+        setDocumentCaptureKey('')
         setApiKey('')
         setTestResult(null)
         toast.success(t('saved'))
@@ -224,6 +249,7 @@ export function AiSettingsForm({ specs, detectorSpecs, initial, selectedAgentKey
           baseUrl,
           apiKey: apiKey || undefined,
           agents,
+          documentCapture: { ...documentCapture, apiKey: documentCaptureKey || undefined },
         }),
       })
       const saved = (await saveResponse.json()) as AiFormInitial & {
@@ -231,6 +257,8 @@ export function AiSettingsForm({ specs, detectorSpecs, initial, selectedAgentKey
       }
       if (!saveResponse.ok) throw new Error(saved.error ?? 'save_failed')
       setAgents(saved.agents)
+      setDocumentCapture(saved.documentCapture)
+      setDocumentCaptureKey('')
       setHasKey(saved.hasKey)
       setApiKey('')
       const response = await fetch('/api/continuous-close/run', {
@@ -280,6 +308,40 @@ export function AiSettingsForm({ specs, detectorSpecs, initial, selectedAgentKey
         setTestResult((await res.json()) as { ok: boolean; message: string })
       } catch {
         setTestResult({ ok: false, message: t('testFailed') })
+      }
+    })
+  }
+
+  function testDocumentCapture() {
+    startCaptureTest(async () => {
+      try {
+        const response = await fetch('/api/admin/ai/document-capture/test', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            endpoint: documentCapture.endpoint,
+            model: documentCapture.model,
+            apiKey: documentCaptureKey || undefined,
+          }),
+        })
+        setCaptureTestResult((await response.json()) as { ok: boolean; code: 'connected' | 'failed' | 'missing' })
+      } catch {
+        setCaptureTestResult({ ok: false, code: 'failed' })
+      }
+    })
+  }
+
+  function clearDocumentCaptureKey() {
+    startSave(async () => {
+      try {
+        const response = await fetch('/api/admin/ai/document-capture', { method: 'DELETE' })
+        if (!response.ok) throw new Error('clear_failed')
+        setDocumentCapture((current) => ({ ...current, enabled: false, hasKey: false }))
+        setDocumentCaptureKey('')
+        setCaptureTestResult(null)
+        toast.success(t('documentCapture.keyRemoved'))
+      } catch {
+        toast.error(t('saveFailed'))
       }
     })
   }
@@ -425,6 +487,107 @@ export function AiSettingsForm({ specs, detectorSpecs, initial, selectedAgentKey
         </div>
       </section>
 
+      <section className="space-y-4 border-t border-slate-100 pt-5 dark:border-slate-800">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <FileScan size={16} className="text-teal-600" />
+              {t('documentCapture.title')}
+            </h3>
+            <p className="mt-1 max-w-xl text-xs text-slate-500 dark:text-slate-400">{t('documentCapture.description')}</p>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/ap/capture">{t('documentCapture.openQueue')}</Link>
+          </Button>
+        </div>
+        <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+          <label className="flex items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={documentCapture.enabled}
+              onChange={(event) => setDocumentCapture({ ...documentCapture, enabled: event.target.checked })}
+              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+            />
+            <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{t('documentCapture.enabled')}</span>
+          </label>
+          {!enabled ? <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">{t('documentCapture.globallyDisabled')}</p> : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>{t('documentCapture.endpoint')}</Label>
+              <Input
+                value={documentCapture.endpoint}
+                onChange={(event) => {
+                  setDocumentCapture({ ...documentCapture, endpoint: event.target.value })
+                  setCaptureTestResult(null)
+                }}
+                placeholder="https://resource.cognitiveservices.azure.com"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">{t('documentCapture.endpointHint')}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('documentCapture.key')}</Label>
+              <Input
+                type="password"
+                value={documentCaptureKey}
+                onChange={(event) => {
+                  setDocumentCaptureKey(event.target.value)
+                  setCaptureTestResult(null)
+                }}
+                placeholder={documentCapture.hasKey ? t('keySavedPlaceholder') : t('documentCapture.keyPlaceholder')}
+                autoComplete="off"
+              />
+              {documentCapture.hasKey ? (
+                <button type="button" onClick={clearDocumentCaptureKey} disabled={saving} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300">
+                  {t('documentCapture.removeKey')}
+                </button>
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('documentCapture.model')}</Label>
+              <Input
+                value={documentCapture.model}
+                onChange={(event) => setDocumentCapture({ ...documentCapture, model: event.target.value })}
+                placeholder="prebuilt-invoice"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('documentCapture.confidence')}</Label>
+              <Input
+                inputMode="decimal"
+                value={documentCapture.confidenceThreshold}
+                onChange={(event) => setDocumentCapture({ ...documentCapture, confidenceThreshold: event.target.value })}
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">{t('documentCapture.confidenceHint')}</p>
+            </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={documentCapture.autoCreatePoMatchedDrafts}
+                onChange={(event) => setDocumentCapture({ ...documentCapture, autoCreatePoMatchedDrafts: event.target.checked })}
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+              />
+              {t('documentCapture.autoDraft')}
+            </label>
+          </div>
+          <div className="flex flex-wrap items-start gap-3">
+            <Button type="button" variant="outline" disabled={testingCapture} onClick={testDocumentCapture}>
+              {testingCapture ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+              {t('documentCapture.test')}
+            </Button>
+            {captureTestResult ? (
+              <div className={cn('flex items-start gap-2 rounded-md border p-2.5 text-sm', captureTestResult.ok ? 'border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-200' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300')}>
+                {captureTestResult.ok ? <CheckCircle2 size={15} className="mt-px shrink-0" /> : <XCircle size={15} className="mt-px shrink-0" />}
+                <span>{t(`documentCapture.testResult.${captureTestResult.code}`)}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       <div className="space-y-1.5">
         <Label>{t('providerLabel')}</Label>
         <SearchSelect value={provider} onChange={onProviderChange} options={specs.map((s) => ({ value: s.value, label: s.label }))} sheetTitle={t('providerLabel')} ariaLabel={t('providerLabel')} />
@@ -550,6 +713,7 @@ function AgentConfigurationDrawer({ agent, specs, onSaved }: { agent: AgentPolic
   const router = useRouter()
   const [draft, setDraft] = useState<AgentPolicy>({
     ...agent,
+    analysis: { ...agent.analysis },
     detectors: agent.detectors.map((detector) => ({
       ...detector,
       parameters: { ...detector.parameters },
@@ -567,6 +731,13 @@ function AgentConfigurationDrawer({ agent, specs, onSaved }: { agent: AgentPolic
   function resetRecommended() {
     setDraft((current) => ({
       ...current,
+      analysis: {
+        rootCauseAnalysis: true,
+        recommendations: true,
+        narrative: true,
+        modelTier: 'smart',
+        maxToolSteps: 16,
+      },
       detectors: specs.map((spec) => ({
         detectorKey: spec.detectorKey,
         enabled: true,
@@ -677,6 +848,65 @@ function AgentConfigurationDrawer({ agent, specs, onSaved }: { agent: AgentPolic
                 }
               />
               <p className="text-[11px] text-slate-500 dark:text-slate-400">{t('agents.materialityHint')}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/20">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('agents.reasoningTitle')}</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{t('agents.reasoningDescription')}</p>
+          </div>
+          <div className="space-y-3">
+            {(['rootCauseAnalysis', 'recommendations', 'narrative'] as const).map((capability) => (
+              <label key={capability} className="flex items-start justify-between gap-4 rounded-lg border border-violet-100 bg-white/80 px-3 py-2.5 dark:border-violet-900/70 dark:bg-slate-900/80">
+                <span>
+                  <span className="block text-xs font-medium text-slate-800 dark:text-slate-200">{t(`agents.reasoning.${capability}.title`)}</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t(`agents.reasoning.${capability}.description`)}</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={draft.analysis[capability]}
+                  disabled={!draft.enabled}
+                  onChange={(event) => setDraft({
+                    ...draft,
+                    analysis: { ...draft.analysis, [capability]: event.target.checked },
+                  })}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-600"
+                />
+              </label>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>{t('agents.modelTier')}</Label>
+              <Select
+                value={draft.analysis.modelTier}
+                disabled={!draft.enabled}
+                onChange={(event) => setDraft({
+                  ...draft,
+                  analysis: { ...draft.analysis, modelTier: event.target.value === 'fast' ? 'fast' : 'smart' },
+                })}
+              >
+                <option value="smart">{t('agents.modelTiers.smart')}</option>
+                <option value="fast">{t('agents.modelTiers.fast')}</option>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('agents.maxToolSteps')}</Label>
+              <Input
+                type="number"
+                min={4}
+                max={30}
+                step={1}
+                value={draft.analysis.maxToolSteps}
+                disabled={!draft.enabled}
+                onChange={(event) => setDraft({
+                  ...draft,
+                  analysis: { ...draft.analysis, maxToolSteps: Number(event.target.value) },
+                })}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{t('agents.maxToolStepsHint')}</p>
             </div>
           </div>
         </section>

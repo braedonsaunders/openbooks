@@ -12,14 +12,22 @@ import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   getContinuousClosePolicies,
   nextContinuousCloseRunAt,
+  normalizeContinuousCloseAnalysisSettings,
   normalizeContinuousCloseDetectors,
   type AgentCadence,
+  type ContinuousCloseAnalysisSettings,
   type ContinuousCloseAgentKey,
   type ContinuousCloseDetectorPolicy,
   type ContinuousClosePolicy,
 } from "@openbooks/engine/src/continuous-close.ts";
 import { serializeContinuousCloseDetectors } from "@openbooks/engine/src/continuous-close-config.ts";
 import { fromUnits, toUnits } from "@openbooks/engine/src/money.ts";
+import {
+  normalizeStoredDocumentCapture,
+  type DocumentCaptureSettings,
+  type StoredDocumentCapture,
+} from "@openbooks/engine/src/ap-capture-config.ts";
+import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/src/ap-capture.ts";
 
 /**
  * AI provider configuration, ported from beaconhs's lib/ai-config.ts and
@@ -38,6 +46,7 @@ type RawAi = {
   baseUrl?: string;
   /** enc:v1 sealed API key (see web/lib/secrets.ts). */
   keyEncrypted?: string;
+  documentCapture?: StoredDocumentCapture;
 };
 
 function normProvider(p: string | undefined): AiProvider {
@@ -53,6 +62,11 @@ export type OrgAiSettings = {
   baseUrl: string;
   hasKey: boolean;
   agents: ContinuousClosePolicy[];
+  documentCapture: DocumentCaptureSettings;
+};
+
+export type DocumentCaptureSettingsInput = Omit<DocumentCaptureSettings, "hasKey"> & {
+  apiKey?: string;
 };
 
 export type AgentSettingsInput = {
@@ -62,6 +76,7 @@ export type AgentSettingsInput = {
   cadence: AgentCadence;
   materialityThreshold: string;
   detectors: ContinuousCloseDetectorPolicy[];
+  analysis: ContinuousCloseAnalysisSettings;
 };
 
 /** The mutable, non-secret fields the settings form collects. */
@@ -74,6 +89,7 @@ export type AiSettingsInput = {
   /** Sealed when provided; omit to keep the existing key. */
   apiKey?: string;
   agents: AgentSettingsInput[];
+  documentCapture: DocumentCaptureSettingsInput;
 };
 
 async function readAi(orgId: string): Promise<{ ai: RawAi; orgName: string | null }> {
@@ -97,7 +113,37 @@ export async function getOrgAiSettings(orgId: string): Promise<OrgAiSettings> {
     baseUrl: ai.baseUrl ?? "",
     hasKey: Boolean(ai.keyEncrypted),
     agents,
+    documentCapture: normalizeStoredDocumentCapture(ai.documentCapture),
   };
+}
+
+function normalizeDocumentCaptureInput(
+  input: DocumentCaptureSettingsInput,
+  previous: StoredDocumentCapture | undefined,
+): StoredDocumentCapture {
+  const endpoint = input.endpoint.trim();
+  if (endpoint) validateAzureDocumentEndpoint(endpoint);
+  const model = input.model.trim() || DEFAULT_INVOICE_MODEL;
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model)) throw new Error("invalid document capture model id");
+  const threshold = String(input.confidenceThreshold).trim();
+  if (!/^0(?:\.\d{1,4})?$|^1(?:\.0{1,4})?$/.test(threshold)) {
+    throw new Error("document capture confidence must be between 0 and 1");
+  }
+  const [whole, fraction = ""] = threshold.split(".");
+  const next: StoredDocumentCapture = {
+    enabled: input.enabled,
+    provider: "azure_document_intelligence",
+    endpoint,
+    model,
+    confidenceThreshold: `${whole}.${fraction.padEnd(4, "0")}`,
+    autoCreatePoMatchedDrafts: input.autoCreatePoMatchedDrafts,
+    keyEncrypted: previous?.keyEncrypted,
+  };
+  if (input.apiKey?.trim()) next.keyEncrypted = sealSecret(input.apiKey.trim());
+  if (input.enabled && (!endpoint || !next.keyEncrypted)) {
+    throw new Error("document capture requires an endpoint and API key");
+  }
+  return next;
 }
 
 export function normalizeAgentSettingsInput(raw: unknown): AgentSettingsInput[] {
@@ -133,6 +179,7 @@ export function normalizeAgentSettingInput(
     cadence: row.cadence === "weekly" ? "weekly" : "daily",
     materialityThreshold: threshold,
     detectors: normalizeContinuousCloseDetectors(agentKey, row.detectors),
+    analysis: normalizeContinuousCloseAnalysisSettings(row.analysis),
   };
 }
 
@@ -179,6 +226,7 @@ export async function saveOrgAiSettings(
       modelSmart: input.modelSmart || undefined,
       baseUrl: baseUrl || undefined,
       keyEncrypted: prev.keyEncrypted,
+      documentCapture: normalizeDocumentCaptureInput(input.documentCapture, prev.documentCapture),
     };
     if (input.apiKey && input.apiKey.trim()) {
       next.keyEncrypted = sealSecret(input.apiKey.trim());
@@ -199,6 +247,15 @@ export async function saveOrgAiSettings(
         modelSmart: input.modelSmart || null,
         baseUrl: baseUrl || null,
         keyReplaced: Boolean(input.apiKey),
+        documentCapture: {
+          enabled: input.documentCapture.enabled,
+          provider: input.documentCapture.provider,
+          endpoint: input.documentCapture.endpoint,
+          model: input.documentCapture.model,
+          confidenceThreshold: input.documentCapture.confidenceThreshold,
+          autoCreatePoMatchedDrafts: input.documentCapture.autoCreatePoMatchedDrafts,
+          keyReplaced: Boolean(input.documentCapture.apiKey),
+        },
       })}::jsonb, ${userId})
     `);
 
@@ -231,11 +288,11 @@ async function persistAgentPolicy(
   const saved = (await tx.execute(sql`
     insert into ai_agent_policies (
       org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
-      detector_settings, next_run_at, created_by, updated_by
+      detector_settings, analysis_settings, next_run_at, created_by, updated_by
     ) values (
       ${orgId}, ${agent.agentKey}, ${agent.enabled}, ${agent.automaticRuns},
       ${agent.cadence}, ${agent.materialityThreshold}, ${JSON.stringify(detectorSettings)}::jsonb,
-      ${nextRunAt}, ${userId}, ${userId}
+      ${JSON.stringify(agent.analysis)}::jsonb, ${nextRunAt}, ${userId}, ${userId}
     )
     on conflict (org_id, agent_key) do update set
       enabled = excluded.enabled,
@@ -243,6 +300,7 @@ async function persistAgentPolicy(
       cadence = excluded.cadence,
       materiality_threshold = excluded.materiality_threshold,
       detector_settings = excluded.detector_settings,
+      analysis_settings = excluded.analysis_settings,
       next_run_at = excluded.next_run_at,
       updated_at = now(),
       updated_by = excluded.updated_by
@@ -257,6 +315,7 @@ async function persistAgentPolicy(
       cadence: agent.cadence,
       materialityThreshold: agent.materialityThreshold,
       detectors: detectorSettings,
+      analysis: agent.analysis,
     })}::jsonb, ${userId})
   `);
 }
@@ -294,6 +353,31 @@ export async function clearOrgAiKey(orgId: string, userId: string): Promise<void
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'orgs', ${orgId}, 'update', '{"area":"ai","keyRemoved":true}'::jsonb, ${userId})
+    `);
+  });
+}
+
+/** Clear only the document extraction credential; the LLM provider key is independent. */
+export async function clearOrgDocumentCaptureKey(orgId: string, userId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update orgs
+         set settings = jsonb_set(
+               coalesce(settings, '{}'::jsonb),
+               '{ai,documentCapture}',
+               jsonb_set(
+                 coalesce(settings->'ai'->'documentCapture', '{}'::jsonb) - 'keyEncrypted',
+                 '{enabled}', 'false'::jsonb, true
+               ),
+               true
+             ),
+             updated_at = now(), updated_by = ${userId}
+       where id = ${orgId}
+    `);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'orgs', ${orgId}, 'update',
+              '{"area":"ai.documentCapture","keyRemoved":true}'::jsonb, ${userId})
     `);
   });
 }

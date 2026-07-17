@@ -739,6 +739,17 @@
       "detectorMateriality": "Umbral de materialidad del control",
       "inheritedMateriality": "Usa el umbral del agente de {amount}.",
       "disabledFindingBehavior": "Desactivar un control detiene esa comprobación. Los hallazgos existentes siguen disponibles y no se marcan como resueltos.",
+      "reasoningTitle": "Razonamiento y narrativas del agente",
+      "reasoningDescription": "Proporcione a este agente las mismas herramientas de lectura controladas que usa el asistente para investigar evidencia, relacionar causas y crear análisis revisables. No puede cambiar ni contabilizar registros.",
+      "reasoning": {
+        "rootCauseAnalysis": { "title": "Análisis de causa raíz", "description": "Investiga las transacciones de respaldo y explica los factores específicos de cada hallazgo." },
+        "recommendations": { "title": "Acciones recomendadas", "description": "Sugiere próximos pasos concretos y revisables según la evidencia recopilada." },
+        "narrative": { "title": "Narrativa de gestión", "description": "Crea un resumen de preparación para el cierre o de rendimiento financiero a partir de informes y tendencias actuales." }
+      },
+      "modelTier": "Modelo de análisis",
+      "modelTiers": { "smart": "Modelo avanzado — análisis más profundo", "fast": "Modelo rápido — menor coste" },
+      "maxToolSteps": "Máximo de pasos de herramientas",
+      "maxToolStepsHint": "Limita cuántas consultas de informes y registros puede realizar una ejecución (4–30).",
       "resetRecommended": "Restablecer valores recomendados",
       "cancel": "Cancelar",
       "saveConfiguration": "Guardar agente",
@@ -790,6 +801,25 @@
       "scanComplete": "Análisis completado: {detected} detectados, {resolved} resueltos.",
       "scanFailed": "El análisis del agente falló.",
       "runStatus": { "completed": "completado", "failed": "fallido", "skipped": "omitido", "running": "en curso" }
+    },
+    "documentCapture": {
+      "title": "Captura de documentos de compras",
+      "description": "Extrae facturas y abonos de proveedores a una cola de revisión con evidencia. Usa el mismo interruptor general de IA de la organización, mientras la credencial del proveedor documental se cifra por separado.",
+      "openQueue": "Abrir cola de captura",
+      "enabled": "Activar la captura de documentos de compras",
+      "globallyDisabled": "Las funciones de IA están desactivadas. La captura de documentos está detenida independientemente de este control.",
+      "endpoint": "Punto de conexión del proveedor documental",
+      "endpointHint": "El punto de conexión público de Azure AI Document Intelligence de su organización.",
+      "key": "Clave API del proveedor documental",
+      "keyPlaceholder": "Pegue la clave del proveedor documental",
+      "removeKey": "Quitar la clave del proveedor documental",
+      "keyRemoved": "Se quitó la clave del proveedor documental.",
+      "model": "Modelo de factura",
+      "confidence": "Umbral de confianza para revisión",
+      "confidenceHint": "Los valores inferiores a este umbral de 0 a 1 se marcan para revisión.",
+      "autoDraft": "Crear borradores automáticamente solo para órdenes de compra totalmente conciliadas",
+      "test": "Probar proveedor documental",
+      "testResult": { "connected": "Conectado al proveedor documental.", "failed": "La prueba del proveedor documental falló.", "missing": "Introduzca primero un punto de conexión y una clave API." }
     },
     "models": {
       "load": "Cargar modelos",

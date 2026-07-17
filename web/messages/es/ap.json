@@ -21,6 +21,7 @@
     "new": "Nuevo",
     "newBill": "Nueva factura",
     "newCredit": "Nueva nota de crédito",
+    "capture": "Capturar facturas",
     "submitForApproval": "Enviar para aprobación"
   },
   "drawer": {
@@ -53,6 +54,36 @@
     "formSetPreferredDone": "Formulario preferido guardado",
     "formPreferredCleared": "Formulario preferido borrado",
     "formPreferredFailed": "No se pudo guardar el formulario preferido"
+  },
+  "capture": {
+    "title": "Captura de facturas", "description": "Cargue facturas por lotes, revise los datos extraídos junto a la fuente y cree borradores de compras controlados.",
+    "backToBills": "Facturas", "upload": "Cargar documentos", "uploading": "Cargando…",
+    "uploadComplete": "{count, plural, one {# documento en cola} other {# documentos en cola}}.", "uploadFailed": "No se pudieron cargar los documentos.",
+    "notConfigured": "La captura de documentos no está operativa porque está desactivada o falta la configuración del proveedor de la organización.", "configure": "Configúrela en Plataforma → IA.",
+    "search": "Buscar archivos, proveedores, números de factura…",
+    "status": { "queued": "En cola", "extracting": "Extrayendo", "needs_review": "Requiere revisión", "ready": "Listo", "duplicate": "Posible duplicado", "failed": "Error", "materialized": "Borrador creado", "rejected": "Rechazado" },
+    "emptyTitle": "No hay documentos capturados", "emptyDescription": "Cargue documentos de proveedor PDF, JPEG, PNG o TIFF para comenzar.",
+    "selected": "{count, plural, =0 {Ninguno seleccionado} one {# seleccionado} other {# seleccionados}}", "select": "Seleccionar", "selectDocument": "Seleccionar {name}",
+    "reprocess": "Reprocesar", "reject": "Rechazar", "createDraft": "Crear borrador", "createDrafts": "Crear borradores",
+    "bulkComplete": "Acción masiva terminada: {succeeded} correctas, {failed} fallidas.", "actionFailed": "La acción de captura falló.",
+    "rejected": "Documento rechazado.", "reprocessQueued": "Documento en cola para reprocesamiento.", "draftCreated": "Borrador de compras creado.", "openDraft": "Abrir borrador de compras",
+    "bill": "Factura de proveedor", "credit": "Abono de proveedor",
+    "columns": { "document": "Documento", "vendor": "Proveedor", "invoice": "N.º de factura", "date": "Fecha de factura", "total": "Total", "status": "Estado", "received": "Recibido" },
+    "saving": "Guardando correcciones…", "unsaved": "Correcciones sin guardar", "saved": "Todas las correcciones guardadas", "saveFailed": "No se pudieron guardar las correcciones.",
+    "processing": "Extrayendo evidencia del documento…", "processingFailed": "La extracción del documento falló. Revise la configuración del proveedor de la organización y vuelva a procesar el documento.", "sourcePreview": "Vista previa del documento fuente", "sourcePreviewAlt": "Documento fuente {name}", "confidencePercent": "{percent} %", "highlightEvidence": "Resaltar esta evidencia en el documento fuente",
+    "fields": { "kind": "Tipo de documento", "vendor": "Proveedor", "vendorPlaceholder": "Seleccionar proveedor…", "invoiceNumber": "Número de factura", "invoiceDate": "Fecha de factura", "dueDate": "Fecha de vencimiento", "currency": "Moneda", "purchaseOrder": "Orden de compra", "purchaseOrderPlaceholder": "Seleccionar orden de compra…", "memo": "Nota", "subtotal": "Subtotal", "taxTotal": "Impuesto", "total": "Total" },
+    "lines": { "title": "Líneas extraídas", "add": "Añadir línea", "description": "Descripción", "account": "Cuenta", "accountPlaceholder": "Seleccionar cuenta…", "quantity": "Cant.", "unitPrice": "Precio unitario", "amount": "Importe", "tax": "Impuesto", "remove": "Quitar línea {line}" },
+    "issues": {
+      "required_field": "Falta un campo obligatorio.", "invalid_date": "Introduzca una fecha ISO válida.", "invalid_currency": "Introduzca un código de moneda válido de tres letras.", "amount_out_of_range": "El importe está fuera del rango contable admitido.", "missing_lines": "Añada al menos una línea de factura.",
+      "missing_line_description": "La línea {line} no tiene descripción ni código de producto.", "line_math_mismatch": "La línea {line} no equivale a cantidad × precio unitario (se esperaba {expected}, se encontró {actual}).",
+      "low_confidence": "La línea {line} está por debajo del umbral de confianza.", "document_low_confidence": "El documento está por debajo del umbral de confianza para revisión.", "subtotal_mismatch": "El subtotal de líneas es {expected}, pero el documento indica {actual}.",
+      "line_tax_mismatch": "Los impuestos de las líneas suman {expected}, pero el documento indica {actual}.",
+      "total_mismatch": "El subtotal más impuestos es {expected}, pero el documento indica {actual}.", "vendor_unresolved": "Seleccione el proveedor.",
+      "purchase_order_unresolved": "La orden de compra no se pudo resolver de forma única.", "account_unresolved": "Seleccione una cuenta para la línea {line}.",
+      "po_line_unmatched": "La línea {line} no se pudo conciliar de forma única con la orden de compra.", "po_quantity_exceeded": "La línea {line} supera la cantidad no facturada de la orden ({expected}).",
+      "receipt_quantity_shortfall": "La línea {line} supera la cantidad recibida y no facturada ({expected}); reciba primero los bienes.",
+      "possible_duplicate": "Una captura o documento de compras ya tiene este archivo o número de factura del proveedor."
+    }
   },
   "toasts": {
     "actionFailed": "La acción falló",

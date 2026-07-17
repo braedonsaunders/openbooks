@@ -15,6 +15,7 @@
     },
     "folderRow": "Carpeta"
   },
+  "systemFolders": { "apCapture": "Captura de compras" },
   "columns": {
     "name": "Nombre",
     "size": "Tamaño",
