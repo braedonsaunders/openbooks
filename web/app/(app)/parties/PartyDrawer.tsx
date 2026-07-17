@@ -25,6 +25,7 @@ import {
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import { AuditTrailPanel } from '../../../components/audit-trail-panel'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -104,7 +105,7 @@ const emptyContact = (): ContactRow => ({
   mobilePhone: '', isPrimary: 'false', isActive: 'true',
 })
 
-export type PartyTab = 'overview' | 'transactions' | 'contacts' | 'addresses' | 'accounting'
+export type PartyTab = 'overview' | 'transactions' | 'contacts' | 'addresses' | 'accounting' | 'audit'
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -437,6 +438,7 @@ export function PartyDrawer({
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
     { key: 'accounting', label: t('tabs.accounting') },
+    { key: 'audit', label: tc('auditTrail.tabs.audit') },
   ]
 
   return (
@@ -943,6 +945,8 @@ export function PartyDrawer({
         {tab === 'accounting' ? (
           <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} />
         ) : null}
+
+        {tab === 'audit' ? <AuditTrailPanel table="parties" recordId={String(p.id)} /> : null}
       </div>
       </TabContent>
     </UrlDrawer>

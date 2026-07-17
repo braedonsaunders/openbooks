@@ -404,6 +404,7 @@ export function JournalDrawer({
   return (
     <TransactionDrawer
       closeHref="/journal"
+      recordId={String(doc.id)}
       panelClassName={docTypeMeta('journal').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
