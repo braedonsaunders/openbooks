@@ -113,13 +113,15 @@ interface Entry {
 }
 
 /** Native Drawer listing raw time entries behind an employee / item drill. */
-function EntriesDrawer({ kind, id, name, sub, from, to, onClose }: {
-  kind: 'employee' | 'item'; id: string; name: string; sub?: string; from: string; to: string; onClose: () => void
+function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
+  kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number }; from: string; to: string; onClose: () => void
 }) {
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [error, setError] = useState(false)
+  const [view, setView] = useState<'entries' | 'byItem' | 'byCustomer'>('entries')
   useEffect(() => {
     let live = true
+    setEntries(null); setError(false); setView('entries')
     fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((j) => { if (live) setEntries(j.entries) })
@@ -130,18 +132,74 @@ function EntriesDrawer({ kind, id, name, sub, from, to, onClose }: {
   const total = (entries ?? []).reduce((a, e) => a + e.hours, 0)
   const billable = (entries ?? []).reduce((a, e) => a + (e.billable ? e.hours : 0), 0)
 
+  // Group entries by a key → { hours, billable } (Gantry by-item / by-customer).
+  const groupBy = (keyFn: (e: Entry) => string) => {
+    const m = new Map<string, { hours: number; billable: number }>()
+    for (const e of entries ?? []) {
+      const k = keyFn(e) || '—'
+      const g = m.get(k) ?? { hours: 0, billable: 0 }
+      g.hours += e.hours; g.billable += e.billable ? e.hours : 0
+      m.set(k, g)
+    }
+    return [...m.entries()].map(([label, g]) => ({ label, ...g })).sort((a, b) => b.hours - a.hours)
+  }
+  const itemGroups = view === 'byItem' ? groupBy((e) => (kind === 'employee' ? e.itemName : e.employeeName)) : []
+  const custGroups = view === 'byCustomer' ? groupBy((e) => e.customerName) : []
+
   return (
     <Drawer open onClose={onClose} size="lg" title={name} description={sub ?? 'Time entries'} bodyClassName="overflow-hidden flex flex-col p-0">
+      {/* Peer strip (employee vs same-title average) */}
+      {peer ? (
+        <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/30">
+          <div>
+            <p className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">vs {peer.title} peers ({peer.peerCount})</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">This employee {pct1(peer.empPct)} · peer avg {pct1(peer.peerAvg)}</p>
+          </div>
+          <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', peer.empPct >= peer.peerAvg ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300')}>
+            {peer.empPct >= peer.peerAvg ? '+' : ''}{(peer.empPct - peer.peerAvg).toFixed(1)}pp
+          </span>
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-4 border-b border-slate-100 px-4 py-2.5 text-sm dark:border-slate-800">
         <span className="text-slate-500 dark:text-slate-400">{entries ? `${entries.length}${entries.length === 500 ? '+' : ''} entries` : '…'}</span>
         <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{hrs0(total)} hrs</span>
         <span className="tabular-nums text-emerald-600 dark:text-emerald-400">{total > 0 ? pct1((billable / total) * 100) : '—'} billable</span>
       </div>
+
+      {/* View pills */}
+      <div className="flex items-center gap-1.5 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+        {([['entries', 'Entries'], ['byItem', kind === 'employee' ? 'By Service Item' : 'By Employee'], ['byCustomer', 'By Customer']] as const).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setView(k)} className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', view === k ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>{label}</button>
+        ))}
+      </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
           <p className="p-6 text-center text-sm text-slate-400">Could not load entries.</p>
         ) : !entries ? (
           <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
+        ) : view !== 'entries' ? (
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white dark:bg-slate-900">
+              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <th className="px-4 py-2 text-left font-medium">{view === 'byItem' ? (kind === 'employee' ? 'Service Item' : 'Employee') : 'Customer'}</th>
+                <th className="px-4 py-2 text-right font-medium">Hours</th>
+                <th className="px-4 py-2 text-right font-medium">Billable %</th>
+                <th className="w-32 px-4 py-2 text-left font-medium">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(view === 'byItem' ? itemGroups : custGroups).map((g) => (
+                <tr key={g.label} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <td className="max-w-48 truncate px-4 py-2 text-slate-700 dark:text-slate-300" title={g.label}>{g.label}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{g.hours.toFixed(1)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{g.hours > 0 ? pct1((g.billable / g.hours) * 100) : '—'}</td>
+                  <td className="px-4 py-2"><span className="block h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><span className="block h-full rounded-full bg-teal-400" style={{ width: `${total > 0 ? (g.hours / total) * 100 : 0}%` }} /></span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
@@ -175,7 +233,7 @@ function EntriesDrawer({ kind, id, name, sub, from, to, onClose }: {
   )
 }
 
-type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: string } | null
+type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number } } | null
 
 /* ------------------------------------------------------------------- shell */
 
@@ -217,7 +275,7 @@ export function UtilizationView({ data }: { data: UtilizationData }) {
       </div>
 
       {flyout ? (
-        <EntriesDrawer kind={flyout.kind} id={flyout.id} name={flyout.name} sub={flyout.sub} from={data.period.from} to={data.period.to} onClose={() => setFlyout(null)} />
+        <EntriesDrawer kind={flyout.kind} id={flyout.id} name={flyout.name} sub={flyout.sub} peer={flyout.peer} from={data.period.from} to={data.period.to} onClose={() => setFlyout(null)} />
       ) : null}
     </div>
   )
@@ -1244,7 +1302,14 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
   const top = [...qualified].sort((a, b) => b.range.percentBilled - a.range.percentBilled)[0]
   const avgHours = filtered.length ? filtered.reduce((s, e) => s + e.range.hours, 0) / filtered.length : 0
 
-  const drill = (e: UGroupRow) => onDrill({ kind: 'employee', id: e.id, name: e.name, sub: `${e.title ?? ''} · ${e.departmentName ?? ''} · ${pct1(e.range.percentBilled)} billable` })
+  const drill = (e: UGroupRow) => {
+    // Peer strip: this employee vs same-title peers' average billable %.
+    const peers = e.title ? data.employees.filter((p) => p.title === e.title && p.range.hours >= minHours) : []
+    const peer = e.title && peers.length >= 2
+      ? { title: e.title, empPct: e.range.percentBilled, peerAvg: peers.reduce((a, p) => a + p.range.percentBilled, 0) / peers.length, peerCount: peers.length }
+      : undefined
+    onDrill({ kind: 'employee', id: e.id, name: e.name, sub: `${e.title ?? ''} · ${e.departmentName ?? ''} · ${pct1(e.range.percentBilled)} billable`, peer })
+  }
 
   return (
     <div className="space-y-4">
