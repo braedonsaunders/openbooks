@@ -1326,6 +1326,10 @@
       "item-inventory-profiles": {
         "title": "Costeo de artículos",
         "description": "Método de costeo, cuentas de inventario, seguimiento y costo estándar por artículo."
+      },
+      "bom-components": {
+        "title": "Lista de materiales",
+        "description": "Componentes consumidos para ensamblar cada artículo."
       }
     },
     "fields": {
@@ -1438,7 +1442,10 @@
       "baseUnit": "Unidad base",
       "reorderPoint": "Punto de reorden",
       "preferredStockLevel": "Nivel de stock preferido",
-      "receivedNotBilledAccountId": "Cuenta de recibido no facturado"
+      "receivedNotBilledAccountId": "Cuenta de recibido no facturado",
+      "assemblyItemId": "Artículo ensamblado",
+      "componentItemId": "Componente",
+      "quantityPer": "Cantidad por"
     },
     "options": {
       "appliesTo": {
