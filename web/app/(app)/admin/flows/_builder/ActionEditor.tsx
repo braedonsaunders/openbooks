@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { Input, Label, Select, Textarea } from '@openbooks/ui'
 import type { ActionData, ActionKind, FlowSubjectProfile } from '@openbooks/forms-core'
-import { buildAction, type OrgUser } from './graph'
+import { buildAction, type OrgRole, type OrgUser } from './graph'
 import { TargetsEditor } from './TargetsEditor'
 
 /**
@@ -37,14 +37,19 @@ export function ActionEditor({
   onChange,
   profile,
   users,
+  roles,
 }: {
   action: ActionData
   onChange: (action: ActionData) => void
   profile: FlowSubjectProfile
   users: OrgUser[]
+  roles: OrgRole[]
 }) {
   const t = useTranslations('admin.flows')
   const writableFields = profile.fields.filter((f) => f.writable)
+  const selectedField = writableFields.find((field) => field.key === (action.action === 'set_field' ? action.field : ''))
+  const literalDefault = () =>
+    selectedField?.options?.[0]?.value ?? (selectedField?.type === 'bool' ? false : '')
 
   return (
     <div className="space-y-4">
@@ -71,6 +76,7 @@ export function ActionEditor({
               onChange={(to) => onChange({ ...action, to })}
               profile={profile}
               users={users}
+              roles={roles}
               allowEmail
               addLabel={t('targets.add')}
             />
@@ -90,6 +96,20 @@ export function ActionEditor({
               onChange={(e) => onChange({ ...action, body: e.target.value })}
             />
           </div>
+          <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={action.attachPdf ?? false}
+              onChange={(e) => onChange({ ...action, attachPdf: e.target.checked || undefined })}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            />
+            <span>
+              <span className="block font-medium">{t('action.attachPdf')}</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                {t('action.attachPdfHint')}
+              </span>
+            </span>
+          </label>
           <FieldTokensHint profile={profile} />
         </>
       ) : null}
@@ -103,6 +123,7 @@ export function ActionEditor({
               onChange={(to) => onChange({ ...action, to })}
               profile={profile}
               users={users}
+              roles={roles}
               allowEmail
               addLabel={t('targets.add')}
             />
@@ -140,7 +161,21 @@ export function ActionEditor({
             <Label>{t('action.field')}</Label>
             <Select
               value={action.field}
-              onChange={(e) => onChange({ ...action, field: e.target.value })}
+              onChange={(e) => {
+                const field = writableFields.find((candidate) => candidate.key === e.target.value)
+                onChange({
+                  ...action,
+                  field: e.target.value,
+                  ...(action.value.kind === 'literal'
+                    ? {
+                        value: {
+                          kind: 'literal' as const,
+                          value: field?.options?.[0]?.value ?? (field?.type === 'bool' ? false : ''),
+                        },
+                      }
+                    : {}),
+                })
+              }}
             >
               {writableFields.map((f) => (
                 <option key={f.key} value={f.key}>
@@ -150,22 +185,76 @@ export function ActionEditor({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>{t('action.value')}</Label>
-            <Input
-              value={
-                action.value.kind === 'literal' ? String(action.value.value ?? '') : ''
-              }
+            <Label>{t('action.valueSource')}</Label>
+            <Select
+              value={action.value.kind}
               onChange={(e) => {
-                const raw = e.target.value
-                const type = profile.fields.find((f) => f.key === action.field)?.type
-                const value =
-                  type === 'number' && raw !== '' && !Number.isNaN(Number(raw))
-                    ? Number(raw)
-                    : raw
-                onChange({ ...action, value: { kind: 'literal', value } })
+                const kind = e.target.value as 'literal' | 'today' | 'now' | 'current_user_name'
+                onChange({
+                  ...action,
+                  value: kind === 'literal' ? { kind, value: literalDefault() } : { kind },
+                })
               }}
-            />
+            >
+              <option value="literal">{t('action.valueSources.literal')}</option>
+              <option value="today">{t('action.valueSources.today')}</option>
+              <option value="now">{t('action.valueSources.now')}</option>
+              <option value="current_user_name">{t('action.valueSources.currentUser')}</option>
+              {action.value.kind === 'expression' ? (
+                <option value="expression">{t('action.valueSources.expression')}</option>
+              ) : null}
+            </Select>
           </div>
+          {action.value.kind === 'literal' ? (
+            <div className="space-y-1.5">
+              <Label>{t('action.value')}</Label>
+              {selectedField?.options?.length ? (
+                <Select
+                  value={String(action.value.value ?? '')}
+                  onChange={(e) =>
+                    onChange({ ...action, value: { kind: 'literal', value: e.target.value } })
+                  }
+                >
+                  {selectedField.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              ) : selectedField?.type === 'bool' ? (
+                <Select
+                  value={String(action.value.value ?? false)}
+                  onChange={(e) =>
+                    onChange({
+                      ...action,
+                      value: { kind: 'literal', value: e.target.value === 'true' },
+                    })
+                  }
+                >
+                  <option value="true">{t('logic.true')}</option>
+                  <option value="false">{t('logic.false')}</option>
+                </Select>
+              ) : (
+                <Input
+                  type={selectedField?.type === 'date' ? 'date' : selectedField?.type === 'number' ? 'number' : 'text'}
+                  value={String(action.value.value ?? '')}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    const value =
+                      selectedField?.type === 'number' && raw !== '' && !Number.isNaN(Number(raw))
+                        ? Number(raw)
+                        : raw
+                    onChange({ ...action, value: { kind: 'literal', value } })
+                  }}
+                />
+              )}
+            </div>
+          ) : null}
+          {action.value.kind === 'expression' ? (
+            <p className="rounded-md border border-dashed border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              {t('action.expressionPreserved')}
+            </p>
+          ) : null}
         </>
       ) : null}
 
@@ -180,39 +269,6 @@ export function ActionEditor({
             ))}
           </Select>
         </div>
-      ) : null}
-
-      {action.action === 'webhook' ? (
-        <>
-          <div className="space-y-1.5">
-            <Label>{t('action.url')}</Label>
-            <Input
-              value={action.url}
-              onChange={(e) => onChange({ ...action, url: e.target.value })}
-              placeholder="https://example.com/hooks/openbooks"
-              className="font-mono text-[13px]"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>{t('action.method')}</Label>
-            <Select
-              value={action.method}
-              onChange={(e) => onChange({ ...action, method: e.target.value as 'POST' | 'PUT' })}
-            >
-              <option value="POST">POST</option>
-              <option value="PUT">PUT</option>
-            </Select>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              checked={action.includeRecord ?? false}
-              onChange={(e) => onChange({ ...action, includeRecord: e.target.checked || undefined })}
-              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-            />
-            {t('action.includeRecord')}
-          </label>
-        </>
       ) : null}
 
       {action.action === 'post_document' ? (

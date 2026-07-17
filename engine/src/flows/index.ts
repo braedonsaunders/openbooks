@@ -37,7 +37,7 @@ export {
   type EmailActionClaims,
 } from "./email-tokens.ts";
 export { runDueScheduledFlows, lastCronOccurrenceBetween } from "./scheduled.ts";
-export { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
+export { flowSubjectProfileForOrg, getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 export {
   checkFlowLock,
   getFlowLock,

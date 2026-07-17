@@ -1,8 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, schema } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
-import { BUILT_IN_ROLE_NAMES } from "./subject-profiles.ts";
+import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 
 /**
  * party_bank_accounts FlowSubjectAdapter — the first non-document subject.
@@ -44,7 +44,7 @@ export const bankAccountSubjectProfile: FlowSubjectProfile = {
   subjectKind: BANK_ACCOUNT_SUBJECT_KIND,
   label: "Vendor bank details",
   triggers: ["on_create", "on_update", "status_change", "on_field_value", "manual"],
-  actions: ["send_email", "notify", "change_status", "webhook"],
+  actions: ["send_email", "notify", "change_status"],
   statuses: [...BANK_ACCOUNT_STATUSES],
   fields: [
     { key: "partyId", label: "Party", type: "text" },
@@ -53,12 +53,28 @@ export const bankAccountSubjectProfile: FlowSubjectProfile = {
     { key: "country", label: "Country", type: "text" },
     { key: "currency", label: "Currency", type: "enum" },
     { key: "accountLastFour", label: "Account last four", type: "text" },
-    { key: "approvalStatus", label: "Approval status", type: "enum" },
+    {
+      key: "approvalStatus",
+      label: "Approval status",
+      type: "enum",
+      options: BANK_ACCOUNT_STATUSES.map((status) => ({ ...status })),
+    },
+    {
+      key: "status",
+      label: "Status",
+      type: "enum",
+      options: BANK_ACCOUNT_STATUSES.map((status) => ({ ...status })),
+    },
     { key: "isActive", label: "Active", type: "bool" },
     { key: "createdBy", label: "Created by (user)", type: "user" },
     // Present only on on_update dispatches (injected from the event):
     { key: "changedFields", label: "Changed fields (on update)", type: "text" },
-    { key: "event_source", label: "Event source", type: "enum" },
+    {
+      key: "event_source",
+      label: "Event source",
+      type: "enum",
+      options: [...EVENT_SOURCE_OPTIONS],
+    },
   ],
   roles: [...BUILT_IN_ROLE_NAMES],
 };
@@ -159,7 +175,12 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
               updatedBy: ctx.userId ?? null,
             },
       )
-      .where(eq(schema.partyBankAccounts.id, subjectId));
+      .where(
+        and(
+          eq(schema.partyBankAccounts.id, subjectId),
+          eq(schema.partyBankAccounts.orgId, ctx.orgId),
+        ),
+      );
   },
 
   async setField(): Promise<void> {

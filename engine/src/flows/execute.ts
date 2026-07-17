@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   interpolateTemplate,
@@ -8,7 +7,7 @@ import {
   type EvalContext,
   type GateData,
 } from "@openbooks/forms-core";
-import { db, env, schema } from "../db.ts";
+import { db, schema } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter } from "./types.ts";
 import {
   resolveAssigneeUsers,
@@ -54,8 +53,6 @@ export interface ExecuteFlowPlanResult {
   failed: string[];
   gatesCreated: number;
 }
-
-const WEBHOOK_TIMEOUT_MS = 10_000;
 
 /** Org display name for email shells (best-effort). */
 async function orgName(orgId: string): Promise<string> {
@@ -234,35 +231,6 @@ export async function executeFlowPlan(
           writable: true,
         });
         return `change_status→${action.to}`;
-      }
-
-      case "webhook": {
-        const payload = JSON.stringify({
-          event: "flow.action",
-          flowId: flow.id,
-          runId,
-          subjectKind: flow.subjectKind,
-          subjectId,
-          ...(action.includeRecord ? { values } : {}),
-        });
-        // HMAC-signed body — no outbound-webhook precedent exists in the repo
-        // yet (netsuite.ts signs OAuth1 requests), so the secret is
-        // env FLOWS_WEBHOOK_SECRET with a 'dev' fallback until per-org
-        // webhook secrets land.
-        const signature = createHmac("sha256", env.FLOWS_WEBHOOK_SECRET || "dev")
-          .update(payload)
-          .digest("hex");
-        const res = await fetch(action.url, {
-          method: action.method,
-          headers: {
-            "content-type": "application/json",
-            "x-openbooks-signature": `sha256=${signature}`,
-          },
-          body: payload,
-          signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
-        });
-        if (!res.ok) throw new Error(`webhook returned HTTP ${res.status}`);
-        return `webhook ${action.method} ${res.status}`;
       }
 
       case "post_document": {

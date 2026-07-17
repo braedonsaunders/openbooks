@@ -34,6 +34,14 @@ export type FlowFieldDef = {
   label: string
   type: FlowFieldType
   writable?: boolean
+  /** Closed vocabulary for enum-like condition values. The builder renders
+   * these as choices instead of accepting typo-prone free text. */
+  options?: FlowFieldOption[]
+}
+
+export type FlowFieldOption = {
+  value: string
+  label: string
 }
 
 export type FlowSubjectProfile = {

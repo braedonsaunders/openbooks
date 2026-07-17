@@ -3,6 +3,7 @@ import {
   lintAutomationGraph,
   profileFieldIds,
   type AutomationGraph,
+  type FlowSubjectProfile,
 } from "@openbooks/forms-core";
 import { getFlowAdapter } from "./registry.ts";
 
@@ -16,6 +17,7 @@ import { getFlowAdapter } from "./registry.ts";
 export function lintFlowGraphForSubject(
   subjectKind: string,
   graph: unknown,
+  profileOverride?: FlowSubjectProfile,
 ): { ok: true; graph: AutomationGraph; errors: [] } | { ok: false; errors: string[] } {
   const adapter = getFlowAdapter(subjectKind);
   if (!adapter) return { ok: false, errors: [`unknown flow subject kind "${subjectKind}"`] };
@@ -28,7 +30,7 @@ export function lintFlowGraphForSubject(
     };
   }
 
-  const profile = adapter.profile;
+  const profile = profileOverride ?? adapter.profile;
   const errors = lintAutomationGraph(parsed.data, profileFieldIds(profile), profile);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, graph: parsed.data, errors: [] };

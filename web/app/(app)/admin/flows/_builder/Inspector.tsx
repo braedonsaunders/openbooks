@@ -4,7 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label } from '@openbooks/ui'
 import type { FlowSubjectProfile } from '@openbooks/forms-core'
-import type { FlowNode, NodeData, OrgUser } from './graph'
+import type { FlowNode, NodeData, OrgRole, OrgUser } from './graph'
 import { LogicRuleBuilder } from './LogicRuleBuilder'
 import { TriggerEditor } from './TriggerEditor'
 import { ActionEditor } from './ActionEditor'
@@ -30,12 +30,16 @@ export function Inspector({
   node,
   profile,
   users,
+  roles,
+  permissions,
   onChange,
   onDelete,
 }: {
   node: FlowNode | null
   profile: FlowSubjectProfile
   users: OrgUser[]
+  roles: OrgRole[]
+  permissions: string[]
   onChange: (id: string, data: NodeData) => void
   onDelete: (id: string) => void
 }) {
@@ -77,6 +81,7 @@ export function Inspector({
             onChange={(trigger) => patch({ ...data, trigger })}
             profile={profile}
             users={users}
+            permissions={permissions}
           />
         ) : null}
 
@@ -111,6 +116,7 @@ export function Inspector({
             onChange={(action) => patch({ ...data, action })}
             profile={profile}
             users={users}
+            roles={roles}
           />
         ) : null}
 
@@ -120,6 +126,7 @@ export function Inspector({
             onChange={(gate) => patch({ ...data, gate })}
             profile={profile}
             users={users}
+            roles={roles}
           />
         ) : null}
       </div>

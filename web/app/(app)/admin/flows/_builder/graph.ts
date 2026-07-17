@@ -21,6 +21,7 @@ export type FlowNode = Node<NodeData>
 
 /** An org user offered by the "specific user" pickers. */
 export type OrgUser = { id: string; name: string; email: string }
+export type OrgRole = { key: string; name: string }
 
 export const newId = (prefix: string) => `${prefix}_${globalThis.crypto.randomUUID()}`
 
@@ -111,8 +112,6 @@ export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): Acti
       }
     case 'change_status':
       return { action: 'change_status', to: profile.statuses[0]?.value ?? 'draft' }
-    case 'webhook':
-      return { action: 'webhook', url: 'https://', method: 'POST' }
     case 'post_document':
       return { action: 'post_document' }
     case 'lock_record':

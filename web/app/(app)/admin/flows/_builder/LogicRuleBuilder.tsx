@@ -63,10 +63,40 @@ function ValueInput({
   if (VALUELESS_OPS.has(rule.op as LeafOp)) return null
   const value = 'value' in rule ? rule.value : undefined
   const set = (v: unknown) => onChange({ ...rule, value: v } as LogicRule)
-  const fieldType = profile.fields.find((f) => f.key === rule.field)?.type ?? 'text'
+  const field = profile.fields.find((f) => f.key === rule.field)
+  const fieldType = field?.type ?? 'text'
 
   if (LIST_OPS.has(rule.op as LeafOp)) {
     const list = Array.isArray(value) ? value : []
+    if (field?.options?.length) {
+      return (
+        <div className="col-span-2 flex flex-wrap gap-1.5">
+          {field.options.map((option) => {
+            const selected = list.includes(option.value)
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() =>
+                  set(
+                    selected
+                      ? list.filter((item) => item !== option.value)
+                      : [...list, option.value],
+                  )
+                }
+                className={
+                  selected
+                    ? 'rounded-full border border-teal-500 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700 dark:bg-teal-950 dark:text-teal-300'
+                    : 'rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400'
+                }
+              >
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+      )
+    }
     return (
       <Input
         value={list.join(', ')}
@@ -109,6 +139,18 @@ function ValueInput({
         {profile.statuses.map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}
+          </option>
+        ))}
+      </Select>
+    )
+  }
+  if (field?.options?.length) {
+    return (
+      <Select value={String(value ?? '')} onChange={(e) => set(e.target.value)}>
+        <option value="" />
+        {field.options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </Select>

@@ -26,6 +26,8 @@ import { CustomFieldInputs, type CustomFieldDefClient } from '../../../component
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { AuditTrailPanel } from '../../../components/audit-trail-panel'
+import { ApprovalActions } from '../../../components/approval-actions'
+import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { money } from '../../../lib/format'
 
 interface Opt {
@@ -1209,7 +1211,7 @@ function BankAccountsPanel({
             <TableHeader><TableRow>
               <TableHead>{t('bankName')}</TableHead><TableHead>{t('routing')}</TableHead>
               <TableHead>{t('accountNumber')}</TableHead><TableHead>{tc('labels.currency')}</TableHead>
-              <TableHead>{tc('labels.status')}</TableHead>{canManage ? <TableHead className="text-right">{tc('labels.actions')}</TableHead> : null}
+              <TableHead>{tc('labels.status')}</TableHead><TableHead className="text-right">{tc('labels.actions')}</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {shown.map((account) => (
@@ -1219,7 +1221,13 @@ function BankAccountsPanel({
                   <TableCell className="font-mono">•••• {account.account_last_four || '—'}</TableCell>
                   <TableCell className="font-mono text-xs">{account.currency || '—'}</TableCell>
                   <TableCell><Badge variant={account.approval_status === 'approved' || account.approved_at ? 'success' : account.approval_status === 'rejected' ? 'outline' : 'warning'}>{statusLabel(account)}</Badge></TableCell>
-                  {canManage ? <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => edit(account)}>{tc('actions.edit')}</Button></TableCell> : null}
+                  <TableCell>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <FlowManualButtons subjectKind="party_bank_account" subjectId={String(account.id)} />
+                      <ApprovalActions subjectKind="party_bank_account" subjectId={String(account.id)} />
+                      {canManage ? <Button variant="ghost" size="sm" onClick={() => edit(account)}>{tc('actions.edit')}</Button> : null}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

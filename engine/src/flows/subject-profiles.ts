@@ -66,6 +66,16 @@ export const BUILT_IN_ROLE_NAMES = [
   "viewer",
 ] as const;
 
+/** Closed execution-context vocabulary shared by every record adapter. */
+export const EVENT_SOURCE_OPTIONS = [
+  { value: "ui", label: "User interface" },
+  { value: "api", label: "API" },
+  { value: "sync", label: "Data synchronization" },
+  { value: "script", label: "Script" },
+  { value: "schedule", label: "Scheduled process" },
+  { value: "close_automation", label: "Close automation" },
+] as const;
+
 /**
  * Header fields flows may write via set_field — mirrors the trigger-script
  * whitelist (engine/src/scripting.ts MUTABLE_FIELDS) minus the raw `custom`
@@ -131,7 +141,12 @@ export const DOCUMENT_FIELDS: FlowFieldDef[] = [
   // Injected on every dispatch: where the mutation came from
   // ('ui'|'api'|'sync'|'script'|'schedule'|'close_automation') — execution-context
   // filters (auto-approve system-generated records).
-  { key: "event_source", label: "Event source", type: "enum" },
+  {
+    key: "event_source",
+    label: "Event source",
+    type: "enum",
+    options: [...EVENT_SOURCE_OPTIONS],
+  },
   // Present only while resolving MANUAL buttons (viewer-aware showIf):
   { key: "current_user_id", label: "Current user (manual buttons)", type: "user" },
   { key: "is_submitter", label: "Viewer is submitter (manual buttons)", type: "bool" },
@@ -165,13 +180,18 @@ export function documentSubjectProfile(kind: string): FlowSubjectProfile {
       "notify",
       "set_field",
       "change_status",
-      "webhook",
       "lock_record",
       "unlock_record",
       ...(canPost ? (["post_document"] as const) : []),
     ],
     statuses: [...DOCUMENT_STATUSES],
-    fields: DOCUMENT_FIELDS,
+    fields: DOCUMENT_FIELDS.map((field) =>
+      field.key === "status"
+        ? { ...field, options: DOCUMENT_STATUSES.map((status) => ({ ...status })) }
+        : field.key === "kind"
+          ? { ...field, options: [{ value: kind, label: titleize(kind) }] }
+          : field,
+    ),
     roles: [...BUILT_IN_ROLE_NAMES],
   };
 }

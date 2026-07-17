@@ -48,6 +48,7 @@ import {
   type FlowNode,
   type NodeData,
   type NodeKind,
+  type OrgRole,
   type OrgUser,
 } from '../_builder/graph'
 import { NODE_TYPES } from '../_builder/nodes'
@@ -71,10 +72,16 @@ export default function FlowBuilder({
   flow,
   runs,
   profile,
+  users,
+  roles,
+  permissions,
 }: {
   flow: { id: string; name: string; enabled: boolean; graph: AutomationGraph }
   runs: FlowRunRow[]
   profile: FlowSubjectProfile
+  users: OrgUser[]
+  roles: OrgRole[]
+  permissions: string[]
 }) {
   const t = useTranslations('admin.flows')
   const router = useRouter()
@@ -99,15 +106,6 @@ export default function FlowBuilder({
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
-  const [users, setUsers] = useState<OrgUser[]>([])
-
-  useEffect(() => {
-    fetch('/api/admin/flows/users')
-      .then((r) => (r.ok ? r.json() : { users: [] }))
-      .then((d) => setUsers(d.users ?? []))
-      .catch(() => {})
-  }, [])
-
   // Follow the app's dark theme so the canvas / minimap / controls match.
   const [isDark, setIsDark] = useState(false)
   useEffect(() => {
@@ -199,15 +197,32 @@ export default function FlowBuilder({
 
   async function toggleEnabled() {
     const next = !enabled
-    setEnabled(next)
-    const res = await fetch(`/api/admin/flows/${flow.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: next }),
-    }).catch(() => null)
-    if (!res?.ok) {
-      setEnabled(!next)
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/admin/flows/${flow.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: next,
+          ...(next && dirty
+            ? { name: name.trim() || flow.name, graph: fromFlow(nodes, edges) }
+            : {}),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSaveErrors(Array.isArray(data.errors) ? data.errors : [String(data.error ?? res.status)])
+        toast.error(t('actions.updateFailed'))
+        return
+      }
+      setEnabled(next)
+      setSaveErrors([])
+      if (next && dirty) setDirty(false)
+      router.refresh()
+    } catch {
       toast.error(t('actions.updateFailed'))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -243,6 +258,7 @@ export default function FlowBuilder({
             type="button"
             role="switch"
             aria-checked={enabled}
+            disabled={busy}
             onClick={toggleEnabled}
             className={cn(
               'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition',
@@ -383,6 +399,8 @@ export default function FlowBuilder({
               node={selectedNode}
               profile={profile}
               users={users}
+              roles={roles}
+              permissions={permissions}
               onChange={patchNodeData}
               onDelete={removeNode}
             />

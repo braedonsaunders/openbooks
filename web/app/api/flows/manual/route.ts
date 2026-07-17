@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { evaluateLogicRule, type EvalContext } from '@openbooks/forms-core'
-import { db, schema } from '@openbooks/engine/src/db.ts'
+import { db, schema, withOrgContext } from '@openbooks/engine/src/db.ts'
 import {
   getFlowAdapter,
   parseFlowGraph,
@@ -108,7 +108,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'subjectKind and subjectId required' }, { status: 400 })
   }
 
-  const buttons = await availableButtons(authz, subjectKind, subjectId)
+  const buttons = await withOrgContext(authz.user.orgId, () =>
+    availableButtons(authz, subjectKind, subjectId),
+  )
   if (buttons instanceof NextResponse) return buttons
   return NextResponse.json({ buttons })
 }
@@ -126,17 +128,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'subjectKind, subjectId, buttonId required' }, { status: 400 })
   }
 
-  const buttons = await availableButtons(authz, body.subjectKind, body.subjectId!)
+  const buttons = await withOrgContext(authz.user.orgId, () =>
+    availableButtons(authz, body.subjectKind!, body.subjectId!),
+  )
   if (buttons instanceof NextResponse) return buttons
   if (!buttons.some((b) => b.buttonId === body.buttonId)) {
     return NextResponse.json({ error: 'this action is not available' }, { status: 404 })
   }
 
-  const result = await runRecordFlows(
-    { kind: 'manual', buttonId: body.buttonId },
-    body.subjectKind,
-    body.subjectId!,
-    { orgId: authz.user.orgId, userId: authz.user.id },
+  const result = await withOrgContext(authz.user.orgId, () =>
+    runRecordFlows(
+      { kind: 'manual', buttonId: body.buttonId! },
+      body.subjectKind!,
+      body.subjectId!,
+      { orgId: authz.user.orgId, userId: authz.user.id },
+    ),
   )
   const failed = result.runs.some((r) => r.status === 'failed')
   return NextResponse.json({

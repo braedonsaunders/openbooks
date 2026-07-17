@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, ContextMenu, Input, Label, Popover, Select, Textarea, UrlDrawer, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
+import { ApprovalActions } from '../../../components/approval-actions'
 import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
 import { money } from '../../../lib/format'
@@ -312,6 +313,7 @@ export function BudgetDrawer({
     {editable ? <Button variant="outline" size="sm" asChild><Link href={importHref as any}><FileUp size={15} />{t('import.button')}</Link></Button> : null}
     <Button variant="outline" size="sm" asChild><Link href={`/reports/budget?scenario=${scenario.id}`}>{t('actions.openReport')}</Link></Button>
     <FlowManualButtons subjectKind="budget_scenario" subjectId={scenario.id} />
+    <ApprovalActions subjectKind="budget_scenario" subjectId={scenario.id} />
     <BudgetMoreActions scenario={scenario} canManage={canManage} canApprove={canApprove} canExport={canExport} busy={busy} onAction={action} onDelete={deleteDraft} />
   </>
 

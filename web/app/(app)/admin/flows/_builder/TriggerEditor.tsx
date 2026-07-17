@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, TriggerData, TriggerKind } from '@openbooks/forms-core'
 import { buildTrigger, type OrgUser } from './graph'
 import { LogicRuleBuilder } from './LogicRuleBuilder'
@@ -16,11 +16,13 @@ export function TriggerEditor({
   onChange,
   profile,
   users,
+  permissions,
 }: {
   trigger: TriggerData
   onChange: (trigger: TriggerData) => void
   profile: FlowSubjectProfile
   users: OrgUser[]
+  permissions: string[]
 }) {
   const t = useTranslations('admin.flows')
 
@@ -102,6 +104,83 @@ export function TriggerEditor({
               placeholder="America/Toronto"
             />
           </div>
+          <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={!!trigger.select}
+              onChange={(e) =>
+                onChange({
+                  ...trigger,
+                  select: e.target.checked ? { limit: 200 } : undefined,
+                })
+              }
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            />
+            <span>
+              <span className="block font-medium">{t('trigger.selectRecords')}</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                {t('trigger.selectRecordsHint')}
+              </span>
+            </span>
+          </label>
+          {trigger.select ? (
+            <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+              <div className="space-y-1.5">
+                <Label>{t('trigger.selectRule')}</Label>
+                {trigger.select.rule ? (
+                  <>
+                    <LogicRuleBuilder
+                      rule={trigger.select.rule}
+                      onChange={(rule) =>
+                        onChange({ ...trigger, select: { ...trigger.select!, rule } })
+                      }
+                      profile={profile}
+                      users={users}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        onChange({
+                          ...trigger,
+                          select: { ...trigger.select!, rule: undefined },
+                        })
+                      }
+                    >
+                      {t('trigger.selectRuleRemove')}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      onChange({
+                        ...trigger,
+                        select: {
+                          ...trigger.select!,
+                          rule: { op: 'isSet', field: profile.fields[0]?.key ?? 'status' },
+                        },
+                      })
+                    }
+                  >
+                    {t('trigger.selectRuleAdd')}
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t('trigger.selectLimit')}</Label>
+                <Input
+                  inputMode="numeric"
+                  value={String(trigger.select.limit ?? 200)}
+                  onChange={(e) => {
+                    const limit = Math.min(1000, Math.max(1, Number(e.target.value) || 1))
+                    onChange({ ...trigger, select: { ...trigger.select!, limit } })
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
 
@@ -123,13 +202,16 @@ export function TriggerEditor({
           </div>
           <div className="space-y-1.5">
             <Label>{t('trigger.requirePermission')}</Label>
-            <Input
+            <SearchSelect
               value={trigger.requirePermission ?? ''}
-              onChange={(e) =>
-                onChange({ ...trigger, requirePermission: e.target.value || undefined })
+              options={permissions.map((permission) => ({
+                value: permission,
+                label: permission,
+              }))}
+              onChange={(requirePermission) =>
+                onChange({ ...trigger, requirePermission: requirePermission || undefined })
               }
-              placeholder="ap.post"
-              className="font-mono text-[13px]"
+              placeholder={t('trigger.permissionPlaceholder')}
             />
           </div>
           <div className="space-y-1.5">
@@ -164,6 +246,15 @@ export function TriggerEditor({
                 {t('trigger.showIfAdd')}
               </Button>
             )}
+          </div>
+          <div className="space-y-1.5 rounded-md border border-dashed border-slate-200 p-3 dark:border-slate-700">
+            <Label>{t('trigger.buttonPreview')}</Label>
+            <Button type="button" variant="outline" disabled>
+              {trigger.label || t('trigger.defaultButtonLabel')}
+            </Button>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('trigger.buttonHint')}
+            </p>
           </div>
         </>
       ) : null}

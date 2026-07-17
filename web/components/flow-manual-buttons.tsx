@@ -8,12 +8,13 @@
 // Renders nothing while loading or when no flow offers a button, so the
 // drawer header is untouched for orgs without flows.
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { confirmDialog } from '../lib/confirm'
+import { refreshApprovalState } from './approval-actions'
 
 interface ManualButton {
   buttonId: string
@@ -31,47 +32,59 @@ export function FlowManualButtons({
   const tc = useTranslations('common')
   const router = useRouter()
   const [buttons, setButtons] = useState<ManualButton[]>([])
-  const [busy, setBusy] = useState(false)
+  const [busyButtonId, setBusyButtonId] = useState<string | null>(null)
+
+  const loadButtons = useCallback(async () => {
+    const res = await fetch(
+      `/api/flows/manual?subjectKind=${encodeURIComponent(subjectKind)}&subjectId=${encodeURIComponent(subjectId)}`,
+    )
+    const data = res.ok ? await res.json() : { buttons: [] }
+    return Array.isArray(data.buttons) ? data.buttons as ManualButton[] : []
+  }, [subjectKind, subjectId])
 
   useEffect(() => {
     let cancelled = false
-    fetch(
-      `/api/flows/manual?subjectKind=${encodeURIComponent(subjectKind)}&subjectId=${encodeURIComponent(subjectId)}`,
-    )
-      .then((res) => (res.ok ? res.json() : { buttons: [] }))
-      .then((data) => {
-        if (!cancelled) setButtons(Array.isArray(data.buttons) ? data.buttons : [])
+    loadButtons()
+      .then((next) => {
+        if (!cancelled) setButtons(next)
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [subjectKind, subjectId])
+  }, [loadButtons])
 
   if (buttons.length === 0) return null
 
   async function run(button: ManualButton) {
     if (button.confirm && !(await confirmDialog({ message: button.confirm }))) return
-    setBusy(true)
-    const res = await fetch('/api/flows/manual', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subjectKind, subjectId, buttonId: button.buttonId }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok || data.ok === false) {
-      toast.error(data.error ?? tc('feedback.somethingWentWrong'))
-    } else {
+    setBusyButtonId(button.buttonId)
+    try {
+      const res = await fetch('/api/flows/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subjectKind, subjectId, buttonId: button.buttonId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.ok === false) {
+        toast.error(data.error ?? tc('feedback.somethingWentWrong'))
+        return
+      }
       toast.success(tc('feedback.flowActionDone'))
+      setButtons(await loadButtons().catch(() => []))
+      refreshApprovalState()
+      router.refresh()
+    } catch {
+      toast.error(tc('feedback.somethingWentWrong'))
+    } finally {
+      setBusyButtonId(null)
     }
-    setBusy(false)
-    router.refresh()
   }
 
   return (
     <>
       {buttons.map((b) => (
-        <Button key={b.buttonId} variant="outline" disabled={busy} onClick={() => run(b)}>
+        <Button key={b.buttonId} variant="outline" disabled={busyButtonId !== null} onClick={() => run(b)}>
           {b.label}
         </Button>
       ))}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgContext } from '@openbooks/engine/src/db.ts'
+import { getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
 import { userRoleKeys } from '@openbooks/engine/src/flows/targets.ts'
 import { getAuthz, can } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
@@ -110,12 +111,10 @@ export async function GET(req: Request) {
   }
 
   const orgId = authz.user.orgId
-  const doc = (await db.execute(sql`
-    select id, kind, status from documents
-     where id = ${subjectId} and org_id = ${orgId} and kind = ${subjectKind}
-  `)) as unknown as Rows<{ id: string; kind: string; status: string }>
-  if (!doc.rows[0]) return NextResponse.json({ error: 'record not found' }, { status: 404 })
-  const status = doc.rows[0].status
+  const adapter = getFlowAdapter(subjectKind)
+  if (!adapter) return NextResponse.json({ error: 'unknown subject kind' }, { status: 400 })
+  const status = await withOrgContext(orgId, () => adapter.getStatus(subjectId))
+  if (status === null) return NextResponse.json({ error: 'record not found' }, { status: 404 })
 
   const [gates, runs, legacyRequests, roleRows, viewerRow, viewerRoles] = await Promise.all([
     db.execute(sql`
@@ -135,7 +134,7 @@ export async function GET(req: Request) {
         from flow_runs r
         left join users u on u.id = r.created_by
        where r.org_id = ${orgId} and r.subject_kind = ${subjectKind}
-         and r.subject_id = ${subjectId} and r.trigger = 'on_submit'
+         and r.subject_id = ${subjectId}
        order by r.started_at
     `) as unknown as Promise<Rows<Record<string, unknown>>>,
     db.execute(sql`

@@ -34,8 +34,8 @@ Triggers: `on_create`, `on_submit`, `before_post`, `after_post`, `before_void`,
 
 Actions: `send_email` (recipients, subject/body with `{{field}}` interpolation),
 `notify` (in-app), `set_field` (writable header fields only), `change_status`
-(adapter-mediated document lifecycle transition), `webhook` (POST/PUT, HMAC-signed),
-`post_document`.
+(adapter-mediated document lifecycle transition), `post_document`, `lock_record`,
+and `unlock_record`.
 
 Gate (approval node): `{ title, assignees: AssigneeTarget[], mode: 'any'|'all',
 signatureRequired?, reminderAfterHours?, escalateAfterHours?, escalateTo? }`.
@@ -68,3 +68,37 @@ the fallback, so existing behavior is preserved.
 Permissions: `flows.manage` (author/admin), `flows.approve` (act on gates —
 assignees can always act on their own). Nav: Flows under Settings/Build;
 gates appear in the existing `/approvals` worklist.
+
+## Production parity audit (2026-07-17)
+
+The authenticated source-account audit found 18 exportable workflows and 7
+vendor-locked workflows. The exportable set uses 41 add-button actions, 67
+set-field actions, 19 email actions, 15 display-type actions, 9 record locks,
+9 button removals, 6 mandatory-field actions, and 5 custom actions. That audit
+drives the implementation order; source-specific identifiers remain tenant
+configuration rather than product code.
+
+The current production tenant has six enabled native flows: bill approval,
+payment approval, expense approval, journal approval, bank-detail approval,
+and scheduled remittance delivery. Every enabled graph validates against its
+tenant-aware profile. The remittance flow uses a registered custom sent-at
+field, so its scheduled fan-out has an idempotent latch.
+
+Authoring and runtime parity delivered in this slice:
+
+- Manual triggers are arbitrary record-header buttons, including tenant
+  permission selection, visibility rules, confirmation copy, and live preview.
+  They render on document, bank-account, and budget records.
+- Gate approve/reject controls render through the subject adapter, including
+  non-document records, and support self-approval prevention.
+- Roles, permissions, statuses, event sources, and configured custom fields are
+  selected from tenant-aware vocabularies instead of typed as opaque IDs.
+- Scheduled flows can fan out over records with a typed filter and bounded
+  limit; email actions can attach the active tenant PDF; set-field actions can
+  use fixed, date/time, or current-user values.
+
+Exact source parity is not yet assertable for the seven vendor-locked workflows:
+their definitions cannot be exported by the authenticated CLI. They require an
+authorized source-side unlock/export or a behavioral capture before their
+conditions and side effects can be proven equivalent. The product must not
+claim those workflows are replicated until that evidence exists.
