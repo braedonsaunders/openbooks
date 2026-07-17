@@ -30,6 +30,9 @@ export const FIELD_TARGETS = [
   { table: 'projects', kinds: [] },
   { table: 'accounts', kinds: [] },
   { table: 'items', kinds: [] },
+  { table: 'crm_account_profiles', kinds: [] },
+  { table: 'crm_activities', kinds: [] },
+  { table: 'crm_opportunities', kinds: [] },
 ] as const
 
 const FIELD_TYPES = ['text', 'long_text', 'number', 'currency', 'date', 'boolean', 'select', 'multi_select', 'reference']

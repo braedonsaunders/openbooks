@@ -65,6 +65,10 @@ const TARGETS: {
   { table: 'parties', labelKey: 'targets.parties.label', descriptionKey: 'targets.parties.description', kinds: [] },
   { table: 'projects', labelKey: 'targets.projects.label', descriptionKey: 'targets.projects.description', kinds: [] },
   { table: 'accounts', labelKey: 'targets.accounts.label', descriptionKey: 'targets.accounts.description', kinds: [] },
+  { table: 'items', labelKey: 'targets.items.label', descriptionKey: 'targets.items.description', kinds: [] },
+  { table: 'crm_account_profiles', labelKey: 'targets.crmAccounts.label', descriptionKey: 'targets.crmAccounts.description', kinds: [] },
+  { table: 'crm_activities', labelKey: 'targets.crmActivities.label', descriptionKey: 'targets.crmActivities.description', kinds: [] },
+  { table: 'crm_opportunities', labelKey: 'targets.crmOpportunities.label', descriptionKey: 'targets.crmOpportunities.description', kinds: [] },
 ]
 
 const TYPES: { value: string; labelKey: string; helpKey: string }[] = [

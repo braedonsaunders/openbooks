@@ -165,6 +165,18 @@
       "items": {
         "label": "Items & Services",
         "description": "Products and services."
+      },
+      "crmAccounts": {
+        "label": "CRM accounts",
+        "description": "Lead, prospect, and customer qualification profiles."
+      },
+      "crmActivities": {
+        "label": "CRM activities",
+        "description": "Calls, visits, events, emails, notes, and tasks."
+      },
+      "crmOpportunities": {
+        "label": "CRM opportunities",
+        "description": "Pipeline opportunities and forecast details."
       }
     },
     "kinds": {
@@ -645,7 +657,8 @@
       "documents": "File Cabinet",
       "admin": "Administration",
       "assets": "Fixed assets & depreciation",
-      "data": "Import & Export"
+      "data": "Import & Export",
+      "crm": "Customer relationship management"
     },
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
@@ -715,7 +728,20 @@
     "documents_manage": "Upload, move, rename, and delete files",
     "admin_setup_manage": "Manage setup & configuration",
     "data_export": "Export data",
-    "data_import": "Import data"
+    "data_import": "Import data",
+    "crm_accounts_read": "View CRM accounts",
+    "crm_accounts_create": "Create leads and prospects",
+    "crm_accounts_manage": "Manage CRM accounts",
+    "crm_accounts_assign": "Assign and route CRM accounts",
+    "crm_activities_read": "View CRM activities",
+    "crm_activities_manage": "Create and manage CRM activities",
+    "crm_opportunities_read": "View opportunities",
+    "crm_opportunities_manage": "Create and manage opportunities",
+    "crm_opportunities_close": "Close won or lost opportunities",
+    "crm_forecasts_read": "View sales forecasts",
+    "crm_forecasts_manage": "Create forecast snapshots",
+    "crm_forecasts_override": "Override team forecasts",
+    "crm_setup_manage": "Manage CRM setup"
   },
   "ai": {
     "metaTitle": "AI settings",

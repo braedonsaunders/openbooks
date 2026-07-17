@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { nextDocumentNumber } from './bills'
 import { ORDER_KINDS, type OrderKind, CONVERSION_TARGETS } from './order-kinds'
+import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
@@ -154,6 +155,26 @@ export async function convertOrder(
       insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by)
       values (${orgId}, ${sourceId}, ${newId}, ${target.link}, ${userId})
     `)
+
+    const opportunityLink = (await tx.execute(sql`
+      select opportunity_id from crm_opportunity_documents where document_id = ${sourceId}
+    `)) as unknown as { rows: { opportunity_id: string }[] }
+    if (opportunityLink.rows[0]) {
+      await tx.execute(sql`
+        insert into crm_opportunity_documents (org_id, opportunity_id, document_id, created_by, updated_by)
+        values (${orgId}, ${opportunityLink.rows[0].opportunity_id}, ${newId}, ${userId}, ${userId})
+        on conflict (document_id) do nothing`)
+    }
+    if (doc.party_id && ['sales_order', 'customer_invoice', 'customer_credit', 'customer_payment'].includes(target.kind)) {
+      await promoteCrmAccount(tx, {
+        orgId,
+        partyId: doc.party_id,
+        actorId: userId,
+        toStage: 'customer',
+        sourceKind: target.kind,
+        sourceId: newId,
+      })
+    }
 
     return { id: newId, documentNumber, kind: target.kind }
   })

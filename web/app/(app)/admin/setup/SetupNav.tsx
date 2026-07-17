@@ -61,10 +61,11 @@ type NavItem = { href: string; label: string; iconKey: string }
  * links (permission-gated). Client component (needs the active pathname).
  * Setup labels resolve under `admin.setup`; the data links under `data`.
  */
-export function SetupNav({ canExport, canImport }: { canExport: boolean; canImport: boolean }) {
+export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: boolean; canImport: boolean; canManageSetup: boolean }) {
   const t = useTranslations('admin.setup')
   const tClose = useTranslations('close.setup')
   const td = useTranslations('data')
+  const tCrm = useTranslations('crm')
   const pathname = usePathname()
   const byGroup = setupEntitiesByGroup()
 
@@ -82,6 +83,7 @@ export function SetupNav({ canExport, canImport }: { canExport: boolean; canImpo
     <nav className="w-full" aria-label={t('title')}>
       <div className="space-y-5">
         {SETUP_GROUPS.map((group) => {
+          if (!canManageSetup && group.key !== 'company') return null
           const items: NavItem[] =
             group.key === 'accounting'
               ? [
@@ -102,6 +104,7 @@ export function SetupNav({ canExport, canImport }: { canExport: boolean; canImpo
                   })),
                   { href: '/admin/setup/sftp', label: t('entities.sftp.title'), iconKey: 'server' },
                   { href: '/admin/setup/payment-operations', label: t('entities.payment-operations.title'), iconKey: 'payments' },
+                  { href: '/admin/setup/crm', label: tCrm('setup.title'), iconKey: 'users' },
                 ]
               : group.key === 'currency'
               ? [
@@ -117,14 +120,15 @@ export function SetupNav({ canExport, canImport }: { canExport: boolean; canImpo
                   label: t(`entities.${e.key}.title`),
                   iconKey: e.iconKey,
                 }))
-          if (items.length === 0) return null
+          const visibleItems = canManageSetup ? items : items.filter((item) => item.href === '/admin/setup/crm')
+          if (visibleItems.length === 0) return null
           return (
             <div key={group.key} className="space-y-1">
               <h3 className="px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
                 {t(`groups.${group.key}`)}
               </h3>
               <ul className="space-y-0.5">
-                {items.map((item) => {
+                {visibleItems.map((item) => {
                   const active = pathname === item.href
                   return (
                     <li key={item.href}>

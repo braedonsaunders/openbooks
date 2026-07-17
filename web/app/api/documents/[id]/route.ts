@@ -19,6 +19,7 @@ import {
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
+import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 
 export const runtime = 'nodejs'
 
@@ -327,6 +328,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           updated_at = now(), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
       `)
+
+      const effectivePartyId = body.partyId !== undefined ? body.partyId : row.partyId
+      if (effectivePartyId && ['customer_invoice', 'customer_credit', 'customer_payment'].includes(row.kind)) {
+        await promoteCrmAccount(tx, {
+          orgId: user.orgId,
+          partyId: effectivePartyId,
+          actorId: user.id,
+          toStage: 'customer',
+          sourceKind: row.kind,
+          sourceId: id,
+        })
+      }
 
       if ((await glSignature(tx, id)) !== sigBefore) {
         await regenerateGlImpactTx(tx, id, deps, user.id)

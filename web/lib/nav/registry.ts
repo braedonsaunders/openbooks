@@ -31,6 +31,13 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'continuous-close', href: '/continuous-close', label: 'Continuous Close', iconKey: 'activity', group: 'Home', requiredPermission: 'assistant.use' },
   { key: 'approvals', href: '/approvals', label: 'Approvals', iconKey: 'check', group: 'Home', requiredPermission: 'ap.approve' },
 
+  // CRM — relationship lifecycle, daily activities, pipeline, and forecasts.
+  { key: 'crm-leads', href: '/crm/leads', label: 'Leads', iconKey: 'users', group: 'CRM', requiredPermission: 'crm.accounts.read' },
+  { key: 'crm-prospects', href: '/crm/prospects', label: 'Prospects', iconKey: 'target', group: 'CRM', requiredPermission: 'crm.accounts.read' },
+  { key: 'crm-opportunities', href: '/crm/opportunities', label: 'Opportunities', iconKey: 'activity', group: 'CRM', requiredPermission: 'crm.opportunities.read' },
+  { key: 'crm-activities', href: '/crm/activities', label: 'Activities', iconKey: 'timer', group: 'CRM', requiredPermission: 'crm.activities.read' },
+  { key: 'crm-forecasts', href: '/crm/forecasts', label: 'Forecasts & Quotas', iconKey: 'target', group: 'CRM', requiredPermission: 'crm.forecasts.read' },
+
   // Purchases — money out plus the vendors it flows to.
   { key: 'purchase-orders', href: '/purchase-orders', label: 'Purchase Orders', iconKey: 'clipboard', group: 'Purchases', requiredPermission: 'ap.read' },
   { key: 'ap', href: '/ap', label: 'Bills', iconKey: 'clipboard', group: 'Purchases', requiredPermission: 'ap.read' },
@@ -55,10 +62,11 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'banking-rules', href: '/banking/rules', label: 'Reconciliation Rules', iconKey: 'workflow', group: 'Banking', requiredPermission: 'banking.reconcile' },
 
   // Accounting — the ledger core: journals, chart, assets, close, and the item master.
-  { key: 'journal', href: '/journal', label: 'Journal', iconKey: 'journal', group: 'Accounting', requiredPermission: 'gl.read' },
+  { key: 'journal', href: '/journal', label: 'Journals', iconKey: 'journal', group: 'Accounting', requiredPermission: 'gl.read' },
   { key: 'accounts', href: '/accounts', label: 'Chart of Accounts', iconKey: 'layers', group: 'Accounting', requiredPermission: 'gl.read' },
   { key: 'assets', href: '/assets', label: 'Fixed Assets', iconKey: 'building', group: 'Accounting', requiredPermission: 'assets.read' },
-  { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Banking', requiredPermission: 'close.read' },
+  { key: 'tax-filings', href: '/tax', label: 'Tax Filings', iconKey: 'receipt', group: 'Accounting', requiredPermission: 'reports.read' },
+  { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Accounting', requiredPermission: 'close.read' },
   { key: 'items', href: '/items', label: 'Items & Services', iconKey: 'grid', group: 'Accounting', requiredPermission: 'items.read' },
   { key: 'budgets', href: '/budgets', label: 'Budgets', iconKey: 'target', group: 'Accounting', requiredPermission: 'budgets.read' },
 
@@ -71,7 +79,6 @@ export const NAV_MODULES: NavModule[] = [
 
   // Reports — every read surface: statements, analytics, views, docs, queries.
   { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', group: 'Reports', requiredPermission: 'reports.read' },
-  { key: 'tax-filings', href: '/tax', label: 'Tax Filings', iconKey: 'receipt', group: 'Reports', requiredPermission: 'reports.read' },
   // Analytics is ONE nav entry — the /analytics hub. The individual dashboards
   // (Financial Health, Customer Intelligence, …) are cards on the hub, not nav
   // modules (user directive 2026-07-16). No `exact` so it stays active on
