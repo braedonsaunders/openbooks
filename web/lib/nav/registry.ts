@@ -173,6 +173,14 @@ export const NAV_MODULES: NavModule[] = [
     group: 'sales',
     requiredPermission: 'items.read',
   },
+  {
+    key: 'revenue',
+    href: '/revenue',
+    label: 'Revenue Recognition',
+    iconKey: 'trending-up',
+    group: 'sales',
+    requiredPermission: 'ar.read',
+  },
 
   // Purchases — money out plus the vendors it flows to.
   {

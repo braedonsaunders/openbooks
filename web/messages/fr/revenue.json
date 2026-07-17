@@ -1,0 +1,52 @@
+{
+  "list": {
+    "title": "Comptabilisation des produits",
+    "description": "Contrats, obligations de prestation et calendriers de comptabilisation (ASC 606).",
+    "searchPlaceholder": "Rechercher des contrats…",
+    "emptyTitle": "Aucun contrat de produits",
+    "emptyDescription": "Comptabilisez une facture avec un article à règle de comptabilisation pour créer des obligations et des calendriers.",
+    "runRecognition": "Exécuter la comptabilisation"
+  },
+  "labels": {
+    "contract": "Contrat",
+    "customer": "Client",
+    "total": "Total",
+    "recognized": "Comptabilisé",
+    "deferred": "Différé"
+  },
+  "status": {
+    "draft": "Brouillon",
+    "active": "Actif",
+    "complete": "Terminé",
+    "cancelled": "Annulé"
+  },
+  "obligationStatus": {
+    "open": "Ouverte",
+    "satisfied": "Satisfaite",
+    "cancelled": "Annulée"
+  },
+  "method": {
+    "point_in_time": "Ponctuel",
+    "straight_line_even": "Linéaire, égal",
+    "straight_line_prorate_first_last": "Linéaire, prorata",
+    "straight_line_daily": "Linéaire, quotidien",
+    "percent_complete": "Avancement",
+    "milestone": "Jalon",
+    "usage": "Utilisation"
+  },
+  "run": {
+    "failed": "Échec de la comptabilisation",
+    "posted": "Comptabilisé {count, plural, one {# écriture} other {# écritures}} pour {amount}",
+    "someSkipped": "{count} ignoré(s)",
+    "nothingDue": "Rien à comptabiliser"
+  },
+  "drawer": {
+    "obligations": "Obligations",
+    "noSchedule": "Aucun calendrier généré",
+    "period": "Période",
+    "planned": "Prévu",
+    "recognized": "Comptabilisé",
+    "postedStatus": "Comptabilisé",
+    "plannedStatus": "Prévu"
+  }
+}
