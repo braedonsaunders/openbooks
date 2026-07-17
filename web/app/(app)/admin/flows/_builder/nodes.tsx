@@ -62,6 +62,12 @@ export function actionSummary(t: (key: string) => string, d: ActionData): string
       return d.url.replace(/^https?:\/\//, '') || t('action.kinds.webhook')
     case 'post_document':
       return t('action.kinds.post_document')
+    case 'lock_record':
+      return d.exemptRoles?.length
+        ? `${t('action.kinds.lock_record')} (${d.exemptRoles.join(', ')})`
+        : t('action.kinds.lock_record')
+    case 'unlock_record':
+      return t('action.kinds.unlock_record')
   }
 }
 

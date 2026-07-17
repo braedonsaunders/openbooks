@@ -115,12 +115,27 @@ export const DOCUMENT_FIELDS: FlowFieldDef[] = [
   { key: "classId", label: "Class", type: "text", writable: true },
   { key: "createdBy", label: "Created by (user)", type: "user" },
   { key: "lineCount", label: "Line count", type: "number" },
+  { key: "vendorEftEmail", label: "Vendor EFT email", type: "text" },
   // Present only while dispatching an `on_update` event (injected by run.ts
-  // from the event, not loaded by the adapter): the document total before the
-  // edit and whether it changed — the "needs re-approval on material edit"
-  // building blocks.
+  // from the event, not loaded by the adapter): the edit shape — the
+  // "needs re-approval on material edit" building blocks. `changedFields` /
+  // `changedLineFields` are ARRAYS; LogicRule `in` over them is any-overlap,
+  // so {op:'in', field:'changedFields', value:['total','taxTotal']} reads
+  // "total or tax total changed".
   { key: "previousTotal", label: "Previous total (on update)", type: "number" },
   { key: "totalChanged", label: "Total changed (on update)", type: "bool" },
+  { key: "changedFields", label: "Changed header fields (on update)", type: "text" },
+  { key: "changedLineFields", label: "Changed line fields (on update)", type: "text" },
+  { key: "old_total", label: "Old total (on update)", type: "number" },
+  { key: "old_taxTotal", label: "Old tax total (on update)", type: "number" },
+  // Injected on every dispatch: where the mutation came from
+  // ('ui'|'api'|'sync'|'script'|'schedule'|'close_automation') — execution-context
+  // filters (auto-approve system-generated records).
+  { key: "event_source", label: "Event source", type: "enum" },
+  // Present only while resolving MANUAL buttons (viewer-aware showIf):
+  { key: "current_user_id", label: "Current user (manual buttons)", type: "user" },
+  { key: "is_submitter", label: "Viewer is submitter (manual buttons)", type: "bool" },
+  { key: "is_pending_approver", label: "Viewer has a pending gate (manual buttons)", type: "bool" },
 ];
 
 function titleize(kind: string): string {
@@ -151,6 +166,8 @@ export function documentSubjectProfile(kind: string): FlowSubjectProfile {
       "set_field",
       "change_status",
       "webhook",
+      "lock_record",
+      "unlock_record",
       ...(canPost ? (["post_document"] as const) : []),
     ],
     statuses: [...DOCUMENT_STATUSES],

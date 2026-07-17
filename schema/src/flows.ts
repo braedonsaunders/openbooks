@@ -203,6 +203,35 @@ export const approvalDelegations = pgTable(
 );
 
 /**
+ * Flow-managed record locks — the `lock_record` action (NetSuite "Lock
+ * Record" with role exemptions). While a row exists the record rejects
+ * edits/void/delete for everyone except admins and holders of an exemptRole;
+ * `unlock_record` removes it. One lock per record (the unique index): a
+ * second lock_record replaces the reason/exemptions. Locks deliberately
+ * survive status changes (NetSuite's donotexitworkflow terminal locks — e.g.
+ * an approved vendor payment stays locked forever).
+ */
+export const flowLocks = pgTable(
+  "flow_locks",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: uuid("subject_id").notNull(),
+    /** The flow whose lock_record action created this lock. */
+    flowId: uuid("flow_id").notNull(),
+    reason: text("reason"),
+    /** Role keys allowed through in addition to admins. */
+    exemptRoles: jsonb("exempt_roles").$type<string[]>().notNull().default([]),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("flow_locks_subject").on(t.subjectKind, t.subjectId),
+    index("flow_locks_org").on(t.orgId, t.subjectKind),
+  ],
+);
+
+/**
  * In-app inbox (new to openbooks). Written by the flows `notify` action, gate
  * assignment/reminder/escalation, and anything else that wants a bell-menu
  * entry. readAt null = unread.
@@ -244,6 +273,8 @@ schema/migrations/referential-integrity.sql):
   approval_delegations.org_id       → orgs.id (on delete cascade)
   approval_delegations.from_user_id → users.id
   approval_delegations.to_user_id   → users.id
+  flow_locks.org_id             → orgs.id (on delete cascade)
+  flow_locks.flow_id            → flows.id (on delete cascade)
   notifications.org_id          → orgs.id (on delete cascade)
   notifications.user_id         → users.id (on delete cascade)
 */

@@ -155,6 +155,17 @@ export async function resolveRecipientEmails(
       for (const part of t.email.split(/[,;\s]+/)) add(part);
       continue;
     }
+    // A `field` target whose record value LOOKS like an email address (or a
+    // list of them) is delivered directly — the NetSuite "email a recipient
+    // from a record field" pattern (e.g. the vendor's EFT notification
+    // address). Values that don't contain '@' resolve as user ids as usual.
+    if (t.type === "field") {
+      const v = ctx.values[t.field];
+      if (typeof v === "string" && v.includes("@")) {
+        for (const part of v.split(/[,;\s]+/)) add(part);
+        continue;
+      }
+    }
     for (const u of await resolveTargetUsers(t, ctx)) add(u.email);
   }
   return [...out];

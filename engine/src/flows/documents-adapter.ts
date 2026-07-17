@@ -121,11 +121,16 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       const doc = await loadDoc(subjectId);
       if (!doc) return null;
       let partyName: string | null = null;
+      let vendorEftEmail: string | null = null;
       if (doc.partyId) {
-        const r = (await db.execute(
-          sql`select display_name from parties where id = ${doc.partyId}`,
-        )) as unknown as { rows: { display_name: string }[] };
+        const r = (await db.execute(sql`
+          select p.display_name, vr.eft_notification_email
+            from parties p
+            left join vendor_roles vr on vr.party_id = p.id
+           where p.id = ${doc.partyId}
+        `)) as unknown as { rows: { display_name: string; eft_notification_email: string | null }[] };
         partyName = r.rows[0]?.display_name ?? null;
+        vendorEftEmail = r.rows[0]?.eft_notification_email ?? null;
       }
       const lines = await db
         .select()
@@ -134,6 +139,9 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         .orderBy(schema.documentLines.lineNumber);
       const values = headerValues(doc, partyName);
       values.lineCount = lines.length;
+      // The vendor's remittance address (vendor_roles.eft_notification_email)
+      // — a `field` recipient target delivers to it directly (EFT emails).
+      values.vendorEftEmail = vendorEftEmail;
       return {
         values,
         rows: { lines: lines as unknown as Array<Record<string, unknown>> },
@@ -179,6 +187,22 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
     },
 
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
+      // `custom.<key>` writes one key of the custom jsonb blob — the NetSuite
+      // "workflow checkbox" pattern (e.g. an EFT sent-latch). The builder's
+      // lint flags these as unknown fields (custom keys aren't in the curated
+      // profile), which surfaces as a non-blocking warning — authors opt in
+      // knowingly, same posture as reading custom keys in conditions.
+      if (field.startsWith("custom.")) {
+        const key = field.slice("custom.".length);
+        if (!key) throw new Error(`empty custom field key`);
+        await db.execute(sql`
+          update documents
+             set custom = jsonb_set(coalesce(custom, '{}'::jsonb), ${`{${key}}`}::text[], ${JSON.stringify(value ?? null)}::jsonb),
+                 updated_by = ${ctx.userId ?? null}, updated_at = now()
+           where id = ${subjectId}
+        `);
+        return;
+      }
       if (!WRITABLE_DOCUMENT_FIELDS.has(field)) {
         throw new Error(`field "${field}" is not writable by flows`);
       }
@@ -186,6 +210,20 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         .update(schema.documents)
         .set({ [field]: value, updatedBy: ctx.userId ?? null, updatedAt: new Date() })
         .where(eq(schema.documents.id, subjectId));
+    },
+
+    async findCandidateIds(limit: number): Promise<string[]> {
+      // Coarse newest-first fetch for scheduled fan-out; the select rule does
+      // the real filtering in JS against each record's loaded context. Runs
+      // inside withOrg(flow.orgId), so RLS scopes the org. Voided docs are
+      // terminal and never candidates.
+      const r = (await db.execute(sql`
+        select id from documents
+         where kind = ${kind} and status <> 'voided'
+         order by created_at desc
+         limit ${limit}
+      `)) as unknown as { rows: { id: string }[] };
+      return r.rows.map((row) => row.id);
     },
   };
 }

@@ -4,6 +4,7 @@ import { db, schema } from '@openbooks/engine/src/db.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { nextDocumentNumber } from './bills'
 import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
+import { segmentRegistry } from './segments'
 
 /**
  * Unified line-based posting-document machinery.
@@ -70,12 +71,18 @@ export async function createDocumentDraft(orgId: string, userId: string, kind: s
   const cfg = docKindConfig(kind)
   if (!cfg) throw new Error(`unknown document kind "${kind}"`)
   const currency = await orgBaseCurrency(orgId)
-  const documentNumber = await nextDocumentNumber(orgId, kind, cfg.numberPrefix)
+  const root = (await db.execute(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`)) as unknown as {
+    rows: { id: string }[]
+  }
+  const subsidiaryId = root.rows[0]?.id ?? null
+  const documentNumber = await nextDocumentNumber(orgId, kind, cfg.numberPrefix, subsidiaryId)
   const [doc] = await db
     .insert(schema.documents)
     .values({
       orgId,
       kind,
+      subsidiaryId,
       documentNumber,
       documentDate: new Date().toISOString().slice(0, 10),
       currency,
@@ -88,7 +95,7 @@ export async function createDocumentDraft(orgId: string, userId: string, kind: s
   // on_create flows fire AFTER the insert commits. runRecordFlows never
   // throws into the caller (failures land on the flow_runs row), and it is
   // awaited — not detached — so it runs inside this request's RLS org scope.
-  await runRecordFlows({ kind: 'on_create' }, kind, doc.id, { orgId, userId })
+  await runRecordFlows({ kind: 'on_create', source: 'ui' }, kind, doc.id, { orgId, userId })
   return doc
 }
 
@@ -118,7 +125,8 @@ export async function loadDocument(id: string) {
   const lines = (await db.execute(sql`
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.tax_code_id, l.tax_amount,
-           l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id, l.custom
+           l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
+           l.extra_dims, l.custom
       from document_lines l
      where l.document_id = ${id}
      order by l.line_number
@@ -141,6 +149,8 @@ export interface Opt {
   last_four?: string
   network?: string
   liability_account_id?: string
+  /** Party pickers carry the party's primary subsidiary (drafts default to it). */
+  subsidiary_id?: string | null
 }
 
 export async function partyOptions(role: 'vendor' | 'customer'): Promise<Opt[]> {
@@ -150,7 +160,7 @@ export async function partyOptions(role: 'vendor' | 'customer'): Promise<Opt[]> 
       : sql`(custom->>'nsKind' = 'customer'
              or exists (select 1 from customer_roles cr where cr.party_id = parties.id))`
   const r = (await db.execute(sql`
-    select id, display_name from parties
+    select id, display_name, subsidiary_id from parties
      where ${filter} and is_active
      order by display_name limit 2000
   `)) as unknown as { rows: Opt[] }
@@ -183,17 +193,20 @@ export async function taxCodeOptions(): Promise<Opt[]> {
 }
 
 export async function dimensionOptions() {
-  const [departments, projects, locations, classes] = await Promise.all([
+  const [departments, projects, locations, classes, registry] = await Promise.all([
     db.execute(sql`select id, name from departments where is_active order by name`) as any,
     db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
     db.execute(sql`select id, name from locations where is_active order by name`) as any,
     db.execute(sql`select id, name from classes where is_active order by name`) as any,
+    segmentRegistry(),
   ])
   return {
     departments: departments.rows as Opt[],
     projects: projects.rows as Opt[],
     locations: locations.rows as Opt[],
     classes: classes.rows as Opt[],
+    segments: registry.filter((segment) => segment.sourceKind === 'custom'),
+    builtinSegments: registry.filter((segment) => segment.sourceKind === 'builtin'),
   }
 }
 

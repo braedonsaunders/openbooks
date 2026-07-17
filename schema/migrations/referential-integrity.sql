@@ -24,10 +24,14 @@ alter table applications
   add foreign key (to_line_id) references journal_lines(id),
   add foreign key (fx_gain_loss_entry_id) references journal_entries(id);
 
--- org structure
-alter table orgs add foreign key (parent_id) references orgs(id);
-alter table accounting_periods add foreign key (org_id) references orgs(id);
+-- org structure (orgs.parent_id was dropped in 0028 — subsidiaries carry the
+-- consolidation hierarchy now)
+alter table accounting_periods
+  add foreign key (org_id) references orgs(id);
 alter table accounting_books add foreign key (org_id) references orgs(id);
+-- Fiscal-calendar, period-lock, and close-system FKs are created by
+-- generated/0030_close_operating_system.sql so incremental upgrades receive
+-- the same integrity as fresh databases without duplicating constraints here.
 alter table accounts
   add foreign key (org_id) references orgs(id),
   add foreign key (parent_id) references accounts(id);
@@ -39,11 +43,8 @@ alter table projects
   add foreign key (customer_id) references parties(id),
   add foreign key (foreman_id) references parties(id),
   add foreign key (manager_id) references parties(id);
-alter table intercompany_pairs
-  add foreign key (from_org_id) references orgs(id),
-  add foreign key (to_org_id) references orgs(id),
-  add foreign key (due_from_account_id) references accounts(id),
-  add foreign key (due_to_account_id) references accounts(id);
+-- intercompany_pairs FKs live in generated/0028_subsidiaries.sql (the table
+-- was rebuilt there from org refs to subsidiary refs, with its FK set).
 alter table payment_cards
   add foreign key (holder_party_id) references parties(id),
   add foreign key (liability_account_id) references accounts(id);
@@ -219,7 +220,61 @@ alter table payment_instructions
   add foreign key (payment_run_id) references payment_runs(id),
   add foreign key (payee_party_id) references parties(id),
   add foreign key (payee_bank_account_id) references party_bank_accounts(id),
-  add foreign key (payment_document_id) references documents(id);
+  add foreign key (payment_document_id) references documents(id),
+  add foreign key (mandate_id) references payment_mandates(id);
+alter table payment_runs
+  add foreign key (payment_bank_profile_id) references payment_bank_profiles(id),
+  add foreign key (subsidiary_id) references subsidiaries(id),
+  add foreign key (source_schedule_id) references payment_schedules(id),
+  add foreign key (parent_payment_run_id) references payment_runs(id);
+alter table payment_formats add foreign key (org_id) references orgs(id) on delete cascade;
+alter table payment_bank_profiles
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (bank_account_id) references accounts(id),
+  add foreign key (subsidiary_id) references subsidiaries(id),
+  add foreign key (payment_format_id) references payment_formats(id),
+  add foreign key (sftp_server_id) references sftp_servers(id);
+alter table payment_schedules
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (payment_bank_profile_id) references payment_bank_profiles(id),
+  add foreign key (last_payment_run_id) references payment_runs(id);
+alter table payment_run_items
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (payment_run_id) references payment_runs(id),
+  add foreign key (payment_instruction_id) references payment_instructions(id),
+  add foreign key (source_document_id) references documents(id),
+  add foreign key (source_open_line_id) references journal_lines(id);
+alter table payment_files
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (payment_run_id) references payment_runs(id),
+  add foreign key (payment_bank_profile_id) references payment_bank_profiles(id),
+  add foreign key (payment_format_id) references payment_formats(id),
+  add foreign key (parent_payment_file_id) references payment_files(id),
+  add foreign key (file_id) references files(id),
+  add foreign key (file_version_id) references file_versions(id);
+alter table payment_file_deliveries
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (payment_file_id) references payment_files(id);
+alter table payment_mandates
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (party_id) references parties(id),
+  add foreign key (party_bank_account_id) references party_bank_accounts(id),
+  add foreign key (proof_file_id) references files(id);
+alter table payment_settlements
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (payment_instruction_id) references payment_instructions(id),
+  add foreign key (bank_statement_line_id) references bank_statement_lines(id),
+  add foreign key (reversal_document_id) references documents(id);
+alter table payment_remittances
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (payment_instruction_id) references payment_instructions(id),
+  add foreign key (file_id) references files(id);
+alter table payment_events
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (payment_run_id) references payment_runs(id),
+  add foreign key (payment_instruction_id) references payment_instructions(id),
+  add foreign key (payment_file_id) references payment_files(id),
+  add foreign key (actor_id) references users(id);
 
 -- planning
 alter table budget_scenarios add foreign key (book_id) references accounting_books(id);
@@ -377,6 +432,22 @@ alter table approval_delegations
   add foreign key (org_id) references orgs(id) on delete cascade,
   add foreign key (from_user_id) references users(id),
   add foreign key (to_user_id) references users(id);
+alter table flow_locks
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (flow_id) references flows(id) on delete cascade;
+
+-- accounting segment registry and custom values
+alter table segment_definitions
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
+alter table segment_values
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (segment_id) references segment_definitions(id) on delete restrict,
+  add foreign key (parent_id) references segment_values(id) on delete restrict,
+  add foreign key (subsidiary_id) references subsidiaries(id) on delete restrict,
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
 alter table notifications
   add foreign key (org_id) references orgs(id) on delete cascade,
   add foreign key (user_id) references users(id) on delete cascade;

@@ -115,6 +115,10 @@ export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): Acti
       return { action: 'webhook', url: 'https://', method: 'POST' }
     case 'post_document':
       return { action: 'post_document' }
+    case 'lock_record':
+      return { action: 'lock_record' }
+    case 'unlock_record':
+      return { action: 'unlock_record' }
   }
 }
 

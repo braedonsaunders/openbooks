@@ -43,7 +43,30 @@ async function availableButtons(
 
   const subject = await adapter.loadContext(subjectId)
   if (!subject) return NextResponse.json({ error: 'record not found' }, { status: 404 })
-  const evalCtx: EvalContext = { values: subject.values, rows: subject.rows ?? {} }
+  // Viewer-aware showIf (NetSuite button conditions like "Next Approver =
+  // Current User" / "Requestor = Current User"): inject who is LOOKING before
+  // evaluating each button's rule.
+  const [pendingGate] = await db
+    .select({ id: schema.flowGates.id })
+    .from(schema.flowGates)
+    .where(
+      and(
+        eq(schema.flowGates.orgId, authz.user.orgId),
+        eq(schema.flowGates.subjectId, subjectId),
+        eq(schema.flowGates.status, 'pending'),
+        eq(schema.flowGates.assigneeUserId, authz.user.id),
+      ),
+    )
+    .limit(1)
+  const evalCtx: EvalContext = {
+    values: {
+      ...subject.values,
+      current_user_id: authz.user.id,
+      is_submitter: subject.submitterUserId === authz.user.id,
+      is_pending_approver: !!pendingGate,
+    },
+    rows: subject.rows ?? {},
+  }
 
   const flows = await db
     .select({ id: schema.flows.id, graph: schema.flows.graph })

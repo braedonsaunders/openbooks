@@ -220,6 +220,57 @@ export function ActionEditor({
           {t('action.postDocumentHint')}
         </p>
       ) : null}
+
+      {action.action === 'lock_record' ? (
+        <>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+              {t('action.lockReason')}
+            </label>
+            <Input
+              value={action.reason ?? ''}
+              onChange={(e) => onChange({ ...action, reason: e.target.value || undefined })}
+              placeholder={t('action.lockReasonPlaceholder')}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+              {t('action.lockExemptRoles')}
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {(profile.roles ?? []).map((role) => {
+                const selected = action.exemptRoles?.includes(role) ?? false
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => {
+                      const next = selected
+                        ? (action.exemptRoles ?? []).filter((r) => r !== role)
+                        : [...(action.exemptRoles ?? []), role]
+                      onChange({ ...action, exemptRoles: next.length > 0 ? next : undefined })
+                    }}
+                    className={
+                      selected
+                        ? 'rounded-full border border-teal-500 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700 dark:bg-teal-950 dark:text-teal-300'
+                        : 'rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400'
+                    }
+                  >
+                    {role}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{t('action.lockExemptHint')}</p>
+          </div>
+        </>
+      ) : null}
+
+      {action.action === 'unlock_record' ? (
+        <p className="rounded-md border border-dashed border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          {t('action.unlockHint')}
+        </p>
+      ) : null}
     </div>
   )
 }

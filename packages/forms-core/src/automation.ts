@@ -86,10 +86,23 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   z.object({ trigger: z.literal('on_field_value'), rule: logicRuleSchema }),
   // Runs off the 60s scheduler tick in the worker — see
   // `lintWorkerTriggerCompatibility` for what its branch may contain.
+  //
+  // `select` turns the schedule into a RECORD FAN-OUT (NetSuite "scheduled
+  // workflow over a saved search"): each due occurrence loads candidate
+  // records of the flow's subject kind, evaluates `select.rule` against each,
+  // and starts ONE RUN PER MATCHING RECORD (capped by `select.limit`). With a
+  // record in hand the branch may also `set_field` (e.g. a sent-latch
+  // checkbox); without `select` there is no record, so only send_email/notify.
   z.object({
     trigger: z.literal('scheduled'),
     cron: z.string().min(1).max(128),
     tz: z.string().max(64).optional(),
+    select: z
+      .object({
+        rule: logicRuleSchema.optional(),
+        limit: z.number().int().positive().max(1_000).optional(),
+      })
+      .optional(),
   }),
   // A user-clickable button rendered on the record that runs THIS flow on
   // demand. Multiple manual triggers can coexist on one graph — each is a
@@ -113,11 +126,16 @@ export type TriggerKind = TriggerData['trigger']
 export const actionDataSchema = z.discriminatedUnion('action', [
   // `subject` and `body` support {{field}} interpolation — see
   // `interpolateTemplate`. Delivery goes through the tenant's email settings.
+  // `attachPdf` renders the subject record's PDF (the org's record template)
+  // and attaches it — NetSuite's "include transaction" email option. When no
+  // PDF renderer is registered in the executing process the email still sends,
+  // with a recorded warning.
   z.object({
     action: z.literal('send_email'),
     to: z.array(recipientTargetSchema).min(1).max(20),
     subject: z.string().min(1).max(500),
     body: z.string().max(100_000),
+    attachPdf: z.boolean().optional(),
   }),
   // In-app inbox notification (the `notifications` table). `href` deep-links
   // the notification to a record page.
@@ -146,6 +164,17 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   }),
   // Post the document to the GL (runs the normal posting pipeline).
   z.object({ action: z.literal('post_document') }),
+  // Hard-lock the record against edits/void/delete until `unlock_record` runs
+  // (NetSuite "Lock Record" with role exemptions — e.g. an approved payment
+  // stays permanently locked except for admins + controllers). Admins are
+  // always exempt; `exemptRoles` widens the exemption. Locks persist across
+  // status changes (NetSuite donotexitworkflow terminal locks).
+  z.object({
+    action: z.literal('lock_record'),
+    reason: z.string().max(500).optional(),
+    exemptRoles: z.array(z.string().min(1).max(64)).max(10).optional(),
+  }),
+  z.object({ action: z.literal('unlock_record') }),
 ])
 export type ActionData = z.infer<typeof actionDataSchema>
 export type ActionKind = ActionData['action']
@@ -243,12 +272,29 @@ export function interpolateTemplate(template: string, ctx: EvalContext): string 
  * (status transition endpoints, which manual button was clicked, which
  * scheduled nodes are due via `opts.triggerNodeIds`).
  */
-export type TriggerEvent =
+export type FlowEventSource = 'ui' | 'api' | 'sync' | 'script' | 'schedule' | 'close_automation'
+
+export type TriggerEvent = (
   | { kind: 'on_create' }
-  // `previousTotal` / `totalChanged` describe the edit that fired the event;
-  // the engine surfaces them as eval-context values (values.previousTotal /
-  // values.totalChanged) so condition nodes can gate on material changes.
-  | { kind: 'on_update'; previousTotal?: string | number | null; totalChanged?: boolean }
+  // The edit shape that fired the event; the engine surfaces these as
+  // eval-context values so condition nodes can gate on material changes
+  // (NetSuite's old-vs-new "needs re-approval" pattern):
+  //   values.previousTotal / values.totalChanged — the document total delta
+  //   values.changedFields     — header fields that materially changed
+  //   values.changedLineFields — line-level fields that changed on ANY line
+  //                              (adds/removes count as every field changing)
+  //   values.old_total / values.old_taxTotal — pre-edit compare values
+  // LogicRule `in` over an array value is ANY-OVERLAP, so
+  //   { op:'in', field:'changedFields', value:['total','taxTotal'] }
+  // reads "total or tax total changed".
+  | {
+      kind: 'on_update'
+      previousTotal?: string | number | null
+      totalChanged?: boolean
+      changedFields?: string[]
+      changedLineFields?: string[]
+      old?: Record<string, unknown>
+    }
   | { kind: 'on_submit' }
   | { kind: 'before_post' }
   | { kind: 'after_post' }
@@ -257,6 +303,12 @@ export type TriggerEvent =
   | { kind: 'on_field_value' }
   | { kind: 'scheduled' }
   | { kind: 'manual'; buttonId?: string }
+) & {
+  // Where the mutation came from — surfaced as `values.event_source` so
+  // conditions can e.g. auto-approve system-generated records (NetSuite's
+  // execution-context filters). Engine default when absent: 'api'.
+  source?: FlowEventSource
+}
 
 // A reached gate carries its node id so the runtime can persist a `flow_gates`
 // row keyed back to the exact node and RESUME the correct branch on a human
@@ -500,14 +552,24 @@ export function lintAutomationGraph(
 
 const WORKER_ONLY_TRIGGERS = new Set<TriggerKind>(['scheduled'])
 const WORKER_SAFE_ACTIONS = new Set<ActionKind>(['send_email', 'notify'])
+// With a record fan-out (`select`) each scheduled run HAS a subject record, so
+// persisting into it is well-defined (the EFT "sent" latch pattern). Status
+// pipelines, gates, posting, and webhooks stay excluded from the tick.
+const WORKER_SAFE_ACTIONS_WITH_RECORD = new Set<ActionKind>(['send_email', 'notify', 'set_field'])
+
+/** The action vocabulary a scheduled trigger's branch may use at runtime. */
+export function scheduledSafeActions(hasRecordSelect: boolean): Set<ActionKind> {
+  return hasRecordSelect ? WORKER_SAFE_ACTIONS_WITH_RECORD : WORKER_SAFE_ACTIONS
+}
 
 /**
  * Scheduled triggers execute off the worker's scheduler tick, not in a web
- * request with a live record mutation pipeline. The worker only has a narrow,
- * side-effect-safe executor (email + in-app notify); reject branches that
- * would otherwise save successfully and then silently no-op — gates (nothing
- * to pause), record mutations (set_field / change_status / post_document),
- * and webhooks (no HMAC signing context in the tick).
+ * request with a live record mutation pipeline. The tick's executor is
+ * narrow — email + in-app notify, plus set_field when the trigger declares a
+ * record `select` (fan-out gives each run a real record). Reject branches
+ * that would otherwise save successfully and then silently no-op — gates
+ * (nothing to pause), status pipelines (change_status / post_document), and
+ * webhooks (no HMAC signing context in the tick).
  */
 export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[] {
   const errors: string[] = []
@@ -522,6 +584,10 @@ export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[]
       continue
     }
     const triggerName = trigger.data.trigger.trigger
+    const safeActions =
+      trigger.data.trigger.trigger === 'scheduled'
+        ? scheduledSafeActions(!!trigger.data.trigger.select)
+        : WORKER_SAFE_ACTIONS
     const seen = new Set<string>()
     const walk = (nodeId: string) => {
       if (seen.has(nodeId)) return
@@ -537,7 +603,7 @@ export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[]
         return
       }
 
-      if (node.data.kind === 'action' && !WORKER_SAFE_ACTIONS.has(node.data.action.action)) {
+      if (node.data.kind === 'action' && !safeActions.has(node.data.action.action)) {
         errors.push(
           `Trigger ${trigger.id}: "${triggerName}" runs in the worker and cannot execute "${node.data.action.action}".`,
         )

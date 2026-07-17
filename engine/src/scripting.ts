@@ -1,6 +1,10 @@
 import { newAsyncContext } from "quickjs-emscripten";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
-import cronParser from "cron-parser";
+// Named export, NOT the default: under ESM/tsx the default import resolves to
+// the module namespace (no .parse), so computeNextRunAt silently returned
+// null and scheduled scripts never ran. CronExpressionParser.parse works
+// under both CJS and ESM interop.
+import { CronExpressionParser } from "cron-parser";
 import { db, schema } from "./db.ts";
 import { runUserSql } from "./sqlapi.ts";
 import { createScriptJournal } from "./journal-writes.ts";
@@ -397,7 +401,7 @@ export async function runBulkScript(scriptId: string, orgId: string): Promise<Sc
 
 export function computeNextRunAt(cron: string, from: Date = new Date()): Date | null {
   try {
-    const expr = cronParser.parse(cron, { currentDate: from, tz: "UTC" });
+    const expr = CronExpressionParser.parse(cron, { currentDate: from, tz: "UTC" });
     return expr.next().toDate();
   } catch {
     return null;

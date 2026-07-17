@@ -324,7 +324,15 @@
       "keyPlaceholder": "ap_clerk",
       "descriptionPlaceholder": "¿Para qué sirve este rol?",
       "permissionsHeading": "Permisos",
-      "selectedCount": "{count} seleccionados"
+      "selectedCount": "{count} seleccionados",
+      "subsidiaryHeading": "Acceso a subsidiarias",
+      "subsidiaryModeAll": "Todas las subsidiarias",
+      "subsidiaryModeSubtree": "Una subsidiaria y sus hijas",
+      "subsidiaryModeList": "Subsidiarias específicas",
+      "subsidiaryPlaceholder": "Elija una subsidiaria…",
+      "subsidiarySearchPlaceholder": "Buscar subsidiarias…",
+      "subsidiaryRequired": "Elija una subsidiaria",
+      "subsidiaryListRequired": "Seleccione al menos una subsidiaria"
     }
   },
   "scripts": {
@@ -746,6 +754,14 @@
         "title": "Classes",
         "description": "A reporting dimension for slicing transactions."
       },
+      "segment-definitions": {
+        "title": "Segmentos",
+        "description": "Configura segmentos contables integrados y personalizados en transacciones, cuentas e informes."
+      },
+      "segment-values": {
+        "title": "Valores de segmento",
+        "description": "Administra los valores seleccionables y las jerarquías de los segmentos personalizados."
+      },
       "departments": {
         "title": "Departments",
         "description": "A reporting dimension for slicing transactions."
@@ -784,6 +800,22 @@
       },
       "sftp": {
         "title": "Servidores SFTP"
+      },
+      "subsidiaries": {
+        "title": "Subsidiaries",
+        "description": "The legal entities inside your organization — a consolidation tree with one root."
+      },
+      "intercompany-pairs": {
+        "title": "Pares intercompañía",
+        "description": "Asignaciones de cuentas por cobrar y pagar para transacciones entre subsidiarias."
+      },
+      "fx-rates": {
+        "title": "Tipos de cambio",
+        "description": "Tasas diarias propias del inquilino usadas para contabilizar transacciones en moneda extranjera."
+      },
+      "consolidated-fx-rates": {
+        "title": "Tipos de cambio consolidados",
+        "description": "Tasas actuales, promedio e históricas por período para consolidar subsidiarias."
       }
     },
     "fields": {
@@ -826,7 +858,35 @@
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
       "depreciationExpenseAccountId": "Depreciation expense account",
       "gainLossAccountId": "Gain / loss account",
-      "minorUnits": "Minor units"
+      "minorUnits": "Minor units",
+      "legalName": "Legal name",
+      "baseCurrency": "Base currency",
+      "isElimination": "Elimination",
+      "fromSubsidiaryId": "From subsidiary",
+      "toSubsidiaryId": "To subsidiary",
+      "dueFromAccountId": "Due-from account",
+      "dueToAccountId": "Due-to account"
+      ,"asOf": "A fecha de"
+      ,"fromCurrency": "Moneda de origen"
+      ,"toCurrency": "Moneda de destino"
+      ,"rateType": "Tipo de tasa"
+      ,"rate": "Tasa"
+      ,"source": "Origen"
+      ,"periodId": "Período contable"
+      ,"currentRate": "Tasa actual"
+      ,"averageRate": "Tasa promedio"
+      ,"historicalRate": "Tasa histórica"
+      ,"subsidiaryId": "Subsidiaria"
+      ,"subsidiaryIncludeChildren": "Incluir subsidiarias hijas"
+      ,"pluralName": "Nombre plural"
+      ,"sourceKind": "Origen"
+      ,"isHierarchical": "Jerárquico"
+      ,"showOnHeader": "Mostrar en el encabezado de la transacción"
+      ,"showOnLines": "Mostrar en las líneas de la transacción"
+      ,"showInReports": "Mostrar en informes"
+      ,"allowAccountRequirement": "Permitir como requisito de cuenta"
+      ,"segmentId": "Segmento"
+      ,"description": "Descripción"
     },
     "options": {
       "appliesTo": {
@@ -850,6 +910,15 @@
       "burdenMethod": {
         "live": "Live",
         "standard": "Standard"
+      },
+      "fxRateType": {
+        "spot": "Al contado",
+        "average": "Promedio",
+        "historical": "Histórica"
+      },
+      "rateSource": {
+        "derived": "Calculado",
+        "manual": "Manual"
       }
     }
   },
@@ -982,7 +1051,9 @@
         "set_field": "Establecer un campo",
         "change_status": "Cambiar el estado",
         "webhook": "Llamar a un webhook",
-        "post_document": "Contabilizar el documento"
+        "post_document": "Contabilizar el documento",
+        "lock_record": "Bloquear el registro",
+        "unlock_record": "Desbloquear el registro"
       },
       "recipients": "Destinatarios",
       "subject": "Asunto",
@@ -998,7 +1069,12 @@
       "url": "URL",
       "method": "Método",
       "includeRecord": "Incluir la instantánea del registro en la carga",
-      "postDocumentHint": "Contabiliza el documento en el libro mayor por el pipeline normal. Nada que configurar."
+      "postDocumentHint": "Contabiliza el documento en el libro mayor por el pipeline normal. Nada que configurar.",
+      "lockReason": "Motivo del bloqueo",
+      "lockReasonPlaceholder": "p. ej. Aprobado — el pago es definitivo",
+      "lockExemptRoles": "Roles exentos",
+      "lockExemptHint": "Los administradores siempre están exentos; los roles seleccionados aún pueden editar.",
+      "unlockHint": "Elimina el bloqueo del flujo para permitir la edición de nuevo."
     },
     "gate": {
       "title": "Título",

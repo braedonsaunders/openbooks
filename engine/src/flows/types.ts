@@ -54,6 +54,14 @@ export interface FlowSubjectAdapter {
   changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void>;
   /** set_field action — writableFields only, throws on violation. */
   setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void>;
+  /**
+   * Recent candidate record ids for scheduled record fan-out (`scheduled`
+   * triggers with a `select`). The scheduler loads each candidate's context
+   * and evaluates the select rule in JS — this only needs to be a reasonable
+   * coarse fetch (newest-first, excluding terminal records). Optional: subjects
+   * without it don't support fan-out.
+   */
+  findCandidateIds?(limit: number): Promise<string[]>;
 }
 
 /** Build the EvalContext the planner/evaluator consume from a subject snapshot. */

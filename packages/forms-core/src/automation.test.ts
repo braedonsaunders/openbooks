@@ -394,6 +394,73 @@ describe('lintWorkerTriggerCompatibility', () => {
     }
   })
 
+  test('scheduled + record select widens the safe set to set_field only', () => {
+    const withSelect = (data: AutomationGraph['nodes'][number]['data']): AutomationGraph => ({
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: 'trigger',
+          position: { x: 0, y: 0 },
+          data: {
+            kind: 'trigger',
+            trigger: {
+              trigger: 'scheduled',
+              cron: '*/30 * * * *',
+              select: { rule: { op: 'eq', field: 'status', value: 'approved' }, limit: 100 },
+            },
+          },
+        },
+        { id: 'node', position: { x: 100, y: 0 }, data },
+      ],
+      edges: [{ id: 'edge', source: 'trigger', target: 'node', sourceHandle: 'next' }],
+    })
+    // set_field is legal WITH a record select (the EFT sent-latch pattern)…
+    assert.deepEqual(
+      lintWorkerTriggerCompatibility(
+        withSelect({
+          kind: 'action',
+          action: { action: 'set_field', field: 'memo', value: { kind: 'literal', value: 'sent' } },
+        }),
+      ),
+      [],
+    )
+    // …but status pipelines stay rejected even with a record in hand.
+    assert.ok(
+      lintWorkerTriggerCompatibility(
+        withSelect({ kind: 'action', action: { action: 'change_status', to: 'approved' } }),
+      ).length > 0,
+    )
+  })
+
+  test('lock_record parses and is rejected from scheduled branches', () => {
+    const graph = schedGraphWith({
+      kind: 'action',
+      action: { action: 'lock_record', reason: 'approved — locked', exemptRoles: ['controller'] },
+    })
+    assert.ok(automationGraphSchema.safeParse(graph).success)
+    assert.ok(
+      lintWorkerTriggerCompatibility(graph).includes(
+        'Trigger trigger: "scheduled" runs in the worker and cannot execute "lock_record".',
+      ),
+    )
+  })
+
+  test('send_email attachPdf parses', () => {
+    const parsed = automationGraphSchema.safeParse(
+      schedGraphWith({
+        kind: 'action',
+        action: {
+          action: 'send_email',
+          to: [{ type: 'email', email: 'ap@example.com' }],
+          subject: 'Remittance {{documentNumber}}',
+          body: 'Attached.',
+          attachPdf: true,
+        },
+      }),
+    )
+    assert.ok(parsed.success)
+  })
+
   test('rejects gates reachable from a scheduled trigger', () => {
     assert.ok(
       lintWorkerTriggerCompatibility(

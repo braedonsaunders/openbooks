@@ -17,6 +17,8 @@ import {
   supervisorOf,
 } from "./targets.ts";
 import { emailActionUrls } from "./email-tokens.ts";
+import { lockRecord, unlockRecord } from "./locks.ts";
+import { renderFlowPdf } from "./pdf-hook.ts";
 
 /**
  * The ONE flows executor — subject-agnostic, ported from beaconhs-platform's
@@ -131,6 +133,35 @@ export async function executeFlowPlan(
         if (to.length === 0) throw new Error("no recipients resolved");
         const subject = interpolateTemplate(action.subject, evalCtx) || "Notification";
         const body = interpolateTemplate(action.body, evalCtx);
+        // attachPdf: render the record's PDF via the hook the web process
+        // registers at boot; a process without a renderer (standalone worker)
+        // still sends the email, minus the attachment, with a warning noted
+        // on the effect. A renderer FAILURE also degrades the same way — a
+        // remittance email without its PDF beats no email.
+        let attachments: Array<{ filename: string; content: string; contentType: string }> = [];
+        let pdfNote = "";
+        if (action.attachPdf) {
+          try {
+            const pdf = await renderFlowPdf({
+              orgId: ctx.orgId,
+              subjectKind: flow.subjectKind,
+              subjectId,
+            });
+            // The email queue's attachment payload is base64 (JSON-safe for Redis).
+            if (pdf) {
+              attachments = [
+                {
+                  filename: pdf.filename,
+                  content: pdf.content.toString("base64"),
+                  contentType: pdf.contentType,
+                },
+              ];
+            } else pdfNote = " (pdf unavailable in this process, sent without attachment)";
+          } catch (e) {
+            console.error(`[flows] attachPdf render failed (run ${runId}):`, e);
+            pdfNote = " (pdf render failed, sent without attachment)";
+          }
+        }
         try {
           const [{ enqueueEmail }, { flowNotificationEmail }] = await Promise.all([
             import("@openbooks/jobs"),
@@ -143,6 +174,7 @@ export async function executeFlowPlan(
             subject: mail.subject,
             html: mail.html,
             text: mail.text,
+            ...(attachments.length > 0 ? { attachments } : {}),
             meta: { category: "flows" },
           });
         } catch (e) {
@@ -158,7 +190,7 @@ export async function executeFlowPlan(
           });
           return `send_email→${to.length} (queue unavailable, skipped)`;
         }
-        return `send_email→${to.length}`;
+        return `send_email→${to.length}${pdfNote}`;
       }
 
       case "notify": {
@@ -245,6 +277,24 @@ export async function executeFlowPlan(
           writable: true,
         });
         return `post_document→${entryId}`;
+      }
+
+      case "lock_record": {
+        await lockRecord({
+          orgId: ctx.orgId,
+          subjectKind: flow.subjectKind,
+          subjectId,
+          flowId: flow.id,
+          reason: action.reason ? interpolateTemplate(action.reason, evalCtx) : null,
+          exemptRoles: action.exemptRoles ?? [],
+          userId: ctx.userId ?? null,
+        });
+        return `lock_record${action.exemptRoles?.length ? ` (exempt: ${action.exemptRoles.join(", ")})` : ""}`;
+      }
+
+      case "unlock_record": {
+        await unlockRecord(flow.subjectKind, subjectId);
+        return "unlock_record";
       }
     }
   };
