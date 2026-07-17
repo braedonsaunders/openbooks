@@ -914,7 +914,9 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
         analyzedFindings: 0,
         reason: error instanceof Error && error.message === "continuous_close_agent_timeout"
           ? "enrichment_timeout"
-          : "enrichment_failed",
+          : error instanceof Error && error.message.startsWith("continuous_close_evidence_validation:")
+            ? "evidence_validation_failed"
+            : "enrichment_failed",
       };
     }
   }

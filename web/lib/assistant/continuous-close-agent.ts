@@ -11,6 +11,7 @@ import { getOrgAiConfig } from "./ai-config";
 import { defaultModel, getModel } from "./client";
 import { buildToolRegistry, executeAssistantTool } from "./registry";
 import type { ToolResult } from "./types";
+import { validateFinanceNarrative } from "./continuous-close-validation";
 
 const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 const MAX_TEXT = 4_000;
@@ -323,6 +324,12 @@ export async function enrichContinuousCloseRun(
     clearTimeout(timeout);
   }
   const cleaned = cleanPayload(parseJson(result.text), new Set(input.findingIds), input);
+  if (input.agentKey === "finance" && evidence && cleaned.narrative) {
+    const issues = validateFinanceNarrative(cleaned.narrative, evidence.data);
+    if (issues.length) {
+      throw new Error(`continuous_close_evidence_validation:${issues.join(",")}`);
+    }
+  }
   for (const analysis of cleaned.analyses) {
     await db.execute(sql`
       update ai_work_items

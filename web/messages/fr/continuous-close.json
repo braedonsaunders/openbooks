@@ -19,6 +19,7 @@
     "gross_margin_decline": { "title": "Baisse de la marge brute", "description": "La marge brute a reculé au-delà du seuil configuré par rapport à la période achevée précédente." }
   },
   "summary": { "records": "{count, plural, one {# enregistrement} other {# enregistrements}}", "review": "Examiner les preuves à l’appui" },
+  "reports": { "title": "Rapports des agents", "description": "Ouvrez une synthèse générée ou exportez-la en PDF.", "search": "Rechercher des rapports…", "empty": "Aucun rapport généré ne correspond à ces filtres." },
   "narrative": {
     "title": "Dernière synthèse de l’agent",
     "agent": "Générée par {agent}",
