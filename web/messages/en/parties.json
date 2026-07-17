@@ -30,6 +30,7 @@
       "ariaLabel": "Party record sections",
       "overview": "Overview",
       "transactions": "Transactions",
+      "activities": "Activities",
       "contacts": "Contacts",
       "addresses": "Addresses",
       "accounting": "Accounting"
@@ -113,6 +114,7 @@
     "allStatuses": "All statuses",
     "noTransactions": "No transactions match these filters.",
     "transactionCount": "{count, plural, one {# transaction} other {# transactions}}",
+    "activityCount": "{count, plural, one {# activity} other {# activities}}",
     "bankAccountsHeading": "Bank accounts",
     "noBankAccounts": "No bank accounts on file.",
     "bankAccountFallback": "Bank account",

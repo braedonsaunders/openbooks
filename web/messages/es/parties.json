@@ -30,6 +30,7 @@
       "ariaLabel": "Secciones del registro del tercero",
       "overview": "Resumen",
       "transactions": "Transacciones",
+      "activities": "Actividades",
       "contacts": "Contactos",
       "addresses": "Direcciones",
       "accounting": "Contabilidad"
@@ -113,6 +114,7 @@
     "allStatuses": "Todos los estados",
     "noTransactions": "Ninguna transacción coincide con estos filtros.",
     "transactionCount": "{count, plural, one {# transacción} other {# transacciones}}",
+    "activityCount": "{count, plural, one {# actividad} other {# actividades}}",
     "bankAccountsHeading": "Cuentas bancarias",
     "noBankAccounts": "No hay cuentas bancarias registradas.",
     "bankAccountFallback": "Cuenta bancaria",

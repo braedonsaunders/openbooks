@@ -50,7 +50,7 @@ export default async function Parties({
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
-  const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'contacts'
+  const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'audit'
     ? requestedPartyTab
     : 'overview'
@@ -203,6 +203,7 @@ export default async function Parties({
           taxCodes={pickers[6].rows}
           salesReps={pickers[7].rows}
           canManage={canManage}
+          canReadActivities={can(authz, 'crm.activities.read')}
           initialTab={partyTab}
         />
       ) : null}
