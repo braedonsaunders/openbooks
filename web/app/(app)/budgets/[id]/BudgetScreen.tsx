@@ -143,6 +143,13 @@ export function BudgetScreen({
     if (!initial.accounts.some((account) => key.startsWith(`${account.id}|`))) return sum
     try { return sum + budgetToUnits(value || '0') } catch { return sum }
   }, 0n), [initial.accounts, values])
+  const initialPageTotalUnits = useMemo(() => initial.lines.reduce((sum, line) => {
+    try { return sum + budgetToUnits(toDisplay(line.accountId, line.amount)) } catch { return sum }
+  }, 0n), [initial.lines, toDisplay])
+  const sliceTotalUnits = useMemo(
+    () => budgetToUnits(initial.sliceTotal) + pageTotalUnits - initialPageTotalUnits,
+    [initial.sliceTotal, initialPageTotalUnits, pageTotalUnits],
+  )
 
   function replaceUrl(key: string, value: string) {
     const params = new URLSearchParams()
@@ -269,7 +276,7 @@ export function BudgetScreen({
         <CardHeader className="gap-3 pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><CardTitle className="text-base">{t('workspace.dimensions.title')}</CardTitle><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('workspace.sheetDescription')}</p></div>
-            <div className="text-right"><div className="text-xs text-slate-500">{t('workspace.sliceTotal')}</div><div className="font-semibold tabular-nums">{money(initial.sliceTotal)}</div></div>
+            <div className="text-right"><div className="text-xs text-slate-500">{t('workspace.sliceTotal')}</div><div className="font-semibold tabular-nums">{money(budgetFromUnits(sliceTotalUnits))}</div></div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <DimensionSelect label={t('workspace.dimensions.department')} value={dims.departmentId ?? ''} options={initial.dimensions.departments} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('department', value)} />
