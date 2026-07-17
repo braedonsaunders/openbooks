@@ -871,9 +871,13 @@
         "title": "Tax Groups",
         "description": "Bundle several tax codes to apply together on a line."
       },
+      "tax-return-forms": {
+        "title": "Déclarations de taxes",
+        "description": "Configurez une déclaration de taxes gouvernementale : ses cases, leur calcul et son mode de dépôt."
+      },
       "tax-report-lines": {
-        "title": "Tax Report Lines",
-        "description": "Map tax codes onto the boxes of a tax return."
+        "title": "Cases de déclaration",
+        "description": "Associez les codes de taxe aux cases d’une déclaration, ou calculez une case à partir d’autres cases."
       },
       "classes": {
         "title": "Classes",
@@ -973,6 +977,11 @@
       "label": "Label",
       "basis": "Basis",
       "sign": "Sign",
+      "submissionChannel": "Canal de dépôt",
+      "watermark": "Filigrane",
+      "sequence": "Ordre",
+      "formula": "Formule",
+      "pdfField": "Champ PDF",
       "parentId": "Parent",
       "netDays": "Net days",
       "discountDays": "Discount days",
@@ -1036,6 +1045,12 @@
       "sign": {
         "positive": "Add (+)",
         "negative": "Subtract (−)"
+      },
+      "channel": {
+        "printPdf": "Imprimer et poster (PDF officiel)",
+        "fileUpload": "Téléversement de fichier électronique",
+        "efileApi": "Télédéclaration (API)",
+        "portalManual": "Portail gouvernemental (saisie manuelle)"
       },
       "method": {
         "straightLine": "Straight line",

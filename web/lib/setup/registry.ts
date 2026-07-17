@@ -123,9 +123,19 @@ const APPLIES_TO = [
   { value: 'both', labelKey: 'options.appliesTo.both' },
 ]
 
+// Values match the tax_report_lines.basis enum (schema/src/tax.ts) and the tax
+// return engine: tax_amount sums the tax collected/paid, taxable_base sums the
+// base the tax applied to.
 const TAX_BASIS = [
-  { value: 'net', labelKey: 'options.basis.net' },
-  { value: 'tax', labelKey: 'options.basis.tax' },
+  { value: 'tax_amount', labelKey: 'options.basis.tax' },
+  { value: 'taxable_base', labelKey: 'options.basis.net' },
+]
+
+const SUBMISSION_CHANNELS = [
+  { value: 'print_pdf', labelKey: 'options.channel.printPdf' },
+  { value: 'file_upload', labelKey: 'options.channel.fileUpload' },
+  { value: 'efile_api', labelKey: 'options.channel.efileApi' },
+  { value: 'portal_manual', labelKey: 'options.channel.portalManual' },
 ]
 
 const TAX_SIGN = [
@@ -314,16 +324,46 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    // A configurable government return: openbooks computes the boxes from the
+    // ledger, renders a facsimile, and routes filing to the jurisdiction's real
+    // channel. New jurisdictions are data (a form + its boxes), not code.
+    key: 'tax-return-forms',
+    table: 'tax_return_forms',
+    actorCols: true,
+    groupKey: 'taxes',
+    iconKey: 'file',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'country', kind: 'text' },
+      { key: 'submissionChannel', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'country', kind: 'text' },
+      { key: 'region', kind: 'text' },
+      { key: 'submissionChannel', kind: 'select', options: SUBMISSION_CHANNELS, keepDefault: true },
+      { key: 'watermark', kind: 'text' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
     key: 'tax-report-lines',
     table: 'tax_report_lines',
     actorCols: true,
     groupKey: 'taxes',
     iconKey: 'file',
     orgScoped: true,
-    orderBy: 'report_code, line_code',
+    orderBy: 'report_code, sequence, line_code',
     hasActive: false,
     columns: [
       { key: 'reportCode', kind: 'code' },
+      { key: 'sequence', kind: 'number' },
       { key: 'lineCode', kind: 'code' },
       { key: 'label', kind: 'text' },
       { key: 'basis', kind: 'text' },
@@ -332,9 +372,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'reportCode', kind: 'text', required: true },
       { key: 'lineCode', kind: 'text', required: true },
       { key: 'label', kind: 'text', required: true },
+      { key: 'sequence', kind: 'integer', keepDefault: true },
       { key: 'taxCodeId', kind: 'ref', ref: 'tax-codes' },
-      { key: 'basis', kind: 'select', required: true, options: TAX_BASIS },
+      { key: 'basis', kind: 'select', options: TAX_BASIS },
       { key: 'sign', kind: 'select', options: TAX_SIGN },
+      { key: 'formula', kind: 'text' },
+      { key: 'pdfField', kind: 'text' },
     ],
   },
 

@@ -96,6 +96,7 @@ alter table tax_group_members
   add foreign key (tax_group_id) references tax_groups(id),
   add foreign key (tax_code_id) references tax_codes(id);
 alter table tax_report_lines add foreign key (tax_code_id) references tax_codes(id);
+alter table tax_return_forms add foreign key (org_id) references orgs(id);
 
 -- documents
 alter table documents

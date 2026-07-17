@@ -915,9 +915,13 @@
         "title": "Tax Groups",
         "description": "Bundle several tax codes to apply together on a line."
       },
+      "tax-return-forms": {
+        "title": "Tax Returns",
+        "description": "Configure a government tax return: its boxes, how each is computed, and how it is filed."
+      },
       "tax-report-lines": {
-        "title": "Tax Report Lines",
-        "description": "Map tax codes onto the boxes of a tax return."
+        "title": "Tax Return Boxes",
+        "description": "Map tax codes onto the boxes of a tax return, or compute a box from other boxes."
       },
       "classes": {
         "title": "Classes",
@@ -1021,6 +1025,11 @@
       "label": "Label",
       "basis": "Basis",
       "sign": "Sign",
+      "submissionChannel": "Submission channel",
+      "watermark": "Watermark",
+      "sequence": "Order",
+      "formula": "Formula",
+      "pdfField": "PDF field",
       "parentId": "Parent",
       "netDays": "Net days",
       "discountDays": "Discount days",
@@ -1088,6 +1097,12 @@
       "sign": {
         "positive": "Add (+)",
         "negative": "Subtract (−)"
+      },
+      "channel": {
+        "printPdf": "Print & mail (official PDF)",
+        "fileUpload": "Electronic file upload",
+        "efileApi": "E-file (API)",
+        "portalManual": "Government portal (enter by hand)"
       },
       "method": {
         "straightLine": "Straight line",
