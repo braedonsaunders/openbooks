@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
@@ -655,19 +656,19 @@ export async function transferInventory(orgId: string, actorId: string | null, i
       });
     }
 
-    const fromMv = (await tx.execute(sql`
+    // A posted movement is immutable (no post-insert UPDATE), so the id is
+    // generated up front and only the transfer_in leg carries the pairing
+    // link back to the transfer_out (one direction is enough to relate them).
+    const fromMovementId = randomUUID();
+    await tx.execute(sql`
       insert into inventory_movements
-        (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
-      values (${orgId}, ${input.itemId}, 'transfer_out', ${input.date}, ${input.fromStockLocationId}, ${neg(input.quantity)}, ${unitCost}, ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
-    const fromMovementId = fromMv.rows[0].id;
-    const toMv = (await tx.execute(sql`
+        (id, org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
+      values (${fromMovementId}, ${orgId}, ${input.itemId}, 'transfer_out', ${input.date}, ${input.fromStockLocationId}, ${neg(input.quantity)}, ${unitCost}, ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})`);
+    const toMovementId = randomUUID();
+    await tx.execute(sql`
       insert into inventory_movements
-        (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, paired_movement_id, status, memo, created_by, updated_by)
-      values (${orgId}, ${input.itemId}, 'transfer_in', ${input.date}, ${input.toStockLocationId}, ${input.quantity}, ${unitCost}, ${cost}, ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
-    const toMovementId = toMv.rows[0].id;
-    await tx.execute(sql`update inventory_movements set paired_movement_id = ${toMovementId} where id = ${fromMovementId}`);
+        (id, org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, paired_movement_id, status, memo, created_by, updated_by)
+      values (${toMovementId}, ${orgId}, ${input.itemId}, 'transfer_in', ${input.date}, ${input.toStockLocationId}, ${input.quantity}, ${unitCost}, ${cost}, ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})`);
 
     await recordConsumptions(tx, orgId, consumptions, fromMovementId, actorId);
     await addLayerAtCost(tx, orgId, input.itemId, input.toStockLocationId, input.quantity, unitCost, profile.costingMethod, toMovementId, input.date);

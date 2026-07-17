@@ -219,8 +219,9 @@ export const landedCostAllocations = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    /** The cost source: a bill line for freight/duty/etc. */
-    sourceDocumentLineId: uuid("source_document_line_id").notNull(),
+    /** The cost source: a bill line for freight/duty/etc. Null for a manual
+     *  landed-cost entry not tied to a document line. */
+    sourceDocumentLineId: uuid("source_document_line_id"),
     targetCostLayerId: uuid("target_cost_layer_id").notNull(),
     basis: text("basis", { enum: ["value", "quantity", "weight", "manual"] }).notNull(),
     amount: money("amount").notNull(),
