@@ -56,7 +56,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           groups={groups}
           navMode={navMode}
           defaultCollapsed={defaultCollapsed}
-          showAssistantLauncher={can(authz, 'assistant.use')}
           createPermissions={{
             accountsReceivable: can(authz, 'ar.create'),
             accountsPayable: can(authz, 'ap.create'),
