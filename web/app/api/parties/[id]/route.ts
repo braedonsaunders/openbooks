@@ -30,11 +30,39 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   return isUuid(s) ? s : 'invalid'
 }
 
+async function orgRefExists(
+  kind: 'terms' | 'receivable' | 'payable' | 'expense' | 'tax' | 'salesRep' | 'department' | 'trade',
+  id: string | null,
+  orgId: string,
+): Promise<boolean> {
+  if (id === null) return true
+  const query = kind === 'terms'
+    ? sql`select 1 from payment_terms where id = ${id} and org_id = ${orgId} and is_active`
+    : kind === 'receivable'
+      ? sql`select 1 from accounts where id = ${id} and org_id = ${orgId} and is_active and not is_summary and type = 'asset_receivable'`
+      : kind === 'payable'
+        ? sql`select 1 from accounts where id = ${id} and org_id = ${orgId} and is_active and not is_summary and type = 'liability_payable'`
+        : kind === 'expense'
+          ? sql`select 1 from accounts where id = ${id} and org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'expense_other', 'cogs')`
+          : kind === 'tax'
+            ? sql`select 1 from tax_codes where id = ${id} and org_id = ${orgId} and is_active`
+            : kind === 'salesRep'
+              ? sql`select 1 from parties p join employee_roles r on r.party_id = p.id and r.is_active where p.id = ${id} and p.org_id = ${orgId} and p.is_active`
+              : kind === 'department'
+                ? sql`select 1 from departments where id = ${id} and org_id = ${orgId} and is_active`
+                : sql`select 1 from trades where id = ${id} and org_id = ${orgId} and is_active`
+  const result = await db.execute(query) as unknown as { rows: unknown[] }
+  return result.rows.length === 1
+}
+
 interface CustomerRoleInput {
   enabled?: boolean
   paymentTermsId?: string | null
   creditLimit?: string | null
   currency?: string | null
+  arAccountId?: string | null
+  salesRepId?: string | null
+  taxCodeId?: string | null
 }
 interface VendorRoleInput {
   enabled?: boolean
@@ -43,6 +71,9 @@ interface VendorRoleInput {
   paymentTermsId?: string | null
   currency?: string | null
   is1099OrT4a?: boolean
+  apAccountId?: string | null
+  defaultExpenseAccountId?: string | null
+  taxCodeId?: string | null
 }
 interface EmployeeRoleInput {
   enabled?: boolean
@@ -62,6 +93,18 @@ interface AddressInput {
   isDefaultBilling?: boolean
   isDefaultShipping?: boolean
 }
+interface ContactInput {
+  firstName?: string | null
+  lastName?: string | null
+  name?: string | null
+  title?: string | null
+  role?: string | null
+  email?: string | null
+  phone?: string | null
+  mobilePhone?: string | null
+  isPrimary?: boolean
+  isActive?: boolean
+}
 
 interface PatchBody {
   kind?: string
@@ -78,7 +121,13 @@ interface PatchBody {
     employee?: EmployeeRoleInput
   }
   addresses?: AddressInput[]
+  contacts?: ContactInput[]
   isActive?: boolean
+  /** Primary subsidiary (null = org root). Only sent by multi-subsidiary orgs. */
+  subsidiaryId?: string | null
+  /** Full replacement of the ADDITIONAL subsidiaries the party transacts with
+   *  (party_subsidiaries, diff-and-synced). Only sent by multi-subsidiary orgs. */
+  additionalSubsidiaryIds?: string[]
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -140,6 +189,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return bad('Website must be a URL or domain')
   }
 
+  const subsidiaryId = body.subsidiaryId !== undefined ? uuidOrNull(body.subsidiaryId) : undefined
+  if (subsidiaryId === 'invalid') return bad('Invalid subsidiary')
+  let additionalSubsidiaryIds: string[] | undefined
+  if (body.additionalSubsidiaryIds !== undefined) {
+    if (!Array.isArray(body.additionalSubsidiaryIds) || body.additionalSubsidiaryIds.some((s) => !isUuid(s))) {
+      return bad('Invalid additional subsidiaries')
+    }
+    additionalSubsidiaryIds = [...new Set(body.additionalSubsidiaryIds)].filter((s) => s !== subsidiaryId)
+  }
+  const requestedSubsidiaries = [...new Set([
+    ...(typeof subsidiaryId === 'string' ? [subsidiaryId] : []),
+    ...(additionalSubsidiaryIds ?? []),
+  ])]
+  if (requestedSubsidiaries.length > 0) {
+    const found = (await db.execute(sql`
+      select id from subsidiaries
+       where org_id = ${user.orgId} and is_active and not is_elimination
+         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)) as unknown as {
+      rows: { id: string }[]
+    }
+    if (found.rows.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary')
+  }
+
   try {
     await db.execute(sql`
       update parties set
@@ -151,9 +223,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         phone = ${body.phone !== undefined ? strOrNull(body.phone) : sql`phone`},
         website = ${website !== undefined ? website : sql`website`},
         custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
+        subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
         is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
         updated_at = now(), updated_by = ${user.id}
-      where id = ${id}
+      where id = ${id} and org_id = ${user.orgId}
     `)
   } catch (e: unknown) {
     const msg = e instanceof Error ? `${e.message} ${String((e as { cause?: unknown }).cause ?? '')}` : String(e)
@@ -161,6 +234,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return bad('That short code is already used by another party')
     }
     throw e
+  }
+
+  if (additionalSubsidiaryIds !== undefined) {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        delete from party_subsidiaries where org_id = ${user.orgId} and party_id = ${id}`)
+      for (const extraId of additionalSubsidiaryIds) {
+        await tx.execute(sql`
+          insert into party_subsidiaries
+            (org_id, party_id, subsidiary_id, created_by, updated_by)
+          values (${user.orgId}, ${id}, ${extraId}, ${user.id}, ${user.id})`)
+      }
+    })
+  } else if (typeof subsidiaryId === 'string') {
+    await db.execute(sql`
+      delete from party_subsidiaries
+       where org_id = ${user.orgId} and party_id = ${id} and subsidiary_id = ${subsidiaryId}`)
   }
 
   // -- roles ---------------------------------------------------------------
@@ -173,6 +263,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     } else if (c.enabled === true) {
       const paymentTermsId = uuidOrNull(c.paymentTermsId)
       if (paymentTermsId === 'invalid') return bad('Invalid customer payment terms')
+      const arAccountId = uuidOrNull(c.arAccountId)
+      if (arAccountId === 'invalid') return bad('Invalid receivable account')
+      const salesRepId = uuidOrNull(c.salesRepId)
+      if (salesRepId === 'invalid') return bad('Invalid sales representative')
+      const taxCodeId = uuidOrNull(c.taxCodeId)
+      if (taxCodeId === 'invalid') return bad('Invalid customer tax code')
+      if (!await orgRefExists('terms', paymentTermsId, user.orgId)) return bad('Invalid customer payment terms')
+      if (!await orgRefExists('receivable', arAccountId, user.orgId)) return bad('Invalid receivable account')
+      if (!await orgRefExists('salesRep', salesRepId, user.orgId)) return bad('Invalid sales representative')
+      if (!await orgRefExists('tax', taxCodeId, user.orgId)) return bad('Invalid customer tax code')
       const creditLimitRaw = strOrNull(c.creditLimit)
       if (creditLimitRaw !== null && (Number.isNaN(Number(creditLimitRaw)) || Number(creditLimitRaw) < 0)) {
         return bad('Credit limit must be a non-negative number')
@@ -181,12 +281,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const currency = strOrNull(c.currency)?.toUpperCase() ?? null
       if (currency && !CURRENCY_RE.test(currency)) return bad('Customer currency must be a 3-letter code')
       await db.execute(sql`
-        insert into customer_roles (org_id, party_id, payment_terms_id, credit_limit, currency, created_by, updated_by)
-        values (${user.orgId}, ${id}, ${paymentTermsId}, ${creditLimit}, ${currency}, ${user.id}, ${user.id})
+        insert into customer_roles (org_id, party_id, payment_terms_id, credit_limit, currency,
+                                    ar_account_id, sales_rep_id, tax_code_id, created_by, updated_by)
+        values (${user.orgId}, ${id}, ${paymentTermsId}, ${creditLimit}, ${currency},
+                ${arAccountId}, ${salesRepId}, ${taxCodeId}, ${user.id}, ${user.id})
         on conflict (party_id) do update set
           payment_terms_id = excluded.payment_terms_id,
           credit_limit = excluded.credit_limit,
           currency = excluded.currency,
+          ar_account_id = excluded.ar_account_id,
+          sales_rep_id = excluded.sales_rep_id,
+          tax_code_id = excluded.tax_code_id,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}
       `)
@@ -206,19 +311,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       const paymentTermsId = uuidOrNull(v.paymentTermsId)
       if (paymentTermsId === 'invalid') return bad('Invalid vendor payment terms')
+      const apAccountId = uuidOrNull(v.apAccountId)
+      if (apAccountId === 'invalid') return bad('Invalid payable account')
+      const defaultExpenseAccountId = uuidOrNull(v.defaultExpenseAccountId)
+      if (defaultExpenseAccountId === 'invalid') return bad('Invalid default expense account')
+      const taxCodeId = uuidOrNull(v.taxCodeId)
+      if (taxCodeId === 'invalid') return bad('Invalid vendor tax code')
+      if (!await orgRefExists('terms', paymentTermsId, user.orgId)) return bad('Invalid vendor payment terms')
+      if (!await orgRefExists('payable', apAccountId, user.orgId)) return bad('Invalid payable account')
+      if (!await orgRefExists('expense', defaultExpenseAccountId, user.orgId)) return bad('Invalid default expense account')
+      if (!await orgRefExists('tax', taxCodeId, user.orgId)) return bad('Invalid vendor tax code')
       const currency = strOrNull(v.currency)?.toUpperCase() ?? null
       if (currency && !CURRENCY_RE.test(currency)) return bad('Vendor currency must be a 3-letter code')
       await db.execute(sql`
         insert into vendor_roles (org_id, party_id, payment_method, eft_notification_email,
-                                  payment_terms_id, currency, is_t4a, created_by, updated_by)
+                                  payment_terms_id, currency, is_t4a, ap_account_id,
+                                  default_expense_account_id, tax_code_id, created_by, updated_by)
         values (${user.orgId}, ${id}, ${paymentMethod}, ${strOrNull(v.eftNotificationEmail)},
-                ${paymentTermsId}, ${currency}, ${v.is1099OrT4a === true}, ${user.id}, ${user.id})
+                ${paymentTermsId}, ${currency}, ${v.is1099OrT4a === true}, ${apAccountId},
+                ${defaultExpenseAccountId}, ${taxCodeId}, ${user.id}, ${user.id})
         on conflict (party_id) do update set
           payment_method = excluded.payment_method,
           eft_notification_email = excluded.eft_notification_email,
           payment_terms_id = excluded.payment_terms_id,
           currency = excluded.currency,
           is_t4a = excluded.is_t4a,
+          ap_account_id = excluded.ap_account_id,
+          default_expense_account_id = excluded.default_expense_account_id,
+          tax_code_id = excluded.tax_code_id,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}
       `)
@@ -236,6 +356,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (departmentId === 'invalid') return bad('Invalid department')
       const tradeId = uuidOrNull(e.tradeId)
       if (tradeId === 'invalid') return bad('Invalid trade')
+      if (!await orgRefExists('department', departmentId, user.orgId)) return bad('Invalid department')
+      if (!await orgRefExists('trade', tradeId, user.orgId)) return bad('Invalid trade')
       const hiredOn = strOrNull(e.hiredOn)
       if (hiredOn && !DATE_RE.test(hiredOn)) return bad('Hired-on must be a date (YYYY-MM-DD)')
       await db.execute(sql`
@@ -282,7 +404,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         shippingSeen = true
       }
     }
-    await db.execute(sql`delete from addresses where party_id = ${id}`)
+    await db.execute(sql`delete from addresses where party_id = ${id} and org_id = ${user.orgId}`)
     for (const a of rows) {
       await db.execute(sql`
         insert into addresses (org_id, party_id, label, line1, line2, city, region, postal_code,
@@ -290,6 +412,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         values (${user.orgId}, ${id}, ${a.label}, ${a.line1}, ${a.line2}, ${a.city}, ${a.region},
                 ${a.postalCode}, ${a.country}, ${a.isDefaultBilling}, ${a.isDefaultShipping},
                 ${user.id}, ${user.id})
+      `)
+    }
+  }
+
+  // -- contacts: full replacement ------------------------------------------
+  if (body.contacts) {
+    const rows = body.contacts
+      .map((contact) => {
+        const firstName = strOrNull(contact.firstName)
+        const lastName = strOrNull(contact.lastName)
+        const explicitName = strOrNull(contact.name)
+        return {
+          firstName,
+          lastName,
+          name: explicitName ?? [firstName, lastName].filter(Boolean).join(' '),
+          title: strOrNull(contact.title),
+          role: strOrNull(contact.role),
+          email: strOrNull(contact.email),
+          phone: strOrNull(contact.phone),
+          mobilePhone: strOrNull(contact.mobilePhone),
+          isPrimary: contact.isPrimary === true,
+          isActive: contact.isActive !== false,
+        }
+      })
+      .filter((contact) => contact.name || contact.email || contact.phone || contact.mobilePhone)
+    let primarySeen = false
+    for (const contact of rows) {
+      if (contact.isPrimary) {
+        if (primarySeen) contact.isPrimary = false
+        primarySeen = true
+      }
+    }
+    await db.execute(sql`delete from contacts where party_id = ${id} and org_id = ${user.orgId}`)
+    for (const contact of rows) {
+      await db.execute(sql`
+        insert into contacts (org_id, party_id, first_name, last_name, name, title, role,
+                              email, phone, mobile_phone, is_primary, is_active, created_by, updated_by)
+        values (${user.orgId}, ${id}, ${contact.firstName}, ${contact.lastName}, ${contact.name},
+                ${contact.title}, ${contact.role}, ${contact.email}, ${contact.phone},
+                ${contact.mobilePhone}, ${contact.isPrimary}, ${contact.isActive}, ${user.id}, ${user.id})
       `)
     }
   }

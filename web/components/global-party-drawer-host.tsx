@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { PartyDrawer } from '../app/(app)/parties/PartyDrawer'
+import { PartyDrawer, type PartyTab } from '../app/(app)/parties/PartyDrawer'
 import type { RelatedPartyRole } from './related-party-link'
 
 interface DrawerPayload {
@@ -13,6 +13,9 @@ interface DrawerPayload {
   departments: Parameters<typeof PartyDrawer>[0]['departments']
   trades: Parameters<typeof PartyDrawer>[0]['trades']
   fieldDefs: Parameters<typeof PartyDrawer>[0]['fieldDefs']
+  accounts: Parameters<typeof PartyDrawer>[0]['accounts']
+  taxCodes: Parameters<typeof PartyDrawer>[0]['taxCodes']
+  salesReps: Parameters<typeof PartyDrawer>[0]['salesReps']
   subsidiaries: Array<{
     id: string
     parentId: string | null
@@ -26,6 +29,11 @@ function isRole(value: string | null): value is RelatedPartyRole {
   return value === 'customer' || value === 'vendor' || value === 'employee'
 }
 
+function isPartyTab(value: string | null): value is PartyTab {
+  return value === 'overview' || value === 'transactions' || value === 'contacts'
+    || value === 'addresses' || value === 'accounting'
+}
+
 /** Shell-level related-party overlay. Its close URL is the exact page beneath it. */
 export function GlobalPartyDrawerHost({ canManage }: { canManage: boolean }) {
   const t = useTranslations('shell.relatedParty')
@@ -36,6 +44,8 @@ export function GlobalPartyDrawerHost({ canManage }: { canManage: boolean }) {
   const partyId = searchParams.get('relatedParty')
   const requestedRole = searchParams.get('relatedPartyRole')
   const role = isRole(requestedRole) ? requestedRole : undefined
+  const requestedTab = searchParams.get('relatedPartyTab')
+  const initialTab = isPartyTab(requestedTab) ? requestedTab : 'overview'
   const [data, setData] = useState<DrawerPayload | null>(null)
   const [loadedId, setLoadedId] = useState<string | null>(null)
 
@@ -43,6 +53,7 @@ export function GlobalPartyDrawerHost({ canManage }: { canManage: boolean }) {
     const params = new URLSearchParams(queryString)
     params.delete('relatedParty')
     params.delete('relatedPartyRole')
+    params.delete('relatedPartyTab')
     const query = params.toString()
     return query ? `${pathname}?${query}` : pathname
   }, [pathname, queryString])
@@ -88,8 +99,12 @@ export function GlobalPartyDrawerHost({ canManage }: { canManage: boolean }) {
       departments={data.departments}
       trades={data.trades}
       fieldDefs={data.fieldDefs}
+      accounts={data.accounts}
+      taxCodes={data.taxCodes}
+      salesReps={data.salesReps}
       canManage={canManage}
       role={role}
+      initialTab={initialTab}
       basePath={closeHref}
     />
   )

@@ -16,7 +16,7 @@ import { loadParty } from '../../api/parties/_lib'
 import { subsidiaryOptions } from '../../../lib/subsidiaries'
 import { NewPartyButton } from './NewPartyButton'
 import { NewPartyRedirect } from './NewPartyRedirect'
-import { PartyDrawer } from './PartyDrawer'
+import { PartyDrawer, type PartyTab } from './PartyDrawer'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +46,11 @@ export default async function Parties({
 
   const sp = await searchParams
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
+  const requestedPartyTab = pickString(sp.partyTab)
+  const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'contacts'
+    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting'
+    ? requestedPartyTab
+    : 'overview'
   const params = parseListParams(sp, {
     sort: 'name',
     dir: 'asc',
@@ -98,11 +103,14 @@ export default async function Parties({
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId) : null,
     partyId
       ? Promise.all([
-          db.execute(sql`select id, name from payment_terms where is_active order by name`) as any,
-          db.execute(sql`select id, name from departments where is_active order by name`) as any,
-          db.execute(sql`select id, name from trades where is_active order by name`) as any,
+          db.execute(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`) as any,
+          db.execute(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`) as any,
+          db.execute(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`) as any,
           loadFieldDefs('parties'),
           subsidiaryOptions(),
+          db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`) as any,
+          db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`) as any,
+          db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`) as any,
         ])
       : null,
   ])
@@ -188,7 +196,11 @@ export default async function Parties({
           trades={pickers[2].rows}
           fieldDefs={pickers[3] as any}
           subsidiaries={pickers[4]}
+          accounts={pickers[5].rows}
+          taxCodes={pickers[6].rows}
+          salesReps={pickers[7].rows}
           canManage={canManage}
+          initialTab={partyTab}
         />
       ) : null}
     </ListPageLayout>

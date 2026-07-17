@@ -135,6 +135,34 @@ export const addresses = pgTable(
 );
 
 /**
+ * Contacts — people at a customer/vendor company (NetSuite's separate `contact`
+ * entity). Linked to the company party; carries their own role, title, and
+ * contact info. A company party can have many contacts; one may be primary.
+ */
+export const contacts = pgTable(
+  "contacts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    partyId: uuid("party_id"), // the company party this contact belongs to
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    name: text("name").notNull(), // full/display name
+    title: text("title"), // job title
+    role: text("role"), // contact role (Primary, Billing, Purchasing…)
+    email: text("email"),
+    phone: text("phone"),
+    mobilePhone: text("mobile_phone"),
+    fax: text("fax"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    custom: jsonb("custom").notNull().default({}),
+    ...auditColumns,
+  },
+  (t) => [index("contacts_party").on(t.partyId)],
+);
+
+/**
  * Normalized bank accounts (NetSuite: a 52-field custom record). Changes are
  * fraud-sensitive: `approvedAt/By` gate use in payment runs, mirroring the
  * bank-details approval workflow found in the extraction.
@@ -154,6 +182,15 @@ export const partyBankAccounts = pgTable(
     accountLastFour: text("account_last_four"),
     approvedAt: date("approved_at"),
     approvedBy: uuid("approved_by"),
+    /**
+     * Bank-detail change approval (the NetSuite "Vendor Bank Details Approval"
+     * workflow, replicated as a flow): new/edited details sit 'pending' —
+     * inactive and unusable by payment runs — until the gate approves.
+     * Existing rows default 'approved' (they were in use pre-flows).
+     */
+    approvalStatus: text("approval_status", { enum: ["pending", "approved", "rejected"] })
+      .notNull()
+      .default("approved"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
