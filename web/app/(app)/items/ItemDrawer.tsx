@@ -16,6 +16,14 @@ interface TaxOpt {
   id: string
   name?: string | null
 }
+interface RuleOpt {
+  id: string
+  code?: string | null
+  name?: string | null
+}
+
+const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
+const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
 interface ItemPayload {
   item: Record<string, any>
   incomeAccountName: string | null
@@ -44,6 +52,7 @@ export function ItemDrawer({
   accounts,
   taxCodes,
   fieldDefs,
+  recognitionRules = [],
   canManage,
   basePath = '/items',
 }: {
@@ -51,6 +60,7 @@ export function ItemDrawer({
   accounts: AccountOpt[]
   taxCodes: TaxOpt[]
   fieldDefs: CustomFieldDefClient[]
+  recognitionRules?: RuleOpt[]
   canManage: boolean
   basePath?: string
 }) {
@@ -79,6 +89,13 @@ export function ItemDrawer({
   const [expenseAccountId, setExpenseAccountId] = useState<string>(it.expense_account_id ?? '')
   const [taxCodeId, setTaxCodeId] = useState<string>(it.tax_code_id ?? '')
   const [showOnTimesheet, setShowOnTimesheet] = useState<boolean>(it.show_on_timesheet === true)
+  const [recognitionRuleId, setRecognitionRuleId] = useState<string>(it.recognition_rule_id ?? '')
+  const [deferredAccountId, setDeferredAccountId] = useState<string>(it.deferred_account_id ?? '')
+  const [createPlansOn, setCreatePlansOn] = useState<string>(it.create_plans_on ?? 'billing')
+  const [revenueAllocation, setRevenueAllocation] = useState<string>(it.revenue_allocation ?? 'normal')
+  const [standaloneSellingPrice, setStandaloneSellingPrice] = useState<string>(
+    it.standalone_selling_price != null ? Number(it.standalone_selling_price).toFixed(2) : '',
+  )
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(it.custom ?? {})
   const [isActive, setIsActive] = useState<boolean>(it.is_active === true)
 
@@ -97,6 +114,10 @@ export function ItemDrawer({
     () => accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
     [accounts],
   )
+  const ruleOptions = useMemo(
+    () => recognitionRules.map((r) => ({ value: r.id, label: `${r.code ? `${r.code} · ` : ''}${r.name ?? ''}`.trim() })),
+    [recognitionRules],
+  )
 
   // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
@@ -111,9 +132,14 @@ export function ItemDrawer({
       expenseAccountId: expenseAccountId || null,
       taxCodeId: taxCodeId || null,
       showOnTimesheet,
+      recognitionRuleId: recognitionRuleId || null,
+      deferredAccountId: deferredAccountId || null,
+      createPlansOn,
+      revenueAllocation,
+      standaloneSellingPrice: standaloneSellingPrice || null,
       custom: customValues,
     }),
-    [kind, name, code, category, unit, defaultRate, incomeAccountId, expenseAccountId, taxCodeId, showOnTimesheet, customValues, isActive],
+    [kind, name, code, category, unit, defaultRate, incomeAccountId, expenseAccountId, taxCodeId, showOnTimesheet, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -139,6 +165,11 @@ export function ItemDrawer({
     setExpenseAccountId(it.expense_account_id ?? '')
     setTaxCodeId(it.tax_code_id ?? '')
     setShowOnTimesheet(it.show_on_timesheet === true)
+    setRecognitionRuleId(it.recognition_rule_id ?? '')
+    setDeferredAccountId(it.deferred_account_id ?? '')
+    setCreatePlansOn(it.create_plans_on ?? 'billing')
+    setRevenueAllocation(it.revenue_allocation ?? 'normal')
+    setStandaloneSellingPrice(it.standalone_selling_price != null ? Number(it.standalone_selling_price).toFixed(2) : '')
     setCustomValues(it.custom ?? {})
   }
 
@@ -378,6 +409,93 @@ export function ItemDrawer({
             ) : (
               <p className="text-sm">{payload.taxCodeName ?? '—'}</p>
             )}
+          </div>
+        </section>
+
+        {/* -- revenue recognition (ASC 606) --------------------------- */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">{t('revrec.title')}</h3>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('revrec.hint')}</span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={field}>
+              <Label>{t('revrec.rule')}</Label>
+              {editable ? (
+                <SearchSelect
+                  value={recognitionRuleId}
+                  onChange={setRecognitionRuleId}
+                  options={ruleOptions}
+                  clearable
+                  emptyLabel={t('revrec.noRule')}
+                  placeholder={t('revrec.selectRule')}
+                  sheetTitle={t('revrec.rule')}
+                  ariaLabel={t('revrec.rule')}
+                />
+              ) : (
+                <p className="text-sm">{ruleOptions.find((r) => r.value === recognitionRuleId)?.label ?? t('revrec.noRule')}</p>
+              )}
+            </div>
+            <div className={field}>
+              <Label>{t('revrec.deferredAccount')}</Label>
+              {editable ? (
+                <SearchSelect
+                  value={deferredAccountId}
+                  onChange={setDeferredAccountId}
+                  options={accountOptions}
+                  clearable
+                  emptyLabel={t('revrec.ruleDefault')}
+                  placeholder={t('drawer.selectAccount')}
+                  sheetTitle={t('revrec.deferredAccount')}
+                  ariaLabel={t('revrec.deferredAccount')}
+                />
+              ) : (
+                <p className="text-sm">
+                  {accountOptions.find((a) => a.value === deferredAccountId)?.label ?? t('revrec.ruleDefault')}
+                </p>
+              )}
+            </div>
+            <div className={field}>
+              <Label>{t('revrec.standaloneSellingPrice')}</Label>
+              {editable ? (
+                <Input
+                  inputMode="decimal"
+                  className="text-right tabular-nums"
+                  value={standaloneSellingPrice}
+                  onChange={(e) => setStandaloneSellingPrice(e.target.value)}
+                />
+              ) : (
+                <p className="text-right text-sm tabular-nums">{standaloneSellingPrice || '—'}</p>
+              )}
+            </div>
+            <div className={field}>
+              <Label>{t('revrec.createPlansOn')}</Label>
+              {editable ? (
+                <Select value={createPlansOn} onChange={(e) => setCreatePlansOn(e.target.value)}>
+                  {CREATE_PLANS_ON.map((o) => (
+                    <option key={o} value={o}>
+                      {t(`revrec.createPlansOnOptions.${o}`)}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <p className="text-sm">{t(`revrec.createPlansOnOptions.${createPlansOn}`)}</p>
+              )}
+            </div>
+            <div className={field}>
+              <Label>{t('revrec.allocation')}</Label>
+              {editable ? (
+                <Select value={revenueAllocation} onChange={(e) => setRevenueAllocation(e.target.value)}>
+                  {REVENUE_ALLOCATION.map((o) => (
+                    <option key={o} value={o}>
+                      {t(`revrec.allocationOptions.${o}`)}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <p className="text-sm">{t(`revrec.allocationOptions.${revenueAllocation}`)}</p>
+              )}
+            </div>
           </div>
         </section>
 

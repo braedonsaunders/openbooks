@@ -191,6 +191,26 @@ export const items = pgTable(
     unit: text("unit"),
     taxCodeId: uuid("tax_code_id"),
     showOnTimesheet: boolean("show_on_timesheet").notNull().default(false),
+
+    // --- Revenue recognition (ASC 606 / ARM item defaults) ------------------
+    /** When set, invoicing this item defers revenue and a recognition schedule
+     *  is built from this rule instead of crediting income immediately. */
+    recognitionRuleId: uuid("recognition_rule_id"),
+    /** Item-level deferred-revenue account override (else the rule's). */
+    deferredAccountId: uuid("deferred_account_id"),
+    /** Trigger for creating the obligation/plan: on billing (invoice post),
+     *  fulfillment, or revenue-arrangement creation. */
+    createPlansOn: text("create_plans_on", { enum: ["billing", "fulfillment", "arrangement"] })
+      .notNull()
+      .default("billing"),
+    /** Relative-SSP allocation participation: normal, exclude (carve-out),
+     *  or software (residual/VSOE). */
+    revenueAllocation: text("revenue_allocation", { enum: ["normal", "exclude", "software"] })
+      .notNull()
+      .default("normal"),
+    /** Fallback standalone selling price when no dated fair_value_prices row. */
+    standaloneSellingPrice: money("standalone_selling_price"),
+
     isActive: boolean("is_active").notNull().default(true),
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,

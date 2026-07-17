@@ -153,7 +153,9 @@ alter table document_links
 alter table items
   add foreign key (income_account_id) references accounts(id),
   add foreign key (expense_account_id) references accounts(id),
-  add foreign key (tax_code_id) references tax_codes(id);
+  add foreign key (tax_code_id) references tax_codes(id),
+  add foreign key (recognition_rule_id) references recognition_rules(id),
+  add foreign key (deferred_account_id) references accounts(id);
 alter table labor_burden_rates add foreign key (department_id) references departments(id);
 
 -- approvals
@@ -212,11 +214,15 @@ alter table revenue_contracts add foreign key (customer_id) references parties(i
 alter table recognition_rules
   add foreign key (deferred_account_id) references accounts(id),
   add foreign key (recognized_account_id) references accounts(id);
+alter table fair_value_prices
+  add foreign key (item_id) references items(id);
 alter table performance_obligations
   add foreign key (contract_id) references revenue_contracts(id),
   add foreign key (document_line_id) references document_lines(id),
   add foreign key (item_id) references items(id),
-  add foreign key (recognition_rule_id) references recognition_rules(id);
+  add foreign key (recognition_rule_id) references recognition_rules(id),
+  add foreign key (deferred_account_id) references accounts(id),
+  add foreign key (recognized_account_id) references accounts(id);
 alter table recognition_schedules
   add foreign key (obligation_id) references performance_obligations(id),
   add foreign key (book_id) references accounting_books(id);

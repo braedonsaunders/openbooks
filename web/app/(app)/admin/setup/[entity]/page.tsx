@@ -63,6 +63,13 @@ async function loadEntityOptions(source: string, orgId: string): Promise<RefOpti
        where org_id = ${orgId} order by starts_on desc, period_number desc`)) as any
     return periods.rows as RefOption[]
   }
+  if (source === 'items') {
+    const items = (await db.execute(sql`
+      select id as value,
+             case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
+        from items where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
+    return items.rows as RefOption[]
+  }
   const target = SETUP_ENTITY_BY_KEY.get(source)
   if (!target) return []
   const orgFilter = target.orgScoped ? sql` where org_id = ${orgId}` : sql``

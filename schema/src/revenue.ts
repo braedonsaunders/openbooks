@@ -5,15 +5,101 @@ import {
   integer,
   pgTable,
   text,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
- * Revenue recognition, shaped by ASC 606 / IFRS 15:
- * contract → performance obligations → allocated price → recognition
- * schedule → period journals (origin = 'revenue_recognition').
+ * Revenue recognition, shaped by ASC 606 / IFRS 15 and NetSuite's Advanced
+ * Revenue Management (ARM):
+ *
+ *   contract → performance obligations → allocated price (by SSP) →
+ *   recognition schedule → period journals (origin = 'revenue_recognition').
+ *
+ * Everything a controller would tune is DATA, configured in the UI, not code:
+ * recognition rules (method + date sources + offsets + accounts), standalone
+ * selling prices (fair-value price lists), and per-item defaults. The engine
+ * (engine/src/revenue-recognition.ts) reads this config; posting always runs
+ * through the kernel so deferred-revenue GL balance = Σ unrecognized plan.
  */
+
+/**
+ * How a rule spreads an obligation's allocated amount across periods.
+ * Mirrors NetSuite ARM recognition methods.
+ */
+export const RECOGNITION_METHODS = [
+  "point_in_time", // recognize the whole amount on the start date
+  "straight_line_even", // equal amount per period over the term
+  "straight_line_prorate_first_last", // even, but first & last period prorated by days in service
+  "straight_line_daily", // exact days: each period gets (days in period / total days)
+  "percent_complete", // recognize cumulative % (project/manual) − already recognized
+  "milestone", // recognize only when a milestone/event fires (amounts entered per event)
+  "usage", // recognize per unit consumed × unit rate (usage events)
+] as const;
+
+/** Where the recognition term starts / ends when the rule is term-driven. */
+export const START_DATE_SOURCES = ["obligation", "document", "fulfillment", "event", "contract"] as const;
+export const END_DATE_SOURCES = ["term", "obligation", "contract"] as const;
+
+/**
+ * A revenue recognition rule — the reusable, org-configured recipe applied to an
+ * obligation. Actual rules post; forecast rules only project (isForecast).
+ */
+export const recognitionRules = pgTable(
+  "recognition_rules",
+  {
+    id: id(),
+    orgId: orgRef(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    method: text("method", { enum: RECOGNITION_METHODS }).notNull(),
+    /** Forecast rules feed the pipeline/forecast only; they never post GL. */
+    isForecast: boolean("is_forecast").notNull().default(false),
+    /** Term length in accounting periods (months) when not purely date-driven. */
+    recognitionPeriods: integer("recognition_periods"),
+    /** Term boundaries. `document`/`fulfillment`/`event` resolve at plan time. */
+    startDateSource: text("start_date_source", { enum: START_DATE_SOURCES }).notNull().default("obligation"),
+    endDateSource: text("end_date_source", { enum: END_DATE_SOURCES }).notNull().default("term"),
+    /** Shift the whole schedule by N periods (deferral) — NetSuite "period offset". */
+    periodOffset: integer("period_offset").notNull().default(0),
+    /** Shift the start date by N days before spreading. */
+    startOffsetDays: integer("start_offset_days").notNull().default(0),
+    /** Percent recognized immediately in the first period (e.g. an activation fee). */
+    initialAmountPercent: money("initial_amount_percent").notNull().default("0"),
+    /** Where unearned revenue sits until recognized, and where it lands when earned.
+     *  Item / obligation overrides win; these are the rule-level defaults. */
+    deferredAccountId: uuid("deferred_account_id"),
+    recognizedAccountId: uuid("recognized_account_id"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("recognition_rules_org_code").on(t.orgId, t.code)],
+);
+
+/**
+ * Standalone selling price (fair value) for an item, used to allocate a bundle's
+ * transaction price across obligations (relative-SSP method). Dated + currency
+ * scoped; low/high bound the acceptable range for allocation review.
+ * NetSuite's "Fair Value Price" list, native.
+ */
+export const fairValuePrices = pgTable(
+  "fair_value_prices",
+  {
+    id: id(),
+    orgId: orgRef(),
+    itemId: uuid("item_id").notNull(),
+    currency: text("currency").notNull(),
+    unitPrice: money("unit_price").notNull(),
+    lowValue: money("low_value"),
+    highValue: money("high_value"),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [index("fair_value_item").on(t.itemId, t.currency, t.effectiveFrom)],
+);
 
 export const revenueContracts = pgTable(
   "revenue_contracts",
@@ -28,30 +114,18 @@ export const revenueContracts = pgTable(
     startsOn: date("starts_on"),
     endsOn: date("ends_on"),
     totalTransactionPrice: money("total_transaction_price").notNull().default("0"),
+    currency: text("currency"),
     memo: text("memo"),
     ...auditColumns,
   },
   (t) => [index("rev_contracts_customer").on(t.customerId)],
 );
 
-export const recognitionRules = pgTable("recognition_rules", {
-  id: id(),
-  orgId: orgRef(),
-  name: text("name").notNull(),
-  method: text("method", {
-    enum: ["point_in_time", "straight_line", "percent_complete", "usage", "milestone"],
-  }).notNull(),
-  /** Where deferred revenue sits until earned. */
-  deferredAccountId: uuid("deferred_account_id").notNull(),
-  recognizedAccountId: uuid("recognized_account_id").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-  ...auditColumns,
-});
-
 /**
- * A distinct promise to the customer. Links back to the originating
- * document line(s); transaction price is allocated across obligations in
- * proportion to standalone selling price (SSP).
+ * A distinct promise to the customer. Links back to the originating document
+ * line; transaction price is allocated across obligations in proportion to
+ * standalone selling price (SSP). `recognitionStartsOn/EndsOn` are the resolved
+ * term the schedule is built over.
  */
 export const performanceObligations = pgTable(
   "performance_obligations",
@@ -63,21 +137,29 @@ export const performanceObligations = pgTable(
     itemId: uuid("item_id"),
     description: text("description").notNull(),
     recognitionRuleId: uuid("recognition_rule_id").notNull(),
+    /** Booked selling price on the line (what was billed) before allocation. */
+    bookedAmount: money("booked_amount"),
     standaloneSellingPrice: money("standalone_selling_price"),
+    /** Amount to recognize after relative-SSP allocation of the bundle. */
     allocatedPrice: money("allocated_price").notNull(),
     percentComplete: money("percent_complete"), // for percent_complete method
+    recognitionStartsOn: date("recognition_starts_on"),
+    recognitionEndsOn: date("recognition_ends_on"),
+    /** Deferred/recognized account resolution: obligation → item → rule. */
+    deferredAccountId: uuid("deferred_account_id"),
+    recognizedAccountId: uuid("recognized_account_id"),
     status: text("status", { enum: ["open", "satisfied", "cancelled"] })
       .notNull()
       .default("open"),
     ...auditColumns,
   },
-  (t) => [index("obligations_contract").on(t.contractId)],
+  (t) => [index("obligations_contract").on(t.contractId), index("obligations_doc_line").on(t.documentLineId)],
 );
 
 /**
- * The period-by-period plan. Each line recognizes into one period, in one
- * book; posting writes the journal entry id back — so recognized-to-date
- * is auditable and re-forecasting never touches posted lines.
+ * The period-by-period plan for one obligation on one book. Posting writes the
+ * journal entry id back to each line — so recognized-to-date is auditable and
+ * re-forecasting never touches posted lines (mirror of depreciation schedules).
  */
 export const recognitionSchedules = pgTable(
   "recognition_schedules",
@@ -92,7 +174,7 @@ export const recognitionSchedules = pgTable(
     totalAmount: money("total_amount").notNull(),
     ...auditColumns,
   },
-  (t) => [index("rec_schedules_obligation").on(t.obligationId)],
+  (t) => [uniqueIndex("rec_schedules_obligation_book").on(t.obligationId, t.bookId)],
 );
 
 export const recognitionScheduleLines = pgTable(

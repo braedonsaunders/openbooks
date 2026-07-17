@@ -112,6 +112,7 @@ export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'taxes', iconKey: 'receipt' },
   { key: 'dimensions', iconKey: 'layers' },
   { key: 'billing', iconKey: 'hash' },
+  { key: 'revenue', iconKey: 'trending-up' },
   { key: 'workforce', iconKey: 'users' },
   { key: 'assets', iconKey: 'landmark' },
   { key: 'currency', iconKey: 'coins' },
@@ -183,6 +184,31 @@ const FX_RATE_TYPES = [
 const CONSOLIDATED_RATE_SOURCES = [
   { value: 'derived', labelKey: 'options.rateSource.derived' },
   { value: 'manual', labelKey: 'options.rateSource.manual' },
+]
+
+// Revenue recognition (ASC 606 / IFRS 15) — mirrors NetSuite ARM rule methods.
+const RECOGNITION_METHODS = [
+  { value: 'point_in_time', labelKey: 'options.recognitionMethod.pointInTime' },
+  { value: 'straight_line_even', labelKey: 'options.recognitionMethod.straightLineEven' },
+  { value: 'straight_line_prorate_first_last', labelKey: 'options.recognitionMethod.straightLineProrate' },
+  { value: 'straight_line_daily', labelKey: 'options.recognitionMethod.straightLineDaily' },
+  { value: 'percent_complete', labelKey: 'options.recognitionMethod.percentComplete' },
+  { value: 'milestone', labelKey: 'options.recognitionMethod.milestone' },
+  { value: 'usage', labelKey: 'options.recognitionMethod.usage' },
+]
+
+const START_DATE_SOURCES = [
+  { value: 'obligation', labelKey: 'options.startDateSource.obligation' },
+  { value: 'document', labelKey: 'options.startDateSource.document' },
+  { value: 'fulfillment', labelKey: 'options.startDateSource.fulfillment' },
+  { value: 'event', labelKey: 'options.startDateSource.event' },
+  { value: 'contract', labelKey: 'options.startDateSource.contract' },
+]
+
+const END_DATE_SOURCES = [
+  { value: 'term', labelKey: 'options.endDateSource.term' },
+  { value: 'obligation', labelKey: 'options.endDateSource.obligation' },
+  { value: 'contract', labelKey: 'options.endDateSource.contract' },
 ]
 
 export const SETUP_ENTITIES: SetupEntity[] = [
@@ -621,6 +647,72 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'nextNumber', kind: 'integer', required: true },
       { key: 'padding', kind: 'integer', required: true },
       { key: 'gapless', kind: 'boolean' },
+    ],
+  },
+
+  // --- Revenue recognition -------------------------------------------------
+  {
+    // Recognition rules — the reusable ASC 606 / ARM recipe (method + date
+    // sources + offsets + accounts) applied to a performance obligation.
+    key: 'recognition-rules',
+    table: 'recognition_rules',
+    actorCols: true,
+    groupKey: 'revenue',
+    iconKey: 'trending-up',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'method', kind: 'text' },
+      { key: 'isForecast', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'method', kind: 'select', options: RECOGNITION_METHODS, required: true },
+      { key: 'isForecast', kind: 'boolean' },
+      { key: 'recognitionPeriods', kind: 'integer' },
+      { key: 'startDateSource', kind: 'select', options: START_DATE_SOURCES, keepDefault: true },
+      { key: 'endDateSource', kind: 'select', options: END_DATE_SOURCES, keepDefault: true },
+      { key: 'periodOffset', kind: 'integer', keepDefault: true },
+      { key: 'startOffsetDays', kind: 'integer', keepDefault: true },
+      { key: 'initialAmountPercent', kind: 'percent', keepDefault: true },
+      { key: 'deferredAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'recognizedAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Fair-value / standalone selling prices — dated per item & currency, used
+    // to allocate a bundle's transaction price across obligations (relative SSP).
+    key: 'fair-value-prices',
+    table: 'fair_value_prices',
+    actorCols: true,
+    groupKey: 'revenue',
+    iconKey: 'coins',
+    orgScoped: true,
+    orderBy: 'item_id, effective_from desc',
+    hasActive: true,
+    columns: [
+      { key: 'itemId', kind: 'ref', ref: 'items' },
+      { key: 'currency', kind: 'code' },
+      { key: 'unitPrice', kind: 'number' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'itemId', kind: 'ref', ref: 'items', required: true },
+      { key: 'currency', kind: 'text', required: true },
+      { key: 'unitPrice', kind: 'decimal', required: true },
+      { key: 'lowValue', kind: 'decimal' },
+      { key: 'highValue', kind: 'decimal' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'boolean' },
     ],
   },
 

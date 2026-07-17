@@ -51,5 +51,27 @@
     "noExpenseAccount": "No expense account",
     "selectAccount": "Select account…",
     "showOnTimesheet": "Show on timesheet"
+  },
+  "revrec": {
+    "title": "Revenue recognition",
+    "hint": "Defer and recognize this item's revenue over time (ASC 606)",
+    "rule": "Recognition rule",
+    "noRule": "Recognize immediately",
+    "selectRule": "Select a rule",
+    "deferredAccount": "Deferred revenue account",
+    "ruleDefault": "Use rule default",
+    "standaloneSellingPrice": "Standalone selling price",
+    "createPlansOn": "Create plan on",
+    "createPlansOnOptions": {
+      "billing": "Billing",
+      "fulfillment": "Fulfillment",
+      "arrangement": "Arrangement creation"
+    },
+    "allocation": "Revenue allocation",
+    "allocationOptions": {
+      "normal": "Normal",
+      "exclude": "Exclude",
+      "software": "Software (residual)"
+    }
   }
 }
