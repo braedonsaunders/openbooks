@@ -21,6 +21,7 @@
     "journal": "Journal",
     "accounts": "Chart of Accounts",
     "assets": "Fixed Assets",
+    "budgets": "Budgets",
     "banking": "Overview",
     "banking-match": "Match Bank Data",
     "banking-transactions": "Transactions",

@@ -50,7 +50,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   })
   let data
   try {
-    data = await resolveDefinitionToExportData(user.orgId, id, url.searchParams, { t, period, query: q })
+    data = await resolveDefinitionToExportData(user.orgId, id, url.searchParams, { orgId: user.orgId, t, period, query: q })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Report run failed' }, { status: 422 })
   }

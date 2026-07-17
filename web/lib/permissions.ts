@@ -40,6 +40,10 @@ export const PERMISSION_CATALOGUE = [
   "reports.read",
   "reports.create",
   "reports.schedule",
+  // Budget and forecast authoring is distinct from report construction.
+  "budgets.read",
+  "budgets.manage",
+  "budgets.approve",
   // Insights — native BI (cards, dashboards, library)
   "insights.read",
   "insights.create",
@@ -180,6 +184,15 @@ export const PERMISSION_GROUPS: {
       { key: "reports.read", labelKey: permissionLabelKey("reports.read") },
       { key: "reports.create", labelKey: permissionLabelKey("reports.create") },
       { key: "reports.schedule", labelKey: permissionLabelKey("reports.schedule") },
+    ],
+  },
+  {
+    key: "budgets",
+    labelKey: "permissions.groups.budgets",
+    permissions: [
+      { key: "budgets.read", labelKey: permissionLabelKey("budgets.read") },
+      { key: "budgets.manage", labelKey: permissionLabelKey("budgets.manage") },
+      { key: "budgets.approve", labelKey: permissionLabelKey("budgets.approve") },
     ],
   },
   {
@@ -356,6 +369,9 @@ export const BUILT_IN_ROLES: Record<
       "reports.read",
       "reports.create",
       "reports.schedule",
+      "budgets.read",
+      "budgets.manage",
+      "budgets.approve",
       "insights.read",
       "insights.create",
       "insights.publish",
@@ -415,6 +431,8 @@ export const BUILT_IN_ROLES: Record<
       "ar.pay",
       "reports.read",
       "reports.create",
+      "budgets.read",
+      "budgets.manage",
       "insights.read",
       "records.read",
       "records.create",
@@ -450,6 +468,8 @@ export const BUILT_IN_ROLES: Record<
       "ar.approve",
       "flows.approve",
       "reports.read",
+      "budgets.read",
+      "budgets.approve",
       "insights.read",
       "records.read",
       "time.read",
@@ -463,7 +483,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read", "data.export", "apps.use"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read", "data.export", "apps.use"],
   },
 };
 

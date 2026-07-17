@@ -1,0 +1,207 @@
+import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import { can, guardPermission } from '../../../../../lib/authz'
+import { isUuid } from '../../../../../lib/list-params'
+import { BudgetMutationError } from '../../../../../lib/budget-mutations'
+
+export const runtime = 'nodejs'
+
+type Action = 'submit' | 'withdraw' | 'approve' | 'reject' | 'archive' | 'copy' | 'copy_prior_actuals'
+
+function dims(body: Record<string, unknown>) {
+  const value = (key: string) => typeof body[key] === 'string' && isUuid(body[key] as string) ? body[key] as string : null
+  return {
+    departmentId: value('departmentId'),
+    projectId: value('projectId'),
+    locationId: value('locationId'),
+    classId: value('classId'),
+  }
+}
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('budgets.read')
+  if (gate instanceof NextResponse) return gate
+  const user = gate.user
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const action = body.action as Action
+  if (!['submit', 'withdraw', 'approve', 'reject', 'archive', 'copy', 'copy_prior_actuals'].includes(action)) {
+    return NextResponse.json({ error: 'invalid_action' }, { status: 422 })
+  }
+  const needsApproval = action === 'approve' || action === 'reject'
+  if (!can(gate, needsApproval ? 'budgets.approve' : 'budgets.manage')) {
+    return NextResponse.json({ error: `missing permission: ${needsApproval ? 'budgets.approve' : 'budgets.manage'}` }, { status: 403 })
+  }
+  const expectedRevision = Number(body.expectedRevision)
+  if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const locked = (await tx.execute(sql`
+        select id, name, description, book_id, fiscal_year, kind, status, revision
+          from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
+      `)) as unknown as { rows: Record<string, any>[] }
+      const scenario = locked.rows[0]
+      if (!scenario) throw new BudgetMutationError('not_found', 404)
+      if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+
+      if (action === 'copy') {
+        const targetYearRaw = Number(body.fiscalYear)
+        const targetYear = Number.isInteger(targetYearRaw) ? targetYearRaw : Number(scenario.fiscal_year)
+        const periods = (await tx.execute(sql`
+          select 1 from accounting_periods
+           where org_id = ${user.orgId} and fiscal_year = ${targetYear} and not is_adjustment limit 1
+        `)) as unknown as { rows: unknown[] }
+        if (!periods.rows[0]) throw new BudgetMutationError('target_year_has_no_periods')
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${scenario.book_id}:${targetYear}:${scenario.kind}`}, 0))`)
+        const baseName = `${scenario.name} Copy`
+        const existing = (await tx.execute(sql`
+          select name from budget_scenarios
+           where org_id = ${user.orgId} and book_id = ${scenario.book_id}
+             and fiscal_year = ${targetYear} and kind = ${scenario.kind}
+             and (name = ${baseName} or name like ${`${baseName} (%`})
+        `)) as unknown as { rows: { name: string }[] }
+        const used = new Set(existing.rows.map((row) => row.name))
+        let name = baseName
+        for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
+        const created = (await tx.execute(sql`
+          insert into budget_scenarios
+            (org_id, book_id, fiscal_year, name, description, kind, status, created_by, updated_by)
+          values (${user.orgId}, ${scenario.book_id}, ${targetYear}, ${name}, ${scenario.description},
+                  ${scenario.kind}, 'draft', ${user.id}, ${user.id})
+          returning id
+        `)) as unknown as { rows: { id: string }[] }
+        const newId = created.rows[0]!.id
+        await tx.execute(sql`
+          insert into budget_lines
+            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+             amount, note, created_by, updated_by)
+          select ${user.orgId}, ${newId}, bl.account_id, destination.id,
+                 bl.department_id, bl.project_id, bl.location_id, bl.class_id,
+                 bl.amount, bl.note, ${user.id}, ${user.id}
+            from budget_lines bl
+            join accounting_periods source_period on source_period.id = bl.period_id
+            join accounting_periods destination
+              on destination.org_id = ${user.orgId}
+             and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
+             and destination.fiscal_year = ${targetYear}
+             and destination.period_number = source_period.period_number
+           where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
+        `)
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${user.orgId}, 'budget_scenarios', ${newId}, 'insert',
+            ${JSON.stringify({ copiedFrom: id, targetYear })}::jsonb, ${user.id})
+        `)
+        return { id: newId, revision: 1 }
+      }
+
+      if (action === 'copy_prior_actuals') {
+        if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
+        const selected = dims(body)
+        await tx.execute(sql`
+          delete from budget_lines
+           where org_id = ${user.orgId} and scenario_id = ${id}
+             and department_id is not distinct from ${selected.departmentId}
+             and project_id is not distinct from ${selected.projectId}
+             and location_id is not distinct from ${selected.locationId}
+             and class_id is not distinct from ${selected.classId}
+        `)
+        await tx.execute(sql`
+          insert into budget_lines
+            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+             amount, created_by, updated_by)
+          select ${user.orgId}, ${id}, l.account_id, destination.id,
+                 ${selected.departmentId}, ${selected.projectId}, ${selected.locationId}, ${selected.classId},
+                 sum(l.amount), ${user.id}, ${user.id}
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status = 'posted'
+            join accounts a on a.id = l.account_id and a.org_id = ${user.orgId}
+            join accounting_periods source_period on source_period.id = e.period_id and source_period.fiscal_year = ${Number(scenario.fiscal_year) - 1}
+            join accounting_periods destination
+              on destination.org_id = ${user.orgId}
+             and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
+             and destination.fiscal_year = ${scenario.fiscal_year}
+             and destination.period_number = source_period.period_number
+           where e.book_id = ${scenario.book_id}
+             and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+             and l.department_id is not distinct from ${selected.departmentId}
+             and l.project_id is not distinct from ${selected.projectId}
+             and l.location_id is not distinct from ${selected.locationId}
+             and l.class_id is not distinct from ${selected.classId}
+           group by l.account_id, destination.id
+          having sum(l.amount) <> 0
+        `)
+        const nextRevision = expectedRevision + 1
+        await tx.execute(sql`
+          update budget_scenarios set revision = ${nextRevision}, updated_at = now(), updated_by = ${user.id}
+           where id = ${id} and org_id = ${user.orgId}
+        `)
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
+            ${JSON.stringify({ action, sourceFiscalYear: Number(scenario.fiscal_year) - 1, dimensions: selected })}::jsonb,
+            ${user.id})
+        `)
+        return { revision: nextRevision }
+      }
+
+      const lineCount = (await tx.execute(sql`
+        select count(*) as n from budget_lines where org_id = ${user.orgId} and scenario_id = ${id} and amount <> 0
+      `)) as unknown as { rows: { n: string }[] }
+      const hasLines = Number(lineCount.rows[0]?.n ?? 0) > 0
+      let status: string
+      let auditAction: 'update' | 'approve' | 'reject' = 'update'
+      if (action === 'submit') {
+        if (scenario.status !== 'draft') throw new BudgetMutationError('invalid_status_transition', 409)
+        if (!hasLines) throw new BudgetMutationError('budget_has_no_lines')
+        status = 'pending_approval'
+      } else if (action === 'withdraw') {
+        if (scenario.status !== 'pending_approval') throw new BudgetMutationError('invalid_status_transition', 409)
+        status = 'draft'
+      } else if (action === 'approve') {
+        if (scenario.status !== 'pending_approval') throw new BudgetMutationError('invalid_status_transition', 409)
+        if (!hasLines) throw new BudgetMutationError('budget_has_no_lines')
+        status = 'approved'
+        auditAction = 'approve'
+      } else if (action === 'reject') {
+        if (scenario.status !== 'pending_approval') throw new BudgetMutationError('invalid_status_transition', 409)
+        const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+        if (!reason) throw new BudgetMutationError('rejection_reason_required')
+        status = 'draft'
+        auditAction = 'reject'
+      } else {
+        if (!['draft', 'pending_approval', 'approved'].includes(scenario.status)) {
+          throw new BudgetMutationError('invalid_status_transition', 409)
+        }
+        if (scenario.status === 'approved' && !can(gate, 'budgets.approve')) {
+          throw new BudgetMutationError('approved_budget_requires_approver', 403)
+        }
+        status = 'archived'
+      }
+      const nextRevision = expectedRevision + 1
+      await tx.execute(sql`
+        update budget_scenarios set
+          status = ${status}, revision = ${nextRevision},
+          submitted_at = case when ${action} = 'submit' then now() when ${status} = 'draft' then null else submitted_at end,
+          submitted_by = case when ${action} = 'submit' then ${user.id} when ${status} = 'draft' then null else submitted_by end,
+          approved_at = case when ${action} = 'approve' then now() else approved_at end,
+          approved_by = case when ${action} = 'approve' then ${user.id} else approved_by end,
+          updated_at = now(), updated_by = ${user.id}
+        where id = ${id} and org_id = ${user.orgId}
+      `)
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${user.orgId}, 'budget_scenarios', ${id}, ${auditAction},
+          ${JSON.stringify({ action, from: scenario.status, to: status, reason: body.reason ?? null })}::jsonb, ${user.id})
+      `)
+      return { revision: nextRevision, status }
+    })
+    return NextResponse.json(result)
+  } catch (error) {
+    if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    throw error
+  }
+}

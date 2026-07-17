@@ -13,6 +13,7 @@ import { Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { exportCsv } from '../_ui/exportCsv'
+import { useSort } from '../_ui/useSort'
 import { TxnLink } from '../../reports/TxnLink'
 import { fmtMoney } from '../_ui/format'
 
@@ -731,21 +732,22 @@ function DetectionTab({ data }: { data: SentinelData }) {
 /* ------------------------------------------------------------------ Vendors */
 
 function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillTarget) => void }) {
+  const { sorted, SortTh } = useSort(data.vendorRisk, { key: 'compositeScore', dir: 'desc' })
   return (
     <Panel title="Vendor Risk Roll-Up" icon={ShieldAlert} hint="Parties ranked by flag severity across all detectors · click a row for that party's transactions" bodyClassName="p-0">
       <div className="max-h-144 overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-slate-900">
             <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <th className="px-4 py-2 text-left font-medium">Party</th>
-              <th className="px-4 py-2 text-right font-medium">Flags</th>
-              <th className="px-4 py-2 text-right font-medium">Flagged Amount</th>
+              <SortTh label="Party" col="partyName" align="left" defaultDir="asc" />
+              <SortTh label="Flags" col="flagCount" />
+              <SortTh label="Flagged Amount" col="totalAmount" />
               <th className="px-4 py-2 text-left font-medium">Flag Types</th>
-              <th className="px-4 py-2 text-right font-medium">Risk Score</th>
+              <SortTh label="Risk Score" col="compositeScore" />
             </tr>
           </thead>
           <tbody>
-            {data.vendorRisk.map((v, i) => (
+            {sorted.map((v, i) => (
               <tr
                 key={`${v.partyId}-${i}`}
                 onClick={v.partyId ? () => onDrill({ kind: 'party', id: v.partyId!, name: v.partyName, sub: `${v.flagCount} flags · ${money0(v.totalAmount)} flagged` }) : undefined}

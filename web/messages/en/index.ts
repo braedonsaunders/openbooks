@@ -19,6 +19,7 @@ import assistant from './assistant.json'
 import ar from './ar.json'
 import assets from './assets.json'
 import banking from './banking.json'
+import budgets from './budgets.json'
 import close from './close.json'
 import customization from './customization.json'
 import pdfTemplates from './pdfTemplates.json'
@@ -60,6 +61,7 @@ export default {
   ar,
   assets,
   banking,
+  budgets,
   close,
   customization,
   pdfTemplates,

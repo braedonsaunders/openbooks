@@ -288,9 +288,10 @@ alter table payment_events
   add foreign key (actor_id) references users(id);
 
 -- planning
+-- Budget-management FK coverage (including dimensions, tenant ownership, and
+-- scenario-line cascade) is installed by generated/0040_budget_management.sql.
 alter table budget_scenarios add foreign key (book_id) references accounting_books(id);
 alter table budget_lines
-  add foreign key (scenario_id) references budget_scenarios(id),
   add foreign key (account_id) references accounts(id),
   add foreign key (period_id) references accounting_periods(id);
 alter table allocation_rules add foreign key (offset_account_id) references accounts(id);

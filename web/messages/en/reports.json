@@ -827,6 +827,8 @@
     "description": "Actual ledger activity against a budget scenario, by account.",
     "noScenarios": "No budget scenarios yet. Create one to compare against actuals.",
     "scenario": "Scenario",
+    "scenarioOption": "{name} · FY{year} · {status}",
+    "manage": "Manage budgets",
     "actual": "Actual",
     "budget": "Budget",
     "variance": "Variance",

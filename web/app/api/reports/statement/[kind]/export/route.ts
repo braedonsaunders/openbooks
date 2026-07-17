@@ -56,7 +56,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   try {
     const q = parseReportQuery(p)
     const period = await resolvePeriod(q.period, { customFrom: p.get('from'), customTo: p.get('to') })
-    const resolved = await resolveReport(kind as ReportKind, p, { t, period, query: q })
+    const resolved = await resolveReport(kind as ReportKind, p, { orgId: gate.user.orgId, t, period, query: q })
 
     if (resolved.render === 'view') {
       const { view, title, periodPhrase } = resolved

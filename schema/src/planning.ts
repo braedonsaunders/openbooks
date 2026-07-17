@@ -5,7 +5,8 @@ import {
   jsonb,
   pgTable,
   text,
-  uniqueIndex,
+  timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
@@ -16,16 +17,32 @@ import { auditColumns, id, money, orgRef } from "./helpers";
  * symmetric query — not a bolted-on report.
  */
 
-export const budgetScenarios = pgTable("budget_scenarios", {
-  id: id(),
-  orgId: orgRef(),
-  bookId: uuid("book_id").notNull(),
-  fiscalYear: integer("fiscal_year").notNull(),
-  name: text("name").notNull(), // "FY27 Board Approved", "FY27 Reforecast Q2"
-  kind: text("kind", { enum: ["budget", "forecast"] }).notNull().default("budget"),
-  status: text("status", { enum: ["draft", "approved", "archived"] }).notNull().default("draft"),
-  ...auditColumns,
-});
+export const budgetScenarios = pgTable(
+  "budget_scenarios",
+  {
+    id: id(),
+    orgId: orgRef(),
+    bookId: uuid("book_id").notNull(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    name: text("name").notNull(), // "FY27 Board Approved", "FY27 Reforecast Q2"
+    description: text("description"),
+    kind: text("kind", { enum: ["budget", "forecast"] }).notNull().default("budget"),
+    status: text("status", {
+      enum: ["draft", "pending_approval", "approved", "archived"],
+    }).notNull().default("draft"),
+    /** Optimistic concurrency token. Every metadata or line write increments it. */
+    revision: integer("revision").notNull().default(1),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedBy: uuid("submitted_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
+    ...auditColumns,
+  },
+  (t) => [
+    unique("budget_scenarios_identity").on(t.orgId, t.bookId, t.fiscalYear, t.kind, t.name),
+    index("budget_scenarios_org_year_status").on(t.orgId, t.fiscalYear, t.status),
+  ],
+);
 
 export const budgetLines = pgTable(
   "budget_lines",
@@ -44,10 +61,11 @@ export const budgetLines = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("budget_lines_cell").on(
-      t.scenarioId, t.accountId, t.periodId, t.departmentId, t.projectId, t.locationId, t.classId,
-    ),
+    unique("budget_lines_cell")
+      .on(t.scenarioId, t.accountId, t.periodId, t.departmentId, t.projectId, t.locationId, t.classId)
+      .nullsNotDistinct(),
     index("budget_lines_scenario").on(t.scenarioId),
+    index("budget_lines_org_scenario").on(t.orgId, t.scenarioId),
   ],
 );
 

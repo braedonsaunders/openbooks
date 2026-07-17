@@ -97,6 +97,29 @@
       "otherIncome": "Autres produits",
       "otherExpense": "Autres charges",
       "netIncome": "Résultat net"
+    },
+    "budget": {
+      "measuredAgainst": "Mesuré par rapport à <strong>{name}</strong> (EF{year}, {status}) — lignes budgétaires sur la période sélectionnée. Gérez les scénarios dans <link>Budgets</link>.",
+      "totalBudget": "Budget total",
+      "budgetedAccounts": "{count, plural, one {# compte budgété} other {# comptes budgétés}}",
+      "totalActual": "Réel total",
+      "normalizedIncome": "revenus normalisés par signe",
+      "overBudget": "Dépassements",
+      "onWatch": "{count} à surveiller",
+      "coverage": "Couverture",
+      "coverageSub": "comptes avec une ligne budgétaire",
+      "tableTitle": "Budget et réel ({count})",
+      "search": "Rechercher des comptes…",
+      "csv": "CSV",
+      "all": "Tous",
+      "status": { "on-track": "Conforme", "watch": "À surveiller", "over": "Dépassé", "no-budget": "Sans budget" },
+      "columns": { "account": "Compte", "type": "Type", "budget": "Budget", "actual": "Réel", "progress": "Progression", "variance": "Écart", "variancePct": "Écart %", "status": "Statut" },
+      "showing": "Affichage de {from} à {to} sur {total} comptes",
+      "previous": "Précédent",
+      "next": "Suivant",
+      "noBudgetTitle": "Aucun budget officiel pour cette période",
+      "noBudgetDescription": "Créez et approuvez un scénario budgétaire pour afficher les écarts réels par compte. Ce tableau de bord ne remplace pas les données par des cibles synthétiques.",
+      "createBudget": "Créer un budget"
     }
   },
   "customer": {

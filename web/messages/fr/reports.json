@@ -808,6 +808,8 @@
     "description": "Activité réelle du grand livre par rapport à un scénario budgétaire, par compte.",
     "noScenarios": "Aucun scénario budgétaire pour le moment. Créez-en un pour comparer aux réels.",
     "scenario": "Scénario",
+    "scenarioOption": "{name} · EF{year} · {status}",
+    "manage": "Gérer les budgets",
     "actual": "Réel",
     "budget": "Budget",
     "variance": "Écart",
