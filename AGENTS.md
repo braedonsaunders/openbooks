@@ -152,6 +152,32 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
   draft record server-side and opens it in the flyout for editing. No big
   blocking create forms, no client-only state that can be lost. Drafts
   autosave (debounced PATCH); posting/submitting is an explicit action.
+- NON-NEGOTIABLE — a detail surface has ONE primary record and it lives on the
+  shared flyout (`TransactionDrawer` over `UrlDrawer`) with exactly three chrome
+  affordances: Edit (inline into the draft), an Actions menu (the `Popover`
+  header dropdown), and Fullscreen (`UrlDrawer`'s built-in expand-to-viewport
+  toggle). No bespoke per-record header layouts — bills, invoices, journals,
+  parties, projects, everything shares this shell.
+- NON-NEGOTIABLE — every secondary create/mutate on a record ("Add charge",
+  "Request billing", "Recognize revenue", "Generate backup", …) is an entry in
+  that record's Actions menu / flyout, NEVER a standalone button or a form
+  section bolted onto the page body. The body shows data; all verbs live behind
+  the one Actions menu.
+- NON-NEGOTIABLE — user-facing terminology is "Transactions", not "Documents"
+  (nav labels, page titles, headings, breadcrumbs, i18n copy, empty states).
+  The `documents`/`document_lines` tables, `documents.*` permission keys, and
+  `document_kinds` internals keep their names — only the surfaced words change.
+- NON-NEGOTIABLE — ALL tables are paginated. No exceptions, ever. Every table or
+  record list ships search + relevant filters + `Pagination`, URL-driven via
+  `parseListParams` (prefixed params when a page has more than one table). An
+  unbounded or unpaginated table is a bug, not a shortcut.
+- NON-NEGOTIABLE — KPI/stat tiles render in a SINGLE row (one scannable strip).
+  Never stack two rows of KPIs — it reads worse than the legacy app. More stats
+  than fit one row → cut them, or move the overflow behind a subtab. One row,
+  full stop.
+- NON-NEGOTIABLE — never place two multi-column (≥6-col) tables side-by-side in
+  one row. Wide tables each take full width; when a surface needs several, put
+  them in subtabs (`DetailPageLayout`/`TabNav` `subtabs`), one table per tab.
 - Navigation comes from `web/lib/nav/registry.ts` + org overrides
   (`/admin/navigation`). Add modules to the registry — never hardcode
   sidebar entries.
