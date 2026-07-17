@@ -29,6 +29,7 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { can } from '../../../../lib/authz'
 import { loadProject } from '../../../api/projects/_lib'
 import { BillingSection } from './BillingSection'
+import { ChargesSection } from './ChargesSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,13 +150,34 @@ export default async function ProjectCockpit({
   if (!payload) notFound()
   const canManage = can(authz, 'projects.manage')
 
+  // Project charges (resource usage) + item picker + absorption summary.
+  const [chargeRows, itemRows] = (await Promise.all([
+    db.execute(sql`
+      select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
+             d.total::numeric(19,4) as cost,
+             coalesce(sum(dl.amount * coalesce(nullif(dl.cost_multiplier,0),1)) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
+             count(dl.*) as lines,
+             bool_and(dl.billed_by_line_id is not null) filter (where dl.is_billable) as billed
+        from documents d left join document_lines dl on dl.document_id = d.id
+       where d.org_id = ${orgId} and d.kind = 'project_charge' and d.project_id = ${id}
+       group by d.id order by d.document_date desc, d.document_number desc`),
+    db.execute(sql`
+      select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
+        from items where org_id = ${orgId} and is_active order by name limit 2000`),
+  ])) as any[]
+  const chargeList = chargeRows.rows as any[]
+  const absorption = {
+    recovered: chargeList.filter((c) => c.status === 'posted').reduce((a, c) => a + Number(c.cost), 0).toFixed(2),
+    billValue: chargeList.reduce((a, c) => a + Number(c.billValue), 0).toFixed(2),
+  }
+
   const pr = payload.project
   const s = summary
   const custom = (pr.custom as Record<string, unknown> | null) ?? {}
   const cfByKey = new Map((payload.customFieldDefs ?? []).map((d) => [`cf_${d.key}`, d]))
 
   const sp = await searchParams
-  const TAB_KEYS = ['overview', 'financials', 'cost_time', 'billing', 'documents'] as const
+  const TAB_KEYS = ['overview', 'financials', 'cost_time', 'charges', 'billing', 'documents'] as const
   const tabParam = pickString(sp.tab)
   const activeTab = (TAB_KEYS as readonly string[]).includes(tabParam ?? '') ? tabParam! : 'overview'
   const tabs = TAB_KEYS.map((key) => ({ key, label: t(`cockpit.tabs.${key}`) }))
@@ -374,6 +396,16 @@ export default async function ProjectCockpit({
             <TimeTable title={t('cockpit.timeByEmployee')} rows={time.byEmployee} unlabeled={t('cockpit.unassignedEmployee')} labelHead={tCommon('labels.employee')} hoursHead={t('cockpit.hoursHead')} billableHead={t('cockpit.billableHead')} costHead={t('labels.actualCost')} billHead={t('cockpit.billValue')} money={money} hours={hours} empty={t('cockpit.noTime')} />
           </section>
         </div>
+      ) : null}
+
+      {activeTab === 'charges' ? (
+        <ChargesSection
+          projectId={id}
+          charges={chargeList as any}
+          items={itemRows.rows as any}
+          absorption={absorption}
+          canManage={canManage}
+        />
       ) : null}
 
       {activeTab === 'billing' ? (
