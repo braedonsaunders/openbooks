@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, BarChart3, CalendarDays, CheckCircle2, Copy, FileWarning, Flag, Ghost,
   History, Info, ListOrdered, Scale, ShieldAlert, SlidersHorizontal, Sigma, Zap, Database, Download,
 } from 'lucide-react'
-import { cn, Badge } from '@openbooks/ui'
+import { cn, Badge, Drawer } from '@openbooks/ui'
 import type { SentinelData, FlaggedDoc } from '../../../../lib/analytics/sentinel-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
@@ -259,6 +259,7 @@ function OverviewTab({ data }: { data: SentinelData }) {
 
 function BenfordTab({ data }: { data: SentinelData }) {
   const [sub, setSub] = useState<'1d' | '2d' | 'trap'>('1d')
+  const [drill, setDrill] = useState<{ digit: number; dim: '1d' | '2d' } | null>(null)
   const b1 = data.benford1D
   const b2 = data.benford2D
   const trap = data.thresholdTrap
@@ -269,6 +270,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
         { key: '2d', label: 'First Two Digits (2D)', count: b2.anomalies.length },
         { key: 'trap', label: 'Threshold Trap', count: trap.total },
       ]} />
+      {drill ? <BenfordDrill digit={drill.digit} dim={drill.dim} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} /> : null}
 
       {sub === '1d' ? (
         <div className="space-y-5">
@@ -294,7 +296,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
               }}
             />
           </Panel>
-          <Panel title="Digit Detail" icon={ListOrdered} bodyClassName="p-0">
+          <Panel title="Digit Detail" icon={ListOrdered} hint="Click a digit to see the transactions behind it" bodyClassName="p-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
@@ -308,7 +310,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
               </thead>
               <tbody>
                 {b1.digits.map((d) => (
-                  <tr key={d.digit} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <tr key={d.digit} onClick={() => setDrill({ digit: d.digit, dim: '1d' })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</td>
@@ -393,6 +395,56 @@ function BenfordTab({ data }: { data: SentinelData }) {
         </div>
       ) : null}
     </div>
+  )
+}
+
+/** Benford digit → transactions drill (Gantry openBenford1DDigitFlyout). */
+function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '1d' | '2d'; from: string; to: string; onClose: () => void }) {
+  const [data, setData] = useState<any>(null)
+  const [error, setError] = useState(false)
+  useEffect(() => {
+    let live = true
+    fetch(`/api/analytics/sentinel/benford?digit=${digit}&dim=${dim}&from=${from}&to=${to}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((j) => { if (live) setData(j) })
+      .catch(() => { if (live) setError(true) })
+    return () => { live = false }
+  }, [digit, dim, from, to])
+  const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+
+  return (
+    <Drawer open onClose={onClose} size="lg" title={`${dim === '2d' ? 'First two digits' : 'Leading digit'}: ${digit}`} description={data ? `${num(data.count)} documents · ${money(data.total)}${data.count > data.documents.length ? ` (top ${data.documents.length})` : ''}` : 'Loading…'} bodyClassName="overflow-hidden flex flex-col p-0">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {error ? (
+          <p className="p-6 text-center text-sm text-slate-400">Could not load transactions.</p>
+        ) : !data ? (
+          <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
+        ) : data.documents.length === 0 ? (
+          <p className="p-6 text-center text-sm text-slate-400">No documents lead with {digit}.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <th className="px-4 py-2 text-left font-medium">Date</th>
+                <th className="px-4 py-2 text-left font-medium">Document</th>
+                <th className="px-4 py-2 text-left font-medium">Party</th>
+                <th className="px-4 py-2 text-right font-medium">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.documents.map((d: any, k: number) => (
+                <tr key={k} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                  <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(d.date)}</td>
+                  <td className="px-4 py-1.5"><TxnLink entryId={d.entryId ?? ''} docKind={d.docKind} docId={d.docId} className="font-medium text-slate-700 hover:text-teal-600 dark:text-slate-200 dark:hover:text-teal-400">{d.docNumber || d.docKind}</TxnLink></td>
+                  <td className="max-w-48 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={d.partyName}>{d.partyName || '—'}</td>
+                  <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(d.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </Drawer>
   )
 }
 
