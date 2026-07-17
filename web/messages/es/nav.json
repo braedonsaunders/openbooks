@@ -2,6 +2,7 @@
   "modules": {
     "dashboard": "Panel",
     "assistant": "Asistente",
+    "continuous-close": "Cierre continuo",
     "approvals": "Aprobaciones",
     "insights": "Análisis",
     "purchase-orders": "Órdenes de compra",

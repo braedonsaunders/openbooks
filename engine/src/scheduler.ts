@@ -126,6 +126,14 @@ export async function tick(): Promise<void> {
     } catch (e) {
       console.error("[scheduler] FX provider scan failed:", e);
     }
+
+    // Tenant-controlled Accounting and Finance continuous-close agents.
+    try {
+      const { runDueContinuousCloseAgents } = await import("./continuous-close.ts");
+      await runDueContinuousCloseAgents();
+    } catch (e) {
+      console.error("[scheduler] continuous-close scan failed:", e);
+    }
   } catch (e) {
     // Never let a tick rejection escape setInterval — an unhandled rejection
     // would take down the whole server process on a transient DB error.

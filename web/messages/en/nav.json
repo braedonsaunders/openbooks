@@ -2,6 +2,7 @@
   "modules": {
     "dashboard": "Dashboard",
     "assistant": "Assistant",
+    "continuous-close": "Continuous Close",
     "approvals": "Approvals",
     "insights": "Insights",
     "purchase-orders": "Purchase Orders",

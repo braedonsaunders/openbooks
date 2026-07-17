@@ -107,6 +107,10 @@ accounts match NetSuite exactly**.
 - [x] Saved Searches (NetSuite Saved Search analogue) — Knowledge menu: named,
       shareable queries over the ledger/documents/parties/accounts catalog
       (detail rows or grouped summaries), builder flyout, live preview, export *(2026-07-15)*
+- [x] Continuous close agents: separate Accounting and Finance control planes,
+      deterministic exact-money detectors, evidence-backed review queue,
+      automatic resolution, feedback, audit history, tenant kill switches,
+      schedules, and materiality policies under Platform → AI *(2026-07-16)*
 
 ### M5 — Cutover
 - [ ] NetSuite → read-only; openbooks system of record

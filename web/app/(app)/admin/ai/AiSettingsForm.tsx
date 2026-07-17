@@ -8,10 +8,11 @@
 // policy selector, no journal-automation toggle).
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
-import { useTranslations } from 'next-intl'
-import { CheckCircle2, Loader2, RefreshCw, XCircle, Zap } from 'lucide-react'
+import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
+import { Activity, CheckCircle2, Loader2, Play, RefreshCw, XCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, Input, Label, SearchSelect, cn, type SelectOption } from '@openbooks/ui'
+import { Button, Input, Label, SearchSelect, Select, cn, type SelectOption } from '@openbooks/ui'
 
 // Serializable slice of a provider spec (no SDK code reaches the client bundle).
 export type ProviderSpecLite = {
@@ -32,6 +33,19 @@ type AiFormInitial = {
   modelSmart: string
   baseUrl: string
   hasKey: boolean
+  agents: AgentPolicy[]
+}
+
+type AgentPolicy = {
+  id: string | null
+  agentKey: 'accounting' | 'finance'
+  enabled: boolean
+  automaticRuns: boolean
+  cadence: 'daily' | 'weekly'
+  materialityThreshold: string
+  lastRunAt: string | null
+  nextRunAt: string | null
+  lastRunStatus: 'completed' | 'failed' | 'skipped' | 'running' | null
 }
 
 type ModelListItem = { id: string; label?: string }
@@ -44,6 +58,7 @@ export function AiSettingsForm({
   initial: AiFormInitial
 }) {
   const t = useTranslations('admin.ai')
+  const locale = useLocale()
   const [enabled, setEnabled] = useState(initial.enabled)
   const [provider, setProvider] = useState(initial.provider)
   const [apiKey, setApiKey] = useState('')
@@ -52,6 +67,8 @@ export function AiSettingsForm({
   const [modelSmart, setModelSmart] = useState(initial.modelSmart)
   const [hasKey, setHasKey] = useState(initial.hasKey)
   const [savedProviderValue, setSavedProviderValue] = useState(initial.provider)
+  const [agents, setAgents] = useState<AgentPolicy[]>(initial.agents)
+  const [runningAgent, setRunningAgent] = useState<string | null>(null)
 
   const [models, setModels] = useState<ModelListItem[]>([])
   const [modelsError, setModelsError] = useState<string | null>(null)
@@ -144,6 +161,7 @@ export function AiSettingsForm({
             modelSmart,
             baseUrl,
             apiKey: apiKey || undefined,
+            agents,
           }),
         })
         const body = (await res.json()) as AiFormInitial & { error?: string }
@@ -153,6 +171,7 @@ export function AiSettingsForm({
         }
         setHasKey(body.hasKey)
         setSavedProviderValue(body.provider)
+        setAgents(body.agents)
         setApiKey('')
         setTestResult(null)
         toast.success(t('saved'))
@@ -160,6 +179,42 @@ export function AiSettingsForm({
         toast.error(t('saveFailed'))
       }
     })
+  }
+
+  function updateAgent(agentKey: AgentPolicy['agentKey'], patch: Partial<AgentPolicy>) {
+    setAgents((current) => current.map((agent) => agent.agentKey === agentKey ? { ...agent, ...patch } : agent))
+  }
+
+  async function runAgent(agentKey: AgentPolicy['agentKey']) {
+    setRunningAgent(agentKey)
+    try {
+      // Persist the visible policy first so Run now always executes exactly the
+      // controls the administrator is looking at.
+      const saveResponse = await fetch('/api/admin/ai', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled, provider, modelFast, modelSmart, baseUrl, apiKey: apiKey || undefined, agents }),
+      })
+      const saved = (await saveResponse.json()) as AiFormInitial & { error?: string }
+      if (!saveResponse.ok) throw new Error(saved.error ?? 'save_failed')
+      setAgents(saved.agents)
+      setHasKey(saved.hasKey)
+      setApiKey('')
+      const response = await fetch('/api/continuous-close/run', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ agentKey }),
+      })
+      const result = (await response.json()) as { detected?: number; autoResolved?: number }
+      if (!response.ok) throw new Error('scan_failed')
+      toast.success(t('agents.scanComplete', { detected: result.detected ?? 0, resolved: result.autoResolved ?? 0 }))
+      const refreshed = await fetch('/api/admin/ai').then((res) => res.json()) as AiFormInitial
+      setAgents(refreshed.agents)
+    } catch {
+      toast.error(t('agents.scanFailed'))
+    } finally {
+      setRunningAgent(null)
+    }
   }
 
   function clearKey() {
@@ -254,6 +309,107 @@ export function AiSettingsForm({
           {t('enabledLabel')}
         </span>
       </label>
+
+      <section className="space-y-4 border-t border-slate-100 pt-5 dark:border-slate-800">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <Activity size={16} className="text-teal-600" />
+              {t('agents.title')}
+            </h3>
+            <p className="mt-1 max-w-xl text-xs text-slate-500 dark:text-slate-400">{t('agents.description')}</p>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/continuous-close">{t('agents.reviewWork')}</Link>
+          </Button>
+        </div>
+        {!enabled ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+            {t('agents.globallyDisabled')}
+          </p>
+        ) : null}
+        <div className="grid gap-3 lg:grid-cols-2">
+          {agents.map((agent) => (
+            <div key={agent.agentKey} className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t(`agents.${agent.agentKey}.title`)}</h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t(`agents.${agent.agentKey}.description`)}</p>
+                </div>
+                <label className="flex shrink-0 items-center gap-2 text-xs font-medium">
+                  <input
+                    type="checkbox"
+                    checked={agent.enabled}
+                    onChange={(event) => updateAgent(agent.agentKey, { enabled: event.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+                  />
+                  {t('agents.enabled')}
+                </label>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={agent.automaticRuns}
+                  disabled={!agent.enabled}
+                  onChange={(event) => updateAgent(agent.agentKey, { automaticRuns: event.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-600"
+                />
+                {t('agents.automaticRuns')}
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>{t('agents.cadence')}</Label>
+                  <Select
+                    value={agent.cadence}
+                    disabled={!agent.enabled || !agent.automaticRuns}
+                    onChange={(event) => updateAgent(agent.agentKey, { cadence: event.target.value === 'weekly' ? 'weekly' : 'daily' })}
+                  >
+                    <option value="daily">{t('agents.cadences.daily')}</option>
+                    <option value="weekly">{t('agents.cadences.weekly')}</option>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t('agents.materiality')}</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={agent.materialityThreshold}
+                    disabled={!agent.enabled}
+                    onChange={(event) => updateAgent(agent.agentKey, { materialityThreshold: event.target.value })}
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{t(`agents.${agent.agentKey}.coverage`)}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {agent.lastRunAt
+                    ? t('agents.lastRun', {
+                        date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(agent.lastRunAt)),
+                        status: t(`agents.runStatus.${agent.lastRunStatus ?? 'completed'}`),
+                      })
+                    : t('agents.neverRun')}
+                  {agent.nextRunAt && enabled && agent.enabled && agent.automaticRuns ? (
+                    <div className="mt-0.5">
+                      {t('agents.nextRun', {
+                        date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(agent.nextRunAt)),
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!enabled || !agent.enabled || runningAgent !== null}
+                  onClick={() => void runAgent(agent.agentKey)}
+                >
+                  {runningAgent === agent.agentKey ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+                  {t('agents.runNow')}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="space-y-1.5">
         <Label>{t('providerLabel')}</Label>

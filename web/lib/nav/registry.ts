@@ -28,6 +28,7 @@ export const NAV_MODULES: NavModule[] = [
   // Home — the daily landing surfaces.
   { key: 'dashboard', href: '/dashboard', label: 'Dashboard', iconKey: 'gauge', group: 'Home', exact: true },
   { key: 'assistant', href: '/assistant', label: 'Assistant', iconKey: 'sparkles', group: 'Home', requiredPermission: 'assistant.use' },
+  { key: 'continuous-close', href: '/continuous-close', label: 'Continuous Close', iconKey: 'activity', group: 'Home', requiredPermission: 'assistant.use' },
   { key: 'approvals', href: '/approvals', label: 'Approvals', iconKey: 'check', group: 'Home', requiredPermission: 'ap.approve' },
 
   // Purchases — money out plus the vendors it flows to.

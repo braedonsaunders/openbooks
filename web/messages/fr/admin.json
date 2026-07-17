@@ -730,6 +730,34 @@
     "removeKey": "Supprimer la clé API",
     "testConnection": "Tester la connexion",
     "testFailed": "La requête de test a échoué.",
+    "agents": {
+      "title": "Agents de clôture continue",
+      "description": "Exécutez en continu des contrôles comptables déterministes. Les constats comprennent les preuves sources et ne comptabilisent ni ne modifient jamais automatiquement les données financières.",
+      "reviewWork": "Examiner les constats",
+      "globallyDisabled": "Les fonctions d’IA sont désactivées. Les deux agents et leurs exécutions planifiées sont arrêtés, quels que soient les réglages ci-dessous.",
+      "enabled": "Activé",
+      "automaticRuns": "Exécuter automatiquement",
+      "cadence": "Fréquence",
+      "materiality": "Seuil d’importance relative",
+      "cadences": { "daily": "Chaque jour", "weekly": "Chaque semaine" },
+      "accounting": {
+        "title": "Agent comptable",
+        "description": "Contrôles continus de tenue de livres et de préparation à la clôture.",
+        "coverage": "Vérifie l’activité bancaire non appariée, les écarts de rapprochement et les documents comptables brouillons ou en attente."
+      },
+      "finance": {
+        "title": "Agent financier",
+        "description": "Contrôles continus des écarts et du rendement.",
+        "coverage": "Vérifie les écarts au budget approuvé, les baisses du chiffre d’affaires et de la marge brute ainsi que l’absence de budget."
+      },
+      "lastRun": "Dernière exécution : {date} · {status}",
+      "nextRun": "Prochaine exécution planifiée : {date}",
+      "neverRun": "Jamais exécuté",
+      "runNow": "Exécuter",
+      "scanComplete": "Analyse terminée : {detected} détectés, {resolved} résolus.",
+      "scanFailed": "L’analyse de l’agent a échoué.",
+      "runStatus": { "completed": "terminée", "failed": "échouée", "skipped": "ignorée", "running": "en cours" }
+    },
     "models": {
       "load": "Charger les modèles",
       "reload": "Recharger les modèles",
