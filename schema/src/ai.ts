@@ -71,6 +71,8 @@ export const aiAgentPolicies = pgTable(
     automaticRuns: boolean("automatic_runs").notNull().default(false),
     cadence: text("cadence", { enum: ["daily", "weekly"] }).notNull().default("daily"),
     materialityThreshold: money("materiality_threshold").notNull().default("1000"),
+    /** Canonical per-detector enablement, materiality overrides, and thresholds. */
+    detectorSettings: jsonb("detector_settings").$type<Record<string, unknown>>().notNull().default({}),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     ...auditColumns,

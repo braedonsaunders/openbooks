@@ -27,12 +27,12 @@ test("evalFormula rejects unsupported operators and unknown boxes", () => {
 // sign -1 → positive on the return), 106 ITCs (a debit, sign +1), then computed
 // totals: 105 = 103, 108 = 106, net tax 109 = 105 - 108.
 const GST34: TaxReturnBoxDef[] = [
-  { lineCode: "101", label: "Sales", sign: 1, sequence: 1, formula: null, editable: false },
-  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 2, formula: null, editable: false },
-  { lineCode: "106", label: "Input tax credits", sign: 1, sequence: 3, formula: null, editable: false },
-  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 4, formula: "103", editable: false },
-  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 5, formula: "106", editable: false },
-  { lineCode: "109", label: "Net tax", sign: 1, sequence: 6, formula: "105 - 108", editable: false },
+  { lineCode: "101", label: "Sales", sign: 1, sequence: 1, formula: null, editable: false, pdfField: null },
+  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 2, formula: null, editable: false, pdfField: null },
+  { lineCode: "106", label: "Input tax credits", sign: 1, sequence: 3, formula: null, editable: false, pdfField: null },
+  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 4, formula: "103", editable: false, pdfField: null },
+  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 5, formula: "106", editable: false, pdfField: null },
+  { lineCode: "109", label: "Net tax", sign: 1, sequence: 6, formula: "105 - 108", editable: false, pdfField: null },
 ];
 
 test("assembleReturn computes a GST34 with sign flips and derived totals", () => {
@@ -63,21 +63,21 @@ test("assembleReturn marks computed vs GL-mapped boxes and preserves order", () 
 test("assembleReturn evaluates strictly in sequence order (a forward reference throws)", () => {
   // 109 references 105 but is sequenced BEFORE it → not-yet-computed.
   const bad: TaxReturnBoxDef[] = [
-    { lineCode: "109", label: "Net", sign: 1, sequence: 1, formula: "105", editable: false },
-    { lineCode: "105", label: "Total", sign: 1, sequence: 2, formula: null, editable: false },
+    { lineCode: "109", label: "Net", sign: 1, sequence: 1, formula: "105", editable: false, pdfField: null },
+    { lineCode: "105", label: "Total", sign: 1, sequence: 2, formula: null, editable: false, pdfField: null },
   ];
   assert.throws(() => assembleReturn(bad, new Map([["105", "1.0000"]])), /not-yet-computed box "105"/);
 });
 
 // A GST34 with adjustment boxes (104 add / 107 deduct) feeding the totals.
 const GST34_ADJ: TaxReturnBoxDef[] = [
-  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 20, formula: null, editable: false },
-  { lineCode: "104", label: "Adjustments (add)", sign: 1, sequence: 30, formula: null, editable: true },
-  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 40, formula: "103 + 104", editable: false },
-  { lineCode: "106", label: "ITCs", sign: 1, sequence: 50, formula: null, editable: false },
-  { lineCode: "107", label: "Adjustments (deduct)", sign: 1, sequence: 60, formula: null, editable: true },
-  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 70, formula: "106 + 107", editable: false },
-  { lineCode: "109", label: "Net tax", sign: 1, sequence: 80, formula: "105 - 108", editable: false },
+  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 20, formula: null, editable: false, pdfField: null },
+  { lineCode: "104", label: "Adjustments (add)", sign: 1, sequence: 30, formula: null, editable: true, pdfField: null },
+  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 40, formula: "103 + 104", editable: false, pdfField: null },
+  { lineCode: "106", label: "ITCs", sign: 1, sequence: 50, formula: null, editable: false, pdfField: null },
+  { lineCode: "107", label: "Adjustments (deduct)", sign: 1, sequence: 60, formula: null, editable: true, pdfField: null },
+  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 70, formula: "106 + 107", editable: false, pdfField: null },
+  { lineCode: "109", label: "Net tax", sign: 1, sequence: 80, formula: "105 - 108", editable: false, pdfField: null },
 ];
 
 test("adjustment boxes take the filer's amount and flow into the totals", () => {

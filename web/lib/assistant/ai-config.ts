@@ -12,10 +12,13 @@ import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   getContinuousClosePolicies,
   nextContinuousCloseRunAt,
+  normalizeContinuousCloseDetectors,
   type AgentCadence,
   type ContinuousCloseAgentKey,
+  type ContinuousCloseDetectorPolicy,
   type ContinuousClosePolicy,
 } from "@openbooks/engine/src/continuous-close.ts";
+import { serializeContinuousCloseDetectors } from "@openbooks/engine/src/continuous-close-config.ts";
 import { fromUnits, toUnits } from "@openbooks/engine/src/money.ts";
 
 /**
@@ -58,6 +61,7 @@ export type AgentSettingsInput = {
   automaticRuns: boolean;
   cadence: AgentCadence;
   materialityThreshold: string;
+  detectors: ContinuousCloseDetectorPolicy[];
 };
 
 /** The mutable, non-secret fields the settings form collects. */
@@ -105,25 +109,31 @@ export function normalizeAgentSettingsInput(raw: unknown): AgentSettingsInput[] 
       if (typeof row.agentKey === "string") byKey.set(row.agentKey, row);
     }
   }
-  return CONTINUOUS_CLOSE_AGENT_KEYS.map((agentKey) => {
-    const row = byKey.get(agentKey) ?? {};
-    const rawThreshold = String(row.materialityThreshold ?? "1000").trim();
-    let threshold: string;
-    try {
-      const units = toUnits(rawThreshold);
-      if (units < 0n) throw new Error("negative");
-      threshold = fromUnits(units);
-    } catch {
-      throw new Error(`invalid materiality threshold for ${agentKey}`);
-    }
-    return {
-      agentKey,
-      enabled: row.enabled === true,
-      automaticRuns: row.automaticRuns === true,
-      cadence: row.cadence === "weekly" ? "weekly" : "daily",
-      materialityThreshold: threshold,
-    };
-  });
+  return CONTINUOUS_CLOSE_AGENT_KEYS.map((agentKey) => normalizeAgentSettingInput(agentKey, byKey.get(agentKey) ?? {}));
+}
+
+export function normalizeAgentSettingInput(
+  agentKey: ContinuousCloseAgentKey,
+  raw: unknown,
+): AgentSettingsInput {
+  const row = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const rawThreshold = String(row.materialityThreshold ?? "1000").trim();
+  let threshold: string;
+  try {
+    const units = toUnits(rawThreshold);
+    if (units < 0n) throw new Error("negative");
+    threshold = fromUnits(units);
+  } catch {
+    throw new Error(`invalid materiality threshold for ${agentKey}`);
+  }
+  return {
+    agentKey,
+    enabled: row.enabled === true,
+    automaticRuns: row.automaticRuns === true,
+    cadence: row.cadence === "weekly" ? "weekly" : "daily",
+    materialityThreshold: threshold,
+    detectors: normalizeContinuousCloseDetectors(agentKey, row.detectors),
+  };
 }
 
 /**
@@ -192,51 +202,83 @@ export async function saveOrgAiSettings(
       })}::jsonb, ${userId})
     `);
 
-    for (const agent of input.agents) {
-      const prior = (await tx.execute(sql`
-        select id, enabled, automatic_runs, cadence, next_run_at
-          from ai_agent_policies
-         where org_id = ${orgId} and agent_key = ${agent.agentKey}
-         for update
-      `)) as unknown as { rows: { id: string; enabled: boolean; automatic_runs: boolean; cadence: AgentCadence; next_run_at: Date | null }[] };
-      const previous = prior.rows[0];
-      const schedulable = input.enabled && agent.enabled && agent.automaticRuns;
-      const scheduleChanged = !previous || !previous.enabled || !previous.automatic_runs || previous.cadence !== agent.cadence;
-      const nextRunAt = schedulable
-        ? scheduleChanged || !previous?.next_run_at
-          ? nextContinuousCloseRunAt(agent.cadence)
-          : previous.next_run_at
-        : null;
-      const saved = (await tx.execute(sql`
-        insert into ai_agent_policies (
-          org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
-          next_run_at, created_by, updated_by
-        ) values (
-          ${orgId}, ${agent.agentKey}, ${agent.enabled}, ${agent.automaticRuns},
-          ${agent.cadence}, ${agent.materialityThreshold}, ${nextRunAt}, ${userId}, ${userId}
-        )
-        on conflict (org_id, agent_key) do update set
-          enabled = excluded.enabled,
-          automatic_runs = excluded.automatic_runs,
-          cadence = excluded.cadence,
-          materiality_threshold = excluded.materiality_threshold,
-          next_run_at = excluded.next_run_at,
-          updated_at = now(),
-          updated_by = excluded.updated_by
-        returning id
-      `)) as unknown as { rows: { id: string }[] };
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'ai_agent_policies', ${saved.rows[0]!.id}, 'update', ${JSON.stringify({
-          agentKey: agent.agentKey,
-          enabled: agent.enabled,
-          automaticRuns: agent.automaticRuns,
-          cadence: agent.cadence,
-          materialityThreshold: agent.materialityThreshold,
-        })}::jsonb, ${userId})
-      `);
-    }
+    for (const agent of input.agents) await persistAgentPolicy(tx, orgId, userId, input.enabled, agent);
   });
+}
+
+async function persistAgentPolicy(
+  tx: any,
+  orgId: string,
+  userId: string,
+  globalEnabled: boolean,
+  agent: AgentSettingsInput,
+): Promise<void> {
+  const prior = (await tx.execute(sql`
+    select id, enabled, automatic_runs, cadence, next_run_at
+      from ai_agent_policies
+     where org_id = ${orgId} and agent_key = ${agent.agentKey}
+     for update
+  `)) as unknown as { rows: { id: string; enabled: boolean; automatic_runs: boolean; cadence: AgentCadence; next_run_at: Date | null }[] };
+  const previous = prior.rows[0];
+  const schedulable = globalEnabled && agent.enabled && agent.automaticRuns;
+  const scheduleChanged = !previous || !previous.enabled || !previous.automatic_runs || previous.cadence !== agent.cadence;
+  const nextRunAt = schedulable
+    ? scheduleChanged || !previous?.next_run_at
+      ? nextContinuousCloseRunAt(agent.cadence)
+      : previous.next_run_at
+    : null;
+  const detectorSettings = serializeContinuousCloseDetectors(agent.detectors);
+  const saved = (await tx.execute(sql`
+    insert into ai_agent_policies (
+      org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
+      detector_settings, next_run_at, created_by, updated_by
+    ) values (
+      ${orgId}, ${agent.agentKey}, ${agent.enabled}, ${agent.automaticRuns},
+      ${agent.cadence}, ${agent.materialityThreshold}, ${JSON.stringify(detectorSettings)}::jsonb,
+      ${nextRunAt}, ${userId}, ${userId}
+    )
+    on conflict (org_id, agent_key) do update set
+      enabled = excluded.enabled,
+      automatic_runs = excluded.automatic_runs,
+      cadence = excluded.cadence,
+      materiality_threshold = excluded.materiality_threshold,
+      detector_settings = excluded.detector_settings,
+      next_run_at = excluded.next_run_at,
+      updated_at = now(),
+      updated_by = excluded.updated_by
+    returning id
+  `)) as unknown as { rows: { id: string }[] };
+  await tx.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'ai_agent_policies', ${saved.rows[0]!.id}, 'update', ${JSON.stringify({
+      agentKey: agent.agentKey,
+      enabled: agent.enabled,
+      automaticRuns: agent.automaticRuns,
+      cadence: agent.cadence,
+      materialityThreshold: agent.materialityThreshold,
+      detectors: detectorSettings,
+    })}::jsonb, ${userId})
+  `);
+}
+
+/** Save one agent drawer without mutating provider/model/key settings. */
+export async function saveOrgAiAgentSettings(
+  orgId: string,
+  userId: string,
+  raw: unknown,
+): Promise<ContinuousClosePolicy> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid agent settings");
+  const agentKey = (raw as { agentKey?: unknown }).agentKey;
+  if (!CONTINUOUS_CLOSE_AGENT_KEYS.includes(agentKey as ContinuousCloseAgentKey)) throw new Error("invalid agent");
+  const agent = normalizeAgentSettingInput(agentKey as ContinuousCloseAgentKey, raw);
+  await db.transaction(async (tx) => {
+    const org = (await tx.execute(sql`
+      select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
+        from orgs where id = ${orgId} for update
+    `)) as unknown as { rows: { enabled: boolean }[] };
+    await persistAgentPolicy(tx, orgId, userId, org.rows[0]?.enabled !== false, agent);
+  });
+  return (await getContinuousClosePolicies(orgId)).find((policy) => policy.agentKey === agent.agentKey)!;
 }
 
 /** Clear the stored API key for this org. */

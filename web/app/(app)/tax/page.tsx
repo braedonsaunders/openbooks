@@ -13,11 +13,11 @@ export default async function TaxPage() {
   const canManage = !!authz && (can(authz, 'admin.users.manage') || can(authz, '*'))
 
   const r = (await db.execute(sql`
-    select code, name, submission_channel
+    select code, name, submission_channel, official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${orgId} and is_active
      order by name`)) as unknown as {
-    rows: { code: string; name: string; submission_channel: string }[]
+    rows: { code: string; name: string; submission_channel: string; has_official: boolean }[]
   }
 
   return (

@@ -29,6 +29,18 @@
     "csv": "CSV",
     "xlsx": "Excel"
   },
+  "official": {
+    "label": "Formulaire officiel",
+    "present": "téléversé",
+    "none": "non téléversé",
+    "upload": "Téléverser le PDF officiel",
+    "uploading": "Téléversement…",
+    "uploaded": "Formulaire officiel téléversé",
+    "remove": "Retirer",
+    "removed": "Formulaire officiel retiré",
+    "download": "Formulaire officiel (rempli)",
+    "hint": "Téléversez le PDF à remplir de votre gouvernement; associez chaque case à son champ dans Configuration → Cases de déclaration."
+  },
   "channels": {
     "print_pdf": "Imprimer et poster",
     "file_upload": "Téléversement électronique",

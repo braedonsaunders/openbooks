@@ -1,7 +1,7 @@
 {
   "metaTitle": "Continuous close",
   "title": "Continuous close",
-  "description": "Evidence-backed accounting and finance exceptions, continuously monitored and ready for review.",
+  "description": "Continuously monitors close readiness and surfaces evidence-backed accounting and finance exceptions for review.",
   "search": "Search findings…",
   "agents": {
     "accounting": "Accounting",
@@ -46,7 +46,7 @@
     },
     "stale_accounting_documents": {
       "title": "Stale accounting documents",
-      "description": "Draft or pending accounting documents have remained unfinished for more than seven days."
+      "description": "Draft or pending accounting documents have remained unfinished beyond the configured age."
     },
     "missing_approved_budget": {
       "title": "No approved budget",
@@ -62,7 +62,7 @@
     },
     "gross_margin_decline": {
       "title": "Gross margin decline",
-      "description": "Gross margin fell by at least five percentage points from the prior completed period."
+      "description": "Gross margin fell beyond the configured threshold from the prior completed period."
     }
   },
   "summary": {

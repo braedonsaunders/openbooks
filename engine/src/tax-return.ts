@@ -29,6 +29,8 @@ export interface TaxReturnBoxDef {
   /** True for manual ADJUSTMENT boxes (no formula, no GL source): the filer types
    *  the amount (e.g. GST34 lines 104/107). */
   editable: boolean;
+  /** AcroForm field name this box fills on an uploaded official PDF (optional). */
+  pdfField: string | null;
 }
 
 export interface TaxReturnBox {
@@ -39,6 +41,8 @@ export interface TaxReturnBox {
   computed: boolean;
   /** True when the filer supplies this box's amount (an adjustment). */
   editable: boolean;
+  /** AcroForm field to fill on the official-PDF overlay (null when unmapped). */
+  pdfField: string | null;
 }
 
 export class TaxReturnError extends Error {
@@ -144,6 +148,7 @@ export function assembleReturn(
       value,
       computed: Boolean(box.formula?.trim()),
       editable: box.editable,
+      pdfField: box.pdfField,
     });
   }
   return result;
@@ -158,6 +163,7 @@ export interface TaxReportLineRow {
   taxCodeId: string | null;
   basis: string | null;
   formula: string | null;
+  pdfField?: string | null;
 }
 
 /** Where a GL-mapped box pulls its raw value from (one per contributing row). */
@@ -191,10 +197,12 @@ export function planReturn(rows: TaxReportLineRow[]): {
         sequence: row.sequence,
         formula: row.formula,
         editable: false,
+        pdfField: row.pdfField ?? null,
       });
     } else {
       existing.sequence = Math.min(existing.sequence, row.sequence);
       if (!existing.formula && row.formula) existing.formula = row.formula;
+      if (!existing.pdfField && row.pdfField) existing.pdfField = row.pdfField;
     }
     if (!row.formula?.trim() && row.taxCodeId && row.basis) {
       glSources.push({ lineCode: row.lineCode, taxCodeId: row.taxCodeId, basis: row.basis });
@@ -253,13 +261,13 @@ export async function computeTaxReturn(
 
   const boxRes = (await db.execute(sql`
     select line_code, label, coalesce(sign, 1) as sign, coalesce(sequence, 0) as sequence,
-           tax_code_id, basis, formula
+           tax_code_id, basis, formula, pdf_field
       from tax_report_lines
      where org_id = ${orgId} and report_code = ${formCode}
      order by sequence, line_code`)) as unknown as {
     rows: {
       line_code: string; label: string; sign: number; sequence: number;
-      tax_code_id: string | null; basis: string | null; formula: string | null;
+      tax_code_id: string | null; basis: string | null; formula: string | null; pdf_field: string | null;
     }[];
   };
   if (boxRes.rows.length === 0) {
@@ -275,6 +283,7 @@ export async function computeTaxReturn(
       taxCodeId: r.tax_code_id,
       basis: r.basis,
       formula: r.formula,
+      pdfField: r.pdf_field,
     })),
   );
 

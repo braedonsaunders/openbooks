@@ -11,11 +11,11 @@ export async function GET() {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const r = (await db.execute(sql`
-    select code, name, country, submission_channel
+    select code, name, country, submission_channel, official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${gate.user.orgId} and is_active
      order by name`)) as unknown as {
-    rows: { code: string; name: string; country: string | null; submission_channel: string }[]
+    rows: { code: string; name: string; country: string | null; submission_channel: string; has_official: boolean }[]
   }
   return NextResponse.json({ forms: r.rows })
 }
