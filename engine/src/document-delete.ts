@@ -4,6 +4,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
+import { releaseBillingProvenance } from "./billing-provenance.ts";
 
 /**
  * Delete a transaction, with accounting-appropriate guards.
@@ -121,6 +122,11 @@ export async function deleteDocument(
     await tx.execute(
       sql`delete from document_links where from_document_id = ${documentId} or to_document_id = ${documentId}`,
     );
+    // Release any billing provenance this invoice consumed (before its lines go)
+    // so the billed time/cost becomes billable again and its request reopens.
+    if (doc.kind === "customer_invoice") {
+      await releaseBillingProvenance(tx, doc.orgId, documentId);
+    }
     await tx.execute(
       sql`delete from document_lines where document_id = ${documentId}`,
     );
