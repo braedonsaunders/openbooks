@@ -776,7 +776,10 @@
     },
     "errors": {
       "duplicate": "A record with that code already exists.",
-      "inUse": "This record is in use and can't be deleted."
+      "inUse": "This record is in use and can't be deleted.",
+      "primaryRequired": "Choose another accounting book as primary before removing primary status from this one.",
+      "primaryActiveRequired": "The primary accounting book must remain active.",
+      "archiveOnly": "Accounting books are retained for ledger history and can only be archived."
     },
     "groups": {
       "company": "Company",
@@ -975,6 +978,11 @@
         "title": "Intercompany Pairs",
         "description": "Due-from / due-to account mappings for transactions that cross two subsidiaries."
       },
+      "accounting-books": {
+        "title": "Accounting Books",
+        "singular": "accounting book",
+        "description": "Manage the primary, tax, statutory, and reporting books that own ledger entries and close controls."
+      },
       "fx-rates": {
         "title": "Exchange Rates",
         "description": "Tenant-owned daily rates used to post foreign-currency transactions."
@@ -990,6 +998,7 @@
       "appliesTo": "Applies to",
       "recoverablePercent": "Recoverable %",
       "isActive": "Active",
+      "isPrimary": "Primary book",
       "country": "Country",
       "region": "Region",
       "collectedAccountId": "Tax collected account",

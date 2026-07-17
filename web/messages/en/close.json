@@ -54,6 +54,7 @@
   "actions": {
     "start": "Start close",
     "starting": "Starting…",
+    "manageBooks": "Manage books",
     "resume": "Resume",
     "backToPeriods": "Back to periods",
     "revalidate": "Revalidate",
@@ -387,6 +388,7 @@
       "approve": "Approve",
       "reject": "Reject",
       "cancel": "Cancel",
+      "manageBooks": "Manage books",
       "managePeriod": "Manage {period}"
     },
     "fields": {

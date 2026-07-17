@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
+  BookOpen,
   Building2,
   Calendar,
   Coins,
@@ -30,6 +31,7 @@ import { SETUP_GROUPS, setupEntitiesByGroup } from '../../../../lib/setup/regist
 
 // iconKey → lucide component. Keys come from the registry (SETUP_GROUPS / entities).
 const ICONS: Record<string, ReactNode> = {
+  'book-open': <BookOpen size={15} />,
   building: <Building2 size={15} />,
   receipt: <Receipt size={15} />,
   percent: <Percent size={15} />,

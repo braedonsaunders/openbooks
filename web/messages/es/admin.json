@@ -717,7 +717,10 @@
     },
     "errors": {
       "duplicate": "A record with that code already exists.",
-      "inUse": "This record is in use and can't be deleted."
+      "inUse": "This record is in use and can't be deleted.",
+      "primaryRequired": "Elija otro libro contable como principal antes de quitarle ese estado a este libro.",
+      "primaryActiveRequired": "El libro contable principal debe permanecer activo.",
+      "archiveOnly": "Los libros contables se conservan para el historial del mayor y solo se pueden archivar."
     },
     "groups": {
       "company": "Company",
@@ -883,6 +886,11 @@
         "title": "Pares intercompañía",
         "description": "Asignaciones de cuentas por cobrar y pagar para transacciones entre subsidiarias."
       },
+      "accounting-books": {
+        "title": "Libros contables",
+        "singular": "libro contable",
+        "description": "Administre los libros principal, fiscal, estatutario y de informes que contienen asientos y controles de cierre."
+      },
       "fx-rates": {
         "title": "Tipos de cambio",
         "description": "Tasas diarias propias del inquilino usadas para contabilizar transacciones en moneda extranjera."
@@ -898,6 +906,7 @@
       "appliesTo": "Applies to",
       "recoverablePercent": "Recoverable %",
       "isActive": "Active",
+      "isPrimary": "Libro principal",
       "country": "Country",
       "region": "Region",
       "collectedAccountId": "Tax collected account",

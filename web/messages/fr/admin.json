@@ -761,7 +761,10 @@
     },
     "errors": {
       "duplicate": "A record with that code already exists.",
-      "inUse": "This record is in use and can't be deleted."
+      "inUse": "This record is in use and can't be deleted.",
+      "primaryRequired": "Choisissez un autre livre comptable comme livre principal avant de retirer ce statut à celui-ci.",
+      "primaryActiveRequired": "Le livre comptable principal doit rester actif.",
+      "archiveOnly": "Les livres comptables sont conservés pour l’historique du grand livre et peuvent seulement être archivés."
     },
     "groups": {
       "company": "Company",
@@ -927,6 +930,11 @@
         "title": "Paires intersociétés",
         "description": "Correspondances des comptes à recevoir et à payer pour les transactions entre filiales."
       },
+      "accounting-books": {
+        "title": "Livres comptables",
+        "singular": "livre comptable",
+        "description": "Gérez les livres principal, fiscal, statutaire et de reporting auxquels appartiennent les écritures et les contrôles de clôture."
+      },
       "fx-rates": {
         "title": "Taux de change",
         "description": "Taux quotidiens propres au locataire utilisés pour comptabiliser les transactions en devises."
@@ -942,6 +950,7 @@
       "appliesTo": "Applies to",
       "recoverablePercent": "Recoverable %",
       "isActive": "Active",
+      "isPrimary": "Livre principal",
       "country": "Country",
       "region": "Region",
       "collectedAccountId": "Tax collected account",
