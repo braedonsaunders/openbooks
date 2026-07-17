@@ -42,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Locale: users.locale ?? orgs.settings.defaultLocale ?? 'en' (i18n/request.ts).
   const [locale, messages] = await Promise.all([getLocale(), getMessages()])
   return (
-    <html lang={locale} className="h-full" suppressHydrationWarning>
+    <html lang={locale} className="h-full" data-application-name="openbooks" suppressHydrationWarning>
       <head>
         <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: HEAD_INIT }} />
       </head>

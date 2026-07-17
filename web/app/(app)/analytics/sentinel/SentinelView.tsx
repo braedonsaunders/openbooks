@@ -11,6 +11,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
+import { ConfigEditor } from '../_ui/ConfigEditor'
 import { TxnLink } from '../../reports/TxnLink'
 import { fmtMoney } from '../_ui/format'
 
@@ -752,30 +753,44 @@ function AuditTab({ data }: { data: SentinelData }) {
 /* ----------------------------------------------------------- Configuration */
 
 function ConfigTab({ data }: { data: SentinelData }) {
+  const c = data.config
   const items = [
-    { label: 'Duplicates', value: '≤14d · ≥$100', note: 'Same vendor + document kind + amount; credits excluded; confidence by memo/date proximity' },
+    { label: 'Duplicates', value: `≤${c.duplicateDays}d · ≥$${c.duplicateMinAmount}`, note: 'Same vendor + document kind + amount; credits excluded; confidence by memo/date proximity' },
     { label: 'Benford conformity', value: 'MAD (Nigrini)', note: '1D bands 0.006/0.012/0.015 · 2D bands 0.0012/0.0022/0.0033' },
     { label: 'RSF', value: '≥10×', note: 'Amount ÷ vendor 2nd-largest over a 36-month baseline ($100 baseline floor)' },
     { label: 'Z-score', value: '|z| ≥ 3', note: 'Per-vendor mean/σ baseline, ≥5 transactions and σ > $10' },
-    { label: 'Sequential runs', value: '≥3 refs · ≥7 days', note: 'Gap-free vendor reference numbers; 30+ day spans rank high risk' },
+    { label: 'Sequential runs', value: `≥${c.sequentialMinCount} refs · ≥${c.sequentialMinDays} days`, note: 'Gap-free vendor reference numbers; 30+ day spans rank high risk' },
     { label: 'Threshold trap', value: '99 / 999 / 9999', note: 'Whole-dollar endings (.00 or .99 cents) just under round limits' },
     { label: 'Weekend', value: 'Sat / Sun', note: 'Accounting document date (migrated data carries import timestamps, so system created-time is not meaningful here)' },
   ]
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-      <Panel title="Detector Thresholds" icon={SlidersHorizontal} bodyClassName="p-0">
-        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-          {items.map((i) => (
-            <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
-              </div>
-              <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
+      <div className="space-y-5">
+        <ConfigEditor
+          dashboard="sentinel"
+          fields={[
+            { key: 'duplicateDays', label: 'Duplicate window (days)', help: 'Same vendor, kind and amount within this many days flags a pair', min: 1, max: 90, step: 1 },
+            { key: 'duplicateMinAmount', label: 'Duplicate minimum ($)', help: 'Pairs below this amount are ignored', min: 0, max: 100_000, step: 50 },
+            { key: 'sequentialMinCount', label: 'Sequential run minimum', help: 'Gap-free invoice-number runs need at least this many documents', min: 2, max: 50, step: 1 },
+            { key: 'sequentialMinDays', label: 'Sequential span (days)', help: 'Runs spread over fewer days are treated as batch entry, not a flag', min: 1, max: 365, step: 1 },
+          ]}
+          values={c}
+          defaults={{ duplicateDays: 14, duplicateMinAmount: 100, sequentialMinCount: 3, sequentialMinDays: 7 }}
+        />
+        <Panel title="Detector Thresholds" icon={SlidersHorizontal} bodyClassName="p-0">
+          <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+            {items.map((i) => (
+              <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
+                </div>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      </div>
       <Panel title="Engineered for scale" icon={Database}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
           <p>Every test runs <span className="font-semibold">in the database over the full ledger</span> — no 30-day caps, no per-vendor query loops, no “first 500 rows” sampling:</p>

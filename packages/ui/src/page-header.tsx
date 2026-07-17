@@ -3,6 +3,7 @@
 // refetches the whole shell on every record → list hop. The app injects its
 // client-side Link via UiLinkProvider (see link-context.tsx).
 import { UiBackLink } from './link-context'
+import { DocumentTitle } from './document-title'
 import { cn } from './utils'
 
 export function PageHeader({
@@ -20,6 +21,7 @@ export function PageHeader({
 }) {
   return (
     <div className={cn('space-y-2', className)}>
+      <DocumentTitle title={title} />
       {back ? (
         <UiBackLink
           href={back.href}
@@ -65,6 +67,7 @@ export function DetailHeader({
 }) {
   return (
     <header className="space-y-2">
+      <DocumentTitle title={title} />
       {back ? (
         <UiBackLink
           href={back.href}

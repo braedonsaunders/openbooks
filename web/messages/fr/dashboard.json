@@ -42,6 +42,7 @@
     "subtitle": "Cliquez pour ajouter à votre tableau de bord",
     "close": "Fermer",
     "added": "Ajouté",
+    "empty": "Aucun widget disponible à ajouter.",
     "libraryCards": "Cartes d'analyses"
   },
   "customize": {

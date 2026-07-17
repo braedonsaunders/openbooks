@@ -182,7 +182,15 @@ export function Drawer({
         <div
           key="drawer"
           data-drawer-layer={stacked ? 'nested' : 'base'}
-          className={cn('fixed inset-0', stacked ? 'z-[55]' : 'z-50')}
+          className={cn(
+            // Drawers are bottom-anchored and stop beneath the persistent app
+            // header. Because this boundary lives on the shared portal layer,
+            // both the panel and its backdrop leave the shell header visible
+            // for every Drawer and UrlDrawer in the application. Include the
+            // device safe-area inset used by AppShell on mobile.
+            'fixed inset-x-0 bottom-0 [top:calc(3.5rem+env(safe-area-inset-top))]',
+            stacked ? 'z-[55]' : 'z-50',
+          )}
         >
           <motion.div
             initial={{ opacity: 0 }}
@@ -203,7 +211,7 @@ export function Drawer({
             exit={{ x: side === 'left' ? '-100%' : '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
             className={cn(
-              'absolute top-0 flex h-full flex-col overflow-hidden border-slate-200 bg-white shadow-2xl transition-[max-width] duration-300 ease-in-out dark:border-slate-800 dark:bg-slate-900',
+              'absolute inset-y-0 flex flex-col overflow-hidden border-t border-slate-200 bg-white shadow-2xl transition-[max-width] duration-300 ease-in-out dark:border-slate-800 dark:bg-slate-900',
               side === 'left' ? 'left-0 border-r' : 'right-0 border-l',
               // Full replacement, not an additional class: two sm:max-w-*
               // utilities on one element resolve by stylesheet order, not

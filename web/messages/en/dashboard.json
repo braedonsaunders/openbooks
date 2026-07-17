@@ -42,6 +42,7 @@
     "subtitle": "Click to add to your dashboard",
     "close": "Close",
     "added": "Added",
+    "empty": "No widgets available to add.",
     "libraryCards": "Insight cards"
   },
   "customize": {

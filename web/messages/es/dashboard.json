@@ -42,6 +42,7 @@
     "subtitle": "Haz clic para añadir a tu panel",
     "close": "Cerrar",
     "added": "Añadido",
+    "empty": "No hay widgets disponibles para añadir.",
     "libraryCards": "Tarjetas de análisis"
   },
   "customize": {

@@ -12,6 +12,7 @@ import type { UtilizationData, UGroupRow, UStat } from '../../../../lib/analytic
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
+import { ConfigEditor } from '../_ui/ConfigEditor'
 import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
@@ -1327,27 +1328,36 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
 
 function ConfigTab({ data }: { data: UtilizationData }) {
   const items = [
-    { label: 'Target billable %', value: `${data.config.target}%`, note: 'Company-wide utilization benchmark' },
-    { label: 'Cost spike alert', value: money0(data.config.costSpike), note: 'Alert when non-billable cost rises more than this vs prior range' },
-    { label: 'Minimum hours', value: `${data.config.minHours}h`, note: 'Employees below this are excluded from analysis' },
     { label: 'Prior range', value: `${data.prior.from} → ${data.prior.to}`, note: 'Same duration immediately preceding the selected period' },
     { label: 'History periods', value: String(data.history.periods.length), note: `Rolling ${data.history.periodMonths}-month periods feeding trend & forecast` },
   ]
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-      <Panel title="Model & Assumptions" icon={SlidersHorizontal} bodyClassName="p-0">
-        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-          {items.map((i) => (
-            <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
-              </div>
-              <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
+      <div className="space-y-5">
+        <ConfigEditor
+          dashboard="utilization"
+          fields={[
+            { key: 'targetBillablePct', label: 'Target billable %', help: 'Company-wide utilization benchmark', min: 10, max: 100, step: 1 },
+            { key: 'costSpikeThreshold', label: 'Cost spike alert ($)', help: 'Alert when non-billable cost rises more than this vs the prior range', min: 0, max: 1_000_000, step: 100 },
+            { key: 'minHours', label: 'Minimum hours', help: 'Employees below this are excluded from anomaly / peer analysis', min: 0, max: 500, step: 1 },
+          ]}
+          values={{ targetBillablePct: data.config.target, costSpikeThreshold: data.config.costSpike, minHours: data.config.minHours }}
+          defaults={{ targetBillablePct: 70, costSpikeThreshold: 1000, minHours: 10 }}
+        />
+        <Panel title="Model & Assumptions" icon={SlidersHorizontal} bodyClassName="p-0">
+          <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+            {items.map((i) => (
+              <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
+                </div>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      </div>
       <Panel title="Data sources & derivations" icon={Info}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
           <p>Everything is computed live from <span className="font-semibold">time entries</span>:</p>
