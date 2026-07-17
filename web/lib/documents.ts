@@ -2,9 +2,13 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
-import { nextDocumentNumber } from './bills'
+import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
+import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
+import { computeBillTotals, nextDocumentNumber, taxRateMap, type BillLineInput } from './bills'
 import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
-import { segmentRegistry } from './segments'
+import { loadFieldDefs, validateCustomValues } from './custom-fields'
+import { segmentRegistry, validateExtraDims } from './segments'
 
 /**
  * Unified line-based posting-document machinery.
@@ -132,6 +136,350 @@ export async function loadDocument(id: string) {
      order by l.line_number
   `)) as unknown as { rows: Record<string, unknown>[] }
   return { doc: doc.rows[0], lines: lines.rows }
+}
+
+// ---------------------------------------------------------------------------
+// Shared edit service — the single source of truth for writing a posting
+// document's header + lines. Both the interactive drawer route
+// (app/api/documents/[id]/route.ts) and the public REST writer
+// (lib/api/writers.ts) call this, so an API edit gets the exact same custom-
+// field validation, GL re-materialization, transaction audit, CRM promotion,
+// and on_update flows the UI does — no duplicated, drifting write logic.
+// ---------------------------------------------------------------------------
+
+/** A line as accepted on a document edit (built-ins + dimensions + custom). */
+export interface DocumentLineInput extends BillLineInput {
+  itemId?: string | null
+  quantity?: string | null
+  unit?: string | null
+  unitPrice?: string | null
+  departmentId?: string | null
+  projectId?: string | null
+  locationId?: string | null
+  classId?: string | null
+  extraDims?: Record<string, string | null>
+  custom?: Record<string, unknown>
+}
+
+/** The header + lines payload for a document edit. Every field is optional; an
+ *  absent key leaves the stored value untouched (partial patch). */
+export interface DocumentEditInput {
+  partyId?: string | null
+  paymentCardId?: string | null
+  documentDate?: string
+  dueDate?: string | null
+  referenceNumber?: string | null
+  memo?: string | null
+  postingDate?: string | null
+  departmentId?: string | null
+  projectId?: string | null
+  locationId?: string | null
+  classId?: string | null
+  extraDims?: Record<string, string | null>
+  subsidiaryId?: string | null
+  expectedPayDate?: string | null
+  paymentHoldReason?: string | null
+  internalNotes?: string | null
+  billingMethod?: string | null
+  isFinalInvoice?: boolean
+  custom?: Record<string, unknown>
+  lines?: DocumentLineInput[]
+}
+
+/** The pre-edit snapshot a caller loads under its own org scope. */
+export interface DocumentEditCurrent {
+  kind: string
+  status: string
+  total: string
+  taxTotal: string
+  partyId: string | null
+}
+
+export interface DocumentEditContext {
+  orgId: string
+  userId: string
+  /** Provenance recorded on the transaction audit + flow events. */
+  source: 'ui' | 'api'
+  /** Fire on_update record flows after the edit commits (default true). */
+  runFlows?: boolean
+}
+
+/** A validation/period failure with the HTTP status the callers should return. */
+export class DocumentEditError extends Error {
+  status: number
+  fieldErrors?: Record<string, string>
+  constructor(status: number, message: string, fieldErrors?: Record<string, string>) {
+    super(message)
+    this.name = 'DocumentEditError'
+    this.status = status
+    this.fieldErrors = fieldErrors
+  }
+}
+
+/**
+ * A document-layer signature of everything that shapes a posting document's GL
+ * impact. Comparing before vs after a save tells us whether the edit was
+ * GL-affecting WITHOUT assuming the stored entry was produced by our own
+ * posting rules (migrated docs carry the source system's GL). Non-GL edits
+ * (memo, reference #) leave this unchanged and never touch the ledger.
+ */
+async function glSignature(
+  tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
+  id: string,
+): Promise<string> {
+  const r = (await tx.execute(sql`
+    select md5(
+      coalesce(d.party_id::text,'') || '~' || coalesce(d.payment_card_id::text,'') || '~' ||
+      coalesce(d.document_date::text,'') || '~' || coalesce(d.posting_date::text,'') || '~' ||
+      coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
+      coalesce(d.subsidiary_id::text,'') || '~' ||
+      coalesce(d.extra_dims::text,'{}') || '~' ||
+      coalesce((select string_agg(
+        coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
+        coalesce(tax_code_id::text,'') || ':' || tax_amount::text || ':' ||
+        coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
+        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' ||
+        coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
+        '|' order by line_number)
+        from document_lines where document_id = d.id), '')
+    ) as sig
+    from documents d where d.id = ${id}`)) as { rows: { sig: string }[] }
+  return r.rows[0]?.sig ?? ''
+}
+
+/**
+ * Apply a header + lines edit to a posting document. Draft/approved docs edit
+ * freely (no GL yet). A POSTED doc is editable in place, NetSuite-style: its
+ * journal entry is a derived projection re-materialized on save
+ * (regenerateGlImpactTx) — a non-GL change is a ledger no-op; a GL change
+ * regenerates the entry's lines and is blocked only if the period is closed.
+ * Throws DocumentEditError (422) on validation / closed-period failures.
+ *
+ * Callers own auth + status/lock guards; this owns validation, the write, GL,
+ * audit, and flows.
+ */
+export async function applyDocumentEdit(
+  id: string,
+  current: DocumentEditCurrent,
+  body: DocumentEditInput,
+  ctx: DocumentEditContext,
+): Promise<void> {
+  const cfg = docKindConfig(current.kind)
+  if (!cfg) throw new DocumentEditError(422, `kind "${current.kind}" is not editable`)
+  const { orgId, userId } = ctx
+
+  // Kinds with a party role (vendor/customer) must keep a party — an explicit
+  // null would strand the document without the entity its posting depends on.
+  if (cfg.partyRole && body.partyId === null) {
+    throw new DocumentEditError(422, `a ${current.kind} requires a ${cfg.partyRole}; the party cannot be removed`)
+  }
+  if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
+    const subsidiary = (await db.execute(sql`
+      select 1 from subsidiaries
+       where id = ${body.subsidiaryId} and org_id = ${orgId}
+         and is_active and not is_elimination`)) as any
+    if (!subsidiary.rows.length) throw new DocumentEditError(422, 'invalid subsidiary')
+  }
+
+  // custom-field validation (header + line) against the live definitions
+  const [headerDefs, lineDefs, segments] = await Promise.all([
+    loadFieldDefs('documents', current.kind),
+    loadFieldDefs('document_lines', current.kind),
+    segmentRegistry(orgId),
+  ])
+  const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
+  if (headerDims && !headerDims.ok) throw new DocumentEditError(422, headerDims.error!)
+  let headerCustom: Record<string, unknown> | null = null
+  if (body.custom !== undefined) {
+    const v = validateCustomValues(headerDefs, body.custom)
+    if (!v.ok) throw new DocumentEditError(422, Object.values(v.errors)[0]!, v.errors)
+    headerCustom = v.cleaned
+  }
+
+  // Pre-validate + prepare lines before touching the DB, so a bad line fails
+  // without a partial write.
+  let totals: { subtotal: string; taxTotal: string; total: string } | null = null
+  let preparedLines:
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
+    | null = null
+  if (body.lines) {
+    const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
+    const computed = computeBillTotals(valid, await taxRateMap())
+    totals = computed
+    // A transfer moves one amount between two accounts; its two legs carry the
+    // same amount, so the document total is that amount — NOT the summed legs.
+    if (current.kind === 'transfer' && computed.lines.length > 0) {
+      const amt = computed.lines[0]!.amount
+      totals = { subtotal: amt, taxTotal: '0', total: amt }
+    }
+    preparedLines = []
+    for (let i = 0; i < computed.lines.length; i++) {
+      const l = computed.lines[i]! as (typeof computed.lines)[number] & DocumentLineInput
+      const lv = validateCustomValues(lineDefs, l.custom)
+      if (!lv.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, lv.errors)
+      const lineDims = validateExtraDims(l.extraDims ?? {}, segments)
+      if (!lineDims.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${lineDims.error}`)
+      preparedLines.push({
+        accountId: l.accountId!,
+        itemId: l.itemId ?? null,
+        description: l.description ?? null,
+        quantity: l.quantity ?? null,
+        unit: l.unit ?? null,
+        unitPrice: l.unitPrice ?? null,
+        amount: l.amount,
+        taxCodeId: l.taxCodeId ?? null,
+        taxAmount: l.taxAmount,
+        taxOverridden: l.taxOverridden === true,
+        departmentId: l.departmentId ?? null,
+        projectId: l.projectId ?? null,
+        locationId: l.locationId ?? null,
+        classId: l.classId ?? null,
+        extraDims: lineDims.cleaned,
+        custom: lv.cleaned,
+      })
+    }
+  }
+
+  // Pre-edit line snapshot for line-level change detection (the on_update
+  // "re-approval on material edit" pattern).
+  const oldLines = ((await db.execute(sql`
+    select line_number as "lineNumber", account_id as "accountId", department_id as "departmentId",
+           project_id as "projectId", amount
+      from document_lines where document_id = ${id} order by line_number
+  `)) as unknown as { rows: { lineNumber: number; accountId: string | null; departmentId: string | null; projectId: string | null; amount: string }[] }).rows
+
+  const deps = await controlDeps(orgId)
+
+  // All writes + the GL-Impact re-materialization happen in one transaction, so
+  // a GL edit into a closed period rolls the whole edit back (nothing partial).
+  try {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
+      const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
+      const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
+      const sigBefore = await glSignature(tx, id)
+
+      if (preparedLines) {
+        await tx.execute(sql`delete from document_lines where document_id = ${id}`)
+        for (let i = 0; i < preparedLines.length; i++) {
+          const l = preparedLines[i]!
+          await tx.execute(sql`
+            insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
+                                        quantity, unit, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
+                                        department_id, project_id, location_id, class_id, extra_dims, custom)
+            values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
+                    ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
+                    ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
+                    ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
+                    ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
+          `)
+        }
+      }
+
+      await tx.execute(sql`
+        update documents set
+          party_id = ${body.partyId !== undefined ? body.partyId : sql`party_id`},
+          payment_card_id = ${body.paymentCardId !== undefined ? body.paymentCardId : sql`payment_card_id`},
+          document_date = coalesce(${body.documentDate ?? null}, document_date),
+          due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
+          reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
+          memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+          posting_date = ${body.postingDate !== undefined ? body.postingDate : sql`posting_date`},
+          department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},
+          project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
+          location_id = ${body.locationId !== undefined ? body.locationId : sql`location_id`},
+          class_id = ${body.classId !== undefined ? body.classId : sql`class_id`},
+          extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
+          subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
+          expected_pay_date = ${body.expectedPayDate !== undefined ? body.expectedPayDate : sql`expected_pay_date`},
+          payment_hold_reason = ${body.paymentHoldReason !== undefined ? body.paymentHoldReason : sql`payment_hold_reason`},
+          internal_notes = ${body.internalNotes !== undefined ? body.internalNotes : sql`internal_notes`},
+          billing_method = ${body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`},
+          is_final_invoice = ${body.isFinalInvoice !== undefined ? body.isFinalInvoice : sql`is_final_invoice`},
+          custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
+          subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
+          tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
+          total = coalesce(${totals?.total ?? null}, total),
+          updated_at = now(), updated_by = ${userId}
+        where id = ${id} and org_id = ${orgId}
+      `)
+
+      const effectivePartyId = body.partyId !== undefined ? body.partyId : current.partyId
+      if (effectivePartyId && ['customer_invoice', 'customer_credit', 'customer_payment'].includes(current.kind)) {
+        await promoteCrmAccount(tx, {
+          orgId,
+          partyId: effectivePartyId,
+          actorId: userId,
+          toStage: 'customer',
+          sourceKind: current.kind,
+          sourceId: id,
+        })
+      }
+
+      if ((await glSignature(tx, id)) !== sigBefore) {
+        await regenerateGlImpactTx(tx, id, deps, userId)
+      }
+      if (auditBefore) {
+        const auditAfter = await captureTransactionAuditSnapshot(tx, id)
+        if (!auditAfter) throw new Error(`document ${id} disappeared during amendment`)
+        await recordTransactionAudit(tx, {
+          orgId,
+          documentId: id,
+          action: 'update',
+          actorId: userId,
+          source: ctx.source,
+          before: auditBefore,
+          after: auditAfter,
+        })
+      }
+    })
+  } catch (e) {
+    if (e instanceof ClosedPeriodError) throw new DocumentEditError(422, e.message)
+    throw e
+  }
+
+  // on_update flows fire AFTER the edit commits (unless the caller opts out).
+  // The edit-shape data rides on the EVENT (previousTotal / totalChanged /
+  // changedFields / changedLineFields). runRecordFlows never throws into the
+  // caller and cannot veto the saved edit; it is awaited so it runs inside the
+  // caller's RLS org scope.
+  if (ctx.runFlows === false) return
+  const newTotal = totals?.total ?? current.total
+  const newTaxTotal = totals?.taxTotal ?? current.taxTotal
+  const changedFields: string[] = []
+  if (Number(newTotal) !== Number(current.total)) changedFields.push('total')
+  if (Number(newTaxTotal) !== Number(current.taxTotal)) changedFields.push('taxTotal')
+  if (body.partyId !== undefined && body.partyId !== current.partyId) changedFields.push('partyId')
+  const changedLineFields = new Set<string>()
+  if (preparedLines) {
+    const maxLen = Math.max(oldLines.length, preparedLines.length)
+    for (let i = 0; i < maxLen; i++) {
+      const o = oldLines[i]
+      const n = preparedLines[i]
+      if (!o || !n) {
+        changedLineFields.add('accountId').add('departmentId').add('projectId').add('amount')
+        break
+      }
+      if (o.accountId !== n.accountId) changedLineFields.add('accountId')
+      if ((o.departmentId ?? null) !== (n.departmentId ?? null)) changedLineFields.add('departmentId')
+      if ((o.projectId ?? null) !== (n.projectId ?? null)) changedLineFields.add('projectId')
+      if (Number(o.amount) !== Number(n.amount)) changedLineFields.add('amount')
+    }
+  }
+  await runRecordFlows(
+    {
+      kind: 'on_update',
+      source: ctx.source,
+      previousTotal: current.total,
+      totalChanged: Number(newTotal) !== Number(current.total),
+      changedFields,
+      changedLineFields: [...changedLineFields],
+      old: { total: current.total, taxTotal: current.taxTotal },
+    },
+    current.kind,
+    id,
+    { orgId, userId },
+  )
 }
 
 // ---------------------------------------------------------------------------

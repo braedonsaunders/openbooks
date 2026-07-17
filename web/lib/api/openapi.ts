@@ -1,11 +1,12 @@
-import "server-only";
-import { loadApiSchema } from "./schema-registry";
+import type { ApiRecordTypeSchema } from "./registry-data";
 
 /**
- * Generate a tenant-specific OpenAPI 3.0 spec. Unlike NetSuite (one global
- * spec per release), openbooks produces a spec that includes the org's
- * custom record types and custom fields — the schema is the source of truth,
- * so the docs are never stale.
+ * Build a tenant-specific OpenAPI 3.0 spec from an already-loaded schema.
+ * Pure (no db/server-only) so it is unit-testable; `generateOpenApiSpec`
+ * (openapi-server.ts) loads the live schema and calls this. Unlike NetSuite
+ * (one global spec per release), openbooks produces a spec that includes the
+ * org's custom record types and custom fields — the schema is the source of
+ * truth, so the docs are never stale.
  */
 
 export interface OpenApiSpec {
@@ -25,12 +26,10 @@ export interface OpenApiSpec {
   security: Record<string, any>[];
 }
 
-export async function generateOpenApiSpec(
-  orgId: string,
+export function buildOpenApiSpec(
+  schema: ApiRecordTypeSchema[],
   baseUrl: string,
-): Promise<OpenApiSpec> {
-  const schema = await loadApiSchema(orgId);
-
+): OpenApiSpec {
   const paths: Record<string, any> = {};
   const schemas: Record<string, any> = {};
 
@@ -58,23 +57,39 @@ export async function generateOpenApiSpec(
     const capName = rt.key.replace(/-/g, "_");
     const modelKey = capName.charAt(0).toUpperCase() + capName.slice(1);
 
-    // Build the JSON schema for this record type's fields.
+    // Build the JSON schema for this record type's fields. The READ model
+    // (`modelKey`) exposes every field; the WRITE model (`modelKey`Write) is
+    // the request body — only writable fields (identity/audit/computed excluded).
     const properties: Record<string, any> = {};
+    const writeProps: Record<string, any> = {};
     const required: string[] = [];
+    const writeRequired: string[] = [];
     for (const f of rt.fields) {
       const [type, format] = f.type.split(" (");
-      properties[f.name] = {
+      const prop = {
         type,
-        ...(format ? { description: `${f.type}` } : {}),
+        ...(format ? { format: format.replace(")", "") } : {}),
         ...(f.description ? { description: f.description } : {}),
       };
+      properties[f.name] = prop;
       if (f.required) required.push(f.name);
+      if (f.writable) {
+        writeProps[f.name] = prop;
+        if (f.required) writeRequired.push(f.name);
+      }
     }
     schemas[modelKey] = {
       type: "object",
       description: rt.description,
       properties,
       ...(required.length > 0 ? { required } : {}),
+    };
+    const writeModelKey = `${modelKey}Write`;
+    schemas[writeModelKey] = {
+      type: "object",
+      description: `Writable fields for ${rt.label}.`,
+      properties: writeProps,
+      ...(writeRequired.length > 0 ? { required: writeRequired } : {}),
     };
 
     // List endpoint
@@ -149,13 +164,15 @@ export async function generateOpenApiSpec(
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
+            content: { "application/json": { schema: { $ref: `#/components/schemas/${writeModelKey}` } } },
           },
           responses: {
             "201": {
               description: "Created",
               content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
             },
+            "403": { $ref: "#/components/responses/Forbidden" },
+            "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
       };
@@ -174,13 +191,38 @@ export async function generateOpenApiSpec(
           ],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
+            content: { "application/json": { schema: { $ref: `#/components/schemas/${writeModelKey}` } } },
           },
           responses: {
             "200": {
               description: "Updated",
               content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
             },
+            "404": { description: "Not found" },
+            "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      };
+    }
+
+    // Delete
+    if (rt.operations.includes("delete")) {
+      paths[`${rt.path}/{id}`] = {
+        ...(paths[`${rt.path}/{id}`] ?? {}),
+        delete: {
+          summary: `Delete a ${rt.label.replace(/s$/, "")}`,
+          tags: [rt.dynamic ? "Custom Records" : "Records"],
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          responses: {
+            "200": {
+              description: "Deleted",
+              content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } },
+            },
+            "404": { description: "Not found" },
+            "409": { description: "Blocked — referenced by other records" },
           },
         },
       };

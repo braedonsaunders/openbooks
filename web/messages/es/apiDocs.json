@@ -17,5 +17,26 @@
     "required": "Obligatorio",
     "description": "Descripción",
     "yes": "sí"
+  },
+  "console": {
+    "referenceTab": "Referencia",
+    "consoleTab": "Consola",
+    "recordTypes": "Tipos de registro",
+    "tokenLabel": "Clave API",
+    "tokenPlaceholder": "ob_live_…",
+    "tokenNote": "Pegue una clave de Claves API. Permanece en esta pestaña del navegador y solo se envía a esta API.",
+    "needToken": "Introduzca una clave API arriba para enviar solicitudes.",
+    "method": "Método",
+    "requestBody": "Cuerpo de la solicitud",
+    "send": "Enviar",
+    "sending": "Enviando…",
+    "resetBody": "Restablecer cuerpo",
+    "response": "Respuesta",
+    "responseIdle": "Envíe una solicitud para ver la respuesta aquí.",
+    "readOnly": "Este tipo de registro es de solo lectura a través de la API.",
+    "status": "Estado",
+    "time": "Tiempo",
+    "idPlaceholder": "id del registro (uuid)",
+    "selectType": "Seleccione un tipo de registro para construir una solicitud."
   }
 }
