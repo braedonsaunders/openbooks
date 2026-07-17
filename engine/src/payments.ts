@@ -765,6 +765,7 @@ export async function createPaymentRun(opts: {
       ) ap on true
      where d.id in ${opts.billDocumentIds}
        and d.org_id = ${opts.orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
+       and d.payment_hold_reason is null
   `)) as unknown as {
     rows: { document_id: string; document_number: string; party_id: string; vendor: string; open_line_id: string; open: string }[];
   };
