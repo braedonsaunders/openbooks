@@ -408,6 +408,108 @@
           "total": 1037
         }
       ]
+    },
+    {
+      "at": "2026-07-17T14:10:10.978Z",
+      "sha": "28fa77774c7403f4dac6c9e87c7d06388c2f918e",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1326,
+      "functions": 3536,
+      "loc": 481160,
+      "languages": 13,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 60,
+          "lines": 290662
+        },
+        {
+          "ext": "ts",
+          "pct": 21,
+          "lines": 100411
+        },
+        {
+          "ext": "tsx",
+          "pct": 16,
+          "lines": 75395
+        },
+        {
+          "ext": "sql",
+          "pct": 1,
+          "lines": 6939
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 64,
+      "deadPct": 1.8,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 4.6,
+      "securityIssues": 134,
+      "patterns": 9,
+      "duplicates": 48,
+      "layerViolations": 1273,
+      "connections": 6034,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 42,
+      "testRatio": 3.2,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 920
+        },
+        {
+          "name": "engine",
+          "count": 140
+        },
+        {
+          "name": "schema",
+          "count": 122
+        },
+        {
+          "name": "packages",
+          "count": 106
+        },
+        {
+          "name": "extraction",
+          "count": 20
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 67,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 339,
+        "transitive": 995,
+        "total": 1334
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 339,
+          "transitive": 995,
+          "total": 1334
+        },
+        {
+          "path": "web/lib/authz.ts",
+          "direct": 318,
+          "transitive": 838,
+          "total": 1156
+        },
+        {
+          "path": "web/app/(app)/admin/customization/FormDesigner.tsx",
+          "direct": 106,
+          "transitive": 940,
+          "total": 1046
+        }
+      ]
     }
   ]
 }
