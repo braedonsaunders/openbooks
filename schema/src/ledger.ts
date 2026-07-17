@@ -61,6 +61,7 @@ export const journalEntries = pgTable(
         "payroll",
         "labor_burden",
         "depreciation",
+        "disposal",
         "revaluation",
         "revenue_recognition",
         "inventory",

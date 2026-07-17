@@ -1,4 +1,16 @@
 {
+  "dispose": {
+    "label": "Dar de baja",
+    "writeOff": "Anular (sin ingresos)",
+    "proceeds": "Ingresos por venta",
+    "account": "Depositar ingresos en",
+    "selectAccount": "Seleccione una cuenta…",
+    "date": "Fecha de baja",
+    "action": "Registrar la baja",
+    "writeOffAction": "Registrar la anulación",
+    "working": "Registrando…",
+    "done": "Dado de baja — ganancia/pérdida {gainLoss}"
+  },
   "list": {
     "title": "Activos fijos",
     "description": "El registro de activos detrás de la depreciación — costo, depreciación acumulada y valor en libros neto por activo.",

@@ -1,4 +1,16 @@
 {
+  "dispose": {
+    "label": "Dispose",
+    "writeOff": "Write off (no proceeds)",
+    "proceeds": "Sale proceeds",
+    "account": "Deposit proceeds to",
+    "selectAccount": "Select an account…",
+    "date": "Disposal date",
+    "action": "Post disposal",
+    "writeOffAction": "Post write-off",
+    "working": "Posting…",
+    "done": "Disposed — gain/loss {gainLoss}"
+  },
   "list": {
     "title": "Fixed Assets",
     "description": "The asset register behind depreciation — cost, accumulated depreciation, and net book value per asset.",
