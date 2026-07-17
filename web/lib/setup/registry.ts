@@ -127,6 +127,8 @@ const APPLIES_TO = [
 // return engine: tax_amount sums the tax collected/paid, taxable_base sums the
 // base the tax applied to.
 const TAX_BASIS = [
+  { value: 'tax_collected', labelKey: 'options.basis.collected' },
+  { value: 'tax_paid', labelKey: 'options.basis.paid' },
   { value: 'tax_amount', labelKey: 'options.basis.tax' },
   { value: 'taxable_base', labelKey: 'options.basis.net' },
 ]

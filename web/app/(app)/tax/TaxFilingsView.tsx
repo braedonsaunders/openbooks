@@ -18,7 +18,7 @@ import {
 } from '@openbooks/ui'
 
 type Form = { code: string; name: string; submission_channel: string }
-type Box = { lineCode: string; label: string; value: string; computed: boolean }
+type Box = { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }
 type Result = {
   formCode: string
   formName: string
@@ -49,8 +49,15 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
   const [from, setFrom] = useState(bounds.from)
   const [to, setTo] = useState(bounds.to)
   const [result, setResult] = useState<Result | null>(null)
+  const [adjustments, setAdjustments] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [installing, setInstalling] = useState(false)
+
+  const adjQuery = (adj: Record<string, string>) =>
+    Object.entries(adj)
+      .filter(([, v]) => v.trim() !== '' && v.trim() !== '0')
+      .map(([k, v]) => `&adj_${encodeURIComponent(k)}=${encodeURIComponent(v.trim())}`)
+      .join('')
 
   async function install() {
     setInstalling(true)
@@ -71,11 +78,11 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
     }
   }
 
-  async function compute() {
+  async function compute(adj: Record<string, string> = adjustments) {
     if (!code) return
     setBusy(true)
     try {
-      const res = await fetch(`/api/tax/returns/${encodeURIComponent(code)}?from=${from}&to=${to}`)
+      const res = await fetch(`/api/tax/returns/${encodeURIComponent(code)}?from=${from}&to=${to}${adjQuery(adj)}`)
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(err.error)
@@ -89,7 +96,7 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
   }
 
   const exportHref = (format: string) =>
-    `/api/tax/returns/${encodeURIComponent(code)}/export?from=${from}&to=${to}&format=${format}`
+    `/api/tax/returns/${encodeURIComponent(code)}/export?from=${from}&to=${to}&format=${format}${adjQuery(adjustments)}`
 
   return (
     <div className="space-y-6">
@@ -135,7 +142,7 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
                 <Label htmlFor="tax-to">{t('to')}</Label>
                 <Input id="tax-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
               </div>
-              <Button onClick={compute} disabled={busy}>
+              <Button onClick={() => compute()} disabled={busy}>
                 <Play size={15} />
                 {busy ? t('computing') : t('compute')}
               </Button>
@@ -194,7 +201,25 @@ export function TaxFilingsView({ forms, canManage }: { forms: Form[]; canManage:
                       >
                         <td className="py-2 pr-4 tabular-nums text-slate-500">{b.lineCode}</td>
                         <td className="py-2 pr-4">{b.label}</td>
-                        <td className="py-2 text-right tabular-nums">{fmt(b.value)}</td>
+                        <td className="py-1.5 text-right tabular-nums">
+                          {b.editable ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              inputMode="decimal"
+                              aria-label={b.label}
+                              className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1 text-right tabular-nums focus:border-teal-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+                              value={adjustments[b.lineCode] ?? ''}
+                              placeholder="0.00"
+                              onChange={(e) =>
+                                setAdjustments((a) => ({ ...a, [b.lineCode]: e.target.value }))
+                              }
+                              onBlur={() => compute()}
+                            />
+                          ) : (
+                            fmt(b.value)
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

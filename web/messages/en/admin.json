@@ -1119,6 +1119,8 @@
         "both": "Both"
       },
       "basis": {
+        "collected": "Tax collected (output)",
+        "paid": "Tax paid / ITCs (input)",
         "net": "Net amount",
         "tax": "Tax amount"
       },

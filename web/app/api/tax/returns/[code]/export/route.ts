@@ -12,6 +12,7 @@ import {
 } from '../../../../../../lib/report-pdf'
 import { taxReturnExportData } from '../../../../../../lib/tax-filing'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
+import { parseAdjustments } from '../route'
 
 export const runtime = 'nodejs'
 
@@ -35,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
 
   try {
     const t = (await getTranslations('tax')) as unknown as Translator
-    const result = await computeTaxReturn(gate.user.orgId, code, from, to)
+    const result = await computeTaxReturn(gate.user.orgId, code, from, to, parseAdjustments(p))
     const data = taxReturnExportData(result, t)
     const filename = `${safeName(code)}-${from}-${to}`
 

@@ -27,12 +27,12 @@ test("evalFormula rejects unsupported operators and unknown boxes", () => {
 // sign -1 → positive on the return), 106 ITCs (a debit, sign +1), then computed
 // totals: 105 = 103, 108 = 106, net tax 109 = 105 - 108.
 const GST34: TaxReturnBoxDef[] = [
-  { lineCode: "101", label: "Sales", sign: 1, sequence: 1, formula: null },
-  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 2, formula: null },
-  { lineCode: "106", label: "Input tax credits", sign: 1, sequence: 3, formula: null },
-  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 4, formula: "103" },
-  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 5, formula: "106" },
-  { lineCode: "109", label: "Net tax", sign: 1, sequence: 6, formula: "105 - 108" },
+  { lineCode: "101", label: "Sales", sign: 1, sequence: 1, formula: null, editable: false },
+  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 2, formula: null, editable: false },
+  { lineCode: "106", label: "Input tax credits", sign: 1, sequence: 3, formula: null, editable: false },
+  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 4, formula: "103", editable: false },
+  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 5, formula: "106", editable: false },
+  { lineCode: "109", label: "Net tax", sign: 1, sequence: 6, formula: "105 - 108", editable: false },
 ];
 
 test("assembleReturn computes a GST34 with sign flips and derived totals", () => {
@@ -63,11 +63,53 @@ test("assembleReturn marks computed vs GL-mapped boxes and preserves order", () 
 test("assembleReturn evaluates strictly in sequence order (a forward reference throws)", () => {
   // 109 references 105 but is sequenced BEFORE it → not-yet-computed.
   const bad: TaxReturnBoxDef[] = [
-    { lineCode: "109", label: "Net", sign: 1, sequence: 1, formula: "105" },
-    { lineCode: "105", label: "Total", sign: 1, sequence: 2, formula: null },
+    { lineCode: "109", label: "Net", sign: 1, sequence: 1, formula: "105", editable: false },
+    { lineCode: "105", label: "Total", sign: 1, sequence: 2, formula: null, editable: false },
   ];
   assert.throws(() => assembleReturn(bad, new Map([["105", "1.0000"]])), /not-yet-computed box "105"/);
 });
+
+// A GST34 with adjustment boxes (104 add / 107 deduct) feeding the totals.
+const GST34_ADJ: TaxReturnBoxDef[] = [
+  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 20, formula: null, editable: false },
+  { lineCode: "104", label: "Adjustments (add)", sign: 1, sequence: 30, formula: null, editable: true },
+  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 40, formula: "103 + 104", editable: false },
+  { lineCode: "106", label: "ITCs", sign: 1, sequence: 50, formula: null, editable: false },
+  { lineCode: "107", label: "Adjustments (deduct)", sign: 1, sequence: 60, formula: null, editable: true },
+  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 70, formula: "106 + 107", editable: false },
+  { lineCode: "109", label: "Net tax", sign: 1, sequence: 80, formula: "105 - 108", editable: false },
+];
+
+test("adjustment boxes take the filer's amount and flow into the totals", () => {
+  const gl = new Map([["103", "-13000.0000"], ["106", "4000.0000"]])
+  const adj = new Map([["104", "500.0000"], ["107", "200.0000"]])
+  const boxes = assembleReturn(GST34_ADJ, gl, adj)
+  const v = (c: string) => boxes.find((b) => b.lineCode === c)!.value
+  assert.equal(v("104"), "500.0000") // entered as displayed, no sign flip
+  assert.equal(v("105"), "13500.0000") // 13000 + 500
+  assert.equal(v("108"), "4200.0000") // 4000 + 200
+  assert.equal(v("109"), "9300.0000") // 13500 - 4200
+  assert.equal(boxes.find((b) => b.lineCode === "104")!.editable, true)
+})
+
+test("an omitted adjustment defaults to zero", () => {
+  const boxes = assembleReturn(GST34_ADJ, new Map([["103", "-13000.0000"], ["106", "4000.0000"]]))
+  assert.equal(boxes.find((b) => b.lineCode === "104")!.value, "0.0000")
+  assert.equal(boxes.find((b) => b.lineCode === "109")!.value, "9000.0000")
+})
+
+test("planReturn marks manual boxes (no formula, no GL source) editable", () => {
+  const rows: TaxReportLineRow[] = [
+    { lineCode: "103", label: "Collected", sign: -1, sequence: 20, taxCodeId: "gst", basis: "tax_collected", formula: null },
+    { lineCode: "104", label: "Adjustments", sign: 1, sequence: 30, taxCodeId: null, basis: null, formula: null },
+    { lineCode: "105", label: "Total", sign: 1, sequence: 40, taxCodeId: null, basis: null, formula: "103 + 104" },
+  ]
+  const { boxes } = planReturn(rows)
+  const byCode = new Map(boxes.map((b) => [b.lineCode, b]))
+  assert.equal(byCode.get("104")!.editable, true) // manual → editable
+  assert.equal(byCode.get("103")!.editable, false) // GL-mapped
+  assert.equal(byCode.get("105")!.editable, false) // computed
+})
 
 test("planReturn collapses multi-code boxes and collects every GL source", () => {
   // Line 103 (GST/HST collected) sums two tax codes; 105 is computed.
