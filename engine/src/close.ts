@@ -180,6 +180,17 @@ const DEFAULT_STEPS = [
     evidence: false,
   },
   {
+    key: "fx-revalued",
+    title: "close.defaultSteps.fx-revalued.title",
+    description: "close.defaultSteps.fx-revalued.description",
+    workstream: "gl",
+    taskType: "journal",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 2,
+    evidence: true,
+  },
+  {
     key: "intercompany-balanced",
     title: "close.defaultSteps.intercompany-balanced.title",
     description: "close.defaultSteps.intercompany-balanced.description",
@@ -264,8 +275,10 @@ const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
   ["ap-cutoff", "drafts-cleared"],
   ["depreciation-posted", "drafts-cleared"],
   ["fx-ready", "drafts-cleared"],
+  ["fx-revalued", "fx-ready"],
   ["intercompany-balanced", "drafts-cleared"],
   ["consolidation", "fx-ready"],
+  ["consolidation", "fx-revalued"],
   ["consolidation", "intercompany-balanced"],
   ["variance-review", "ar-cutoff"],
   ["variance-review", "ap-cutoff"],
@@ -927,7 +940,7 @@ async function readinessChecks(
   const ctx = context.rows[0];
   if (!ctx) throw new CloseError("close run not found");
 
-  const [drafts, bank, depreciation, fx, intercompany, variancePolicy] =
+  const [drafts, bank, depreciation, fx, fxReval, intercompany, variancePolicy] =
     (await Promise.all([
       db.execute(sql`
       select
@@ -963,6 +976,26 @@ async function readinessChecks(
          select 1 from fx_rates f where f.org_id = ${orgId} and f.from_currency = c.currency
            and f.to_currency = ${ctx.base_currency} and f.rate_type = 'spot' and f.as_of <= ${ctx.ends_on}
        )`),
+      db.execute(sql`
+      select count(*) as count from (
+        select l.subsidiary_id, l.currency
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id
+          join accounts a on a.id = l.account_id
+          join subsidiaries s on s.id = l.subsidiary_id
+         where l.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status = 'posted'
+           and e.origin <> 'revaluation' and e.posting_date <= ${ctx.ends_on}
+           and l.currency <> s.base_currency
+           and a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
+         group by l.subsidiary_id, l.currency
+        having sum(l.txn_amount) <> 0
+      ) positions
+      where not exists (
+        select 1 from journal_entries r
+         where r.org_id = ${orgId} and r.period_id = ${ctx.period_id} and r.book_id = ${ctx.book_id}
+           and r.subsidiary_id = positions.subsidiary_id
+           and r.origin = 'revaluation' and r.reverses_entry_id is null
+      )`),
       db.execute(sql`
       select count(*) as count from (
         select a.id
@@ -1047,6 +1080,15 @@ async function readinessChecks(
       title: "close.diagnostics.fx-missing.title",
       message: "close.diagnostics.fx-missing.message",
       count: Number(fx.rows[0]?.count ?? 0),
+    },
+    {
+      code: "fx-unrevalued",
+      taskKey: "fx-revalued",
+      category: "foreign_exchange",
+      severity: "error",
+      title: "close.diagnostics.fx-unrevalued.title",
+      message: "close.diagnostics.fx-unrevalued.message",
+      count: Number(fxReval.rows[0]?.count ?? 0),
     },
     {
       code: "intercompany-residual",

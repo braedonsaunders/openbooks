@@ -31,6 +31,7 @@ type ControlAccounts = {
   taxCollected: string
   taxPaid: string
   employeePayable: string
+  fxUnrealizedGainLoss: string
 }
 
 type Initial = {
@@ -59,6 +60,7 @@ const CONTROL_FIELDS: { key: keyof ControlAccounts }[] = [
   { key: 'taxCollected' },
   { key: 'taxPaid' },
   { key: 'employeePayable' },
+  { key: 'fxUnrealizedGainLoss' },
 ]
 
 export function SettingsForm({

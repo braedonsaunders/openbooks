@@ -533,6 +533,20 @@ function TaskCard(props: Props & { task: Row }) {
       setBusy(false);
     }
   }
+  async function runRevaluation() {
+    setBusy(true);
+    try {
+      await call("/api/close/run-revaluation", {
+        periodId: props.run.period_id,
+      });
+      toast.success(t("messages.revaluationPosted"));
+      router.refresh();
+    } catch {
+      toast.error(t("errors.actionFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <Card
       className={cn(
@@ -603,6 +617,14 @@ function TaskCard(props: Props & { task: Row }) {
               </Badge>
             ))}
           </div>
+        ) : null}
+        {props.canRun &&
+        props.task.key === "fx-revalued" &&
+        !["complete", "waived"].includes(props.task.status) ? (
+          <Button size="sm" disabled={busy} onClick={runRevaluation}>
+            <Play size={14} />
+            {t("actions.runRevaluation")}
+          </Button>
         ) : null}
         {props.canRun &&
         !["complete", "waived"].includes(props.task.status) &&

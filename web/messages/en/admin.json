@@ -559,6 +559,10 @@
         "employeePayable": {
           "label": "Employee payable",
           "hint": "Expense reimbursements owed to staff"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "Unrealized FX gain/loss",
+          "hint": "Where period-end revaluation of foreign-currency balances is booked"
         }
       }
     },

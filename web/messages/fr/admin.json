@@ -545,6 +545,10 @@
         "employeePayable": {
           "label": "Dû aux employés",
           "hint": "Remboursements de dépenses dus au personnel"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "Gain/perte de change latent",
+          "hint": "Où est comptabilisée la réévaluation de fin de période des soldes en devises"
         }
       }
     },

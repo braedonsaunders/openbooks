@@ -58,6 +58,7 @@
     "resume": "Continuar",
     "backToPeriods": "Volver a períodos",
     "revalidate": "Revalidar",
+    "runRevaluation": "Revaluar divisas",
     "startTask": "Iniciar",
     "complete": "Completar",
     "submitReview": "Enviar a revisión",
@@ -76,6 +77,7 @@
     "close": "Período bloqueado",
     "publish": "Paquete de cierre publicado",
     "taskUpdated": "Tarea actualizada",
+    "revaluationPosted": "Saldos en moneda extranjera revaluados",
     "evidenceAdded": "Evidencia adjunta",
     "automationComplete": "Automatización completada"
   },
@@ -129,6 +131,10 @@
     "fx-missing": {
       "title": "Faltan tipos de cambio",
       "message": "{count, plural, one {# moneda de transacción no tiene un tipo de cierre utilizable.} other {# monedas de transacción no tienen un tipo de cierre utilizable.}}"
+    },
+    "fx-unrevalued": {
+      "title": "Los saldos en moneda extranjera no están revaluados",
+      "message": "{count, plural, one {# saldo monetario en moneda extranjera no se ha revaluado al tipo de cierre.} other {# saldos monetarios en moneda extranjera no se han revaluado al tipo de cierre.}}"
     },
     "intercompany-residual": {
       "title": "La actividad intercompañía no se elimina",
@@ -280,6 +286,10 @@
     "fx-ready": {
       "title": "Validar cobertura cambiaria",
       "description": "Cada moneda de transacción debe tener un tipo de cierre utilizable."
+    },
+    "fx-revalued": {
+      "title": "Revaluar los saldos en moneda extranjera",
+      "description": "Reexpresar los saldos abiertos en moneda extranjera (banco, cuentas por cobrar y por pagar) al tipo de cierre."
     },
     "intercompany-balanced": {
       "title": "Conciliar intercompañía",
