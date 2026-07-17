@@ -5,13 +5,16 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { DocTypeBadge } from '../../../components/doc-type-badge'
+import { TransactionDrawer } from '../../../components/transaction-drawer'
+import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { money } from '../../../lib/format'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
+import { HeaderFields } from '../../../components/transaction-form/header-fields'
+import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
 
 interface Opt {
   id: string
@@ -36,6 +39,13 @@ interface LineRow extends Record<string, unknown> {
   taxCodeId: string
   departmentId: string
   projectId: string
+}
+interface SegmentOption {
+  key: string
+  name: string
+  showOnHeader: boolean
+  showOnLines: boolean
+  values: { id: string; name: string }[]
 }
 interface LinkRow {
   direction: 'from' | 'to'
@@ -104,7 +114,7 @@ function docHref(kind: string, id: string): string {
   return targetHref(kind, id)
 }
 
-const emptyLine = (): LineRow => ({
+const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   itemId: '',
   accountId: '',
   description: '',
@@ -114,9 +124,10 @@ const emptyLine = (): LineRow => ({
   taxCodeId: '',
   departmentId: '',
   projectId: '',
+  ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, ''])),
 })
 
-function toRow(l: Record<string, any>): LineRow {
+function toRow(l: Record<string, any>, segments: SegmentOption[]): LineRow {
   return {
     itemId: l.item_id ?? '',
     accountId: l.account_id ?? '',
@@ -127,6 +138,7 @@ function toRow(l: Record<string, any>): LineRow {
     taxCodeId: l.tax_code_id ?? '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
+    ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, l.extra_dims?.[segment.key] ?? ''])),
   }
 }
 
@@ -139,7 +151,9 @@ export function OrderDrawer({
   taxCodes,
   departments,
   projects,
+  segments,
   canManage,
+  layout,
 }: {
   order: OrderPayload
   kind: OrderKind
@@ -149,7 +163,9 @@ export function OrderDrawer({
   taxCodes: Opt[]
   departments: Opt[]
   projects: Opt[]
+  segments: SegmentOption[]
   canManage: boolean
+  layout?: FormLayoutConfig
 }) {
   const t = useTranslations('purchaseOrders.shared')
   const tCommon = useTranslations('common')
@@ -176,8 +192,9 @@ export function OrderDrawer({
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [departmentId, setDepartmentId] = useState<string>(doc.department_id ?? '')
   const [projectId, setProjectId] = useState<string>(doc.project_id ?? '')
+  const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
-    order.lines.length > 0 ? order.lines.map(toRow) : [emptyLine()],
+    order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)],
   )
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
@@ -245,6 +262,7 @@ export function OrderDrawer({
       memo,
       departmentId: departmentId || null,
       projectId: projectId || null,
+      extraDims,
       lines: rows
         .filter((r) => (r.itemId || r.accountId) && Number(r.quantity) > 0 && Number(r.unitPrice) >= 0 && lineAmount(r) > 0)
         .map((r) => ({
@@ -257,9 +275,15 @@ export function OrderDrawer({
           taxCodeId: r.taxCodeId || null,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
+          extraDims: Object.fromEntries(
+            segments
+              .filter((segment) => segment.showOnLines)
+              .map((segment) => [segment.key, r[`seg_${segment.key}`]])
+              .filter(([, value]) => value !== '' && value != null),
+          ),
         })),
     }),
-    [partyId, documentDate, dueDate, memo, departmentId, projectId, rows],
+    [partyId, documentDate, dueDate, memo, departmentId, projectId, extraDims, rows, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -281,7 +305,8 @@ export function OrderDrawer({
     setMemo(doc.memo ?? '')
     setDepartmentId(doc.department_id ?? '')
     setProjectId(doc.project_id ?? '')
-    setRows(order.lines.length > 0 ? order.lines.map(toRow) : [emptyLine()])
+    setExtraDims(doc.extra_dims ?? {})
+    setRows(order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)])
     setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   }
 
@@ -396,7 +421,9 @@ export function OrderDrawer({
 
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
-    () => [
+    () => {
+      const builtIn: Record<string, LineGridColumn<LineRow>> = {
+      item_id:
       {
         key: 'itemId',
         label: t('columns.item'),
@@ -405,7 +432,7 @@ export function OrderDrawer({
         options: items.map((i) => ({ value: i.id, label: `${i.code ? i.code + ' · ' : ''}${i.name ?? ''}`.trim() })),
         placeholder: '—',
       },
-      {
+      account_id: {
         key: 'accountId',
         label: t('columns.account', { kind }),
         width: 'minmax(180px,1.8fr)',
@@ -413,17 +440,26 @@ export function OrderDrawer({
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
         placeholder: t('columns.accountPlaceholder'),
       },
-      { key: 'description', label: tCommon('labels.description'), width: 'minmax(150px,1.6fr)', type: 'text' },
-      { key: 'quantity', label: t('columns.qty'), width: '90px', type: 'amount', align: 'right', required: true },
-      { key: 'unitPrice', label: t('columns.unitPrice'), width: '110px', type: 'amount', align: 'right', required: true },
-      {
+      description: { key: 'description', label: tCommon('labels.description'), width: 'minmax(150px,1.6fr)', type: 'text' },
+      quantity: { key: 'quantity', label: t('columns.qty'), width: '90px', type: 'amount', align: 'right', required: true },
+      unit: { key: 'unit', label: tCommon('labels.unit'), width: '90px', type: 'text' },
+      unit_price: { key: 'unitPrice', label: t('columns.unitPrice'), width: '110px', type: 'amount', align: 'right', required: true },
+      department_id: {
+        key: 'departmentId', label: tCommon('labels.department'), width: '140px', type: 'select',
+        options: [{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))],
+      },
+      project_id: {
+        key: 'projectId', label: tCommon('labels.project'), width: 'minmax(150px,1.2fr)', type: 'search-select',
+        options: projects.map((project) => ({ value: project.id, label: project.name ?? '' })), placeholder: '—',
+      },
+      tax_code_id: {
         key: 'taxCodeId',
         label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
         options: [{ value: '', label: t('columns.noTax') }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
       },
-      {
+      amount: {
         key: '_amount',
         label: tCommon('labels.amount'),
         width: '120px',
@@ -434,7 +470,7 @@ export function OrderDrawer({
           return a ? money(a) : ''
         },
       },
-      {
+      tax_amount: {
         key: '_tax',
         label: t('columns.taxAmount'),
         width: '100px',
@@ -445,20 +481,56 @@ export function OrderDrawer({
           return t ? money(t) : ''
         },
       },
-    ],
+      }
+      const placed = !layout ? Object.values(builtIn) : layout.lines.columns.flatMap((placement) => {
+        if (!placement.visible) return []
+        const base = builtIn[placement.key]
+        if (!base) return []
+        return [{ ...base, width: placement.width ?? base.width, label: placement.labelOverride?.trim() || base.label }]
+      })
+      return [
+        ...placed,
+        ...segments.filter((segment) => segment.showOnLines).map((segment): LineGridColumn<LineRow> => ({
+          key: `seg_${segment.key}`,
+          label: segment.name,
+          width: 'minmax(150px,1.2fr)',
+          type: 'search-select',
+          options: segment.values.map((value) => ({ value: value.id, label: value.name })),
+          placeholder: '—',
+        })),
+      ]
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxCodes, kind, t, tCommon],
+    [accounts, items, taxCodes, departments, projects, segments, kind, layout, t, tCommon],
   )
 
   const field = 'space-y-1.5'
+  const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
+    const label = placement.labelOverride?.trim()
+    switch (placement.key) {
+      case 'party_id':
+        return <><Label>{label || t('partyLabel', { kind })}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { kind })} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
+      case 'document_date':
+        return <><Label>{label || t('dateLabel', { kind })}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+      case 'due_date':
+        return <><Label>{label || t('expiryLabel', { kind })}</Label>{isEditable ? <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /> : <p className="text-sm">{doc.due_date ?? '—'}</p>}</>
+      case 'department_id':
+        return <><Label>{label || tCommon('labels.department')}</Label>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))]} value={departmentId} onChange={(value) => setDepartmentId(value ?? '')} placeholder="—" /> : <p className="text-sm">{departments.find((department) => department.id === doc.department_id)?.name ?? '—'}</p>}</>
+      case 'project_id':
+        return <><Label>{label || tCommon('labels.project')}</Label>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...projects.map((project) => ({ value: project.id, label: project.name ?? '' }))]} value={projectId} onChange={(value) => setProjectId(value ?? '')} placeholder="—" /> : <p className="text-sm">{projects.find((project) => project.id === doc.project_id)?.name ?? '—'}</p>}</>
+      case 'memo':
+        return <><Label>{label || tCommon('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+      default:
+        return null
+    }
+  }
   const canIssue = !!partyId && rows.some((r) => (r.itemId || r.accountId) && lineAmount(r) > 0)
   const convertTargets = CONVERSION_TARGETS[kind]
 
   return (
-    <UrlDrawer
-      open
+    <TransactionDrawer
       closeHref={meta.base}
-      size="2xl"
+      panelClassName={docTypeMeta(kind).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={kind} />
@@ -479,24 +551,26 @@ export function OrderDrawer({
         </span>
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
-      headerActions={
+      primaryAction={
+        mode === 'view' && canManage && canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
+            {tCommon('actions.edit')}
+          </Button>
+        ) : null
+      }
+      actions={
         mode === 'edit' ? (
           <>
             <Button disabled={busy} onClick={save}>
-              {busy ? 'Saving…' : 'Save'}
+              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
             <Button variant="outline" disabled={busy} onClick={cancel}>
-              Cancel
+              {tCommon('actions.cancel')}
             </Button>
           </>
         ) : canManage ? (
           <>
             <PdfButton recordType={kind} recordId={String(doc.id)} />
-            {canEditStatus ? (
-              <Button variant="outline" onClick={() => setMode('edit')}>
-                Edit
-              </Button>
-            ) : null}
             {isDraft ? (
               <Button disabled={busy || !canIssue} onClick={issue}>
                 {t('issue')}
@@ -520,7 +594,7 @@ export function OrderDrawer({
             ) : null}
             {doc.status !== 'voided' ? (
               <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                Delete
+                {tCommon('actions.delete')}
               </Button>
             ) : null}
           </>
@@ -556,7 +630,7 @@ export function OrderDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
               {t('partyLabel', { kind })}
@@ -623,7 +697,31 @@ export function OrderDrawer({
               <p className="text-sm">{doc.memo ?? '—'}</p>
             )}
           </div>
-        </div>
+        </div>}
+
+        {segments.some((segment) => segment.showOnHeader) ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {segments.filter((segment) => segment.showOnHeader).map((segment) => {
+              const selected = extraDims[segment.key] ?? ''
+              return (
+                <div key={segment.key} className={field}>
+                  <Label>{segment.name}</Label>
+                  {editable ? (
+                    <SearchSelect
+                      options={segment.values.map((value) => ({ value: value.id, label: value.name }))}
+                      value={selected}
+                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value ?? '' }))}
+                      placeholder="—"
+                      clearable
+                    />
+                  ) : (
+                    <p className="text-sm">{segment.values.find((value) => value.id === selected)?.name ?? '—'}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <Label>{tCommon('labels.lines')}</Label>
@@ -631,7 +729,7 @@ export function OrderDrawer({
             columns={columns}
             rows={rows}
             onRowsChange={onRowsChange}
-            emptyRow={emptyLine}
+            emptyRow={() => emptyLine(segments)}
             readOnly={!editable}
           />
         </div>
@@ -662,6 +760,6 @@ export function OrderDrawer({
           </div>
         ) : null}
       </div>
-    </UrlDrawer>
+    </TransactionDrawer>
   )
 }

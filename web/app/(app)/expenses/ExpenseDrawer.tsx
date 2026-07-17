@@ -5,14 +5,23 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import { CustomFieldInput } from '../../../components/custom-field-input'
+import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { AttachmentPanel } from '../../../components/attachment-panel'
-import { DocTypeBadge } from '../../../components/doc-type-badge'
+import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
+import {
+  customFieldDefKey,
+  isCustomFieldKey,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+} from '@openbooks/customization'
 
 interface Opt {
   id: string
@@ -21,6 +30,13 @@ interface Opt {
   name?: string
   code?: string
   rate?: string
+}
+interface SegmentOpt {
+  key: string
+  name: string
+  showOnHeader: boolean
+  showOnLines: boolean
+  values: { id: string; code: string | null; name: string }[]
 }
 interface LineRow extends Record<string, unknown> {
   accountId: string
@@ -66,7 +82,7 @@ const emptyLine = (): LineRow => ({
   taxAmount: '',
 })
 
-function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRow {
+function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     accountId: l.account_id ?? '',
     description: l.description ?? '',
@@ -78,6 +94,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRo
     taxAmount: l.tax_amount != null ? Number(l.tax_amount).toFixed(2) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
   return row
 }
 
@@ -88,10 +105,12 @@ export function ExpenseDrawer({
   taxCodes,
   departments,
   projects,
+  segments = [],
   headerDefs,
   lineDefs,
   canSubmit,
   canPost,
+  layout,
 }: {
   report: ExpensePayload
   employees: Opt[]
@@ -99,10 +118,12 @@ export function ExpenseDrawer({
   taxCodes: Opt[]
   departments: Opt[]
   projects: Opt[]
+  segments?: SegmentOpt[]
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
   canSubmit: boolean
   canPost: boolean
+  layout?: FormLayoutConfig
 }) {
   const t = useTranslations('expenses')
   const tCommon = useTranslations('common')
@@ -125,8 +146,9 @@ export function ExpenseDrawer({
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
+  const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
-    report.lines.length > 0 ? report.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()],
+    report.lines.length > 0 ? report.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()],
   )
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
@@ -146,6 +168,7 @@ export function ExpenseDrawer({
       partyId: partyId || null,
       documentDate: documentDate || undefined,
       memo,
+      extraDims,
       custom: customValues,
       lines: rows
         .filter((r) => r.accountId && Number(r.amount) > 0)
@@ -158,12 +181,13 @@ export function ExpenseDrawer({
           taxAmount: r.taxOverridden ? r.taxAmount : null,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
+          extraDims: Object.fromEntries(segments.map((segment) => [segment.key, r[`seg_${segment.key}`]]).filter(([, value]) => value !== '' && value != null)),
           custom: Object.fromEntries(
             lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
           ),
         })),
     }),
-    [partyId, documentDate, memo, customValues, rows, lineDefs],
+    [partyId, documentDate, memo, customValues, extraDims, rows, lineDefs, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -183,7 +207,8 @@ export function ExpenseDrawer({
     setDocumentDate(doc.document_date ?? '')
     setMemo(doc.memo ?? '')
     setCustomValues(doc.custom ?? {})
-    setRows(report.lines.length > 0 ? report.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()])
+    setExtraDims(doc.extra_dims ?? {})
+    setRows(report.lines.length > 0 ? report.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()])
     setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   }
 
@@ -234,11 +259,11 @@ export function ExpenseDrawer({
     const posted = doc.status === 'posted'
     if (
       !(await confirmDialog({
-        title: 'Delete this expense report?',
+        title: t('drawer.deleteTitle'),
         message: posted
-          ? 'This permanently deletes the expense report and removes its ledger impact. This cannot be undone.'
-          : 'This permanently deletes the draft expense report. This cannot be undone.',
-        confirmLabel: 'Delete',
+          ? t('drawer.deletePostedBody')
+          : t('drawer.deleteDraftBody'),
+        confirmLabel: tCommon('actions.delete'),
         tone: 'danger',
       }))
     )
@@ -246,18 +271,20 @@ export function ExpenseDrawer({
     setBusy(true)
     const res = await fetch(`/api/expenses/${doc.id}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success('Expense report deleted')
+      toast.success(t('toasts.deleted'))
       router.push('/expenses')
       router.refresh()
     } else {
-      toast.error((await res.json()).error ?? 'Delete failed')
+      toast.error((await res.json()).error ?? t('toasts.deleteFailed'))
       setBusy(false)
     }
   }
 
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
-    () => [
+    () => {
+      const builtIn: Record<string, LineGridColumn<LineRow>> = {
+      account_id:
       {
         key: 'accountId',
         label: tCommon('labels.account'),
@@ -267,15 +294,15 @@ export function ExpenseDrawer({
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
         placeholder: t('drawer.accountPlaceholder'),
       },
-      { key: 'description', label: tCommon('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
-      {
+      description: { key: 'description', label: tCommon('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
+      department_id: {
         key: 'departmentId',
         label: tCommon('labels.department'),
         width: '140px',
         type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
       },
-      {
+      project_id: {
         key: 'projectId',
         label: tCommon('labels.project'),
         width: 'minmax(150px,1.2fr)',
@@ -283,16 +310,15 @@ export function ExpenseDrawer({
         options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
         placeholder: '—',
       },
-      {
+      tax_code_id: {
         key: 'taxCodeId',
         label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
         options: [{ value: '', label: t('drawer.noTax') }, ...taxCodes.map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
       },
-      ...customFieldColumns<LineRow>(lineDefs),
-      { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
-      {
+      amount: { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
+      tax_amount: {
         key: 'taxAmount',
         label: t('drawer.columns.taxAmount'),
         width: '120px',
@@ -306,18 +332,60 @@ export function ExpenseDrawer({
             ),
           ),
       },
-    ],
+      }
+      const custom = new Map(customFieldColumns<LineRow>(lineDefs).map((column) => [column.key, column]))
+      const segmentColumns: LineGridColumn<LineRow>[] = segments.filter((segment) => segment.showOnLines).map((segment) => ({
+        key: `seg_${segment.key}`, label: segment.name, width: '150px', type: 'search-select',
+        options: segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` })), placeholder: '—',
+      }))
+      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...custom.values()]
+      const configured = layout.lines.columns.flatMap((placement) => {
+        if (!placement.visible) return []
+        const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
+        if (!base) return []
+        return [{
+          ...base,
+          width: placement.width ?? base.width,
+          label: placement.labelOverride?.trim() || base.label,
+        }]
+      })
+      return [...configured, ...segmentColumns]
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxCodes, lineDefs, t, tCommon],
+    [accounts, departments, projects, taxCodes, lineDefs, segments, layout, t, tCommon],
   )
 
   const field = 'space-y-1.5'
+  const headerDefByKey = new Map(headerDefs.map((def) => [def.key, def]))
+  const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
+    const override = placement.labelOverride?.trim()
+    if (isCustomFieldKey(placement.key)) {
+      const def = headerDefByKey.get(customFieldDefKey(placement.key))
+      return def ? (
+        <CustomFieldInput
+          def={{ ...def, label: override || def.label, isRequired: placement.required ?? def.isRequired }}
+          value={customValues[def.key]}
+          onChange={(value) => setCustomValues((current) => ({ ...current, [def.key]: value }))}
+          readOnly={!isEditable}
+        />
+      ) : null
+    }
+    switch (placement.key) {
+      case 'party_id':
+        return <><Label>{override || tCommon('labels.employee')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={employees.map((employee) => ({ value: employee.id, label: employee.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('drawer.selectEmployeePlaceholder')} /> : <p className="text-sm">{doc.employee_name}</p>}</>
+      case 'document_date':
+        return <><Label>{override || t('drawer.reportDate')}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+      case 'memo':
+        return <><Label>{override || tCommon('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+      default:
+        return null
+    }
+  }
 
   return (
-    <UrlDrawer
-      open
+    <TransactionDrawer
       closeHref="/expenses"
-      size="2xl"
+      panelClassName={docTypeMeta('expense_report').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind="expense_report" />
@@ -328,25 +396,27 @@ export function ExpenseDrawer({
         </span>
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.employee_name ?? undefined)}
-      headerActions={
+      primaryAction={
+        mode === 'view' && canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
+            {tCommon('actions.edit')}
+          </Button>
+        ) : null
+      }
+      actions={
         <>
           {mode === 'edit' ? (
             <>
               <Button disabled={busy} onClick={save}>
-                {busy ? 'Saving…' : 'Save'}
+                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
               </Button>
               <Button variant="outline" disabled={busy} onClick={cancel}>
-                Cancel
+                {tCommon('actions.cancel')}
               </Button>
             </>
           ) : (
             <>
               <PdfButton recordType="expense_report" recordId={String(doc.id)} />
-              {canEditStatus ? (
-                <Button variant="outline" onClick={() => setMode('edit')}>
-                  Edit
-                </Button>
-              ) : null}
               {isDraft && canSubmit ? (
                 <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
                   {t('actions.submitForApproval')}
@@ -364,7 +434,7 @@ export function ExpenseDrawer({
               ) : null}
               {doc.status !== 'voided' && canSubmit ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                  Delete
+                  {tCommon('actions.delete')}
                 </Button>
               ) : null}
             </>
@@ -404,7 +474,7 @@ export function ExpenseDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>{tCommon('labels.employee')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
@@ -436,7 +506,24 @@ export function ExpenseDrawer({
           </div>
         </div>
 
-        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
+        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} /></>}
+
+        {segments.some((segment) => segment.showOnHeader) ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {segments.filter((segment) => segment.showOnHeader).map((segment) => {
+              const selected = extraDims[segment.key] ?? ''
+              return <div className={field} key={segment.key}>
+                <Label>{segment.name}</Label>
+                {editable ? <SearchSelect
+                  options={segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))}
+                  value={selected}
+                  onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value ?? '' }))}
+                  placeholder="—"
+                /> : <p className="text-sm">{segment.values.find((value) => value.id === selected)?.name ?? '—'}</p>}
+              </div>
+            })}
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <Label>{tCommon('labels.lines')}</Label>
@@ -451,6 +538,6 @@ export function ExpenseDrawer({
 
         <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
-    </UrlDrawer>
+    </TransactionDrawer>
   )
 }

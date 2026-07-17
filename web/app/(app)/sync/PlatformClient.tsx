@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plug, RefreshCw, Play, FlaskConical, Trash2, Plus, Pencil } from 'lucide-react'
+import { Plug, RefreshCw, Play, FlaskConical, Trash2, Plus, Pencil, Copy, ExternalLink } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -40,6 +40,7 @@ interface SourceTypeDef {
   blurb: string
   configFields: FieldSpec[]
   secretFields: FieldSpec[]
+  oauthSetup?: { portalUrl: string; portalLabel: string; steps: string[] } | null
 }
 interface Connection {
   id: string
@@ -72,6 +73,7 @@ interface Run {
     applications?: { inserted?: number } | null
     tb?: { matches?: number; accounts?: number; mismatches?: unknown[] }
     openItems?: { checked?: number; matches?: number; mismatches?: unknown[] } | null
+    periods?: { checked?: number; matches?: number } | null
   }
   errorMessage: string | null
   triggeredBy: string | null
@@ -110,6 +112,17 @@ export function PlatformClient() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  // Surface an OAuth callback result (e.g. QuickBooks), then clean the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('oauth')
+    if (!status) return
+    if (status === 'connected') toast.success('Connection authorized')
+    else if (status === 'denied') toast.error('Authorization was declined')
+    else toast.error(`Authorization failed (${status})`)
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
 
 
   async function run(conn: Connection, mode: 'full_migration' | 'mirror') {
@@ -210,6 +223,16 @@ export function PlatformClient() {
                   {c.mirrorEnabled ? <Badge variant="success">mirror: {c.mirrorSchedule}</Badge> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {c.authKind === 'oauth2' && c.status !== 'active' ? (
+                    <Button size="sm" onClick={() => window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, '_blank')}>
+                      <Plug size={14} /> Connect
+                    </Button>
+                  ) : null}
+                  {c.authKind === 'oauth2' && c.status === 'active' ? (
+                    <Button variant="outline" size="sm" onClick={() => window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, '_blank')}>
+                      Reconnect
+                    </Button>
+                  ) : null}
                   <Button variant="outline" size="sm" disabled={busy === `${c.id}:test`} onClick={() => test(c)}>
                     <FlaskConical size={14} /> Test
                   </Button>
@@ -270,7 +293,8 @@ export function PlatformClient() {
                         `${(r.stats.applications?.inserted ?? 0) > 0 ? ` · ${r.stats.applications?.inserted} applied` : ''}` +
                         ` · TB ${r.stats.tb?.matches ?? 0}/${r.stats.tb?.accounts ?? 0}` +
                         `${(r.stats.tb?.mismatches?.length ?? 0) > 0 ? ` (${r.stats.tb?.mismatches?.length} off)` : ''}` +
-                        `${r.stats.openItems ? ` · open items ${r.stats.openItems.matches}/${r.stats.openItems.checked}` : ''}`
+                        `${r.stats.openItems ? ` · open items ${r.stats.openItems.matches}/${r.stats.openItems.checked}` : ''}` +
+                        `${r.stats.periods ? ` · periods ${r.stats.periods.matches}/${r.stats.periods.checked}` : ''}`
                       : (r.errorMessage ?? '')}
                   </TableCell>
                 </TableRow>
@@ -295,6 +319,58 @@ export function PlatformClient() {
 }
 
 // --- Add-connection wizard (drawer) ------------------------------------------
+
+/**
+ * App-registration guidance for OAuth sources: where to create the app, the
+ * steps, and the EXACT redirect URI for this deployment (composed from the
+ * browser origin, with one-click copy) — so a tenant never has to guess what
+ * to paste into the developer portal.
+ */
+function OauthSetupBox({ source, setup }: { source: string; setup: NonNullable<SourceTypeDef['oauthSetup']> }) {
+  const [origin, setOrigin] = useState('')
+  useEffect(() => setOrigin(window.location.origin), [])
+  const redirectUri = `${origin}/api/platform/connections/oauth/${source}/callback`
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(redirectUri)
+      toast.success('Redirect URI copied')
+    } catch {
+      toast.error('Could not copy — select and copy the text manually')
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs dark:border-sky-900/40 dark:bg-sky-900/10">
+      <p className="mb-2 font-medium text-sky-800 dark:text-sky-300">
+        One-time app setup in the{' '}
+        <a
+          href={setup.portalUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-sky-600"
+        >
+          {setup.portalLabel}
+          <ExternalLink size={11} />
+        </a>
+      </p>
+      <ol className="mb-3 list-decimal space-y-1 pl-4 text-slate-600 dark:text-slate-300">
+        {setup.steps.map((s, i) => (
+          <li key={i}>{s}</li>
+        ))}
+      </ol>
+      <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">Redirect URI to register:</p>
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded bg-white px-2 py-1.5 font-mono text-[11px] text-slate-800 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
+          {redirectUri}
+        </code>
+        <Button variant="outline" size="sm" onClick={copy}>
+          <Copy size={13} /> Copy
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 function configOptions(f: FieldSpec, currencies: Currency[]): { value: string; label: string }[] {
   if (f.optionsSource === 'currencies') return currencies.map((c) => ({ value: c.code, label: `${c.code} — ${c.name}` }))
@@ -400,6 +476,9 @@ function ConnectionDrawer({
         {def ? (
           <>
             {!editing ? <p className="text-xs text-slate-500">{def.blurb}</p> : null}
+            {def.authKind === 'oauth2' && def.oauthSetup ? (
+              <OauthSetupBox source={def.source} setup={def.oauthSetup} />
+            ) : null}
             <div>
               <Label>Connection name</Label>
               <Input value={displayName} placeholder={def.displayName} onChange={(e) => setDisplayName(e.target.value)} />

@@ -3,6 +3,7 @@ import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { profitAndLossView } from '../../../../lib/statement-matrix'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
@@ -29,12 +30,14 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
     totalOf: (section: string) => t('statement.sectionTotal', { section }),
   }
 
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const [view, opts, org] = await Promise.all([
     profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
       breakout: q.breakout,
       compare: q.compare,
       basis: q.basis,
       dims: q.dims,
+      subsidiary: subView.subsidiary,
       showZero: q.showZero,
     }),
     dimensionOptions(),
@@ -52,7 +55,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
         <>
           <PageHeader
             title={t('pnl.title')}
-            description={`${period.label}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`}
+            description={`${subView.label ? `${subView.label} · ` : ''}${period.label}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`}
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
@@ -62,10 +65,12 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
               compare: true,
               basis: true,
               dimensions: true,
+              subsidiary: true,
               showZero: true,
               scale: true,
             }}
             dimensions={opts}
+            subsidiaries={subView.picker}
             actions={
               <>
                 <SaveViewButton />
@@ -89,8 +94,8 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
         <StatementMatrixTable
           view={view}
           scale={q.scale}
-          currency={org?.base_currency}
-          drill={{ dims: q.dims, basis: q.basis, back: backHref, backLabel: t('pnl.title') }}
+          currency={subView.currency ?? org?.base_currency}
+          drill={{ dims: q.dims, basis: q.basis, subsidiaryId: q.subsidiaryId, back: backHref, backLabel: t('pnl.title') }}
         />
       </StatementPaper>
     </ListPageLayout>

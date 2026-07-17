@@ -31,7 +31,7 @@ export default async function Aging({
   // Aging is inherently "as of a date" — default to TODAY, not the fiscal year.
   const period = await resolvePeriod(sp.period ?? 'today', { customFrom: q.from, customTo: q.to })
   const asOf = period.to
-  const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
+  const dims = q.dims
   const [summary, detailResult, opts, org] = await Promise.all([
     agingByParty(side, asOf, dims),
     detail ? agingDetail(side, asOf, dims) : null,

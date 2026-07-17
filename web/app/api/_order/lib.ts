@@ -21,6 +21,7 @@ export interface OrderLineInput {
   taxCodeId?: string | null
   departmentId?: string | null
   projectId?: string | null
+  extraDims?: Record<string, string | null>
 }
 
 /** Latest effective rate per tax code, as of now. */
@@ -75,7 +76,7 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
   const lines = (await db.execute(sql`
     select l.id, l.line_number, l.item_id, l.account_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.tax_code_id, l.tax_amount, l.quantity_billed,
-           l.department_id, l.project_id,
+           l.department_id, l.project_id, l.extra_dims,
            i.name as item_name, a.number as account_number, a.name as account_name, tc.code as tax_code
       from document_lines l
       left join items i on i.id = l.item_id

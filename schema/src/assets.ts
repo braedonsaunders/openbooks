@@ -39,6 +39,8 @@ export const fixedAssets = pgTable(
   {
     id: id(),
     orgId: orgRef(),
+    /** Legal entity whose books own the asset and its depreciation. */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
     categoryId: uuid("category_id").notNull(),
     assetNumber: text("asset_number").notNull(),
     name: text("name").notNull(),

@@ -1,11 +1,11 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { db, env, schema } from "./db.ts";
+import { db, schema } from "./db.ts";
 import { cmp, fromUnits, isZero, sum, toUnits } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
+import { sealSecret, unsealJson, unsealSecret } from "./secrets.ts";
 
 /**
  * Payments: vendor payments and customer receipts with open-item application,
@@ -47,11 +47,18 @@ function isPaymentKind(kind: string): kind is PaymentKind {
   return kind === "vendor_payment" || kind === "customer_payment";
 }
 
-async function nextNumber(orgId: string, kind: string, prefix: string): Promise<string> {
+async function nextNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null): Promise<string> {
+  const configured = subsidiaryId
+    ? ((await db.execute(sql`
+        select 1 from number_sequences
+         where org_id = ${orgId} and document_kind = ${kind} and subsidiary_id = ${subsidiaryId}
+         limit 1`)) as any).rows.length > 0
+    : false;
+  const sequenceSubsidiaryId = configured ? subsidiaryId : null;
   const seq = (await db.execute(sql`
-    insert into number_sequences (org_id, document_kind, prefix)
-    values (${orgId}, ${kind}, ${prefix})
-    on conflict (org_id, document_kind)
+    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
+    values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
+    on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
   `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
@@ -100,7 +107,13 @@ export async function createPaymentDocument(opts: {
 }): Promise<{ id: string; documentNumber: string }> {
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
-  const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind]);
+  const sub = (await db.execute(sql`
+    select coalesce(
+      (select subsidiary_id from parties where id = ${opts.partyId ?? null} and org_id = ${opts.orgId}),
+      (select id from subsidiaries where org_id = ${opts.orgId} and parent_id is null)
+    ) as id`)) as unknown as { rows: { id: string }[] };
+  const subsidiaryId = sub.rows[0]?.id ?? null;
+  const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind], subsidiaryId);
   const [doc] = await db
     .insert(schema.documents)
     .values({
@@ -108,6 +121,7 @@ export async function createPaymentDocument(opts: {
       kind: opts.kind,
       documentNumber,
       partyId: opts.partyId ?? null,
+      subsidiaryId,
       documentDate: opts.documentDate ?? new Date().toISOString().slice(0, 10),
       currency: org.baseCurrency,
       memo: opts.memo ?? null,
@@ -575,6 +589,7 @@ async function reversePostedEntry(
       .values({
         orgId,
         bookId: entry.bookId,
+        subsidiaryId: entry.subsidiaryId,
         entryNumber: `${entry.entryNumber}-R`,
         postingDate: entry.postingDate,
         periodId: entry.periodId,
@@ -591,6 +606,7 @@ async function reversePostedEntry(
         entryId: rev.id,
         lineNumber: l.lineNumber,
         accountId: l.accountId,
+        subsidiaryId: l.subsidiaryId,
         amount: negStr(l.amount),
         currency: l.currency,
         txnAmount: negStr(l.txnAmount),
@@ -627,7 +643,7 @@ async function reversePostedEntry(
 }
 
 // ---------------------------------------------------------------------------
-// EFT settings (orgs.settings.eft)
+// Originator settings (tenant-owned payment bank profiles)
 // ---------------------------------------------------------------------------
 
 export interface EftSettings {
@@ -662,11 +678,18 @@ export type EftSettingsResult =
   | { ok: false; missing: string[] };
 
 /** Read and validate the org's EFT origination settings. Never fakes success. */
-export async function loadEftSettings(orgId: string): Promise<EftSettingsResult> {
-  const r = (await db.execute(
-    sql`select settings->'eft' as eft from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { eft: Partial<EftSettings> | null }[] };
-  const eft = r.rows[0]?.eft ?? {};
+export async function loadEftSettings(orgId: string, runId?: string): Promise<EftSettingsResult> {
+  const r = (await db.execute(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id
+     where p.org_id = ${orgId} and p.is_active and f.rail = 'cpa005_credit'
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `)) as unknown as { rows: { originator_secrets_encrypted: string | null }[] };
+  const eft = unsealJson<Partial<EftSettings>>(r.rows[0]?.originator_secrets_encrypted) ?? {};
   const missing = EFT_REQUIRED.filter((k) => {
     const v = eft[k];
     return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
@@ -682,44 +705,18 @@ export async function loadEftSettings(orgId: string): Promise<EftSettingsResult>
 }
 
 // ---------------------------------------------------------------------------
-// Payee bank account number encryption (app-layer, AES-256-GCM)
+// Counterparty bank account number encryption
 // ---------------------------------------------------------------------------
-
-const ENC_PREFIX = "enc:v1:";
-
-function dataKey(): Buffer {
-  const raw = env.OPENBOOKS_DATA_KEY;
-  if (!raw) {
-    throw new PaymentError(
-      "OPENBOOKS_DATA_KEY is not set in .env — required to encrypt/decrypt payee bank account numbers (32-byte key, hex or base64)",
-    );
-  }
-  const buf = /^[0-9a-fA-F]{64}$/.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
-  if (buf.length !== 32) {
-    throw new PaymentError("OPENBOOKS_DATA_KEY must decode to exactly 32 bytes (hex or base64)");
-  }
-  return buf;
-}
 
 /** Encrypt a payee bank account number for party_bank_accounts.account_number_encrypted. */
 export function encryptAccountNumber(plain: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", dataKey(), iv);
-  const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
-  return `${ENC_PREFIX}${iv.toString("base64")}:${ct.toString("base64")}:${cipher.getAuthTag().toString("base64")}`;
+  return sealSecret(plain);
 }
 
 export function decryptAccountNumber(stored: string): string {
-  if (!stored.startsWith(ENC_PREFIX)) {
-    throw new PaymentError(
-      "stored bank account number is not in the expected enc:v1 format — re-save the payee's bank details",
-    );
-  }
-  const [ivB64, ctB64, tagB64] = stored.slice(ENC_PREFIX.length).split(":");
-  if (!ivB64 || !ctB64 || !tagB64) throw new PaymentError("stored bank account number is malformed");
-  const decipher = createDecipheriv("aes-256-gcm", dataKey(), Buffer.from(ivB64, "base64"));
-  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-  return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+  const plain = unsealSecret(stored);
+  if (plain === null) throw new PaymentError("stored bank account number is malformed or could not be decrypted");
+  return plain;
 }
 
 // ---------------------------------------------------------------------------
@@ -735,18 +732,41 @@ export function decryptAccountNumber(stored: string): string {
 export async function createPaymentRun(opts: {
   orgId: string;
   createdBy: string;
-  bankAccountId: string;
+  paymentBankProfileId: string;
   billDocumentIds: string[];
   scheduledFor?: string | null;
+  sourceScheduleId?: string | null;
+  selectionCriteria?: Record<string, unknown>;
 }): Promise<{ id: string; runNumber: string }> {
   if (opts.billDocumentIds.length === 0) throw new PaymentError("select at least one bill to pay");
 
-  const bank = (await db.execute(sql`
-    select id from accounts
-     where id = ${opts.bankAccountId} and org_id = ${opts.orgId}
-       and type = 'asset_bank' and is_active and not is_summary
-  `)) as unknown as { rows: { id: string }[] };
-  if (!bank.rows[0]) throw new PaymentError("bank account must be an active bank-type account");
+  const profiles = (await db.execute(sql`
+    select p.id, p.bank_account_id, p.subsidiary_id, p.currency, p.require_run_approval,
+           f.rail, f.direction
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.is_active
+      join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
+                        and a.type = 'asset_bank' and a.is_active and not a.is_summary
+     where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
+  `)) as unknown as { rows: {
+    id: string;
+    bank_account_id: string;
+    subsidiary_id: string | null;
+    currency: string;
+    require_run_approval: boolean;
+    rail: string;
+    direction: string;
+  }[] };
+  const profile = profiles.rows[0];
+  if (!profile) throw new PaymentError("payment bank profile was not found or is inactive");
+  if (profile.direction === "debit") throw new PaymentError("a debit-only bank profile cannot pay vendor bills");
+  const method = profile.rail === "cpa005_credit" ? "eft"
+    : profile.rail === "nacha_credit" ? "ach"
+    : profile.rail === "sepa_credit" ? "sepa"
+    : profile.rail === "positive_pay" ? "positive_pay"
+    : profile.rail === "custom" ? "custom"
+    : profile.rail === "cheque" ? "cheque"
+    : "wire";
 
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
@@ -754,6 +774,7 @@ export async function createPaymentRun(opts: {
   // Selected bills → their open AP lines with current open balances.
   const bills = (await db.execute(sql`
     select d.id as document_id, d.document_number, d.party_id, p.display_name as vendor,
+           d.currency, d.fx_rate, d.subsidiary_id,
            jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open
       from documents d
       join parties p on p.id = d.party_id
@@ -766,14 +787,16 @@ export async function createPaymentRun(opts: {
      where d.id in ${opts.billDocumentIds}
        and d.org_id = ${opts.orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
        and d.payment_hold_reason is null
+       and d.currency = ${profile.currency}
+       and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
   `)) as unknown as {
-    rows: { document_id: string; document_number: string; party_id: string; vendor: string; open_line_id: string; open: string }[];
+    rows: { document_id: string; document_number: string; party_id: string; vendor: string; currency: string; fx_rate: string; subsidiary_id: string | null; open_line_id: string; open: string }[];
   };
 
   const found = new Set(bills.rows.map((b) => b.document_id));
   const missing = opts.billDocumentIds.filter((id) => !found.has(id));
   if (missing.length > 0) {
-    throw new PaymentError("some selected bills are not posted vendor bills with an open balance");
+    throw new PaymentError("some selected bills are held, closed, or do not match the profile currency and subsidiary");
   }
   const payable = bills.rows.filter((b) => cmp(b.open, "0") > 0);
   if (payable.length === 0) throw new PaymentError("all selected bills are already fully paid");
@@ -792,8 +815,15 @@ export async function createPaymentRun(opts: {
     .values({
       orgId: opts.orgId,
       runNumber,
-      bankAccountId: opts.bankAccountId,
-      method: "eft",
+      bankAccountId: profile.bank_account_id,
+      paymentBankProfileId: profile.id,
+      subsidiaryId: profile.subsidiary_id,
+      sourceScheduleId: opts.sourceScheduleId ?? null,
+      method: method as "eft" | "ach" | "sepa" | "wire" | "cheque" | "positive_pay" | "custom",
+      direction: "outbound",
+      purpose: "vendor_payments",
+      currency: profile.currency,
+      selectionCriteria: opts.selectionCriteria ?? {},
       status: "draft",
       scheduledFor: opts.scheduledFor ?? null,
       createdBy: opts.createdBy,
@@ -812,12 +842,12 @@ export async function createPaymentRun(opts: {
       kind: "vendor_payment",
       createdBy: opts.createdBy,
       partyId,
-      bankAccountId: opts.bankAccountId,
+      bankAccountId: profile.bank_account_id,
       memo: `Payment run ${runNumber}`,
     });
     await updateDraftPayment(
       payment.id,
-      { partyId, bankAccountId: opts.bankAccountId, allocations },
+      { partyId, bankAccountId: profile.bank_account_id, allocations },
       opts.createdBy,
     );
 
@@ -829,7 +859,7 @@ export async function createPaymentRun(opts: {
        order by approved_at desc, created_at desc limit 1
     `)) as unknown as { rows: { id: string }[] };
 
-    await db.insert(schema.paymentInstructions).values({
+    const [instruction] = await db.insert(schema.paymentInstructions).values({
       orgId: opts.orgId,
       paymentRunId: run.id,
       payeePartyId: partyId,
@@ -839,8 +869,46 @@ export async function createPaymentRun(opts: {
       paymentDocumentId: payment.id,
       status: "pending",
       createdBy: opts.createdBy,
-    });
+    }).returning({ id: schema.paymentInstructions.id });
+
+    await db.insert(schema.paymentRunItems).values(vendorBills.map((bill) => ({
+      orgId: opts.orgId,
+      paymentRunId: run.id,
+      paymentInstructionId: instruction.id,
+      sourceDocumentId: bill.document_id,
+      sourceOpenLineId: bill.open_line_id,
+      kind: "bill" as const,
+      grossAmount: bill.open,
+      discountAmount: "0",
+      creditAmount: "0",
+      paymentAmount: bill.open,
+      currency: bill.currency,
+      fxRate: bill.fx_rate,
+      status: "selected" as const,
+      createdBy: opts.createdBy,
+    })));
   }
+
+  await db.execute(sql`
+    update payment_runs r set
+      payment_count = x.payment_count,
+      total_amount = x.total_amount,
+      updated_at = now(), updated_by = ${opts.createdBy}
+    from (
+      select payment_run_id, count(*)::integer as payment_count, coalesce(sum(amount), 0) as total_amount
+        from payment_instructions where payment_run_id = ${run.id} and status <> 'cancelled'
+       group by payment_run_id
+    ) x
+    where r.id = x.payment_run_id
+  `);
+  await db.insert(schema.paymentEvents).values({
+    orgId: opts.orgId,
+    paymentRunId: run.id,
+    eventType: "run_created",
+    toStatus: "draft",
+    details: { paymentBankProfileId: profile.id, sourceCount: payable.length },
+    actorId: opts.createdBy,
+  });
 
   return run;
 }
@@ -849,7 +917,7 @@ export async function createPaymentRun(opts: {
 export async function cancelPaymentRun(runId: string, orgId: string): Promise<void> {
   const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
   if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
-  if (run.status !== "draft" && run.status !== "exported") {
+  if (run.status !== "draft" && run.status !== "rejected" && run.status !== "rolled_back") {
     throw new PaymentError(`a ${run.status} run cannot be cancelled`);
   }
   const instructions = await db
@@ -897,7 +965,20 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
   eft: EftSettingsResult;
   blockers: RunBlocker[];
 }> {
-  const eft = await loadEftSettings(orgId);
+  const runInfo = (await db.execute(sql`
+    select r.method, f.rail
+      from payment_runs r
+      left join payment_bank_profiles p on p.id = r.payment_bank_profile_id
+      left join payment_formats f on f.id = p.payment_format_id
+     where r.id = ${runId} and r.org_id = ${orgId}
+  `)) as unknown as { rows: { method: string; rail: string | null }[] };
+  const method = runInfo.rows[0]?.method;
+  const rail = runInfo.rows[0]?.rail;
+  let eft: EftSettingsResult;
+  if (method === "ach") eft = await loadNachaSettings(orgId, runId) as EftSettingsResult;
+  else if (method === "sepa") eft = await loadSepaSettings(orgId, runId) as EftSettingsResult;
+  else if (method === "eft") eft = await loadEftSettings(orgId, runId);
+  else eft = { ok: true, settings: {} as EftSettings };
   const rows = (await db.execute(sql`
     select i.id, p.display_name as payee, i.payee_bank_account_id,
            b.approved_at, b.is_active, b.routing, b.account_number_encrypted, i.currency
@@ -933,19 +1014,28 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
       continue;
     }
     const routing = r.routing ?? {};
-    if (!/^\d{3}$/.test(routing.institution ?? "")) {
+    if (method === "eft" && !/^\d{3}$/.test(routing.institution ?? "")) {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid 3-digit institution number" });
       continue;
     }
-    if (!/^\d{5}$/.test(routing.transit ?? "")) {
+    if (method === "eft" && !/^\d{5}$/.test(routing.transit ?? "")) {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid 5-digit transit number" });
       continue;
     }
-    if (!r.account_number_encrypted) {
+    if (method !== "cheque" && method !== "positive_pay" && !r.account_number_encrypted) {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing account number" });
       continue;
     }
-    if (r.currency !== "CAD") {
+    const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
+    if (method === "ach" && !/^\d{9}$/.test(aba)) {
+      blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid 9-digit routing number" });
+      continue;
+    }
+    if (method === "sepa" && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test((routing.iban ?? "").replace(/\s/g, ""))) {
+      blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid IBAN" });
+      continue;
+    }
+    if (method === "eft" && r.currency !== "CAD") {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: `CPA-005 CAD file cannot carry ${r.currency}` });
     }
   }
@@ -955,7 +1045,7 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
 /**
  * Post every pending instruction's payment document (+ applications).
  * Sequential and partial-failure-honest: successes are marked 'sent'; any
- * failures are reported and leave the run 'exported' for retry.
+ * failures are reported and leave the run partially failed for retry.
  */
 export async function postPaymentRun(
   runId: string,
@@ -964,7 +1054,7 @@ export async function postPaymentRun(
 ): Promise<{ posted: number; failures: { payee: string; error: string }[] }> {
   const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
   if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
-  if (run.status !== "exported") {
+  if (run.status !== "generated" && run.status !== "delivered" && run.status !== "partially_failed") {
     throw new PaymentError(
       run.status === "confirmed"
         ? "run is already posted"
@@ -1013,6 +1103,11 @@ export async function postPaymentRun(
     await db
       .update(schema.paymentRuns)
       .set({ status: "confirmed", updatedAt: new Date(), updatedBy: userId })
+      .where(eq(schema.paymentRuns.id, runId));
+  } else {
+    await db
+      .update(schema.paymentRuns)
+      .set({ status: "partially_failed", updatedAt: new Date(), updatedBy: userId })
       .where(eq(schema.paymentRuns.id, runId));
   }
   return { posted, failures };
@@ -1193,7 +1288,7 @@ export async function loadCpa005RunFile(
   const { eft, blockers } = await paymentRunReadiness(runId, orgId);
   if (!eft.ok) {
     throw new PaymentError(
-      `EFT origination is not configured — missing orgs.settings.eft: ${eft.missing.join(", ")}. See engine/src/seed-eft-settings.ts.`,
+      `EFT origination is not configured on the payment bank profile: ${eft.missing.join(", ")}.`,
     );
   }
   if (blockers.length > 0) {
@@ -1290,9 +1385,18 @@ export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok:
   return { ok: true, settings: s as NachaSettings };
 }
 
-export async function loadNachaSettings(orgId: string) {
-  const r = (await db.execute(sql`select settings->'nacha' as nacha from orgs where id = ${orgId}`)) as unknown as { rows: { nacha: Partial<NachaSettings> | null }[] };
-  return validateNachaSettings(r.rows[0]?.nacha ?? null);
+export async function loadNachaSettings(orgId: string, runId?: string) {
+  const r = (await db.execute(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id
+     where p.org_id = ${orgId} and p.is_active and f.rail in ('nacha_credit', 'nacha_debit')
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `)) as unknown as { rows: { originator_secrets_encrypted: string | null }[] };
+  return validateNachaSettings(unsealJson<Partial<NachaSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
 
 export interface NachaEntry {
@@ -1387,8 +1491,8 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
   if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
   if (run.method !== "ach") throw new PaymentError(`NACHA export applies to ACH runs, not ${run.method}`);
-  const settings = await loadNachaSettings(orgId);
-  if (!settings.ok) throw new PaymentError(`ACH origination is not configured — missing orgs.settings.nacha: ${settings.missing.join(", ")}`);
+  const settings = await loadNachaSettings(orgId, runId);
+  if (!settings.ok) throw new PaymentError(`ACH origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
 
   const rows = (await db.execute(sql`
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
@@ -1438,9 +1542,18 @@ export function validateSepaSettings(raw: Partial<SepaSettings> | null): { ok: t
   return { ok: true, settings: s as SepaSettings };
 }
 
-export async function loadSepaSettings(orgId: string) {
-  const r = (await db.execute(sql`select settings->'sepa' as sepa from orgs where id = ${orgId}`)) as unknown as { rows: { sepa: Partial<SepaSettings> | null }[] };
-  return validateSepaSettings(r.rows[0]?.sepa ?? null);
+export async function loadSepaSettings(orgId: string, runId?: string) {
+  const r = (await db.execute(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id
+     where p.org_id = ${orgId} and p.is_active and f.rail in ('sepa_credit', 'sepa_debit')
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `)) as unknown as { rows: { originator_secrets_encrypted: string | null }[] };
+  return validateSepaSettings(unsealJson<Partial<SepaSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
 
 const xmlEsc = (v: string) => v.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
@@ -1500,8 +1613,8 @@ export async function loadSepaRunFile(runId: string, orgId: string, now: Date): 
   if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
   if (run.method !== "sepa") throw new PaymentError(`SEPA export applies to SEPA runs, not ${run.method}`);
-  const settings = await loadSepaSettings(orgId);
-  if (!settings.ok) throw new PaymentError(`SEPA origination is not configured — missing orgs.settings.sepa: ${settings.missing.join(", ")}`);
+  const settings = await loadSepaSettings(orgId, runId);
+  if (!settings.ok) throw new PaymentError(`SEPA origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
 
   const rows = (await db.execute(sql`
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number

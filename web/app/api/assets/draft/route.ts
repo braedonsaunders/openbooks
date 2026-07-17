@@ -17,6 +17,14 @@ export async function POST(_req: NextRequest) {
   const user = gate.user
 
   const categoryId = await ensureDefaultCategory(user.orgId, user.id)
+  const root = (await db.execute(sql`
+    select id from subsidiaries
+     where org_id = ${user.orgId} and is_active and not is_elimination
+       ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
+     order by (parent_id is null) desc, name limit 1`)) as unknown as {
+    rows: { id: string }[]
+  }
+  if (!root.rows[0]) return NextResponse.json({ error: 'no_available_subsidiary' }, { status: 409 })
 
   // Next sequential FA-#### number (advisory; not uniquely constrained).
   const nextRes = (await db.execute(sql`
@@ -30,8 +38,8 @@ export async function POST(_req: NextRequest) {
 
   const ins = (await db.execute(sql`
     insert into fixed_assets
-      (org_id, category_id, asset_number, name, status, acquisition_cost, salvage_value, created_by, updated_by)
-    values (${user.orgId}, ${categoryId}, ${assetNumber}, 'New asset', 'draft', '0', '0', ${user.id}, ${user.id})
+      (org_id, subsidiary_id, category_id, asset_number, name, status, acquisition_cost, salvage_value, created_by, updated_by)
+    values (${user.orgId}, ${root.rows[0].id}, ${categoryId}, ${assetNumber}, 'New asset', 'draft', '0', '0', ${user.id}, ${user.id})
     returning id`)) as unknown as { rows: { id: string }[] }
 
   return NextResponse.json({ id: ins.rows[0].id })

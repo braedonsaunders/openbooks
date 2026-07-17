@@ -42,6 +42,7 @@ interface PatchBody {
   assetNumber?: string
   description?: string | null
   categoryId?: string | null
+  subsidiaryId?: string | null
   acquisitionCost?: string | number | null
   salvageValue?: string | number | null
   acquiredOn?: string | null
@@ -62,7 +63,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const payload = await loadAsset(id, gate.user.orgId)
-  if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!payload || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(payload.asset.subsidiary_id)))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   return NextResponse.json(payload)
 }
 
@@ -82,11 +85,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existRes = (await db.execute(sql`
     select id, status, custom from fixed_assets where id = ${id} and org_id = ${user.orgId}
+      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
   `)) as unknown as { rows: { id: string; status: string; custom: Record<string, any> | null }[] }
   const existing = existRes.rows[0]
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
+
+  let subsidiaryId: string | undefined
+  if (body.subsidiaryId !== undefined) {
+    const value = strOrNull(body.subsidiaryId)
+    if (!value || !isUuid(value)) return bad('invalid_subsidiary')
+    const valid = (await db.execute(sql`
+      select 1 from subsidiaries
+       where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`)) as unknown as {
+      rows: unknown[]
+    }
+    if (!valid.rows[0]) return bad('invalid_subsidiary')
+    subsidiaryId = value
+  }
 
   // -- category -----------------------------------------------------------
   let categoryId: string | undefined
@@ -182,6 +199,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       asset_number = ${body.assetNumber !== undefined ? (strOrNull(body.assetNumber) ?? sql`asset_number`) : sql`asset_number`},
       description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
       category_id = ${categoryId !== undefined ? categoryId : sql`category_id`},
+      subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
       acquisition_cost = ${cost !== undefined ? cost : sql`acquisition_cost`},
       salvage_value = ${salvage !== undefined ? salvage : sql`salvage_value`},
       acquired_on = ${body.acquiredOn !== undefined ? strOrNull(body.acquiredOn) : sql`acquired_on`},
@@ -214,6 +232,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const user = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const visible = (await db.execute(sql`
+    select 1 from fixed_assets where id = ${id} and org_id = ${user.orgId}
+      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
+  `)) as unknown as { rows: unknown[] }
+  if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const posted = (await db.execute(sql`
     select 1

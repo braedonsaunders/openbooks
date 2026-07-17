@@ -14,6 +14,7 @@ import {
   isCustomFieldKey,
   type FieldKind,
   type FieldMeta,
+  type FormActionPlacement,
   type FormLayoutConfig,
   type HeaderFieldPlacement,
   type HeaderGroup,
@@ -87,22 +88,26 @@ function slugifyKey(label: string, used: Set<string>): string {
 }
 
 /** Clone a layout and ensure every active custom def AND every built-in field
- *  has a placement — so a form saved before a field existed (custom or a new
- *  built-in) still surfaces it in the designer. New built-ins that default to
- *  hidden are placed hidden, so editing an old form doesn't reveal them on the
- *  live form until the admin turns them on. */
+ *  has a placement. Newly registered fields are visible by default and remain
+ *  user-configurable afterward. */
 function ensureCustomPlaced(
   layout: FormLayoutConfig,
   headerDefs: FieldDef[],
   lineDefs: FieldDef[],
   meta: { headerFields: FieldMeta[]; lineFields: FieldMeta[] } | undefined,
 ): FormLayoutConfig {
+  const defaultActions = defaultFormLayout(layout.recordType).actions
+  const placedActions = new Set((layout.actions ?? []).map((action) => action.key))
+  layout.actions = [
+    ...(layout.actions ?? []),
+    ...defaultActions.filter((action) => !placedActions.has(action.key)),
+  ]
   const placedHeader = new Set<string>()
   for (const g of layout.header.groups) for (const f of g.fields) placedHeader.add(f.key)
   const firstGroup = layout.header.groups[0]!
   // Missing built-in header fields (registry order).
   for (const f of meta?.headerFields ?? []) {
-    if (!placedHeader.has(f.key)) firstGroup.fields.push({ key: f.key, visible: !f.defaultHidden, required: f.required ? true : null, labelOverride: null, colSpan: null })
+    if (!placedHeader.has(f.key)) firstGroup.fields.push({ key: f.key, visible: true, required: f.required ? true : null, labelOverride: null, colSpan: null })
   }
   for (const d of headerDefs) {
     const k = `cf_${d.key}`
@@ -111,7 +116,7 @@ function ensureCustomPlaced(
   const placedLine = new Set<string>()
   for (const c of layout.lines.columns) placedLine.add(c.key)
   for (const f of meta?.lineFields ?? []) {
-    if (!placedLine.has(f.key)) layout.lines.columns.push({ key: f.key, visible: !f.defaultHidden, width: null, labelOverride: null })
+    if (!placedLine.has(f.key)) layout.lines.columns.push({ key: f.key, visible: true, width: null, labelOverride: null })
   }
   for (const d of lineDefs) {
     const k = `cf_${d.key}`
@@ -255,6 +260,27 @@ export function FormDesigner({
       next.lines.columns[ci] = { ...next.lines.columns[ci]!, ...patch }
       return next
     })
+  const updateAction = (ai: number, patch: Partial<FormActionPlacement>) =>
+    setLayout((prev) => {
+      const next = structuredClone(prev) as FormLayoutConfig
+      next.actions[ai] = { ...next.actions[ai]!, ...patch }
+      return next
+    })
+
+  const actionLabel = (key: string) => {
+    const labelKeys: Record<string, string> = {
+      customize: 'common.actions.customize',
+      pdf: 'common.actions.pdf',
+      workflow: 'common.actions.workflowActions',
+      approval: 'common.actions.approvalActions',
+      edit: 'common.actions.edit',
+      submit: 'common.actions.submitForApproval',
+      post: 'common.actions.post',
+      gl_impact: 'common.actions.glImpact',
+      delete: 'common.actions.delete',
+    }
+    return tRoot(labelKeys[key] as never)
+  }
 
   // Inline-create a custom field and drop it onto the form.
   const addCustomField = (def: FieldDef, level: 'header' | 'line') => {
@@ -418,6 +444,24 @@ export function FormDesigner({
             </div>
           </div>
           <AddFieldPanel level="line" recordType={recordType} usedKeys={usedFieldKeys} onCreated={(d) => addCustomField(d, 'line')} />
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('designer.forms.actionsSection')}</h3>
+          <p className="text-xs text-slate-400">{t('designer.forms.actionsHelp')}</p>
+          <div className="space-y-1.5 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            {layout.actions.map((action, ai) => (
+              <div key={action.key} className="flex items-center gap-2 rounded-md border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
+                <GripVertical size={14} className="text-slate-300" />
+                <span className="flex-1 text-xs font-medium text-slate-600 dark:text-slate-300">{actionLabel(action.key)}</span>
+                <button type="button" onClick={() => setLayout((p) => { const n = structuredClone(p) as FormLayoutConfig; n.actions = reorder(n.actions, ai, ai - 1); return n })} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={15} /></button>
+                <button type="button" onClick={() => setLayout((p) => { const n = structuredClone(p) as FormLayoutConfig; n.actions = reorder(n.actions, ai, ai + 1); return n })} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={15} /></button>
+                <button type="button" onClick={() => updateAction(ai, { visible: !action.visible })} className={action.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'} aria-label={t('designer.forms.visible')}>
+                  {action.visible ? <Eye size={15} /> : <EyeOff size={15} />}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </UrlDrawer>

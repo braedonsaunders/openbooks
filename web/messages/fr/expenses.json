@@ -20,6 +20,9 @@
     "selectEmployeePlaceholder": "Sélectionner un employé…",
     "accountPlaceholder": "Compte…",
     "noTax": "Sans taxe",
+    "deleteTitle": "Supprimer cette note de frais?",
+    "deleteDraftBody": "Cela supprime définitivement la note de frais brouillon. Cette action est irréversible.",
+    "deletePostedBody": "Cela supprime définitivement la note de frais et son impact au grand livre. Cette action est irréversible.",
     "columns": {
       "taxAmount": "Mt taxe"
     },
@@ -35,6 +38,8 @@
     "posted": "Comptabilisé au grand livre",
     "actionFailed": "Échec de l’action",
     "autosaveFailed": "Échec de l’enregistrement automatique",
+    "deleted": "Note de frais supprimée",
+    "deleteFailed": "Échec de la suppression",
     "draftFailed": "Impossible de créer une note de frais brouillon"
   }
 }

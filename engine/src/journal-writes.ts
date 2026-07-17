@@ -158,7 +158,7 @@ export async function createScriptJournal(
     const seq = (await tx.execute(sql`
       insert into number_sequences (org_id, document_kind, prefix)
       values (${orgId}, 'journal', 'JE-')
-      on conflict (org_id, document_kind)
+      on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
       returning prefix, next_number, padding`)) as any;
     const s = seq.rows[0]!;

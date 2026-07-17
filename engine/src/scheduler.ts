@@ -84,6 +84,14 @@ export async function tick(): Promise<void> {
       console.error("[scheduler] sftp import scan failed:", e);
     }
 
+    // Tenant-configured payment schedules: create draft runs or submit them.
+    try {
+      const { runDuePaymentSchedules } = await import("./payment-operations.ts");
+      await runDuePaymentSchedules();
+    } catch (e) {
+      console.error("[scheduler] payment schedule scan failed:", e);
+    }
+
     // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
     try {
       const { runDueScheduledFlows } = await import("./flows/scheduled.ts");
@@ -107,6 +115,16 @@ export async function tick(): Promise<void> {
       await runDueCloseAutomations();
     } catch (e) {
       console.error("[scheduler] close automation scan failed:", e);
+    }
+
+    // Tenant-configured foreign-exchange feeds. Each due row is claimed with
+    // compare-and-swap before its external request, so multiple app servers do
+    // not import the same observation concurrently.
+    try {
+      const { runDueFxProviders } = await import("./fx-providers.ts");
+      await runDueFxProviders();
+    } catch (e) {
+      console.error("[scheduler] FX provider scan failed:", e);
     }
   } catch (e) {
     // Never let a tick rejection escape setInterval — an unhandled rejection

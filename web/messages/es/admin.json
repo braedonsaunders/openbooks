@@ -729,6 +729,75 @@
       "assets": "Assets",
       "currency": "Currency"
     },
+    "fxProvider": {
+      "title": "Proveedor de tipos de cambio",
+      "description": "Importe tipos de cambio al contado diarios en el registro de monedas del inquilino y manténgalos actualizados automáticamente.",
+      "provider": "Proveedor",
+      "providers": {
+        "bank_of_canada": "Banco de Canadá",
+        "ecb": "Banco Central Europeo",
+        "open_exchange_rates": "Open Exchange Rates"
+      },
+      "providerHelp": {
+        "bank_of_canada": "Promedios diarios oficiales con CAD como moneda base. No requiere clave API.",
+        "ecb": "Tipos de referencia oficiales de días hábiles con EUR como moneda base. No requiere clave API.",
+        "open_exchange_rates": "Amplia cobertura comercial con la clave API de su inquilino. Pueden aplicarse límites del plan."
+      },
+      "displayName": "Nombre de la configuración",
+      "displayNamePlaceholder": "Tipos corporativos diarios",
+      "baseCurrency": "Moneda base del inquilino",
+      "selectCurrency": "Seleccione una moneda…",
+      "schedule": "Programación de sincronización",
+      "schedules": { "manual": "Solo manual", "daily": "Diaria", "weekdays": "Días hábiles", "weekly": "Semanal" },
+      "syncHourUtc": "Hora de sincronización (UTC)",
+      "lookbackDays": "Período de revisión (días)",
+      "currencies": "Monedas para importar",
+      "addCurrency": "Agregar una moneda…",
+      "searchCurrencies": "Buscar monedas…",
+      "removeCurrency": "Quitar {currency}",
+      "noCurrencies": "Agregue al menos una moneda extranjera.",
+      "apiKey": "Clave API del proveedor",
+      "apiKeyPlaceholder": "Introduzca la clave API del inquilino",
+      "secretStored": "Hay una clave cifrada guardada — introduzca un valor para reemplazarla",
+      "clearSecret": "Eliminar la clave API guardada",
+      "enabled": "Activar la sincronización del proveedor",
+      "saved": "Proveedor de tipos de cambio guardado.",
+      "test": "Probar proveedor",
+      "testPassed": "El proveedor devolvió {observations} observaciones y {rates} tipos normalizados.",
+      "testFailed": "La prueba del proveedor falló.",
+      "syncNow": "Sincronizar ahora",
+      "syncPassed": "Se importaron {observations} observaciones y se procesaron {rates} tipos normalizados.",
+      "syncFailed": "La sincronización de tipos de cambio falló.",
+      "health": "Estado del proveedor",
+      "lastSuccess": "Última importación correcta",
+      "lastObservation": "Última observación",
+      "nextSync": "Próxima sincronización",
+      "latestRun": "Última ejecución",
+      "noRuns": "El proveedor aún no se ha ejecutado.",
+      "runStatus": { "running": "En curso", "ok": "Correcta", "failed": "Fallida" },
+      "runSummary": "{observations} observaciones · {inserted} insertadas · {updated} actualizadas · {preserved} anulaciones manuales conservadas",
+      "overridePolicy": "Los tipos editados en Configuración se convierten en anulaciones manuales protegidas. Las importaciones nunca los reemplazan."
+    },
+    "paymentOperations": {
+      "title": "Pagos y banca",
+      "description": "Configure redes de pago, perfiles bancarios, programaciones, aprobaciones, entrega y mandatos de débito.",
+      "tabs": { "profiles": "Perfiles bancarios", "formats": "Formatos de pago", "schedules": "Programaciones", "mandates": "Mandatos de débito" },
+      "search": { "profiles": "Buscar perfiles…", "formats": "Buscar formatos…", "schedules": "Buscar programaciones…", "mandates": "Buscar mandatos…" },
+      "state": "Estado", "new": { "profiles": "Nuevo perfil", "formats": "Nuevo formato personalizado", "schedules": "Nueva programación", "mandates": "Nuevo mandato" },
+      "columns": { "name": "Nombre", "bank": "Cuenta de fondos", "format": "Formato", "currency": "Moneda", "delivery": "Entrega", "approval": "Aprobación del lote", "status": "Estado", "code": "Código", "rail": "Red", "direction": "Dirección", "profile": "Perfil", "cron": "Programación", "nextRun": "Próxima ejecución", "action": "Acción", "reference": "Referencia", "party": "Contraparte", "scheme": "Esquema", "signedOn": "Firmado", "expiresOn": "Vence" },
+      "states": { "active": "Activo", "archived": "Archivado", "pending": "Pendiente", "suspended": "Suspendido", "revoked": "Revocado", "expired": "Vencido" },
+      "rails": { "cpa005_credit": "Crédito CPA-005", "nacha_credit": "Crédito NACHA", "sepa_credit": "Transferencia SEPA", "nacha_debit": "Débito NACHA", "sepa_debit": "Débito directo SEPA", "positive_pay": "Positive Pay", "wire": "Transferencia bancaria", "cheque": "Cheque", "custom": "Personalizado" },
+      "directions": { "credit": "Crédito", "debit": "Débito", "both": "Crédito y débito" },
+      "actions": { "create_draft": "Crear borrador", "submit_for_approval": "Enviar para aprobación" },
+      "schemes": { "nacha": "NACHA", "sepa_core": "SEPA Core", "sepa_b2b": "SEPA B2B", "custom": "Personalizado" },
+      "fields": { "name": "Nombre", "currency": "Moneda", "bankAccount": "Cuenta de fondos", "format": "Formato de pago", "subsidiary": "Subsidiaria", "country": "País", "sftpServer": "Servidor SFTP existente", "sftpFolder": "Carpeta de salida", "requireRunApproval": "Requerir aprobación del lote de pagos", "requireFileApproval": "Requerir aprobación del archivo generado", "autoRemittance": "Enviar aviso de pago automáticamente", "active": "Activo", "code": "Código", "direction": "Dirección", "extension": "Extensión de archivo", "contentType": "Tipo de contenido", "formatterScript": "JavaScript de formato", "profile": "Perfil bancario", "cron": "Expresión cron", "timezone": "Zona horaria", "action": "Al vencer", "party": "Contraparte", "partyBankAccount": "Cuenta bancaria aprobada", "scheme": "Esquema del mandato", "reference": "Referencia del mandato", "status": "Estado", "signedOn": "Firmado el", "validFrom": "Válido desde", "expiresOn": "Vence el" },
+      "secretFields": { "originatorId": "ID del originador", "originatorShortName": "Nombre corto", "originatorLongName": "Nombre largo", "dataCentre": "Centro de datos", "institution": "Institución", "transit": "Tránsito", "account": "Número de cuenta", "transactionCode": "Código de transacción", "odfiRouting": "Ruta ODFI", "immediateDestination": "Destino inmediato", "immediateOrigin": "Origen inmediato", "destinationName": "Nombre del destino", "originName": "Nombre del origen", "companyName": "Nombre de la empresa", "companyId": "ID de la empresa", "entryClassCode": "Clase de entrada", "entryDescription": "Descripción de entrada", "originatorName": "Nombre del originador", "originatorIban": "IBAN del originador", "originatorBic": "BIC del originador", "creditorId": "ID del acreedor" },
+      "originator": { "title": "Credenciales del originador", "newHint": "Se almacenan cifradas para este inquilino y perfil.", "editHint": "Las credenciales son de solo escritura. Deje todos los campos vacíos para conservar los valores guardados." },
+      "delivery": { "title": "Entrega", "manual": "Descarga manual", "existingSftpHint": "Los servidores SFTP se administran una sola vez en la configuración SFTP existente. Este perfil solo selecciona uno para la entrega." },
+      "criteria": { "title": "Criterios de selección", "dueThroughDays": "Incluir facturas que vencen dentro de (días)", "minimumAmount": "Importe mínimo de factura", "maximumRunAmount": "Importe máximo del lote", "captureDiscounts": "Capturar descuentos disponibles por pronto pago", "applyCredits": "Aplicar créditos disponibles" },
+      "drawer": { "new": { "profiles": "Nuevo perfil bancario", "formats": "Nuevo formato de pago personalizado", "schedules": "Nueva programación de pagos", "mandates": "Nuevo mandato de débito" }, "edit": { "profiles": "Editar perfil bancario", "formats": "Editar formato de pago", "schedules": "Editar programación de pagos", "mandates": "Editar mandato de débito" }, "description": { "profiles": "Conecte una cuenta de fondos con una red de pago y una política de entrega.", "formats": "Defina los metadatos del archivo y el JavaScript aislado de un formato bancario personalizado.", "schedules": "Seleccione operaciones elegibles según una programación recurrente.", "mandates": "Registre la autorización necesaria para cobrar fondos de una contraparte." } },
+      "select": "Seleccionar…", "allSubsidiaries": "Todas las subsidiarias", "empty": "No hay registros coincidentes.", "manualDelivery": "Descarga manual", "runApproval": "Requerida", "automatic": "Automática", "any": "Cualquiera", "builtInFormatHint": "Este formateador integrado lo mantiene el motor de pagos. Su definición ejecutable no se puede editar aquí.", "save": "Guardar", "saving": "Guardando…", "saved": "Guardado", "cancel": "Cancelar", "saveFailed": "No se pudo guardar la configuración."
+    },
     "entities": {
       "company": {
         "title": "Company & Accounting",
@@ -800,6 +869,10 @@
       },
       "sftp": {
         "title": "Servidores SFTP"
+      },
+      "payment-operations": {
+        "title": "Pagos y banca",
+        "description": "Formatos de pago, perfiles bancarios, programaciones y mandatos de débito."
       },
       "subsidiaries": {
         "title": "Subsidiaries",

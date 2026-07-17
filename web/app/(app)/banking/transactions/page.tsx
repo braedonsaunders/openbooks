@@ -23,6 +23,7 @@ import {
   taxCodeOptions,
 } from '../../../../lib/documents'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
+import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { DocumentDrawer } from '../../../../components/document-drawer'
 import { DocumentRowActions } from '../../../../components/document-row-actions'
@@ -58,7 +59,6 @@ const NEW_KINDS = ['check', 'deposit', 'card_charge', 'card_refund', 'transfer']
 
 // Kinds that keep a bespoke drawer form (no customizable form layout): transfers
 // (to/from legs) and deposits (destination bank + source lines).
-const BESPOKE_FORM_KINDS = ['transfer', 'deposit']
 
 export default async function BankingTransactions({
   searchParams,
@@ -79,8 +79,15 @@ export default async function BankingTransactions({
     allowedSorts: ['date', 'number', 'total', 'status'] as const,
   })
   const txKind = pickString(sp.txKind)
-  const txList = sql`(${BANK_KINDS.map((k) => `'${k}'`).join(',')})`
+  const txList = sql`(${sql.join(BANK_KINDS.map((kind) => sql`${kind}`), sql`, `)})`
+  const allowedIds = authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : []
+  const subsidiaryWhere = authz.allowedSubsidiaryIds
+    ? allowedIds.length
+      ? sql`and d.subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])`
+      : sql`and false`
+    : sql``
   const txWhere = sql`d.org_id = ${authz.user.orgId} and d.kind in ${txList}
+    ${subsidiaryWhere}
     ${txKind ? sql` and d.kind = ${txKind}` : sql``}
     ${txParams.q ? sql` and (d.document_number ilike ${'%' + txParams.q + '%'} or d.memo ilike ${'%' + txParams.q + '%'} or d.reference_number ilike ${'%' + txParams.q + '%'})` : sql``}`
   const [txRows, txCount, txKindCounts] = (await Promise.all([
@@ -94,7 +101,7 @@ export default async function BankingTransactions({
        limit ${txParams.perPage} offset ${(txParams.page - 1) * txParams.perPage}
     `),
     db.execute(sql`select count(*) as n from documents d where ${txWhere}`),
-    db.execute(sql`select kind, count(*) as n from documents d where d.org_id = ${authz.user.orgId} and d.kind in ${txList} group by kind`),
+    db.execute(sql`select kind, count(*) as n from documents d where d.org_id = ${authz.user.orgId} and d.kind in ${txList} ${subsidiaryWhere} group by kind`),
   ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }]
   const txTotal = Number(txCount.rows[0].n)
   const txKindOptions = txKindCounts.rows.map((r: any) => ({
@@ -107,7 +114,9 @@ export default async function BankingTransactions({
   const docId = typeof sp.doc === 'string' ? sp.doc : undefined
   // Org guard: never render another tenant's document in the drawer.
   const loadedDoc = docId ? await loadDocument(docId) : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null
+  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
+    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
+    ? loadedDoc : null
   const openKind = openDoc?.doc.kind as string | undefined
   const drawerOpen = !!(openDoc && openKind && (BANK_KINDS as readonly string[]).includes(openKind))
   const pickers = drawerOpen
@@ -120,11 +129,17 @@ export default async function BankingTransactions({
         bankAccountOptions(),
         loadFieldDefs('documents', openKind!),
         loadFieldDefs('document_lines', openKind!),
+        // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
+        isMultiSubsidiary().then(async (multi) => {
+          if (!multi) return null
+          const options = await subsidiaryOptions()
+          return authz.allowedSubsidiaryIds
+            ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+            : options
+        }),
       ])
     : null
-  // Transfers keep their bespoke form; the line-based banking kinds resolve a
-  // customizable form layout like AP/AR.
-  const resolvedForm = drawerOpen && pickers && !BESPOKE_FORM_KINDS.includes(openKind!)
+  const resolvedForm = drawerOpen && pickers
     ? await resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
@@ -179,7 +194,7 @@ export default async function BankingTransactions({
                   <TableHead>{tCommon('labels.memo')}</TableHead>
                   <SortTh basePath={basePath} currentParams={sp} column="total" sort={txParams.sort} dir={txParams.dir} align="right">{tCommon('labels.total')}</SortTh>
                   <SortTh basePath={basePath} currentParams={sp} column="status" sort={txParams.sort} dir={txParams.dir}>{tCommon('labels.status')}</SortTh>
-                  <TableHead>{tCommon('labels.actions')}</TableHead>
+                  <TableHead className="w-px px-2"><span className="sr-only">{tCommon('labels.actions')}</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -197,8 +212,8 @@ export default async function BankingTransactions({
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[d.status] ?? 'secondary'}>{d.status}</Badge>
                     </TableCell>
-                    <TableCell>
-                      <DocumentRowActions id={d.id} status={d.status} config={DOC_KINDS[d.kind]} />
+                    <TableCell className="w-px px-2 text-center">
+                      <DocumentRowActions id={d.id} status={d.status} config={DOC_KINDS[d.kind]} openHref={`${basePath}?doc=${d.id}`} />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -220,9 +235,12 @@ export default async function BankingTransactions({
           projects={(pickers[2] as any).projects}
           locations={(pickers[2] as any).locations}
           classes={(pickers[2] as any).classes}
+          segments={(pickers[2] as any).segments}
+          builtinSegments={(pickers[2] as any).builtinSegments}
           items={pickers[3] as any}
           cards={pickers[4] as any}
           bankAccounts={pickers[5] as any}
+          subsidiaries={(pickers[8] as any) ?? undefined}
           headerDefs={pickers[6] as any}
           lineDefs={pickers[7] as any}
           canCreate={canCreate}
@@ -230,7 +248,7 @@ export default async function BankingTransactions({
           layout={resolvedForm?.layout}
           availableLayouts={resolvedForm?.available}
           currentLayoutId={resolvedForm?.row?.id ?? null}
-          recordType={!BESPOKE_FORM_KINDS.includes(openKind!) ? openKind : undefined}
+          recordType={openKind}
           canCustomize={can(authz, 'admin.customization.manage')}
         />
       ) : null}

@@ -51,7 +51,8 @@
     "sectionTotal": "Total {section}",
     "other": "Other",
     "otherTotal": "Total Other",
-    "accumulatedEarnings": "Accumulated earnings (computed)"
+    "accumulatedEarnings": "Accumulated earnings (computed)",
+    "translationAdjustment": "Cumulative translation adjustment"
   },
   "saveView": {
     "namePrompt": "Name this view:",
@@ -67,6 +68,7 @@
   },
   "filterBar": {
     "period": "Period",
+    "subsidiary": "Subsidiary",
     "asOf": "As of",
     "from": "From",
     "to": "To",
@@ -95,6 +97,7 @@
     "allProjects": "All projects",
     "allLocations": "All locations",
     "allClasses": "All classes",
+    "allSegment": "All {name}",
     "scale": "Scale",
     "scaleActual": "Actual",
     "scaleThousands": "Thousands",

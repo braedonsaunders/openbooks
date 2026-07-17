@@ -12,6 +12,11 @@ interface PartyOpt {
   id: string
   display_name?: string | null
 }
+interface SubsidiaryOpt {
+  id: string
+  name: string
+  depth: number
+}
 interface TaskRow {
   id: string | null
   code: string
@@ -50,11 +55,13 @@ const emptyTask = (): TaskRow => ({
 export function ProjectDrawer({
   payload,
   parties,
+  subsidiaries,
   canManage,
   basePath = '/projects',
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
+  subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   basePath?: string
 }) {
@@ -120,6 +127,10 @@ export function ProjectDrawer({
     })),
   )
   const [isActive, setIsActive] = useState<boolean>(pr.is_active === true)
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(pr.subsidiary_id ?? '')
+  const [subsidiaryIncludeChildren, setSubsidiaryIncludeChildren] = useState<boolean>(
+    pr.subsidiary_include_children !== false,
+  )
 
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
@@ -156,6 +167,8 @@ export function ProjectDrawer({
       endsOn: endsOn || null,
       contractValue: contractValue || null,
       notes: notes || null,
+      subsidiaryId: subsidiaries.length > 1 ? subsidiaryId || null : undefined,
+      subsidiaryIncludeChildren: subsidiaries.length > 1 ? subsidiaryIncludeChildren : undefined,
       tasks: tasks
         .filter((t) => t.name.trim().length > 0)
         .map((t) => ({
@@ -167,7 +180,7 @@ export function ProjectDrawer({
           estimatedCost: t.estimatedCost || null,
         })),
     }),
-    [name, code, customerId, foremanId, managerId, status, billingMethod, customerPoNumber, startsOn, endsOn, contractValue, notes, tasks, isActive],
+    [name, code, customerId, foremanId, managerId, status, billingMethod, customerPoNumber, startsOn, endsOn, contractValue, notes, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -195,6 +208,8 @@ export function ProjectDrawer({
     setEndsOn(pr.ends_on ?? '')
     setContractValue(payload.contractValue != null ? Number(payload.contractValue).toFixed(2) : '')
     setNotes(pr.notes ?? '')
+    setSubsidiaryId(pr.subsidiary_id ?? '')
+    setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false)
     setTasks(
       payload.tasks.map((t) => ({
         id: t.id,
@@ -390,6 +405,32 @@ export function ProjectDrawer({
             />
           </div>
         </section>
+
+        {subsidiaries.length > 1 ? (
+          <section className="grid gap-4 sm:grid-cols-2">
+            <div className={field}>
+              <Label>{t('drawer.subsidiaryRestriction')}</Label>
+              <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)} disabled={ro}>
+                <option value="">{t('drawer.allSubsidiaries')}</option>
+                {subsidiaries.map((s) => (
+                  <option key={s.id} value={s.id}>{`${'— '.repeat(s.depth)}${s.name}`}</option>
+                ))}
+              </Select>
+            </div>
+            {subsidiaryId ? (
+              <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={subsidiaryIncludeChildren}
+                  onChange={(e) => setSubsidiaryIncludeChildren(e.target.checked)}
+                  disabled={ro}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+                {t('drawer.includeChildSubsidiaries')}
+              </label>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* -- assignment / schedule ----------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

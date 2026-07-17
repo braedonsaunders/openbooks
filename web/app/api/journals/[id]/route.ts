@@ -7,6 +7,8 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { guardPermission } from '../../../../lib/authz'
 import { loadJournalDoc } from '../../../../lib/journals'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { isUuid } from '../../../../lib/list-params'
+import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 
 export const runtime = 'nodejs'
 
@@ -30,9 +32,12 @@ async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise
     select md5(
       coalesce(d.party_id::text,'') || '~' || coalesce(d.document_date::text,'') || '~' ||
       coalesce(d.posting_date::text,'') || '~' || coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
+      coalesce(d.subsidiary_id::text,'') || '~' ||
+      coalesce(d.extra_dims::text,'{}') || '~' ||
       coalesce((select string_agg(
         coalesce(account_id::text,'') || ':' || amount::text || ':' ||
-        coalesce(department_id::text,'') || ':' || coalesce(project_id::text,''),
+        coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
+        coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
         '|' order by line_number)
         from document_lines where document_id = d.id), '')
     ) as sig
@@ -56,6 +61,9 @@ interface JournalLineInput {
   amount: string
   departmentId?: string | null
   projectId?: string | null
+  /** Intercompany line override (null = the header's subsidiary). */
+  subsidiaryId?: string | null
+  extraDims?: Record<string, string | null>
   custom?: Record<string, unknown>
 }
 
@@ -86,15 +94,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     documentDate?: string
     referenceNumber?: string | null
     memo?: string | null
+    /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
+    subsidiaryId?: string | null
+    extraDims?: Record<string, string | null>
     custom?: Record<string, unknown>
     lines?: JournalLineInput[]
   }
+  const requestedSubsidiaries = [...new Set([
+    ...(body.subsidiaryId ? [body.subsidiaryId] : []),
+    ...(body.lines ?? []).flatMap((line) => line.subsidiaryId ? [line.subsidiaryId] : []),
+  ])]
+  if (requestedSubsidiaries.some((subsidiaryId) => !isUuid(subsidiaryId))) {
+    return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+  }
+  if (requestedSubsidiaries.length) {
+    const subsidiaries = (await db.execute(sql`
+      select id from subsidiaries
+       where org_id = ${user.orgId} and is_active and not is_elimination
+         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)) as any
+    if (subsidiaries.rows.length !== requestedSubsidiaries.length) {
+      return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+    }
+  }
 
   // custom-field validation (header + line) against the live definitions
-  const [headerDefs, lineDefs] = await Promise.all([
+  const [headerDefs, lineDefs, segments] = await Promise.all([
     loadFieldDefs('documents', 'journal'),
     loadFieldDefs('document_lines', 'journal'),
+    segmentRegistry(user.orgId),
   ])
+  const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
+  if (headerDims && !headerDims.ok) return NextResponse.json({ error: headerDims.error }, { status: 422 })
   let headerCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
     const v = validateCustomValues(headerDefs, body.custom)
@@ -106,7 +136,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // line returns 422 without a partial write.
   // journal totals = sum of debits (positive line amounts); tax never applies
   let totalDebits: string | null = null
-  let preparedLines: { accountId: string; description: string | null; amount: string; departmentId: string | null; projectId: string | null; custom: Record<string, unknown> }[] | null = null
+  let preparedLines: { accountId: string; description: string | null; amount: string; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid = body.lines.filter(
       (l) => l.accountId && !Number.isNaN(Number(l.amount)) && Number(l.amount) !== 0,
@@ -122,12 +152,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { status: 422 },
         )
       }
+      const lineDims = validateExtraDims(l.extraDims, segments)
+      if (!lineDims.ok) return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
       preparedLines.push({
         accountId: l.accountId,
         description: l.description ?? null,
         amount: l.amount,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
+        subsidiaryId: l.subsidiaryId ?? null,
+        extraDims: lineDims.cleaned,
         custom: lv.cleaned,
       })
     }
@@ -146,10 +180,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const l = preparedLines[i]!
           await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                        quantity, unit_price, amount, department_id, project_id, custom)
+                                        quantity, unit_price, amount, department_id, project_id,
+                                        subsidiary_id, extra_dims, custom)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
                     '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId},
-                    ${JSON.stringify(l.custom)})
+                    ${l.subsidiaryId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
           `)
         }
       }
@@ -160,11 +195,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           document_date = coalesce(${body.documentDate ?? null}, document_date),
           reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
           memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+          subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
+          extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
           custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
           subtotal = coalesce(${totalDebits}, subtotal),
           total = coalesce(${totalDebits}, total),
           updated_at = now(), updated_by = ${user.id}
-        where id = ${id}
+        where id = ${id} and org_id = ${user.orgId}
       `)
 
       // Re-materialize the GL-Impact projection only when the edit actually

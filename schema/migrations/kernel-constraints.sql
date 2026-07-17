@@ -216,6 +216,33 @@ end $$;
 create trigger jl_check_account before insert or update on journal_lines
   for each row execute function jl_check_account();
 
+-- Account-specific required dimensions are part of the posting contract.
+-- Built-ins use physical columns; registry-defined segments use extra_dims.
+create or replace function jl_check_required_dimensions() returns trigger
+language plpgsql as $$
+declare v_key text; v_required jsonb;
+begin
+  select required_dimensions into v_required from accounts
+   where id = new.account_id and org_id = new.org_id;
+  for v_key in select jsonb_array_elements_text(coalesce(v_required, '[]'::jsonb)) loop
+    if (case v_key
+      when 'subsidiary' then new.subsidiary_id is null
+      when 'department' then new.department_id is null
+      when 'project' then new.project_id is null
+      when 'location' then new.location_id is null
+      when 'class' then new.class_id is null
+      when 'party' then new.party_id is null
+      else not (coalesce(new.extra_dims, '{}'::jsonb) ? v_key)
+    end) then
+      raise exception 'account % requires segment %', new.account_id, v_key using errcode = '23514';
+    end if;
+  end loop;
+  return new;
+end $$;
+
+drop trigger if exists jl_check_required_dimensions on journal_lines;
+create trigger jl_check_required_dimensions before insert or update on journal_lines
+  for each row execute function jl_check_required_dimensions();
 
 -- ---------------------------------------------------------------------------
 -- 4. FX consistency: base amount = txn amount x rate (0.005 rounding slack).
@@ -257,3 +284,55 @@ create constraint trigger app_check_open
   after insert or update on applications
   deferrable initially deferred
   for each row execute function app_check_open();
+
+-- ---------------------------------------------------------------------------
+-- 6. Payment artifacts and lifecycle evidence are immutable.
+-- ---------------------------------------------------------------------------
+create or replace function payment_event_immutable() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'payment events are append-only';
+end $$;
+
+create trigger payment_event_immutable before update or delete on payment_events
+  for each row execute function payment_event_immutable();
+
+create or replace function payment_file_artifact_immutable() returns trigger
+language plpgsql as $$
+begin
+  if new.payment_run_id is distinct from old.payment_run_id
+     or new.payment_bank_profile_id is distinct from old.payment_bank_profile_id
+     or new.payment_format_id is distinct from old.payment_format_id
+     or new.parent_payment_file_id is distinct from old.parent_payment_file_id
+     or new.sequence_number is distinct from old.sequence_number
+     or new.filename is distinct from old.filename
+     or new.content_type is distinct from old.content_type
+     or new.content_hash is distinct from old.content_hash
+     or new.file_id is distinct from old.file_id
+     or new.file_version_id is distinct from old.file_version_id
+     or new.payment_count is distinct from old.payment_count
+     or new.total_amount is distinct from old.total_amount
+     or new.currency is distinct from old.currency
+     or new.generated_at is distinct from old.generated_at
+     or new.generated_by is distinct from old.generated_by then
+    raise exception 'generated payment file artifacts are immutable; reprocess into a new file';
+  end if;
+  return new;
+end $$;
+
+create trigger payment_file_artifact_immutable before update on payment_files
+  for each row execute function payment_file_artifact_immutable();
+
+create or replace function payment_run_item_guard() returns trigger
+language plpgsql as $$
+declare v_status text;
+begin
+  select status into v_status from payment_runs where id = coalesce(new.payment_run_id, old.payment_run_id);
+  if v_status not in ('draft', 'pending_approval') then
+    raise exception 'payment run items are immutable once the run is approved';
+  end if;
+  return coalesce(new, old);
+end $$;
+
+create trigger payment_run_item_guard before update or delete on payment_run_items
+  for each row execute function payment_run_item_guard();

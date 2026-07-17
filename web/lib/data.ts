@@ -86,12 +86,12 @@ export async function journalPage(offset: number, limit = 50) {
   return { entries: r.rows, total: Number(c.rows[0].n) };
 }
 
-export async function entryDetail(id: string) {
+export async function entryDetail(orgId: string, id: string) {
   const e = (await db.execute(sql`
     select e.*, re.entry_number as reverses_number
       from journal_entries e
       left join journal_entries re on re.id = e.reverses_entry_id
-     where e.id = ${id}
+     where e.id = ${id} and e.org_id = ${orgId}
   `)) as any;
   const lines = (await db.execute(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
@@ -101,7 +101,7 @@ export async function entryDetail(id: string) {
       join accounts a on a.id = l.account_id
       left join parties p on p.id = l.party_id
       left join departments d on d.id = l.department_id
-     where l.entry_id = ${id}
+     where l.entry_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `)) as any;
   return { entry: e.rows[0] ?? null, lines: lines.rows };

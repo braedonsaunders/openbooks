@@ -3,6 +3,7 @@ import { Badge, DetailHeader, Table, TableBody, TableCell, TableHead, TableHeade
 import { PageContainer } from '../../../../components/page-layout'
 import { entryDetail } from '../../../../lib/data'
 import { money } from '../../../../lib/format'
+import { requirePermission } from '../../../../lib/authz'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,10 +30,11 @@ const STATUS_KEYS: Record<string, string> = {
 }
 
 export default async function Entry({ params }: { params: Promise<{ id: string }> }) {
+  const authz = await requirePermission('gl.read')
   const t = await getTranslations('journal')
   const tc = await getTranslations('common')
   const { id } = await params
-  const { entry, lines } = await entryDetail(id)
+  const { entry, lines } = await entryDetail(authz.user.orgId, id)
   if (!entry) return <PageContainer>{t('detail.notFound')}</PageContainer>
 
   const debits = lines.filter((l: any) => Number(l.amount) > 0).reduce((a: number, l: any) => a + Number(l.amount), 0)

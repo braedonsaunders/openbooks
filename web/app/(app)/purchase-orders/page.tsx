@@ -10,6 +10,8 @@ import { loadOrder } from '../../api/_order/lib'
 import { OrderDrawer } from '../_order/OrderDrawer'
 import { NewOrderButton } from '../_order/NewOrderButton'
 import { NewOrderRedirect } from '../_order/NewOrderRedirect'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
+import { customSegmentOptions } from '../../../lib/segments'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,9 +53,14 @@ export default async function PurchaseOrders({
              where tc.is_active order by tc.code`) as any,
           db.execute(sql`select id, name from departments where is_active order by name`) as any,
           db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
+          customSegmentOptions(authz.user.orgId),
         ])
       : null,
   ])
+  const resolvedForm = openOrder && pickers ? await resolveFormLayout({
+    orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
+    userRoles: [authz.user.role], headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
+  }) : null
 
   const newBtn = canManage ? (
     <NewOrderButton apiPath={API} base={BASE} param={PARAM} label={t('list.newButton')} createFailedMessage={t('list.createDraftFailed')} />
@@ -74,7 +81,9 @@ export default async function PurchaseOrders({
           taxCodes={pickers[3].rows}
           departments={pickers[4].rows}
           projects={pickers[5].rows}
+          segments={pickers[6]}
           canManage={canManage}
+          layout={resolvedForm?.layout}
         />
       ) : null}
     </>

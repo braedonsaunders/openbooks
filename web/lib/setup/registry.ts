@@ -60,6 +60,8 @@ export interface SetupField {
   keepDefault?: boolean
   /** decimal/integer default shown as placeholder text (message key). */
   defaultHintKey?: string
+  /** Initial value for a new record; database defaults remain authoritative. */
+  defaultValue?: string | number | boolean
 }
 
 export interface SetupColumn {
@@ -140,7 +142,76 @@ const BURDEN_METHODS = [
   { value: 'standard', labelKey: 'options.burdenMethod.standard' },
 ]
 
+const FX_RATE_TYPES = [
+  { value: 'spot', labelKey: 'options.fxRateType.spot' },
+  { value: 'average', labelKey: 'options.fxRateType.average' },
+  { value: 'historical', labelKey: 'options.fxRateType.historical' },
+]
+
+const CONSOLIDATED_RATE_SOURCES = [
+  { value: 'derived', labelKey: 'options.rateSource.derived' },
+  { value: 'manual', labelKey: 'options.rateSource.manual' },
+]
+
 export const SETUP_ENTITIES: SetupEntity[] = [
+  // --- Company -------------------------------------------------------------
+  {
+    // Subsidiaries — the org's legal-entity tree (NetSuite OneWorld model).
+    // baseCurrency is the entity's functional currency: locked after create so
+    // it cannot drift once books exist.
+    key: 'subsidiaries',
+    table: 'subsidiaries',
+    actorCols: true,
+    groupKey: 'company',
+    iconKey: 'building',
+    orgScoped: true,
+    orderBy: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'baseCurrency', kind: 'code' },
+      { key: 'country', kind: 'code' },
+      { key: 'parentId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'isElimination', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'legalName', kind: 'text' },
+      { key: 'parentId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'baseCurrency', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'country', kind: 'text', required: true },
+      { key: 'isElimination', kind: 'boolean' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Intercompany pairs — the due-from/due-to account mapping used when a
+    // transaction crosses two subsidiaries.
+    key: 'intercompany-pairs',
+    table: 'intercompany_pairs',
+    actorCols: true,
+    groupKey: 'company',
+    iconKey: 'layers',
+    orgScoped: true,
+    orderBy: 'created_at',
+    hasActive: true,
+    columns: [
+      { key: 'fromSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'toSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'dueFromAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'dueToAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'fromSubsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true },
+      { key: 'toSubsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true },
+      { key: 'dueFromAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'dueToAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+
   // --- Taxes ---------------------------------------------------------------
   {
     key: 'tax-codes',
@@ -239,6 +310,66 @@ export const SETUP_ENTITIES: SetupEntity[] = [
 
   // --- Dimensions ----------------------------------------------------------
   {
+    key: 'segment-definitions',
+    table: 'segment_definitions',
+    actorCols: true,
+    groupKey: 'dimensions',
+    iconKey: 'layers',
+    orgScoped: true,
+    naturalKey: 'key',
+    orderBy: 'sort_order, name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'key', kind: 'code' },
+      { key: 'sourceKind', kind: 'text' },
+      { key: 'showOnHeader', kind: 'boolean' },
+      { key: 'showOnLines', kind: 'boolean' },
+      { key: 'showInReports', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'key', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'pluralName', kind: 'text', required: true },
+      { key: 'isHierarchical', kind: 'boolean' },
+      { key: 'showOnHeader', kind: 'boolean', defaultValue: true },
+      { key: 'showOnLines', kind: 'boolean', defaultValue: true },
+      { key: 'showInReports', kind: 'boolean', defaultValue: true },
+      { key: 'allowAccountRequirement', kind: 'boolean', defaultValue: true },
+      { key: 'sortOrder', kind: 'integer', keepDefault: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'segment-values',
+    table: 'segment_values',
+    actorCols: true,
+    groupKey: 'dimensions',
+    iconKey: 'tag',
+    orgScoped: true,
+    orderBy: 'segment_id, name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'code', kind: 'code' },
+      { key: 'segmentId', kind: 'ref', ref: 'segment-definitions' },
+      { key: 'parentId', kind: 'ref', ref: 'segment-values' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'segmentId', kind: 'ref', ref: 'segment-definitions', required: true, lockedOnEdit: true },
+      { key: 'code', kind: 'text' },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'description', kind: 'textarea' },
+      { key: 'parentId', kind: 'ref', ref: 'segment-values' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'subsidiaryIncludeChildren', kind: 'boolean', defaultValue: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
     key: 'classes',
     table: 'classes',
     actorCols: true,
@@ -252,12 +383,15 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'parentId', kind: 'ref', ref: 'classes' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'code', kind: 'text' },
       { key: 'name', kind: 'text', required: true },
       { key: 'parentId', kind: 'ref', ref: 'classes' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'subsidiaryIncludeChildren', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -275,12 +409,15 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'parentId', kind: 'ref', ref: 'departments' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'code', kind: 'text' },
       { key: 'name', kind: 'text', required: true },
       { key: 'parentId', kind: 'ref', ref: 'departments' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'subsidiaryIncludeChildren', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -298,12 +435,15 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'parentId', kind: 'ref', ref: 'locations' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'code', kind: 'text' },
       { key: 'name', kind: 'text', required: true },
       { key: 'parentId', kind: 'ref', ref: 'locations' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'subsidiaryIncludeChildren', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -366,11 +506,11 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'billing',
     iconKey: 'hash',
     orgScoped: true,
-    naturalKey: 'documentKind',
     orderBy: 'document_kind',
     hasActive: false,
     columns: [
       { key: 'documentKind', kind: 'code' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'prefix', kind: 'code' },
       { key: 'nextNumber', kind: 'number' },
       { key: 'padding', kind: 'number' },
@@ -378,6 +518,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
     fields: [
       { key: 'documentKind', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', lockedOnEdit: true },
       { key: 'prefix', kind: 'text', keepDefault: true },
       { key: 'nextNumber', kind: 'integer', required: true },
       { key: 'padding', kind: 'integer', required: true },
@@ -484,6 +625,60 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   },
 
   // --- Currency ------------------------------------------------------------
+  {
+    key: 'fx-rates',
+    table: 'fx_rates',
+    actorCols: true,
+    groupKey: 'currency',
+    iconKey: 'coins',
+    orgScoped: true,
+    orderBy: 'as_of desc',
+    hasActive: false,
+    columns: [
+      { key: 'asOf', kind: 'date' },
+      { key: 'fromCurrency', kind: 'code' },
+      { key: 'toCurrency', kind: 'code' },
+      { key: 'rateType', kind: 'text' },
+      { key: 'rate', kind: 'number' },
+      { key: 'source', kind: 'text' },
+    ],
+    fields: [
+      { key: 'asOf', kind: 'date', required: true, lockedOnEdit: true },
+      { key: 'fromCurrency', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'toCurrency', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'rateType', kind: 'select', required: true, options: FX_RATE_TYPES, lockedOnEdit: true },
+      { key: 'rate', kind: 'decimal', required: true },
+      { key: 'source', kind: 'text', lockedOnEdit: true, keepDefault: true },
+    ],
+  },
+  {
+    key: 'consolidated-fx-rates',
+    table: 'consolidated_fx_rates',
+    actorCols: true,
+    groupKey: 'currency',
+    iconKey: 'layers',
+    orgScoped: true,
+    orderBy: 'period_id desc',
+    hasActive: false,
+    columns: [
+      { key: 'periodId', kind: 'ref', ref: 'accounting-periods' },
+      { key: 'fromCurrency', kind: 'code' },
+      { key: 'toCurrency', kind: 'code' },
+      { key: 'currentRate', kind: 'number' },
+      { key: 'averageRate', kind: 'number' },
+      { key: 'historicalRate', kind: 'number' },
+      { key: 'source', kind: 'text' },
+    ],
+    fields: [
+      { key: 'periodId', kind: 'ref', ref: 'accounting-periods', required: true, lockedOnEdit: true },
+      { key: 'fromCurrency', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'toCurrency', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'currentRate', kind: 'decimal', required: true },
+      { key: 'averageRate', kind: 'decimal', required: true },
+      { key: 'historicalRate', kind: 'decimal', required: true },
+      { key: 'source', kind: 'select', required: true, options: CONSOLIDATED_RATE_SOURCES },
+    ],
+  },
   {
     key: 'currencies',
     table: 'currencies',

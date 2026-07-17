@@ -27,7 +27,7 @@ export default async function RegistersPage({
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
+  const dims = q.dims
   const [reg, opts, org] = await Promise.all([
     partyRegister(side, { from: period.from, to: period.to, dims }),
     dimensionOptions(),

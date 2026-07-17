@@ -11,6 +11,8 @@ import { RecordListView } from '../../../components/record-list-view'
 import { isUuid } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'
 import { PaymentDrawer, type OpenItemClient } from './PaymentDrawer'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
+import { pickString } from '../../../lib/list-params'
 
 /**
  * Payment/receipt list, shared by /payments (vendor_payment) and /receipts
@@ -25,6 +27,7 @@ export async function PaymentsSection({
   orgId,
   userId,
   canManage,
+  userRole,
 }: {
   sp: Record<string, string | string[] | undefined>
   basePath: string
@@ -32,6 +35,7 @@ export async function PaymentsSection({
   orgId: string
   userId: string
   canManage: boolean
+  userRole: string
 }) {
   const t = await getTranslations('payments')
   const side = PAYMENT_KIND_SIDE[kind]
@@ -61,6 +65,15 @@ export async function PaymentsSection({
       openPayment.doc.status === 'draft' && openPayment.doc.party_id
         ? await openItemsForParty(openPayment.doc.party_id as string, side)
         : []
+    const resolvedForm = await resolveFormLayout({
+      orgId,
+      userId,
+      recordType: kind,
+      userRoles: [userRole],
+      headerDefs: [],
+      lineDefs: [],
+      explicitLayoutId: pickString(sp.form),
+    })
     drawer = (
       <PaymentDrawer
         payment={openPayment as any}
@@ -69,6 +82,7 @@ export async function PaymentsSection({
         bankAccounts={banks.rows}
         side={side}
         basePath={basePath}
+        layout={resolvedForm.layout}
       />
     )
   }

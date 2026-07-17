@@ -37,7 +37,6 @@ const TYPE_KEYS: Record<string, string> = {
   cogs: 'cogs', expense: 'expense', expense_other: 'expenseOther', expense_deferred: 'expenseDeferred',
 }
 
-const DIMENSIONS = ['department', 'location', 'class', 'project', 'party'] as const
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-950'
 const fieldClass = 'space-y-1.5'
 
@@ -47,6 +46,7 @@ export function AccountDrawer({
   currencies,
   subsidiaries,
   fieldDefs,
+  segments,
   canManage,
   closeHref,
 }: {
@@ -55,6 +55,7 @@ export function AccountDrawer({
   currencies: Option[]
   subsidiaries: Option[]
   fieldDefs: CustomFieldDefClient[]
+  segments: { key: string; name: string }[]
   canManage: boolean
   closeHref: string
 }) {
@@ -246,10 +247,10 @@ export function AccountDrawer({
         <section className={fieldClass}>
           <Label>{t('drawer.requiredDimensions')}</Label>
           <div className="flex flex-wrap gap-x-6 gap-y-3">
-            {DIMENSIONS.map((dimension) => (
-              <label key={dimension} className="flex items-center gap-2">
-                <input type="checkbox" checked={form.requiredDimensions.includes(dimension)} disabled={!editable} onChange={(e) => toggleDimension(dimension, e.target.checked)} className={checkboxClass} />
-                <span className="text-sm">{t(`drawer.dimensions.${dimension}`)}</span>
+            {[...segments, { key: 'party', name: t('drawer.dimensions.party') }].map((dimension) => (
+              <label key={dimension.key} className="flex items-center gap-2">
+                <input type="checkbox" checked={form.requiredDimensions.includes(dimension.key)} disabled={!editable} onChange={(e) => toggleDimension(dimension.key, e.target.checked)} className={checkboxClass} />
+                <span className="text-sm">{dimension.name}</span>
               </label>
             ))}
           </div>

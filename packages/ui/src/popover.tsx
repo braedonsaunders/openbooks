@@ -65,6 +65,11 @@ export function Popover({
       const target = e.target as Node
       if (panelRef.current?.contains(target)) return
       if (triggerRef.current?.contains(target)) return
+      // Nested UI overlays (select menus, context menus, child popovers) are
+      // portaled siblings in <body>, not DOM descendants of this panel. Treat
+      // them as inside so interacting with a nested control does not unmount
+      // its owner before the selection click completes.
+      if (target instanceof Element && target.closest('[data-ui-overlay]')) return
       onOpenChange(false)
     }
     function onKey(e: KeyboardEvent) {
@@ -93,6 +98,7 @@ export function Popover({
               {open ? (
                 <motion.div
                   ref={panelRef}
+                  data-ui-overlay
                   initial={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}

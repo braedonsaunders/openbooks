@@ -41,6 +41,10 @@
     "disposed": "Cédé",
     "written_off": "Mis hors service"
   },
+  "errors": {
+    "invalidSubsidiary": "Choisissez une filiale active qui n'est pas une entité d'élimination.",
+    "noAvailableSubsidiary": "Votre rôle ne dispose d'aucune filiale active pour cet actif."
+  },
   "drawer": {
     "newAsset": "Nouvel actif",
     "editing": "Modification — Enregistrer pour appliquer les modifications",

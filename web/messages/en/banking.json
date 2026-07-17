@@ -325,7 +325,12 @@
     },
     "deleteTitle": "Delete this document?",
     "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone."
+    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone.",
+    "formLabel": "Form",
+    "formSetPreferred": "Set as my preferred",
+    "formSetPreferredDone": "Preferred form saved",
+    "formPreferredCleared": "Preferred form cleared",
+    "formPreferredFailed": "Could not save the preferred form"
   },
   "reconcile": {
     "title": "Reconcile through {date}",

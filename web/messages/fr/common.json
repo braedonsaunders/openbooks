@@ -44,9 +44,29 @@
     "copy": "Copier",
     "select": "Sélectionner",
     "newRecord": "Nouveau",
-    "more": "Plus d'actions",
+    "more": "Plus d’actions",
+    "pdf": "PDF",
+    "workflowActions": "Actions du flux de travail",
+    "approvalActions": "Actions d’approbation",
+    "submitForApproval": "Soumettre pour approbation",
+    "glImpact": "Impact sur le grand livre",
     "done": "Terminé",
     "sending": "Envoi…"
+  },
+  "transactionTypes": {
+    "vendorBill": "Facture fournisseur", "bill": "Facture",
+    "vendorCredit": "Avoir fournisseur", "credit": "Avoir",
+    "purchaseOrder": "Bon de commande", "purchaseOrderShort": "BC",
+    "customerInvoice": "Facture client", "invoice": "Facture",
+    "customerCredit": "Avoir client", "customerCreditShort": "Avoir client",
+    "salesOrder": "Commande client", "salesOrderShort": "CC",
+    "estimate": "Devis", "expenseReport": "Note de frais", "expense": "Frais",
+    "journalEntry": "Écriture de journal", "journal": "Journal",
+    "vendorPayment": "Paiement fournisseur", "vendorPaymentShort": "Pmt fournisseur",
+    "customerPayment": "Paiement client", "customerPaymentShort": "Pmt client",
+    "check": "Chèque", "bankDeposit": "Dépôt bancaire", "deposit": "Dépôt",
+    "transfer": "Virement", "cardCharge": "Dépense par carte", "cardChargeShort": "Carte",
+    "cardRefund": "Remboursement par carte", "cardRefundShort": "Remb. carte"
   },
   "labels": {
     "name": "Nom",
@@ -77,6 +97,7 @@
     "department": "Service",
     "location": "Emplacement",
     "class": "Classe",
+    "subsidiary": "Filiale",
     "project": "Projet",
     "customer": "Client",
     "vendor": "Fournisseur",
@@ -99,6 +120,16 @@
     "to": "À",
     "of": "de",
     "settings": "Paramètres",
+    "item": "Article",
+    "unit": "Unité",
+    "unitPrice": "Prix unitaire",
+    "postingDate": "Date de comptabilisation",
+    "dueDate": "Date d’échéance",
+    "internalNotes": "Notes internes",
+    "billingMethod": "Méthode de facturation",
+    "finalInvoice": "Facture finale",
+    "paymentHold": "Blocage du paiement",
+    "expectedPayDate": "Date de paiement prévue",
     "openBalance": "Solde impayé"
   },
   "status": {
@@ -145,6 +176,10 @@
     "deleteBody": "Cette action est irréversible.",
     "confirm": "Confirmer",
     "cancel": "Annuler"
+  },
+  "billingMethods": {
+    "timeAndMaterials": "Temps et matériaux",
+    "fixedPrice": "Prix fixe"
   },
   "empty": {
     "title": "Rien pour l’instant",

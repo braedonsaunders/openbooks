@@ -57,5 +57,15 @@ export async function neuterSandbox(sandboxOrgId: string): Promise<void> {
   await db
     .execute(sql`update sftp_servers set password_encrypted = null where org_id = ${sandboxOrgId}`)
     .catch(() => {});
+  // Provider credentials are tenant secrets and scheduled synchronization is
+  // real network egress. Preserve the non-secret configuration for testing,
+  // but make cloned providers inert and credential-free.
+  await db
+    .execute(sql`
+      update fx_provider_configs
+         set is_enabled = false, secrets = null, next_sync_at = null,
+             last_error = null, updated_at = now()
+       where org_id = ${sandboxOrgId}`)
+    .catch(() => {});
   envCache.delete(sandboxOrgId);
 }

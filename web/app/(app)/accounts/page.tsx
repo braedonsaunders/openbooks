@@ -15,6 +15,7 @@ import { loadAccount } from '../../api/accounts/_lib'
 import { AccountDrawer } from './AccountDrawer'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { segmentRegistry } from '../../../lib/segments'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,6 +111,7 @@ export default async function Accounts({
              order by name
           `) as any,
           loadFieldDefs('accounts'),
+          segmentRegistry(authz.user.orgId),
         ])
       : null,
   ])
@@ -124,6 +126,9 @@ export default async function Accounts({
       currencies={drawerOptions[1].rows.map((option: any) => ({ value: option.code, label: `${option.code} · ${option.name}` }))}
       subsidiaries={drawerOptions[2].rows.map((option: any) => ({ value: option.id, label: option.name }))}
       fieldDefs={drawerOptions[3] as any}
+      segments={(drawerOptions[4] as Awaited<ReturnType<typeof segmentRegistry>>)
+        .filter((segment) => segment.allowAccountRequirement)
+        .map((segment) => ({ key: segment.key, name: segment.name }))}
       canManage={can(authz, 'gl.manage')}
       closeHref={closeHref}
     />

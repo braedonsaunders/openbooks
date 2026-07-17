@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -14,6 +15,7 @@ import { DocTypeBadge } from './doc-type-badge'
 import { docTypeMeta } from './doc-type-badge'
 import { parseListParams, pickString } from '../lib/list-params'
 import { money } from '../lib/format'
+import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
 import { columnDescriptors, documentWhere, type ListColDesc } from '../lib/customization/list-query'
@@ -142,7 +144,9 @@ export async function RecordListView({
     sql`, `,
   )
   const joins = source.joins ?? sql``
-  const where = documentWhere(source.kinds, view, { q: params.q, status, kind }, orgId)
+  // Role-based subsidiary visibility (null = unrestricted).
+  const allowedSubs = await allowedSubsidiaryIds(userId)
+  const where = documentWhere(source.kinds, view, { q: params.q, status, kind }, orgId, allowedSubs)
   const orderExpr = source.sorts[params.sort] ?? sql`d.document_date`
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
@@ -185,7 +189,7 @@ export async function RecordListView({
     const countByKind = new Map(kindCounts.rows.map((r: any) => [r.kind, Number(r.n)]))
     kindOptions = source.kinds.map((k) => ({
       value: k,
-      label: docTypeMeta(k).label,
+      label: tCommon(`transactionTypes.${docTypeMeta(k).labelKey}` as never),
       count: Number(countByKind.get(k) ?? 0),
     }))
   }
@@ -253,7 +257,20 @@ export async function RecordListView({
         return <TableCell key={c.key} className="text-slate-700 dark:text-slate-300">{display}</TableCell>
       }
       case 'actions':
-        return <TableCell key={c.key}>{renderRowActions ? renderRowActions(row) : null}</TableCell>
+        return (
+          <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
+            {renderRowActions ? renderRowActions(row) : (
+              <Link
+                href={`${basePath}?${source.drawerParam}=${row.id}` as any}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
+                aria-label={tCommon('actions.open')}
+                title={tCommon('actions.open')}
+              >
+                <Eye size={15} />
+              </Link>
+            )}
+          </TableCell>
+        )
       default:
         return (
           <TableCell key={c.key} className={v == null || v === '' ? 'text-slate-400' : ''}>
@@ -308,7 +325,11 @@ export async function RecordListView({
                       {c.label}
                     </SortTh>
                   ) : (
-                    <TableHead key={c.key} className={c.kind === 'amount' ? 'text-right' : undefined}>
+                    <TableHead
+                      key={c.key}
+                      className={c.kind === 'amount' ? 'text-right' : c.kind === 'actions' ? 'w-px px-2 text-center' : undefined}
+                      style={c.kind === 'actions' ? { width: 64 } : c.width ? { width: c.width } : undefined}
+                    >
                       {c.label}
                     </TableHead>
                   ),

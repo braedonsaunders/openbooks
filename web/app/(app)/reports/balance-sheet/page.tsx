@@ -3,6 +3,7 @@ import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
@@ -34,16 +35,19 @@ export default async function BalanceSheet({
     totalLiabilities: secTotal(t('balanceSheet.liabilities')),
     totalEquity: secTotal(t('balanceSheet.equity')),
     accumulatedEarnings: t('statement.accumulatedEarnings'),
+    translationAdjustment: t('statement.translationAdjustment'),
     liabilitiesAndEquity: t('balanceSheet.liabilitiesAndEquity'),
     totalOf: secTotal,
   }
 
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
   const [view, opts, org] = await Promise.all([
     balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
       breakout: q.breakout,
       compare: q.compare,
       basis: q.basis,
       dims: q.dims,
+      subsidiary: subView.subsidiary,
       showZero: q.showZero,
     }),
     dimensionOptions(),
@@ -62,7 +66,7 @@ export default async function BalanceSheet({
         <>
           <PageHeader
             title={t('balanceSheet.title')}
-            description={t('balanceSheet.asOf', { date: period.to })}
+            description={`${subView.label ? `${subView.label} · ` : ''}${t('balanceSheet.asOf', { date: period.to })}`}
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
@@ -74,10 +78,12 @@ export default async function BalanceSheet({
               compare: true,
               basis: true,
               dimensions: true,
+              subsidiary: true,
               showZero: true,
               scale: true,
             }}
             dimensions={opts}
+            subsidiaries={subView.picker}
             actions={
               <>
                 <SaveViewButton />
@@ -106,10 +112,11 @@ export default async function BalanceSheet({
         <StatementMatrixTable
           view={view}
           scale={q.scale}
-          currency={org?.base_currency}
+          currency={subView.currency ?? org?.base_currency}
           drill={{
             dims: q.dims,
             basis: q.basis,
+            subsidiaryId: q.subsidiaryId,
             back: (() => {
               const bp = new URLSearchParams()
               for (const [k, v] of Object.entries(sp)) if (v) bp.set(k, v)

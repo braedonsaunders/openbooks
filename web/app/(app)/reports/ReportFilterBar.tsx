@@ -8,6 +8,10 @@ import { Button, Popover, Select, cn } from '@openbooks/ui'
 import { PERIOD_PRESETS, PERIOD_PRESET_GROUP_LABELS, type PeriodPresetGroup } from '@openbooks/reports'
 
 type DimOption = { id: string; name: string }
+type SegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean; values: DimOption[] }
+type BuiltinSegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean }
+/** Picker rows are pre-labelled server-side (tree indent + "(consolidated)"). */
+export type SubsidiaryPickerOption = { id: string; label: string }
 
 /** Which controls a given report exposes. */
 export type ReportControls = {
@@ -19,6 +23,8 @@ export type ReportControls = {
   compare?: boolean
   basis?: boolean
   dimensions?: boolean
+  /** Subsidiary context dropdown (multi-subsidiary orgs only). */
+  subsidiary?: boolean
   showZero?: boolean
   scale?: boolean
 }
@@ -55,11 +61,14 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 export function ReportFilterBar({
   controls,
   dimensions,
+  subsidiaries,
   actions,
   defaultPeriod = 'this_fiscal_year',
 }: {
   controls: ReportControls
-  dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[] }
+  dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[]; segments?: SegmentOption[]; builtinSegments?: BuiltinSegmentOption[] }
+  /** First entry is the default context (the root, consolidated). */
+  subsidiaries?: SubsidiaryPickerOption[]
   actions?: ReactNode
   /** Preset shown when no `period` param is set (aging defaults to `today`). */
   defaultPeriod?: string
@@ -90,6 +99,7 @@ export function ReportFilterBar({
   const showZero = params.get('zero') === '1'
   const isCustom = period === 'custom'
   const breakoutOpts = controls.breakoutOptions ?? ['department', 'project', 'location', 'class', 'month', 'quarter']
+  const builtinByKey = new Map((dimensions?.builtinSegments ?? []).map((segment) => [segment.key, segment]))
 
   // Dimension filters carry no inline label — the value ("All departments", a
   // department name, …) is self-describing, which keeps the toolbar on one row.
@@ -143,9 +153,14 @@ export function ReportFilterBar({
         <Field label={t('breakout')}>
           <Select value={breakout} onChange={(e) => setParams({ breakout: e.target.value })} className={SELECT} aria-label={t('breakout')}>
             <option value="none">{t('breakoutNone')}</option>
-            {breakoutOpts.map((b) => (
+            {breakoutOpts.filter((b) => b === 'month' || b === 'quarter' || builtinByKey.get(b)?.showInReports !== false).map((b) => (
               <option key={b} value={b}>
-                {t(`breakoutOpts.${b}`)}
+                {b === 'month' || b === 'quarter' ? t(`breakoutOpts.${b}`) : (builtinByKey.get(b)?.name ?? t(`breakoutOpts.${b}`))}
+              </option>
+            ))}
+            {(dimensions?.segments ?? []).filter((segment) => segment.showInReports).map((segment) => (
+              <option key={segment.key} value={`segment:${segment.key}`}>
+                {segment.name}
               </option>
             ))}
           </Select>
@@ -162,12 +177,32 @@ export function ReportFilterBar({
         </Field>
       )}
 
+      {controls.subsidiary && subsidiaries && subsidiaries.length > 1 && (
+        <Field label={t('subsidiary')}>
+          <Select
+            value={params.get('sub') ?? ''}
+            onChange={(e) => setParams({ sub: e.target.value || null })}
+            className={SELECT}
+            aria-label={t('subsidiary')}
+          >
+            {subsidiaries.map((s, i) => (
+              <option key={s.id} value={i === 0 ? '' : s.id}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+
       {controls.dimensions && dimensions && (
         <>
-          {dimSelect('dept', t('department'), dimensions.departments, t('allDepartments'))}
-          {dimSelect('project', t('project'), dimensions.projects, t('allProjects'))}
-          {dimSelect('location', t('location'), dimensions.locations, t('allLocations'))}
-          {dimSelect('class', t('class'), dimensions.classes, t('allClasses'))}
+          {builtinByKey.get('department')?.showInReports !== false ? dimSelect('dept', builtinByKey.get('department')?.name ?? t('department'), dimensions.departments, builtinByKey.get('department') ? t('allSegment', { name: builtinByKey.get('department')!.pluralName }) : t('allDepartments')) : null}
+          {builtinByKey.get('project')?.showInReports !== false ? dimSelect('project', builtinByKey.get('project')?.name ?? t('project'), dimensions.projects, builtinByKey.get('project') ? t('allSegment', { name: builtinByKey.get('project')!.pluralName }) : t('allProjects')) : null}
+          {builtinByKey.get('location')?.showInReports !== false ? dimSelect('location', builtinByKey.get('location')?.name ?? t('location'), dimensions.locations, builtinByKey.get('location') ? t('allSegment', { name: builtinByKey.get('location')!.pluralName }) : t('allLocations')) : null}
+          {builtinByKey.get('class')?.showInReports !== false ? dimSelect('class', builtinByKey.get('class')?.name ?? t('class'), dimensions.classes, builtinByKey.get('class') ? t('allSegment', { name: builtinByKey.get('class')!.pluralName }) : t('allClasses')) : null}
+          {(dimensions.segments ?? []).filter((segment) => segment.showInReports).map((segment) =>
+            dimSelect(`seg_${segment.key}`, segment.name, segment.values, t('allSegment', { name: segment.pluralName })),
+          )}
         </>
       )}
 

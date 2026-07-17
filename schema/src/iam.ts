@@ -33,6 +33,16 @@ export const appRoles = pgTable(
     description: text("description"),
     isBuiltIn: boolean("is_built_in").notNull().default(false),
     permissions: jsonb("permissions").$type<PermissionKey[]>().notNull().default([]),
+    /**
+     * Subsidiary visibility for holders of this role — `{mode:'all'}`,
+     * `{mode:'subtree', subsidiaryId}`, or `{mode:'list', subsidiaryIds}`.
+     * A user's allowed set is the UNION across their roles; resolved in
+     * web/lib/authz.ts and enforced as a query filter (never a tenancy wall).
+     */
+    subsidiaryRestriction: jsonb("subsidiary_restriction")
+      .$type<import("./subsidiaries").SubsidiaryRestriction>()
+      .notNull()
+      .default({ mode: "all" }),
     ...auditColumns,
   },
   (t) => [

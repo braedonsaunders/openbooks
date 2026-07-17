@@ -26,6 +26,7 @@ import {
 } from '../../../../../lib/setup/registry'
 import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
+import { FxProviderPage } from './FxProviderPage'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 
 export const dynamic = 'force-dynamic'
@@ -54,13 +55,26 @@ async function loadAccounts(orgId: string): Promise<RefOption[]> {
 
 /** Options for a setup-entity ref source (id + code/name label). */
 async function loadEntityOptions(source: string, orgId: string): Promise<RefOption[]> {
+  if (source === 'accounting-periods') {
+    const periods = (await db.execute(sql`
+      select id as value, name as label from accounting_periods
+       where org_id = ${orgId} order by starts_on desc, period_number desc`)) as any
+    return periods.rows as RefOption[]
+  }
   const target = SETUP_ENTITY_BY_KEY.get(source)
   if (!target) return []
   const orgFilter = target.orgScoped ? sql` where org_id = ${orgId}` : sql``
+  const customSegmentFilter = source === 'segment-definitions'
+    ? (target.orgScoped ? sql` and source_kind = 'custom'` : sql` where source_kind = 'custom'`)
+    : sql``
+  // Only entities that declare a `code` field carry the column (e.g.
+  // subsidiaries are name-only) — prefix the label with it when present.
+  const labelExpr = target.fields.some((f) => f.key === 'code')
+    ? sql.raw(`case when coalesce(code, '') <> '' then code || ' · ' || name else name end`)
+    : sql.raw('name')
   const r = (await db.execute(sql`
-    select id as value,
-           case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
-      from ${sql.raw(target.table)}${orgFilter}
+    select id as value, ${labelExpr} as label
+      from ${sql.raw(target.table)}${orgFilter}${customSegmentFilter}
      order by name`)) as any
   return r.rows as RefOption[]
 }
@@ -135,6 +149,7 @@ export default async function SetupEntityPage({
     await requirePermission('periods.manage')
     return <CloseSetupPage orgId={orgId} actorId={authz.user.id} searchParams={sp} canReopen={can(authz, 'close.reopen')} />
   }
+  if (entityKey === 'fx-provider') return <FxProviderPage orgId={orgId} />
 
   const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
   if (!entity) notFound()

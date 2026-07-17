@@ -788,6 +788,104 @@
       "assets": "Assets",
       "currency": "Currency"
     },
+    "fxProvider": {
+      "title": "Exchange rate provider",
+      "description": "Import daily spot rates into the tenant currency registry and keep them current automatically.",
+      "provider": "Provider",
+      "providers": {
+        "bank_of_canada": "Bank of Canada",
+        "ecb": "European Central Bank",
+        "open_exchange_rates": "Open Exchange Rates"
+      },
+      "providerHelp": {
+        "bank_of_canada": "Official daily averages with CAD as the source anchor. No API key required.",
+        "ecb": "Official business-day reference rates with EUR as the source anchor. No API key required.",
+        "open_exchange_rates": "Broad commercial coverage using your tenant's API key. Plan limits may apply."
+      },
+      "displayName": "Configuration name",
+      "displayNamePlaceholder": "Daily corporate rates",
+      "baseCurrency": "Tenant base currency",
+      "selectCurrency": "Select a currency…",
+      "schedule": "Synchronization schedule",
+      "schedules": {
+        "manual": "Manual only",
+        "daily": "Daily",
+        "weekdays": "Weekdays",
+        "weekly": "Weekly"
+      },
+      "syncHourUtc": "Synchronization hour (UTC)",
+      "lookbackDays": "Revision lookback (days)",
+      "currencies": "Currencies to import",
+      "addCurrency": "Add a currency…",
+      "searchCurrencies": "Search currencies…",
+      "removeCurrency": "Remove {currency}",
+      "noCurrencies": "Add at least one foreign currency.",
+      "apiKey": "Provider API key",
+      "apiKeyPlaceholder": "Enter the tenant API key",
+      "secretStored": "A sealed key is stored — enter a value to replace it",
+      "clearSecret": "Remove the stored API key",
+      "enabled": "Enable provider synchronization",
+      "saved": "Exchange rate provider saved.",
+      "test": "Test provider",
+      "testPassed": "Provider returned {observations} observations and {rates} normalized rates.",
+      "testFailed": "The provider test failed.",
+      "syncNow": "Synchronize now",
+      "syncPassed": "Imported {observations} observations and processed {rates} normalized rates.",
+      "syncFailed": "Exchange rate synchronization failed.",
+      "health": "Provider health",
+      "lastSuccess": "Last successful import",
+      "lastObservation": "Latest observation",
+      "nextSync": "Next synchronization",
+      "latestRun": "Latest run",
+      "noRuns": "The provider has not been run yet.",
+      "runStatus": { "running": "Running", "ok": "Successful", "failed": "Failed" },
+      "runSummary": "{observations} observations · {inserted} inserted · {updated} updated · {preserved} manual overrides preserved",
+      "overridePolicy": "Rates edited in Setup become protected manual overrides. Provider imports never replace them."
+    },
+    "paymentOperations": {
+      "title": "Payments & Banking",
+      "description": "Configure payment rails, funding profiles, schedules, approvals, delivery, and debit mandates.",
+      "tabs": { "profiles": "Bank profiles", "formats": "Payment formats", "schedules": "Schedules", "mandates": "Debit mandates" },
+      "search": { "profiles": "Search profiles…", "formats": "Search formats…", "schedules": "Search schedules…", "mandates": "Search mandates…" },
+      "state": "State",
+      "new": { "profiles": "New profile", "formats": "New custom format", "schedules": "New schedule", "mandates": "New mandate" },
+      "columns": {
+        "name": "Name", "bank": "Funding account", "format": "Format", "currency": "Currency", "delivery": "Delivery", "approval": "Run approval", "status": "Status",
+        "code": "Code", "rail": "Rail", "direction": "Direction", "profile": "Profile", "cron": "Schedule", "nextRun": "Next run", "action": "Action",
+        "reference": "Reference", "party": "Counterparty", "scheme": "Scheme", "signedOn": "Signed", "expiresOn": "Expires"
+      },
+      "states": { "active": "Active", "archived": "Archived", "pending": "Pending", "suspended": "Suspended", "revoked": "Revoked", "expired": "Expired" },
+      "rails": {
+        "cpa005_credit": "CPA-005 credit", "nacha_credit": "NACHA credit", "sepa_credit": "SEPA credit", "nacha_debit": "NACHA debit", "sepa_debit": "SEPA debit",
+        "positive_pay": "Positive Pay", "wire": "Wire", "cheque": "Cheque", "custom": "Custom"
+      },
+      "directions": { "credit": "Credit", "debit": "Debit", "both": "Credit and debit" },
+      "actions": { "create_draft": "Create draft", "submit_for_approval": "Submit for approval" },
+      "schemes": { "nacha": "NACHA", "sepa_core": "SEPA Core", "sepa_b2b": "SEPA B2B", "custom": "Custom" },
+      "fields": {
+        "name": "Name", "currency": "Currency", "bankAccount": "Funding account", "format": "Payment format", "subsidiary": "Subsidiary", "country": "Country",
+        "sftpServer": "Existing SFTP server", "sftpFolder": "Outbound folder", "requireRunApproval": "Require payment-run approval", "requireFileApproval": "Require generated-file approval",
+        "autoRemittance": "Send remittance advice automatically", "active": "Active", "code": "Code", "direction": "Direction", "extension": "File extension", "contentType": "Content type",
+        "formatterScript": "Formatter JavaScript", "profile": "Bank profile", "cron": "Cron expression", "timezone": "Time zone", "action": "When due", "party": "Counterparty",
+        "partyBankAccount": "Approved bank account", "scheme": "Mandate scheme", "reference": "Mandate reference", "status": "Status", "signedOn": "Signed on", "validFrom": "Valid from", "expiresOn": "Expires on"
+      },
+      "secretFields": {
+        "originatorId": "Originator ID", "originatorShortName": "Short name", "originatorLongName": "Long name", "dataCentre": "Data centre", "institution": "Institution", "transit": "Transit", "account": "Account number", "transactionCode": "Transaction code",
+        "odfiRouting": "ODFI routing", "immediateDestination": "Immediate destination", "immediateOrigin": "Immediate origin", "destinationName": "Destination name", "originName": "Origin name", "companyName": "Company name", "companyId": "Company ID", "entryClassCode": "Entry class", "entryDescription": "Entry description",
+        "originatorName": "Originator name", "originatorIban": "Originator IBAN", "originatorBic": "Originator BIC", "creditorId": "Creditor ID"
+      },
+      "originator": { "title": "Originator credentials", "newHint": "Stored encrypted for this tenant and profile.", "editHint": "Credentials are write-only. Leave every field blank to keep the saved values." },
+      "delivery": { "title": "Delivery", "manual": "Manual download", "existingSftpHint": "SFTP servers are managed once in the existing SFTP setup. This profile only selects one for delivery." },
+      "criteria": { "title": "Selection criteria", "dueThroughDays": "Include bills due within (days)", "minimumAmount": "Minimum bill amount", "maximumRunAmount": "Maximum run amount", "captureDiscounts": "Capture available early-payment discounts", "applyCredits": "Apply available credits" },
+      "drawer": {
+        "new": { "profiles": "New bank profile", "formats": "New custom payment format", "schedules": "New payment schedule", "mandates": "New debit mandate" },
+        "edit": { "profiles": "Edit bank profile", "formats": "Edit payment format", "schedules": "Edit payment schedule", "mandates": "Edit debit mandate" },
+        "description": { "profiles": "Connect a funding account to a payment rail and delivery policy.", "formats": "Define file metadata and sandboxed JavaScript for a custom bank format.", "schedules": "Select eligible transactions on a repeatable schedule.", "mandates": "Record the authorization required to collect funds from a counterparty." }
+      },
+      "select": "Select…", "allSubsidiaries": "All subsidiaries", "empty": "No matching records.", "manualDelivery": "Manual download", "runApproval": "Required", "automatic": "Automatic", "any": "Any",
+      "builtInFormatHint": "This built-in formatter is maintained by the payment engine. Its executable definition cannot be edited here.",
+      "save": "Save", "saving": "Saving…", "saved": "Saved", "cancel": "Cancel", "saveFailed": "Could not save the configuration."
+    },
     "entities": {
       "company": {
         "title": "Company & Accounting",
@@ -859,6 +957,10 @@
       },
       "sftp": {
         "title": "SFTP Servers"
+      },
+      "payment-operations": {
+        "title": "Payments & Banking",
+        "description": "Payment formats, funding profiles, schedules, and debit mandates."
       },
       "account-groups": {
         "title": "Account Groups",

@@ -34,7 +34,7 @@ async function loadInsightCardNodes(
   const res = (await db.execute(sql`
     select id, name, description, query, viz_type, viz_settings
       from insight_cards
-     where org_id = ${orgId} and id = any(${sql.param(uuidIds)})
+     where org_id = ${orgId} and id = any(${`{${uuidIds.join(',')}}`}::uuid[])
        and status = 'published'
   `)) as any
   const nodes: Record<string, React.ReactNode> = {}

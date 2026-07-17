@@ -30,6 +30,13 @@ export const journalEntries = pgTable(
     orgId: orgRef(),
     /** Every entry belongs to exactly one accounting book (→ accounting_books). */
     bookId: uuid("book_id").notNull(),
+    /**
+     * Originating subsidiary. Lines carry their own subsidiary_id — an
+     * intercompany entry spans several — and the kernel enforces that each
+     * subsidiary's lines sum to zero independently (every legal entity's
+     * books balance on their own).
+     */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
     entryNumber: text("entry_number").notNull(),
     postingDate: date("posting_date").notNull(),
     periodId: uuid("period_id").notNull(),
@@ -86,7 +93,12 @@ export const journalLines = pgTable(
     entryId: uuid("entry_id").notNull(),
     lineNumber: integer("line_number").notNull(),
     accountId: uuid("account_id").notNull(),
-    /** Signed base-currency amount: positive = debit, negative = credit. */
+    /** The legal entity this line posts to (→ subsidiaries). */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    /**
+     * Signed amount in the LINE's subsidiary's functional currency:
+     * positive = debit, negative = credit. Consolidation translates.
+     */
     amount: money("amount").notNull(),
     /** Transaction-currency detail; equal to amount when txn currency = base. */
     currency: currencyCode("currency").notNull(),
@@ -123,6 +135,7 @@ export const journalLines = pgTable(
   (t) => [
     index("jl_entry").on(t.entryId),
     index("jl_org_account").on(t.orgId, t.accountId),
+    index("jl_org_sub_account").on(t.orgId, t.subsidiaryId, t.accountId),
     index("jl_org_project").on(t.orgId, t.projectId),
     index("jl_org_party_open").on(t.orgId, t.partyId, t.isOpenItem),
     check("jl_nonzero", sql`${t.amount} <> 0`),

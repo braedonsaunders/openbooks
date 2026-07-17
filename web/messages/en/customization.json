@@ -7,6 +7,10 @@
     "card_charge": "Card charge",
     "card_refund": "Card refund",
     "check": "Check",
+    "deposit": "Bank deposit",
+    "transfer": "Transfer",
+    "expense_report": "Expense report",
+    "journal": "Journal entry",
     "vendor_payment": "Vendor payment",
     "customer_payment": "Customer payment",
     "quote": "Estimate",
@@ -30,6 +34,8 @@
   "designer": {
     "title": "Forms & Views",
     "description": "Customize how each transaction form and record list looks for this organization and for yourself.",
+    "allRecordTypes": "All record types",
+    "searchPlaceholder": "Search forms and views…",
     "tabs": {
       "forms": "Transaction forms",
       "views": "Saved list views"
@@ -55,6 +61,8 @@
       "deleted": "Form deleted",
       "headerSection": "Header fields",
       "linesSection": "Line columns",
+      "actionsSection": "Record actions",
+      "actionsHelp": "Choose which permitted actions appear in this form's flyout and the order they use.",
       "groups": "Groups",
       "addGroup": "Add group",
       "groupLabel": "Group label",

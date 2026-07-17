@@ -36,40 +36,62 @@ export const OPERATORS_BY_KIND: Record<ListFilterKind, readonly FilterOperator[]
  *  decides visibility/order/labels per record type. */
 const TRANSACTION_LINE_FIELDS: RecordTypeMeta["lineFields"] = [
   { key: "account_id", labelKey: "common.labels.account", level: "line", kind: "entity_ref", required: true, locked: true },
-  { key: "item_id", labelKey: "common.labels.item", level: "line", kind: "entity_ref", defaultHidden: true },
+  { key: "item_id", labelKey: "common.labels.item", level: "line", kind: "entity_ref" },
   { key: "description", labelKey: "common.labels.description", level: "line", kind: "text" },
-  { key: "quantity", labelKey: "common.labels.quantity", level: "line", kind: "number", defaultHidden: true },
-  { key: "unit", labelKey: "common.labels.unit", level: "line", kind: "text", defaultHidden: true },
-  { key: "unit_price", labelKey: "common.labels.unitPrice", level: "line", kind: "currency", defaultHidden: true },
+  { key: "quantity", labelKey: "common.labels.quantity", level: "line", kind: "number" },
+  { key: "unit", labelKey: "common.labels.unit", level: "line", kind: "text" },
+  { key: "unit_price", labelKey: "common.labels.unitPrice", level: "line", kind: "currency" },
   { key: "department_id", labelKey: "common.labels.department", level: "line", kind: "dimension" },
   { key: "project_id", labelKey: "common.labels.project", level: "line", kind: "dimension" },
-  { key: "location_id", labelKey: "common.labels.location", level: "line", kind: "dimension", defaultHidden: true },
-  { key: "class_id", labelKey: "common.labels.class", level: "line", kind: "dimension", defaultHidden: true },
+  { key: "location_id", labelKey: "common.labels.location", level: "line", kind: "dimension" },
+  { key: "class_id", labelKey: "common.labels.class", level: "line", kind: "dimension" },
   { key: "tax_code_id", labelKey: "common.labels.tax", level: "line", kind: "entity_ref" },
   { key: "amount", labelKey: "common.labels.amount", level: "line", kind: "amount", required: true },
   { key: "tax_amount", labelKey: "ap.drawer.taxAmountColumn", level: "line", kind: "tax" },
 ];
 
-/** Header built-ins available on every transaction form (off by default). */
+/** Manual journals use signed debit/credit columns rather than quantity × rate. */
+const JOURNAL_LINE_FIELDS: RecordTypeMeta["lineFields"] = [
+  { key: "account_id", labelKey: "common.labels.account", level: "line", kind: "entity_ref", required: true, locked: true },
+  { key: "description", labelKey: "common.labels.description", level: "line", kind: "text" },
+  { key: "department_id", labelKey: "common.labels.department", level: "line", kind: "dimension" },
+  { key: "project_id", labelKey: "common.labels.project", level: "line", kind: "dimension" },
+  { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "line", kind: "entity_ref" },
+  { key: "debit", labelKey: "journal.drawer.columns.debit", level: "line", kind: "amount" },
+  { key: "credit", labelKey: "journal.drawer.columns.credit", level: "line", kind: "amount" },
+];
+
+/** Expense reports expose the expense-entry columns their dedicated drawer persists. */
+const EXPENSE_LINE_FIELDS: RecordTypeMeta["lineFields"] = TRANSACTION_LINE_FIELDS.filter((field) =>
+  ["account_id", "description", "department_id", "project_id", "tax_code_id", "amount", "tax_amount"].includes(field.key),
+);
+
+/** Order-cycle rows use quantity × unit price; amount and tax are calculated columns. */
+const ORDER_LINE_FIELDS: RecordTypeMeta["lineFields"] = TRANSACTION_LINE_FIELDS.filter((field) =>
+  ["item_id", "account_id", "description", "quantity", "unit", "unit_price", "department_id", "project_id", "tax_code_id", "amount", "tax_amount"].includes(field.key),
+);
+
+/** Header built-ins available on every transaction form. */
 const COMMON_HEADER_EXTRAS: FieldMeta[] = [
-  { key: "posting_date", labelKey: "common.labels.postingDate", level: "header", kind: "date", defaultHidden: true },
-  { key: "department_id", labelKey: "common.labels.department", level: "header", kind: "dimension", defaultHidden: true },
-  { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension", defaultHidden: true },
-  { key: "location_id", labelKey: "common.labels.location", level: "header", kind: "dimension", defaultHidden: true },
-  { key: "class_id", labelKey: "common.labels.class", level: "header", kind: "dimension", defaultHidden: true },
-  { key: "internal_notes", labelKey: "common.labels.internalNotes", level: "header", kind: "long_text", defaultHidden: true },
+  { key: "posting_date", labelKey: "common.labels.postingDate", level: "header", kind: "date" },
+  { key: "department_id", labelKey: "common.labels.department", level: "header", kind: "dimension" },
+  { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension" },
+  { key: "location_id", labelKey: "common.labels.location", level: "header", kind: "dimension" },
+  { key: "class_id", labelKey: "common.labels.class", level: "header", kind: "dimension" },
+  { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref" },
+  { key: "internal_notes", labelKey: "common.labels.internalNotes", level: "header", kind: "long_text" },
 ];
 
 /** Extra AP-side header built-ins (bills/credits). */
 const PAYABLE_HEADER_EXTRAS: FieldMeta[] = [
-  { key: "expected_pay_date", labelKey: "common.labels.expectedPayDate", level: "header", kind: "date", defaultHidden: true },
-  { key: "payment_hold_reason", labelKey: "common.labels.paymentHold", level: "header", kind: "text", defaultHidden: true },
+  { key: "expected_pay_date", labelKey: "common.labels.expectedPayDate", level: "header", kind: "date" },
+  { key: "payment_hold_reason", labelKey: "common.labels.paymentHold", level: "header", kind: "text" },
 ];
 
 /** Extra AR-side header built-ins (project-billing invoices). */
 const INVOICE_HEADER_EXTRAS: FieldMeta[] = [
-  { key: "billing_method", labelKey: "common.labels.billingMethod", level: "header", kind: "select", defaultHidden: true },
-  { key: "is_final_invoice", labelKey: "common.labels.finalInvoice", level: "header", kind: "boolean", defaultHidden: true },
+  { key: "billing_method", labelKey: "common.labels.billingMethod", level: "header", kind: "select" },
+  { key: "is_final_invoice", labelKey: "common.labels.finalInvoice", level: "header", kind: "boolean" },
 ];
 
 /** Status filter shared by the approval-flow kinds (bill/invoice/credits). */
@@ -118,7 +140,7 @@ function partyListColumns(numberLabelKey: string, partyLabelKey: string): ListCo
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "open_balance", labelKey: "common.labels.openBalance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", locked: true, defaultWidth: 96 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ];
 }
 
@@ -144,7 +166,7 @@ const VENDOR_BILL: RecordTypeMeta = {
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "open_balance", labelKey: "common.labels.openBalance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", locked: true, defaultWidth: 96 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -240,7 +262,7 @@ function cardRecordType(key: string): RecordTypeMeta {
       { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
       { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", locked: true, defaultWidth: 96 },
+      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [DIRECT_POST_STATUS_FILTER, DATE_FILTER],
   };
@@ -266,7 +288,7 @@ const CHECK: RecordTypeMeta = {
     { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", locked: true, defaultWidth: 96 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     DIRECT_POST_STATUS_FILTER,
@@ -275,19 +297,96 @@ const CHECK: RecordTypeMeta = {
   ],
 };
 
+const EXPENSE_REPORT: RecordTypeMeta = {
+  key: "expense_report",
+  labelKey: "customization.recordTypes.expense_report",
+  category: "transaction",
+  headerFields: [
+    { key: "party_id", labelKey: "common.labels.employee", level: "header", kind: "entity_ref", required: true, locked: true },
+    { key: "document_date", labelKey: "expenses.drawer.reportDate", level: "header", kind: "date" },
+    { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+  ],
+  lineFields: EXPENSE_LINE_FIELDS,
+  listColumns: partyListColumns("common.labels.number", "common.labels.employee"),
+  listFilters: [
+    APPROVAL_STATUS_FILTER,
+    { key: "party_id", labelKey: "common.labels.employee", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "employee" },
+    DATE_FILTER,
+  ],
+};
+
+const JOURNAL: RecordTypeMeta = {
+  key: "journal",
+  labelKey: "customization.recordTypes.journal",
+  category: "transaction",
+  headerFields: [
+    { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+    { key: "party_id", labelKey: "common.labels.party", level: "header", kind: "entity_ref" },
+    { key: "reference_number", labelKey: "journal.drawer.referenceNumber", level: "header", kind: "text" },
+    { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref" },
+  ],
+  lineFields: JOURNAL_LINE_FIELDS,
+  listColumns: [
+    { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+    { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
+    { key: "memo", labelKey: "common.labels.memo", kind: "text" },
+    { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [DIRECT_POST_STATUS_FILTER, DATE_FILTER],
+};
+
+function bankDocumentRecordType(key: "deposit" | "transfer"): RecordTypeMeta {
+  const isTransfer = key === "transfer";
+  return {
+    key,
+    labelKey: `customization.recordTypes.${key}`,
+    category: "transaction",
+    headerFields: [
+      { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+      ...(!isTransfer ? [{ key: "reference_number", labelKey: "common.labels.reference", level: "header" as const, kind: "text" as const }] : []),
+      { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+      ...(isTransfer
+        ? [{ key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header" as const, kind: "entity_ref" as const }]
+        : COMMON_HEADER_EXTRAS),
+    ],
+    lineFields: isTransfer ? [] : TRANSACTION_LINE_FIELDS,
+    listColumns: [
+      { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+      { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+      { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
+      { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+      { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+    ],
+    listFilters: [DIRECT_POST_STATUS_FILTER, DATE_FILTER],
+  };
+}
+
+const DEPOSIT = bankDocumentRecordType("deposit");
+const TRANSFER = bankDocumentRecordType("transfer");
+
 /**
- * Vendor/customer payment documents. Editor is the bespoke PaymentDrawer, so
- * `supportsForms` is false — only the saved list view is customizable. The
- * `total` and `bank_account` columns are journal-derived at query time (imported
- * payments carry the amount on their posted entry, not documents.total).
+ * Vendor/customer payment documents. Each side owns an independent form;
+ * application allocation stays a purpose-built section below the configurable
+ * transaction header. The `total` and `bank_account` list columns are
+ * journal-derived at query time.
  */
 function paymentRecordType(key: string, partyLabelKey: string, entitySource: string): RecordTypeMeta {
   return {
     key,
     labelKey: `customization.recordTypes.${key}`,
-    category: "entity",
-    supportsForms: false,
-    headerFields: [],
+    category: "transaction",
+    headerFields: [
+      { key: "party_id", labelKey: partyLabelKey, level: "header", kind: "entity_ref", required: true, locked: true },
+      { key: "bank_account_id", labelKey: "payments.list.columns.bankAccount", level: "header", kind: "entity_ref", required: true },
+      { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+      { key: "reference_number", labelKey: "common.labels.reference", level: "header", kind: "text" },
+      { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ],
     lineFields: [],
     listColumns: [
       { key: "document_number", labelKey: "payments.list.columns.payment", kind: "reference", sortable: true, sortKey: "number", locked: true },
@@ -297,6 +396,7 @@ function paymentRecordType(key: string, partyLabelKey: string, entitySource: str
       { key: "reference_number", labelKey: "payments.list.columns.ref", kind: "text" },
       { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 130 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [
       DIRECT_POST_STATUS_FILTER,
@@ -311,19 +411,24 @@ const VENDOR_PAYMENT = paymentRecordType("vendor_payment", "common.labels.vendor
 const CUSTOMER_PAYMENT = paymentRecordType("customer_payment", "common.labels.customer", "customer");
 
 /**
- * Order documents (quotes, sales orders, purchase orders). Non-posting; edited
- * via the bespoke OrderDrawer, so `supportsForms` is false — only the saved list
- * view is customizable. Conversion progress ("Converted %") lives in a report,
- * not the list. Statuses are draft/approved/voided (no approval routing).
+ * Order documents (quotes, sales orders, purchase orders). Each lifecycle kind
+ * owns an independent form even though the shared OrderDrawer renders them.
+ * Conversion progress ("Converted %") lives in a report, not the list.
  */
 function orderRecordType(key: string, partyLabelKey: string, entitySource: string): RecordTypeMeta {
   return {
     key,
     labelKey: `customization.recordTypes.${key}`,
-    category: "entity",
-    supportsForms: false,
-    headerFields: [],
-    lineFields: [],
+    category: "transaction",
+    headerFields: [
+      { key: "party_id", labelKey: partyLabelKey, level: "header", kind: "entity_ref", required: true, locked: true },
+      { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+      { key: "due_date", labelKey: "common.labels.dueDate", level: "header", kind: "date" },
+      { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+      { key: "department_id", labelKey: "common.labels.department", level: "header", kind: "dimension" },
+      { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension" },
+    ],
+    lineFields: ORDER_LINE_FIELDS,
     listColumns: [
       { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
       { key: "party_name", labelKey: partyLabelKey, kind: "text", sortable: true, sortKey: "party" },
@@ -331,6 +436,7 @@ function orderRecordType(key: string, partyLabelKey: string, entitySource: strin
       { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
       { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [
       {
@@ -363,6 +469,10 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   CARD_CHARGE,
   CARD_REFUND,
   CHECK,
+  DEPOSIT,
+  TRANSFER,
+  EXPENSE_REPORT,
+  JOURNAL,
   VENDOR_PAYMENT,
   CUSTOMER_PAYMENT,
   QUOTE,

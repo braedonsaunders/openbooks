@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
+import { Eye } from 'lucide-react'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
@@ -11,11 +12,14 @@ import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../lib/list-params'
 import { money } from '../../../lib/format'
-import { can, getAuthz } from '../../../lib/authz'
+import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { createDraftJournal, loadJournalDoc } from '../../../lib/journals'
 import { JournalDrawer } from './JournalDrawer'
 import { NewJournalButton } from './NewJournalButton'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
+import { customSegmentOptions } from '../../../lib/segments'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +58,7 @@ export default async function Journal({
 }) {
   const t = await getTranslations('journal')
   const tc = await getTranslations('common')
+  const authz = await requirePermission('gl.read')
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'date',
@@ -62,14 +67,28 @@ export default async function Journal({
     allowedSorts: ['date', 'number', 'debits'] as const,
   })
   const origin = pickString(sp.origin)
+  const allowedSubsidiaries = authz.allowedSubsidiaryIds
+  const allowedIds = allowedSubsidiaries ? [...allowedSubsidiaries] : []
+  const entryVisibility = allowedSubsidiaries
+    ? allowedIds.length
+      ? sql`and exists (
+          select 1 from journal_lines visible
+           where visible.entry_id = e.id
+             and visible.subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])
+        )`
+      : sql`and false`
+    : sql``
+  const lineVisibility = allowedSubsidiaries
+    ? allowedIds.length
+      ? sql`and l.subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])`
+      : sql`and false`
+    : sql``
 
   // ?entry= drives the manual-journal drawer over DOCUMENT ids;
   // posted-entry links to /journal/[id] are a separate, untouched surface.
   const entryParam = pickString(sp.entry)
   if (entryParam === 'new') {
     // deep-linkable instant draft: create it server-side, land on its drawer
-    const authz = await getAuthz()
-    if (!authz) redirect('/login')
     if (!can(authz, 'gl.post')) redirect('/journal')
     const draft = await createDraftJournal(authz.user.orgId, authz.user.id)
     redirect(`/journal?entry=${draft.id}`)
@@ -88,6 +107,7 @@ export default async function Journal({
     )
   )`
   const where = sql`${journalsOnly}
+    ${entryVisibility}
     ${origin ? sql` and e.origin = ${origin}` : sql``}
     ${params.q ? sql` and (e.entry_number ilike ${'%' + params.q + '%'} or e.memo ilike ${'%' + params.q + '%'})` : sql``}`
 
@@ -98,14 +118,14 @@ export default async function Journal({
              sum(case when l.amount > 0 then l.amount else 0 end) as total_debits,
              (select d.id from documents d where d.posted_entry_id = e.id and d.kind = 'journal' limit 1) as source_document_id
         from journal_entries e
-        join journal_lines l on l.entry_id = e.id
+        join journal_lines l on l.entry_id = e.id ${lineVisibility}
        where ${where}
        group by e.id
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`}, e.entry_number desc
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
     db.execute(sql`select count(*) as n from journal_entries e where ${where}`) as any,
-    db.execute(sql`select e.origin, count(*) as n from journal_entries e where ${journalsOnly} group by e.origin order by count(*) desc`) as any,
+    db.execute(sql`select e.origin, count(*) as n from journal_entries e where ${journalsOnly} ${entryVisibility} group by e.origin order by count(*) desc`) as any,
   ])
   const total = Number(totalRow.rows[0].n)
 
@@ -115,10 +135,18 @@ export default async function Journal({
       select id, document_number, document_date, memo, total
         from documents
        where kind = 'journal' and status = 'draft'
+         ${allowedSubsidiaries
+           ? allowedIds.length
+             ? sql`and subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])`
+             : sql`and false`
+           : sql``}
        order by created_at desc
        limit 20
     `) as any,
-    entryParam ? loadJournalDoc(entryParam) : null,
+    entryParam ? loadJournalDoc(entryParam).then((journal) => {
+      if (!journal || !allowedSubsidiaries) return journal
+      return allowedSubsidiaries.has(String(journal.doc.subsidiary_id)) ? journal : null
+    }) : null,
     entryParam
       ? Promise.all([
           db.execute(sql`select id, display_name from parties where is_active order by display_name limit 2000`) as any,
@@ -127,9 +155,27 @@ export default async function Journal({
           db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
           loadFieldDefs('documents', 'journal'),
           loadFieldDefs('document_lines', 'journal'),
+          // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
+          isMultiSubsidiary().then(async (multi) => {
+            if (!multi) return null
+            const options = await subsidiaryOptions()
+            return allowedSubsidiaries ? options.filter((option) => allowedSubsidiaries.has(option.id)) : options
+          }),
+          customSegmentOptions(authz.user.orgId),
         ])
       : null,
   ])
+  const resolvedForm = openJournal && pickers
+    ? await resolveFormLayout({
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        recordType: 'journal',
+        userRoles: [authz.user.role],
+        headerDefs: pickers[4] as any,
+        lineDefs: pickers[5] as any,
+        explicitLayoutId: pickString(sp.form),
+      })
+    : null
 
   return (
     <ListPageLayout
@@ -190,6 +236,7 @@ export default async function Journal({
             <TableHead className="text-right">{tc('labels.lines')}</TableHead>
             <SortTh basePath="/journal" currentParams={sp} column="debits" sort={params.sort} dir={params.dir} align="right">{t('list.columns.debits')}</SortTh>
             <TableHead>{tc('labels.status')}</TableHead>
+            <TableHead className="w-16 px-2 text-center">{tc('labels.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -221,6 +268,18 @@ export default async function Journal({
                   {STATUS_KEYS[e.status] ? tc(`status.${STATUS_KEYS[e.status]}`) : e.status}
                 </Badge>
               </TableCell>
+              <TableCell className="w-11">
+                <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                  <Link
+                    href={e.source_document_id ? `/journal?entry=${e.source_document_id}` : `/journal?txn=${e.id}`}
+                    aria-label={tc('actions.open')}
+                    title={tc('actions.open')}
+                    scroll={false}
+                  >
+                    <Eye size={14} />
+                  </Link>
+                </Button>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -235,8 +294,11 @@ export default async function Journal({
           accounts={pickers[1].rows}
           departments={pickers[2].rows}
           projects={pickers[3].rows}
+          subsidiaries={pickers[6] ?? undefined}
           headerDefs={pickers[4] as any}
           lineDefs={pickers[5] as any}
+          layout={resolvedForm?.layout}
+          segments={pickers[7] as any}
         />
       ) : null}
     </ListPageLayout>

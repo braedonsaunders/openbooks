@@ -240,9 +240,9 @@ const getJournalEntry: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["gl.read"] },
   inputSchema: z.object({ entryId: uuidInput }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { entryId: string };
-    const r = await entryDetail(a.entryId);
+    const r = await entryDetail(authz.user.orgId, a.entryId);
     if (!r.entry) return { ok: false, error: "entry_not_found" };
     const e = r.entry as any;
     return {

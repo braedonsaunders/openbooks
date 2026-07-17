@@ -16,6 +16,7 @@ import {
   customFieldDefKey,
 } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
+import { ensureCustomizationDefaults } from "./seed-defaults";
 
 /**
  * Effective-resolution layer for transaction form layouts + saved list views.
@@ -76,6 +77,12 @@ function mergeCustomFieldsIntoLayout(
   headerDefs: CustomFieldDef[],
   lineDefs: CustomFieldDef[],
 ): FormLayoutConfig {
+  const systemActions = defaultFormLayout(layout.recordType).actions;
+  const placedActions = new Set((layout.actions ?? []).map((action) => action.key));
+  layout.actions = [
+    ...(layout.actions ?? []),
+    ...systemActions.filter((action) => !placedActions.has(action.key)),
+  ];
   // Header: ensure every active header def has a placement. Unplaced custom
   // fields land in a distinct trailing group (renders as a separate section,
   // matching the pre-customization layout); a saved layout that explicitly
@@ -124,9 +131,8 @@ function mergeCustomFieldsIntoLayout(
     (c) => !isCustomFieldKey(c.key) || liveLineKeys.has(c.key),
   );
 
-  // Merge in built-in fields the stored layout predates (e.g. the full-schema
-  // extras added after it was saved). New built-ins default to hidden, so an
-  // old layout gains them off — no visible change to the live form.
+  // Merge in built-in fields the stored layout predates. The complete data
+  // model is visible by default; admins may hide fields afterward per form.
   const meta = getRecordType(layout.recordType);
   if (meta) {
     const placedH = new Set<string>();
@@ -136,7 +142,7 @@ function mergeCustomFieldsIntoLayout(
       layout.header.groups[layout.header.groups.length - 1]!.fields.push(
         ...missingH.map<HeaderFieldPlacement>((f) => ({
           key: f.key,
-          visible: !f.defaultHidden,
+          visible: true,
           required: f.required ? true : null,
           labelOverride: null,
           colSpan: null,
@@ -147,7 +153,7 @@ function mergeCustomFieldsIntoLayout(
     const missingL = meta.lineFields.filter((f) => !placedL.has(f.key));
     if (missingL.length > 0) {
       const amountIdx = layout.lines.columns.findIndex((c) => c.key === "amount");
-      const cols = missingL.map<LineColumnPlacement>((f) => ({ key: f.key, visible: !f.defaultHidden, width: null, labelOverride: null }));
+      const cols = missingL.map<LineColumnPlacement>((f) => ({ key: f.key, visible: true, width: null, labelOverride: null }));
       if (amountIdx >= 0) layout.lines.columns.splice(amountIdx, 0, ...cols);
       else layout.lines.columns.push(...cols);
     }
@@ -177,6 +183,8 @@ export const resolveFormLayout = cache(
     explicitLayoutId?: string | null;
   }): Promise<ResolvedFormLayout> => {
     const { orgId, userId, recordType, userRoles, headerDefs, lineDefs, explicitLayoutId } = args;
+
+    await ensureCustomizationDefaults({ orgId, actorId: userId, recordTypes: [recordType] });
 
     const rows = (await db.execute(sql`
       select id, name, record_type as "recordType", is_default as "isDefault",
@@ -246,6 +254,18 @@ function mergeCustomFieldsIntoView(
   showInListDefs: CustomFieldDef[],
 ): ListViewConfig {
   const placed = new Set(view.columns.map((c) => c.key));
+  const meta = getRecordType(view.recordType);
+  for (const column of meta?.listColumns ?? []) {
+    if (!placed.has(column.key)) {
+      view.columns.push({
+        key: column.key,
+        visible: true,
+        width: column.defaultWidth ?? null,
+        labelOverride: null,
+      });
+      placed.add(column.key);
+    }
+  }
   for (const def of showInListDefs) {
     const cfKey = `cf_${def.key}`;
     if (!placed.has(cfKey)) {
@@ -270,6 +290,8 @@ export const resolveListView = cache(
     showInListDefs: CustomFieldDef[];
   }): Promise<ResolvedListView> => {
     const { orgId, userId, recordType, viewId, showInListDefs } = args;
+
+    await ensureCustomizationDefaults({ orgId, actorId: userId, recordTypes: [recordType] });
 
     const rows = (await db.execute(sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",

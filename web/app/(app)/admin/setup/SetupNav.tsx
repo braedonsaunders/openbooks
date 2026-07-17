@@ -23,6 +23,7 @@ import {
   Timer,
   Upload,
   Users,
+  WalletCards,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { SETUP_GROUPS, setupEntitiesByGroup } from '../../../../lib/setup/registry'
@@ -47,6 +48,7 @@ const ICONS: Record<string, ReactNode> = {
   download: <Download size={15} />,
   upload: <Upload size={15} />,
   history: <History size={15} />,
+  payments: <WalletCards size={15} />,
 }
 
 type NavItem = { href: string; label: string; iconKey: string }
@@ -91,7 +93,22 @@ export function SetupNav({ canExport, canImport }: { canExport: boolean; canImpo
               : group.key === 'company'
               ? [
                   { href: '/admin/setup/company', label: t('entities.company.title'), iconKey: 'building' },
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
                   { href: '/admin/setup/sftp', label: t('entities.sftp.title'), iconKey: 'server' },
+                  { href: '/admin/setup/payment-operations', label: t('entities.payment-operations.title'), iconKey: 'payments' },
+                ]
+              : group.key === 'currency'
+              ? [
+                  { href: '/admin/setup/fx-provider', label: t('fxProvider.title'), iconKey: 'coins' },
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
                 ]
               : (byGroup.get(group.key) ?? []).map((e) => ({
                   href: `/admin/setup/${e.key}`,

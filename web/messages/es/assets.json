@@ -41,6 +41,10 @@
     "disposed": "Dispuesto",
     "written_off": "Dados de baja"
   },
+  "errors": {
+    "invalidSubsidiary": "Elija una subsidiaria activa que no sea de eliminación.",
+    "noAvailableSubsidiary": "Su rol no tiene ninguna subsidiaria activa disponible para este activo."
+  },
   "drawer": {
     "newAsset": "Nuevo activo",
     "editing": "Editando — Guarde para aplicar los cambios",

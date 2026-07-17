@@ -18,6 +18,7 @@ import {
 } from "./registry";
 import type {
   FilterOperator,
+  FormActionPlacement,
   FormLayoutConfig,
   HeaderFieldPlacement,
   LineColumnPlacement,
@@ -60,11 +61,30 @@ const lineColumnPlacementSchema = z.object({
   labelOverride: z.string().max(120).nullable().optional(),
 });
 
+export const FORM_ACTION_KEYS = [
+  "customize",
+  "pdf",
+  "workflow",
+  "approval",
+  "edit",
+  "submit",
+  "post",
+  "gl_impact",
+  "delete",
+] as const;
+
+const formActionPlacementSchema = z.object({
+  key: z.enum(FORM_ACTION_KEYS),
+  visible: z.boolean(),
+});
+
 export const formLayoutConfigSchema = z.object({
   schemaVersion: z.literal(1),
+  defaultVisibilityVersion: z.literal(1).optional(),
   recordType: recordTypeSchema,
   header: z.object({ groups: z.array(headerGroupSchema).min(1).max(20) }),
   lines: z.object({ columns: z.array(lineColumnPlacementSchema).max(200) }),
+  actions: z.array(formActionPlacementSchema).length(FORM_ACTION_KEYS.length),
 });
 
 const filterOperatorSchema = z.enum([
@@ -190,6 +210,16 @@ export function lintFormLayout(config: FormLayoutConfig): LintIssue[] {
       issues.push({ path: "lines", message: `locked line column "${fm.key}" is missing` })
   }
 
+  const seenActions = new Set<string>()
+  config.actions.forEach((action, ai) => {
+    if (seenActions.has(action.key))
+      issues.push({ path: `actions[${ai}]`, message: `duplicate action "${action.key}"` })
+    seenActions.add(action.key)
+  })
+  for (const key of FORM_ACTION_KEYS) {
+    if (!seenActions.has(key)) issues.push({ path: "actions", message: `action "${key}" is missing` })
+  }
+
   return issues
 }
 
@@ -292,6 +322,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
   if (!meta) throw new Error(`unknown record type: ${recordType}`)
   return {
     schemaVersion: 1,
+    defaultVisibilityVersion: 1,
     recordType,
     header: {
       groups: [
@@ -300,7 +331,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
           label: null,
           fields: meta.headerFields.map<HeaderFieldPlacement>((f) => ({
             key: f.key,
-            visible: !f.defaultHidden,
+            visible: true,
             required: f.required ? true : null,
             labelOverride: null,
             colSpan: VENDOR_BILL_HEADER_SPAN[f.key] ?? null,
@@ -311,11 +342,12 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
     lines: {
       columns: meta.lineFields.map<LineColumnPlacement>((f) => ({
         key: f.key,
-        visible: !f.defaultHidden,
+        visible: true,
         width: null,
         labelOverride: null,
       })),
     },
+    actions: FORM_ACTION_KEYS.map<FormActionPlacement>((key) => ({ key, visible: true })),
   }
 }
 

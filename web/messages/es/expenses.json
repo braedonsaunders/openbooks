@@ -20,6 +20,9 @@
     "selectEmployeePlaceholder": "Seleccionar empleado…",
     "accountPlaceholder": "Cuenta…",
     "noTax": "Sin impuesto",
+    "deleteTitle": "¿Eliminar este informe de gastos?",
+    "deleteDraftBody": "Esto elimina permanentemente el informe de gastos en borrador. No se puede deshacer.",
+    "deletePostedBody": "Esto elimina permanentemente el informe de gastos y su impacto en el libro mayor. No se puede deshacer.",
     "columns": {
       "taxAmount": "Impuesto"
     },
@@ -35,6 +38,8 @@
     "posted": "Contabilizado en el libro mayor",
     "actionFailed": "La acción falló",
     "autosaveFailed": "Falló el guardado automático",
+    "deleted": "Informe de gastos eliminado",
+    "deleteFailed": "No se pudo eliminar",
     "draftFailed": "No se pudo crear un borrador de informe de gastos"
   }
 }

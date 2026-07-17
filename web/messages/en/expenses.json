@@ -20,6 +20,9 @@
     "selectEmployeePlaceholder": "Select employee…",
     "accountPlaceholder": "Account…",
     "noTax": "No tax",
+    "deleteTitle": "Delete this expense report?",
+    "deleteDraftBody": "This permanently deletes the draft expense report. This cannot be undone.",
+    "deletePostedBody": "This permanently deletes the expense report and removes its ledger impact. This cannot be undone.",
     "columns": {
       "taxAmount": "Tax amt"
     },
@@ -35,6 +38,8 @@
     "posted": "Posted to the ledger",
     "actionFailed": "Action failed",
     "autosaveFailed": "Autosave failed",
+    "deleted": "Expense report deleted",
+    "deleteFailed": "Delete failed",
     "draftFailed": "Could not create a draft expense report"
   }
 }

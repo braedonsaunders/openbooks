@@ -34,12 +34,12 @@ export async function POST(req: Request) {
   const user = gate.user
 
   const body = (await req.json()) as {
-    bankAccountId?: string
+    paymentBankProfileId?: string
     billDocumentIds?: string[]
     scheduledFor?: string | null
   }
-  if (!body.bankAccountId) {
-    return NextResponse.json({ error: 'bankAccountId is required' }, { status: 400 })
+  if (!body.paymentBankProfileId) {
+    return NextResponse.json({ error: 'paymentBankProfileId is required' }, { status: 400 })
   }
   if (!Array.isArray(body.billDocumentIds) || body.billDocumentIds.length === 0) {
     return NextResponse.json({ error: 'select at least one bill' }, { status: 400 })
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const run = await createPaymentRun({
       orgId: user.orgId,
       createdBy: user.id,
-      bankAccountId: body.bankAccountId,
+      paymentBankProfileId: body.paymentBankProfileId,
       billDocumentIds: body.billDocumentIds,
       scheduledFor: body.scheduledFor ?? null,
     })

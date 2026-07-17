@@ -7,6 +7,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { computeBillTotals, taxRateMap, type BillLineInput } from '../../../../lib/bills'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 
 export const runtime = 'nodejs'
 
@@ -38,11 +39,12 @@ async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise
     select md5(
       coalesce(d.party_id::text,'') || '~' || coalesce(d.document_date::text,'') || '~' ||
       coalesce(d.posting_date::text,'') || '~' || coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
+      coalesce(d.extra_dims::text,'{}') || '~' ||
       coalesce((select string_agg(
         coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
         coalesce(tax_code_id::text,'') || ':' || tax_amount::text || ':' ||
         coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
-        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,''),
+        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
         '|' order by line_number)
         from document_lines where document_id = d.id), '')
     ) as sig
@@ -85,19 +87,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     partyId?: string | null
     documentDate?: string
     memo?: string | null
+    extraDims?: Record<string, string | null>
     custom?: Record<string, unknown>
     lines?: (BillLineInput & {
       departmentId?: string | null
       projectId?: string | null
+      extraDims?: Record<string, string | null>
       custom?: Record<string, unknown>
     })[]
   }
 
   // custom-field validation (header + line) against the live definitions
-  const [headerDefs, lineDefs] = await Promise.all([
+  const [headerDefs, lineDefs, segments] = await Promise.all([
     loadFieldDefs('documents', 'expense_report'),
     loadFieldDefs('document_lines', 'expense_report'),
+    segmentRegistry(user.orgId),
   ])
+  const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
+  if (headerDims && !headerDims.ok) return NextResponse.json({ error: headerDims.error }, { status: 422 })
   let headerCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
     const v = validateCustomValues(headerDefs, body.custom)
@@ -108,7 +115,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Pre-validate + prepare lines (read-only) before touching the DB, so a bad
   // line returns 422 without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
-  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; custom: Record<string, unknown> }[] | null = null
+  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
     const computed = computeBillTotals(valid, await taxRateMap())
@@ -118,6 +125,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const l = computed.lines[i]! as (typeof computed.lines)[number] & {
         departmentId?: string | null
         projectId?: string | null
+        extraDims?: Record<string, string | null>
         custom?: Record<string, unknown>
       }
       const lv = validateCustomValues(lineDefs, l.custom)
@@ -127,6 +135,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { status: 422 },
         )
       }
+      const lineDims = validateExtraDims(l.extraDims, segments)
+      if (!lineDims.ok) return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
       preparedLines.push({
         accountId: l.accountId!,
         description: l.description ?? null,
@@ -136,6 +146,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         taxOverridden: l.taxOverridden === true,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
+        extraDims: lineDims.cleaned,
         custom: lv.cleaned,
       })
     }
@@ -155,10 +166,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, description,
                                         quantity, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
-                                        department_id, project_id, custom)
+                                        department_id, project_id, extra_dims, custom)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
                     '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
-                    ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.custom)})
+                    ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
           `)
         }
       }
@@ -168,6 +179,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           party_id = coalesce(${body.partyId ?? null}, party_id),
           document_date = coalesce(${body.documentDate ?? null}, document_date),
           memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+          extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
           custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
           subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
           tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),

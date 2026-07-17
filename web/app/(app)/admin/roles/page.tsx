@@ -11,7 +11,13 @@ import { SortTh } from '../../../../components/sortable-th'
 import { Pagination } from '../../../../components/pagination'
 import { requirePermission } from '../../../../lib/authz'
 import { parseListParams, pickString } from '../../../../lib/list-params'
-import { EditRoleButton, NewRoleButton, type RoleRow } from './RoleEditor'
+import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
+import {
+  EditRoleButton,
+  NewRoleButton,
+  type RoleRow,
+  type SubsidiaryPickerOption,
+} from './RoleEditor'
 
 export async function generateMetadata() {
   const t = await getTranslations('admin.roles')
@@ -60,9 +66,16 @@ export default async function AdminRolesPage({
     `${ORDER[listParams.sort]} ${listParams.dir === 'asc' ? 'asc' : 'desc'}, lower(r.name) asc`,
   )
 
+  // Subsidiary access is only surfaced in multi-subsidiary orgs — single-sub
+  // orgs never see any subsidiary UI.
+  const subsidiaries: SubsidiaryPickerOption[] | null = (await isMultiSubsidiary())
+    ? (await subsidiaryOptions()).map((s) => ({ id: s.id, name: s.name, depth: s.depth }))
+    : null
+
   const [rowsR, countR, typeCountsR] = (await Promise.all([
     db.execute(sql`
       select r.id, r.key, r.name, r.description, r.is_built_in, r.permissions,
+             r.subsidiary_restriction,
              coalesce(jsonb_array_length(r.permissions), 0)::int as permission_count,
              (select count(*)::int from role_assignments a
                where a.role_id = r.id and a.org_id = r.org_id) as member_count
@@ -84,6 +97,7 @@ export default async function AdminRolesPage({
       description: r.description,
       isBuiltIn: r.is_built_in,
       permissions: Array.isArray(r.permissions) ? r.permissions : [],
+      subsidiaryRestriction: r.subsidiary_restriction ?? { mode: 'all' },
       permissionCount: Number(r.permission_count),
       memberCount: Number(r.member_count),
     }),
@@ -108,7 +122,7 @@ export default async function AdminRolesPage({
                 <Link href="/admin/users">
                   <Button variant="outline">{t('manageUsers')}</Button>
                 </Link>
-                <NewRoleButton />
+                <NewRoleButton subsidiaries={subsidiaries} />
               </div>
             }
           />
@@ -180,7 +194,7 @@ export default async function AdminRolesPage({
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <EditRoleButton role={r} />
+                    <EditRoleButton role={r} subsidiaries={subsidiaries} />
                   </td>
                 </tr>
               ))}

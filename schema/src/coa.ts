@@ -56,6 +56,9 @@ export const accounts = pgTable(
     currencyRestriction: currencyCode("currency_restriction"),
     /** Marks intercompany accounts eliminated in consolidation. */
     eliminate: boolean("eliminate").notNull().default(false),
+    /** Restrict posting to one subsidiary('s subtree); null = all. */
+    subsidiaryId: uuid("subsidiary_id"),
+    subsidiaryIncludeChildren: boolean("subsidiary_include_children").notNull().default(true),
     /** Reconcilable accounts (bank, card, clearing) get statement matching. */
     reconcilable: boolean("reconcilable").notNull().default(false),
     /** Which dimensions are required when posting here, e.g. ["project"]. */

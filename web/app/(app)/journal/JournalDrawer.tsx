@@ -5,14 +5,23 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import { CustomFieldInput } from '../../../components/custom-field-input'
+import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { AttachmentPanel } from '../../../components/attachment-panel'
-import { DocTypeBadge } from '../../../components/doc-type-badge'
+import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
+import {
+  customFieldDefKey,
+  isCustomFieldKey,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+} from '@openbooks/customization'
 
 interface Opt {
   id: string
@@ -20,11 +29,25 @@ interface Opt {
   number?: string
   name?: string
 }
+interface SubsidiaryOpt {
+  id: string
+  name: string
+  /** Root = 0; used to indent the picker like a tree. */
+  depth: number
+}
+interface SegmentOpt {
+  key: string
+  name: string
+  showOnHeader: boolean
+  showOnLines: boolean
+  values: { id: string; code: string | null; name: string }[]
+}
 interface LineRow extends Record<string, unknown> {
   accountId: string
   description: string
   departmentId: string
   projectId: string
+  subsidiaryId: string
   debit: string
   credit: string
 }
@@ -52,6 +75,7 @@ const emptyLine = (): LineRow => ({
   description: '',
   departmentId: '',
   projectId: '',
+  subsidiaryId: '',
   debit: '',
   credit: '',
 })
@@ -63,17 +87,19 @@ const cents = (v: unknown): number => {
   return Number.isNaN(n) ? 0 : Math.round(n * 100)
 }
 
-function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRow {
+function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const amt = Number(l.amount ?? 0)
   const row: LineRow = {
     accountId: l.account_id ?? '',
     description: l.description ?? '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
+    subsidiaryId: l.subsidiary_id ?? '',
     debit: amt > 0 ? amt.toFixed(2) : '',
     credit: amt < 0 ? (-amt).toFixed(2) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
   return row
 }
 
@@ -83,16 +109,24 @@ export function JournalDrawer({
   accounts,
   departments,
   projects,
+  subsidiaries,
+  segments = [],
   headerDefs,
   lineDefs,
+  layout,
 }: {
   journal: JournalPayload
   parties: Opt[]
   accounts: Opt[]
   departments: Opt[]
   projects: Opt[]
+  /** The org's subsidiaries (depth-first tree order). Only passed in
+   *  multi-subsidiary orgs — empty/undefined renders NO subsidiary UI. */
+  subsidiaries?: SubsidiaryOpt[]
+  segments?: SegmentOpt[]
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
+  layout?: FormLayoutConfig
 }) {
   const t = useTranslations('journal.drawer')
   const tc = useTranslations('common')
@@ -112,12 +146,27 @@ export function JournalDrawer({
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
+  const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
-    journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs)) : [emptyLine(), emptyLine()],
+    journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine(), emptyLine()],
   )
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+
+  // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
+  // The header subsidiary is the journal's home entity; the OPTIONAL per-line
+  // subsidiary override is the intercompany surface — the posting engine
+  // auto-balances cross-subsidiary lines via due-to/due-from pairs.
+  const multiSub = (subsidiaries?.length ?? 0) > 0
+  const subsidiaryOpts = useMemo(
+    () => (subsidiaries ?? []).map((s) => ({ value: s.id, label: '\u2003'.repeat(s.depth) + s.name })),
+    [subsidiaries],
+  )
+  const rootSubsidiaryName = subsidiaries?.[0]?.name ?? '—'
+  const subsidiaryName = (id: unknown): string =>
+    id ? ((subsidiaries ?? []).find((s) => s.id === id)?.name ?? '—') : rootSubsidiaryName
 
   /** Each row carries exactly one side: entering one clears the other. */
   function handleRowsChange(next: LineRow[]) {
@@ -150,6 +199,9 @@ export function JournalDrawer({
       documentDate: documentDate || undefined,
       referenceNumber,
       memo,
+      // Only sent in multi-subsidiary orgs (undefined drops out of the JSON body).
+      subsidiaryId: multiSub ? subsidiaryId || null : undefined,
+      extraDims,
       custom: customValues,
       lines: rows
         .filter((r) => r.accountId && cents(r.debit) - cents(r.credit) !== 0)
@@ -159,12 +211,15 @@ export function JournalDrawer({
           amount: ((cents(r.debit) - cents(r.credit)) / 100).toFixed(2), // signed: + debit / − credit
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
+          // Intercompany line override (multi-subsidiary orgs only).
+          subsidiaryId: multiSub ? r.subsidiaryId || null : undefined,
+          extraDims: Object.fromEntries(segments.map((segment) => [segment.key, r[`seg_${segment.key}`]]).filter(([, value]) => value !== '' && value != null)),
           custom: Object.fromEntries(
             lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
           ),
         })),
     }),
-    [partyId, documentDate, referenceNumber, memo, customValues, rows, lineDefs],
+    [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, customValues, extraDims, rows, lineDefs, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -184,8 +239,10 @@ export function JournalDrawer({
     setDocumentDate(doc.document_date ?? '')
     setReferenceNumber(doc.reference_number ?? '')
     setMemo(doc.memo ?? '')
+    setSubsidiaryId(doc.subsidiary_id ?? '')
     setCustomValues(doc.custom ?? {})
-    setRows(journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs)) : [emptyLine(), emptyLine()])
+    setExtraDims(doc.extra_dims ?? {})
+    setRows(journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine(), emptyLine()])
   }
 
   async function save() {
@@ -233,11 +290,11 @@ export function JournalDrawer({
     const posted = doc.status === 'posted'
     if (
       !(await confirmDialog({
-        title: 'Delete this journal?',
+        title: t('deleteTitle'),
         message: posted
-          ? 'This permanently deletes the journal and removes its ledger impact. This cannot be undone.'
-          : 'This permanently deletes the draft journal. This cannot be undone.',
-        confirmLabel: 'Delete',
+          ? t('deletePostedBody')
+          : t('deleteDraftBody'),
+        confirmLabel: tc('actions.delete'),
         tone: 'danger',
       }))
     )
@@ -245,18 +302,20 @@ export function JournalDrawer({
     setBusy(true)
     const res = await fetch(`/api/journals/${doc.id}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success('Journal deleted')
+      toast.success(t('deleted'))
       router.push('/journal')
       router.refresh()
     } else {
-      toast.error((await res.json()).error ?? 'Delete failed')
+      toast.error((await res.json()).error ?? t('deleteFailed'))
       setBusy(false)
     }
   }
 
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
-    () => [
+    () => {
+      const builtIn: Record<string, LineGridColumn<LineRow>> = {
+      account_id:
       {
         key: 'accountId',
         label: tc('labels.account'),
@@ -266,15 +325,15 @@ export function JournalDrawer({
         options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
         placeholder: t('accountPlaceholder'),
       },
-      { key: 'description', label: tc('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
-      {
+      description: { key: 'description', label: tc('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
+      department_id: {
         key: 'departmentId',
         label: tc('labels.department'),
         width: '140px',
         type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
       },
-      {
+      project_id: {
         key: 'projectId',
         label: tc('labels.project'),
         width: 'minmax(150px,1.2fr)',
@@ -282,20 +341,70 @@ export function JournalDrawer({
         options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
         placeholder: '—',
       },
-      ...customFieldColumns<LineRow>(lineDefs),
-      { key: 'debit', label: t('columns.debit'), width: '120px', type: 'amount', align: 'right' },
-      { key: 'credit', label: t('columns.credit'), width: '120px', type: 'amount', align: 'right' },
-    ],
-    [accounts, departments, projects, lineDefs, t, tc],
+      // Optional per-line subsidiary override — the intercompany journal
+      // surface ('' = the header's subsidiary; posting auto-balances
+      // cross-subsidiary lines via due-to/due-from pairs).
+      ...(multiSub ? { subsidiary_id:
+            {
+              key: 'subsidiaryId',
+              label: tc('labels.subsidiary'),
+              width: '150px',
+              type: 'select',
+              options: [{ value: '', label: '—' }, ...subsidiaryOpts],
+            } satisfies LineGridColumn<LineRow> } : {}),
+      debit: { key: 'debit', label: t('columns.debit'), width: '120px', type: 'amount', align: 'right' },
+      credit: { key: 'credit', label: t('columns.credit'), width: '120px', type: 'amount', align: 'right' },
+      }
+      const custom = new Map(customFieldColumns<LineRow>(lineDefs).map((column) => [column.key, column]))
+      const segmentColumns: LineGridColumn<LineRow>[] = segments.filter((segment) => segment.showOnLines).map((segment) => ({
+        key: `seg_${segment.key}`,
+        label: segment.name,
+        width: '150px',
+        type: 'search-select',
+        options: segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` })),
+        placeholder: '—',
+      }))
+      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...custom.values()]
+      const configured = layout.lines.columns.flatMap((placement) => {
+        if (!placement.visible) return []
+        const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
+        if (!base) return []
+        return [{ ...base, width: placement.width ?? base.width, label: placement.labelOverride?.trim() || base.label }]
+      })
+      return [...configured, ...segmentColumns]
+    },
+    [accounts, departments, projects, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc],
   )
 
   const field = 'space-y-1.5'
+  const headerDefByKey = new Map(headerDefs.map((def) => [def.key, def]))
+  const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
+    const override = placement.labelOverride?.trim()
+    if (isCustomFieldKey(placement.key)) {
+      const def = headerDefByKey.get(customFieldDefKey(placement.key))
+      return def ? <CustomFieldInput def={{ ...def, label: override || def.label, isRequired: placement.required ?? def.isRequired }} value={customValues[def.key]} onChange={(value) => setCustomValues((current) => ({ ...current, [def.key]: value }))} readOnly={!isEditable} /> : null
+    }
+    switch (placement.key) {
+      case 'document_date':
+        return <><Label>{override || tc('labels.date')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+      case 'party_id':
+        return <><Label>{override || tc('labels.party')}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('noParty')} clearable emptyLabel={t('noParty')} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
+      case 'reference_number':
+        return <><Label>{override || t('referenceNumber')}</Label>{isEditable ? <Input value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} /> : <p className="text-sm">{doc.reference_number ?? '—'}</p>}</>
+      case 'subsidiary_id':
+        if (!multiSub) return null
+        return <><Label>{override || tc('labels.subsidiary')}</Label>{isEditable && doc.status !== 'posted' ? <SearchSelect options={subsidiaryOpts} value={subsidiaryId} onChange={(value) => setSubsidiaryId(value ?? '')} clearable emptyLabel={rootSubsidiaryName} placeholder={rootSubsidiaryName} /> : <p className="text-sm">{subsidiaryName(subsidiaryId || doc.subsidiary_id)}</p>}</>
+      case 'memo':
+        return <><Label>{override || tc('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+      default:
+        return null
+    }
+  }
 
   return (
-    <UrlDrawer
-      open
+    <TransactionDrawer
       closeHref="/journal"
-      size="2xl"
+      panelClassName={docTypeMeta('journal').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind="journal" />
@@ -306,25 +415,27 @@ export function JournalDrawer({
         </span>
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : (doc.party_name ?? undefined)}
-      headerActions={
+      primaryAction={
+        mode === 'view' && canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
+            {tc('actions.edit')}
+          </Button>
+        ) : null
+      }
+      actions={
         <>
           {mode === 'edit' ? (
             <>
               <Button disabled={busy} onClick={save}>
-                {busy ? 'Saving…' : 'Save'}
+                {busy ? tc('actions.saving') : tc('actions.save')}
               </Button>
               <Button variant="outline" disabled={busy} onClick={cancel}>
-                Cancel
+                {tc('actions.cancel')}
               </Button>
             </>
           ) : (
             <>
               <PdfButton recordType="journal" recordId={String(doc.id)} />
-              {canEditStatus ? (
-                <Button variant="outline" onClick={() => setMode('edit')}>
-                  Edit
-                </Button>
-              ) : null}
               {isDraft ? (
                 <Button disabled={busy || !balanced || dirty} onClick={post}>
                   {tc('actions.post')}
@@ -337,7 +448,7 @@ export function JournalDrawer({
               ) : null}
               {doc.status !== 'voided' ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                  Delete
+                  {tc('actions.delete')}
                 </Button>
               ) : null}
             </>
@@ -383,7 +494,7 @@ export function JournalDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
@@ -415,6 +526,25 @@ export function JournalDrawer({
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
             )}
           </div>
+          {multiSub ? (
+            // Locked (read-only) once posted — the subsidiary shapes the GL
+            // and intercompany balancing.
+            <div className={field}>
+              <Label>{tc('labels.subsidiary')}</Label>
+              {editable && doc.status !== 'posted' ? (
+                <SearchSelect
+                  options={subsidiaryOpts}
+                  value={subsidiaryId}
+                  onChange={(v) => setSubsidiaryId(v ?? '')}
+                  clearable
+                  emptyLabel={rootSubsidiaryName}
+                  placeholder={rootSubsidiaryName}
+                />
+              ) : (
+                <p className="text-sm">{subsidiaryName(subsidiaryId || doc.subsidiary_id)}</p>
+              )}
+            </div>
+          ) : null}
           <div className={`${field} lg:col-span-3`}>
             <Label>{tc('labels.memo')}</Label>
             {editable ? (
@@ -425,7 +555,28 @@ export function JournalDrawer({
           </div>
         </div>
 
-        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
+        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} /></>}
+
+        {segments.some((segment) => segment.showOnHeader) ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {segments.filter((segment) => segment.showOnHeader).map((segment) => {
+              const selected = extraDims[segment.key] ?? ''
+              return (
+                <div className={field} key={segment.key}>
+                  <Label>{segment.name}</Label>
+                  {editable ? (
+                    <SearchSelect
+                      options={segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))}
+                      value={selected}
+                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value ?? '' }))}
+                      placeholder="—"
+                    />
+                  ) : <p className="text-sm">{segment.values.find((value) => value.id === selected)?.name ?? '—'}</p>}
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <Label>{tc('labels.lines')}</Label>
@@ -441,6 +592,6 @@ export function JournalDrawer({
 
         <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
-    </UrlDrawer>
+    </TransactionDrawer>
   )
 }

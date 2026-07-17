@@ -68,7 +68,7 @@ export async function convertOrder(
   return db.transaction(async (tx) => {
     const src = (await tx.execute(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
-             department_id, project_id, location_id, class_id, memo, billing_method
+             department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
         from documents where id = ${sourceId} and org_id = ${orgId} for update
     `)) as unknown as { rows: any[] }
     const doc = src.rows[0]
@@ -82,7 +82,7 @@ export async function convertOrder(
 
     const lines = (await tx.execute(sql`
       select id, line_number, item_id, account_id, description, quantity, unit, unit_price,
-             amount, tax_code_id, tax_amount, department_id, project_id, location_id, class_id,
+             amount, tax_code_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
              is_billable, quantity_billed
         from document_lines where document_id = ${sourceId} order by line_number
     `)) as unknown as { rows: any[] }
@@ -109,11 +109,11 @@ export async function convertOrder(
     const [created] = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, due_date,
                              currency, fx_rate, status, department_id, project_id, location_id,
-                             class_id, billing_method, memo, subtotal, tax_total, total, created_by)
+                             class_id, extra_dims, billing_method, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, ${target.kind}, ${documentNumber}, ${doc.party_id},
               ${new Date().toISOString().slice(0, 10)}, ${doc.due_date}, ${doc.currency},
               ${doc.fx_rate}, ${targetStatus}, ${doc.department_id}, ${doc.project_id},
-              ${doc.location_id}, ${doc.class_id}, ${doc.billing_method}, ${doc.memo},
+              ${doc.location_id}, ${doc.class_id}, ${JSON.stringify(doc.extra_dims ?? {})}::jsonb, ${doc.billing_method}, ${doc.memo},
               '0', '0', '0', ${userId})
       returning id
     `)).rows as any[]
@@ -130,11 +130,11 @@ export async function convertOrder(
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_amount, department_id, project_id,
-              location_id, class_id, is_billable, created_by)
+              location_id, class_id, extra_dims, is_billable, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
               ${r.rem.toFixed(4)}, ${l.unit}, ${unitPrice.toFixed(4)}, ${amount.toFixed(4)},
               ${l.tax_code_id}, ${taxAmount.toFixed(4)}, ${l.department_id}, ${l.project_id},
-              ${l.location_id}, ${l.class_id}, ${l.is_billable}, ${userId})
+              ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.is_billable}, ${userId})
       `)
       // advance billed qty on the source line
       await tx.execute(sql`

@@ -32,6 +32,7 @@ export function NewSetupButton({ entityKey, label }: { entityKey: string; label:
 /** Initial form value for one field, read from the (snake-keyed) row. */
 function initialValue(field: SetupField, row: Record<string, any> | null): any {
   const raw = row ? row[toSnake(field.key)] : undefined
+  if (!row && field.defaultValue !== undefined) return field.defaultValue
   switch (field.kind) {
     case 'boolean':
       // New records default to active/true for the common isActive flag.

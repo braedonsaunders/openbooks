@@ -30,6 +30,12 @@ export const parties = pgTable(
     phone: text("phone"),
     website: text("website"),
     taxIds: jsonb("tax_ids").$type<Record<string, string>>().default({}),
+    /**
+     * Primary subsidiary (null = org root). Additional subsidiaries the party
+     * may transact with live in party_subsidiaries (multi-subsidiary entities).
+     * Employees are always single-subsidiary (primary only).
+     */
+    subsidiaryId: uuid("subsidiary_id"),
     isActive: boolean("is_active").notNull().default(true),
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
@@ -129,6 +135,7 @@ export const addresses = pgTable(
     country: text("country"),
     isDefaultBilling: boolean("is_default_billing").notNull().default(false),
     isDefaultShipping: boolean("is_default_shipping").notNull().default(false),
+    custom: jsonb("custom").notNull().default({}), // source nsId bridge for sync
     ...auditColumns,
   },
   (t) => [index("addresses_party").on(t.partyId)],
@@ -205,4 +212,5 @@ export const paymentTerms = pgTable("payment_terms", {
   discountDays: integer("discount_days"),
   discountPercent: money("discount_percent"),
   isActive: boolean("is_active").notNull().default(true),
+  custom: jsonb("custom").notNull().default({}), // source nsId bridge for sync
 });

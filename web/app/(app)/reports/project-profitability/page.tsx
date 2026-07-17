@@ -25,12 +25,7 @@ export default async function ProjectProfitabilityPage({
   const sp = await searchParams
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const dims = {
-    departmentId: q.dims.departmentId,
-    projectId: q.dims.projectId,
-    locationId: q.dims.locationId,
-    classId: q.dims.classId,
-  }
+  const dims = q.dims
   const [result, opts, org, branding] = await Promise.all([
     projectProfitability(period.from, period.to, { dims }),
     dimensionOptions(),

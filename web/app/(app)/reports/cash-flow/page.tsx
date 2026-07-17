@@ -27,7 +27,7 @@ export default async function CashFlow({
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const from = period.from
   const to = period.to
-  const dims = { departmentId: q.dims.departmentId, projectId: q.dims.projectId }
+  const dims = q.dims
   const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims), dimensionOptions(), orgInfo()])
   const sym = currencySymbol(org?.base_currency)
   const m = (v: number) => money(v, sym)

@@ -1,17 +1,18 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { TransactionDrawer } from './transaction-drawer'
 import { LineGrid, type LineGridColumn } from './line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
 import { CustomFieldInput } from './custom-field-input'
 import { HeaderFields } from './transaction-form/header-fields'
 import { AttachmentPanel } from './attachment-panel'
-import { DocTypeBadge } from './doc-type-badge'
+import { DocTypeBadge, docTypeMeta } from './doc-type-badge'
 import { PdfButton } from './pdf-button'
 import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
@@ -28,6 +29,7 @@ import {
   customFieldDefKey,
   isCustomFieldKey,
   lineFieldMeta,
+  FORM_ACTION_KEYS,
 } from '@openbooks/customization'
 
 interface Opt {
@@ -38,6 +40,27 @@ interface Opt {
   code?: string
   rate?: string
   label?: string
+  subsidiary_id?: string | null
+}
+
+interface SubsidiaryOpt {
+  id: string
+  name: string
+  /** Root = 0; used to indent the picker like a tree. */
+  depth: number
+}
+interface SegmentOpt {
+  key: string
+  name: string
+  showOnHeader: boolean
+  showOnLines: boolean
+  values: { id: string; code: string | null; name: string }[]
+}
+interface BuiltinSegmentOpt {
+  key: string
+  storageColumn: string | null
+  showOnHeader: boolean
+  showOnLines: boolean
 }
 interface LineRow extends Record<string, unknown> {
   accountId: string
@@ -97,7 +120,7 @@ const emptyLine = (): LineRow => ({
   taxAmount: '',
 })
 
-function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRow {
+function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     accountId: l.account_id ?? '',
     itemId: l.item_id ?? '',
@@ -115,6 +138,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[]): LineRo
     taxAmount: l.tax_amount != null ? Number(l.tax_amount).toFixed(2) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
   return row
 }
 
@@ -131,14 +155,19 @@ export interface DocumentDrawerProps {
   projects: Opt[]
   locations?: Opt[]
   classes?: Opt[]
+  segments?: SegmentOpt[]
+  builtinSegments?: BuiltinSegmentOpt[]
   items?: Opt[]
+  /** The org's subsidiaries (depth-first tree order). Only passed by pages in
+   *  multi-subsidiary orgs — empty/undefined renders NO subsidiary UI. */
+  subsidiaries?: SubsidiaryOpt[]
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
   canCreate: boolean
   canPost: boolean
-  /** Resolved transaction form layout (vendor_bill today); when present the
-   *  header + line columns render from it (move/hide/rename/custom fields).
-   *  Omitted ⇒ the hardcoded header + columns (all other kinds). */
+  /** Resolved transaction form layout; when present the header + line columns
+   *  render from it (move/hide/rename/custom fields). Omitted only for the
+   *  defensive legacy-free fallback used while a page is loading. */
   layout?: FormLayoutConfig
   /** Available org form layouts (for the per-record "Custom Form" picker). */
   availableLayouts?: { id: string; name: string }[]
@@ -163,7 +192,10 @@ export function DocumentDrawer({
   projects,
   locations,
   classes,
+  segments = [],
+  builtinSegments = [],
   items,
+  subsidiaries,
   headerDefs,
   lineDefs,
   canCreate,
@@ -209,12 +241,14 @@ export function DocumentDrawer({
   const [projectIdHeader, setProjectIdHeader] = useState<string>(doc.project_id ?? '')
   const [locationId, setLocationId] = useState<string>(doc.location_id ?? '')
   const [classId, setClassId] = useState<string>(doc.class_id ?? '')
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
   const [expectedPayDate, setExpectedPayDate] = useState<string>(doc.expected_pay_date ?? '')
   const [paymentHoldReason, setPaymentHoldReason] = useState<string>(doc.payment_hold_reason ?? '')
   const [internalNotes, setInternalNotes] = useState<string>(doc.internal_notes ?? '')
   const [billingMethod, setBillingMethod] = useState<string>(doc.billing_method ?? '')
   const [isFinalInvoice, setIsFinalInvoice] = useState<boolean>(doc.is_final_invoice === true)
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
+  const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
 
   // -- transfer: dedicated to/from + amount state ---------------------------
   const initialTransfer = isTransfer
@@ -227,7 +261,7 @@ export function DocumentDrawer({
   const [transfer, setTransfer] = useState(initialTransfer)
 
   const [rows, setRows] = useState<LineRow[]>(
-    payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()],
+    payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()],
   )
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
@@ -244,6 +278,23 @@ export function DocumentDrawer({
     return Math.round(amt * rate) / 100
   }
 
+  // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
+  const multiSub = (subsidiaries?.length ?? 0) > 0
+  const subsidiaryOpts = useMemo(
+    () => (subsidiaries ?? []).map((s) => ({ value: s.id, label: '\u2003'.repeat(s.depth) + s.name })),
+    [subsidiaries],
+  )
+  const subsidiaryName = (id: unknown): string =>
+    (subsidiaries ?? []).find((s) => s.id === id)?.name ?? '—'
+  /** Picking a party on a draft defaults the document's subsidiary to the party's primary. */
+  const changeParty = (v: string | null | undefined) => {
+    setPartyId(v ?? '')
+    if (multiSub && isDraft && v) {
+      const sub = (parties ?? []).find((p) => p.id === v)?.subsidiary_id
+      if (sub) setSubsidiaryId(sub)
+    }
+  }
+
   const payload_ = useMemo(() => {
     if (isTransfer) {
       return {
@@ -253,6 +304,9 @@ export function DocumentDrawer({
         dueDate: null,
         referenceNumber: null,
         memo,
+        // Only sent in multi-subsidiary orgs (undefined drops out of the JSON body).
+        subsidiaryId: multiSub ? subsidiaryId || null : undefined,
+        extraDims,
         custom: customValues,
         lines: transfer
           ? [
@@ -276,6 +330,9 @@ export function DocumentDrawer({
       projectId: projectIdHeader || null,
       locationId: locationId || null,
       classId: classId || null,
+      extraDims,
+      // Only sent in multi-subsidiary orgs (undefined drops out of the JSON body).
+      subsidiaryId: multiSub ? subsidiaryId || null : undefined,
       expectedPayDate: expectedPayDate || null,
       paymentHoldReason: paymentHoldReason || null,
       internalNotes: internalNotes || null,
@@ -299,12 +356,17 @@ export function DocumentDrawer({
           projectId: r.projectId || null,
           locationId: r.locationId || null,
           classId: r.classId || null,
+          extraDims: Object.fromEntries(
+            segments
+              .map((segment) => [segment.key, r[`seg_${segment.key}`]])
+              .filter(([, value]) => value !== '' && value != null),
+          ),
           custom: Object.fromEntries(
             lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
           ),
         })),
     }
-  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, rows, lineDefs, config])
+  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config])
 
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
@@ -329,14 +391,16 @@ export function DocumentDrawer({
     setProjectIdHeader(doc.project_id ?? '')
     setLocationId(doc.location_id ?? '')
     setClassId(doc.class_id ?? '')
+    setSubsidiaryId(doc.subsidiary_id ?? '')
     setExpectedPayDate(doc.expected_pay_date ?? '')
     setPaymentHoldReason(doc.payment_hold_reason ?? '')
     setInternalNotes(doc.internal_notes ?? '')
     setBillingMethod(doc.billing_method ?? '')
     setIsFinalInvoice(doc.is_final_invoice === true)
     setCustomValues(doc.custom ?? {})
+    setExtraDims(doc.extra_dims ?? {})
     setTransfer(initialTransfer)
-    setRows(payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs)) : [emptyLine()])
+    setRows(payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()])
     setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   }
 
@@ -453,6 +517,19 @@ export function DocumentDrawer({
         options: [{ value: '', label: t('drawer.noTax') }, ...(taxCodes ?? []).map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
       })
     }
+    for (const segment of segments.filter((item) => item.showOnLines)) {
+      cols.push({
+        key: `seg_${segment.key}`,
+        label: segment.name,
+        width: '150px',
+        type: 'search-select',
+        options: segment.values.map((value) => ({
+          value: value.id,
+          label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
+        })),
+        placeholder: '—',
+      })
+    }
     for (const c of customFieldColumns<LineRow>(lineDefs)) cols.push(c)
     cols.push({ key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true })
     if (config.hasTax) {
@@ -471,9 +548,16 @@ export function DocumentDrawer({
           ),
       })
     }
-    return cols
+    const lineVisibility = new Map(builtinSegments.map((segment) => [segment.storageColumn, segment.showOnLines]))
+    const storageForRowKey: Record<string, string> = {
+      departmentId: 'department_id', projectId: 'project_id', locationId: 'location_id', classId: 'class_id',
+    }
+    return cols.filter((column) => {
+      const storage = storageForRowKey[String(column.key)]
+      return !storage || lineVisibility.get(storage) !== false
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxCodes, lineDefs, config, t, tCommon])
+  }, [accounts, departments, projects, taxCodes, lineDefs, segments, builtinSegments, config, t, tCommon])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -484,10 +568,16 @@ export function DocumentDrawer({
   const partyLabel = config.partyRole === 'customer' ? tCommon('labels.customer') : tCommon('labels.vendor')
   const partyPlaceholder = config.partyRole === 'customer' ? t('drawer.selectCustomerPlaceholder') : t('drawer.selectVendorPlaceholder')
 
-  // -- layout-driven path (vendor_bill today): header via <HeaderFields> + line
-  //    columns from the resolved FormLayoutConfig. Falls back to the hardcoded
-  //    `columns`/grid above for every other kind (no layout passed). ----------
-  const useLayout = !!layout && !isTransfer
+  // -- layout-driven path: header via <HeaderFields> + line columns from the
+  //    resolved FormLayoutConfig. The hardcoded path is a defensive fallback
+  //    for callers that have not resolved a tenant form yet. -----------------
+  const useLayout = !!layout
+
+  // A multi-subsidiary org's transaction must ALWAYS show its subsidiary, even
+  // if a user-customized layout hides the field — mirror how required built-ins
+  // render by force-showing it after the layout groups.
+  const layoutShowsSubsidiary =
+    !!layout && layout.header.groups.some((g) => g.fields.some((f) => f.key === 'subsidiary_id' && f.visible))
 
   const cfColumns = useMemo(() => {
     const m = new Map<string, LineGridColumn<LineRow>>()
@@ -553,8 +643,8 @@ export function DocumentDrawer({
       amount: tCommon('labels.amount'),
       tax_amount: t('drawer.taxAmountColumn'),
     }
-    return layout.lines.columns
-      .filter((p: LineColumnPlacement) => p.visible)
+    const configured = layout.lines.columns
+      .filter((p: LineColumnPlacement) => p.visible && builtinSegments.find((segment) => segment.storageColumn === p.key)?.showOnLines !== false)
       .map((p): LineGridColumn<LineRow> | null => {
         if (isCustomFieldKey(p.key)) {
           const base = cfColumns.get(p.key)
@@ -572,8 +662,9 @@ export function DocumentDrawer({
         }
       })
       .filter((c): c is LineGridColumn<LineRow> => c !== null)
+    return [...configured, ...columns.filter((column) => String(column.key).startsWith('seg_'))]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxCodes, lineDefs, cfColumns, columns, recordType, t, tCommon])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxCodes, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {
@@ -589,6 +680,7 @@ export function DocumentDrawer({
       case 'project_id': return tCommon('labels.project')
       case 'location_id': return tCommon('labels.location')
       case 'class_id': return tCommon('labels.class')
+      case 'subsidiary_id': return tCommon('labels.subsidiary')
       case 'expected_pay_date': return tCommon('labels.expectedPayDate')
       case 'payment_hold_reason': return tCommon('labels.paymentHold')
       case 'internal_notes': return tCommon('labels.internalNotes')
@@ -605,6 +697,7 @@ export function DocumentDrawer({
     (opts ?? []).find((o) => o.id === id)?.name ?? (opts ?? []).find((o) => o.id === id)?.display_name ?? '—'
 
   const renderHeaderField = (p: HeaderFieldPlacement, isEditable: boolean): React.ReactNode => {
+    if (builtinSegments.find((segment) => segment.storageColumn === p.key)?.showOnHeader === false) return null
     const label = p.labelOverride?.trim() ? p.labelOverride.trim() : defLabelForHeader(p.key)
     const required = p.required === true
     switch (p.key) {
@@ -616,7 +709,7 @@ export function DocumentDrawer({
               <SearchSelect
                 options={(parties ?? []).map((v) => ({ value: v.id, label: v.display_name ?? '' }))}
                 value={partyId}
-                onChange={(v) => setPartyId(v ?? '')}
+                onChange={changeParty}
                 placeholder={partyPlaceholder}
               />
             ) : (<p className="text-sm">{doc.party_name}</p>)}
@@ -730,6 +823,28 @@ export function DocumentDrawer({
             ) : (<p className="text-sm">{optName(classes, doc.class_id)}</p>)}
           </>
         )
+      case 'subsidiary_id': {
+        // HARD RULE: no subsidiary UI in single-subsidiary orgs, even if a
+        // form layout carries the field. Locked (read-only) once posted — the
+        // subsidiary shapes the GL and intercompany balancing.
+        if (!multiSub) return null
+        const rootName = subsidiaries?.[0]?.name ?? '—'
+        return (
+          <>
+            <Label>{label}</Label>
+            {isEditable && !isPosted ? (
+              <SearchSelect
+                options={subsidiaryOpts}
+                value={subsidiaryId}
+                onChange={(v) => setSubsidiaryId(v ?? '')}
+                clearable
+                emptyLabel={rootName}
+                placeholder={rootName}
+              />
+            ) : (<p className="text-sm">{subsidiaryId ? subsidiaryName(subsidiaryId) : rootName}</p>)}
+          </>
+        )
+      }
       case 'payment_hold_reason':
         return (
           <>
@@ -812,7 +927,7 @@ export function DocumentDrawer({
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recordType, layoutId }),
     })
-    if (res.ok) toast.success(layoutId ? t('drawer.formSetPreferred') : t('drawer.formPreferredCleared'))
+    if (res.ok) toast.success(layoutId ? t('drawer.formSetPreferredDone') : t('drawer.formPreferredCleared'))
     else toast.error((await res.json()).error ?? t('drawer.formPreferredFailed'))
   }
   const showFormPicker = !editable && !!availableLayouts && availableLayouts.length > 0 && !!recordType
@@ -824,11 +939,58 @@ export function DocumentDrawer({
       ? `/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=forms${currentLayoutId ? `&form=${currentLayoutId}` : ''}`
       : null
 
+  const actionLayout = layout?.actions ?? FORM_ACTION_KEYS.map((key) => ({ key, visible: true }))
+  const renderFormAction = (key: string) => {
+    switch (key) {
+      case 'customize':
+        return customizeHref ? (
+          <Button variant="ghost" asChild>
+            <Link href={customizeHref}>{tCommon('actions.customize')}</Link>
+          </Button>
+        ) : null
+      case 'pdf':
+        return PDF_RECORD_TYPE_BY_KEY[recordType ?? String(doc.kind)] ? (
+          <PdfButton recordType={recordType ?? String(doc.kind)} recordId={String(doc.id)} />
+        ) : null
+      case 'workflow':
+        return <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
+      case 'approval':
+        return doc.status === 'pending_approval' ? (
+          <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
+        ) : null
+      case 'submit':
+        return isDraft && canCreate && !config.directPost ? (
+          <Button disabled={busy || (config.partyRole ? !partyId : false) || Number(totals.total) <= 0} onClick={() => act('submit')}>
+            {t('actions.submitForApproval')}
+          </Button>
+        ) : null
+      case 'post':
+        return (isDraft && canCreate && config.directPost) || (doc.status === 'approved' && canPost) ? (
+          <Button disabled={busy || (isDraft && Number(totals.total) <= 0)} onClick={() => act('post')}>
+            {tCommon('actions.post')}
+          </Button>
+        ) : null
+      case 'gl_impact':
+        return doc.entry_id ? (
+          <Button variant="outline" asChild>
+            <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
+          </Button>
+        ) : null
+      case 'delete':
+        return doc.status !== 'voided' && canCreate ? (
+          <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+            {tCommon('actions.delete')}
+          </Button>
+        ) : null
+      default:
+        return null
+    }
+  }
+
   return (
-    <UrlDrawer
-      open
+    <TransactionDrawer
       closeHref={basePath}
-      size="2xl"
+      panelClassName={docTypeMeta(config.kind).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={config.kind} />
@@ -841,66 +1003,57 @@ export function DocumentDrawer({
         </span>
       }
       description={mode === 'edit' ? t('drawer.editingHint') : (doc.party_name ?? undefined)}
-      headerActions={
-        <>
-          {customizeHref ? (
-            <Button variant="ghost" asChild>
-              <Link href={customizeHref}>{tCommon('actions.customize')}</Link>
+      primaryAction={
+        mode === 'view' && canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
+            {tCommon('actions.edit')}
+          </Button>
+        ) : null
+      }
+      actionsMenuHeader={showFormPicker ? (
+        <div className="mb-1.5 space-y-1.5 border-b border-slate-100 px-1 pb-2 dark:border-slate-800">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            {t('drawer.formLabel')}
+          </span>
+          <Select
+            value={currentLayoutId ?? ''}
+            onChange={(e) => router.push(`${basePath}?doc=${doc.id}&form=${e.target.value}`)}
+            aria-label={t('drawer.formLabel')}
+            triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
+          >
+            {availableLayouts!.map((availableLayout) => (
+              <option key={availableLayout.id} value={availableLayout.id}>{availableLayout.name}</option>
+            ))}
+          </Select>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!h-8 w-full !justify-start !px-2 !text-xs"
+            onClick={() => setPreferredForm(currentLayoutId ?? null)}
+            disabled={!currentLayoutId}
+          >
+            {t('drawer.formSetPreferred')}
+          </Button>
+        </div>
+      ) : null}
+      actions={
+        mode === 'edit' ? (
+          <>
+            {actionLayout.find((action) => action.key === 'customize')?.visible ? renderFormAction('customize') : null}
+            <Button disabled={busy} onClick={save}>
+              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
-          ) : null}
-          {mode === 'edit' ? (
-            <>
-              <Button disabled={busy} onClick={save}>
-                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={cancel}>
-                {tCommon('actions.cancel')}
-              </Button>
-            </>
-          ) : (
-            <>
-              {PDF_RECORD_TYPE_BY_KEY[recordType ?? String(doc.kind)] ? (
-                <PdfButton recordType={recordType ?? String(doc.kind)} recordId={String(doc.id)} />
-              ) : null}
-              <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
-              {doc.status === 'pending_approval' ? (
-                // Contextual Approve/Reject (flow gate or legacy step) — or a
-                // "Pending with …" chip when the viewer cannot decide.
-                <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
-              ) : null}
-              {canEditStatus ? (
-                <Button variant="outline" onClick={() => setMode('edit')}>
-                  {tCommon('actions.edit')}
-                </Button>
-              ) : null}
-              {isDraft && canCreate && !config.directPost ? (
-                <Button disabled={busy || (config.partyRole ? !partyId : false) || Number(totals.total) <= 0} onClick={() => act('submit')}>
-                  {t('actions.submitForApproval')}
-                </Button>
-              ) : null}
-              {isDraft && canCreate && config.directPost ? (
-                <Button disabled={busy || Number(totals.total) <= 0} onClick={() => act('post')}>
-                  {tCommon('actions.post')}
-                </Button>
-              ) : null}
-              {doc.status === 'approved' && canPost ? (
-                <Button disabled={busy} onClick={() => act('post')}>
-                  {tCommon('actions.post')}
-                </Button>
-              ) : null}
-              {doc.entry_id ? (
-                <Button variant="outline" asChild>
-                  <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
-                </Button>
-              ) : null}
-              {doc.status !== 'voided' && canCreate ? (
-                <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                  {tCommon('actions.delete')}
-                </Button>
-              ) : null}
-            </>
-          )}
-        </>
+            <Button variant="outline" disabled={busy} onClick={cancel}>
+              {tCommon('actions.cancel')}
+            </Button>
+          </>
+        ) : (
+          <>
+            {actionLayout.filter((action) => action.visible && action.key !== 'edit').map((action) => (
+              <Fragment key={action.key}>{renderFormAction(action.key)}</Fragment>
+            ))}
+          </>
+        )
       }
       footer={
         <div className="flex w-full items-center gap-3">
@@ -941,87 +1094,43 @@ export function DocumentDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        {showFormPicker ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('drawer.formLabel')}</span>
-            <div className="w-52">
-              <Select
-                value={currentLayoutId ?? ''}
-                onChange={(e) => router.push(e.target.value ? `${basePath}?doc=${doc.id}&form=${e.target.value}` : `${basePath}?doc=${doc.id}`)}
-              >
-                <option value="">{t('drawer.formDefault')}</option>
-                {availableLayouts!.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </Select>
+        {isTransfer ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={field}>
+              <Label>{t('drawer.transferAmount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              {editable ? <Input type="number" step="0.01" value={transfer?.amount ?? ''} onChange={(e) => setTransfer((p) => ({ ...p!, amount: e.target.value }))} /> : <p className="text-sm tabular-nums">{money(payload.lines[0]?.amount)}</p>}
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setPreferredForm(currentLayoutId ?? null)} disabled={!currentLayoutId}>
-              {t('drawer.formSetPreferred')}
-            </Button>
+            <div className={field}>
+              <Label>{t('drawer.toAccount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={transfer?.toAccount ?? ''} onChange={(v) => setTransfer((p) => ({ ...p!, toAccount: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(payload.lines[0]?.account_id)}</p>}
+            </div>
+            <div className={field}>
+              <Label>{t('drawer.fromAccount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={transfer?.fromAccount ?? ''} onChange={(v) => setTransfer((p) => ({ ...p!, fromAccount: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(payload.lines[1]?.account_id)}</p>}
+            </div>
+          </div>
+        ) : null}
+
+        {config.kind === 'deposit' ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className={field}>
+              <Label>{t('drawer.depositTo')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={(customValues.controlAccountId as string) ?? ''} onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(customValues.controlAccountId as string)}</p>}
+            </div>
           </div>
         ) : null}
 
         {useLayout ? (
-          <HeaderFields layout={layout!} editable={editable} renderField={renderHeaderField} />
+          <>
+            <HeaderFields layout={layout!} editable={editable} renderField={renderHeaderField} />
+            {multiSub && !layoutShowsSubsidiary ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className={field}>{renderHeaderField({ key: 'subsidiary_id', visible: true }, editable)}</div>
+              </div>
+            ) : null}
+          </>
         ) : (
           <>
-            {isTransfer ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className={field}>
-                  <Label>{t('drawer.transferAmount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-                  {editable ? (
-                    <Input type="number" step="0.01" value={transfer?.amount ?? ''} onChange={(e) => setTransfer((p) => ({ ...p!, amount: e.target.value }))} />
-                  ) : (
-                    <p className="text-sm tabular-nums">{money(payload.lines[0]?.amount)}</p>
-                  )}
-                </div>
-                <div className={`${field} lg:col-span-1`}>
-                  <Label>{t('drawer.toAccount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-                  {editable ? (
-                    <SearchSelect
-                      options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
-                      value={transfer?.toAccount ?? ''}
-                      onChange={(v) => setTransfer((p) => ({ ...p!, toAccount: v ?? '' }))}
-                      placeholder={t('drawer.accountPlaceholder')}
-                    />
-                  ) : (
-                    <p className="text-sm">{accountName(payload.lines[0]?.account_id)}</p>
-                  )}
-                </div>
-                <div className={`${field} lg:col-span-1`}>
-                  <Label>{t('drawer.fromAccount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-                  {editable ? (
-                    <SearchSelect
-                      options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
-                      value={transfer?.fromAccount ?? ''}
-                      onChange={(v) => setTransfer((p) => ({ ...p!, fromAccount: v ?? '' }))}
-                      placeholder={t('drawer.accountPlaceholder')}
-                    />
-                  ) : (
-                    <p className="text-sm">{accountName(payload.lines[1]?.account_id)}</p>
-                  )}
-                </div>
-              </div>
-            ) : null}
-
-            {config.kind === 'deposit' ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className={field}>
-                  <Label>{t('drawer.depositTo')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-                  {editable ? (
-                    <SearchSelect
-                      options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
-                      value={(customValues.controlAccountId as string) ?? ''}
-                      onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))}
-                      placeholder={t('drawer.accountPlaceholder')}
-                    />
-                  ) : (
-                    <p className="text-sm">{accountName(customValues.controlAccountId as string)}</p>
-                  )}
-                </div>
-              </div>
-            ) : null}
-
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {config.partyRole ? (
                 <div className={`${field} lg:col-span-2`}>
@@ -1030,7 +1139,7 @@ export function DocumentDrawer({
                     <SearchSelect
                       options={(parties ?? []).map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
                       value={partyId}
-                      onChange={(v) => setPartyId(v ?? '')}
+                      onChange={changeParty}
                       placeholder={partyPlaceholder}
                     />
                   ) : (
@@ -1055,6 +1164,10 @@ export function DocumentDrawer({
                     </p>
                   )}
                 </div>
+              ) : null}
+
+              {multiSub ? (
+                <div className={field}>{renderHeaderField({ key: 'subsidiary_id', visible: true }, editable)}</div>
               ) : null}
 
               <div className={field}>
@@ -1099,6 +1212,33 @@ export function DocumentDrawer({
           </>
         )}
 
+        {segments.some((segment) => segment.showOnHeader) ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {segments.filter((segment) => segment.showOnHeader).map((segment) => {
+              const selected = extraDims[segment.key] ?? ''
+              const selectedLabel = segment.values.find((value) => value.id === selected)
+              return (
+                <div className={field} key={segment.key}>
+                  <Label>{segment.name}</Label>
+                  {editable ? (
+                    <SearchSelect
+                      options={segment.values.map((value) => ({
+                        value: value.id,
+                        label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
+                      }))}
+                      value={selected}
+                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value ?? '' }))}
+                      placeholder="—"
+                    />
+                  ) : (
+                    <p className="text-sm">{selectedLabel?.name ?? '—'}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+
         {!isTransfer ? (
           <div className="space-y-2">
             <Label>{tCommon('labels.lines')}</Label>
@@ -1120,6 +1260,6 @@ export function DocumentDrawer({
 
         <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
-    </UrlDrawer>
+    </TransactionDrawer>
   )
 }

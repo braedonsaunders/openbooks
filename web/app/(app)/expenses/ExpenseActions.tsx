@@ -1,21 +1,25 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { BookCheck, Eye, LoaderCircle, Send } from 'lucide-react'
 
 export function ExpenseActions({
   id,
   status,
   canSubmit,
   canPost,
+  openHref,
 }: {
   id: string
   status: string
   canSubmit: boolean
   canPost: boolean
+  openHref: string
 }) {
   const t = useTranslations('expenses')
   const tCommon = useTranslations('common')
@@ -37,18 +41,23 @@ export function ExpenseActions({
   }
 
   if (status === 'draft' && canSubmit) {
+    const label = t('actions.submitForApproval')
     return (
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => act('submit')}>
-        {t('actions.submitForApproval')}
+      <Button variant="outline" size="icon" className="h-7 w-7" disabled={busy} onClick={() => act('submit')} aria-label={label} title={label}>
+        {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Send size={14} />}
       </Button>
     )
   }
   if (status === 'approved' && canPost) {
     return (
-      <Button size="sm" disabled={busy} onClick={() => act('post')}>
-        {tCommon('actions.post')}
+      <Button size="icon" className="h-7 w-7" disabled={busy} onClick={() => act('post')} aria-label={tCommon('actions.post')} title={tCommon('actions.post')}>
+        {busy ? <LoaderCircle size={14} className="animate-spin" /> : <BookCheck size={14} />}
       </Button>
     )
   }
-  return null
+  return (
+    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+      <Link href={openHref} aria-label={tCommon('actions.open')} title={tCommon('actions.open')}><Eye size={14} /></Link>
+    </Button>
+  )
 }

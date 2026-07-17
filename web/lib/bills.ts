@@ -39,11 +39,20 @@ export function computeBillTotals(lines: BillLineInput[], rateByCode: Map<string
   return { lines: computed, subtotal, taxTotal, total: add(subtotal, taxTotal) }
 }
 
-export async function nextDocumentNumber(orgId: string, kind: string, prefix: string) {
+export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null) {
+  const requested = subsidiaryId ?? ((await db.execute(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`)) as any).rows[0]?.id ?? null
+  const configured = requested
+    ? ((await db.execute(sql`
+        select 1 from number_sequences
+         where org_id = ${orgId} and document_kind = ${kind} and subsidiary_id = ${requested}
+         limit 1`)) as any).rows.length > 0
+    : false
+  const sequenceSubsidiaryId = configured ? requested : null
   const seq = (await db.execute(sql`
-    insert into number_sequences (org_id, document_kind, prefix)
-    values (${orgId}, ${kind}, ${prefix})
-    on conflict (org_id, document_kind)
+    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
+    values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
+    on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
   `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] }

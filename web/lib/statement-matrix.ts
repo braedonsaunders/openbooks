@@ -26,6 +26,7 @@ export type StatementBreakout =
   | 'class'
   | 'month'
   | 'quarter'
+  | `segment:${string}`
 export type StatementCompare = 'none' | 'prior_period' | 'prior_year'
 export type StatementBasis = 'accrual' | 'cash'
 export type StatementMode = 'flow' | 'balance'
@@ -35,6 +36,22 @@ export type StatementDimFilter = {
   projectId?: string
   locationId?: string
   classId?: string
+  segments?: Record<string, string>
+}
+
+/**
+ * Subsidiary context for a statement. `ids` = the journal-line subsidiaries in
+ * view (one leaf for standalone; a subtree plus its elimination subsidiaries
+ * for consolidated). `rates` (per subsidiary, only for entities whose
+ * functional currency differs from the target) translates in-query: flow
+ * columns at the average rate, balance columns at current, equity at
+ * historical — the CTA plug that keeps a translated balance sheet in balance
+ * is added by balanceSheetView. Absent context = every subsidiary, untranslated
+ * (single-subsidiary orgs, unchanged behavior).
+ */
+export type StatementSubsidiaryContext = {
+  ids: string[]
+  rates?: { subsidiaryId: string; averageRate: number; currentRate: number; historicalRate: number }[]
 }
 
 export type StatementColumnKind = 'amount' | 'variance_abs' | 'variance_pct'
@@ -49,6 +66,8 @@ export type StatementColumn = {
   dimField?: 'department' | 'project' | 'location' | 'class'
   /** The dimension value id for this column (null = the "Unassigned" bucket). */
   dimValue?: string | null
+  /** Custom registry segment used by this breakout column. */
+  segmentKey?: string
   /** Spanning header group (e.g. the department name) when breakout is combined
    *  with a compare — columns sharing a group render under one merged heading. */
   group?: string
@@ -107,6 +126,7 @@ type AmountColumn = {
   dimVal?: string | null // null = the "Unassigned" bucket
   /** Breakout dimension (drill-through metadata surfaced on StatementColumn). */
   dimField?: 'department' | 'project' | 'location' | 'class'
+  segmentKey?: string
   /** Spanning header group (breakout value name) when combined with compare. */
   group?: string
 }
@@ -118,13 +138,38 @@ function daysBetween(from: string, to: string): number {
 }
 
 /** Report-level dimension filter as a SQL fragment (AND-combined). */
-function dimFilterSql(dims: StatementDimFilter | undefined): SQL {
+function dimFilterSql(dims: StatementDimFilter | undefined, subsidiary?: StatementSubsidiaryContext): SQL {
   let w = sql`true`
   if (dims?.departmentId) w = sql`${w} and l.department_id = ${dims.departmentId}`
   if (dims?.projectId) w = sql`${w} and l.project_id = ${dims.projectId}`
   if (dims?.locationId) w = sql`${w} and l.location_id = ${dims.locationId}`
   if (dims?.classId) w = sql`${w} and l.class_id = ${dims.classId}`
+  for (const [key, value] of Object.entries(dims?.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+    w = sql`${w} and l.extra_dims ->> ${key} = ${value}`
+  }
+  // One pg-array param — drizzle expands raw JS arrays into value lists.
+  if (subsidiary) w = sql`${w} and l.subsidiary_id = any(${`{${subsidiary.ids.join(',')}}`}::uuid[])`
   return w
+}
+
+/**
+ * The summed amount expression. With translation rates in play, each line is
+ * multiplied by its subsidiary's rate for the statement mode: average for flow
+ * (P&L), current for balance — except equity accounts, which translate at the
+ * historical rate. Subsidiaries not listed in `rates` (functional currency
+ * already equals the target) multiply by 1.
+ */
+function amountExpr(mode: StatementMode, subsidiary?: StatementSubsidiaryContext): SQL {
+  const rates = subsidiary?.rates
+  if (!rates || rates.length === 0) return sql`l.amount`
+  const pick = (r: NonNullable<StatementSubsidiaryContext['rates']>[number]) =>
+    mode === 'flow'
+      ? sql`${r.averageRate}::numeric`
+      : sql`case when a.type = 'equity' then ${r.historicalRate}::numeric else ${r.currentRate}::numeric end`
+  let expr = sql`case l.subsidiary_id`
+  for (const r of rates) expr = sql`${expr} when ${r.subsidiaryId}::uuid then ${pick(r)}`
+  expr = sql`${expr} else 1 end`
+  return sql`l.amount * (${expr})`
 }
 
 /** One column's FILTER predicate: its date window + optional dimension slice. */
@@ -134,6 +179,11 @@ function columnPredicate(col: AmountColumn, mode: StatementMode): SQL {
       ? sql`e.posting_date <= ${col.to}`
       : sql`e.posting_date >= ${col.from} and e.posting_date <= ${col.to}`
   if (!col.dimCol) return date
+  if (col.segmentKey) {
+    return col.dimVal === null
+      ? sql`${date} and not (l.extra_dims ? ${col.segmentKey})`
+      : sql`${date} and l.extra_dims ->> ${col.segmentKey} = ${col.dimVal}`
+  }
   const dimCol = sql.raw(`l.${col.dimCol}`)
   return col.dimVal === null
     ? sql`${date} and ${dimCol} is null`
@@ -152,9 +202,10 @@ async function buildAmountColumns(opts: {
   breakout: StatementBreakout
   compare: StatementCompare
   dims: StatementDimFilter | undefined
+  subsidiary: StatementSubsidiaryContext | undefined
   periodLabel: string
 }): Promise<{ cols: AmountColumn[]; truncated: boolean }> {
-  const { mode, period, breakout, compare, dims, periodLabel } = opts
+  const { mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts
 
   if (breakout === 'month' || breakout === 'quarter') {
     const ranges =
@@ -166,6 +217,57 @@ async function buildAmountColumns(opts: {
       cols: capped.map((r) => ({ key: r.label, label: r.label, from: r.from, to: r.to })),
       truncated: ranges.length > capped.length,
     }
+  }
+
+  if (breakout.startsWith('segment:')) {
+    const segmentKey = breakout.slice('segment:'.length)
+    const definition = (await db.execute(sql`
+      select id from segment_definitions
+       where key = ${segmentKey} and source_kind = 'custom' and is_active and show_in_reports
+       limit 1
+    `)) as unknown as { rows: { id: string }[] }
+    if (!definition.rows[0]) {
+      return { cols: [{ key: 'current', label: periodLabel, from: period.from, to: period.to }], truncated: false }
+    }
+    const periodWhere = mode === 'balance'
+      ? sql`e.posting_date <= ${period.to}`
+      : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`
+    const values = (await db.execute(sql`
+      select sv.id, sv.name from segment_values sv
+       where sv.segment_id = ${definition.rows[0].id} and sv.is_active
+         and exists (
+           select 1 from journal_lines l join journal_entries e on e.id = l.entry_id
+            where l.extra_dims ->> ${segmentKey} = sv.id::text
+              and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
+         )
+       order by sv.name
+    `)) as unknown as { rows: { id: string; name: string }[] }
+    const unassigned = (await db.execute(sql`
+      select 1 from journal_lines l join journal_entries e on e.id = l.entry_id
+       where not (l.extra_dims ? ${segmentKey}) and ${periodWhere}
+         and ${dimFilterSql(dims, subsidiary)} limit 1
+    `)) as unknown as { rows: unknown[] }
+    const groups = values.rows.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
+    if (unassigned.rows.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
+    const periods = comparePeriods(period, compare, periodLabel)
+    const grouped = periods.length > 1
+    const cols: AmountColumn[] = []
+    for (const group of groups) {
+      for (const comparison of periods) {
+        cols.push({
+          key: `${group.key}:${comparison.key}`,
+          label: grouped ? comparison.label : group.name,
+          group: grouped ? group.name : undefined,
+          from: comparison.from,
+          to: comparison.to,
+          dimCol: 'extra_dims',
+          dimVal: group.dimVal,
+          segmentKey,
+        })
+      }
+    }
+    const capped = cols.slice(0, MAX_MATRIX_COLUMNS)
+    return { cols: capped, truncated: cols.length > capped.length }
   }
 
   if (breakout !== 'none') {
@@ -181,14 +283,14 @@ async function buildAmountColumns(opts: {
        where exists (
          select 1 from journal_lines l
            join journal_entries e on e.id = l.entry_id
-          where ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} and ${dimFilterSql(dims)}
+          where ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
        )
        order by d.name
     `)) as unknown as { rows: { id: string; name: string }[] }
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l
         join journal_entries e on e.id = l.entry_id
-       where ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} and ${dimFilterSql(dims)}
+       where ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
        limit 1
     `)) as unknown as { rows: unknown[] }
     const dimField = breakout as 'department' | 'project' | 'location' | 'class'
@@ -311,12 +413,15 @@ function treeifyMatrix(
 export async function statementMatrix(opts: {
   types: string[]
   mode: StatementMode
+  /** Translation-rate class when it differs from the date-window mode. */
+  translationMode?: StatementMode
   period: { from: string; to: string }
   periodLabel: string
   breakout?: StatementBreakout
   compare?: StatementCompare
   basis?: StatementBasis
   dims?: StatementDimFilter
+  subsidiary?: StatementSubsidiaryContext
   showZero?: boolean
   /** Emit variance columns for a compare pair (default true when comparing). */
   variance?: boolean
@@ -332,6 +437,7 @@ export async function statementMatrix(opts: {
     breakout,
     compare,
     dims: opts.dims,
+    subsidiary: opts.subsidiary,
     periodLabel: opts.periodLabel,
   })
 
@@ -351,9 +457,10 @@ export async function statementMatrix(opts: {
            where a2.type = 'asset_bank')`
       : sql``
 
+  const amount = amountExpr(opts.translationMode ?? opts.mode, opts.subsidiary)
   const filterCols = sql.join(
     cols.map(
-      (c, i) => sql`coalesce(sum(l.amount) filter (where ${columnPredicate(c, opts.mode)}), 0) as ${sql.raw(`c${i}`)}`,
+      (c, i) => sql`coalesce(sum(${amount}) filter (where ${columnPredicate(c, opts.mode)}), 0) as ${sql.raw(`c${i}`)}`,
     ),
     sql`, `,
   )
@@ -362,7 +469,8 @@ export async function statementMatrix(opts: {
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
       from accounts a
       left join (journal_lines l join journal_entries e on e.id = l.entry_id)
-        on l.account_id = a.id and ${baseDate} and ${dimFilterSql(opts.dims)}${cashFilter}
+        on l.account_id = a.id and e.status = 'posted' and ${baseDate}
+       and ${dimFilterSql(opts.dims, opts.subsidiary)}${cashFilter}
      group by a.id
      order by a.number nulls last, a.name
   `)) as unknown as {
@@ -390,6 +498,8 @@ export async function statementMatrix(opts: {
     to: c.to,
     dimField: c.dimField,
     dimValue: c.dimField ? c.dimVal : undefined,
+    segmentKey: c.segmentKey,
+    ...(c.segmentKey ? { dimValue: c.dimVal } : {}),
     group: c.group,
   }))
   const wantVariance = (opts.variance ?? true) && compare !== 'none' && cols.length === 2
@@ -487,6 +597,7 @@ type MatrixOpts = {
   compare?: StatementCompare
   basis?: StatementBasis
   dims?: StatementDimFilter
+  subsidiary?: StatementSubsidiaryContext
   showZero?: boolean
 }
 
@@ -556,6 +667,8 @@ export type BalanceSheetLabels = {
   totalEquity: string
   accumulatedEarnings: string
   liabilitiesAndEquity: string
+  /** Shown only on translated consolidated views. */
+  translationAdjustment: string
   totalOf: (section: string) => string
 }
 
@@ -578,7 +691,14 @@ export async function balanceSheetView(
   // Cumulative P&L → retained/accumulated earnings, same columns. Net income is
   // revenue − cogs − expenses, so it must be combined with signs — summing all
   // P&L types would (wrongly) add expenses as positive.
-  const pnl = await statementMatrix({ types: PNL_TYPES, mode: 'balance', period, periodLabel, ...opts })
+  const pnl = await statementMatrix({
+    types: PNL_TYPES,
+    mode: 'balance',
+    translationMode: 'flow',
+    period,
+    periodLabel,
+    ...opts,
+  })
   const accumulated = combineTotals(
     pnl,
     [
@@ -592,8 +712,21 @@ export async function balanceSheetView(
   const assets = sumSection(matrix, ASSET_TYPES)
   const liabilities = sumSection(matrix, LIABILITY_TYPES)
   const equityPosted = sumSection(matrix, EQUITY_TYPES)
-  const equityTotal = combineTotals(matrix, [equityPosted, accumulated], [1, 1])
-  const liabAndEquity = combineTotals(matrix, [liabilities, equityPosted, accumulated], [1, 1, 1])
+
+  // Translated consolidation: assets/liabilities at current rate, equity at
+  // historical, accumulated earnings at average — the rate differences leave a
+  // residual, which IS the cumulative translation adjustment. Plugging it into
+  // equity (the standard CTA treatment) rebalances the sheet by construction.
+  const translated = (opts.subsidiary?.rates?.length ?? 0) > 0
+  const cta = translated
+    ? combineTotals(matrix, [assets, liabilities, equityPosted, accumulated], [1, -1, -1, -1])
+    : undefined
+  const equityTotal = combineTotals(
+    matrix,
+    cta ? [equityPosted, accumulated, cta] : [equityPosted, accumulated],
+    [1, 1, 1],
+  )
+  const liabAndEquity = combineTotals(matrix, [liabilities, equityTotal], [1, 1])
 
   const lines: StatementViewLine[] = []
   lines.push({ kind: 'section', label: labels.assets, depth: 0 })
@@ -609,6 +742,14 @@ export async function balanceSheetView(
   // Accumulated earnings (= lifetime net income) and the totals that include it
   // are signed formulas, so they don't drill to a single transaction set.
   lines.push({ kind: 'account', label: labels.accumulatedEarnings, depth: 1, values: accumulated })
+  if (cta) {
+    lines.push({
+      kind: 'account',
+      label: labels.translationAdjustment,
+      depth: 1,
+      values: cta,
+    })
+  }
   lines.push({ kind: 'subtotal', label: labels.totalEquity, depth: 0, values: equityTotal })
 
   lines.push({ kind: 'total', label: labels.liabilitiesAndEquity, depth: 0, emphasis: true, values: liabAndEquity })
