@@ -951,7 +951,8 @@
       "workforce": "Workforce",
       "assets": "Assets",
       "currency": "Currency",
-      "revenue": "Ingresos"
+      "revenue": "Ingresos",
+      "inventory": "Inventario"
     },
     "fxProvider": {
       "title": "Proveedor de tipos de cambio",
@@ -1317,6 +1318,14 @@
       "fair-value-prices": {
         "title": "Precios de valor razonable",
         "description": "Precios de venta independientes usados para asignar los ingresos de un paquete entre las obligaciones."
+      },
+      "stock-locations": {
+        "title": "Ubicaciones de stock",
+        "description": "Contenedores, zonas y almacenes físicos bajo la dimensión de ubicaciones."
+      },
+      "item-inventory-profiles": {
+        "title": "Costeo de artículos",
+        "description": "Método de costeo, cuentas de inventario, seguimiento y costo estándar por artículo."
       }
     },
     "fields": {
@@ -1371,7 +1380,7 @@
       "defaultConvention": "Convención de depreciación",
       "endOfLife": "Fin de vida",
       "defaultLifeMonths": "Default life (months)",
-      "assetAccountId": "Asset account",
+      "assetAccountId": "Cuenta de inventario",
       "accumulatedDepreciationAccountId": "Accumulated depreciation account",
       "depreciationExpenseAccountId": "Depreciation expense account",
       "gainLossAccountId": "Gain / loss account",
@@ -1417,7 +1426,18 @@
       "unitPrice": "Precio unitario",
       "lowValue": "Valor bajo",
       "highValue": "Valor alto",
-      "currency": "Moneda"
+      "currency": "Moneda",
+      "locationId": "Ubicación",
+      "kind": "Tipo",
+      "costingMethod": "Método de costeo",
+      "tracking": "Seguimiento",
+      "cogsAccountId": "Cuenta de costo de ventas",
+      "adjustmentAccountId": "Cuenta de ajuste",
+      "varianceAccountId": "Cuenta de variación",
+      "standardCost": "Costo estándar",
+      "baseUnit": "Unidad base",
+      "reorderPoint": "Punto de reorden",
+      "preferredStockLevel": "Nivel de stock preferido"
     },
     "options": {
       "appliesTo": {
@@ -1494,6 +1514,24 @@
         "term": "Duración del plazo",
         "obligation": "Fin de la obligación",
         "contract": "Fin del contrato"
+      },
+      "costingMethod": {
+        "fifo": "PEPS",
+        "movingAverage": "Costo promedio",
+        "standard": "Costo estándar"
+      },
+      "tracking": {
+        "none": "Ninguno",
+        "lot": "Lote",
+        "serial": "Serie"
+      },
+      "stockLocationKind": {
+        "warehouse": "Almacén",
+        "zone": "Zona",
+        "bin": "Contenedor",
+        "staging": "Preparación",
+        "transit": "Tránsito",
+        "quarantine": "Cuarentena"
       }
     }
   },

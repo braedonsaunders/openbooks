@@ -18,6 +18,7 @@ import approvals from './approvals.json'
 import assistant from './assistant.json'
 import ar from './ar.json'
 import assets from './assets.json'
+import inventory from './inventory.json'
 import revenue from './revenue.json'
 import apps from './apps.json'
 import banking from './banking.json'
@@ -65,6 +66,7 @@ export default {
   assistant,
   ar,
   assets,
+  inventory,
   revenue,
   apps,
   banking,

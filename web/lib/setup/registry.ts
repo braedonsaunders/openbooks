@@ -113,6 +113,7 @@ export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'dimensions', iconKey: 'layers' },
   { key: 'billing', iconKey: 'hash' },
   { key: 'revenue', iconKey: 'trending-up' },
+  { key: 'inventory', iconKey: 'package' },
   { key: 'workforce', iconKey: 'users' },
   { key: 'assets', iconKey: 'landmark' },
   { key: 'currency', iconKey: 'coins' },
@@ -209,6 +210,28 @@ const END_DATE_SOURCES = [
   { value: 'term', labelKey: 'options.endDateSource.term' },
   { value: 'obligation', labelKey: 'options.endDateSource.obligation' },
   { value: 'contract', labelKey: 'options.endDateSource.contract' },
+]
+
+// Inventory costing — matches item_inventory_profiles + stock_locations enums.
+const COSTING_METHODS = [
+  { value: 'fifo', labelKey: 'options.costingMethod.fifo' },
+  { value: 'moving_average', labelKey: 'options.costingMethod.movingAverage' },
+  { value: 'standard', labelKey: 'options.costingMethod.standard' },
+]
+
+const INVENTORY_TRACKING = [
+  { value: 'none', labelKey: 'options.tracking.none' },
+  { value: 'lot', labelKey: 'options.tracking.lot' },
+  { value: 'serial', labelKey: 'options.tracking.serial' },
+]
+
+const STOCK_LOCATION_KINDS = [
+  { value: 'warehouse', labelKey: 'options.stockLocationKind.warehouse' },
+  { value: 'zone', labelKey: 'options.stockLocationKind.zone' },
+  { value: 'bin', labelKey: 'options.stockLocationKind.bin' },
+  { value: 'staging', labelKey: 'options.stockLocationKind.staging' },
+  { value: 'transit', labelKey: 'options.stockLocationKind.transit' },
+  { value: 'quarantine', labelKey: 'options.stockLocationKind.quarantine' },
 ]
 
 export const SETUP_ENTITIES: SetupEntity[] = [
@@ -713,6 +736,65 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'effectiveFrom', kind: 'date' },
       { key: 'effectiveTo', kind: 'date' },
       { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+
+  // --- Inventory -----------------------------------------------------------
+  {
+    // Stock locations — physical bins/zones under the `locations` dimension.
+    key: 'stock-locations',
+    table: 'stock_locations',
+    actorCols: true,
+    groupKey: 'inventory',
+    iconKey: 'package',
+    orgScoped: true,
+    orderBy: 'location_id, code',
+    hasActive: true,
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'locationId', kind: 'ref', ref: 'locations' },
+      { key: 'kind', kind: 'text' },
+      { key: 'parentId', kind: 'ref', ref: 'stock-locations' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'locationId', kind: 'ref', ref: 'locations', required: true },
+      { key: 'code', kind: 'text', required: true },
+      { key: 'kind', kind: 'select', options: STOCK_LOCATION_KINDS, keepDefault: true },
+      { key: 'parentId', kind: 'ref', ref: 'stock-locations' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Per-item costing profile — method, accounts, tracking, standard cost, and
+    // reorder points. One per inventory item.
+    key: 'item-inventory-profiles',
+    table: 'item_inventory_profiles',
+    actorCols: true,
+    groupKey: 'inventory',
+    iconKey: 'package',
+    orgScoped: true,
+    orderBy: 'item_id',
+    hasActive: false,
+    columns: [
+      { key: 'itemId', kind: 'ref', ref: 'items' },
+      { key: 'costingMethod', kind: 'text' },
+      { key: 'tracking', kind: 'text' },
+      { key: 'standardCost', kind: 'number' },
+      { key: 'baseUnit', kind: 'text' },
+    ],
+    fields: [
+      { key: 'itemId', kind: 'ref', ref: 'items', required: true, lockedOnEdit: true },
+      { key: 'costingMethod', kind: 'select', options: COSTING_METHODS, keepDefault: true },
+      { key: 'tracking', kind: 'select', options: INVENTORY_TRACKING, keepDefault: true },
+      { key: 'assetAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'cogsAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'adjustmentAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'varianceAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'standardCost', kind: 'decimal' },
+      { key: 'baseUnit', kind: 'text', keepDefault: true },
+      { key: 'reorderPoint', kind: 'decimal' },
+      { key: 'preferredStockLevel', kind: 'decimal' },
     ],
   },
 
