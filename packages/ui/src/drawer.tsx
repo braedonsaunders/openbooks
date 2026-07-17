@@ -363,13 +363,19 @@ export function UrlDrawer({
   const navigate = React.useContext(DrawerNavigateContext)
   const [nestedContext, setNestedContext] = React.useState<{ closeHref: string; stacked: boolean } | null>(null)
   React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const requestedReturn = params.get('drawerReturn')
+    const currentParams = new URLSearchParams(window.location.search)
+    const requestedReturn = currentParams.get('drawerReturn')
     const safeReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
       ? requestedReturn
       : null
-    setNestedContext(safeReturn
-      ? { closeHref: safeReturn, stacked: params.has('relatedParty') }
+    // A related-record host (the vendor/customer drawer underneath) receives a
+    // closeHref that already preserves drawerReturn. It must remain the base
+    // layer and keep its own close destination. Only the transaction drawer,
+    // whose ordinary closeHref is its module list, consumes this context.
+    const closeParams = new URL(closeHref, window.location.origin).searchParams
+    const isRelatedRecordHost = closeParams.has('drawerReturn')
+    setNestedContext(safeReturn && !isRelatedRecordHost
+      ? { closeHref: safeReturn, stacked: currentParams.has('relatedParty') }
       : null)
   }, [closeHref])
   const resolvedCloseHref = nestedContext?.closeHref ?? closeHref
