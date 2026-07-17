@@ -104,6 +104,7 @@ export interface SetupGroup {
 // Company & Accounting settings tab; the rest are registry-driven.
 export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'company', iconKey: 'building' },
+  { key: 'accounting', iconKey: 'calendar' },
   { key: 'taxes', iconKey: 'receipt' },
   { key: 'dimensions', iconKey: 'layers' },
   { key: 'billing', iconKey: 'hash' },

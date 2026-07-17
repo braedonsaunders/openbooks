@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@openbooks/ui'
-import { requirePermission } from '../../../../../lib/authz'
+import { can, requirePermission } from '../../../../../lib/authz'
 import { ShowInactivesToggle } from '../../../../../components/show-inactives-toggle'
 import { SearchInput } from '../../../../../components/search-input'
 import { Pagination } from '../../../../../components/pagination'
@@ -25,6 +25,7 @@ import {
   type SetupRefSource,
 } from '../../../../../lib/setup/registry'
 import { CompanyTab } from './CompanyTab'
+import { CloseSetupPage } from './CloseSetupPage'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 
 export const dynamic = 'force-dynamic'
@@ -126,15 +127,19 @@ export default async function SetupEntityPage({
   const { entity: entityKey } = await params
   const authz = await requirePermission('admin.setup.manage')
   const { orgId } = authz.user
+  const sp = await searchParams
 
   // Company & Accounting settings is a bespoke tab (not a registry entity).
   if (entityKey === 'company') return <CompanyTab orgId={orgId} />
+  if (entityKey === 'period-close') {
+    await requirePermission('periods.manage')
+    return <CloseSetupPage orgId={orgId} actorId={authz.user.id} searchParams={sp} canReopen={can(authz, 'close.reopen')} />
+  }
 
   const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
   if (!entity) notFound()
 
   const t = await getTranslations('admin.setup')
-  const sp = await searchParams
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
   const showInactive = pickString(sp.showInactive) === 'true'
   const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })

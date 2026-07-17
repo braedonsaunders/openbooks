@@ -99,6 +99,15 @@ export async function tick(): Promise<void> {
     } catch (e) {
       console.error("[scheduler] gate timer scan failed:", e);
     }
+
+    // Period close: expire temporary reopen windows and execute deadline rules.
+    try {
+      const { recloseExpiredReopens, runDueCloseAutomations } = await import("./close.ts");
+      await recloseExpiredReopens();
+      await runDueCloseAutomations();
+    } catch (e) {
+      console.error("[scheduler] close automation scan failed:", e);
+    }
   } catch (e) {
     // Never let a tick rejection escape setInterval — an unhandled rejection
     // would take down the whole server process on a transient DB error.

@@ -413,7 +413,6 @@ ALTER TABLE period_locks
   ADD FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE,
   ADD FOREIGN KEY (period_id) REFERENCES accounting_periods(id),
   ADD FOREIGN KEY (book_id) REFERENCES accounting_books(id),
-  ADD FOREIGN KEY (subsidiary_id) REFERENCES subsidiaries(id),
   ADD FOREIGN KEY (locked_by) REFERENCES users(id);
 ALTER TABLE close_blueprints ADD FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE;
 ALTER TABLE close_blueprint_steps
@@ -469,7 +468,6 @@ ALTER TABLE close_reopen_requests
   ADD FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE,
   ADD FOREIGN KEY (period_id) REFERENCES accounting_periods(id),
   ADD FOREIGN KEY (book_id) REFERENCES accounting_books(id),
-  ADD FOREIGN KEY (subsidiary_id) REFERENCES subsidiaries(id),
   ADD FOREIGN KEY (requested_by) REFERENCES users(id),
   ADD FOREIGN KEY (approved_by) REFERENCES users(id);
 ALTER TABLE close_events
@@ -477,6 +475,14 @@ ALTER TABLE close_events
   ADD FOREIGN KEY (run_id) REFERENCES close_runs(id) ON DELETE CASCADE,
   ADD FOREIGN KEY (task_id) REFERENCES close_run_tasks(id),
   ADD FOREIGN KEY (actor_id) REFERENCES users(id);
+DO $$ BEGIN
+  IF to_regclass('public.subsidiaries') IS NOT NULL THEN
+    ALTER TABLE period_locks
+      ADD FOREIGN KEY (subsidiary_id) REFERENCES subsidiaries(id);
+    ALTER TABLE close_reopen_requests
+      ADD FOREIGN KEY (subsidiary_id) REFERENCES subsidiaries(id);
+  END IF;
+END $$;
 --> statement-breakpoint
 DO $$
 DECLARE close_table text;

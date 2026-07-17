@@ -59,6 +59,7 @@ type NavItem = { href: string; label: string; iconKey: string }
  */
 export function SetupNav({ canExport, canImport }: { canExport: boolean; canImport: boolean }) {
   const t = useTranslations('admin.setup')
+  const tClose = useTranslations('close.setup')
   const td = useTranslations('data')
   const pathname = usePathname()
   const byGroup = setupEntitiesByGroup()
@@ -78,7 +79,16 @@ export function SetupNav({ canExport, canImport }: { canExport: boolean; canImpo
       <div className="space-y-5">
         {SETUP_GROUPS.map((group) => {
           const items: NavItem[] =
-            group.key === 'company'
+            group.key === 'accounting'
+              ? [
+                  { href: '/admin/setup/period-close', label: tClose('title'), iconKey: 'calendar' },
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
+                ]
+              : group.key === 'company'
               ? [
                   { href: '/admin/setup/company', label: t('entities.company.title'), iconKey: 'building' },
                   { href: '/admin/setup/sftp', label: t('entities.sftp.title'), iconKey: 'server' },

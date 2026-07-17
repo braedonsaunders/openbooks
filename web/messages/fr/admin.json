@@ -600,6 +600,7 @@
   "permissions": {
     "groups": {
       "gl": "Grand livre",
+      "close": "Périodes et clôture",
       "ap": "Comptes fournisseurs",
       "ar": "Comptes clients",
       "reports": "Rapports",
@@ -622,7 +623,11 @@
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
     "gl_post": "Comptabiliser des écritures de journal",
-    "gl_close": "Clôturer les périodes comptables",
+    "periods_manage": "Configurer les calendriers, périodes et verrous",
+    "close_read": "Consulter les clôtures et leurs preuves",
+    "close_run": "Exécuter les tâches et validations de clôture",
+    "close_approve": "Réviser, approuver et verrouiller les clôtures",
+    "close_reopen": "Demander et approuver les réouvertures contrôlées",
     "ap_read": "Consulter les factures fournisseurs",
     "ap_create": "Créer et soumettre des factures fournisseurs",
     "ap_approve": "Approuver ou rejeter des factures fournisseurs",
@@ -752,6 +757,7 @@
     },
     "groups": {
       "company": "Company",
+      "accounting": "Comptabilité",
       "taxes": "Taxes",
       "dimensions": "Dimensions",
       "billing": "Billing & numbering",

@@ -3,6 +3,7 @@ import { db, schema } from "./db.ts";
 import { add, isZero, neg, sum, toUnits } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
+import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "./close.ts";
 
 /**
  * The posting engine: document → journal entry, through the kernel.
@@ -444,7 +445,14 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   const [book] = await db
     .select()
     .from(schema.accountingBooks)
-    .where(eq(schema.accountingBooks.isPrimary, true));
+    .where(sql`${schema.accountingBooks.orgId} = ${doc.orgId} and ${schema.accountingBooks.isPrimary} = true`);
+  if (!book) throw new PostingError("primary accounting book is not configured");
+  try {
+    await assertPeriodModulesOpen(db, { orgId: doc.orgId, periodId: period.id, bookId: book.id, subsidiaryIds: [], modules: [closeModuleForDocument(doc.kind)] });
+  } catch (error) {
+    if (error instanceof CloseError) throw new PostingError(error.message);
+    throw error;
+  }
 
   // -- write entry + lines + flip document, atomically ---------------------
   const entryId = await db.transaction(async (tx) => {
@@ -613,10 +621,10 @@ export async function regenerateGlImpactTx(
   const postingDate = doc.postingDate ?? doc.documentDate;
 
   const periodRes = (await tx.execute(sql`
-    select id, gl_closed_at from accounting_periods
+    select id from accounting_periods
      where org_id = ${doc.orgId} and starts_on <= ${postingDate} and ends_on >= ${postingDate}
        and is_adjustment = false
-     limit 1`)) as unknown as { rows: { id: string; gl_closed_at: string | null }[] };
+     limit 1`)) as unknown as { rows: { id: string }[] };
   const period = periodRes.rows[0];
   if (!period) throw new PostingError(`no accounting period covers ${postingDate}`);
 
@@ -639,14 +647,13 @@ export async function regenerateGlImpactTx(
     glKey(kernelLines) === glKey(existing as unknown as Parameters<typeof glKey>[0]);
   if (unchanged) return { entryId: entry.id, changed: false };
 
-  // GL projection changed → must land in an open period (old + new).
-  if (period.gl_closed_at) throw new ClosedPeriodError(`the accounting period for ${postingDate} is closed`);
-  const oldClosed = (await tx.execute(sql`
-    select 1 from accounting_periods where id = ${entry.periodId} and gl_closed_at is not null`)) as unknown as {
-    rows: unknown[];
-  };
-  if (oldClosed.rows.length > 0) {
-    throw new ClosedPeriodError(`${doc.documentNumber} was posted into a period that is now closed`);
+  // GL projection changed → both its old and new book scopes must be open.
+  try {
+    await assertPeriodModulesOpen(tx, { orgId: doc.orgId, periodId: period.id, bookId: entry.bookId, subsidiaryIds: [], modules: [closeModuleForDocument(doc.kind)] });
+    await assertPeriodModulesOpen(tx, { orgId: doc.orgId, periodId: entry.periodId, bookId: entry.bookId, subsidiaryIds: [], modules: [closeModuleForDocument(doc.kind)] });
+  } catch (error) {
+    if (error instanceof CloseError) throw new ClosedPeriodError(error.message);
+    throw error;
   }
 
   // Regenerate the entry's lines IN PLACE, preserving line identity so payment

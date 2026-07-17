@@ -59,7 +59,6 @@ type Props = {
   books: Row[];
   selectedBookId: string;
   canReopen: boolean;
-  subsidiaries: Row[];
   blueprints: Row[];
   policies: Row[];
   automations: Row[];

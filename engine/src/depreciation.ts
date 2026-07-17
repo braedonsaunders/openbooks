@@ -368,7 +368,8 @@ export async function runDepreciation(
            l.period_id     as period_id,
            p.name          as period_name,
            p.ends_on       as period_ends_on,
-           p.gl_closed_at  as gl_closed_at,
+           (period_module_is_closed(${orgId}, p.id, ${bookId}, null, 'assets')
+             or period_module_is_closed(${orgId}, p.id, ${bookId}, null, 'gl')) as period_closed,
            a.id            as asset_id,
            a.asset_number  as asset_number,
            a.name          as asset_name,
@@ -411,7 +412,7 @@ export async function runDepreciation(
       result.skipped++;
       continue;
     }
-    if (row.gl_closed_at) {
+    if (row.period_closed) {
       result.skipped++;
       result.problems.push(`${row.asset_number} ${row.period_name}: GL period closed`);
       continue;

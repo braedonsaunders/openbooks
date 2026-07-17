@@ -33,8 +33,16 @@ export async function deleteDocument(documentId: string, userId: string): Promis
       // 1. period open?
       const closed = (await tx.execute(sql`
         select 1 from journal_entries e
-          join accounting_periods p on p.id = e.period_id
-         where e.id = ${entryId} and p.gl_closed_at is not null`)) as unknown as { rows: unknown[] };
+         where e.id = ${entryId}
+           and (
+             period_module_is_closed(e.org_id, e.period_id, e.book_id,
+               nullif(to_jsonb(e)->>'subsidiary_id', '')::uuid, 'gl')
+             or exists (
+               select 1 from journal_lines l where l.entry_id = e.id
+                 and period_module_is_closed(e.org_id, e.period_id, e.book_id,
+                   nullif(to_jsonb(l)->>'subsidiary_id', '')::uuid, 'gl')
+             )
+           )`)) as unknown as { rows: unknown[] };
       if (closed.rows.length > 0) {
         throw new DeleteError(`${doc.documentNumber} is posted into a closed period — reopen the period to delete it`);
       }
