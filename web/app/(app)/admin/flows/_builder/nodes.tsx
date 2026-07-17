@@ -18,17 +18,11 @@ const CARD =
 const SELECTED = 'border-teal-500 ring-2 ring-teal-500/40'
 const HANDLE_STYLE = { width: 9, height: 9 }
 
-function BranchHandles({ a, b, labels }: { a: string; b: string; labels: [string, string] }) {
+function BranchHandles({ a, b }: { a: string; b: string }) {
   return (
     <>
       <Handle type="source" position={Position.Right} id={a} style={{ ...HANDLE_STYLE, top: '38%' }} />
       <Handle type="source" position={Position.Right} id={b} style={{ ...HANDLE_STYLE, top: '72%' }} />
-      <span className="pointer-events-none absolute -right-1.5 top-[38%] -translate-y-1/2 translate-x-full pl-1.5 text-[9px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-        {labels[0]}
-      </span>
-      <span className="pointer-events-none absolute -right-1.5 top-[72%] -translate-y-1/2 translate-x-full pl-1.5 text-[9px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-        {labels[1]}
-      </span>
     </>
   )
 }
@@ -104,7 +98,7 @@ function ConditionNode({ data, selected }: NodeProps) {
       <div className="mt-0.5 truncate text-slate-600 dark:text-slate-400">
         {d.label || t('node.conditionDefault')}
       </div>
-      <BranchHandles a="then" b="else" labels={[t('edge.then'), t('edge.else')]} />
+      <BranchHandles a="then" b="else" />
     </div>
   )
 }
@@ -141,7 +135,7 @@ function GateNode({ data, selected }: NodeProps) {
       <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
         {d.gate.assignees.length} · {d.gate.mode}
       </div>
-      <BranchHandles a="approve" b="reject" labels={[t('edge.approve'), t('edge.reject')]} />
+      <BranchHandles a="approve" b="reject" />
     </div>
   )
 }
