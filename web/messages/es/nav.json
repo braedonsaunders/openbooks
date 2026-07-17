@@ -53,7 +53,9 @@
     "crm-prospects": "Prospectos",
     "crm-opportunities": "Oportunidades",
     "crm-activities": "Actividades",
-    "crm-forecasts": "Previsiones y cuotas"
+    "crm-forecasts": "Previsiones y cuotas",
+    "revenue": "Reconocimiento de ingresos",
+    "inventory": "Inventario"
   },
   "groups": {
     "home": "Inicio",

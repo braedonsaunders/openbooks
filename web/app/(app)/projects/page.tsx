@@ -10,6 +10,7 @@ import { subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadProject } from '../../api/projects/_lib'
+import { loadProjectCockpit } from './_cockpit-data'
 import { NewProjectButton } from './NewProjectButton'
 import { NewProjectRedirect } from './NewProjectRedirect'
 import { ProjectDrawer } from './ProjectDrawer'
@@ -33,16 +34,18 @@ export default async function Projects({
   const openProject =
     projectId && projectId !== 'new' && isUuid(projectId) ? await loadProject(projectId, orgId) : null
 
-  // party pickers + resolved form layout for the drawer (only when it's open).
-  const [parties, subsidiaries] = openProject
+  // party pickers + resolved form layout + cockpit data for the flyout
+  // (only when a project is open).
+  const [parties, subsidiaries, cockpit] = openProject
     ? await Promise.all([
         db.execute(sql`
           select id, display_name from parties
            where org_id = ${orgId} and is_active
            order by display_name limit 2000`) as any,
         subsidiaryOptions(),
+        loadProjectCockpit(orgId, openProject.project.id as string),
       ])
-    : [null, []]
+    : [null, [], null]
 
   const resolvedForm = openProject
     ? await resolveFormLayout({
@@ -76,7 +79,7 @@ export default async function Projects({
         drawer={
           <>
             {projectId === 'new' && canManage ? <NewProjectRedirect /> : null}
-            {openProject && parties ? (
+            {openProject && parties && cockpit ? (
               <ProjectDrawer
                 key={String(openProject.project.id)}
                 payload={openProject as any}
@@ -84,6 +87,7 @@ export default async function Projects({
                 subsidiaries={subsidiaries}
                 canManage={canManage}
                 layout={resolvedForm?.layout}
+                cockpit={cockpit}
               />
             ) : null}
           </>

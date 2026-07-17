@@ -6,7 +6,7 @@ import { Card, CardContent, cn } from '@openbooks/ui'
 import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
 import { money } from '../../../../lib/format'
-import { RecognizeRevenue } from '../[id]/RecognizeButton'
+import { RecognizeRevenue } from './RecognizeButton'
 
 interface CategoryRow { category: string; amount: number }
 interface AccountRow { accountId: string; number: string | null; name: string; amount: number }

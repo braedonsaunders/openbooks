@@ -66,7 +66,7 @@ const SOURCES: Record<string, EntityListSource> = {
     where: projectWhere,
     drawerParam: 'project',
     basePath: '/projects',
-    rowHref: (id) => `/projects/${id}`,
+    rowHref: (id) => `/projects?project=${id}`,
     hasInactive: true,
     extraSelect: sql`p.is_active`,
   },
