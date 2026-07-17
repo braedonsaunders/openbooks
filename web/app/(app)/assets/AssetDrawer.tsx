@@ -22,6 +22,7 @@ import {
 } from '@openbooks/ui'
 import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
+import { DisposeButton } from './DisposeButton'
 import type { AssetPayload } from '../../api/assets/_lib'
 
 interface AccountOpt {
@@ -294,6 +295,9 @@ export function AssetDrawer({
                 <Button variant="outline" disabled={busy} onClick={runForAsset}>
                   {t('drawer.runForAsset')}
                 </Button>
+              ) : null}
+              {canManage && (status === 'in_service' || status === 'fully_depreciated') ? (
+                <DisposeButton assetId={a.id} accountOptions={accountOptions} />
               ) : null}
               {canManage && isDraft && !hasPosted ? (
                 <Button

@@ -1,4 +1,16 @@
 {
+  "dispose": {
+    "label": "Céder",
+    "writeOff": "Radier (sans produit)",
+    "proceeds": "Produit de la vente",
+    "account": "Déposer le produit dans",
+    "selectAccount": "Sélectionner un compte…",
+    "date": "Date de cession",
+    "action": "Comptabiliser la cession",
+    "writeOffAction": "Comptabiliser la radiation",
+    "working": "Comptabilisation…",
+    "done": "Cédé — gain/perte {gainLoss}"
+  },
   "list": {
     "title": "Immobilisations",
     "description": "Le registre des immobilisations derrière l'amortissement — coût, amortissement cumulé et valeur nette comptable par actif.",
