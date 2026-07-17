@@ -11,7 +11,7 @@ import {
   type ParsedStatement,
   type ParsedStatementLine,
 } from "../banking.ts";
-import { generatePaymentFileArtifact, recordPaymentFileSftpDelivery } from "../payment-operations.ts";
+import { generatePaymentFileArtifact, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery } from "../payment-operations.ts";
 import { backendFor } from "./backend.ts";
 
 /**
@@ -117,8 +117,12 @@ export async function runDueSftpImports(): Promise<ScheduleRun[]> {
 /** Outbound: write a payment run's bank file into an SFTP server's outbound folder. */
 export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, userId: string, now: Date): Promise<{ filename: string; path: string }> {
   const svr = (await db.execute(sql`
-    select backend, bucket, root_prefix from sftp_servers where id = ${sftpServerId} and org_id = ${orgId} and is_active
-  `)) as unknown as { rows: { backend: string; bucket: string | null; root_prefix: string }[] };
+    select s.backend, s.bucket, s.root_prefix, coalesce(p.sftp_folder, 'outbound') as payment_folder
+      from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id
+      join sftp_servers s on s.id = ${sftpServerId} and s.org_id = r.org_id and s.is_active
+     where r.id = ${runId} and r.org_id = ${orgId}
+       and (p.sftp_server_id is null or p.sftp_server_id = s.id)
+  `)) as unknown as { rows: { backend: string; bucket: string | null; root_prefix: string; payment_folder: string }[] };
   if (!svr.rows[0]) throw new Error("SFTP server not found or inactive");
   const file = await generatePaymentFileArtifact(runId, orgId, userId, { now });
   const approval = (await db.execute(sql`select status from payment_files where id = ${file.id}`)) as unknown as { rows: { status: string }[] };
@@ -126,8 +130,15 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
     throw new Error("the generated payment file requires approval before SFTP delivery");
   }
   const backend = backendFor({ backend: svr.rows[0].backend, bucket: svr.rows[0].bucket, rootPrefix: svr.rows[0].root_prefix });
-  const path = `outbound/${file.filename}`;
-  await backend.write(path, file.content);
+  const folder = svr.rows[0].payment_folder.replace(/^\/+|\/+$/g, "");
+  if (!folder || folder.split("/").some((part) => part === ".." || part === ".")) throw new Error("payment profile SFTP folder is invalid");
+  const path = `${folder}/${file.filename}`;
+  try {
+    await backend.write(path, file.content);
+  } catch (error) {
+    await recordPaymentFileDeliveryFailure({ fileId: file.id, orgId, userId, channel: "sftp", targetRef: `${sftpServerId}:${path}`, error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
   await recordPaymentFileSftpDelivery({ fileId: file.id, orgId, userId, targetRef: `${sftpServerId}:${path}`, response: { path } });
   return { filename: file.filename, path };
 }

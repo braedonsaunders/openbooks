@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Paiements",
-    "description": "Gérez les paiements fournisseurs et les lots de paiements, de la sélection à la comptabilisation.",
+    "description": "Gérez les paiements et les lots bancaires, de la sélection au règlement.",
     "newPayment": "Nouveau paiement",
     "newRun": "Nouveau lot de paiements",
     "tabs": {
@@ -93,24 +93,33 @@
   "configuration": {
     "notConfiguredTitle": "La configuration des paiements est incomplète",
     "notConfiguredDescription": "Créez un profil de financement dans la <setup>configuration Paiements et services bancaires</setup> avant de préparer un lot de paiements.",
+    "collectionsNotConfiguredTitle": "La configuration du prélèvement est incomplète",
+    "collectionsNotConfiguredDescription": "Créez un profil bancaire de débit et des mandats dans la <setup>configuration Paiements et services bancaires</setup> avant de préparer un lot d’encaissements.",
     "runNotReadyTitle": "Ce lot de paiements n’est pas prêt",
     "runNotReadyDescription": "Terminez la configuration du profil avant de générer un fichier. Éléments manquants ou invalides : {missing}."
   },
   "runBuilder": {
     "title": "Nouveau lot de paiements",
     "description": "Choisissez le compte de financement et les factures, puis créez un lot brouillon à vérifier.",
+    "collectionTitle": "Nouveau lot de prélèvements",
+    "collectionDescription": "Choisissez le profil d’encaissement et les factures ouvertes, puis créez un lot brouillon à vérifier.",
     "noOpenBills": "Aucune facture fournisseur comptabilisée avec un solde ouvert ne correspond.",
+    "noOpenInvoices": "Aucune facture client comptabilisée avec un solde ouvert ne correspond.",
     "selectAllAriaLabel": "Sélectionner toutes les factures de cette page",
     "selectAriaLabel": "Sélectionner {document}",
     "columns": {
       "bill": "Facture",
+      "invoice": "Facture client",
       "due": "Échéance",
       "ref": "Réf.",
       "bankDetails": "Coordonnées bancaires",
+      "mandate": "Mandat de prélèvement",
       "openBalance": "Solde ouvert"
     },
     "bankApproved": "approuvées",
     "bankMissing": "manquantes",
+    "mandateActive": "actif",
+    "mandateMissing": "manquant",
     "payFromBankAccount": "Profil bancaire de paiement",
     "selectBankAccountPlaceholder": "Sélectionner un profil de paiement…",
     "noBankAccounts": "Aucun profil de paiement actif",
@@ -118,14 +127,22 @@
     "captureDiscounts": "Saisir les escomptes de paiement anticipé disponibles",
     "applyCredits": "Appliquer les avoirs fournisseurs disponibles",
     "selectedForPayment": "Sélectionné pour paiement",
+    "selectedForCollection": "Sélectionné pour encaissement",
     "selectionSummary": "{count, plural, one {# facture} other {# factures}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# facture client} other {# factures client}} · <total>{amount}</total>",
     "createRun": "Créer un lot de paiements",
+    "createCollectionRun": "Créer le lot de prélèvements",
     "toasts": {
       "createFailed": "Impossible de créer le lot de paiements",
       "created": "Lot de paiements {number} créé"
     }
   },
   "runs": {
+    "collectionRunsHeading": "Lots de prélèvements",
+    "collectionDescription": "Approuvez, générez, livrez, comptabilisez et réglez les fichiers d’encaissement client.",
+    "openInvoicesHeading": "Factures ouvertes",
+    "openInvoicesDescription": "Vérifiez les factures ouvertes et l’état des mandats de prélèvement avant la sélection.",
+    "invoicesSearchPlaceholder": "Rechercher des factures ou des clients…",
     "openBillsHeading": "Factures fournisseurs ouvertes à payer",
     "openBillsDescription": "Sélectionnez des factures de plusieurs fournisseurs; chaque fournisseur devient une instruction de paiement.",
     "billsSearchPlaceholder": "Rechercher des factures, fournisseurs, réf…",
@@ -133,6 +150,7 @@
     "description": "Vérifiez les brouillons, exportez les fichiers bancaires et confirmez les paiements comptabilisés.",
     "searchPlaceholder": "Rechercher des lots ou des comptes bancaires…",
     "noRunsYet": "Aucun lot de paiements pour l’instant. Créez le premier lorsque des factures sont prêtes à être payées.",
+    "noCollectionRunsYet": "Aucun lot de prélèvements pour l’instant. Créez le premier lorsque des factures autorisées sont prêtes à être encaissées.",
     "columns": {
       "run": "Lot",
       "bankAccount": "Compte bancaire",
@@ -209,7 +227,7 @@
       "cancelled": "annulé"
     },
     "fileStatus": { "generated": "généré", "pending_approval": "en attente d’approbation", "approved": "approuvé", "rejected": "rejeté", "delivered": "livré", "superseded": "remplacé", "voided": "annulé" },
-    "events": { "run_created": "Lot de paiements créé", "run_submitted": "Lot de paiements soumis", "run_approved": "Lot de paiements approuvé", "run_rejected": "Lot de paiements rejeté", "file_generated": "Fichier de paiement généré", "file_reprocessed": "Fichier de paiement retraité", "file_approved": "Fichier de paiement approuvé", "file_rejected": "Fichier de paiement rejeté", "file_downloaded": "Fichier de paiement téléchargé", "file_delivered_sftp": "Fichier de paiement livré par SFTP", "run_rolled_back": "Traitement du lot annulé", "instruction_settled": "Paiement réglé", "instruction_returned": "Paiement retourné", "instruction_rejected": "Paiement rejeté" },
+    "events": { "run_created": "Lot de paiements créé", "run_submitted": "Lot de paiements soumis", "run_approved": "Lot de paiements approuvé", "run_rejected": "Lot de paiements rejeté", "file_generated": "Fichier de paiement généré", "file_reprocessed": "Fichier de paiement retraité", "file_approved": "Fichier de paiement approuvé", "file_rejected": "Fichier de paiement rejeté", "file_downloaded": "Fichier de paiement téléchargé", "file_delivered_sftp": "Fichier de paiement livré par SFTP", "file_delivery_failed": "Échec de la livraison du fichier de paiement", "run_rolled_back": "Traitement du lot annulé", "instruction_settled": "Paiement réglé", "instruction_returned": "Paiement retourné", "instruction_rejected": "Paiement rejeté" },
     "confirmPost": "{count, plural, one {Comptabiliser # paiement} other {Comptabiliser # paiements}} totalisant {total} au grand livre et les appliquer aux factures sélectionnées?",
     "confirmCancel": "Annuler le lot {number}? Ses paiements en brouillon seront supprimés; rien n’a été comptabilisé.",
     "toasts": {

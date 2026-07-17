@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Pagos",
-    "description": "Gestione los pagos a proveedores y los lotes de pagos, desde la selección hasta la contabilización.",
+    "description": "Gestione la actividad de pagos y los lotes bancarios desde la selección hasta la liquidación.",
     "newPayment": "Nuevo pago",
     "newRun": "Nuevo lote de pagos",
     "tabs": {
@@ -93,24 +93,33 @@
   "configuration": {
     "notConfiguredTitle": "La configuración de pagos está incompleta",
     "notConfiguredDescription": "Cree un perfil de fondos en la <setup>configuración de Pagos y banca</setup> antes de preparar un lote de pagos.",
+    "collectionsNotConfiguredTitle": "La configuración del débito directo está incompleta",
+    "collectionsNotConfiguredDescription": "Cree un perfil bancario de débito y mandatos en la <setup>configuración de Pagos y banca</setup> antes de preparar un lote de cobros.",
     "runNotReadyTitle": "Este lote de pagos no está listo",
     "runNotReadyDescription": "Complete la configuración del perfil antes de generar un archivo. Datos faltantes o no válidos: {missing}."
   },
   "runBuilder": {
     "title": "Nuevo lote de pagos",
     "description": "Elija la cuenta de origen y las facturas, y luego cree un lote borrador para revisarlo.",
+    "collectionTitle": "Nuevo lote de débito directo",
+    "collectionDescription": "Elija el perfil de cobro y las facturas abiertas, y cree un lote borrador para revisar.",
     "noOpenBills": "Ninguna factura de compra contabilizada con saldo pendiente coincide.",
+    "noOpenInvoices": "No hay facturas de cliente contabilizadas con saldo pendiente que coincidan.",
     "selectAllAriaLabel": "Seleccionar todas las facturas de compra de esta página",
     "selectAriaLabel": "Seleccionar {document}",
     "columns": {
       "bill": "Factura de compra",
+      "invoice": "Factura de cliente",
       "due": "Vencimiento",
       "ref": "Ref.",
       "bankDetails": "Datos bancarios",
+      "mandate": "Mandato de débito",
       "openBalance": "Saldo pendiente"
     },
     "bankApproved": "aprobados",
     "bankMissing": "faltantes",
+    "mandateActive": "activo",
+    "mandateMissing": "faltante",
     "payFromBankAccount": "Perfil bancario de pago",
     "selectBankAccountPlaceholder": "Seleccionar un perfil de pago…",
     "noBankAccounts": "No hay perfiles de pago activos",
@@ -118,14 +127,22 @@
     "captureDiscounts": "Aprovechar los descuentos disponibles por pronto pago",
     "applyCredits": "Aplicar los créditos de proveedor disponibles",
     "selectedForPayment": "Seleccionado para pago",
+    "selectedForCollection": "Seleccionado para cobro",
     "selectionSummary": "{count, plural, one {# factura de compra} other {# facturas de compra}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# factura de cliente} other {# facturas de cliente}} · <total>{amount}</total>",
     "createRun": "Crear lote de pagos",
+    "createCollectionRun": "Crear lote de cobros",
     "toasts": {
       "createFailed": "No se pudo crear el lote de pagos",
       "created": "Lote de pagos {number} creado"
     }
   },
   "runs": {
+    "collectionRunsHeading": "Lotes de débito directo",
+    "collectionDescription": "Apruebe, genere, entregue, contabilice y liquide archivos de cobro de clientes.",
+    "openInvoicesHeading": "Facturas abiertas",
+    "openInvoicesDescription": "Revise las facturas abiertas y el estado de los mandatos de débito antes de seleccionarlas.",
+    "invoicesSearchPlaceholder": "Buscar facturas o clientes…",
     "openBillsHeading": "Facturas de compra pendientes por pagar",
     "openBillsDescription": "Seleccione facturas de varios proveedores; cada proveedor se convierte en una instrucción de pago.",
     "billsSearchPlaceholder": "Buscar facturas de compra, proveedores, refs…",
@@ -133,6 +150,7 @@
     "description": "Revise borradores, exporte archivos bancarios y confirme los pagos contabilizados.",
     "searchPlaceholder": "Buscar lotes o cuentas bancarias…",
     "noRunsYet": "Aún no hay lotes de pagos. Cree el primero cuando haya facturas listas para pagar.",
+    "noCollectionRunsYet": "Aún no hay lotes de débito directo. Cree el primero cuando haya facturas autorizadas listas para cobrar.",
     "columns": {
       "run": "Lote",
       "bankAccount": "Cuenta bancaria",
@@ -209,7 +227,7 @@
       "cancelled": "cancelado"
     },
     "fileStatus": { "generated": "generado", "pending_approval": "pendiente de aprobación", "approved": "aprobado", "rejected": "rechazado", "delivered": "entregado", "superseded": "sustituido", "voided": "anulado" },
-    "events": { "run_created": "Lote de pagos creado", "run_submitted": "Lote de pagos enviado", "run_approved": "Lote de pagos aprobado", "run_rejected": "Lote de pagos rechazado", "file_generated": "Archivo de pago generado", "file_reprocessed": "Archivo de pago reprocesado", "file_approved": "Archivo de pago aprobado", "file_rejected": "Archivo de pago rechazado", "file_downloaded": "Archivo de pago descargado", "file_delivered_sftp": "Archivo de pago entregado por SFTP", "run_rolled_back": "Lote de pagos revertido", "instruction_settled": "Pago liquidado", "instruction_returned": "Pago devuelto", "instruction_rejected": "Pago rechazado" },
+    "events": { "run_created": "Lote de pagos creado", "run_submitted": "Lote de pagos enviado", "run_approved": "Lote de pagos aprobado", "run_rejected": "Lote de pagos rechazado", "file_generated": "Archivo de pago generado", "file_reprocessed": "Archivo de pago reprocesado", "file_approved": "Archivo de pago aprobado", "file_rejected": "Archivo de pago rechazado", "file_downloaded": "Archivo de pago descargado", "file_delivered_sftp": "Archivo de pago entregado por SFTP", "file_delivery_failed": "Falló la entrega del archivo de pago", "run_rolled_back": "Lote de pagos revertido", "instruction_settled": "Pago liquidado", "instruction_returned": "Pago devuelto", "instruction_rejected": "Pago rechazado" },
     "confirmPost": "¿{count, plural, one {Contabilizar # pago} other {Contabilizar # pagos}} por un total de {total} en el libro mayor y aplicarlos a las facturas de compra seleccionadas?",
     "confirmCancel": "¿Cancelar el lote {number}? Sus pagos en borrador se eliminan; nada se ha contabilizado.",
     "toasts": {

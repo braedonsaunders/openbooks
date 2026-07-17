@@ -58,8 +58,9 @@ accounts match NetSuite exactly**.
       routing, role worklists, approve/reject with notes; full lifecycle
       verified draft → submit → approve → post (correct AP + ITC entry)
       *(2026-07-14 — per-person assignees + email nudges still to add)*
-- [x] Payment runs → Canadian EFT (CPA-005) file export *(2026-07-14 —
-      remittance emails still to add; needs a worker)*
+- [x] Payment operations → tenant-configurable credit/debit bank formats,
+      approvals, immutable files, existing-SFTP delivery, settlement/returns,
+      remittance, schedules, and direct-debit mandates *(2026-07-16)*
 - [x] Expense reports: instant-draft flyout, line grid, approval, posting to
       employee payable *(2026-07-14 — receipt capture/attachments to add)*
 - [x] Payment application UI: open-item selection, apply amounts, post

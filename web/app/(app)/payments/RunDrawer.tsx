@@ -67,6 +67,8 @@ export function RunDrawer({
   events,
   items,
   canApprove,
+  closeHref = '/payments?view=runs',
+  paymentBasePath = '/payments',
 }: {
   run: Record<string, any>
   instructions: Record<string, any>[]
@@ -77,6 +79,8 @@ export function RunDrawer({
   events: Record<string, any>[]
   items: Record<string, any>[]
   canApprove: boolean
+  closeHref?: string
+  paymentBasePath?: '/payments' | '/receipts'
 }) {
   const t = useTranslations('payments')
   const tCommon = useTranslations('common')
@@ -95,7 +99,6 @@ export function RunDrawer({
   const [bankReference, setBankReference] = useState('')
   const [returnCode, setReturnCode] = useState('')
   const [returnReason, setReturnReason] = useState('')
-  const closeHref = '/payments?view=runs'
 
   async function openDeliver() {
     setDeliverOpen(true)
@@ -330,7 +333,7 @@ export function RunDrawer({
                   <td className="px-3 py-2 font-mono text-[13px] font-semibold">
                     {i.payment_document_id ? (
                       <Link
-                        href={`/payments?payment=${i.payment_document_id}` as any}
+                        href={`${paymentBasePath}?payment=${i.payment_document_id}` as any}
                         className="text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {i.document_number}

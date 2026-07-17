@@ -35,6 +35,8 @@ export function RunBuilder({
   dir,
   toolbar,
   pagination,
+  mode = 'payments',
+  basePath = '/payments',
 }: {
   bills: RunBill[]
   bankProfiles: {
@@ -50,6 +52,8 @@ export function RunBuilder({
   dir: 'asc' | 'desc'
   toolbar: ReactNode
   pagination: ReactNode
+  mode?: 'payments' | 'collections'
+  basePath?: string
 }) {
   const t = useTranslations('payments.runBuilder')
   const tCommon = useTranslations('common')
@@ -85,14 +89,14 @@ export function RunBuilder({
 
   async function createRun() {
     setBusy(true)
-    const res = await fetch('/api/payments/runs', {
+    const res = await fetch(mode === 'collections' ? '/api/receipts/runs' : '/api/payments/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         paymentBankProfileId,
-        billDocumentIds: selectedList.map((b) => b.id),
+        ...(mode === 'collections' ? { invoiceDocumentIds: selectedList.map((b) => b.id) } : { billDocumentIds: selectedList.map((b) => b.id) }),
         scheduledFor: scheduledFor || null,
-        selectionCriteria: { captureDiscounts, applyCredits },
+        ...(mode === 'payments' ? { selectionCriteria: { captureDiscounts, applyCredits } } : {}),
       }),
     })
     const data = await res.json()
@@ -104,12 +108,12 @@ export function RunBuilder({
     toast.success(t('toasts.created', { number: data.runNumber }))
     setSelected({})
     setBusy(false)
-    router.push(`/payments?view=runs&run=${data.id}` as any)
+    router.push(`${basePath}?view=runs&run=${data.id}` as any)
     router.refresh()
   }
 
   const thProps = {
-    basePath: '/payments',
+    basePath,
     currentParams: sp,
     sort,
     dir,
@@ -144,10 +148,10 @@ export function RunBuilder({
           <div className="flex min-h-10 flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-900 dark:bg-teal-950/40">
             <div>
               <p className="text-[11px] font-medium tracking-wide text-teal-700 uppercase dark:text-teal-300">
-                {t('selectedForPayment')}
+                {t(mode === 'collections' ? 'selectedForCollection' : 'selectedForPayment')}
               </p>
               <p className="text-sm text-slate-700 tabular-nums dark:text-slate-200">
-                {t.rich('selectionSummary', {
+                {t.rich(mode === 'collections' ? 'collectionSummary' : 'selectionSummary', {
                   count: selectedList.length,
                   amount: money(totalSelected),
                   total: (chunks) => <strong className="text-slate-950 dark:text-white">{chunks}</strong>,
@@ -155,7 +159,7 @@ export function RunBuilder({
               </p>
             </div>
             <Button disabled={busy || selectedList.length === 0 || !paymentBankProfileId} onClick={createRun}>
-              {busy ? tCommon('actions.creating') : t('createRun')}
+              {busy ? tCommon('actions.creating') : t(mode === 'collections' ? 'createCollectionRun' : 'createRun')}
             </Button>
           </div>
         </div>
@@ -163,15 +167,15 @@ export function RunBuilder({
 
       <div className="shrink-0 px-4 py-3 sm:px-6">{toolbar}</div>
 
-      <div className="flex shrink-0 flex-wrap gap-x-5 gap-y-2 px-4 pb-3 text-sm text-slate-700 sm:px-6 dark:text-slate-200">
+      {mode === 'payments' ? <div className="flex shrink-0 flex-wrap gap-x-5 gap-y-2 px-4 pb-3 text-sm text-slate-700 sm:px-6 dark:text-slate-200">
         <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-teal-600" checked={captureDiscounts} onChange={(e) => setCaptureDiscounts(e.target.checked)} />{t('captureDiscounts')}</label>
         <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-teal-600" checked={applyCredits} onChange={(e) => setApplyCredits(e.target.checked)} />{t('applyCredits')}</label>
-      </div>
+      </div> : null}
 
       <div className="min-h-0 flex-1 px-4 pb-3 sm:px-6 [&>div]:h-full [&>div]:overflow-auto">
         {bills.length === 0 ? (
           <div className="flex h-full min-h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-            {t('noOpenBills')}
+            {t(mode === 'collections' ? 'noOpenInvoices' : 'noOpenBills')}
           </div>
         ) : (
           <Table>
@@ -186,11 +190,11 @@ export function RunBuilder({
                     aria-label={t('selectAllAriaLabel')}
                   />
                 </TableHead>
-                <SortTh {...thProps} column="number">{t('columns.bill')}</SortTh>
-                <SortTh {...thProps} column="vendor">{tCommon('labels.vendor')}</SortTh>
+                <SortTh {...thProps} column="number">{t(mode === 'collections' ? 'columns.invoice' : 'columns.bill')}</SortTh>
+                <SortTh {...thProps} column="vendor">{mode === 'collections' ? tCommon('labels.customer') : tCommon('labels.vendor')}</SortTh>
                 <SortTh {...thProps} column="due">{t('columns.due')}</SortTh>
                 <TableHead>{t('columns.ref')}</TableHead>
-                <TableHead>{t('columns.bankDetails')}</TableHead>
+                <TableHead>{t(mode === 'collections' ? 'columns.mandate' : 'columns.bankDetails')}</TableHead>
                 <SortTh {...thProps} column="open" align="right">{t('columns.openBalance')}</SortTh>
               </TableRow>
             </TableHeader>
@@ -212,9 +216,9 @@ export function RunBuilder({
                   <TableCell className="text-slate-500 dark:text-slate-400">{b.reference_number}</TableCell>
                   <TableCell>
                     {b.has_bank ? (
-                      <Badge variant="success">{t('bankApproved')}</Badge>
+                      <Badge variant="success">{t(mode === 'collections' ? 'mandateActive' : 'bankApproved')}</Badge>
                     ) : (
-                      <Badge variant="warning">{t('bankMissing')}</Badge>
+                      <Badge variant="warning">{t(mode === 'collections' ? 'mandateMissing' : 'bankMissing')}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{money(b.open)}</TableCell>

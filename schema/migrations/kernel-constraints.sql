@@ -345,8 +345,22 @@ language plpgsql as $$
 declare v_status text;
 begin
   select status into v_status from payment_runs where id = coalesce(new.payment_run_id, old.payment_run_id);
-  if v_status not in ('draft', 'pending_approval') then
+  if tg_op = 'DELETE' and v_status not in ('draft', 'pending_approval') then
     raise exception 'payment run items are immutable once the run is approved';
+  end if;
+  if tg_op = 'UPDATE' and v_status not in ('draft', 'pending_approval') and (
+     new.payment_run_id is distinct from old.payment_run_id
+     or new.payment_instruction_id is distinct from old.payment_instruction_id
+     or new.source_document_id is distinct from old.source_document_id
+     or new.source_open_line_id is distinct from old.source_open_line_id
+     or new.kind is distinct from old.kind
+     or new.gross_amount is distinct from old.gross_amount
+     or new.discount_amount is distinct from old.discount_amount
+     or new.credit_amount is distinct from old.credit_amount
+     or new.payment_amount is distinct from old.payment_amount
+     or new.currency is distinct from old.currency
+     or new.fx_rate is distinct from old.fx_rate) then
+    raise exception 'payment run item composition is immutable once the run is approved';
   end if;
   return coalesce(new, old);
 end $$;

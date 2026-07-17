@@ -165,7 +165,12 @@ export async function updatePaymentBankProfile(
   });
   const secret = input.originatorSecrets === undefined
     ? current.originator_secrets_encrypted
-    : input.originatorSecrets === null ? null : sealJson(input.originatorSecrets);
+    : input.originatorSecrets === null
+      ? null
+      : sealJson({
+          ...(unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted) ?? {}),
+          ...input.originatorSecrets,
+        });
   await db.execute(sql`
     update payment_bank_profiles set
       name = coalesce(${input.name?.trim() ?? null}, name),
@@ -221,7 +226,7 @@ export async function submitPaymentRun(runId: string, orgId: string, userId: str
       updated_at = now(), updated_by = ${userId}
     from payment_bank_profiles p
     where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
-      and p.id = r.payment_bank_profile_id and r.payment_count > 0 and r.total_amount > 0
+      and p.id = r.payment_bank_profile_id and p.is_active and r.payment_count > 0 and r.total_amount > 0
     returning r.status
   `)) as unknown as { rows: { status: string }[] };
   const row = result.rows[0];
@@ -365,6 +370,18 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function bankCents(amount: string): bigint {
+  const units = toUnits(amount);
+  if (units <= 0n) throw new PaymentError("bank-file amounts must be positive");
+  if (units % 100n !== 0n) throw new PaymentError(`bank-file amount ${amount} has a fraction smaller than one cent`);
+  return units / 100n;
+}
+
+function bankAmount2(amount: string): string {
+  const cents = bankCents(amount);
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
 function genericRegister(ctx: FormatContext): { filename: string; content: string; contentType: string } {
   const header = ["reference", "counterparty", "amount", "currency", "routing", "account"];
   const rows = ctx.payments.map((p) => [
@@ -427,7 +444,7 @@ function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content:
     if (!p.mandateReference) throw new PaymentError(`${p.partyName} has no active debit mandate`);
     const routing = p.routing.aba ?? p.routing.routingNumber ?? "";
     if (!/^\d{9}$/.test(routing)) throw new PaymentError(`${p.partyName} needs a 9-digit routing number`);
-    const cents = toUnits(p.amount) / 100n;
+    const cents = bankCents(p.amount);
     hash += BigInt(routing.slice(0, 8));
     total += cents;
     const txn = p.routing.accountType === "savings" ? "37" : "27";
@@ -449,14 +466,15 @@ function sepaDebit(ctx: FormatContext, now: Date): { filename: string; content: 
   }
   const esc = (v: unknown) => String(v ?? "").replace(/[<>&'\"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '\"': "&quot;" }[c]!));
   const total = fromUnits(ctx.payments.reduce((n, p) => n + toUnits(p.amount), 0n));
+  const total2 = bankAmount2(total);
   const collectionDate = String(ctx.run.scheduled_for ?? now.toISOString().slice(0, 10));
   const tx = ctx.payments.map((p) => {
     if (!p.mandateReference) throw new PaymentError(`${p.partyName} has no active debit mandate`);
     const iban = (p.routing.iban ?? p.accountNumber).replace(/\s/g, "");
-    return `      <DrctDbtTxInf><PmtId><EndToEndId>${esc(p.reference)}</EndToEndId></PmtId><InstdAmt Ccy="EUR">${Number(p.amount).toFixed(2)}</InstdAmt><DrctDbtTx><MndtRltdInf><MndtId>${esc(p.mandateReference)}</MndtId></MndtRltdInf><CdtrSchmeId><Id><PrvtId><Othr><Id>${esc(s.creditorId)}</Id><SchmeNm><Prtry>SEPA</Prtry></SchmeNm></Othr></PrvtId></Id></CdtrSchmeId></DrctDbtTx><Dbtr><Nm>${esc(p.partyName)}</Nm></Dbtr><DbtrAcct><Id><IBAN>${esc(iban)}</IBAN></Id></DbtrAcct><RmtInf><Ustrd>${esc(p.reference)}</Ustrd></RmtInf></DrctDbtTxInf>`;
+    return `      <DrctDbtTxInf><PmtId><EndToEndId>${esc(p.reference)}</EndToEndId></PmtId><InstdAmt Ccy="EUR">${bankAmount2(p.amount)}</InstdAmt><DrctDbtTx><MndtRltdInf><MndtId>${esc(p.mandateReference)}</MndtId></MndtRltdInf><CdtrSchmeId><Id><PrvtId><Othr><Id>${esc(s.creditorId)}</Id><SchmeNm><Prtry>SEPA</Prtry></SchmeNm></Othr></PrvtId></Id></CdtrSchmeId></DrctDbtTx><Dbtr><Nm>${esc(p.partyName)}</Nm></Dbtr><DbtrAcct><Id><IBAN>${esc(iban)}</IBAN></Id></DbtrAcct><RmtInf><Ustrd>${esc(p.reference)}</Ustrd></RmtInf></DrctDbtTxInf>`;
   }).join("\n");
   const message = `DD-${String(ctx.run.run_number)}`;
-  const content = `<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02"><CstmrDrctDbtInitn><GrpHdr><MsgId>${esc(message)}</MsgId><CreDtTm>${now.toISOString()}</CreDtTm><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${Number(total).toFixed(2)}</CtrlSum><InitgPty><Nm>${esc(s.originatorName)}</Nm></InitgPty></GrpHdr><PmtInf><PmtInfId>${esc(message)}</PmtInfId><PmtMtd>DD</PmtMtd><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${Number(total).toFixed(2)}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>RCUR</SeqTp></PmtTpInf><ReqdColltnDt>${collectionDate}</ReqdColltnDt><Cdtr><Nm>${esc(s.originatorName)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${esc(s.originatorIban)}</IBAN></Id></CdtrAcct><CdtrAgt><FinInstnId><BIC>${esc(s.originatorBic)}</BIC></FinInstnId></CdtrAgt><ChrgBr>SLEV</ChrgBr>\n${tx}\n</PmtInf></CstmrDrctDbtInitn></Document>\n`;
+  const content = `<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02"><CstmrDrctDbtInitn><GrpHdr><MsgId>${esc(message)}</MsgId><CreDtTm>${now.toISOString()}</CreDtTm><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><InitgPty><Nm>${esc(s.originatorName)}</Nm></InitgPty></GrpHdr><PmtInf><PmtInfId>${esc(message)}</PmtInfId><PmtMtd>DD</PmtMtd><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>RCUR</SeqTp></PmtTpInf><ReqdColltnDt>${collectionDate}</ReqdColltnDt><Cdtr><Nm>${esc(s.originatorName)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${esc(s.originatorIban)}</IBAN></Id></CdtrAcct><CdtrAgt><FinInstnId><BIC>${esc(s.originatorBic)}</BIC></FinInstnId></CdtrAgt><ChrgBr>SLEV</ChrgBr>\n${tx}\n</PmtInf></CstmrDrctDbtInitn></Document>\n`;
   return { filename: `SEPA-DEBIT-${String(ctx.run.run_number)}.xml`, content, contentType: ctx.format.contentType };
 }
 
@@ -675,6 +693,20 @@ export async function recordPaymentFileSftpDelivery(opts: {
   await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "approved", toStatus: "delivered", details: { targetRef: opts.targetRef } });
 }
 
+export async function recordPaymentFileDeliveryFailure(opts: {
+  fileId: string;
+  orgId: string;
+  userId: string;
+  channel: "sftp" | "bank_api";
+  targetRef: string;
+  error: string;
+}): Promise<void> {
+  const file = (await db.execute(sql`select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}`)) as unknown as { rows: { payment_run_id: string }[] };
+  if (!file.rows[0]) throw new PaymentError("payment file not found");
+  await db.insert(schema.paymentFileDeliveries).values({ orgId: opts.orgId, paymentFileId: opts.fileId, channel: opts.channel, targetRef: opts.targetRef, status: "failed", attemptCount: 1, lastAttemptAt: new Date(), error: opts.error, createdBy: opts.userId, updatedBy: opts.userId });
+  await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_failed", details: { channel: opts.channel, targetRef: opts.targetRef, error: opts.error } });
+}
+
 export async function rollbackPaymentRun(runId: string, orgId: string, userId: string, reason: string): Promise<void> {
   if (!reason.trim()) throw new PaymentError("a rollback reason is required");
   const result = (await db.execute(sql`
@@ -751,20 +783,20 @@ export async function recordPaymentSettlement(opts: {
 
 export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ scheduleId: string; runId?: string; selected: number; error?: string }>> {
   const schedules = (await db.execute(sql`
-    select s.id, s.org_id, s.payment_bank_profile_id, s.cron, s.selection_criteria,
+    select s.id, s.org_id, s.payment_bank_profile_id, s.cron, s.timezone, s.selection_criteria,
            s.action, s.created_by, p.currency, p.subsidiary_id
       from payment_schedules s
       join payment_bank_profiles p on p.id = s.payment_bank_profile_id and p.is_active
      where s.is_active and s.next_run_at <= ${now}
      order by s.next_run_at
   `)) as unknown as { rows: Array<{
-    id: string; org_id: string; payment_bank_profile_id: string; cron: string;
+    id: string; org_id: string; payment_bank_profile_id: string; cron: string; timezone: string;
     selection_criteria: Record<string, unknown>; action: string; created_by: string | null;
     currency: string; subsidiary_id: string | null;
   }> };
   const outcomes: Array<{ scheduleId: string; runId?: string; selected: number; error?: string }> = [];
   for (const schedule of schedules.rows) {
-    const next = computeNextRunAt(schedule.cron);
+    const next = computeNextRunAt(schedule.cron, now, schedule.timezone);
     const claimed = (await db.execute(sql`
       update payment_schedules set next_run_at = ${next}, last_run_at = ${now}
        where id = ${schedule.id} and next_run_at <= ${now}

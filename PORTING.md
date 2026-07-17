@@ -35,7 +35,7 @@ permission gates → build → verify in preview → commit.
 | Module | Owner | Routes (exclusive) | Status |
 |---|---|---|---|
 | AR (customer invoices) | agent-LANDED | web/app/(app)/ar, web/app/api/invoices | started |
-| Payments + application + EFT | agent-LANDED | web/app/(app)/payments, /receipts, web/app/api/payments, engine/src/payments.ts | started |
+| Payments + application + bank operations | agent-LANDED | web/app/(app)/payments, /receipts, /admin/setup/payment-operations, web/app/api/payments, engine/src/payments.ts, engine/src/payment-operations.ts | complete; browser + build verified |
 | Journal entry module | agent-LANDED | web/app/(app)/journal (JournalDrawer + new-entry only; list page shared — coordinate via ?entry= param), web/app/api/journals | started |
 | Parties directory | agent-LANDED | web/app/(app)/parties, web/app/api/parties | started |
 | Bank reconciliation | agent-LANDED | web/app/(app)/banking, web/app/api/banking, engine/src/banking.ts | landed; e2e verified (import→auto/manual match→sign-off) |

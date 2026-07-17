@@ -20,7 +20,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
     if (resource === 'profiles') {
       await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body)
     } else if (resource === 'formats') {
-      await db.execute(sql`
+      const updated = (await db.execute(sql`
         update payment_formats set
           name = coalesce(${body.name?.trim() ?? null}, name),
           country = case when ${body.country === undefined} then country else ${body.country?.trim().toUpperCase() || null} end,
@@ -29,11 +29,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           content_type = coalesce(${body.contentType?.trim() ?? null}, content_type),
           formatter_script = case when ${body.formatterScript === undefined} then formatter_script else ${body.formatterScript || null} end,
           is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
-        where id = ${id} and org_id = ${gate.user.orgId}
-      `)
+        where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
+        returning id
+      `)) as unknown as { rows: unknown[] }
+      if (!updated.rows[0]) return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
     } else if (resource === 'schedules') {
-      const next = body.cron ? computeNextRunAt(body.cron) : undefined
-      if (body.cron && !next) return NextResponse.json({ error: 'cron expression is invalid' }, { status: 400 })
+      const current = (await db.execute(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`)) as unknown as { rows: { cron: string; timezone: string }[] }
+      if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      const next = body.cron || body.timezone ? computeNextRunAt(body.cron?.trim() || current.rows[0].cron, new Date(), body.timezone?.trim() || current.rows[0].timezone) : undefined
+      if ((body.cron || body.timezone) && !next) return NextResponse.json({ error: 'cron expression or time zone is invalid' }, { status: 400 })
+      if (body.paymentBankProfileId) {
+        const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`)) as unknown as { rows: unknown[] }
+        if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
+      }
       await db.execute(sql`
         update payment_schedules set
           name = coalesce(${body.name?.trim() ?? null}, name),
