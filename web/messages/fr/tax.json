@@ -21,7 +21,10 @@
   "export": { "label": "Export de travail", "pdf": "PDF de travail", "csv": "CSV de travail", "xlsx": "Excel de travail" },
   "official": { "download": "Formulaire officiel rempli" },
   "submission": {
-    "title": "Dépôt gouvernemental",
+    "title": "Comment déposer cette déclaration",
+    "description": "Après avoir révisé la déclaration, utilisez le canal et l’action configurés ci-dessous.",
+    "channelLabel": "Canal de dépôt",
+    "actionLabel": "Action requise",
     "openGovernment": "Ouvrir les instructions de dépôt",
     "exportNotice": "Les exports de travail servent à la révision et aux dossiers. Ils ne sont pas des fichiers de dépôt gouvernementaux, sauf indication explicite du mode configuré.",
     "gst34Notice": "La GST34 est normalement saisie dans Mon dossier d’entreprise ou IMPÔTNET TPS/TVH. Le fichier .tax téléversable ne peut être produit que par un logiciel homologué par l’ARC; les formats PDF, CSV et Excel ne sont pas acceptés."
