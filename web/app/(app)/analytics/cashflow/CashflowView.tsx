@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   University,
   Wallet,
@@ -19,9 +20,10 @@ import {
   ListOrdered,
   SlidersHorizontal,
 } from 'lucide-react'
-import { cn, Drawer, Badge } from '@openbooks/ui'
-import type { CashflowData, WeekRow, SideSummary } from '../../../../lib/analytics/cashflow-data'
+import { cn, Drawer, Badge, Select } from '@openbooks/ui'
+import type { CashflowData, WeekRow, SideSummary, ForecastCategory } from '../../../../lib/analytics/cashflow-data'
 import { TxnLink } from '../../reports/TxnLink'
+import { ConfigEditor } from '../_ui/ConfigEditor'
 import { Panel } from '../_ui/Panel'
 import { TrendChart, Chart } from '../_ui/charts'
 import { fmtMoney } from '../_ui/format'
@@ -130,10 +132,24 @@ function WeeklyTab({ data }: { data: CashflowData }) {
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [flyout, setFlyout] = useState<{ week: WeekRow; side: 'ar' | 'ap' } | null>(null)
   const toggle = (k: string) => setOpen((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const hasCats = data.categories.length > 0
+  const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
+  const cols = 6 + (hasCats ? 2 : 0) + (scheduling ? 1 : 0)
 
   return (
     <>
-      <Panel title="Forecast Model" icon={ListOrdered} hint="Click a week to see the transactions behind it" bodyClassName="p-0">
+      {scheduling && data.deferredBeyondHorizon > 0 ? (
+        <p className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <ListOrdered size={14} className="mt-0.5 shrink-0" />
+          <span><span className="font-semibold">{money(data.deferredBeyondHorizon)} of payables can&apos;t be paid within the horizon</span> under the current AP capacity settings — the backlog spills past the last week.</span>
+        </p>
+      ) : null}
+      <Panel
+        title="Forecast Model"
+        icon={ListOrdered}
+        hint={scheduling ? `Click a week for its transactions · AP scheduled oldest-due-first up to ${data.apSettings.weeklyCap > 0 ? money(data.apSettings.weeklyCap) : 'safe capacity'} per week` : 'Click a week to see the transactions behind it'}
+        bodyClassName="p-0"
+      >
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
@@ -141,6 +157,9 @@ function WeeklyTab({ data }: { data: CashflowData }) {
               <th className="px-3 py-2 text-left font-medium">Week</th>
               <th className="px-3 py-2 text-right font-medium">Inflows</th>
               <th className="px-3 py-2 text-right font-medium">Outflows</th>
+              {hasCats ? <th className="px-3 py-2 text-right font-medium">Other In</th> : null}
+              {hasCats ? <th className="px-3 py-2 text-right font-medium">Other Out</th> : null}
+              {scheduling ? <th className="px-3 py-2 text-right font-medium">Deferred</th> : null}
               <th className="px-3 py-2 text-right font-medium">Net</th>
               <th className="px-3 py-2 text-right font-medium">Ending Cash</th>
             </tr>
@@ -155,20 +174,29 @@ function WeeklyTab({ data }: { data: CashflowData }) {
                     <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">{w.label}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{w.inflow > 0 ? money(w.inflow) : '—'}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{w.outflow > 0 ? money(w.outflow) : '—'}</td>
+                    {hasCats ? <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600/80 dark:text-emerald-400/80">{w.dynamicInflow > 0 ? money(w.dynamicInflow) : '—'}</td> : null}
+                    {hasCats ? <td className="px-3 py-2.5 text-right tabular-nums text-red-600/80 dark:text-red-400/80">{w.dynamicOutflow > 0 ? money(w.dynamicOutflow) : '—'}</td> : null}
+                    {scheduling ? <td className="px-3 py-2.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{w.deferredOut > 0 ? money(w.deferredOut) : '—'}</td> : null}
                     <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', w.net >= 0 ? 'text-slate-800 dark:text-slate-200' : 'text-red-600 dark:text-red-400')}>{money(w.net)}</td>
                     <td className={cn('px-3 py-2.5 text-right font-bold tabular-nums', w.endingCash < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(w.endingCash)}</td>
                   </tr>
                   {isOpen ? (
                     <tr className="bg-slate-50/40 dark:bg-slate-800/20">
                       <td />
-                      <td colSpan={5} className="px-3 py-2">
+                      <td colSpan={cols - 1} className="px-3 py-2">
                         <div className="flex flex-wrap gap-2 text-xs">
                           <button type="button" onClick={() => setFlyout({ week: w, side: 'ar' })} className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
-                            {w.arEntries.length} AR inflows · {money(w.inflow)}
+                            {w.arEntries.length} AR inflows · {money(w.arEntries.reduce((a, e) => a + e.amount, 0))}
                           </button>
                           <button type="button" onClick={() => setFlyout({ week: w, side: 'ap' })} className="rounded-md border border-red-200 bg-red-50 px-2 py-1 font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                            {w.apEntries.length} AP outflows · {money(w.outflow)}
+                            {w.apEntries.length} AP outflows · {money(w.apEntries.reduce((a, e) => a + e.amount, 0))}
                           </button>
+                          {data.categories.filter((c) => (c.weekly[data.weeks.indexOf(w)] ?? 0) > 0).map((c) => (
+                            <span key={c.id} className={cn('rounded-md border px-2 py-1 font-medium', c.direction === 'inflow' ? 'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900/50 dark:bg-teal-950/30 dark:text-teal-300' : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300')}>
+                              {c.name} · {money(c.weekly[data.weeks.indexOf(w)] ?? 0)}
+                            </span>
+                          ))}
+                          {w.apCapacity !== null ? <span className="rounded-md border border-slate-200 px-2 py-1 text-slate-500 dark:border-slate-700 dark:text-slate-400">AP capacity {money(w.apCapacity)}</span> : null}
                         </div>
                       </td>
                     </tr>
@@ -262,6 +290,35 @@ function CategoryTab({ data }: { data: CashflowData }) {
 
   return (
     <div className="space-y-4">
+      {data.categories.length ? (
+        <Panel title="Forecast Categories" icon={SlidersHorizontal} hint="Non-AR/AP flows configured in the Configuration tab" bodyClassName="p-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <th className="px-4 py-2 text-left font-medium">Category</th>
+                <th className="px-4 py-2 text-left font-medium">Method</th>
+                <th className="px-4 py-2 text-left font-medium">Forecast Logic</th>
+                <th className="px-4 py-2 text-right font-medium">Per Week (avg)</th>
+                <th className="px-4 py-2 text-right font-medium">Horizon Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.categories.map((c) => (
+                <tr key={c.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <td className="px-4 py-2.5">
+                    <span className={cn('mr-2 inline-block h-2 w-2 rounded-full', c.direction === 'inflow' ? 'bg-emerald-500' : 'bg-red-500')} />
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
+                  </td>
+                  <td className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{c.method.replace(/_/g, ' ')}</span></td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{c.logic || '—'}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(c.total / Math.max(1, c.weekly.length))}</td>
+                  <td className={cn('px-4 py-2.5 text-right font-medium tabular-nums', c.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(c.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      ) : null}
       <div className="flex items-center justify-between">
         <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/60">
           {(['ap', 'ar'] as const).map((s) => (
@@ -315,6 +372,19 @@ function ConfigTab({ data }: { data: CashflowData }) {
   ]
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="space-y-5">
+        <CategoryManager data={data} />
+        <ConfigEditor
+          dashboard="cashflow"
+          fields={[
+            { key: 'weeklyApCap', label: 'Weekly AP cap ($)', help: '0 = unlimited (no scheduling). With a cap, payables are paid oldest-due-first and the rest defers.', min: 0, max: 100_000_000, step: 1000 },
+            { key: 'restrictToSafe', label: 'Restrict to safe capacity (0/1)', help: '1 = never pay beyond available cash that week; overflow defers forward', min: 0, max: 1, step: 1 },
+          ]}
+          values={{ weeklyApCap: data.apSettings.weeklyCap, restrictToSafe: data.apSettings.restrictToSafe ? 1 : 0 }}
+          defaults={{ weeklyApCap: 0, restrictToSafe: 0 }}
+        />
+      </div>
+      <div className="space-y-5">
       <Panel title="Forecast Model" icon={SlidersHorizontal} bodyClassName="p-0">
         <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
           {items.map((i) => (
@@ -344,7 +414,160 @@ function ConfigTab({ data }: { data: CashflowData }) {
           </tbody>
         </table>
       </Panel>
+      </div>
     </div>
+  )
+}
+
+/**
+ * Forecast-category manager — Gantry's category config CRUD, openbooks-style.
+ * Edits the full list and PUTs it to /api/analytics/cashflow/categories, then
+ * refreshes so the timeline recomputes.
+ */
+function CategoryManager({ data }: { data: CashflowData }) {
+  const router = useRouter()
+  const [cats, setCats] = useState<ForecastCategory[]>(() => data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method })))
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  // Draft for the add form.
+  const [name, setName] = useState('')
+  const [direction, setDirection] = useState<'inflow' | 'outflow'>('outflow')
+  const [method, setMethod] = useState<ForecastCategory['method']>('manual_recurring')
+  const [amount, setAmount] = useState('')
+  const [frequency, setFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('monthly')
+  const [partyId, setPartyId] = useState('')
+  const [accountIds, setAccountIds] = useState<string[]>([])
+  const [historyWeeks, setHistoryWeeks] = useState('12')
+  const [adjustmentPct, setAdjustmentPct] = useState('0')
+
+  // The server payload carries computed CategoryWeekly rows; the editor needs
+  // the raw configs — refetch them once on mount.
+  useEffect(() => {
+    fetch('/api/analytics/cashflow/categories')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j && Array.isArray(j.categories)) setCats(j.categories) })
+      .catch(() => {})
+  }, [])
+
+  const save = async (next: ForecastCategory[]) => {
+    setBusy(true)
+    setMsg(null)
+    const r = await fetch('/api/analytics/cashflow/categories', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories: next }),
+    })
+    if (r.ok) {
+      const j = await r.json()
+      setCats(j.categories)
+      setMsg('Saved — recomputing…')
+      router.refresh()
+    } else {
+      setMsg(r.status === 403 ? 'Saving requires the Setup permission.' : `Save failed (${r.status}).`)
+    }
+    setBusy(false)
+  }
+
+  const add = () => {
+    const draft: ForecastCategory = { id: '', name: name.trim(), direction, method }
+    if (method === 'manual_recurring') { draft.amount = Number(amount); draft.frequency = frequency }
+    else if (method === 'vendor_payment_history') { draft.partyId = partyId; draft.partyName = data.vendorOptions.find((v) => v.id === partyId)?.name }
+    else { draft.accountIds = accountIds; draft.historyWeeks = Number(historyWeeks) || 12; draft.adjustmentPct = Number(adjustmentPct) || 0 }
+    void save([...cats, draft])
+    setName(''); setAmount(''); setPartyId(''); setAccountIds([])
+  }
+  const addDisabled = busy || !name.trim() ||
+    (method === 'manual_recurring' && !(Number(amount) > 0)) ||
+    (method === 'vendor_payment_history' && !partyId) ||
+    (method === 'gl_history_average' && accountIds.length === 0)
+
+  return (
+    <Panel title="Forecast Categories" icon={SlidersHorizontal} hint="Non-AR/AP cash flows — rent, payroll, recurring subscriptions, GL-trend spend">
+      {cats.length ? (
+        <ul className="mb-4 divide-y divide-slate-50 dark:divide-slate-800/60">
+          {cats.map((c, i) => (
+            <li key={c.id || i} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <span className="min-w-0">
+                <span className={cn('mr-2 inline-block h-2 w-2 rounded-full', c.direction === 'inflow' ? 'bg-emerald-500' : 'bg-red-500')} />
+                <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
+                <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">
+                  {c.method === 'manual_recurring' ? `$${Number(c.amount ?? 0).toLocaleString()} ${c.frequency ?? 'monthly'}` : c.method === 'vendor_payment_history' ? (c.partyName ?? 'vendor history') : `${c.accountIds?.length ?? 0} accounts · ${c.historyWeeks ?? 12}wk avg`}
+                </span>
+              </span>
+              <button type="button" disabled={busy} onClick={() => save(cats.filter((_, j) => j !== i))} className="shrink-0 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:text-rose-500 dark:border-slate-700">Remove</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">No categories yet — AR/AP predictions are the only flows in the forecast.</p>
+      )}
+
+      <div className="space-y-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <Select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="w-24" triggerClassName="h-7 text-xs">
+            <option value="outflow">Outflow</option>
+            <option value="inflow">Inflow</option>
+          </Select>
+          <Select value={method} onChange={(e) => setMethod(e.target.value as ForecastCategory['method'])} className="w-44" triggerClassName="h-7 text-xs">
+            <option value="manual_recurring">Manual recurring</option>
+            <option value="vendor_payment_history">Vendor payment history</option>
+            <option value="gl_history_average">GL history average</option>
+          </Select>
+        </div>
+        {method === 'manual_recurring' ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min={0} placeholder="Amount" className="h-7 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+            <Select value={frequency} onChange={(e) => setFrequency(e.target.value as typeof frequency)} className="w-28" triggerClassName="h-7 text-xs">
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Bi-weekly</option>
+              <option value="monthly">Monthly</option>
+            </Select>
+          </div>
+        ) : method === 'vendor_payment_history' ? (
+          <Select value={partyId} onChange={(e) => setPartyId(e.target.value)} className="w-64" triggerClassName="h-7 text-xs">
+            <option value="">Choose vendor…</option>
+            {data.vendorOptions.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </Select>
+        ) : (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value="" onChange={(e) => { const v = e.target.value; if (v && !accountIds.includes(v)) setAccountIds((a) => [...a, v]) }} className="w-64" triggerClassName="h-7 text-xs">
+                <option value="">Add account…</option>
+                {data.accountOptions.map((a) => (
+                  <option key={a.id} value={a.id}>{a.number ? `${a.number} · ` : ''}{a.name}</option>
+                ))}
+              </Select>
+              <input value={historyWeeks} onChange={(e) => setHistoryWeeks(e.target.value)} type="number" min={1} max={52} title="History weeks" className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+              <span className="text-[11px] text-slate-400">wk history</span>
+              <input value={adjustmentPct} onChange={(e) => setAdjustmentPct(e.target.value)} type="number" min={-90} max={200} title="Adjustment %" className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+              <span className="text-[11px] text-slate-400">% adj</span>
+            </div>
+            {accountIds.length ? (
+              <div className="flex flex-wrap gap-1">
+                {accountIds.map((id) => {
+                  const a = data.accountOptions.find((x) => x.id === id)
+                  return (
+                    <button key={id} type="button" onClick={() => setAccountIds((prev) => prev.filter((x) => x !== id))} title="Remove" className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:text-rose-500 dark:bg-slate-800 dark:text-slate-300">
+                      {a ? (a.number ? `${a.number}` : a.name.slice(0, 18)) : id.slice(0, 6)} ×
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={addDisabled} onClick={add} className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700">Add category</button>
+          {msg ? <span className="text-xs text-slate-400 dark:text-slate-500">{msg}</span> : null}
+        </div>
+        <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+          Gantry&apos;s credit-card-cycle, formula and bank-register strategies aren&apos;t portable to this ledger (no statement cycles or formula variables) and are intentionally not offered.
+        </p>
+      </div>
+    </Panel>
   )
 }
 

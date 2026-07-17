@@ -148,6 +148,52 @@ export class NetSuiteSource implements MigrationSource {
     ];
   }
 
+  async accountingPeriods(): Promise<SourceEntity[]> {
+    const rows = await this.q<Record<string, string>>(`
+      SELECT id, periodname, startdate, enddate, isposting, isadjust,
+             isyear, isquarter, closed, alllocked, aplocked, arlocked,
+             closedondate, lastmodifieddate
+        FROM accountingperiod
+       ORDER BY startdate, enddate, id`);
+    const years = rows
+      .filter((row) => isT(row.isyear))
+      .map((row) => ({
+        start: isoDate(row.startdate)!,
+        end: isoDate(row.enddate)!,
+        year: Number(s(row.periodname)?.match(/\d{4}/)?.[0] ?? 0),
+      }))
+      .filter((row) => row.start && row.end && row.year > 0);
+    const posting = rows
+      .filter((row) => isT(row.isposting))
+      .map((row) => ({ row, start: isoDate(row.startdate), end: isoDate(row.enddate) }))
+      .filter((item): item is { row: Record<string, string>; start: string; end: string } =>
+        Boolean(item.start && item.end),
+      );
+    const counters = new Map<number, number>();
+    return posting.map(({ row, start, end }) => {
+      const fiscalYear = years.find((year) => year.start <= start && year.end >= end)?.year
+        ?? Number(end.slice(0, 4));
+      const periodNumber = (counters.get(fiscalYear) ?? 0) + 1;
+      counters.set(fiscalYear, periodNumber);
+      return {
+        sourceRef: String(row.id),
+        fields: {
+          name: s(row.periodname) ?? `${fiscalYear}-${periodNumber}`,
+          fiscalYear,
+          periodNumber,
+          startsOn: start,
+          endsOn: end,
+          isAdjustment: isT(row.isadjust),
+          closed: isT(row.closed),
+          allLocked: isT(row.alllocked),
+          apLocked: isT(row.aplocked),
+          arLocked: isT(row.arlocked),
+          closedAt: isoDate(row.closedondate),
+        },
+      };
+    });
+  }
+
   private async subsidiaries(): Promise<SourceEntity[]> {
     const rows = await this.q<Record<string, string>>(`
       SELECT id, name, legalname, parent, currency,

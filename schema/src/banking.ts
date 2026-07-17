@@ -116,9 +116,7 @@ export const bankMatchRules = pgTable("bank_match_rules", {
 
 /**
  * Payment runs: select approved payables → generate instructions → export
- * EFT/ACH file (or print cheques) → post payments on confirmation. Mirrors
- * the (locked) Electronic Bank Payments bundle Rassaun depends on, in the
- * open.
+ * EFT/ACH file (or print cheques) → post payments on confirmation.
  */
 export const paymentRuns = pgTable("payment_runs", {
   id: id(),

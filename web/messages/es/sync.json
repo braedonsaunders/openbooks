@@ -1,35 +1,127 @@
 {
-  "title": "Sincronización",
-  "description": "Puente manual hacia un sistema contable conectado mientras se opera en paralelo. Las transacciones modificadas se revierten y se vuelven a contabilizar — pista de auditoría completa, sin mutaciones. Cada sincronización vuelve a verificar el balance de comprobación por cuenta contra la fuente en vivo.",
-  "noSource": {
-    "title": "No hay una fuente externa configurada",
-    "description": "Conecte una agregando un adaptador de fuente y sus credenciales; aparecerá aquí automáticamente."
+  "title": "Migraciones y espejo",
+  "description": "Conecte un sistema contable externo, migre con un clic y luego refléjelo a diario para operar ambos en paralelo (A/B).",
+  "connections": {
+    "heading": "Conexiones",
+    "add": "Agregar conexión",
+    "loading": "Cargando…",
+    "empty": {
+      "title": "Aún no hay conexiones.",
+      "hint": "Agregue NetSuite o QuickBooks Online para iniciar una migración."
+    },
+    "status": {
+      "active": "activa",
+      "paused": "en pausa",
+      "error": "error",
+      "unconfigured": "sin configurar"
+    },
+    "mirrorBadge": "espejo: {schedule}",
+    "lastRun": "Última ejecución: {lastRun} · Sincronizado hasta: {cursor}"
   },
-  "connectedSources": "Fuentes conectadas",
-  "mismatchesHeading": "Discrepancias del balance de comprobación (última sincronización)",
-  "allRuns": "Todas las ejecuciones",
-  "columns": {
-    "sourceAccount": "Cuenta de la fuente",
-    "ours": "openbooks",
-    "theirs": "fuente",
-    "started": "Iniciada",
-    "finished": "Finalizada",
-    "trigger": "Disparador",
-    "detail": "Detalle"
+  "actions": {
+    "connect": "Conectar",
+    "reconnect": "Reconectar",
+    "test": "Probar",
+    "mirrorNow": "Reflejar ahora",
+    "runMigration": "Ejecutar migración",
+    "pauseMirror": "Pausar espejo",
+    "enableMirror": "Activar espejo",
+    "edit": "Editar"
   },
-  "runStatus": {
-    "ok": "OK",
-    "failed": "Fallida",
-    "running": "En ejecución"
-  },
-  "runStats": "{newEntries} nuevos · {reversedEntries} revertidos · {unchanged} sin cambios · BC {matches}/{accounts}",
-  "button": {
-    "syncing": "Sincronizando desde {source}…",
-    "sync": "Sincronizar desde {source}"
+  "runs": {
+    "heading": "Ejecuciones recientes",
+    "columns": {
+      "started": "Iniciada",
+      "kind": "Tipo",
+      "status": "Estado",
+      "trigger": "Disparador",
+      "result": "Resultado"
+    },
+    "kind": {
+      "full_migration": "migración completa",
+      "incremental": "incremental",
+      "mirror": "espejo"
+    },
+    "status": {
+      "ok": "ok",
+      "failed": "fallida",
+      "running": "en ejecución"
+    },
+    "stats": {
+      "docs": "+{new} docs · {amended} modificados · {unchanged} sin cambios",
+      "applied": "{count} aplicados",
+      "tb": "BC {matches}/{accounts}",
+      "tbOff": "({count} con diferencia)",
+      "openItems": "partidas abiertas {matches}/{checked}",
+      "periods": "períodos {matches}/{checked}"
+    }
   },
   "toast": {
-    "summary": "{newEntries} nuevos · {reversedEntries} revertidos · {unchanged} sin cambios — BC {matches}/{accounts}{mismatches, plural, =0 { exacto} one { (# DISCREPANCIA)} other { (# DISCREPANCIAS)}}",
-    "synced": "Sincronizado en {seconds}s — {summary}",
-    "syncFailed": "La sincronización falló: {detail}"
+    "loadFailed": "No se pudieron cargar las conexiones (HTTP {status})",
+    "authorized": "Conexión autorizada",
+    "authDenied": "La autorización fue rechazada",
+    "authFailed": "La autorización falló ({status})",
+    "queuingMigration": "Poniendo en cola la migración completa…",
+    "queuingMirror": "Poniendo en cola el espejo…",
+    "migrationQueued": "Migración en cola — se ejecuta en el worker",
+    "mirrorQueued": "Espejo en cola — se ejecuta en el worker",
+    "testing": "Probando la conexión…",
+    "connected": "Conectado",
+    "connectedDetail": "Conectado — {detail}",
+    "testFailed": "La conexión falló: {error}",
+    "unknownError": "error desconocido",
+    "removed": "Conexión eliminada",
+    "created": "Conexión creada",
+    "updated": "Conexión actualizada",
+    "copied": "URI de redirección copiada",
+    "copyFailed": "No se pudo copiar — seleccione y copie el texto manualmente"
+  },
+  "confirmDelete": "¿Eliminar la conexión \"{name}\"? Los datos migrados se conservan; solo se elimina el vínculo.",
+  "drawer": {
+    "addTitle": "Agregar conexión",
+    "editTitle": "Editar conexión",
+    "description": "Conecte un sistema contable externo. Las credenciales se cifran en reposo y no se vuelven a mostrar.",
+    "cancel": "Cancelar",
+    "saving": "Guardando…",
+    "saveChanges": "Guardar cambios",
+    "create": "Crear conexión",
+    "system": "Sistema",
+    "selectSystem": "Seleccione un sistema…",
+    "name": "Nombre de la conexión",
+    "select": "Seleccionar…",
+    "credentials": "Credenciales (cifradas en reposo, nunca se vuelven a mostrar)",
+    "keepCurrent": "Dejar en blanco para conservar la actual"
+  },
+  "oauth": {
+    "title": "Configuración única de la aplicación en el <link>{portal}</link>",
+    "redirectLabel": "URI de redirección para registrar:",
+    "copy": "Copiar"
+  },
+  "sources": {
+    "netsuite": {
+      "blurb": "Acceso por token (TBA) a SuiteQL. Cree una integración y un token de acceso en NetSuite y pegue los cuatro valores. Las transacciones nativas, las aplicaciones de pago y los pedidos migran y se reflejan a través del motor de contabilización real."
+    },
+    "odoo": {
+      "blurb": "Conéctese con su URL de Odoo, la base de datos, el usuario y una clave API (Ajustes → Mi perfil → Seguridad de la cuenta → Claves API). Las facturas de venta y de compra, los pagos y los asientos migran y se reflejan de forma nativa a través del motor de contabilización real."
+    },
+    "erpnext": {
+      "blurb": "Conéctese con su URL de ERPNext y una clave + secreto API (Usuario → Ajustes → Acceso API). Las facturas de venta y de compra, los registros de pago y los asientos migran y se reflejan de forma nativa a través del motor de contabilización real."
+    },
+    "qbo": {
+      "blurb": "Ingrese el Client ID y el Secret de su aplicación de Intuit (developer.intuit.com → Keys & credentials), guarde y luego haga clic en Conectar para autorizar una empresa. Las facturas de venta y de compra, pagos, notas de crédito, asientos y depósitos migran y se reflejan de forma nativa.",
+      "steps": [
+        "Cree una aplicación (QuickBooks Online and Payments) con el alcance com.intuit.quickbooks.accounting.",
+        "En Keys & credentials, agregue la URI de redirección que se muestra abajo (claves Development para una empresa sandbox, claves Production para una real).",
+        "Copie el Client ID y el Client Secret en este formulario, guarde y luego haga clic en Conectar."
+      ]
+    },
+    "xero": {
+      "blurb": "Ingrese el Client ID y el Secret de su aplicación de Xero (developer.xero.com → My Apps), guarde y luego haga clic en Conectar para autorizar una organización. Las facturas de venta y de compra, notas de crédito, pagos, asientos y transacciones bancarias migran y se reflejan de forma nativa.",
+      "steps": [
+        "Cree una nueva aplicación (tipo de integración: Web app); la URL de la empresa puede ser la dirección de este sitio.",
+        "Agregue la URI de redirección que se muestra abajo a las URI de redirección OAuth 2.0 de la aplicación.",
+        "Copie el Client ID, genere un Client Secret, pegue ambos en este formulario, guarde y luego haga clic en Conectar."
+      ]
+    }
   }
 }

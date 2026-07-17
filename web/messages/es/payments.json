@@ -115,6 +115,8 @@
     "selectBankAccountPlaceholder": "Seleccionar un perfil de pago…",
     "noBankAccounts": "No hay perfiles de pago activos",
     "fundsDate": "Fecha de fondos",
+    "captureDiscounts": "Aprovechar los descuentos disponibles por pronto pago",
+    "applyCredits": "Aplicar los créditos de proveedor disponibles",
     "selectedForPayment": "Seleccionado para pago",
     "selectionSummary": "{count, plural, one {# factura de compra} other {# facturas de compra}} · <total>{amount}</total>",
     "createRun": "Crear lote de pagos",
@@ -186,6 +188,8 @@
     "adjustments": "Descuento {discount} · crédito {credit}",
     "reason": "Motivo",
     "reasonRequired": "Ingrese un motivo. Se conservará en la pista de auditoría del pago.",
+    "recordOutcome": "Registrar resultado",
+    "outcome": { "title": "Resultado bancario", "description": "Registre la liquidación o una devolución para {payee}.", "status": "Resultado", "settled": "Liquidado", "returned": "Devuelto", "rejected": "Rechazado por el banco", "effectiveOn": "Fecha efectiva", "bankReference": "Referencia bancaria", "returnCode": "Código de devolución", "returnReason": "Motivo de devolución", "reversalWarning": "Una devolución o rechazo revierte el pago contabilizado y vuelve a abrir las facturas afectadas." },
     "columns": {
       "payee": "Beneficiario",
       "payment": "Pago",
@@ -224,7 +228,9 @@
       "fileApproved": "Archivo de pago aprobado",
       "fileRejected": "Archivo de pago rechazado",
       "fileReprocessed": "Archivo de pago reprocesado",
-      "rolledBack": "Lote de pagos revertido"
+      "rolledBack": "Lote de pagos revertido",
+      "outcomeFailed": "No se pudo registrar el resultado bancario",
+      "outcomeSaved": "Resultado bancario registrado"
     },
     "deliverSftp": "Entregar por SFTP",
     "deliverHint": "Escribe el archivo bancario de este lote en la carpeta de salida de un servidor SFTP para que el banco lo recoja.",

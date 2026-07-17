@@ -237,6 +237,7 @@ export const paymentSettlements = pgTable(
     returnCode: text("return_code"),
     returnReason: text("return_reason"),
     reversalDocumentId: uuid("reversal_document_id"),
+    reversalEntryId: uuid("reversal_entry_id"),
     ...auditColumns,
   },
   (t) => [

@@ -9,6 +9,7 @@ import type {
   EntityStream, MigrationSource, NativeChanges, SourceEntity,
   SourceAccountMonthRow, SourceOpenItem, SourceTrialBalanceRow,
 } from "./source.ts";
+import { allModules, monthlySourcePeriods, type SourceFiscalYear } from "./periods.ts";
 
 /**
  * ERPNext adapter — native vouchers over the Frappe REST API. Sales/Purchase
@@ -71,6 +72,28 @@ export class ErpNextSource implements MigrationSource {
       { resource: "parties", records: await this.parties() },
       { resource: "items", records: await this.items() },
     ];
+  }
+
+  async accountingPeriods(): Promise<SourceEntity[]> {
+    const [years, settings] = await Promise.all([
+      this.client.listAll<{ name: string; year_start_date: string; year_end_date: string; disabled: 0 | 1 }>(
+        "Fiscal Year", ["name", "year_start_date", "year_end_date", "disabled"], [["disabled", "=", 0]], "year_start_date asc",
+      ),
+      this.client.getDoc<{ acc_frozen_upto?: string | null }>("Accounts Settings", "Accounts Settings"),
+    ]);
+    if (years.length === 0) throw new Error("ERPNext fiscal years are required for period migration");
+    const normalized: SourceFiscalYear[] = years.map((year) => ({
+      key: year.name,
+      fiscalYear: Number(year.name.match(/\d{4}/)?.[0] ?? year.year_end_date.slice(0, 4)),
+      startsOn: year.year_start_date,
+      endsOn: year.year_end_date,
+    }));
+    const frozen = settings.acc_frozen_upto ?? null;
+    return monthlySourcePeriods(
+      "erpnext-period",
+      normalized,
+      (endsOn) => allModules(frozen && endsOn <= frozen ? "closed" : "open"),
+    );
   }
 
   private async accounts(): Promise<SourceEntity[]> {

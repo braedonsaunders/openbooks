@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
-import { cmp, fromUnits, isZero, sum, toUnits } from "./money.ts";
+import { cmp, divRate, fromUnits, isZero, sum, toUnits } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -40,7 +40,17 @@ const NUMBER_PREFIX: Record<PaymentKind, string> = {
 
 export interface AllocationInput {
   openLineId: string;
+  /** Transaction-currency amount used for the payment document total. */
   amount: string;
+  /** Ledger/base-currency application amount. Defaults to `amount`. */
+  baseAmount?: string;
+}
+
+export interface CreditAllocationInput {
+  fromLineId: string;
+  toLineId: string;
+  amount: string;
+  sourceDocumentId: string;
 }
 
 function isPaymentKind(kind: string): kind is PaymentKind {
@@ -104,6 +114,9 @@ export async function createPaymentDocument(opts: {
   bankAccountId?: string | null;
   documentDate?: string;
   memo?: string | null;
+  subsidiaryId?: string | null;
+  currency?: string;
+  fxRate?: string;
 }): Promise<{ id: string; documentNumber: string }> {
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
@@ -112,7 +125,7 @@ export async function createPaymentDocument(opts: {
       (select subsidiary_id from parties where id = ${opts.partyId ?? null} and org_id = ${opts.orgId}),
       (select id from subsidiaries where org_id = ${opts.orgId} and parent_id is null)
     ) as id`)) as unknown as { rows: { id: string }[] };
-  const subsidiaryId = sub.rows[0]?.id ?? null;
+  const subsidiaryId = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
   const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind], subsidiaryId);
   const [doc] = await db
     .insert(schema.documents)
@@ -123,7 +136,8 @@ export async function createPaymentDocument(opts: {
       partyId: opts.partyId ?? null,
       subsidiaryId,
       documentDate: opts.documentDate ?? new Date().toISOString().slice(0, 10),
-      currency: org.baseCurrency,
+      currency: opts.currency ?? org.baseCurrency,
+      fxRate: opts.fxRate ?? "1",
       memo: opts.memo ?? null,
       subtotal: "0",
       taxTotal: "0",
@@ -145,6 +159,9 @@ function validateAllocationInputs(allocations: AllocationInput[]): void {
     let units: bigint;
     try {
       units = toUnits(a.amount);
+      if (a.baseAmount !== undefined && toUnits(a.baseAmount) <= 0n) {
+        throw new Error("base amount must be positive");
+      }
     } catch {
       throw new PaymentError(`allocation amount "${a.amount}" is not a valid amount`);
     }
@@ -166,6 +183,10 @@ export async function updateDraftPayment(
     referenceNumber?: string | null;
     memo?: string | null;
     allocations?: AllocationInput[];
+    creditAllocations?: CreditAllocationInput[];
+    discountAmount?: string;
+    discountAccountId?: string | null;
+    controlAccountId?: string | null;
   },
   userId: string,
 ): Promise<void> {
@@ -173,13 +194,28 @@ export async function updateDraftPayment(
   if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
   if (doc.status !== "draft") throw new PaymentError("only draft payments can be edited");
 
-  const custom = (doc.custom ?? {}) as { bankAccountId?: string; allocations?: AllocationInput[] };
+  const custom = (doc.custom ?? {}) as {
+    bankAccountId?: string;
+    allocations?: AllocationInput[];
+    creditAllocations?: CreditAllocationInput[];
+    discountAmount?: string;
+    discountAccountId?: string;
+    controlAccountId?: string;
+  };
   const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
   const bankAccountId =
     patch.bankAccountId !== undefined ? patch.bankAccountId : (custom.bankAccountId ?? null);
   const allocations = patch.allocations ?? custom.allocations ?? [];
+  const creditAllocations = patch.creditAllocations ?? custom.creditAllocations ?? [];
+  const discountAmount = patch.discountAmount ?? custom.discountAmount ?? "0";
+  const discountAccountId = patch.discountAccountId !== undefined ? patch.discountAccountId : (custom.discountAccountId ?? null);
+  const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);
 
   validateAllocationInputs(allocations);
+  validateAllocationInputs(creditAllocations.map((a) => ({ openLineId: `${a.fromLineId}:${a.toLineId}`, amount: a.amount })));
+  const discountUnits = toUnits(discountAmount);
+  if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
+  if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
 
   if (bankAccountId) {
     const bank = (await db.execute(sql`
@@ -188,6 +224,13 @@ export async function updateDraftPayment(
          and type = 'asset_bank' and is_active and not is_summary
     `)) as unknown as { rows: { id: string }[] };
     if (!bank.rows[0]) throw new PaymentError("bank account must be an active bank-type account");
+  }
+  if (discountAccountId || controlAccountId) {
+    const refs = [discountAccountId, controlAccountId].filter(Boolean) as string[];
+    const validRefs = (await db.execute(sql`
+      select id from accounts where org_id = ${doc.orgId} and id in ${refs} and is_active and not is_summary
+    `)) as unknown as { rows: { id: string }[] };
+    if (validRefs.rows.length !== refs.length) throw new PaymentError("payment accounting account is invalid or inactive");
   }
   if (partyId && partyId !== doc.partyId) {
     const party = (await db.execute(
@@ -204,15 +247,17 @@ export async function updateDraftPayment(
     for (const a of allocations) {
       const item = byLine.get(a.openLineId);
       if (!item) throw new PaymentError("an allocated item is not an open item for this party");
-      if (cmp(a.amount, item.open) > 0) {
+      if (cmp(a.baseAmount ?? a.amount, item.open) > 0) {
         throw new PaymentError(
-          `applying ${a.amount} exceeds the open balance ${item.open} on ${item.documentNumber ?? item.entryNumber}`,
+          `applying ${a.baseAmount ?? a.amount} exceeds the open balance ${item.open} on ${item.documentNumber ?? item.entryNumber}`,
         );
       }
     }
   }
 
-  const total = sum(allocations.map((a) => a.amount));
+  const grossApplied = sum(allocations.map((a) => a.amount));
+  if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
+  const total = fromUnits(toUnits(grossApplied) - discountUnits);
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`delete from document_lines where document_id = ${id}`);
@@ -234,7 +279,7 @@ export async function updateDraftPayment(
         document_date = coalesce(${patch.documentDate ?? null}, document_date),
         reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
         memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-        custom = ${JSON.stringify({ ...custom, bankAccountId, allocations })}::jsonb,
+        custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId })}::jsonb,
         subtotal = ${total}, tax_total = '0', total = ${total},
         updated_at = now(), updated_by = ${userId}
       where id = ${id}
@@ -455,8 +500,14 @@ export async function postPaymentWithApplications(
   if (doc.status === "voided") throw new PaymentError(`${doc.documentNumber} is voided`);
   if (!doc.partyId) throw new PaymentError("select a party before posting");
 
-  const custom = (doc.custom ?? {}) as { bankAccountId?: string; allocations?: AllocationInput[] };
+  const custom = (doc.custom ?? {}) as {
+    bankAccountId?: string;
+    allocations?: AllocationInput[];
+    creditAllocations?: CreditAllocationInput[];
+    discountAmount?: string;
+  };
   const allocs = allocations ?? custom.allocations ?? [];
+  const creditAllocs = custom.creditAllocations ?? [];
   if (allocs.length === 0) throw new PaymentError("select at least one open item to apply");
   validateAllocationInputs(allocs);
 
@@ -466,17 +517,40 @@ export async function postPaymentWithApplications(
   for (const a of allocs) {
     const item = byLine.get(a.openLineId);
     if (!item) throw new PaymentError("an allocated item is no longer an open item for this party");
-    if (cmp(a.amount, item.open) > 0) {
+    if (cmp(a.baseAmount ?? a.amount, item.open) > 0) {
       throw new PaymentError(
-        `applying ${a.amount} exceeds the open balance ${item.open} on ${item.documentNumber ?? item.entryNumber}`,
+        `applying ${a.baseAmount ?? a.amount} exceeds the open balance ${item.open} on ${item.documentNumber ?? item.entryNumber}`,
       );
     }
   }
   const totalAlloc = sum(allocs.map((a) => a.amount));
-  if (cmp(totalAlloc, doc.total) !== 0) {
+  const discountAmount = custom.discountAmount ?? "0";
+  if (cmp(totalAlloc, fromUnits(toUnits(doc.total) + toUnits(discountAmount))) !== 0) {
     throw new PaymentError(
-      `payment total ${doc.total} does not equal the applied total ${totalAlloc} — save the draft again`,
+      `cash ${doc.total} plus discount ${discountAmount} does not equal the applied total ${totalAlloc} — save the draft again`,
     );
+  }
+
+  if (creditAllocs.length > 0) {
+    const creditLines = [...new Set(creditAllocs.map((a) => a.fromLineId))];
+    const creditState = (await db.execute(sql`
+      select jl.id, jl.account_id, abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        left join applications a on a.from_line_id = jl.id
+       where jl.id in ${creditLines} and jl.org_id = ${doc.orgId} and jl.party_id = ${doc.partyId}
+         and jl.is_open_item and jl.amount > 0
+       group by jl.id, jl.account_id
+    `)) as unknown as { rows: { id: string; account_id: string; open: string }[] };
+    const byCredit = new Map(creditState.rows.map((r) => [r.id, r]));
+    const used = new Map<string, bigint>();
+    for (const a of creditAllocs) {
+      const source = byCredit.get(a.fromLineId);
+      if (!source || !byLine.has(a.toLineId)) throw new PaymentError("a selected vendor credit is no longer available for this payment");
+      const next = (used.get(a.fromLineId) ?? 0n) + toUnits(a.amount);
+      if (next > toUnits(source.open)) throw new PaymentError("vendor credit application exceeds its open balance");
+      used.set(a.fromLineId, next);
+    }
   }
 
   const deps = await paymentControlDeps(doc.orgId);
@@ -503,12 +577,24 @@ export async function postPaymentWithApplications(
           orgId: doc.orgId,
           fromLineId: from.id,
           toLineId: a.openLineId,
-          amount: a.amount,
+          amount: a.baseAmount ?? a.amount,
           appliedOn: from.posting_date,
           createdBy: userId ?? doc.createdBy,
         })),
       );
-      const lineIds = allocs.map((a) => a.openLineId);
+      if (creditAllocs.length > 0) {
+        await tx.insert(schema.applications).values(
+          creditAllocs.map((a) => ({
+            orgId: doc.orgId,
+            fromLineId: a.fromLineId,
+            toLineId: a.toLineId,
+            amount: a.amount,
+            appliedOn: from.posting_date,
+            createdBy: userId ?? doc.createdBy,
+          })),
+        );
+      }
+      const lineIds = [...allocs.map((a) => a.openLineId), ...creditAllocs.map((a) => a.toLineId)];
       const targets = (await tx.execute(sql`
         select distinct je.source_document_id as doc_id
           from journal_lines jl
@@ -544,12 +630,12 @@ async function reversePostedEntry(
   documentId: string,
   orgId: string,
   memo: string,
-): Promise<void> {
+): Promise<string | null> {
   const [entry] = await db
     .select()
     .from(schema.journalEntries)
     .where(eq(schema.journalEntries.id, entryId));
-  if (!entry) return;
+  if (!entry) return null;
   const lines = await db
     .select()
     .from(schema.journalLines)
@@ -639,6 +725,48 @@ async function reversePostedEntry(
   // -- flows: the posted → voided status transition (never throws) ----------
   if (doc) {
     await emitStatusChange(doc.kind, documentId, { from: doc.status, to: "voided" }, { orgId });
+  }
+  const reversal = (await db.execute(sql`
+    select id from journal_entries where reverses_entry_id = ${entryId} order by created_at desc limit 1
+  `)) as unknown as { rows: { id: string }[] };
+  return reversal.rows[0]?.id ?? null;
+}
+
+/** Reverse a posted payment after a bank return and reopen its applications. */
+export async function reversePaymentForReturn(
+  paymentDocumentId: string,
+  orgId: string,
+  reason: string,
+): Promise<string> {
+  const row = (await db.execute(sql`
+    select d.id, d.posted_entry_id, d.document_number
+      from documents d
+     where d.id = ${paymentDocumentId} and d.org_id = ${orgId}
+       and d.kind in ('vendor_payment', 'customer_payment') and d.status = 'posted'
+  `)) as unknown as { rows: { id: string; posted_entry_id: string; document_number: string }[] };
+  const payment = row.rows[0];
+  if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
+  await db.execute(sql`
+    update applications a set unapplied_at = now()
+     where a.unapplied_at is null and exists (
+       select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${payment.posted_entry_id})
+  `);
+  try {
+    const reversalId = await reversePostedEntry(
+      payment.posted_entry_id,
+      payment.id,
+      orgId,
+      `bank return: ${reason.trim() || payment.document_number}`,
+    );
+    if (!reversalId) throw new PaymentError("payment reversal could not be created");
+    return reversalId;
+  } catch (error) {
+    await db.execute(sql`
+      update applications a set unapplied_at = null
+       where a.unapplied_at is not null and exists (
+         select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${payment.posted_entry_id})
+    `);
+    throw error;
   }
 }
 
@@ -741,7 +869,7 @@ export async function createPaymentRun(opts: {
   if (opts.billDocumentIds.length === 0) throw new PaymentError("select at least one bill to pay");
 
   const profiles = (await db.execute(sql`
-    select p.id, p.bank_account_id, p.subsidiary_id, p.currency, p.require_run_approval,
+    select p.id, p.bank_account_id, p.subsidiary_id, p.currency, p.require_run_approval, p.settings,
            f.rail, f.direction
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.is_active
@@ -754,6 +882,7 @@ export async function createPaymentRun(opts: {
     subsidiary_id: string | null;
     currency: string;
     require_run_approval: boolean;
+    settings: Record<string, unknown>;
     rail: string;
     direction: string;
   }[] };
@@ -773,11 +902,15 @@ export async function createPaymentRun(opts: {
 
   // Selected bills → their open AP lines with current open balances.
   const bills = (await db.execute(sql`
-    select d.id as document_id, d.document_number, d.party_id, p.display_name as vendor,
-           d.currency, d.fx_rate, d.subsidiary_id,
-           jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open
+    select d.id as document_id, d.document_number, d.document_date, d.party_id, p.display_name as vendor,
+           d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
+           jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
+           round((abs(jl.amount) - coalesce(ap.applied, 0)) / d.fx_rate, 4) as open,
+           pt.discount_days, pt.discount_percent
       from documents d
       join parties p on p.id = d.party_id
+      left join vendor_roles vr on vr.party_id = d.party_id
+      left join payment_terms pt on pt.id = vr.payment_terms_id and pt.is_active
       join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount < 0
       left join lateral (
@@ -790,7 +923,7 @@ export async function createPaymentRun(opts: {
        and d.currency = ${profile.currency}
        and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
   `)) as unknown as {
-    rows: { document_id: string; document_number: string; party_id: string; vendor: string; currency: string; fx_rate: string; subsidiary_id: string | null; open_line_id: string; open: string }[];
+    rows: { document_id: string; document_number: string; document_date: string; party_id: string; vendor: string; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }[];
   };
 
   const found = new Set(bills.rows.map((b) => b.document_id));
@@ -803,9 +936,10 @@ export async function createPaymentRun(opts: {
 
   const byVendor = new Map<string, typeof payable>();
   for (const b of payable) {
-    const list = byVendor.get(b.party_id) ?? [];
+    const groupKey = `${b.party_id}:${b.subsidiary_id ?? ""}:${b.control_account_id}:${b.fx_rate}`;
+    const list = byVendor.get(groupKey) ?? [];
     list.push(b);
-    byVendor.set(b.party_id, list);
+    byVendor.set(groupKey, list);
   }
 
   const runNumber = await nextNumber(opts.orgId, "payment_run", "RUN-");
@@ -830,12 +964,87 @@ export async function createPaymentRun(opts: {
     })
     .returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber });
 
-  for (const [partyId, vendorBills] of byVendor) {
-    const allocations: AllocationInput[] = vendorBills.map((b) => ({
-      openLineId: b.open_line_id,
-      amount: b.open,
-    }));
-    const total = sum(allocations.map((a) => a.amount));
+  const criteria = opts.selectionCriteria ?? {};
+  const captureDiscounts = criteria.captureDiscounts !== false;
+  const applyCredits = criteria.applyCredits !== false;
+  const discountAccountId = typeof profile.settings?.discountAccountId === "string"
+    ? profile.settings.discountAccountId
+    : null;
+  const paymentDate = opts.scheduledFor ?? new Date().toISOString().slice(0, 10);
+
+  for (const vendorBills of byVendor.values()) {
+    const first = vendorBills[0]!;
+    const partyId = first.party_id;
+    const availableCredits = applyCredits ? (await db.execute(sql`
+      select d.id as document_id, jl.id as open_line_id,
+             abs(jl.amount) - coalesce(ap.applied, 0) as open_base
+        from documents d
+        join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
+        join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount > 0
+        left join lateral (
+          select sum(a.amount) as applied from applications a
+           where a.from_line_id = jl.id and a.unapplied_at is null
+        ) ap on true
+       where d.org_id = ${opts.orgId} and d.party_id = ${partyId}
+         and d.kind = 'vendor_credit' and d.status = 'posted'
+         and d.currency = ${profile.currency} and jl.account_id = ${first.control_account_id}
+         and d.subsidiary_id is not distinct from ${first.subsidiary_id}::uuid
+         and abs(jl.amount) - coalesce(ap.applied, 0) > 0
+       order by d.document_date, d.document_number
+    `)) as unknown as { rows: { document_id: string; open_line_id: string; open_base: string }[] } : { rows: [] };
+    const groupBase = vendorBills.reduce((n, b) => n + toUnits(b.open_base), 0n);
+    const creditBase = availableCredits.rows.reduce((n, c) => n + toUnits(c.open_base), 0n);
+    // A bank run must still move cash. If credits cover the entire group they
+    // belong in a credit-application operation, not a zero-value bank file.
+    const credits = creditBase > 0n && creditBase < groupBase ? availableCredits.rows : [];
+    const creditRemaining = new Map(credits.map((c) => [c.open_line_id, toUnits(c.open_base)]));
+    const creditAllocations: CreditAllocationInput[] = [];
+    const billComposition: Array<{ bill: (typeof vendorBills)[number]; allocation: AllocationInput; creditAmount: string; discountAmount: string; paymentAmount: string }> = [];
+    let discountTotal = 0n;
+
+    for (const bill of vendorBills) {
+      let remainingBase = toUnits(bill.open_base);
+      for (const credit of credits) {
+        const left = creditRemaining.get(credit.open_line_id) ?? 0n;
+        if (left <= 0n || remainingBase <= 0n) continue;
+        const applied = left < remainingBase ? left : remainingBase;
+        creditAllocations.push({
+          fromLineId: credit.open_line_id,
+          toLineId: bill.open_line_id,
+          amount: fromUnits(applied),
+          sourceDocumentId: credit.document_id,
+        });
+        creditRemaining.set(credit.open_line_id, left - applied);
+        remainingBase -= applied;
+      }
+      if (remainingBase <= 0n) continue;
+      const remainingTxn = divRate(fromUnits(remainingBase), bill.fx_rate);
+      let discountTxn = "0";
+      if (captureDiscounts && bill.discount_days != null && bill.discount_percent && cmp(bill.discount_percent, "0") > 0) {
+        const deadline = new Date(`${bill.document_date}T00:00:00Z`);
+        deadline.setUTCDate(deadline.getUTCDate() + bill.discount_days);
+        if (paymentDate <= deadline.toISOString().slice(0, 10)) {
+          const numerator = toUnits(remainingTxn) * toUnits(bill.discount_percent);
+          discountTxn = fromUnits((numerator + 500_000n) / 1_000_000n);
+          if (!isZero(discountTxn) && !discountAccountId) {
+            throw new PaymentError("an early-payment discount is available but the bank profile has no discount account");
+          }
+        }
+      }
+      const paymentAmount = fromUnits(toUnits(remainingTxn) - toUnits(discountTxn));
+      if (cmp(paymentAmount, "0") <= 0) throw new PaymentError("discount leaves a non-positive payment amount");
+      discountTotal += toUnits(discountTxn);
+      billComposition.push({
+        bill,
+        allocation: { openLineId: bill.open_line_id, amount: remainingTxn, baseAmount: fromUnits(remainingBase) },
+        creditAmount: divRate(fromUnits(toUnits(bill.open_base) - remainingBase), bill.fx_rate),
+        discountAmount: discountTxn,
+        paymentAmount,
+      });
+    }
+    const allocations = billComposition.map((c) => c.allocation);
+    if (allocations.length === 0) continue;
+    const total = fromUnits(allocations.reduce((n, a) => n + toUnits(a.amount), 0n) - discountTotal);
 
     const payment = await createPaymentDocument({
       orgId: opts.orgId,
@@ -843,11 +1052,22 @@ export async function createPaymentRun(opts: {
       createdBy: opts.createdBy,
       partyId,
       bankAccountId: profile.bank_account_id,
+      subsidiaryId: first.subsidiary_id,
+      currency: profile.currency,
+      fxRate: first.fx_rate,
       memo: `Payment run ${runNumber}`,
     });
     await updateDraftPayment(
       payment.id,
-      { partyId, bankAccountId: profile.bank_account_id, allocations },
+      {
+        partyId,
+        bankAccountId: profile.bank_account_id,
+        allocations,
+        creditAllocations,
+        discountAmount: fromUnits(discountTotal),
+        discountAccountId,
+        controlAccountId: first.control_account_id,
+      },
       opts.createdBy,
     );
 
@@ -865,13 +1085,13 @@ export async function createPaymentRun(opts: {
       payeePartyId: partyId,
       payeeBankAccountId: payeeBank.rows[0]?.id ?? null,
       amount: total,
-      currency: org.baseCurrency,
+      currency: profile.currency,
       paymentDocumentId: payment.id,
       status: "pending",
       createdBy: opts.createdBy,
     }).returning({ id: schema.paymentInstructions.id });
 
-    await db.insert(schema.paymentRunItems).values(vendorBills.map((bill) => ({
+    await db.insert(schema.paymentRunItems).values(billComposition.map(({ bill, creditAmount, discountAmount, paymentAmount }) => ({
       orgId: opts.orgId,
       paymentRunId: run.id,
       paymentInstructionId: instruction.id,
@@ -879,14 +1099,40 @@ export async function createPaymentRun(opts: {
       sourceOpenLineId: bill.open_line_id,
       kind: "bill" as const,
       grossAmount: bill.open,
-      discountAmount: "0",
-      creditAmount: "0",
-      paymentAmount: bill.open,
+      discountAmount,
+      creditAmount,
+      paymentAmount,
       currency: bill.currency,
       fxRate: bill.fx_rate,
       status: "selected" as const,
       createdBy: opts.createdBy,
     })));
+    const creditsUsed = new Map<string, { sourceDocumentId: string; amount: bigint }>();
+    for (const credit of creditAllocations) {
+      const current = creditsUsed.get(credit.fromLineId);
+      creditsUsed.set(credit.fromLineId, {
+        sourceDocumentId: credit.sourceDocumentId,
+        amount: (current?.amount ?? 0n) + toUnits(credit.amount),
+      });
+    }
+    if (creditsUsed.size > 0) {
+      await db.insert(schema.paymentRunItems).values([...creditsUsed].map(([sourceOpenLineId, used]) => ({
+        orgId: opts.orgId,
+        paymentRunId: run.id,
+        paymentInstructionId: instruction.id,
+        sourceDocumentId: used.sourceDocumentId,
+        sourceOpenLineId,
+        kind: "credit" as const,
+        grossAmount: divRate(fromUnits(used.amount), first.fx_rate),
+        discountAmount: "0",
+        creditAmount: divRate(fromUnits(used.amount), first.fx_rate),
+        paymentAmount: "0",
+        currency: profile.currency,
+        fxRate: first.fx_rate,
+        status: "selected" as const,
+        createdBy: opts.createdBy,
+      })));
+    }
   }
 
   await db.execute(sql`
@@ -1001,6 +1247,7 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
 
   const blockers: RunBlocker[] = [];
   for (const r of rows.rows) {
+    if (method === "cheque" || method === "positive_pay") continue;
     if (!r.payee_bank_account_id) {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: "no approved bank account on file" });
       continue;
@@ -1022,7 +1269,7 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
       blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid 5-digit transit number" });
       continue;
     }
-    if (method !== "cheque" && method !== "positive_pay" && !r.account_number_encrypted) {
+    if (!r.account_number_encrypted) {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing account number" });
       continue;
     }
@@ -1093,6 +1340,7 @@ export async function postPaymentRun(
         .update(schema.paymentInstructions)
         .set({ status: "sent", updatedAt: new Date(), updatedBy: userId })
         .where(eq(schema.paymentInstructions.id, ins.id));
+      await queueAutomaticRemittance(ins.id, orgId, userId);
       posted += 1;
     } catch (e) {
       failures.push({ payee: ins.payee, error: e instanceof Error ? e.message : String(e) });
@@ -1111,6 +1359,71 @@ export async function postPaymentRun(
       .where(eq(schema.paymentRuns.id, runId));
   }
   return { posted, failures };
+}
+
+async function queueAutomaticRemittance(instructionId: string, orgId: string, userId: string): Promise<void> {
+  const row = (await db.execute(sql`
+    select i.id, i.amount, i.currency, i.payment_reference, d.document_number,
+           coalesce(r.scheduled_for, d.document_date) as payment_date,
+           p.display_name as payee, vr.eft_notification_email as email,
+           bp.auto_remittance, o.name as org_name
+      from payment_instructions i
+      join payment_runs r on r.id = i.payment_run_id
+      join payment_bank_profiles bp on bp.id = r.payment_bank_profile_id
+      join parties p on p.id = i.payee_party_id
+      left join vendor_roles vr on vr.party_id = p.id
+      left join documents d on d.id = i.payment_document_id
+      join orgs o on o.id = i.org_id
+     where i.id = ${instructionId} and i.org_id = ${orgId}
+  `)) as unknown as { rows: Array<{ id: string; amount: string; currency: string; payment_reference: string | null; document_number: string | null; payment_date: string; payee: string; email: string | null; auto_remittance: boolean; org_name: string }> };
+  const instruction = row.rows[0];
+  if (!instruction?.auto_remittance) return;
+  const already = (await db.execute(sql`
+    select 1 from payment_remittances where payment_instruction_id = ${instructionId} and status = 'sent' limit 1
+  `)) as unknown as { rows: unknown[] };
+  if (already.rows[0]) return;
+  const recipients = instruction.email ? [instruction.email] : [];
+  const [remittance] = await db.insert(schema.paymentRemittances).values({
+    orgId,
+    paymentInstructionId: instructionId,
+    recipients,
+    status: recipients.length ? "pending" : "failed",
+    attemptCount: 0,
+    error: recipients.length ? null : "counterparty has no remittance email address",
+    createdBy: userId,
+    updatedBy: userId,
+  }).returning({ id: schema.paymentRemittances.id });
+  if (!recipients.length) return;
+  const documents = (await db.execute(sql`
+    select d.document_number as number, ri.payment_amount as amount,
+           ri.discount_amount as discount, ri.credit_amount as credit
+      from payment_run_items ri join documents d on d.id = ri.source_document_id
+     where ri.payment_instruction_id = ${instructionId} and ri.kind in ('bill', 'expense', 'refund', 'receivable')
+     order by d.document_number
+  `)) as unknown as { rows: Array<{ number: string; amount: string; discount: string; credit: string }> };
+  try {
+    const [{ enqueueEmail }, { paymentRemittanceEmail }] = await Promise.all([
+      import("@openbooks/jobs"),
+      import("@openbooks/emails"),
+    ]);
+    const paymentReference = instruction.payment_reference ?? instruction.document_number ?? instruction.id;
+    const message = paymentRemittanceEmail({
+      orgName: instruction.org_name,
+      payeeName: instruction.payee,
+      paymentReference,
+      paymentDate: instruction.payment_date,
+      amount: instruction.amount,
+      currency: instruction.currency,
+      documents: documents.rows,
+    });
+    await enqueueEmail({ orgId, to: recipients, subject: message.subject, html: message.html, text: message.text, meta: { category: "payment_remittance" } });
+    await db.execute(sql`update payment_remittances set status = 'sent', attempt_count = 1, last_attempt_at = now(), sent_at = now(), updated_at = now(), updated_by = ${userId} where id = ${remittance.id}`);
+    await db.execute(sql`update payment_instructions set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${userId} where id = ${instructionId}`);
+  } catch (error) {
+    await db.execute(sql`
+      update payment_remittances set status = 'failed', attempt_count = 1, last_attempt_at = now(), error = ${error instanceof Error ? error.message : String(error)}, updated_at = now(), updated_by = ${userId} where id = ${remittance.id}
+    `);
+  }
 }
 
 // ---------------------------------------------------------------------------

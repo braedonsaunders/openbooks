@@ -865,7 +865,7 @@
       "fields": {
         "name": "Name", "currency": "Currency", "bankAccount": "Funding account", "format": "Payment format", "subsidiary": "Subsidiary", "country": "Country",
         "sftpServer": "Existing SFTP server", "sftpFolder": "Outbound folder", "requireRunApproval": "Require payment-run approval", "requireFileApproval": "Require generated-file approval",
-        "autoRemittance": "Send remittance advice automatically", "active": "Active", "code": "Code", "direction": "Direction", "extension": "File extension", "contentType": "Content type",
+        "autoRemittance": "Send remittance advice automatically", "discountAccount": "Early-payment discount account", "positivePayAccountReference": "Institution account reference", "active": "Active", "code": "Code", "direction": "Direction", "extension": "File extension", "contentType": "Content type",
         "formatterScript": "Formatter JavaScript", "profile": "Bank profile", "cron": "Cron expression", "timezone": "Time zone", "action": "When due", "party": "Counterparty",
         "partyBankAccount": "Approved bank account", "scheme": "Mandate scheme", "reference": "Mandate reference", "status": "Status", "signedOn": "Signed on", "validFrom": "Valid from", "expiresOn": "Expires on"
       },
@@ -875,6 +875,7 @@
         "originatorName": "Originator name", "originatorIban": "Originator IBAN", "originatorBic": "Originator BIC", "creditorId": "Creditor ID"
       },
       "originator": { "title": "Originator credentials", "newHint": "Stored encrypted for this tenant and profile.", "editHint": "Credentials are write-only. Leave every field blank to keep the saved values." },
+      "accounting": { "title": "Accounting and bank references", "noDiscountAccount": "Do not capture discounts", "hint": "The discount account records savings earned when a run captures an available payment-term discount." },
       "delivery": { "title": "Delivery", "manual": "Manual download", "existingSftpHint": "SFTP servers are managed once in the existing SFTP setup. This profile only selects one for delivery." },
       "criteria": { "title": "Selection criteria", "dueThroughDays": "Include bills due within (days)", "minimumAmount": "Minimum bill amount", "maximumRunAmount": "Maximum run amount", "captureDiscounts": "Capture available early-payment discounts", "applyCredits": "Apply available credits" },
       "drawer": {

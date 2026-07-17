@@ -188,10 +188,13 @@ export async function RunsSection({
       const [instructions, readiness, files, events, items] = await Promise.all([
         db.execute(sql`
           select i.id, i.amount, i.currency, i.status, p.display_name as payee,
-                 i.payment_document_id, d.document_number, d.status as payment_status
+                 i.payment_document_id, d.document_number, d.status as payment_status,
+                 ps.effective_on as settlement_effective_on, ps.bank_reference,
+                 ps.return_code, ps.return_reason
             from payment_instructions i
             join parties p on p.id = i.payee_party_id
             left join documents d on d.id = i.payment_document_id
+            left join payment_settlements ps on ps.payment_instruction_id = i.id
            where i.payment_run_id = ${runId}
            order by p.display_name
         `) as any,

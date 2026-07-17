@@ -37,6 +37,7 @@ export async function POST(req: Request) {
     paymentBankProfileId?: string
     billDocumentIds?: string[]
     scheduledFor?: string | null
+    selectionCriteria?: Record<string, unknown>
   }
   if (!body.paymentBankProfileId) {
     return NextResponse.json({ error: 'paymentBankProfileId is required' }, { status: 400 })
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
       paymentBankProfileId: body.paymentBankProfileId,
       billDocumentIds: body.billDocumentIds,
       scheduledFor: body.scheduledFor ?? null,
+      selectionCriteria: body.selectionCriteria ?? {},
     })
     return NextResponse.json(run)
   } catch (e) {

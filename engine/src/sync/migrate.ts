@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { CLOSE_MODULES, ensureCloseDefaults } from "../close.ts";
 import type { MigrationSource, SourceEntity } from "./source.ts";
 
 /**
@@ -24,7 +25,7 @@ export type EntityLoadStats = Record<string, ResourceLoadStats>;
 
 /** Resources this loader knows how to land. */
 const KNOWN = new Set([
-  "subsidiaries", "accounts", "departments", "payment_terms", "time_types", "tax_codes", "items",
+  "accounting_periods", "subsidiaries", "accounts", "departments", "payment_terms", "time_types", "tax_codes", "items",
   "parties", "projects", "addresses", "contacts", "time_entries",
 ]);
 
@@ -107,7 +108,10 @@ export async function loadEntities(
     },
   };
 
-  const streams = await source.entities(since);
+  const streams = [
+    { resource: "accounting_periods", records: await source.accountingPeriods() },
+    ...(await source.entities(since)),
+  ];
   const stats: EntityLoadStats = {};
 
   for (const stream of streams) {
@@ -116,6 +120,12 @@ export async function loadEntities(
       continue;
     }
     const s: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
+
+    if (stream.resource === "accounting_periods") {
+      await loadAccountingPeriods(stream.records, ctx, s);
+      stats[stream.resource] = s;
+      continue;
+    }
 
     if (stream.resource === "subsidiaries") {
       await loadSubsidiaries(stream.records, ctx, s);
@@ -157,6 +167,108 @@ export async function loadEntities(
     stats[stream.resource] = s;
   }
   return stats;
+}
+
+/**
+ * Land source posting periods and their module lock state. Source adapters
+ * normalize vendor-specific flags into the fields consumed here, keeping the
+ * migration kernel vendor-neutral. Imported locks remain source-owned while
+ * their reason is `close.importedPeriodLockReason`; a lock changed in openbooks
+ * gains a user reason and is never overwritten by a later mirror.
+ */
+async function loadAccountingPeriods(
+  records: SourceEntity[],
+  ctx: Ctx,
+  s: ResourceLoadStats,
+): Promise<void> {
+  const defaults = await ensureCloseDefaults(ctx.orgId);
+  const books = (await db.execute(sql`
+    select id from accounting_books
+     where org_id = ${ctx.orgId} and is_active
+     order by is_primary desc, created_at
+  `)) as { rows: { id: string }[] };
+  if (books.rows.length === 0) {
+    s.skipped += records.length;
+    return;
+  }
+
+  for (const rec of records) {
+    const f = rec.fields;
+    const fiscalYear = Number(f.fiscalYear);
+    const periodNumber = Number(f.periodNumber);
+    const name = str(f.name);
+    const startsOn = str(f.startsOn);
+    const endsOn = str(f.endsOn);
+    if (
+      !name || !startsOn || !endsOn ||
+      !Number.isInteger(fiscalYear) || !Number.isInteger(periodNumber) ||
+      periodNumber < 1
+    ) {
+      s.skipped++;
+      continue;
+    }
+
+    const existing = (await db.execute(sql`
+      select id from accounting_periods
+       where org_id = ${ctx.orgId}
+         and fiscal_calendar_id = ${defaults.calendarId}
+         and fiscal_year = ${fiscalYear}
+         and period_number = ${periodNumber}
+       limit 1
+    `)) as { rows: { id: string }[] };
+    const period = (await db.execute(sql`
+      insert into accounting_periods
+        (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment)
+      values (${ctx.orgId}, ${defaults.calendarId}, ${fiscalYear}, ${periodNumber},
+              ${name}, ${startsOn}, ${endsOn}, ${f.isAdjustment === true})
+      on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number)
+      do update set name = excluded.name, starts_on = excluded.starts_on,
+        ends_on = excluded.ends_on, is_adjustment = excluded.is_adjustment,
+        updated_at = now()
+      returning id
+    `)) as { rows: { id: string }[] };
+    const periodId = period.rows[0]?.id;
+    if (!periodId) {
+      s.skipped++;
+      continue;
+    }
+    existing.rows[0] ? s.updated++ : s.created++;
+
+    const fullyClosed = f.closed === true || f.allLocked === true;
+    const moduleStates = f.moduleStates && typeof f.moduleStates === "object" && !Array.isArray(f.moduleStates)
+      ? f.moduleStates as Record<string, unknown>
+      : {};
+    const closedAt = str(f.closedAt);
+    for (const book of books.rows) {
+      for (const module of CLOSE_MODULES) {
+        const closed = fullyClosed ||
+          (module === "ar" && f.arLocked === true) ||
+          (module === "ap" && f.apLocked === true);
+        const explicitState = moduleStates[module];
+        const state = explicitState === "closed" || explicitState === "soft_closed" || explicitState === "open"
+          ? explicitState
+          : closed ? "closed" : "open";
+        await db.execute(sql`
+          insert into period_locks
+            (org_id, period_id, book_id, module, state, locked_at, reason)
+          values (${ctx.orgId}, ${periodId}, ${book.id}, ${module},
+                  ${state},
+                  ${state !== "open" ? closedAt : null},
+                  'close.importedPeriodLockReason')
+          on conflict (org_id, period_id, book_id, subsidiary_id, module)
+          do update set state = excluded.state,
+            locked_at = excluded.locked_at,
+            reason = excluded.reason,
+            reopen_expires_at = null,
+            version = period_locks.version + 1,
+            updated_at = now()
+          where period_locks.reason is null
+             or period_locks.reason = 'close.importedPeriodLockReason'
+        `);
+      }
+    }
+  }
 }
 
 async function findByRef(table: string, orgId: string, refKey: string, sourceRef: string) {

@@ -19,13 +19,13 @@ export default async function CashflowPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('analytics.cashflow')
-  await requirePermission('reports.read')
+  const authz = await requirePermission('reports.read')
 
   const sp = await searchParams
   const parsed = Number(sp.horizon)
   const horizon = parsed === 8 || parsed === 12 ? parsed : 4
 
-  const data = await cashflowData(horizon)
+  const data = await cashflowData(authz.user.orgId, horizon)
 
   return (
     <ListPageLayout

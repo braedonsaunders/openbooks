@@ -271,14 +271,23 @@ export const RULES: Record<string, RuleFn> = {
   },
 
   vendor_payment: (doc, lines, deps) => {
-    const total = sum(lines.map(lineTotal));
+    const cash = sum(lines.map(lineTotal));
+    const custom = (doc.custom ?? {}) as Record<string, unknown>;
+    const discount = typeof custom.discountAmount === "string" ? custom.discountAmount : "0";
+    const discountAccountId = typeof custom.discountAccountId === "string" ? custom.discountAccountId : null;
+    if (toUnits(discount) < 0n) throw new Error("vendor payment discount cannot be negative");
+    if (!isZero(discount) && !discountAccountId) throw new Error("vendor payment discount account is required");
+    const payable = add(cash, discount);
     return [
       // The AP leg is an OPEN ITEM: it settles against the bills it paid, so it
       // must carry is_open_item to be a valid application source (from_line).
       // controlOverride: a payment against a non-default payable account (a
       // financing sub-account, or a source system with several AP accounts).
-      { accountId: controlOverride(doc) ?? deps.control.ap, amount: total, partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // debit AP
-      { accountId: lines[0]?.accountId ?? deps.control.bank, amount: neg(total), ...dims(doc) }, // credit bank
+      { accountId: controlOverride(doc) ?? deps.control.ap, amount: payable, partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // debit AP
+      { accountId: lines[0]?.accountId ?? deps.control.bank, amount: neg(cash), ...dims(doc) }, // credit bank
+      ...(!isZero(discount)
+        ? [{ accountId: discountAccountId!, amount: neg(discount), partyId: doc.partyId, ...dims(doc) }]
+        : []),
     ];
   },
 

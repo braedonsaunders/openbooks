@@ -5,7 +5,6 @@ import {
   CLOSE_MODULES,
   CloseError,
   decidePeriodReopen,
-  ensureCloseDefaults,
   generateAccountingPeriods,
   requestPeriodReopen,
   setPeriodLockState,
@@ -386,11 +385,6 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const { orgId, id: actorId } = gate.user;
   try {
-    if (action === "initialize")
-      return NextResponse.json({
-        ok: true,
-        ...(await ensureCloseDefaults(orgId, actorId)),
-      });
     if (action === "save-calendar")
       return NextResponse.json({
         ok: true,

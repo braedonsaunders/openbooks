@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { analyticsConfig } from "./config";
 
 /**
  * Cash Flow forecasting — faithful port of Gantry's Liquidity/Cashflow
@@ -67,7 +68,49 @@ export interface WeekRow {
   endingCash: number;
   arEntries: ForecastEntry[];
   apEntries: ForecastEntry[];
+  /** Non-AR/AP forecast flows from configured categories. */
+  dynamicInflow: number;
+  dynamicOutflow: number;
+  /** AP scheduled but pushed to a later week by the capacity scheduler. */
+  deferredOut: number;
+  /** Available AP capacity this week (null = unlimited, no scheduling). */
+  apCapacity: number | null;
 }
+
+/**
+ * Non-AR/AP forecast category — the openbooks port of Gantry's dynamic
+ * category engine (Lib_Cashflow_Data processCategory). Three of Gantry's
+ * seven strategies are supported; the others need data this ledger doesn't
+ * carry (statement cycles, formula variables) and are stated in the UI.
+ */
+export interface ForecastCategory {
+  id: string;
+  name: string;
+  direction: "inflow" | "outflow";
+  method: "gl_history_average" | "vendor_payment_history" | "manual_recurring";
+  // gl_history_average
+  accountIds?: string[];
+  historyWeeks?: number; // default 12
+  adjustmentPct?: number; // default 0
+  // vendor_payment_history
+  partyId?: string;
+  partyName?: string;
+  // manual_recurring
+  amount?: number;
+  frequency?: "weekly" | "biweekly" | "monthly";
+}
+
+export interface CategoryWeekly {
+  id: string;
+  name: string;
+  direction: "inflow" | "outflow";
+  method: ForecastCategory["method"];
+  weekly: number[]; // aligned with weeks[]
+  total: number;
+  /** Human explanation of the computation (Gantry's Forecast Logic card). */
+  logic: string;
+}
+
 export interface SideSummary {
   outstanding: number;
   scheduled: number; // amount predicted within the horizon
@@ -99,6 +142,13 @@ export interface CashflowData {
   };
   ar: SideSummary;
   ap: SideSummary;
+  categories: CategoryWeekly[];
+  apSettings: { weeklyCap: number; restrictToSafe: boolean };
+  /** AP predicted inside the horizon but unpayable under the cap — spills past the end. */
+  deferredBeyondHorizon: number;
+  /** Vendor options for the category editor (distinct parties on open AP). */
+  vendorOptions: { id: string; name: string }[];
+  accountOptions: { id: string; number: string | null; name: string }[];
 }
 
 interface OpenItem {
@@ -187,6 +237,94 @@ async function paymentStats(side: Side, asOfIso: string): Promise<{ map: Map<str
   return { map, globalAvg: count > 0 ? Math.round(sum / count) : 45 };
 }
 
+/* ------------------------------------------------ forecast category engine */
+
+/** Load configured categories from orgs.settings.analytics.cashflowCategories. */
+async function loadCategories(orgId: string): Promise<ForecastCategory[]> {
+  const r = (await db.execute(sql`
+    select settings -> 'analytics' -> 'cashflowCategories' as cats from orgs where id = ${orgId}
+  `)) as any;
+  const raw = r.rows[0]?.cats;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c: any) => c && typeof c === "object" && c.id && c.name && c.method);
+}
+
+/**
+ * Compute one category's weekly amounts across the horizon — the three
+ * portable Gantry strategies:
+ *  - gl_history_average: |net GL activity| on the chosen accounts over the
+ *    trailing historyWeeks (default 12) ÷ weeks × (1 + adjustment%).
+ *  - vendor_payment_history: median non-zero monthly outflow to the vendor
+ *    over the trailing 12 months ÷ 4.345 (Gantry's month→week factor).
+ *  - manual_recurring: fixed amount weekly / every 2nd week / on the first
+ *    week of each calendar month.
+ */
+async function categoryWeekly(
+  orgId: string,
+  cat: ForecastCategory,
+  asOfIso: string,
+  weekStarts: string[],
+): Promise<CategoryWeekly> {
+  const n = weekStarts.length;
+  const weekly = new Array<number>(n).fill(0);
+  let logic = "";
+
+  if (cat.method === "manual_recurring") {
+    const amount = Math.abs(cat.amount ?? 0);
+    const freq = cat.frequency ?? "monthly";
+    if (freq === "weekly") weekly.fill(amount);
+    else if (freq === "biweekly") for (let i = 0; i < n; i += 2) weekly[i] = amount;
+    else {
+      let lastMonth = "";
+      weekStarts.forEach((w, i) => {
+        const m = w.slice(0, 7);
+        if (m !== lastMonth) { weekly[i] = amount; lastMonth = m; }
+      });
+    }
+    logic = `$${Math.round(amount).toLocaleString()} ${freq}`;
+  } else if (cat.method === "gl_history_average" && cat.accountIds?.length) {
+    const historyWeeks = Math.max(1, Math.min(52, cat.historyWeeks ?? 12));
+    const adj = (cat.adjustmentPct ?? 0) / 100;
+    const ids = sql.join(cat.accountIds.map((a) => sql`${a}`), sql`, `);
+    const r = (await db.execute(sql`
+      select coalesce(sum(l.amount), 0) as total
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+      where l.org_id = ${orgId} and l.account_id in (${ids})
+        and e.posting_date > ${asOfIso}::date - (${historyWeeks} * 7)::int
+        and e.posting_date <= ${asOfIso}::date
+    `)) as any;
+    const perWeek = (Math.abs(Number(r.rows[0]?.total ?? 0)) / historyWeeks) * (1 + adj);
+    weekly.fill(perWeek);
+    logic = `${historyWeeks}-week GL average${adj ? ` ${adj > 0 ? "+" : ""}${Math.round(adj * 100)}%` : ""} across ${cat.accountIds.length} account${cat.accountIds.length === 1 ? "" : "s"}`;
+  } else if (cat.method === "vendor_payment_history" && cat.partyId) {
+    const r = (await db.execute(sql`
+      select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sum(abs(d.total)) as paid
+      from documents d
+      where d.org_id = ${orgId} and d.party_id = ${cat.partyId} and d.voided_at is null
+        and d.kind in ('vendor_payment', 'check')
+        and coalesce(d.document_date, d.posting_date) > ${asOfIso}::date - interval '12 months'
+        and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date
+      group by 1
+    `)) as any;
+    const months = (r.rows as any[]).map((x) => Number(x.paid)).filter((v) => v > 0).sort((a, b) => a - b);
+    const median = months.length ? months[Math.floor(months.length / 2)]! : 0;
+    const perWeek = median / 4.345;
+    weekly.fill(perWeek);
+    logic = `median of ${months.length} monthly payments ÷ 4.345`;
+  }
+
+  return {
+    id: cat.id,
+    name: cat.name,
+    direction: cat.direction === "inflow" ? "inflow" : "outflow",
+    method: cat.method,
+    weekly: weekly.map((v) => Math.round(v)),
+    total: Math.round(weekly.reduce((a, v) => a + v, 0)),
+    logic,
+  };
+}
+
 async function bankBalances(asOf: string) {
   const r = (await db.execute(sql`
     select a.id, a.name, a.number, coalesce(sum(l.amount), 0) as balance
@@ -260,20 +398,33 @@ function summariseSide(items: OpenItem[], asOf: Date, scheduled: number, avgDays
   };
 }
 
-export async function cashflowData(horizonWeeks: number, asOfDate?: string): Promise<CashflowData> {
+export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate?: string): Promise<CashflowData> {
   const today = new Date().toISOString().slice(0, 10);
   const asOfIso = asOfDate && asOfDate < today ? asOfDate : today;
   const asOf = parseISO(asOfIso);
   const start = weekStart(asOf);
   const end = addDays(start, horizonWeeks * 7 - 1);
+  const weekStarts: string[] = [];
+  for (let cur = new Date(start); cur <= end; cur = addDays(cur, 7)) weekStarts.push(toISO(cur));
 
-  const [arItems, apItems, arStats, apStats, banks] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, accountRows] = await Promise.all([
     openItems("ar", asOfIso),
     openItems("ap", asOfIso),
     paymentStats("ar", asOfIso),
     paymentStats("ap", asOfIso),
     bankBalances(asOfIso),
+    loadCategories(orgId),
+    analyticsConfig(orgId, "cashflow"),
+    db.execute(sql`
+      select id, number, name from accounts
+      where org_id = ${orgId} and is_summary = false
+      order by number nulls last, name
+    `) as Promise<any>,
   ]);
+  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, weekStarts)));
+  const weeklyCap = apCfg.weeklyApCap ?? 0;
+  const restrictToSafe = (apCfg.restrictToSafe ?? 0) >= 1;
+  const schedulingOn = weeklyCap > 0 || restrictToSafe;
 
   const startingCash = banks.reduce((a, b) => a + b.balance, 0);
 
@@ -313,17 +464,56 @@ export async function cashflowData(horizonWeeks: number, asOfDate?: string): Pro
   arScheduled = schedule(arItems, arStats, arByWeek);
   apScheduled = schedule(apItems, apStats, apByWeek);
 
-  // Roll the weekly timeline.
+  // Roll the weekly timeline — Gantry buildFinalTimeline. Category flows join
+  // AR/AP each week; when AP scheduling is on, payables are paid oldest-due
+  // first up to that week's capacity and the remainder defers forward.
   const weeks: WeekRow[] = [];
   let running = startingCash;
   let totalIn = 0;
   let totalOut = 0;
-  for (let cur = new Date(start); cur <= end; cur = addDays(cur, 7)) {
-    const k = toISO(cur);
+  let backlog: ForecastEntry[] = [];
+  weekStarts.forEach((k, wi) => {
+    const cur = parseISO(k);
     const arEntries = (arByWeek.get(k) ?? []).sort((a, b) => b.amount - a.amount);
-    const apEntries = (apByWeek.get(k) ?? []).sort((a, b) => b.amount - a.amount);
-    const inflow = arEntries.reduce((a, e) => a + e.amount, 0);
-    const outflow = apEntries.reduce((a, e) => a + e.amount, 0);
+    const dueThisWeek = (apByWeek.get(k) ?? []);
+    const dynamicInflow = categories.filter((c) => c.direction === "inflow").reduce((a, c) => a + (c.weekly[wi] ?? 0), 0);
+    const dynamicOutflow = categories.filter((c) => c.direction === "outflow").reduce((a, c) => a + (c.weekly[wi] ?? 0), 0);
+    const arInflow = arEntries.reduce((a, e) => a + e.amount, 0);
+
+    let apEntries: ForecastEntry[];
+    let deferredOut = 0;
+    let apCapacity: number | null = null;
+    if (schedulingOn) {
+      // Oldest due date first, then largest amount (Gantry's backlog order).
+      backlog = [...backlog, ...dueThisWeek].sort((a, b) => {
+        const ad = a.dueDate ?? a.predictedDate;
+        const bd = b.dueDate ?? b.predictedDate;
+        return ad < bd ? -1 : ad > bd ? 1 : b.amount - a.amount;
+      });
+      const safe = restrictToSafe ? Math.max(0, running + arInflow + dynamicInflow - dynamicOutflow) : Infinity;
+      const cap = Math.min(weeklyCap > 0 ? weeklyCap : Infinity, safe);
+      apCapacity = Number.isFinite(cap) ? cap : null;
+      const paid: ForecastEntry[] = [];
+      let spent = 0;
+      const remaining: ForecastEntry[] = [];
+      for (const e of backlog) {
+        if (apCapacity === null || spent + e.amount <= apCapacity) {
+          spent += e.amount;
+          paid.push(e.weekStart === k ? e : { ...e, weekStart: k, method: `${e.method} (deferred from ${e.weekStart})` });
+        } else {
+          remaining.push(e);
+        }
+      }
+      backlog = remaining;
+      deferredOut = remaining.reduce((a, e) => a + e.amount, 0);
+      apEntries = paid.sort((a, b) => b.amount - a.amount);
+    } else {
+      apEntries = dueThisWeek.sort((a, b) => b.amount - a.amount);
+    }
+
+    const apOutflow = apEntries.reduce((a, e) => a + e.amount, 0);
+    const inflow = arInflow + dynamicInflow;
+    const outflow = apOutflow + dynamicOutflow;
     const net = inflow - outflow;
     const startingWk = running;
     running += net;
@@ -340,8 +530,13 @@ export async function cashflowData(horizonWeeks: number, asOfDate?: string): Pro
       endingCash: running,
       arEntries,
       apEntries,
+      dynamicInflow,
+      dynamicOutflow,
+      deferredOut,
+      apCapacity,
     });
-  }
+  });
+  const deferredBeyondHorizon = backlog.reduce((a, e) => a + e.amount, 0);
 
   // Lowest point.
   let lowestCash = startingCash;
@@ -387,5 +582,10 @@ export async function cashflowData(horizonWeeks: number, asOfDate?: string): Pro
     },
     ar: arSummary,
     ap: apSummary,
+    categories,
+    apSettings: { weeklyCap, restrictToSafe },
+    deferredBeyondHorizon,
+    vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
+    accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
   };
 }

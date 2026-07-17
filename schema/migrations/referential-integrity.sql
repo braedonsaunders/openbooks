@@ -274,7 +274,8 @@ alter table payment_settlements
   add foreign key (org_id) references orgs(id) on delete cascade,
   add foreign key (payment_instruction_id) references payment_instructions(id),
   add foreign key (bank_statement_line_id) references bank_statement_lines(id),
-  add foreign key (reversal_document_id) references documents(id);
+  add foreign key (reversal_document_id) references documents(id),
+  add foreign key (reversal_entry_id) references journal_entries(id);
 alter table payment_remittances
   add foreign key (org_id) references orgs(id) on delete cascade,
   add foreign key (payment_instruction_id) references payment_instructions(id),

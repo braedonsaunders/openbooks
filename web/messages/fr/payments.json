@@ -115,6 +115,8 @@
     "selectBankAccountPlaceholder": "Sélectionner un profil de paiement…",
     "noBankAccounts": "Aucun profil de paiement actif",
     "fundsDate": "Date des fonds",
+    "captureDiscounts": "Saisir les escomptes de paiement anticipé disponibles",
+    "applyCredits": "Appliquer les avoirs fournisseurs disponibles",
     "selectedForPayment": "Sélectionné pour paiement",
     "selectionSummary": "{count, plural, one {# facture} other {# factures}} · <total>{amount}</total>",
     "createRun": "Créer un lot de paiements",
@@ -186,6 +188,8 @@
     "adjustments": "Escompte {discount} · crédit {credit}",
     "reason": "Motif",
     "reasonRequired": "Saisissez un motif. Il sera conservé dans la piste d’audit du paiement.",
+    "recordOutcome": "Enregistrer le résultat",
+    "outcome": { "title": "Résultat bancaire", "description": "Enregistrez le règlement ou un retour pour {payee}.", "status": "Résultat", "settled": "Réglé", "returned": "Retourné", "rejected": "Rejeté par la banque", "effectiveOn": "Date d’effet", "bankReference": "Référence bancaire", "returnCode": "Code de retour", "returnReason": "Motif du retour", "reversalWarning": "Un retour ou un rejet contrepassera le paiement comptabilisé et rouvrira les factures touchées." },
     "columns": {
       "payee": "Bénéficiaire",
       "payment": "Paiement",
@@ -224,7 +228,9 @@
       "fileApproved": "Fichier de paiement approuvé",
       "fileRejected": "Fichier de paiement rejeté",
       "fileReprocessed": "Fichier de paiement retraité",
-      "rolledBack": "Traitement du lot annulé"
+      "rolledBack": "Traitement du lot annulé",
+      "outcomeFailed": "Impossible d’enregistrer le résultat bancaire",
+      "outcomeSaved": "Résultat bancaire enregistré"
     },
     "deliverSftp": "Livrer par SFTP",
     "deliverHint": "Écrit le fichier bancaire de ce lot dans le dossier sortant d'un serveur SFTP pour que la banque le récupère.",

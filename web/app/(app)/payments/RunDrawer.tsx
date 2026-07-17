@@ -89,6 +89,12 @@ export function RunDrawer({
   const [instructionPage, setInstructionPage] = useState(1)
   const [decision, setDecision] = useState<{ kind: 'rejectRun' | 'rejectFile' | 'rollback'; fileId?: string } | null>(null)
   const [reason, setReason] = useState('')
+  const [outcomeInstruction, setOutcomeInstruction] = useState<Record<string, any> | null>(null)
+  const [outcomeStatus, setOutcomeStatus] = useState<'settled' | 'returned' | 'rejected'>('settled')
+  const [effectiveOn, setEffectiveOn] = useState(new Date().toISOString().slice(0, 10))
+  const [bankReference, setBankReference] = useState('')
+  const [returnCode, setReturnCode] = useState('')
+  const [returnReason, setReturnReason] = useState('')
   const closeHref = '/payments?view=runs'
 
   async function openDeliver() {
@@ -203,6 +209,22 @@ export function RunDrawer({
     router.refresh()
   }
 
+  async function saveOutcome() {
+    if (!outcomeInstruction) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payments/runs/${run.id}/instructions/${outcomeInstruction.id}/settlement`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: outcomeStatus, effectiveOn, bankReference: bankReference || null, returnCode: returnCode || null, returnReason: returnReason || null }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(data.error ?? t('runDrawer.toasts.outcomeFailed')); return }
+      toast.success(t('runDrawer.toasts.outcomeSaved'))
+      setOutcomeInstruction(null)
+      router.refresh()
+    } finally { setBusy(false) }
+  }
+
   return (
     <UrlDrawer
       open
@@ -298,6 +320,7 @@ export function RunDrawer({
                 <th className="px-3 py-2">{t('runDrawer.columns.bankDetails')}</th>
                 <th className="px-3 py-2">{tCommon('labels.status')}</th>
                 <th className="px-3 py-2 text-right">{tCommon('labels.amount')}</th>
+                <th className="px-3 py-2 text-right">{tCommon('labels.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -333,6 +356,7 @@ export function RunDrawer({
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(i.amount)}</td>
+                  <td className="px-3 py-2 text-right">{['sent', 'settled'].includes(i.status) ? <Button size="sm" variant="outline" onClick={() => { setOutcomeInstruction(i); setOutcomeStatus(i.status === 'settled' ? 'settled' : 'settled'); setEffectiveOn(i.settlement_effective_on ?? new Date().toISOString().slice(0, 10)); setBankReference(i.bank_reference ?? ''); setReturnCode(i.return_code ?? ''); setReturnReason(i.return_reason ?? '') }}>{t('runDrawer.recordOutcome')}</Button> : null}</td>
                 </tr>
               ))}
             </tbody>
@@ -372,6 +396,7 @@ export function RunDrawer({
         </div>
       </Drawer>
       <Drawer open={decision !== null} onClose={() => setDecision(null)} size="sm" title={decision?.kind === 'rollback' ? t('runDrawer.rollback') : decision?.kind === 'rejectFile' ? t('runDrawer.rejectFile') : t('runDrawer.reject')} description={t('runDrawer.reasonRequired')} headerActions={<><Button variant="outline" onClick={() => setDecision(null)}>{tCommon('actions.cancel')}</Button><Button variant="destructive" disabled={busy || !reason.trim()} onClick={async () => { if (decision?.kind === 'rejectRun') await decideRun('reject', reason); else if (decision?.kind === 'rejectFile' && decision.fileId) await decideFile(decision.fileId, 'reject', reason); else if (decision?.kind === 'rollback') { const ok = await action('rollback', { reason }, t('runDrawer.toasts.rolledBack')); if (ok) { setDecision(null); setReason('') } } }}>{tCommon('actions.confirm')}</Button></>}><div className="space-y-1.5 p-1"><Label>{t('runDrawer.reason')}</Label><Textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} /></div></Drawer>
+      <Drawer open={outcomeInstruction !== null} onClose={() => setOutcomeInstruction(null)} size="sm" title={t('runDrawer.outcome.title')} description={outcomeInstruction ? t('runDrawer.outcome.description', { payee: outcomeInstruction.payee }) : ''} headerActions={<><Button variant="outline" onClick={() => setOutcomeInstruction(null)}>{tCommon('actions.cancel')}</Button><Button disabled={busy || !effectiveOn || (outcomeStatus !== 'settled' && !returnReason.trim())} onClick={saveOutcome}>{tCommon('actions.save')}</Button></>}><div className="space-y-4 p-1"><div className="space-y-1.5"><Label>{t('runDrawer.outcome.status')}</Label><Select value={outcomeStatus} onChange={(e) => setOutcomeStatus(e.target.value as typeof outcomeStatus)}><option value="settled">{t('runDrawer.outcome.settled')}</option><option value="returned">{t('runDrawer.outcome.returned')}</option><option value="rejected">{t('runDrawer.outcome.rejected')}</option></Select></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.effectiveOn')}</Label><Input type="date" value={effectiveOn} onChange={(e) => setEffectiveOn(e.target.value)} /></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.bankReference')}</Label><Input value={bankReference} onChange={(e) => setBankReference(e.target.value)} /></div>{outcomeStatus !== 'settled' ? <><div className="space-y-1.5"><Label>{t('runDrawer.outcome.returnCode')}</Label><Input value={returnCode} onChange={(e) => setReturnCode(e.target.value)} /></div><div className="space-y-1.5"><Label>{t('runDrawer.outcome.returnReason')}</Label><Textarea rows={3} value={returnReason} onChange={(e) => setReturnReason(e.target.value)} /></div><Alert variant="warning"><AlertDescription>{t('runDrawer.outcome.reversalWarning')}</AlertDescription></Alert></> : null}</div></Drawer>
     </UrlDrawer>
   )
 }

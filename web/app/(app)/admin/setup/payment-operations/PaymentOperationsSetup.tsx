@@ -31,6 +31,7 @@ export type PaymentSetupView = 'profiles' | 'formats' | 'schedules' | 'mandates'
 type Options = {
   formats: Array<{ id: string; name: string; rail: string; currency: string | null }>
   bankAccounts: Array<{ id: string; number: string | null; name: string }>
+  accountingAccounts: Array<{ id: string; number: string | null; name: string }>
   subsidiaries: Array<{ id: string; name: string }>
   sftpServers: Array<{ id: string; name: string }>
   profiles: Array<{ id: string; name: string }>
@@ -249,7 +250,9 @@ function ProfileFields({ form, set, options, t, creating }: { form: Record<strin
   const format = options.formats.find((f) => f.id === formatId)
   const secretFields = SECRET_FIELDS[format?.rail ?? ''] ?? []
   const secrets = form.originatorSecrets ?? {}
+  const settings = form.settings ?? {}
   const secretSet = (key: string, value: string) => set('originatorSecrets', { ...secrets, [key]: value })
+  const settingSet = (key: string, value: unknown) => set('settings', { ...settings, [key]: value })
   return <>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
       <Field label={t('fields.currency')}><Input maxLength={3} value={form.currency ?? format?.currency ?? ''} onChange={(e) => set('currency', e.target.value.toUpperCase())} /></Field></div>
@@ -258,6 +261,7 @@ function ProfileFields({ form, set, options, t, creating }: { form: Record<strin
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.subsidiary')}><Select value={form.subsidiary_id ?? form.subsidiaryId ?? ''} onChange={(e) => set('subsidiaryId', e.target.value || null)}><option value="">{t('allSubsidiaries')}</option>{options.subsidiaries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
       <Field label={t('fields.country')}><Input maxLength={2} value={form.country ?? ''} onChange={(e) => set('country', e.target.value.toUpperCase())} /></Field></div>
     {secretFields.length ? <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800"><div><h3 className="text-sm font-semibold">{t('originator.title')}</h3><p className="text-xs text-slate-500">{creating ? t('originator.newHint') : t('originator.editHint')}</p></div><div className="grid gap-4 sm:grid-cols-2">{secretFields.map((key) => <Field key={key} label={t(`secretFields.${key}`)}><Input type="password" autoComplete="new-password" value={secrets[key] ?? ''} onChange={(e) => secretSet(key, e.target.value)} /></Field>)}</div></div> : null}
+    <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="text-sm font-semibold">{t('accounting.title')}</h3><Field label={t('fields.discountAccount')}><Select value={settings.discountAccountId ?? ''} onChange={(e) => settingSet('discountAccountId', e.target.value || null)}><option value="">{t('accounting.noDiscountAccount')}</option>{options.accountingAccounts.map((a) => <option key={a.id} value={a.id}>{[a.number, a.name].filter(Boolean).join(' · ')}</option>)}</Select></Field>{format?.rail === 'positive_pay' ? <Field label={t('fields.positivePayAccountReference')}><Input value={settings.positivePayAccountReference ?? ''} onChange={(e) => settingSet('positivePayAccountReference', e.target.value)} /></Field> : null}<p className="text-xs text-slate-500">{t('accounting.hint')}</p></div>
     <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="mb-3 text-sm font-semibold">{t('delivery.title')}</h3><div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.sftpServer')}><Select value={form.sftp_server_id ?? form.sftpServerId ?? ''} onChange={(e) => set('sftpServerId', e.target.value || null)}><option value="">{t('delivery.manual')}</option>{options.sftpServers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field><Field label={t('fields.sftpFolder')}><Input value={form.sftp_folder ?? form.sftpFolder ?? ''} onChange={(e) => set('sftpFolder', e.target.value)} placeholder="outbound" /></Field></div><p className="mt-2 text-xs text-slate-500">{t('delivery.existingSftpHint')}</p></div>
     <div className="space-y-2"><Toggle checked={form.require_run_approval ?? form.requireRunApproval ?? true} onChange={(v) => set('requireRunApproval', v)} label={t('fields.requireRunApproval')} /><Toggle checked={form.require_file_approval ?? form.requireFileApproval ?? false} onChange={(v) => set('requireFileApproval', v)} label={t('fields.requireFileApproval')} /><Toggle checked={form.auto_remittance ?? form.autoRemittance ?? false} onChange={(v) => set('autoRemittance', v)} label={t('fields.autoRemittance')} /><Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('isActive', v)} label={t('fields.active')} /></div>
   </>
