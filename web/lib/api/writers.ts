@@ -74,7 +74,7 @@ async function applyCustomRecord(
   user: SessionUser,
   typeKey: string,
   id: string,
-  sections: ReturnType<typeof lintRecordFields> extends { sections: infer S } ? S : never,
+  sections: Extract<ReturnType<typeof lintRecordFields>, { success: true }>["sections"],
   body: { data?: unknown; status?: string },
 ): Promise<WriteResult> {
   const record = await loadRecord(user.orgId, typeKey, id);
