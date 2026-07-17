@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { runRecordFlows, checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, guardPermission, can } from '../../../../lib/authz'
 import {
@@ -278,6 +279,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
+      const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
+      const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
       const sigBefore = await glSignature(tx, id)
 
       if (preparedLines) {
@@ -327,6 +330,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       if ((await glSignature(tx, id)) !== sigBefore) {
         await regenerateGlImpactTx(tx, id, deps, user.id)
+      }
+      if (auditBefore) {
+        const auditAfter = await captureTransactionAuditSnapshot(tx, id)
+        if (!auditAfter) throw new Error(`document ${id} disappeared during amendment`)
+        await recordTransactionAudit(tx, {
+          orgId: user.orgId,
+          documentId: id,
+          action: 'update',
+          actorId: user.id,
+          source: 'ui',
+          before: auditBefore,
+          after: auditAfter,
+        })
       }
     })
   } catch (e) {

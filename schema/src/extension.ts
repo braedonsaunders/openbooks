@@ -269,8 +269,11 @@ export const syncRuns = pgTable(
 );
 
 /**
- * Field-level audit trail for the business layer (the ledger needs none —
- * it's append-only). Written by the API layer inside the same transaction.
+ * Immutable audit trail for business-layer changes and open-period posted
+ * transaction amendments. Posted transactions may be re-materialized in an
+ * open period, so their document + GL before/after snapshots live here.
+ * Written inside the same transaction as the mutation; UPDATE/DELETE is
+ * blocked by the kernel.
  */
 export const auditLog = pgTable(
   "audit_log",
@@ -280,7 +283,7 @@ export const auditLog = pgTable(
     tableName: text("table_name").notNull(),
     rowId: uuid("row_id").notNull(),
     action: text("action", { enum: ["insert", "update", "delete", "post", "void", "approve", "reject"] }).notNull(),
-    /** { field: [old, new] } — only changed fields. */
+    /** Field diffs or a full posted-transaction before/after evidence envelope. */
     changes: jsonb("changes").notNull().default({}),
     actorId: uuid("actor_id"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),

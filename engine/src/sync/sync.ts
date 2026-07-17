@@ -7,6 +7,10 @@ import { loadEntities, type EntityLoadStats } from "./migrate.ts";
 import { reconcileApplications, type ApplyStats } from "./applications.ts";
 import type { MigrationSource } from "./source.ts";
 import { verifyAccountMonths, type AccountMonthVerification } from "./verification.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "../transaction-audit.ts";
 
 /**
  * NATIVE sync engine — migration and mirror are one code path.
@@ -317,6 +321,10 @@ export async function runSync(
         await db.transaction(async (tx) => {
           await tx.execute(sql`set local openbooks.amend = on`);
           await tx.execute(sql`set local openbooks.migration = on`);
+          const auditCandidate = await captureTransactionAuditSnapshot(tx, have.id);
+          const auditBefore = auditCandidate?.document.status === "posted"
+            ? auditCandidate
+            : null;
           await tx.execute(sql`
             update documents set
               kind = ${doc.kind}, party_id = ${doc.partyId}, subsidiary_id = ${doc.subsidiaryId},
@@ -348,6 +356,20 @@ export async function runSync(
             })),
           );
           if (have.posted) await regenerateGlImpactTx(tx, have.id, deps, "mirror");
+          if (auditBefore) {
+            const auditAfter = await captureTransactionAuditSnapshot(tx, have.id);
+            if (!auditAfter) throw new Error(`document ${have.id} disappeared during mirror amendment`);
+            await recordTransactionAudit(tx, {
+              orgId: org.id,
+              documentId: have.id,
+              action: "update",
+              actorId: null,
+              source: "mirror",
+              reason: "source_transaction_changed",
+              before: auditBefore,
+              after: auditAfter,
+            });
+          }
         });
         if (have.posted) await setDocumentTotalsFromEntry(have.id);
         docsAmended++;

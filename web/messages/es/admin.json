@@ -94,7 +94,7 @@
   },
   "audit": {
     "title": "Registro de auditoría",
-    "description": "Historial a nivel de campo de los cambios de la capa de negocio. El libro mayor no necesita pista de auditoría: es de solo adición por construcción.",
+    "description": "Historial empresarial inmutable, incluido el estado completo anterior y posterior del documento y su impacto en el libro mayor para modificaciones contabilizadas y eliminaciones.",
     "searchPlaceholder": "Buscar tabla, actor o id de fila…",
     "actionFilter": "Acción",
     "empty": {

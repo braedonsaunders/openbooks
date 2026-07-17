@@ -1,5 +1,9 @@
 import { eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "./transaction-audit.ts";
 
 /**
  * Delete a transaction, with accounting-appropriate guards.
@@ -14,10 +18,10 @@ import { db, schema } from "./db.ts";
  * The document's OWN outgoing applications (when it is itself a payment) are
  * removed first, re-opening the items it had settled.
  *
- * Removing a posted entry is normally blocked by the kernel's je_guard/jl_guard
- * (posted = immutable). A `delete` is the one legitimate exception, so we run it
- * with `session_replication_role = replica` (transaction-local) to bypass the
- * triggers — after the guards above have proven it safe.
+ * Removing a posted entry is normally blocked by the kernel's je_guard/jl_guard.
+ * A guarded open-period delete is an explicit exception: the engine enables
+ * openbooks.amend only after proving it safe and writes a complete immutable
+ * transaction + GL tombstone to audit_log in the same transaction.
  */
 
 export class DeleteError extends Error {}
@@ -25,6 +29,7 @@ export class DeleteError extends Error {}
 export async function deleteDocument(
   documentId: string,
   userId: string,
+  audit: { source?: string; reason?: string } = {},
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
     const [doc] = await tx
@@ -32,6 +37,12 @@ export async function deleteDocument(
       .from(schema.documents)
       .where(eq(schema.documents.id, documentId));
     if (!doc) throw new DeleteError("document not found");
+
+    // Capture the complete business record + GL impact before any dependent
+    // rows are removed. The audit row is inserted in this same transaction and
+    // survives as the deleted transaction's immutable tombstone.
+    const before = await captureTransactionAuditSnapshot(tx, documentId);
+    if (!before) throw new DeleteError("document not found");
 
     const entryId = doc.status === "posted" ? doc.postedEntryId : null;
 
@@ -114,6 +125,17 @@ export async function deleteDocument(
       sql`delete from document_lines where document_id = ${documentId}`,
     );
     await tx.execute(sql`delete from documents where id = ${documentId}`);
+
+    await recordTransactionAudit(tx, {
+      orgId: doc.orgId,
+      documentId,
+      action: "delete",
+      actorId: userId,
+      source: audit.source ?? "ui",
+      reason: audit.reason ?? "user_requested",
+      before,
+      after: null,
+    });
 
     return { documentId };
   });

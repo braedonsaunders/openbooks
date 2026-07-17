@@ -1,7 +1,7 @@
 {
   "list": {
     "title": "Journal",
-    "description": "{count, plural, one {# écriture comptabilisée} other {# écritures comptabilisées}} · immuable, en ajout seul.",
+    "description": "{count, plural, one {# écriture comptabilisée} other {# écritures comptabilisées}} · auditée; les périodes clôturées sont immuables.",
     "searchPlaceholder": "Rechercher un numéro d’écriture ou un mémo…",
     "originFilter": "Origine",
     "draftsHeading": "Écritures brouillons — pas encore comptabilisées",

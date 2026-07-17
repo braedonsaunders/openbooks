@@ -28,7 +28,11 @@ create constraint trigger jl_balanced
   for each row execute function jl_check_balanced();
 
 -- ---------------------------------------------------------------------------
--- 2. Posted entries are immutable; posting requires an open period.
+-- 2. Posted entries are locked by default; posting requires an open period.
+--    A tightly scoped engine transaction may set openbooks.amend=on to
+--    re-materialize or delete a posted transaction in an OPEN period. Every
+--    such operation must write immutable before/after evidence to audit_log in
+--    the same transaction. Closed-period GL impact is never amended in place.
 -- ---------------------------------------------------------------------------
 create or replace function period_module_is_closed(
   p_org uuid,
@@ -179,6 +183,19 @@ end $$;
 
 create trigger jl_guard before insert or update or delete on journal_lines
   for each row execute function jl_guard();
+
+-- The business and GL state of an open-period transaction may change, so its
+-- audit evidence is the permanent history. Audit rows themselves can only be
+-- inserted; even an engine amendment cannot rewrite or remove them.
+create or replace function audit_log_append_only_guard() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'audit_log is append-only';
+end $$;
+
+drop trigger if exists audit_log_append_only on audit_log;
+create trigger audit_log_append_only before update or delete on audit_log
+  for each row execute function audit_log_append_only_guard();
 
 -- ---------------------------------------------------------------------------
 -- 3. Lines post only to active, postable (non-summary) accounts.
