@@ -1325,10 +1325,16 @@ function TransactionSublist({ partyId, role }: { partyId: string; role?: 'custom
       return `${pathname}?${returnParams.toString()}`
     }
 
-    // Global related-party drawers can live over any transaction module, so
-    // retain their cross-module return flow. Dedicated party pages use the
-    // same-page branch above and never replace the underlying route.
-    if (returnParams.has('relatedParty')) returnParams.set('relatedPartyTab', 'transactions')
+    if (returnParams.has('relatedParty')) {
+      returnParams.set('relatedPartyTab', 'transactions')
+      returnParams.set('partyTxn', row.id)
+      returnParams.set('partyTxnKind', row.kind)
+      returnParams.delete('drawerReturn')
+      return `${pathname}?${returnParams.toString()}`
+    }
+
+    // Defensive fallback for a PartyDrawer mounted outside either supported
+    // URL host. Normal vendor/customer flows never leave their current page.
     const returnQuery = returnParams.toString()
     const returnHref = returnQuery ? `${pathname}?${returnQuery}` : pathname
     const target = transactionTarget(row)
