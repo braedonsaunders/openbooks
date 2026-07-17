@@ -58,6 +58,8 @@ export function RunBuilder({
   const [selected, setSelected] = useState<Record<string, RunBill>>({})
   const [paymentBankProfileId, setPaymentBankProfileId] = useState('')
   const [scheduledFor, setScheduledFor] = useState('')
+  const [captureDiscounts, setCaptureDiscounts] = useState(true)
+  const [applyCredits, setApplyCredits] = useState(true)
   const [busy, setBusy] = useState(false)
 
   const selectedList = Object.values(selected)
@@ -90,6 +92,7 @@ export function RunBuilder({
         paymentBankProfileId,
         billDocumentIds: selectedList.map((b) => b.id),
         scheduledFor: scheduledFor || null,
+        selectionCriteria: { captureDiscounts, applyCredits },
       }),
     })
     const data = await res.json()
@@ -159,6 +162,11 @@ export function RunBuilder({
       </div>
 
       <div className="shrink-0 px-4 py-3 sm:px-6">{toolbar}</div>
+
+      <div className="flex shrink-0 flex-wrap gap-x-5 gap-y-2 px-4 pb-3 text-sm text-slate-700 sm:px-6 dark:text-slate-200">
+        <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-teal-600" checked={captureDiscounts} onChange={(e) => setCaptureDiscounts(e.target.checked)} />{t('captureDiscounts')}</label>
+        <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-teal-600" checked={applyCredits} onChange={(e) => setApplyCredits(e.target.checked)} />{t('applyCredits')}</label>
+      </div>
 
       <div className="min-h-0 flex-1 px-4 pb-3 sm:px-6 [&>div]:h-full [&>div]:overflow-auto">
         {bills.length === 0 ? (

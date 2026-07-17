@@ -36,6 +36,13 @@ export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults:
       { key: "sequentialMinDays", label: "Sequential span (days)", help: "Runs spread over fewer days than this are treated as batch entry, not a flag", min: 1, max: 365, step: 1 },
     ],
   },
+  cashflow: {
+    defaults: { weeklyApCap: 0, restrictToSafe: 0 },
+    fields: [
+      { key: "weeklyApCap", label: "Weekly AP cap ($)", help: "Maximum payables paid per week — 0 means unlimited (no scheduling)", min: 0, max: 100_000_000, step: 1000 },
+      { key: "restrictToSafe", label: "Restrict to safe capacity (0/1)", help: "1 = never schedule payments beyond available cash that week; overflow defers", min: 0, max: 1, step: 1 },
+    ],
+  },
   spendVelocity: {
     defaults: {
       velocityHighThreshold: 15,

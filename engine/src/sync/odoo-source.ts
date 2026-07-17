@@ -11,6 +11,7 @@ import type {
   SourceOpenItem,
   SourceTrialBalanceRow,
 } from "./source.ts";
+import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods, type ImportedModuleStates } from "./periods.ts";
 
 /**
  * Odoo adapter — native `account.move` transactions over JSON-RPC. Moves ARE
@@ -80,6 +81,38 @@ export class OdooSource implements MigrationSource {
       { resource: "parties", records: await this.parties() },
       { resource: "items", records: await this.items() },
     ];
+  }
+
+  async accountingPeriods(): Promise<SourceEntity[]> {
+    const [companies, moves] = await Promise.all([
+      this.client.searchReadAll<{
+        id: number; fiscalyear_last_day: number; fiscalyear_last_month: string;
+        fiscalyear_lock_date: string | false; period_lock_date: string | false; tax_lock_date: string | false;
+      }>("res.company", [], ["id", "fiscalyear_last_day", "fiscalyear_last_month", "fiscalyear_lock_date", "period_lock_date", "tax_lock_date"]),
+      this.client.searchReadAll<{ date: string }>("account.move", [["state", "=", "posted"]], ["date"], "date asc"),
+    ]);
+    const company = companies[0];
+    if (!company) throw new Error("Odoo company fiscal settings are required for period migration");
+    const dates = moves.map((move) => move.date).filter(Boolean).sort();
+    const now = new Date();
+    const start = dates[0] ?? new Date(Date.UTC(now.getUTCFullYear() - 7, 0, 1)).toISOString().slice(0, 10);
+    const horizon = new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31)).toISOString().slice(0, 10);
+    const fullLock = company.fiscalyear_lock_date || null;
+    const periodLock = company.period_lock_date || null;
+    const taxLock = company.tax_lock_date || null;
+    const stateFor = (endsOn: string): ImportedModuleStates => {
+      if (fullLock && endsOn <= fullLock) return allModules("closed");
+      const operational = periodLock && endsOn <= periodLock ? "closed" : "open";
+      return {
+        ar: operational, ap: operational, banking: operational, assets: operational,
+        gl: operational, tax: taxLock && endsOn <= taxLock ? "closed" : operational,
+      };
+    };
+    return monthlySourcePeriods(
+      "odoo-period",
+      fiscalYearsForEndingRule(start, horizon, Number(company.fiscalyear_last_month), Number(company.fiscalyear_last_day)),
+      stateFor,
+    );
   }
 
   private async accounts(): Promise<SourceEntity[]> {

@@ -115,6 +115,8 @@
     "selectBankAccountPlaceholder": "Select a payment profile…",
     "noBankAccounts": "No active payment profiles",
     "fundsDate": "Funds date",
+    "captureDiscounts": "Capture available early-payment discounts",
+    "applyCredits": "Apply available vendor credits",
     "selectedForPayment": "Selected for payment",
     "selectionSummary": "{count, plural, one {# bill} other {# bills}} · <total>{amount}</total>",
     "createRun": "Create payment run",
@@ -186,6 +188,8 @@
     "adjustments": "Discount {discount} · credit {credit}",
     "reason": "Reason",
     "reasonRequired": "Enter a reason. It is retained in the payment audit trail.",
+    "recordOutcome": "Record outcome",
+    "outcome": { "title": "Bank outcome", "description": "Record settlement or a return for {payee}.", "status": "Outcome", "settled": "Settled", "returned": "Returned", "rejected": "Rejected by bank", "effectiveOn": "Effective date", "bankReference": "Bank reference", "returnCode": "Return code", "returnReason": "Return reason", "reversalWarning": "A return or rejection reverses the posted payment and reopens the affected bills." },
     "columns": {
       "payee": "Payee",
       "payment": "Payment",
@@ -230,6 +234,8 @@
       ,"fileRejected": "Payment file rejected"
       ,"fileReprocessed": "Payment file reprocessed"
       ,"rolledBack": "Payment run rolled back"
+      ,"outcomeFailed": "Could not record the bank outcome"
+      ,"outcomeSaved": "Bank outcome recorded"
     },
     "deliverSftp": "Deliver to SFTP",
     "deliverHint": "Write this run's bank file to an SFTP server's outbound folder for the bank to fetch.",

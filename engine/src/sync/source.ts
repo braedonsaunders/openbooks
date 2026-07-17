@@ -87,6 +87,13 @@ export interface MigrationSource {
   /** ISO 4217 base currency of the source book. */
   readonly baseCurrency: string;
 
+  /**
+   * Source fiscal periods normalized into posting-period rows plus per-module
+   * lock state. This is mandatory: silently treating historical periods as
+   * open can corrupt a cutover even when every ledger balance matches.
+   */
+  accountingPeriods(): Promise<SourceEntity[]>;
+
   /** Cheap connectivity/credential probe for the "Test connection" button. */
   ping?(): Promise<{ ok: boolean; detail?: string }>;
 

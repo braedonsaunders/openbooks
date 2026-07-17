@@ -6,11 +6,11 @@ import {
   PaymentError,
   decryptAccountNumber,
   loadRunFile,
+  reversePaymentForReturn,
   type NachaSettings,
   type SepaSettings,
 } from "./payments.ts";
-import { runScript } from "./scripting.ts";
-import { computeNextRunAt } from "./scripting.ts";
+import { computeNextRunAt, runScript } from "./scripting.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { createPaymentRun } from "./payments.ts";
 
@@ -78,21 +78,50 @@ export interface PaymentBankProfileInput {
   isActive?: boolean;
 }
 
+async function validatePaymentBankProfileRefs(orgId: string, input: {
+  bankAccountId: string;
+  paymentFormatId: string;
+  subsidiaryId?: string | null;
+  sftpServerId?: string | null;
+  currency: string;
+  settings?: Record<string, unknown>;
+}): Promise<void> {
+  const result = (await db.execute(sql`
+    select f.currency as format_currency, f.rail
+      from payment_formats f
+      join accounts a on a.id = ${input.bankAccountId} and a.org_id = f.org_id
+                         and a.type = 'asset_bank' and a.is_active and not a.is_summary
+     where f.id = ${input.paymentFormatId} and f.org_id = ${orgId} and f.is_active
+       and (${input.subsidiaryId ?? null}::uuid is null or exists (
+         select 1 from subsidiaries s where s.id = ${input.subsidiaryId ?? null} and s.org_id = ${orgId} and s.is_active))
+       and (${input.sftpServerId ?? null}::uuid is null or exists (
+         select 1 from sftp_servers sv where sv.id = ${input.sftpServerId ?? null} and sv.org_id = ${orgId} and sv.is_active))
+  `)) as unknown as { rows: { format_currency: string | null; rail: string }[] };
+  const row = result.rows[0];
+  if (!row) throw new PaymentError("select active tenant-owned payment, bank, subsidiary, and delivery records");
+  if (!/^[A-Z]{3}$/.test(input.currency)) throw new PaymentError("currency must be a three-letter ISO code");
+  if (row.format_currency && row.format_currency !== input.currency) {
+    throw new PaymentError(`the selected format requires ${row.format_currency}`);
+  }
+  const discountAccountId = input.settings?.discountAccountId;
+  if (typeof discountAccountId === "string" && discountAccountId) {
+    const account = (await db.execute(sql`
+      select id from accounts where id = ${discountAccountId} and org_id = ${orgId} and is_active and not is_summary
+    `)) as unknown as { rows: { id: string }[] };
+    if (!account.rows[0]) throw new PaymentError("discount account is invalid or inactive");
+  }
+  if (row.rail === "positive_pay" && !String(input.settings?.positivePayAccountReference ?? "").trim()) {
+    throw new PaymentError("Positive Pay requires the institution's bank account reference");
+  }
+}
+
 /** Creates a profile without ever persisting plaintext originator credentials. */
 export async function createPaymentBankProfile(
   orgId: string,
   userId: string,
   input: PaymentBankProfileInput,
 ): Promise<{ id: string }> {
-  const valid = (await db.execute(sql`
-    select f.id
-      from payment_formats f
-      join accounts a on a.id = ${input.bankAccountId} and a.org_id = f.org_id
-                         and a.type = 'asset_bank' and a.is_active and not a.is_summary
-     where f.id = ${input.paymentFormatId} and f.org_id = ${orgId} and f.is_active
-  `)) as unknown as { rows: { id: string }[] };
-  if (!valid.rows[0]) throw new PaymentError("select an active payment format and bank account");
-  if (!/^[A-Z]{3}$/.test(input.currency)) throw new PaymentError("currency must be a three-letter ISO code");
+  await validatePaymentBankProfileRefs(orgId, input);
   const [profile] = await db.insert(schema.paymentBankProfiles).values({
     orgId,
     name: input.name.trim(),
@@ -122,11 +151,20 @@ export async function updatePaymentBankProfile(
   input: Partial<PaymentBankProfileInput>,
 ): Promise<void> {
   const existing = (await db.execute(sql`
-    select id, originator_secrets_encrypted from payment_bank_profiles where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: { id: string; originator_secrets_encrypted: string | null }[] };
+    select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
+  `)) as unknown as { rows: Array<{ id: string; originator_secrets_encrypted: string | null; bank_account_id: string; subsidiary_id: string | null; payment_format_id: string; currency: string; settings: Record<string, unknown>; sftp_server_id: string | null }> };
   if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
+  const current = existing.rows[0];
+  await validatePaymentBankProfileRefs(orgId, {
+    bankAccountId: input.bankAccountId ?? current.bank_account_id,
+    subsidiaryId: input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId,
+    paymentFormatId: input.paymentFormatId ?? current.payment_format_id,
+    currency: input.currency ?? current.currency,
+    settings: input.settings ?? current.settings,
+    sftpServerId: input.sftpServerId === undefined ? current.sftp_server_id : input.sftpServerId,
+  });
   const secret = input.originatorSecrets === undefined
-    ? existing.rows[0].originator_secrets_encrypted
+    ? current.originator_secrets_encrypted
     : input.originatorSecrets === null ? null : sealJson(input.originatorSecrets);
   await db.execute(sql`
     update payment_bank_profiles set
@@ -276,7 +314,7 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
            m.mandate_reference
       from payment_instructions i
       join parties p on p.id = i.payee_party_id
-      join party_bank_accounts b on b.id = i.payee_bank_account_id and b.is_active and b.approved_at is not null
+      left join party_bank_accounts b on b.id = i.payee_bank_account_id and b.is_active and b.approved_at is not null
       left join documents d on d.id = i.payment_document_id
       left join payment_mandates m on m.id = i.mandate_id and m.status = 'active'
      where i.payment_run_id = ${runId} and i.status <> 'cancelled'
@@ -288,7 +326,7 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
     payee_party_id: string;
     display_name: string;
     routing: Record<string, string>;
-    account_number_encrypted: string;
+    account_number_encrypted: string | null;
     reference: string;
     mandate_reference: string | null;
   }> };
@@ -314,7 +352,7 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
       currency: p.currency,
       partyId: p.payee_party_id,
       partyName: p.display_name,
-      accountNumber: decryptAccountNumber(p.account_number_encrypted),
+      accountNumber: p.account_number_encrypted ? decryptAccountNumber(p.account_number_encrypted) : "",
       routing: p.routing ?? {},
       reference: p.reference,
       mandateReference: p.mandate_reference,
@@ -340,6 +378,30 @@ function genericRegister(ctx: FormatContext): { filename: string; content: strin
   const runNumber = String(ctx.run.run_number);
   return {
     filename: `${ctx.format.code}-${runNumber}.${ctx.format.extension}`,
+    content: [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n",
+    contentType: ctx.format.contentType,
+  };
+}
+
+function chequeRegister(ctx: FormatContext): { filename: string; content: string; contentType: string } {
+  const header = ["payment_reference", "payee", "amount", "currency", "payment_date"];
+  const paymentDate = String(ctx.run.scheduled_for ?? new Date().toISOString().slice(0, 10));
+  const rows = ctx.payments.map((p) => [p.reference, p.partyName, p.amount, p.currency, paymentDate]);
+  return {
+    filename: `CHEQUE-${String(ctx.run.run_number)}.${ctx.format.extension}`,
+    content: [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n",
+    contentType: ctx.format.contentType,
+  };
+}
+
+function positivePayRegister(ctx: FormatContext): { filename: string; content: string; contentType: string } {
+  const header = ["account", "issue_date", "payment_reference", "payee", "amount", "currency", "action"];
+  const issueDate = String(ctx.run.scheduled_for ?? new Date().toISOString().slice(0, 10));
+  const fundingAccount = String(ctx.profile.settings.positivePayAccountReference ?? "");
+  if (!fundingAccount) throw new PaymentError("Positive Pay profile is missing its bank account reference");
+  const rows = ctx.payments.map((p) => [fundingAccount, issueDate, p.reference, p.partyName, p.amount, p.currency, "issue"]);
+  return {
+    filename: `POSITIVE-PAY-${String(ctx.run.run_number)}.${ctx.format.extension}`,
     content: [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n",
     contentType: ctx.format.contentType,
   };
@@ -404,6 +466,8 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
   }
   if (ctx.format.rail === "nacha_debit") return { ...nachaDebit(ctx, now), runNumber: String(ctx.run.run_number) };
   if (ctx.format.rail === "sepa_debit") return { ...sepaDebit(ctx, now), runNumber: String(ctx.run.run_number) };
+  if (ctx.format.rail === "cheque") return { ...chequeRegister(ctx), runNumber: String(ctx.run.run_number) };
+  if (ctx.format.rail === "positive_pay") return { ...positivePayRegister(ctx), runNumber: String(ctx.run.run_number) };
   if (ctx.format.rail !== "custom") return { ...genericRegister(ctx), runNumber: String(ctx.run.run_number) };
   if (!ctx.format.formatterScript) throw new PaymentError("custom payment format has no formatter script");
   const org = (await db.execute(sql`select id, name, base_currency from orgs where id = ${orgId}`)) as unknown as { rows: { id: string; name: string; base_currency: string }[] };
@@ -636,32 +700,45 @@ export async function recordPaymentSettlement(opts: {
   returnReason?: string | null;
 }): Promise<void> {
   const row = (await db.execute(sql`
-    select i.payment_run_id, i.amount, i.currency, i.status
+    select i.payment_run_id, i.payment_document_id, i.amount, i.currency, i.status
       from payment_instructions i join payment_runs r on r.id = i.payment_run_id
      where i.id = ${opts.instructionId} and i.org_id = ${opts.orgId}
-  `)) as unknown as { rows: { payment_run_id: string; amount: string; currency: string; status: string }[] };
+  `)) as unknown as { rows: { payment_run_id: string; payment_document_id: string | null; amount: string; currency: string; status: string }[] };
   const instruction = row.rows[0];
   if (!instruction) throw new PaymentError("payment instruction not found");
   if (!["sent", "settled", "returned"].includes(instruction.status)) throw new PaymentError("only a sent payment can be settled or returned");
+  let reversalEntryId: string | null = null;
+  if ((opts.status === "returned" || opts.status === "rejected") && instruction.status !== "returned") {
+    if (!instruction.payment_document_id) throw new PaymentError("returned instruction has no payment document");
+    reversalEntryId = await reversePaymentForReturn(
+      instruction.payment_document_id,
+      opts.orgId,
+      opts.returnReason ?? opts.returnCode ?? "payment returned by bank",
+    );
+  }
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into payment_settlements
         (org_id, payment_instruction_id, bank_statement_line_id, status, amount, currency,
-         effective_on, bank_reference, return_code, return_reason, created_by, updated_by)
+         effective_on, bank_reference, return_code, return_reason, reversal_entry_id, created_by, updated_by)
       values (${opts.orgId}, ${opts.instructionId}, ${opts.bankStatementLineId ?? null}, ${opts.status},
               ${instruction.amount}, ${instruction.currency}, ${opts.effectiveOn}, ${opts.bankReference ?? null},
-              ${opts.returnCode ?? null}, ${opts.returnReason ?? null}, ${opts.userId}, ${opts.userId})
+              ${opts.returnCode ?? null}, ${opts.returnReason ?? null}, ${reversalEntryId}, ${opts.userId}, ${opts.userId})
       on conflict (payment_instruction_id) do update set
         bank_statement_line_id = excluded.bank_statement_line_id, status = excluded.status,
         effective_on = excluded.effective_on, bank_reference = excluded.bank_reference,
         return_code = excluded.return_code, return_reason = excluded.return_reason,
+        reversal_entry_id = coalesce(excluded.reversal_entry_id, payment_settlements.reversal_entry_id),
         updated_at = now(), updated_by = excluded.updated_by
     `);
     await tx.execute(sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId}`);
+    if (opts.status === "returned") {
+      await tx.execute(sql`update payment_run_items set status = 'returned', updated_at = now(), updated_by = ${opts.userId} where payment_instruction_id = ${opts.instructionId}`);
+    }
     await tx.execute(sql`
       update payment_runs r set
         status = case
-          when exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status = 'returned') then 'returned'
+          when exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status in ('returned', 'rejected')) then 'returned'
           when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status not in ('settled', 'cancelled')) then 'settled'
           else r.status end,
         settled_at = case when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status not in ('settled', 'cancelled')) then now() else settled_at end,

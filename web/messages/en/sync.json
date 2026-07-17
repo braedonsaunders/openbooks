@@ -1,35 +1,127 @@
 {
-  "title": "Sync",
-  "description": "Manual bridge to a connected accounting system while running in parallel. Changed transactions are reversed and re-posted — full audit trail, no mutation. Every sync re-verifies the trial balance per account against the live source.",
-  "noSource": {
-    "title": "No external source configured",
-    "description": "Connect one by adding a source adapter and its credentials; it will appear here automatically."
+  "title": "Migrations & Mirror",
+  "description": "Connect an external accounting system, migrate in one click, then mirror it daily to A/B-run both in parallel.",
+  "connections": {
+    "heading": "Connections",
+    "add": "Add connection",
+    "loading": "Loading…",
+    "empty": {
+      "title": "No connections yet.",
+      "hint": "Add NetSuite or QuickBooks Online to start a migration."
+    },
+    "status": {
+      "active": "active",
+      "paused": "paused",
+      "error": "error",
+      "unconfigured": "unconfigured"
+    },
+    "mirrorBadge": "mirror: {schedule}",
+    "lastRun": "Last run: {lastRun} · Synced through: {cursor}"
   },
-  "connectedSources": "Connected sources",
-  "mismatchesHeading": "Trial-balance mismatches (last sync)",
-  "allRuns": "All runs",
-  "columns": {
-    "sourceAccount": "Source account",
-    "ours": "openbooks",
-    "theirs": "source",
-    "started": "Started",
-    "finished": "Finished",
-    "trigger": "Trigger",
-    "detail": "Detail"
+  "actions": {
+    "connect": "Connect",
+    "reconnect": "Reconnect",
+    "test": "Test",
+    "mirrorNow": "Mirror now",
+    "runMigration": "Run migration",
+    "pauseMirror": "Pause mirror",
+    "enableMirror": "Enable mirror",
+    "edit": "Edit"
   },
-  "runStatus": {
-    "ok": "OK",
-    "failed": "Failed",
-    "running": "Running"
-  },
-  "runStats": "{newEntries} new · {reversedEntries} reversed · {unchanged} unchanged · TB {matches}/{accounts}",
-  "button": {
-    "syncing": "Syncing from {source}…",
-    "sync": "Sync from {source}"
+  "runs": {
+    "heading": "Recent runs",
+    "columns": {
+      "started": "Started",
+      "kind": "Kind",
+      "status": "Status",
+      "trigger": "Trigger",
+      "result": "Result"
+    },
+    "kind": {
+      "full_migration": "full migration",
+      "incremental": "incremental",
+      "mirror": "mirror"
+    },
+    "status": {
+      "ok": "ok",
+      "failed": "failed",
+      "running": "running"
+    },
+    "stats": {
+      "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
+      "applied": "{count} applied",
+      "tb": "TB {matches}/{accounts}",
+      "tbOff": "({count} off)",
+      "openItems": "open items {matches}/{checked}",
+      "periods": "periods {matches}/{checked}"
+    }
   },
   "toast": {
-    "summary": "{newEntries} new · {reversedEntries} reversed · {unchanged} unchanged — TB {matches}/{accounts}{mismatches, plural, =0 { exact} one { (# MISMATCH)} other { (# MISMATCHES)}}",
-    "synced": "Synced in {seconds}s — {summary}",
-    "syncFailed": "Sync failed: {detail}"
+    "loadFailed": "Failed to load connections (HTTP {status})",
+    "authorized": "Connection authorized",
+    "authDenied": "Authorization was declined",
+    "authFailed": "Authorization failed ({status})",
+    "queuingMigration": "Queuing full migration…",
+    "queuingMirror": "Queuing mirror…",
+    "migrationQueued": "Migration queued — runs on the worker",
+    "mirrorQueued": "Mirror queued — runs on the worker",
+    "testing": "Testing connection…",
+    "connected": "Connected",
+    "connectedDetail": "Connected — {detail}",
+    "testFailed": "Connection failed: {error}",
+    "unknownError": "unknown error",
+    "removed": "Connection removed",
+    "created": "Connection created",
+    "updated": "Connection updated",
+    "copied": "Redirect URI copied",
+    "copyFailed": "Could not copy — select and copy the text manually"
+  },
+  "confirmDelete": "Delete connection \"{name}\"? Migrated data stays; only the link is removed.",
+  "drawer": {
+    "addTitle": "Add connection",
+    "editTitle": "Edit connection",
+    "description": "Connect an external accounting system. Credentials are encrypted at rest and never shown again.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveChanges": "Save changes",
+    "create": "Create connection",
+    "system": "System",
+    "selectSystem": "Select a system…",
+    "name": "Connection name",
+    "select": "Select…",
+    "credentials": "Credentials (encrypted at rest, never displayed again)",
+    "keepCurrent": "Leave blank to keep current"
+  },
+  "oauth": {
+    "title": "One-time app setup in the <link>{portal}</link>",
+    "redirectLabel": "Redirect URI to register:",
+    "copy": "Copy"
+  },
+  "sources": {
+    "netsuite": {
+      "blurb": "Token-based (TBA) access to SuiteQL. Create an integration + access token in NetSuite, then paste the four values. Native transactions, applications and orders migrate and mirror through the real posting engine."
+    },
+    "odoo": {
+      "blurb": "Connect with your Odoo URL, database, user and an API key (Settings → My Profile → Account Security → API Keys). Invoices, bills, payments and journals migrate and mirror natively through the real posting engine."
+    },
+    "erpnext": {
+      "blurb": "Connect with your ERPNext URL and an API key + secret (User → Settings → API Access). Invoices, bills, payment entries and journals migrate and mirror natively through the real posting engine."
+    },
+    "qbo": {
+      "blurb": "Enter your Intuit app's Client ID + Secret (developer.intuit.com → Keys & credentials), save, then click Connect to authorize a company. Invoices, bills, payments, credits, journals and deposits migrate and mirror natively.",
+      "steps": [
+        "Create an app (QuickBooks Online and Payments) with the com.intuit.quickbooks.accounting scope.",
+        "Under Keys & credentials, add the Redirect URI shown below (use Development keys for a sandbox company, Production keys for a live one).",
+        "Copy the Client ID and Client Secret into this form, save, then click Connect."
+      ]
+    },
+    "xero": {
+      "blurb": "Enter your Xero app's Client ID + Secret (developer.xero.com → My Apps), save, then click Connect to authorize an organisation. Invoices, bills, credit notes, payments, journals and bank transactions migrate and mirror natively.",
+      "steps": [
+        "Create a new app (integration type: Web app); the company URL can be this site's address.",
+        "Add the Redirect URI shown below to the app's OAuth 2.0 redirect URIs.",
+        "Copy the Client ID, generate a Client Secret, paste both into this form, save, then click Connect."
+      ]
+    }
   }
 }

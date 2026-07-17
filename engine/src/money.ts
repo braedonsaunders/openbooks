@@ -82,3 +82,20 @@ export function mulRate(amount: string, rate: string): string {
   const rounded = (absolute + RATE_SCALE / 2n) / RATE_SCALE;
   return fromUnits(negative ? -rounded : rounded);
 }
+
+/** Divide functional-currency money by an FX rate, rounded to 4 decimals. */
+export function divRate(amount: string, rate: string): string {
+  const raw = String(rate).trim();
+  if (!/^\+?(\d+(\.\d*)?|\.\d+)$/.test(raw)) throw new Error(`not a positive FX rate: "${rate}"`);
+  const [whole = "0", fraction = ""] = raw.replace(/^\+/, "").split(".");
+  if (fraction.length > 10 && /[1-9]/.test(fraction.slice(10))) {
+    throw new Error(`FX rate loses precision beyond 10 decimal places: "${rate}"`);
+  }
+  const rateUnits = BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  if (rateUnits <= 0n) throw new Error(`FX rate must be greater than zero: "${rate}"`);
+  const numerator = toUnits(amount) * RATE_SCALE;
+  const negative = numerator < 0n;
+  const absolute = negative ? -numerator : numerator;
+  const rounded = (absolute + rateUnits / 2n) / rateUnits;
+  return fromUnits(negative ? -rounded : rounded);
+}

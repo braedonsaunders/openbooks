@@ -2,6 +2,7 @@
   "title": "Cierre de período",
   "description": "Cierre módulos por período con controles de contabilización aplicados por la base de datos.",
   "workspaceDescription": "Ejecute un cierre controlado y respaldado por evidencia, desde la preparación hasta la publicación. Cada aprobación permanece vinculada al estado del libro que validó.",
+  "importedPeriodLockReason": "Estado del período importado del sistema de origen",
   "searchPlaceholder": "Buscar períodos…",
   "stageNavigation": "Etapas del cierre",
   "continuousValidation": "Validación continua contra el libro · última revisión {at}",
@@ -333,6 +334,10 @@
       "title": "Períodos contables y bloqueos",
       "description": "Genere, busque, bloquee, cierre de forma flexible y solicite reaperturas por libro y módulo.",
       "searchPlaceholder": "Buscar períodos contables…",
+      "generateTitle": "Generar períodos contables",
+      "generateDescription": "Cree los períodos de contabilización de un calendario y ejercicio fiscal.",
+      "moduleSummary": "{closed} de {total} módulos cerrados",
+      "lockedOn": "Bloqueado el {date}",
       "lockTitle": "Confirmar bloqueo",
       "reopenTitle": "Solicitar reapertura controlada",
       "lockDescription": "{module} · {period}. El motivo queda en el historial inmutable.",
@@ -367,7 +372,6 @@
       "recipientsHint": "Un destinatario por línea."
     },
     "actions": {
-      "restoreDefaults": "Asegurar controles estándar",
       "newCalendar": "Nuevo calendario",
       "newBlueprint": "Nueva plantilla",
       "newPolicy": "Nueva política",
@@ -386,7 +390,8 @@
       "confirmClose": "Confirmar cierre",
       "approve": "Aprobar",
       "reject": "Rechazar",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "managePeriod": "Gestionar {period}"
     },
     "fields": {
       "name": "Nombre",
@@ -454,6 +459,7 @@
     "states": {
       "open": "Abierto",
       "soft_closed": "Cierre flexible",
+      "partial": "Cierre parcial",
       "closed": "Cerrado"
     },
     "modules": {
@@ -540,9 +546,16 @@
       "trial-balance": "Balance de comprobación",
       "general-ledger": "Libro mayor"
     },
-    "table": { "period": "Período", "range": "Rango", "entries": "Asientos" },
+    "table": { "period": "Período", "range": "Rango", "entries": "Asientos", "status": "Estado" },
+    "empty": {
+      "calendars": "Ningún calendario fiscal coincide con la búsqueda.",
+      "periods": "Ningún período contable coincide con estos filtros.",
+      "blueprints": "Ninguna plantilla de cierre coincide con la búsqueda.",
+      "policies": "Ninguna política de cierre coincide con la búsqueda.",
+      "automation": "Ninguna regla de automatización coincide con la búsqueda.",
+      "packages": "Ningún paquete de informes coincide con la búsqueda."
+    },
     "messages": {
-      "initialized": "Los controles estándar están listos",
       "calendarSaved": "Calendario fiscal guardado",
       "periodsGenerated": "Períodos contables generados",
       "lockSaved": "Bloqueo guardado",

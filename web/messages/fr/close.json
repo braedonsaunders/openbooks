@@ -2,6 +2,7 @@
   "title": "Clôture de période",
   "description": "Clôturez les modules par période avec des contrôles de comptabilisation appliqués par la base de données.",
   "workspaceDescription": "Exécutez une clôture contrôlée et documentée, de la préparation à la publication. Chaque approbation reste liée à l’état du grand livre qu’elle a validé.",
+  "importedPeriodLockReason": "Statut de période importé du système source",
   "searchPlaceholder": "Rechercher des périodes…",
   "stageNavigation": "Étapes de clôture",
   "continuousValidation": "Validation continue avec le grand livre · dernière vérification {at}",
@@ -333,6 +334,10 @@
       "title": "Périodes comptables et verrous",
       "description": "Générez, recherchez, verrouillez, clôturez souplement et demandez des réouvertures par livre et module.",
       "searchPlaceholder": "Rechercher des périodes comptables…",
+      "generateTitle": "Générer les périodes comptables",
+      "generateDescription": "Créez les périodes de comptabilisation d’un calendrier et d’un exercice.",
+      "moduleSummary": "{closed} modules sur {total} clôturés",
+      "lockedOn": "Verrouillée le {date}",
       "lockTitle": "Confirmer le verrouillage",
       "reopenTitle": "Demander une réouverture contrôlée",
       "lockDescription": "{module} · {period}. Le motif est conservé dans l’historique immuable.",
@@ -367,7 +372,6 @@
       "recipientsHint": "Un destinataire par ligne."
     },
     "actions": {
-      "restoreDefaults": "Vérifier les contrôles standard",
       "newCalendar": "Nouveau calendrier",
       "newBlueprint": "Nouveau modèle",
       "newPolicy": "Nouvelle politique",
@@ -386,7 +390,8 @@
       "confirmClose": "Confirmer la clôture",
       "approve": "Approuver",
       "reject": "Refuser",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "managePeriod": "Gérer {period}"
     },
     "fields": {
       "name": "Nom",
@@ -454,6 +459,7 @@
     "states": {
       "open": "Ouverte",
       "soft_closed": "Clôture souple",
+      "partial": "Partiellement clôturée",
       "closed": "Clôturée"
     },
     "modules": {
@@ -540,9 +546,16 @@
       "trial-balance": "Balance de vérification",
       "general-ledger": "Grand livre"
     },
-    "table": { "period": "Période", "range": "Plage", "entries": "Écritures" },
+    "table": { "period": "Période", "range": "Plage", "entries": "Écritures", "status": "Statut" },
+    "empty": {
+      "calendars": "Aucun calendrier fiscal ne correspond à cette recherche.",
+      "periods": "Aucune période comptable ne correspond à ces filtres.",
+      "blueprints": "Aucun modèle de clôture ne correspond à cette recherche.",
+      "policies": "Aucune politique de clôture ne correspond à cette recherche.",
+      "automation": "Aucune règle d’automatisation ne correspond à cette recherche.",
+      "packages": "Aucun dossier de rapports ne correspond à cette recherche."
+    },
     "messages": {
-      "initialized": "Les contrôles standard sont prêts",
       "calendarSaved": "Calendrier enregistré",
       "periodsGenerated": "Périodes générées",
       "lockSaved": "Verrou de période enregistré",

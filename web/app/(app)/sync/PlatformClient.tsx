@@ -94,6 +94,7 @@ function fmt(ts: string | null): string {
 }
 
 export function PlatformClient() {
+  const t = useTranslations('sync')
   const tHub = useTranslations('admin.hub')
   const [data, setData] = useState<Payload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -103,13 +104,13 @@ export function PlatformClient() {
   const load = useCallback(async () => {
     const res = await fetch('/api/platform/connections')
     if (!res.ok) {
-      toast.error(`Failed to load connections (HTTP ${res.status})`)
+      toast.error(t('toast.loadFailed', { status: res.status }))
       setLoading(false)
       return
     }
     setData(await res.json())
     setLoading(false)
-  }, [])
+  }, [t])
 
   useEffect(() => { void load() }, [load])
 
@@ -118,17 +119,35 @@ export function PlatformClient() {
     const params = new URLSearchParams(window.location.search)
     const status = params.get('oauth')
     if (!status) return
-    if (status === 'connected') toast.success('Connection authorized')
-    else if (status === 'denied') toast.error('Authorization was declined')
-    else toast.error(`Authorization failed (${status})`)
+    if (status === 'connected') toast.success(t('toast.authorized'))
+    else if (status === 'denied') toast.error(t('toast.authDenied'))
+    else toast.error(t('toast.authFailed', { status }))
     window.history.replaceState({}, '', window.location.pathname)
-  }, [])
+  }, [t])
 
+  // Enum-ish values from the API render through messages when a label exists,
+  // otherwise fall back to the raw value (e.g. a kind added server-side first).
+  const statusLabel = (s: string) => (t.has(`connections.status.${s}`) ? t(`connections.status.${s}`) : s)
+  const kindLabel = (k: string) => (t.has(`runs.kind.${k}`) ? t(`runs.kind.${k}`) : k)
+  const runStatusLabel = (s: string) => (t.has(`runs.status.${s}`) ? t(`runs.status.${s}`) : s)
+
+  function runResult(r: Run): string {
+    if (r.status !== 'ok' || !r.stats) return r.errorMessage ?? ''
+    const s = r.stats
+    const parts = [t('runs.stats.docs', { new: s.docsNew ?? 0, amended: s.docsAmended ?? 0, unchanged: s.docsUnchanged ?? 0 })]
+    if ((s.applications?.inserted ?? 0) > 0) parts.push(t('runs.stats.applied', { count: s.applications?.inserted ?? 0 }))
+    let tb = t('runs.stats.tb', { matches: s.tb?.matches ?? 0, accounts: s.tb?.accounts ?? 0 })
+    if ((s.tb?.mismatches?.length ?? 0) > 0) tb += ` ${t('runs.stats.tbOff', { count: s.tb?.mismatches?.length ?? 0 })}`
+    parts.push(tb)
+    if (s.openItems) parts.push(t('runs.stats.openItems', { matches: s.openItems.matches ?? 0, checked: s.openItems.checked ?? 0 }))
+    if (s.periods) parts.push(t('runs.stats.periods', { matches: s.periods.matches ?? 0, checked: s.periods.checked ?? 0 }))
+    return parts.join(' · ')
+  }
 
   async function run(conn: Connection, mode: 'full_migration' | 'mirror') {
     const key = `${conn.id}:${mode}`
     setBusy(key)
-    const tid = toast.loading(mode === 'full_migration' ? 'Queuing full migration…' : 'Queuing mirror…')
+    const tid = toast.loading(mode === 'full_migration' ? t('toast.queuingMigration') : t('toast.queuingMirror'))
     try {
       const res = await fetch(`/api/platform/connections/${conn.id}/run`, {
         method: 'POST',
@@ -137,7 +156,7 @@ export function PlatformClient() {
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      toast.success(`${mode === 'full_migration' ? 'Migration' : 'Mirror'} queued — runs on the worker`, { id: tid })
+      toast.success(mode === 'full_migration' ? t('toast.migrationQueued') : t('toast.mirrorQueued'), { id: tid })
       setTimeout(() => void load(), 800)
     } catch (e) {
       toast.error((e as Error).message, { id: tid })
@@ -149,12 +168,12 @@ export function PlatformClient() {
   async function test(conn: Connection) {
     const key = `${conn.id}:test`
     setBusy(key)
-    const tid = toast.loading('Testing connection…')
+    const tid = toast.loading(t('toast.testing'))
     try {
       const res = await fetch(`/api/platform/connections/${conn.id}/test`, { method: 'POST' })
       const body = await res.json()
-      if (body.ok) toast.success(`Connected${body.detail ? ` — ${body.detail}` : ''}`, { id: tid })
-      else toast.error(`Connection failed: ${body.error ?? 'unknown error'}`, { id: tid, duration: 8000 })
+      if (body.ok) toast.success(body.detail ? t('toast.connectedDetail', { detail: body.detail }) : t('toast.connected'), { id: tid })
+      else toast.error(t('toast.testFailed', { error: body.error ?? t('toast.unknownError') }), { id: tid, duration: 8000 })
     } catch (e) {
       toast.error((e as Error).message, { id: tid })
     } finally {
@@ -177,12 +196,12 @@ export function PlatformClient() {
   }
 
   async function remove(conn: Connection) {
-    if (!confirm(`Delete connection "${conn.displayName}"? Migrated data stays; only the link is removed.`)) return
+    if (!confirm(t('confirmDelete', { name: conn.displayName }))) return
     setBusy(`${conn.id}:del`)
     try {
       await fetch(`/api/platform/connections/${conn.id}`, { method: 'DELETE' })
       await load()
-      toast.success('Connection removed')
+      toast.success(t('toast.removed'))
     } finally {
       setBusy(null)
     }
@@ -192,24 +211,24 @@ export function PlatformClient() {
     <div>
       <PageHeader
         back={{ href: '/admin', label: tHub('title') }}
-        title="Migrations & Mirror"
-        description="Connect an external accounting system, migrate in one click, then mirror it daily to A/B-run both in parallel."
+        title={t('title')}
+        description={t('description')}
       />
 
       <div className="mt-6 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Connections</h2>
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('connections.heading')}</h2>
         <Button onClick={() => setDrawer({ editing: null })}>
-          <Plus size={15} /> Add connection
+          <Plus size={15} /> {t('connections.add')}
         </Button>
       </div>
 
       {loading ? (
-        <p className="mt-4 text-sm text-slate-500">Loading…</p>
+        <p className="mt-4 text-sm text-slate-500">{t('connections.loading')}</p>
       ) : !data || data.connections.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <Plug className="mx-auto mb-2 text-slate-400" size={22} />
-          <p className="text-sm text-slate-600 dark:text-slate-300">No connections yet.</p>
-          <p className="text-xs text-slate-500">Add NetSuite or QuickBooks Online to start a migration.</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{t('connections.empty.title')}</p>
+          <p className="text-xs text-slate-500">{t('connections.empty.hint')}</p>
         </div>
       ) : (
         <div className="mt-4 space-y-3">
@@ -219,34 +238,34 @@ export function PlatformClient() {
                 <div className="flex items-center gap-3">
                   <span className="font-medium text-slate-800 dark:text-slate-100">{c.displayName}</span>
                   <Badge variant="secondary">{c.source}</Badge>
-                  <Badge variant={STATUS_VARIANT[c.status] ?? 'secondary'}>{c.status}</Badge>
-                  {c.mirrorEnabled ? <Badge variant="success">mirror: {c.mirrorSchedule}</Badge> : null}
+                  <Badge variant={STATUS_VARIANT[c.status] ?? 'secondary'}>{statusLabel(c.status)}</Badge>
+                  {c.mirrorEnabled ? <Badge variant="success">{t('connections.mirrorBadge', { schedule: c.mirrorSchedule })}</Badge> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {c.authKind === 'oauth2' && c.status !== 'active' ? (
                     <Button size="sm" onClick={() => window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, '_blank')}>
-                      <Plug size={14} /> Connect
+                      <Plug size={14} /> {t('actions.connect')}
                     </Button>
                   ) : null}
                   {c.authKind === 'oauth2' && c.status === 'active' ? (
                     <Button variant="outline" size="sm" onClick={() => window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, '_blank')}>
-                      Reconnect
+                      {t('actions.reconnect')}
                     </Button>
                   ) : null}
                   <Button variant="outline" size="sm" disabled={busy === `${c.id}:test`} onClick={() => test(c)}>
-                    <FlaskConical size={14} /> Test
+                    <FlaskConical size={14} /> {t('actions.test')}
                   </Button>
                   <Button variant="outline" size="sm" disabled={busy === `${c.id}:mirror`} onClick={() => run(c, 'mirror')}>
-                    <RefreshCw size={14} /> Mirror now
+                    <RefreshCw size={14} /> {t('actions.mirrorNow')}
                   </Button>
                   <Button size="sm" disabled={busy === `${c.id}:full_migration`} onClick={() => run(c, 'full_migration')}>
-                    <Play size={14} /> Run migration
+                    <Play size={14} /> {t('actions.runMigration')}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => toggleMirror(c)}>
-                    {c.mirrorEnabled ? 'Pause mirror' : 'Enable mirror'}
+                    {c.mirrorEnabled ? t('actions.pauseMirror') : t('actions.enableMirror')}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setDrawer({ editing: c })}>
-                    <Pencil size={14} /> Edit
+                    <Pencil size={14} /> {t('actions.edit')}
                   </Button>
                   <Button variant="ghost" size="sm" disabled={busy === `${c.id}:del`} onClick={() => remove(c)}>
                     <Trash2 size={14} />
@@ -254,7 +273,7 @@ export function PlatformClient() {
                 </div>
               </div>
               <div className="mt-2 text-xs text-slate-500">
-                Last run: {fmt(c.lastRunAt)} · Synced through: {fmt(c.cursor)}
+                {t('connections.lastRun', { lastRun: fmt(c.lastRunAt), cursor: fmt(c.cursor) })}
                 {c.lastError ? <span className="text-red-500"> · {c.lastError}</span> : null}
               </div>
             </div>
@@ -265,38 +284,29 @@ export function PlatformClient() {
       {/* Recent runs */}
       {data && data.runs.length > 0 ? (
         <div className="mt-8 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Recent runs</h2>
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('runs.heading')}</h2>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Started</TableHead>
-                <TableHead>Kind</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Trigger</TableHead>
-                <TableHead>Result</TableHead>
+                <TableHead>{t('runs.columns.started')}</TableHead>
+                <TableHead>{t('runs.columns.kind')}</TableHead>
+                <TableHead>{t('runs.columns.status')}</TableHead>
+                <TableHead>{t('runs.columns.trigger')}</TableHead>
+                <TableHead>{t('runs.columns.result')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.runs.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>{fmt(r.startedAt)}</TableCell>
-                  <TableCell>{r.kind}</TableCell>
+                  <TableCell>{kindLabel(r.kind)}</TableCell>
                   <TableCell>
                     <Badge variant={r.status === 'ok' ? 'success' : r.status === 'failed' ? 'destructive' : 'secondary'}>
-                      {r.status}
+                      {runStatusLabel(r.status)}
                     </Badge>
                   </TableCell>
                   <TableCell>{r.triggeredBy ?? '—'}</TableCell>
-                  <TableCell className="text-slate-500">
-                    {r.status === 'ok' && r.stats
-                      ? `+${r.stats.docsNew ?? 0} docs · ${r.stats.docsAmended ?? 0} amended · ${r.stats.docsUnchanged ?? 0} unchanged` +
-                        `${(r.stats.applications?.inserted ?? 0) > 0 ? ` · ${r.stats.applications?.inserted} applied` : ''}` +
-                        ` · TB ${r.stats.tb?.matches ?? 0}/${r.stats.tb?.accounts ?? 0}` +
-                        `${(r.stats.tb?.mismatches?.length ?? 0) > 0 ? ` (${r.stats.tb?.mismatches?.length} off)` : ''}` +
-                        `${r.stats.openItems ? ` · open items ${r.stats.openItems.matches}/${r.stats.openItems.checked}` : ''}` +
-                        `${r.stats.periods ? ` · periods ${r.stats.periods.matches}/${r.stats.periods.checked}` : ''}`
-                      : (r.errorMessage ?? '')}
-                  </TableCell>
+                  <TableCell className="text-slate-500">{runResult(r)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -325,47 +335,60 @@ export function PlatformClient() {
  * steps, and the EXACT redirect URI for this deployment (composed from the
  * browser origin, with one-click copy) — so a tenant never has to guess what
  * to paste into the developer portal.
+ *
+ * Steps are looked up by manifest source key (`sync.sources.<source>.steps`);
+ * the manifest's English text is the fallback for sources without messages.
  */
 function OauthSetupBox({ source, setup }: { source: string; setup: NonNullable<SourceTypeDef['oauthSetup']> }) {
+  const t = useTranslations('sync')
   const [origin, setOrigin] = useState('')
   useEffect(() => setOrigin(window.location.origin), [])
   const redirectUri = `${origin}/api/platform/connections/oauth/${source}/callback`
 
+  // Object.values, not a plain cast: the English-fallback deep merge turns
+  // message arrays into `{0: …, 1: …}` objects for non-default locales.
+  const stepsKey = `sources.${source}.steps`
+  const steps = t.has(stepsKey) ? Object.values(t.raw(stepsKey) as Record<string, string>) : setup.steps
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(redirectUri)
-      toast.success('Redirect URI copied')
+      toast.success(t('toast.copied'))
     } catch {
-      toast.error('Could not copy — select and copy the text manually')
+      toast.error(t('toast.copyFailed'))
     }
   }
 
   return (
     <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs dark:border-sky-900/40 dark:bg-sky-900/10">
       <p className="mb-2 font-medium text-sky-800 dark:text-sky-300">
-        One-time app setup in the{' '}
-        <a
-          href={setup.portalUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-sky-600"
-        >
-          {setup.portalLabel}
-          <ExternalLink size={11} />
-        </a>
+        {t.rich('oauth.title', {
+          portal: setup.portalLabel,
+          link: (chunks) => (
+            <a
+              href={setup.portalUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-sky-600"
+            >
+              {chunks}
+              <ExternalLink size={11} />
+            </a>
+          ),
+        })}
       </p>
       <ol className="mb-3 list-decimal space-y-1 pl-4 text-slate-600 dark:text-slate-300">
-        {setup.steps.map((s, i) => (
+        {steps.map((s, i) => (
           <li key={i}>{s}</li>
         ))}
       </ol>
-      <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">Redirect URI to register:</p>
+      <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">{t('oauth.redirectLabel')}</p>
       <div className="flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded bg-white px-2 py-1.5 font-mono text-[11px] text-slate-800 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
           {redirectUri}
         </code>
         <Button variant="outline" size="sm" onClick={copy}>
-          <Copy size={13} /> Copy
+          <Copy size={13} /> {t('oauth.copy')}
         </Button>
       </div>
     </div>
@@ -393,6 +416,7 @@ function ConnectionDrawer({
   editing?: Connection | null
   onSaved: () => void
 }) {
+  const t = useTranslations('sync')
   const [source, setSource] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [config, setConfig] = useState<Record<string, string>>({})
@@ -413,6 +437,10 @@ function ConnectionDrawer({
   }, [open, editing])
 
   const def = sourceTypes.find((s) => s.source === source)
+  // Blurbs are keyed by manifest source; the manifest's English text is the
+  // fallback for a source that has no message entry yet.
+  const blurbKey = def ? `sources.${def.source}.blurb` : ''
+  const blurb = def ? (t.has(blurbKey) ? t(blurbKey) : def.blurb) : ''
 
   async function save() {
     if (!def) return
@@ -432,7 +460,7 @@ function ConnectionDrawer({
           })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      toast.success(editing ? 'Connection updated' : 'Connection created')
+      toast.success(editing ? t('toast.updated') : t('toast.created'))
       onSaved()
     } catch (e) {
       toast.error((e as Error).message)
@@ -445,14 +473,14 @@ function ConnectionDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      title={editing ? 'Edit connection' : 'Add connection'}
-      description="Connect an external accounting system. Credentials are encrypted at rest and never shown again."
+      title={editing ? t('drawer.editTitle') : t('drawer.addTitle')}
+      description={t('drawer.description')}
       footer={
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>{t('drawer.cancel')}</Button>
           {def ? (
             <Button disabled={saving} onClick={save}>
-              {saving ? 'Saving…' : editing ? 'Save changes' : 'Create connection'}
+              {saving ? t('drawer.saving') : editing ? t('drawer.saveChanges') : t('drawer.create')}
             </Button>
           ) : null}
         </div>
@@ -460,12 +488,12 @@ function ConnectionDrawer({
     >
       <div className="space-y-4">
         <div>
-          <Label>System</Label>
+          <Label>{t('drawer.system')}</Label>
           {editing ? (
             <Input value={def?.displayName ?? editing.source} disabled />
           ) : (
             <Select value={source} onChange={(e) => { setSource(e.target.value); setConfig({}); setSecrets({}) }}>
-              <option value="">Select a system…</option>
+              <option value="">{t('drawer.selectSystem')}</option>
               {sourceTypes.map((s) => (
                 <option key={s.source} value={s.source}>{s.displayName}</option>
               ))}
@@ -475,12 +503,12 @@ function ConnectionDrawer({
 
         {def ? (
           <>
-            {!editing ? <p className="text-xs text-slate-500">{def.blurb}</p> : null}
+            {!editing ? <p className="text-xs text-slate-500">{blurb}</p> : null}
             {def.authKind === 'oauth2' && def.oauthSetup ? (
               <OauthSetupBox source={def.source} setup={def.oauthSetup} />
             ) : null}
             <div>
-              <Label>Connection name</Label>
+              <Label>{t('drawer.name')}</Label>
               <Input value={displayName} placeholder={def.displayName} onChange={(e) => setDisplayName(e.target.value)} />
             </div>
 
@@ -492,7 +520,7 @@ function ConnectionDrawer({
                     value={config[f.key] ?? ''}
                     onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}
                   >
-                    <option value="">Select…</option>
+                    <option value="">{t('drawer.select')}</option>
                     {configOptions(f, currencies).map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
@@ -511,7 +539,7 @@ function ConnectionDrawer({
             {def.secretFields.length > 0 ? (
               <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/40 dark:bg-amber-900/10">
                 <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-                  Credentials (encrypted at rest, never displayed again)
+                  {t('drawer.credentials')}
                 </p>
                 <div className="space-y-3">
                   {def.secretFields.map((f) => (
@@ -520,7 +548,7 @@ function ConnectionDrawer({
                       <Input
                         type="password"
                         autoComplete="off"
-                        placeholder={editing ? 'Leave blank to keep current' : undefined}
+                        placeholder={editing ? t('drawer.keepCurrent') : undefined}
                         value={secrets[f.key] ?? ''}
                         onChange={(e) => setSecrets((s) => ({ ...s, [f.key]: e.target.value }))}
                       />

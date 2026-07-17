@@ -6,6 +6,7 @@ import type {
   EntityStream, MigrationSource, NativeChanges, SourceEntity,
   SourceOpenItem, SourceTrialBalanceRow,
 } from "./source.ts";
+import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods } from "./periods.ts";
 
 /**
  * Xero adapter — native transactions over the accounting API. Invoices (both
@@ -54,6 +55,12 @@ interface XeroJournal {
   JournalID: string; JournalNumber: number; JournalDate: string;
   JournalLines: { AccountID?: string; NetAmount?: number }[];
 }
+interface XeroOrganisation {
+  FinancialYearEndDay?: number;
+  FinancialYearEndMonth?: number;
+  PeriodLockDate?: string;
+  EndOfYearLockDate?: string;
+}
 
 const TXN_ENTITIES: [path: string, key: string][] = [
   ["Invoices", "Invoices"],
@@ -92,6 +99,28 @@ export class XeroSource implements MigrationSource {
       { resource: "parties", records: await this.parties() },
       { resource: "items", records: await this.items() },
     ];
+  }
+
+  async accountingPeriods(): Promise<SourceEntity[]> {
+    const [organisation, journals] = await Promise.all([
+      this.client.get<{ Organisations?: XeroOrganisation[] }>("Organisation"),
+      this.client.journalsAll<XeroJournal>(),
+    ]);
+    const org = organisation.Organisations?.[0];
+    if (!org?.FinancialYearEndMonth || !org.FinancialYearEndDay) {
+      throw new Error("Xero organisation fiscal year end is required for period migration");
+    }
+    const dates = journals.map((journal) => xeroDate(journal.JournalDate)?.slice(0, 10)).filter((value): value is string => Boolean(value)).sort();
+    const now = new Date();
+    const fallbackStart = new Date(Date.UTC(now.getUTCFullYear() - 7, 0, 1)).toISOString().slice(0, 10);
+    const horizon = new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31)).toISOString().slice(0, 10);
+    const periodLock = xeroDate(org.PeriodLockDate)?.slice(0, 10) ?? null;
+    const yearLock = xeroDate(org.EndOfYearLockDate)?.slice(0, 10) ?? null;
+    return monthlySourcePeriods(
+      "xero-period",
+      fiscalYearsForEndingRule(dates[0] ?? fallbackStart, horizon, org.FinancialYearEndMonth, org.FinancialYearEndDay),
+      (endsOn) => allModules(yearLock && endsOn <= yearLock ? "closed" : periodLock && endsOn <= periodLock ? "soft_closed" : "open"),
+    );
   }
 
   private async xeroAccounts(): Promise<XeroAccount[]> {

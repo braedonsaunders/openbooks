@@ -163,6 +163,7 @@ CREATE TABLE "payment_settlements" (
 	"return_code" text,
 	"return_reason" text,
 	"reversal_document_id" uuid,
+	"reversal_entry_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_by" uuid,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,

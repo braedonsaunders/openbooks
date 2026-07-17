@@ -2,6 +2,7 @@
   "title": "Period Close",
   "description": "Close modules per period with database-enforced posting controls.",
   "workspaceDescription": "Run a controlled, evidence-backed close from readiness through publication. Every sign-off stays connected to the ledger state it approved.",
+  "importedPeriodLockReason": "Imported source-system period status",
   "searchPlaceholder": "Search periods…",
   "stageNavigation": "Close stages",
   "continuousValidation": "Continuously validated against the ledger · last checked {at}",
@@ -329,6 +330,10 @@
       "title": "Accounting periods and locks",
       "description": "Generate, search, lock, soft-close, and request controlled reopenings by book and module.",
       "searchPlaceholder": "Search accounting periods…",
+      "generateTitle": "Generate accounting periods",
+      "generateDescription": "Create the posting periods for a fiscal calendar and year.",
+      "moduleSummary": "{closed} of {total} modules closed",
+      "lockedOn": "Locked {date}",
       "lockTitle": "Confirm period lock",
       "reopenTitle": "Request controlled reopening",
       "lockDescription": "{module} · {period}. A reason is retained in the immutable close history.",
@@ -363,7 +368,6 @@
       "recipientsHint": "One recipient per line."
     },
     "actions": {
-      "restoreDefaults": "Ensure standard controls",
       "newCalendar": "New calendar",
       "newBlueprint": "New blueprint",
       "newPolicy": "New policy",
@@ -382,7 +386,8 @@
       "confirmClose": "Confirm close",
       "approve": "Approve",
       "reject": "Reject",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "managePeriod": "Manage {period}"
     },
     "fields": {
       "name": "Name",
@@ -450,6 +455,7 @@
     "states": {
       "open": "Open",
       "soft_closed": "Soft closed",
+      "partial": "Partially closed",
       "closed": "Closed"
     },
     "modules": {
@@ -532,9 +538,16 @@
       "trial-balance": "Trial balance",
       "general-ledger": "General ledger"
     },
-    "table": { "period": "Period", "range": "Range", "entries": "Entries" },
+    "table": { "period": "Period", "range": "Range", "entries": "Entries", "status": "Status" },
+    "empty": {
+      "calendars": "No fiscal calendars match this search.",
+      "periods": "No accounting periods match these filters.",
+      "blueprints": "No close blueprints match this search.",
+      "policies": "No close policies match this search.",
+      "automation": "No automation rules match this search.",
+      "packages": "No reporting packages match this search."
+    },
     "messages": {
-      "initialized": "Standard close controls are ready",
       "calendarSaved": "Fiscal calendar saved",
       "periodsGenerated": "Accounting periods generated",
       "lockSaved": "Period lock saved",

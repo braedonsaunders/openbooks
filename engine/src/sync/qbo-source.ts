@@ -6,6 +6,7 @@ import type {
   EntityStream, MigrationSource, NativeChanges, SourceEntity,
   SourceAccountMonthRow, SourceOpenItem, SourceTrialBalanceRow,
 } from "./source.ts";
+import { allModules, fiscalYearsForRange, monthlySourcePeriods } from "./periods.ts";
 
 /**
  * QuickBooks Online adapter — NATIVE transactions over the accounting API.
@@ -53,6 +54,13 @@ interface QboItem {
   IncomeAccountRef?: { value: string }; ExpenseAccountRef?: { value: string };
 }
 interface QboTaxRate { Id: string; Name: string; RateValue?: number; Active?: boolean }
+interface QboCompanyInfo { CompanyStartDate?: string; FiscalYearStartMonth?: string }
+interface QboPreferences { AccountingInfoPrefs?: { FirstMonthOfFiscalYear?: string; BookCloseDate?: string } }
+
+const MONTH_NUMBER: Record<string, number> = {
+  January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
+  July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
+};
 
 export class QboSource implements MigrationSource {
   readonly name = "qbo";
@@ -77,6 +85,29 @@ export class QboSource implements MigrationSource {
       { resource: "parties", records: await this.parties() },
       { resource: "items", records: await this.items() },
     ];
+  }
+
+  async accountingPeriods(): Promise<SourceEntity[]> {
+    const [company] = await this.client.queryAll<QboCompanyInfo>("CompanyInfo");
+    const [preferences] = await this.client.queryAll<QboPreferences>("Preferences");
+    const start = company?.CompanyStartDate;
+    if (!start) throw new Error("QBO CompanyInfo.CompanyStartDate is required for period migration");
+    const firstMonth = preferences?.AccountingInfoPrefs?.FirstMonthOfFiscalYear
+      ?? company.FiscalYearStartMonth
+      ?? "January";
+    const startMonth = MONTH_NUMBER[firstMonth] ?? Number(firstMonth);
+    if (!Number.isInteger(startMonth) || startMonth < 1 || startMonth > 12) {
+      throw new Error(`QBO fiscal year start month is invalid: ${firstMonth}`);
+    }
+    const closeDate = preferences?.AccountingInfoPrefs?.BookCloseDate ?? null;
+    const horizon = new Date();
+    horizon.setUTCFullYear(horizon.getUTCFullYear() + 1);
+    const end = horizon.toISOString().slice(0, 10);
+    return monthlySourcePeriods(
+      "qbo-period",
+      fiscalYearsForRange(start, end, startMonth),
+      (endsOn) => allModules(closeDate && endsOn <= closeDate ? "closed" : "open"),
+    );
   }
 
   private async accounts(): Promise<SourceEntity[]> {
