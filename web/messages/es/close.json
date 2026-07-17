@@ -1,31 +1,562 @@
 {
   "title": "Cierre de período",
-  "description": "Cierre los módulos por período: CxC y CxP bloquean sus submayores; el cierre del libro mayor bloquea por completo el período para contabilizar (aplicado por el kernel — un período cerrado rechaza contabilizaciones en la base de datos).",
+  "description": "Cierre módulos por período con controles de contabilización aplicados por la base de datos.",
+  "workspaceDescription": "Ejecute un cierre controlado y respaldado por evidencia, desde la preparación hasta la publicación. Cada aprobación permanece vinculada al estado del libro que validó.",
+  "searchPlaceholder": "Buscar períodos…",
+  "stageNavigation": "Etapas del cierre",
+  "continuousValidation": "Validación continua contra el libro · última revisión {at}",
+  "runTitle": "Cierre de {period}",
+  "runDescription": "{book} · {blueprint} v{version}",
   "filters": {
+    "book": "Libro contable",
     "fiscalYear": "Ejercicio fiscal",
-    "fyOption": "EF {year}"
+    "fyOption": "EF {year}",
+    "status": "Estado"
   },
   "table": {
+    "period": "Período",
     "range": "Rango",
     "entries": "Asientos",
     "debits": "Débitos",
-    "rangeValue": "{start} → {end}"
+    "rangeValue": "{start} → {end}",
+    "status": "Estado",
+    "readiness": "Preparación",
+    "action": "Acción"
   },
   "modules": {
     "ar": "CxC",
     "ap": "CxP",
+    "banking": "Bancos",
+    "assets": "Activos",
+    "tax": "Impuestos",
     "gl": "LM"
   },
-  "status": {
-    "closed": "cerrado",
-    "open": "abierto"
+  "status": { "closed": "cerrado", "open": "abierto" },
+  "runStatus": {
+    "not_started": "Sin iniciar",
+    "draft": "Borrador",
+    "in_progress": "En curso",
+    "review": "En revisión",
+    "approved": "Aprobado",
+    "closed": "Cerrado",
+    "published": "Publicado",
+    "cancelled": "Cancelado"
   },
-  "buttons": {
-    "close": "Cerrar",
-    "reopen": "Reabrir",
-    "reopenConfirm": "¿Reabrir {module} para este período?",
-    "actionFailed": "La acción falló",
-    "closedToast": "{module} cerrado",
-    "reopenedToast": "{module} reabierto"
+  "stages": {
+    "scope": "Alcance",
+    "readiness": "Preparación",
+    "execute": "Ejecución",
+    "review": "Revisión",
+    "lock": "Bloqueo",
+    "publish": "Publicación"
+  },
+  "actions": {
+    "start": "Iniciar cierre",
+    "starting": "Iniciando…",
+    "resume": "Continuar",
+    "backToPeriods": "Volver a períodos",
+    "revalidate": "Revalidar",
+    "startTask": "Iniciar",
+    "complete": "Completar",
+    "submitReview": "Enviar a revisión",
+    "approve": "Aprobar",
+    "requestChanges": "Solicitar cambios",
+    "addEvidence": "Agregar evidencia",
+    "finalApproval": "Dar aprobación final",
+    "lockPeriod": "Bloquear período",
+    "publish": "Publicar paquete",
+    "downloadBinder": "Descargar expediente de auditoría inmutable"
+  },
+  "errors": { "actionFailed": "No se pudo completar la acción de cierre" },
+  "messages": {
+    "refresh": "Estado del cierre actualizado",
+    "approve": "Cierre aprobado",
+    "close": "Período bloqueado",
+    "publish": "Paquete de cierre publicado",
+    "taskUpdated": "Tarea actualizada",
+    "evidenceAdded": "Evidencia adjunta",
+    "automationComplete": "Automatización completada"
+  },
+  "metrics": {
+    "readiness": "Preparación",
+    "liveLedger": "Controles del libro en vivo",
+    "progress": "Progreso",
+    "tasksComplete": "{completed} de {total} tareas",
+    "criticalPath": "Ruta crítica",
+    "clear": "Libre",
+    "historicalDays": "Históricamente termina el día {days}",
+    "noPredictedBlocker": "Sin bloqueo histórico"
+  },
+  "scope": {
+    "title": "Alcance del cierre",
+    "description": "El contexto inmutable de esta ejecución.",
+    "period": "Período contable",
+    "book": "Libro contable",
+    "blueprint": "Plantilla",
+    "target": "Fecha objetivo",
+    "entities": "Entidades",
+    "selectedEntities": "{count, plural, one {# entidad seleccionada} other {# entidades seleccionadas}}",
+    "allEntities": "Todas las entidades",
+    "package": "Paquete de informes",
+    "noPackage": "Sin paquete seleccionado"
+  },
+  "rehearsal": {
+    "title": "Ensayo de cierre",
+    "description": "Cree un entorno aislado a una fecha para ensayar ajustes, consolidación e informes sin tocar los libros de producción.",
+    "action": "Ensayar en entorno aislado"
+  },
+  "readiness": {
+    "title": "Preparación del libro",
+    "description": "Los diagnósticos en vivo detectan bloqueos e invalidan aprobaciones obsoletas cuando cambian los libros.",
+    "score": "listo",
+    "clear": "No quedan excepciones contables bloqueantes."
+  },
+  "diagnostics": {
+    "drafts-open": {
+      "title": "Queda actividad sin contabilizar",
+      "message": "{count, plural, one {Queda # transacción en borrador o pendiente en el período.} other {Quedan # transacciones en borrador o pendientes en el período.}}"
+    },
+    "bank-unreconciled": {
+      "title": "Hay cuentas de efectivo por conciliar",
+      "message": "{count, plural, one {# cuenta conciliable no está aprobada hasta el fin del período.} other {# cuentas conciliables no están aprobadas hasta el fin del período.}}"
+    },
+    "depreciation-unposted": {
+      "title": "Queda depreciación sin contabilizar",
+      "message": "{count, plural, one {Queda # línea de depreciación programada sin contabilizar.} other {Quedan # líneas de depreciación programadas sin contabilizar.}}"
+    },
+    "fx-missing": {
+      "title": "Faltan tipos de cambio",
+      "message": "{count, plural, one {# moneda de transacción no tiene un tipo de cierre utilizable.} other {# monedas de transacción no tienen un tipo de cierre utilizable.}}"
+    },
+    "intercompany-residual": {
+      "title": "La actividad intercompañía no se elimina",
+      "message": "{count, plural, one {# cuenta de eliminación tiene un residual de grupo distinto de cero.} other {# cuentas de eliminación tienen un residual de grupo distinto de cero.}}"
+    },
+    "material-variances": {
+      "title": "Las fluctuaciones materiales requieren explicación",
+      "message": "{count, plural, one {# cuenta supera los umbrales de materialidad configurados.} other {# cuentas superan los umbrales de materialidad configurados.}}"
+    }
+  },
+  "severity": {
+    "info": "Información",
+    "warning": "Advertencia",
+    "error": "Error",
+    "critical": "Crítico"
+  },
+  "workstreams": {
+    "readiness": "Preparación",
+    "banking": "Bancos",
+    "ar": "Cuentas por cobrar",
+    "ap": "Cuentas por pagar",
+    "assets": "Activos fijos",
+    "tax": "Impuestos",
+    "payroll": "Nómina",
+    "intercompany": "Intercompañía",
+    "gl": "Libro mayor",
+    "review": "Revisión",
+    "publish": "Publicación"
+  },
+  "gates": {
+    "none": "Sin control",
+    "soft": "Control flexible",
+    "hard": "Control estricto"
+  },
+  "taskStatus": {
+    "blocked": "Bloqueada",
+    "ready": "Lista",
+    "in_progress": "En curso",
+    "submitted": "Pendiente de revisión",
+    "changes_requested": "Cambios solicitados",
+    "complete": "Completa",
+    "waived": "Eximida",
+    "invalidated": "Revalidación requerida"
+  },
+  "tasks": {
+    "dependencies": "Depende de: {dependencies}",
+    "notePlaceholder": "Agregar nota o resumen de evidencia…"
+  },
+  "lock": {
+    "title": "Bloqueo controlado del período",
+    "description": "Los sublibros operativos se bloquean antes del LM. La base de datos rechaza contabilizaciones posteriores.",
+    "blockedTitle": "La aprobación está bloqueada",
+    "blockedDescription": "{count, plural, one {Queda # tarea con control estricto} other {Quedan # tareas con control estricto}}.",
+    "approvalTitle": "Aprobación independiente y bloqueo",
+    "approvalDescription": "Quien inició la ejecución no puede dar la aprobación final. Cualquier cambio en el libro reabre la revisión.",
+    "complete": "Período bloqueado por {name}"
+  },
+  "lockStates": {
+    "open": "Abierto",
+    "soft_closed": "Cierre flexible",
+    "closed": "Cerrado"
+  },
+  "publish": {
+    "package": "Paquete de informes de cierre",
+    "description": "Revise las salidas configuradas, congele la carpeta de evidencia y publique el paquete.",
+    "complete": "Paquete publicado por {name}",
+    "closeFirst": "Cierre y bloquee el período antes de publicar."
+  },
+  "timeline": {
+    "title": "Cronología inmutable",
+    "description": "Tareas, evidencia, invalidaciones, aprobaciones, bloqueos y publicación en una sola pista de auditoría.",
+    "system": "Sistema"
+  },
+  "events": {
+    "run": {
+      "started": "Ejecución iniciada",
+      "data_changed": "Un cambio contable invalidó trabajo previo",
+      "approved": "Cierre con aprobación final",
+      "closed": "Bloqueos de período aplicados",
+      "published": "Paquete de cierre publicado"
+    },
+    "task": {
+      "start": "Tarea iniciada",
+      "submit": "Tarea enviada",
+      "complete": "Tarea completada",
+      "approve": "Tarea aprobada",
+      "request_changes": "Cambios solicitados",
+      "waive": "Tarea eximida",
+      "evidence_added": "Evidencia adjunta"
+    },
+    "automation": {
+      "completed": "Automatización completada",
+      "failed": "La automatización falló"
+    }
+  },
+  "reports": {
+    "balance-sheet": "Balance general",
+    "pnl": "Estado de resultados",
+    "cash-flow": "Flujo de efectivo",
+    "trial-balance": "Balance de comprobación",
+    "general-ledger": "Libro mayor"
+  },
+  "defaultData": {
+    "calendar": { "name": "Calendario fiscal estándar" },
+    "blueprint": {
+      "name": "Cierre estándar",
+      "description": "Cierre nativo del libro para fin de mes, trimestre y ejercicio"
+    },
+    "policies": {
+      "materialVariance": {
+        "name": "Revisión de variaciones materiales",
+        "description": "Señala movimientos de cuentas que superan los umbrales absoluto y porcentual."
+      },
+      "independentApproval": {
+        "name": "Aprobación final independiente",
+        "description": "Quien inició la ejecución no puede dar la aprobación final."
+      },
+      "controlledReopen": {
+        "name": "Reapertura controlada",
+        "description": "Las reaperturas requieren motivo, aprobación independiente y vencimiento."
+      }
+    },
+    "package": {
+      "name": "Paquete de cierre de gestión",
+      "description": "Estados financieros principales y expediente de evidencia del cierre"
+    }
+  },
+  "defaultSteps": {
+    "drafts-cleared": {
+      "title": "Resolver operaciones pendientes",
+      "description": "Resuelva asientos borrador y operaciones que pertenecen a este período."
+    },
+    "bank-reconciled": {
+      "title": "Conciliar todas las cuentas de efectivo",
+      "description": "Todas las cuentas conciliables deben quedar aprobadas hasta el fin del período."
+    },
+    "ar-cutoff": {
+      "title": "Completar el corte de cuentas por cobrar",
+      "description": "Confirme facturación, cobros sin aplicar, créditos y excepciones de antigüedad."
+    },
+    "ap-cutoff": {
+      "title": "Completar el corte de cuentas por pagar",
+      "description": "Confirme facturas, pasivos no facturados, créditos y corte de pagos."
+    },
+    "depreciation-posted": {
+      "title": "Contabilizar depreciación",
+      "description": "Ejecute la depreciación programada y resuelva las excepciones."
+    },
+    "fx-ready": {
+      "title": "Validar cobertura cambiaria",
+      "description": "Cada moneda de transacción debe tener un tipo de cierre utilizable."
+    },
+    "intercompany-balanced": {
+      "title": "Conciliar intercompañía",
+      "description": "Las cuentas intercompañía deben cuadrar antes de las eliminaciones."
+    },
+    "consolidation": {
+      "title": "Calcular tipos y contabilizar eliminaciones",
+      "description": "Complete los ajustes de consolidación para libros multi-entidad."
+    },
+    "variance-review": {
+      "title": "Explicar variaciones materiales",
+      "description": "Revise movimientos frente al período anterior y conserve las explicaciones."
+    },
+    "controller-approval": {
+      "title": "Aprobación del contralor",
+      "description": "Revise de forma independiente preparación, excepciones, evidencia e informes."
+    },
+    "lock-subledgers": {
+      "title": "Bloquear sublibros operativos",
+      "description": "Bloquee CxC, CxP, bancos, activos e impuestos antes del LM."
+    },
+    "lock-gl": {
+      "title": "Bloquear el libro mayor",
+      "description": "Aplique el bloqueo del LM en la base de datos tras cumplir todos los requisitos."
+    },
+    "publish-package": {
+      "title": "Publicar el paquete de cierre",
+      "description": "Congele la carpeta de cierre y publique el paquete configurado."
+    }
+  },
+  "setup": {
+    "title": "Períodos y cierre",
+    "description": "Diseñe calendarios fiscales, genere períodos, gestione bloqueos y reaperturas, versione plantillas y configure controles, automatización e informes.",
+    "tabs": {
+      "calendars": "Calendarios",
+      "periods": "Períodos",
+      "blueprints": "Plantillas",
+      "policies": "Políticas",
+      "automation": "Automatización",
+      "packages": "Paquetes de informes"
+    },
+    "calendars": {
+      "title": "Calendarios fiscales",
+      "description": "Defina cómo los ejercicios se convierten en períodos contables.",
+      "startsMonth": "Comienza en el mes {month}",
+      "editTitle": "Editar calendario fiscal",
+      "newTitle": "Nuevo calendario fiscal",
+      "formDescription": "Los fundamentos quedan protegidos cuando existe actividad contable.",
+      "anchorHint": "Fecha de inicio del ejercicio fiscal de referencia.",
+      "configurationHint": "Configure anchorFiscalYear y leapWeekYears, o ejercicios personalizados y sus rangos de fechas."
+    },
+    "periods": {
+      "title": "Períodos contables y bloqueos",
+      "description": "Genere, busque, bloquee, cierre de forma flexible y solicite reaperturas por libro y módulo.",
+      "searchPlaceholder": "Buscar períodos contables…",
+      "lockTitle": "Confirmar bloqueo",
+      "reopenTitle": "Solicitar reapertura controlada",
+      "lockDescription": "{module} · {period}. El motivo queda en el historial inmutable.",
+      "reopenRequests": "Solicitudes de reapertura",
+      "requestedBy": "Solicitada por {name}"
+    },
+    "blueprints": {
+      "title": "Plantillas de cierre",
+      "description": "Cree grafos reutilizables con responsables, evidencia, automatización y controles estrictos o flexibles.",
+      "stepCount": "{count, plural, one {# paso} other {# pasos}}",
+      "newTitle": "Nueva plantilla",
+      "newVersionTitle": "Crear una nueva versión",
+      "versionHint": "Las ejecuciones publicadas conservan su versión; los cambios crean una versión nueva e inmutable.",
+      "steps": "Pasos del grafo de dependencias"
+    },
+    "policies": {
+      "title": "Políticas de cierre",
+      "description": "Configure materialidad, bloqueos, revisión, segregación de funciones y excepciones.",
+      "formTitle": "Configuración de política",
+      "rulesHint": "Las reglas JSON avanzadas permiten umbrales y aplicabilidad por inquilino sin despliegues."
+    },
+    "automation": {
+      "title": "Automatización del cierre",
+      "description": "Reaccione a eventos con notificaciones, asignaciones, controles, tareas, informes o flujos.",
+      "formTitle": "Regla de automatización"
+    },
+    "packages": {
+      "title": "Paquetes de informes",
+      "description": "Defina estados, destinatarios y entrega publicados con el cierre.",
+      "formTitle": "Paquete de informes",
+      "reportCount": "{count, plural, one {# informe} other {# informes}}",
+      "recipientsHint": "Un destinatario por línea."
+    },
+    "actions": {
+      "restoreDefaults": "Asegurar controles estándar",
+      "newCalendar": "Nuevo calendario",
+      "newBlueprint": "Nueva plantilla",
+      "newPolicy": "Nueva política",
+      "newAutomation": "Nueva automatización",
+      "newPackage": "Nuevo paquete",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "saveVersion": "Guardar nueva versión",
+      "generate": "Generar períodos",
+      "addStep": "Agregar paso",
+      "remove": "Quitar",
+      "close": "Cerrar",
+      "softClose": "Cierre flexible",
+      "reopen": "Reabrir",
+      "requestReopen": "Solicitar reapertura",
+      "confirmClose": "Confirmar cierre",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "cancel": "Cancelar"
+    },
+    "fields": {
+      "name": "Nombre",
+      "description": "Descripción",
+      "cadence": "Cadencia",
+      "yearStartMonth": "Mes inicial",
+      "weekStartsOn": "Inicio de semana",
+      "anchorDate": "Fecha de referencia",
+      "timeZone": "Zona horaria",
+      "adjustmentPeriod": "Generar período de ajuste",
+      "defaultCalendar": "Calendario fiscal predeterminado",
+      "calendar": "Calendario fiscal",
+      "book": "Libro contable",
+      "fiscalYear": "Ejercicio fiscal",
+      "reason": "Motivo",
+      "periodType": "Tipo de período",
+      "stepKey": "Clave estable",
+      "stepTitle": "Título del paso",
+      "taskType": "Tipo de tarea",
+      "dueOffset": "Desfase de vencimiento (días hábiles)",
+      "ownerRole": "Clave de rol responsable",
+      "reviewerRole": "Clave de rol revisor",
+      "applicability": "Reglas de aplicabilidad",
+      "workstream": "Flujo de trabajo",
+      "gate": "Control",
+      "completion": "Finalización",
+      "dependencies": "Claves de dependencia",
+      "evidenceRequired": "Evidencia obligatoria",
+      "defaultBlueprint": "Plantilla predeterminada",
+      "code": "Código estable",
+      "policyType": "Tipo de política",
+      "rules": "Reglas",
+      "trigger": "Disparador",
+      "action": "Acción",
+      "conditions": "Condiciones",
+      "configuration": "Configuración",
+      "reports": "Informes",
+      "recipients": "Destinatarios",
+      "delivery": "Configuración de entrega",
+      "defaultPackage": "Paquete predeterminado",
+      "active": "Activo"
+    },
+    "labels": {
+      "default": "Predeterminado",
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "cadences": {
+      "monthly": "Meses calendario",
+      "four_four_five": "Semanas 4-4-5",
+      "four_five_four": "Semanas 4-5-4",
+      "five_four_four": "Semanas 5-4-4",
+      "thirteen_period": "13 períodos de cuatro semanas",
+      "custom": "Períodos personalizados"
+    },
+    "weekdays": {
+      "0": "Domingo",
+      "1": "Lunes",
+      "2": "Martes",
+      "3": "Miércoles",
+      "4": "Jueves",
+      "5": "Viernes",
+      "6": "Sábado"
+    },
+    "states": {
+      "open": "Abierto",
+      "soft_closed": "Cierre flexible",
+      "closed": "Cerrado"
+    },
+    "modules": {
+      "ar": "CxC",
+      "ap": "CxP",
+      "banking": "Bancos",
+      "assets": "Activos",
+      "tax": "Impuestos",
+      "gl": "LM"
+    },
+    "reopenStates": {
+      "requested": "Solicitada",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "expired": "Vencida",
+      "reclosed": "Cerrada de nuevo"
+    },
+    "periodTypes": {
+      "any": "Cualquier cierre",
+      "month": "Fin de mes",
+      "quarter": "Fin de trimestre",
+      "year": "Fin de ejercicio",
+      "adjustment": "Ajuste"
+    },
+    "workstreams": {
+      "readiness": "Preparación",
+      "banking": "Bancos",
+      "ar": "Cuentas por cobrar",
+      "ap": "Cuentas por pagar",
+      "assets": "Activos fijos",
+      "tax": "Impuestos",
+      "payroll": "Nómina",
+      "intercompany": "Intercompañía",
+      "gl": "Libro mayor",
+      "review": "Revisión",
+      "publish": "Publicación"
+    },
+    "gates": {
+      "none": "Sin control",
+      "soft": "Control flexible",
+      "hard": "Control estricto"
+    },
+    "completionModes": {
+      "manual": "Manual",
+      "computed": "Calculado por el libro",
+      "automatic": "Automático"
+    },
+    "taskTypes": {
+      "check": "Control",
+      "action": "Acción",
+      "reconciliation": "Conciliación",
+      "journal": "Diario",
+      "approval": "Aprobación",
+      "report": "Informe",
+      "publish": "Publicación"
+    },
+    "policyTypes": {
+      "materiality": "Materialidad",
+      "lock": "Bloqueo",
+      "review": "Revisión",
+      "segregation": "Segregación de funciones",
+      "exception": "Excepción"
+    },
+    "automationTriggers": {
+      "run_started": "Ejecución iniciada",
+      "task_ready": "Tarea lista",
+      "exception_opened": "Excepción abierta",
+      "deadline_approaching": "Plazo próximo",
+      "run_closed": "Ejecución cerrada"
+    },
+    "automationActions": {
+      "notify": "Notificar",
+      "assign": "Asignar",
+      "run_check": "Ejecutar control",
+      "complete_task": "Completar tarea",
+      "create_task": "Crear tarea",
+      "generate_report": "Generar informe",
+      "start_flow": "Iniciar flujo"
+    },
+    "reports": {
+      "balance-sheet": "Balance general",
+      "pnl": "Estado de resultados",
+      "cash-flow": "Flujo de efectivo",
+      "trial-balance": "Balance de comprobación",
+      "general-ledger": "Libro mayor"
+    },
+    "table": { "period": "Período", "range": "Rango", "entries": "Asientos" },
+    "messages": {
+      "initialized": "Los controles estándar están listos",
+      "calendarSaved": "Calendario fiscal guardado",
+      "periodsGenerated": "Períodos contables generados",
+      "lockSaved": "Bloqueo guardado",
+      "reopenRequested": "Solicitud de reapertura enviada",
+      "reopenApproved": "Ventana de reapertura aprobada según la política configurada",
+      "reopenRejected": "Solicitud de reapertura rechazada",
+      "blueprintSaved": "Versión de plantilla guardada",
+      "policySaved": "Política guardada",
+      "automationSaved": "Regla de automatización guardada",
+      "packageSaved": "Paquete de informes guardado"
+    },
+    "errors": {
+      "actionFailed": "No se pudo guardar el cambio",
+      "invalidConfiguration": "La configuración debe ser válida y completa"
+    }
   }
 }

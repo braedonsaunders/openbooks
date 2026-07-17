@@ -42,6 +42,11 @@ export interface BurdenAccount {
   number: string | null;
   name: string;
   amount: number;
+  /** Classification source: explicitly pinned vs matched by the group's rule. */
+  pinned: boolean;
+  /** Department-TAGGED amounts (untagged remainder allocates by hours share). */
+  deptAmounts: Record<string, number>;
+  untaggedAmount: number;
 }
 
 export interface BurdenCategory {
@@ -49,6 +54,8 @@ export interface BurdenCategory {
   key: string;
   name: string;
   color: string | null;
+  /** The group's auto-match rule (editable in the category flyout). */
+  match: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string };
   totalAmount: number;
   rate: number; // totalAmount ÷ total billed hours
   accounts: BurdenAccount[];
@@ -250,16 +257,32 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     const group = burdenGroups.byAccount.get(r.account_id);
 
     if (!group) {
-      const u = unassignedMap.get(r.account_id) ?? { id: r.account_id, number: r.number, name: r.name, amount: 0 };
+      const u = unassignedMap.get(r.account_id) ?? {
+        id: r.account_id, number: r.number, name: r.name, amount: 0,
+        pinned: false, deptAmounts: {} as Record<string, number>, untaggedAmount: 0,
+      };
       u.amount += amount;
+      if (r.department_id && billedShare.has(r.department_id)) {
+        u.deptAmounts[r.department_id] = (u.deptAmounts[r.department_id] ?? 0) + amount;
+      } else {
+        u.untaggedAmount += amount;
+      }
       unassignedMap.set(r.account_id, u);
       continue;
     }
     const cat = cats.get(group.groupId);
     if (!cat) continue;
     cat.total += amount;
-    const acct = cat.accounts.get(r.account_id) ?? { id: r.account_id, number: r.number, name: r.name, amount: 0 };
+    const acct = cat.accounts.get(r.account_id) ?? {
+      id: r.account_id, number: r.number, name: r.name, amount: 0,
+      pinned: burdenGroups.pinned.has(r.account_id), deptAmounts: {} as Record<string, number>, untaggedAmount: 0,
+    };
     acct.amount += amount;
+    if (r.department_id && billedShare.has(r.department_id)) {
+      acct.deptAmounts[r.department_id] = (acct.deptAmounts[r.department_id] ?? 0) + amount;
+    } else {
+      acct.untaggedAmount += amount;
+    }
     cat.accounts.set(r.account_id, acct);
     cat.byMonth.set(r.month, (cat.byMonth.get(r.month) ?? 0) + amount);
     monthBurden.set(r.month, (monthBurden.get(r.month) ?? 0) + amount);
@@ -292,6 +315,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     }
     return {
       id: c.id, key: c.key, name: c.name, color: c.color,
+      match: g.match ?? {},
       totalAmount: c.total,
       rate: billedHours > 0 ? c.total / billedHours : 0,
       accounts: [...c.accounts.values()].sort((a, b) => b.amount - a.amount),

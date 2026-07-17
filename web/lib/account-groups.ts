@@ -71,6 +71,8 @@ export async function listAccountGroups(dimension: string, orgId?: string): Prom
 export interface ResolvedGroups {
   groups: AccountGroup[];
   byAccount: Map<string, GroupRef>;
+  /** Account ids whose classification comes from an explicit pin (not a rule). */
+  pinned: Set<string>;
 }
 
 export async function resolveAccountGroups(dimension: string, orgId?: string): Promise<ResolvedGroups> {
@@ -104,5 +106,5 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
     let hit = groups.find((g) => !g.isCatchAll && matchesRule(acct, g.match)) ?? catchAll;
     if (hit) byAccount.set(a.id, { groupId: hit.id, key: hit.key, name: hit.name, color: hit.color });
   }
-  return { groups, byAccount };
+  return { groups, byAccount, pinned: new Set(pins.keys()) };
 }

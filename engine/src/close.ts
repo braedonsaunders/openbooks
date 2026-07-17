@@ -1,0 +1,2175 @@
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db } from "./db.ts";
+
+export class CloseError extends Error {}
+
+export const CLOSE_MODULES = [
+  "ar",
+  "ap",
+  "banking",
+  "assets",
+  "tax",
+  "gl",
+] as const;
+export type CloseModule = (typeof CLOSE_MODULES)[number];
+
+export function closeModuleForDocument(kind: string): CloseModule {
+  if (
+    [
+      "customer_invoice",
+      "customer_credit",
+      "customer_payment",
+      "sales_order",
+      "quote",
+    ].includes(kind)
+  )
+    return "ar";
+  if (
+    [
+      "vendor_bill",
+      "vendor_credit",
+      "vendor_payment",
+      "purchase_order",
+      "expense_report",
+      "cheque",
+      "card_charge",
+      "card_refund",
+    ].includes(kind)
+  )
+    return "ap";
+  return "gl";
+}
+
+/** Application-level companion to the Postgres guard. It supplies a precise,
+ * user-facing error before a write reaches the kernel. */
+export async function assertPeriodModulesOpen(
+  executor: { execute: (query: any) => Promise<unknown> },
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryIds: string[];
+    modules: CloseModule[];
+  },
+): Promise<void> {
+  const modules = [...new Set<CloseModule>([...args.modules, "gl"])];
+  const subsidiaryIds = [...new Set(args.subsidiaryIds)];
+  for (const subsidiaryId of subsidiaryIds) {
+    for (const module of modules) {
+      const result = (await executor.execute(sql`
+        select coalesce(
+          (select state = 'closed' or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now())
+             from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
+              and book_id = ${args.bookId} and subsidiary_id = ${subsidiaryId} and module = ${module}),
+          (select state = 'closed' or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now())
+             from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
+              and book_id = ${args.bookId} and subsidiary_id is null and module = ${module}),
+          false
+        ) as closed`)) as unknown as { rows: { closed: boolean }[] };
+      if (result.rows[0]?.closed)
+        throw new CloseError(
+          `${module.toUpperCase()} is closed for this period and accounting book`,
+        );
+    }
+  }
+}
+
+type CalendarRow = {
+  id: string;
+  cadence:
+    | "monthly"
+    | "four_four_five"
+    | "four_five_four"
+    | "five_four_four"
+    | "thirteen_period"
+    | "custom";
+  year_start_month: number;
+  anchor_date: string | null;
+  adjustment_period_enabled: boolean;
+  config: Record<string, unknown>;
+};
+
+type GeneratedPeriod = {
+  fiscalYear: number;
+  number: number;
+  name: string;
+  startsOn: string;
+  endsOn: string;
+  adjustment: boolean;
+};
+
+type ReadinessCheck = {
+  code: string;
+  taskKey: string;
+  category: string;
+  severity: "warning" | "error" | "critical";
+  title: string;
+  message: string;
+  count: number;
+  details?: Record<string, unknown>;
+};
+
+const DEFAULT_STEPS = [
+  {
+    key: "drafts-cleared",
+    title: "close.defaultSteps.drafts-cleared.title",
+    description: "close.defaultSteps.drafts-cleared.description",
+    workstream: "readiness",
+    taskType: "check",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: -2,
+    evidence: false,
+  },
+  {
+    key: "bank-reconciled",
+    title: "close.defaultSteps.bank-reconciled.title",
+    description: "close.defaultSteps.bank-reconciled.description",
+    workstream: "banking",
+    taskType: "reconciliation",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 1,
+    evidence: true,
+  },
+  {
+    key: "ar-cutoff",
+    title: "close.defaultSteps.ar-cutoff.title",
+    description: "close.defaultSteps.ar-cutoff.description",
+    workstream: "ar",
+    taskType: "action",
+    completionMode: "manual",
+    gateType: "hard",
+    offset: 1,
+    evidence: true,
+  },
+  {
+    key: "ap-cutoff",
+    title: "close.defaultSteps.ap-cutoff.title",
+    description: "close.defaultSteps.ap-cutoff.description",
+    workstream: "ap",
+    taskType: "action",
+    completionMode: "manual",
+    gateType: "hard",
+    offset: 1,
+    evidence: true,
+  },
+  {
+    key: "depreciation-posted",
+    title: "close.defaultSteps.depreciation-posted.title",
+    description: "close.defaultSteps.depreciation-posted.description",
+    workstream: "assets",
+    taskType: "journal",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 2,
+    evidence: true,
+  },
+  {
+    key: "fx-ready",
+    title: "close.defaultSteps.fx-ready.title",
+    description: "close.defaultSteps.fx-ready.description",
+    workstream: "gl",
+    taskType: "check",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 2,
+    evidence: false,
+  },
+  {
+    key: "intercompany-balanced",
+    title: "close.defaultSteps.intercompany-balanced.title",
+    description: "close.defaultSteps.intercompany-balanced.description",
+    workstream: "intercompany",
+    taskType: "reconciliation",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 2,
+    evidence: true,
+  },
+  {
+    key: "consolidation",
+    title: "close.defaultSteps.consolidation.title",
+    description: "close.defaultSteps.consolidation.description",
+    workstream: "intercompany",
+    taskType: "journal",
+    completionMode: "manual",
+    gateType: "soft",
+    offset: 3,
+    evidence: true,
+  },
+  {
+    key: "variance-review",
+    title: "close.defaultSteps.variance-review.title",
+    description: "close.defaultSteps.variance-review.description",
+    workstream: "review",
+    taskType: "approval",
+    completionMode: "manual",
+    gateType: "hard",
+    offset: 3,
+    evidence: true,
+  },
+  {
+    key: "controller-approval",
+    title: "close.defaultSteps.controller-approval.title",
+    description: "close.defaultSteps.controller-approval.description",
+    workstream: "review",
+    taskType: "approval",
+    completionMode: "manual",
+    gateType: "hard",
+    offset: 4,
+    evidence: false,
+  },
+  {
+    key: "lock-subledgers",
+    title: "close.defaultSteps.lock-subledgers.title",
+    description: "close.defaultSteps.lock-subledgers.description",
+    workstream: "gl",
+    taskType: "action",
+    completionMode: "automatic",
+    gateType: "hard",
+    offset: 4,
+    evidence: false,
+  },
+  {
+    key: "lock-gl",
+    title: "close.defaultSteps.lock-gl.title",
+    description: "close.defaultSteps.lock-gl.description",
+    workstream: "gl",
+    taskType: "action",
+    completionMode: "automatic",
+    gateType: "hard",
+    offset: 4,
+    evidence: false,
+  },
+  {
+    key: "publish-package",
+    title: "close.defaultSteps.publish-package.title",
+    description: "close.defaultSteps.publish-package.description",
+    workstream: "publish",
+    taskType: "publish",
+    completionMode: "automatic",
+    gateType: "hard",
+    offset: 5,
+    evidence: true,
+  },
+] as const;
+
+const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
+  ["bank-reconciled", "drafts-cleared"],
+  ["ar-cutoff", "drafts-cleared"],
+  ["ap-cutoff", "drafts-cleared"],
+  ["depreciation-posted", "drafts-cleared"],
+  ["fx-ready", "drafts-cleared"],
+  ["intercompany-balanced", "drafts-cleared"],
+  ["consolidation", "fx-ready"],
+  ["consolidation", "intercompany-balanced"],
+  ["variance-review", "ar-cutoff"],
+  ["variance-review", "ap-cutoff"],
+  ["variance-review", "bank-reconciled"],
+  ["variance-review", "depreciation-posted"],
+  ["variance-review", "consolidation"],
+  ["controller-approval", "variance-review"],
+  ["lock-subledgers", "controller-approval"],
+  ["lock-gl", "lock-subledgers"],
+  ["publish-package", "lock-gl"],
+];
+
+function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function utcDate(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function addDays(date: Date, days: number): Date {
+  const out = new Date(date);
+  out.setUTCDate(out.getUTCDate() + days);
+  return out;
+}
+
+function addBusinessDays(value: string, days: number): string {
+  let date = utcDate(value);
+  const direction = days < 0 ? -1 : 1;
+  let remaining = Math.abs(days);
+  while (remaining > 0) {
+    date = addDays(date, direction);
+    const weekday = date.getUTCDay();
+    if (weekday !== 0 && weekday !== 6) remaining--;
+  }
+  return isoDate(date);
+}
+
+function endOfMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+}
+
+function fiscalStartYear(fiscalYear: number, startMonth: number): number {
+  return startMonth === 1 ? fiscalYear : fiscalYear - 1;
+}
+
+function periodName(
+  number: number,
+  fiscalYear: number,
+  adjustment = false,
+): string {
+  return adjustment
+    ? `FY${fiscalYear} adjustment`
+    : `P${String(number).padStart(2, "0")} FY${fiscalYear}`;
+}
+
+function blueprintStepApplies(
+  applicability: Record<string, unknown> | null,
+  context: {
+    fiscalYear: number;
+    periodNumber: number;
+    lastRegularPeriod: number;
+    isAdjustment: boolean;
+    bookId: string;
+    subsidiaryIds: string[];
+  },
+): boolean {
+  const rules = applicability ?? {};
+  const list = (key: string): unknown[] =>
+    Array.isArray(rules[key]) ? (rules[key] as unknown[]) : [];
+  const bookIds = list("bookIds");
+  if (bookIds.length && !bookIds.includes(context.bookId)) return false;
+  const fiscalYears = list("fiscalYears").map(Number);
+  if (fiscalYears.length && !fiscalYears.includes(context.fiscalYear))
+    return false;
+  const subsidiaries = list("subsidiaryIds").filter(
+    (item): item is string => typeof item === "string",
+  );
+  if (
+    subsidiaries.length &&
+    !context.subsidiaryIds.some((id) => subsidiaries.includes(id))
+  )
+    return false;
+  const types = list("periodTypes");
+  if (types.length) {
+    const actual = new Set<string>(["any"]);
+    if (context.isAdjustment) actual.add("adjustment");
+    else {
+      actual.add("month");
+      if (context.periodNumber % 3 === 0) actual.add("quarter");
+      if (context.periodNumber === context.lastRegularPeriod)
+        actual.add("year");
+    }
+    if (!types.some((type) => typeof type === "string" && actual.has(type)))
+      return false;
+  }
+  return true;
+}
+
+function generatedPeriods(
+  calendar: CalendarRow,
+  fiscalYear: number,
+): GeneratedPeriod[] {
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 9999) {
+    throw new CloseError("fiscal year must be between 1900 and 9999");
+  }
+
+  let rows: GeneratedPeriod[] = [];
+  if (calendar.cadence === "monthly") {
+    const startYear = fiscalStartYear(fiscalYear, calendar.year_start_month);
+    for (let i = 0; i < 12; i++) {
+      const start = new Date(
+        Date.UTC(startYear, calendar.year_start_month - 1 + i, 1),
+      );
+      rows.push({
+        fiscalYear,
+        number: i + 1,
+        name: periodName(i + 1, fiscalYear),
+        startsOn: isoDate(start),
+        endsOn: isoDate(endOfMonth(start)),
+        adjustment: false,
+      });
+    }
+  } else if (calendar.cadence === "custom") {
+    const years = (calendar.config.years ?? {}) as Record<string, unknown>;
+    const configured = years[String(fiscalYear)];
+    if (!Array.isArray(configured) || configured.length === 0) {
+      throw new CloseError(
+        `custom calendar has no period definition for FY${fiscalYear}`,
+      );
+    }
+    rows = configured.map((raw, index) => {
+      const item = raw as Record<string, unknown>;
+      const startsOn = String(item.startsOn ?? "");
+      const endsOn = String(item.endsOn ?? "");
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(startsOn) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(endsOn) ||
+        startsOn > endsOn
+      ) {
+        throw new CloseError(
+          `custom calendar period ${index + 1} has an invalid date range`,
+        );
+      }
+      return {
+        fiscalYear,
+        number: index + 1,
+        name: String(item.name ?? periodName(index + 1, fiscalYear)),
+        startsOn,
+        endsOn,
+        adjustment: Boolean(item.adjustment),
+      };
+    });
+  } else {
+    if (!calendar.anchor_date)
+      throw new CloseError("week-based calendars require an anchor date");
+    const anchorFiscalYear = Number(
+      calendar.config.anchorFiscalYear ??
+        utcDate(calendar.anchor_date).getUTCFullYear(),
+    );
+    const leapWeekYears = new Set(
+      Array.isArray(calendar.config.leapWeekYears)
+        ? (calendar.config.leapWeekYears as unknown[]).map(Number)
+        : [],
+    );
+    let start = utcDate(calendar.anchor_date);
+    const direction = fiscalYear >= anchorFiscalYear ? 1 : -1;
+    for (let year = anchorFiscalYear; year !== fiscalYear; year += direction) {
+      const measuredYear = direction > 0 ? year : year - 1;
+      start = addDays(
+        start,
+        direction * (leapWeekYears.has(measuredYear) ? 371 : 364),
+      );
+    }
+    const weeks =
+      calendar.cadence === "thirteen_period"
+        ? Array(13).fill(4)
+        : Array.from({ length: 4 }, () =>
+            calendar.cadence === "four_four_five"
+              ? [4, 4, 5]
+              : calendar.cadence === "four_five_four"
+                ? [4, 5, 4]
+                : [5, 4, 4],
+          ).flat();
+    if (leapWeekYears.has(fiscalYear)) weeks[weeks.length - 1] += 1;
+    let cursor = start;
+    rows = weeks.map((weekCount, index) => {
+      const end = addDays(cursor, weekCount * 7 - 1);
+      const row = {
+        fiscalYear,
+        number: index + 1,
+        name: periodName(index + 1, fiscalYear),
+        startsOn: isoDate(cursor),
+        endsOn: isoDate(end),
+        adjustment: false,
+      };
+      cursor = addDays(end, 1);
+      return row;
+    });
+  }
+
+  if (
+    calendar.adjustment_period_enabled &&
+    !rows.some((row) => row.adjustment)
+  ) {
+    const final = rows.at(-1);
+    if (!final) throw new CloseError("calendar generated no periods");
+    rows.push({
+      fiscalYear,
+      number: rows.length + 1,
+      name: periodName(rows.length + 1, fiscalYear, true),
+      startsOn: final.endsOn,
+      endsOn: final.endsOn,
+      adjustment: true,
+    });
+  }
+  return rows;
+}
+
+export async function ensureCloseDefaults(
+  orgId: string,
+  actorId?: string,
+): Promise<{
+  calendarId: string;
+  blueprintId: string;
+  reportingPackageId: string;
+}> {
+  return db.transaction(async (tx) => {
+    const org = (await tx.execute(sql`
+      select coalesce((settings->>'fiscalYearStartMonth')::integer, 1) as start_month,
+             coalesce(settings->>'timeZone', 'UTC') as time_zone
+        from orgs where id = ${orgId}`)) as unknown as {
+      rows: { start_month: number; time_zone: string }[];
+    };
+    if (!org.rows[0]) throw new CloseError("organization not found");
+
+    const existingCalendar = (await tx.execute(sql`
+      select id from fiscal_calendars where org_id = ${orgId} and is_active
+       order by is_default desc, created_at limit 1`)) as unknown as {
+      rows: { id: string }[];
+    };
+    let calendarId = existingCalendar.rows[0]?.id;
+    if (!calendarId) {
+      const createdCalendar = (await tx.execute(sql`
+        insert into fiscal_calendars
+          (org_id, name, cadence, year_start_month, time_zone, is_default, is_active, created_by, updated_by)
+        values (${orgId}, 'close.defaultData.calendar.name', 'monthly', ${org.rows[0].start_month},
+                ${org.rows[0].time_zone}, true, true, ${actorId ?? null}, ${actorId ?? null})
+        returning id`)) as unknown as { rows: { id: string }[] };
+      calendarId = createdCalendar.rows[0]?.id;
+    }
+    if (!calendarId)
+      throw new CloseError("could not initialize fiscal calendar");
+
+    const existingBlueprint = (await tx.execute(sql`
+      select id from close_blueprints where org_id = ${orgId} and is_active
+       order by is_default desc, version desc, created_at limit 1`)) as unknown as {
+      rows: { id: string }[];
+    };
+    let blueprintId = existingBlueprint.rows[0]?.id;
+    let createdBlueprint = false;
+    if (!blueprintId) {
+      const blueprintRes = (await tx.execute(sql`
+        insert into close_blueprints
+          (org_id, name, description, period_type, is_default, is_active, created_by, updated_by)
+        values (${orgId}, 'close.defaultData.blueprint.name', 'close.defaultData.blueprint.description',
+                'any', true, true, ${actorId ?? null}, ${actorId ?? null})
+        returning id`)) as unknown as { rows: { id: string }[] };
+      blueprintId = blueprintRes.rows[0]?.id;
+      createdBlueprint = true;
+    }
+    if (!blueprintId)
+      throw new CloseError("could not initialize close blueprint");
+
+    if (createdBlueprint) {
+      const stepIds = new Map<string, string>();
+      for (const [index, step] of DEFAULT_STEPS.entries()) {
+        const inserted = (await tx.execute(sql`
+        insert into close_blueprint_steps
+          (org_id, blueprint_id, key, title, description, workstream, task_type,
+           completion_mode, gate_type, due_offset_business_days, evidence_required,
+           sort_order, created_by, updated_by)
+        values (${orgId}, ${blueprintId}, ${step.key}, ${step.title}, ${step.description},
+                ${step.workstream}, ${step.taskType}, ${step.completionMode}, ${step.gateType},
+                ${step.offset}, ${step.evidence}, ${(index + 1) * 10}, ${actorId ?? null}, ${actorId ?? null})
+        on conflict (blueprint_id, key) do update set
+          title = excluded.title, description = excluded.description,
+          sort_order = excluded.sort_order, updated_at = now()
+        returning id`)) as unknown as { rows: { id: string }[] };
+        stepIds.set(step.key, inserted.rows[0].id);
+      }
+      for (const [stepKey, dependencyKey] of DEFAULT_DEPENDENCIES) {
+        await tx.execute(sql`
+        insert into close_blueprint_dependencies
+          (org_id, blueprint_id, step_id, depends_on_step_id, created_by, updated_by)
+        values (${orgId}, ${blueprintId}, ${stepIds.get(stepKey)!}, ${stepIds.get(dependencyKey)!},
+                ${actorId ?? null}, ${actorId ?? null})
+          on conflict (step_id, depends_on_step_id) do nothing`);
+      }
+    }
+
+    await tx.execute(sql`
+      insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
+      values
+        (${orgId}, 'material-variance', 'close.defaultData.policies.materialVariance.name', 'close.defaultData.policies.materialVariance.description',
+         'materiality', ${JSON.stringify({ amount: "10000.0000", percent: 20 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null}),
+        (${orgId}, 'independent-approval', 'close.defaultData.policies.independentApproval.name', 'close.defaultData.policies.independentApproval.description',
+         'segregation', ${JSON.stringify({ prohibitSelfApproval: true })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null}),
+        (${orgId}, 'controlled-reopen', 'close.defaultData.policies.controlledReopen.name', 'close.defaultData.policies.controlledReopen.description',
+         'lock', ${JSON.stringify({ approvalRequired: true, defaultHours: 24 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
+      on conflict (org_id, code) do nothing`);
+
+    const existingPackage = (await tx.execute(sql`
+      select id from close_reporting_packages where org_id = ${orgId} and is_active
+       order by is_default desc, created_at limit 1`)) as unknown as {
+      rows: { id: string }[];
+    };
+    let reportingPackageId = existingPackage.rows[0]?.id;
+    if (!reportingPackageId) {
+      const createdPackage = (await tx.execute(sql`
+        insert into close_reporting_packages
+          (org_id, name, description, reports, is_default, is_active, created_by, updated_by)
+        values (${orgId}, 'close.defaultData.package.name', 'close.defaultData.package.description',
+                ${JSON.stringify(["balance-sheet", "pnl", "cash-flow", "trial-balance", "general-ledger"])}::jsonb,
+                true, true, ${actorId ?? null}, ${actorId ?? null})
+        returning id`)) as unknown as { rows: { id: string }[] };
+      reportingPackageId = createdPackage.rows[0]?.id;
+    }
+    if (!reportingPackageId)
+      throw new CloseError("could not initialize reporting package");
+
+    return { calendarId, blueprintId, reportingPackageId };
+  });
+}
+
+export async function generateAccountingPeriods(
+  orgId: string,
+  calendarId: string,
+  fiscalYear: number,
+  actorId: string,
+): Promise<{ created: number; updated: number; periods: GeneratedPeriod[] }> {
+  const calendarRes = (await db.execute(sql`
+    select id, cadence, year_start_month, anchor_date, adjustment_period_enabled, config
+      from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`)) as unknown as {
+    rows: CalendarRow[];
+  };
+  const calendar = calendarRes.rows[0];
+  if (!calendar) throw new CloseError("active fiscal calendar not found");
+  const periods = generatedPeriods(calendar, fiscalYear);
+
+  let created = 0;
+  let updated = 0;
+  await db.transaction(async (tx) => {
+    for (const period of periods) {
+      const existing = (await tx.execute(sql`
+        select p.id, p.name, p.starts_on, p.ends_on, p.is_adjustment,
+               exists(select 1 from journal_entries e where e.period_id = p.id) as has_entries
+          from accounting_periods p
+         where p.org_id = ${orgId} and p.fiscal_calendar_id = ${calendarId}
+           and p.fiscal_year = ${fiscalYear} and p.period_number = ${period.number}`)) as unknown as {
+        rows: {
+          id: string;
+          name: string;
+          starts_on: string;
+          ends_on: string;
+          is_adjustment: boolean;
+          has_entries: boolean;
+        }[];
+      };
+      const row = existing.rows[0];
+      if (!row) {
+        const inserted = (await tx.execute(sql`
+          insert into accounting_periods
+            (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on,
+             is_adjustment, created_by, updated_by)
+          values (${orgId}, ${calendarId}, ${fiscalYear}, ${period.number}, ${period.name},
+                  ${period.startsOn}, ${period.endsOn}, ${period.adjustment}, ${actorId}, ${actorId})
+          returning id`)) as unknown as { rows: { id: string }[] };
+        const books = (await tx.execute(sql`
+          select id from accounting_books where org_id = ${orgId} and is_active`)) as unknown as {
+          rows: { id: string }[];
+        };
+        for (const book of books.rows) {
+          for (const module of CLOSE_MODULES) {
+            await tx.execute(sql`
+              insert into period_locks (org_id, period_id, book_id, module, state, created_by, updated_by)
+              values (${orgId}, ${inserted.rows[0].id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
+              on conflict (org_id, period_id, book_id, subsidiary_id, module) do nothing`);
+          }
+        }
+        created++;
+        continue;
+      }
+      const changed =
+        row.name !== period.name ||
+        row.starts_on !== period.startsOn ||
+        row.ends_on !== period.endsOn ||
+        row.is_adjustment !== period.adjustment;
+      if (!changed) continue;
+      if (row.has_entries)
+        throw new CloseError(
+          `${row.name} has ledger activity and its dates cannot be regenerated`,
+        );
+      await tx.execute(sql`
+        update accounting_periods
+           set name = ${period.name}, starts_on = ${period.startsOn}, ends_on = ${period.endsOn},
+               is_adjustment = ${period.adjustment}, updated_at = now(), updated_by = ${actorId}
+         where id = ${row.id} and org_id = ${orgId}`);
+      updated++;
+    }
+  });
+  return { created, updated, periods };
+}
+
+async function periodFingerprint(
+  orgId: string,
+  periodId: string,
+  bookId: string,
+): Promise<string> {
+  const result = (await db.execute(sql`
+    select
+      (select count(*) from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entries,
+      (select coalesce(max(updated_at)::text, '') from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entry_changed,
+      (select coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0)::text
+         from journal_lines l join journal_entries e on e.id = l.entry_id
+        where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as debits,
+      (select count(*) from documents d join accounting_periods p on p.id = ${periodId}
+        where d.org_id = ${orgId} and coalesce(d.posting_date, d.document_date) between p.starts_on and p.ends_on) as documents,
+      (select coalesce(max(d.updated_at)::text, '') from documents d join accounting_periods p on p.id = ${periodId}
+        where d.org_id = ${orgId} and coalesce(d.posting_date, d.document_date) between p.starts_on and p.ends_on) as document_changed,
+      (select count(*) from reconciliations r join accounting_periods p on p.id = ${periodId}
+        where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off') as reconciliations
+  `)) as unknown as { rows: Record<string, unknown>[] };
+  return createHash("sha256")
+    .update(JSON.stringify(result.rows[0] ?? {}))
+    .digest("hex");
+}
+
+async function assertCloseScope(
+  executor: { execute: (query: any) => Promise<unknown> },
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryIds?: string[];
+  },
+): Promise<void> {
+  const requestedSubsidiaries = args.subsidiaryIds ?? [];
+  const subsidiaryCount = requestedSubsidiaries.length
+    ? sql`(select count(*)::int from subsidiaries where org_id = ${args.orgId} and is_active
+        and id in (${sql.join(
+          requestedSubsidiaries.map((id) => sql`${id}`),
+          sql`, `,
+        )}))`
+    : sql`0`;
+  const scope = (await executor.execute(sql`
+    select
+      exists(select 1 from accounting_periods where id = ${args.periodId} and org_id = ${args.orgId}) as period_ok,
+      exists(select 1 from accounting_books where id = ${args.bookId} and org_id = ${args.orgId} and is_active) as book_ok,
+      ${subsidiaryCount} as subsidiaries_found
+  `)) as unknown as {
+    rows: {
+      period_ok: boolean;
+      book_ok: boolean;
+      subsidiaries_found: number;
+    }[];
+  };
+  const row = scope.rows[0];
+  if (!row?.period_ok) throw new CloseError("period not found");
+  if (!row.book_ok) throw new CloseError("active accounting book not found");
+  const requested = new Set(requestedSubsidiaries);
+  if (
+    requested.size !== requestedSubsidiaries.length ||
+    Number(row.subsidiaries_found) !== requested.size
+  ) {
+    throw new CloseError("one or more close-scope subsidiaries are invalid");
+  }
+}
+
+export async function startCloseRun(args: {
+  orgId: string;
+  periodId: string;
+  bookId: string;
+  actorId: string;
+  blueprintId?: string;
+  reportingPackageId?: string;
+  targetCloseDate?: string;
+  subsidiaryIds?: string[];
+}): Promise<string> {
+  const defaults = await ensureCloseDefaults(args.orgId, args.actorId);
+  const blueprintId = args.blueprintId ?? defaults.blueprintId;
+  const reportingPackageId =
+    args.reportingPackageId ?? defaults.reportingPackageId;
+  await assertCloseScope(db, args);
+  const periodRes = (await db.execute(sql`
+    select p.id, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
+           (select max(p2.period_number) from accounting_periods p2
+             where p2.org_id = p.org_id and p2.fiscal_calendar_id = p.fiscal_calendar_id
+               and p2.fiscal_year = p.fiscal_year and not p2.is_adjustment) as last_regular_period
+      from accounting_periods p
+     where p.id = ${args.periodId} and p.org_id = ${args.orgId}`)) as unknown as {
+    rows: {
+      id: string;
+      ends_on: string;
+      fiscal_year: number;
+      period_number: number;
+      is_adjustment: boolean;
+      last_regular_period: number;
+    }[];
+  };
+  const period = periodRes.rows[0];
+  if (!period) throw new CloseError("period not found");
+  const configuration = (await db.execute(sql`
+    select
+      exists(select 1 from close_blueprints where id = ${blueprintId} and org_id = ${args.orgId} and is_active) as blueprint_ok,
+      (${reportingPackageId}::uuid is null or exists(
+        select 1 from close_reporting_packages where id = ${reportingPackageId} and org_id = ${args.orgId} and is_active
+      )) as package_ok`)) as unknown as {
+    rows: { blueprint_ok: boolean; package_ok: boolean }[];
+  };
+  if (!configuration.rows[0]?.blueprint_ok)
+    throw new CloseError("active close blueprint not found");
+  if (!configuration.rows[0]?.package_ok)
+    throw new CloseError("active reporting package not found");
+  const fingerprint = await periodFingerprint(
+    args.orgId,
+    args.periodId,
+    args.bookId,
+  );
+  const targetCloseDate =
+    args.targetCloseDate ?? addBusinessDays(period.ends_on, 5);
+
+  return db
+    .transaction(async (tx) => {
+      const inserted = (await tx.execute(sql`
+      insert into close_runs
+        (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
+         current_stage, target_close_date, scope, data_fingerprint, last_validated_at,
+         started_at, started_by, created_by, updated_by)
+      values (${args.orgId}, ${args.periodId}, ${args.bookId}, ${blueprintId}, ${reportingPackageId},
+              'in_progress', 'readiness', ${targetCloseDate},
+              ${JSON.stringify({ subsidiaryIds: args.subsidiaryIds ?? [] })}::jsonb,
+              ${fingerprint}, now(), now(), ${args.actorId}, ${args.actorId}, ${args.actorId})
+      on conflict (org_id, period_id, book_id) do update set
+        status = case when close_runs.status = 'cancelled' then 'in_progress' else close_runs.status end,
+        updated_at = now(), updated_by = ${args.actorId}
+      returning id`)) as unknown as { rows: { id: string }[] };
+      const runId = inserted.rows[0].id;
+      const steps = (await tx.execute(sql`
+      select id, key, title, description, workstream, task_type, completion_mode,
+             gate_type, due_offset_business_days, evidence_required, sort_order,
+             default_owner_role_key, default_reviewer_role_key, applicability
+        from close_blueprint_steps
+       where blueprint_id = ${blueprintId} and org_id = ${args.orgId}
+       order by sort_order`)) as unknown as { rows: any[] };
+      if (steps.rows.length === 0)
+        throw new CloseError("close blueprint has no steps");
+      let materializedSteps = 0;
+      for (const step of steps.rows) {
+        if (
+          !blueprintStepApplies(step.applicability, {
+            fiscalYear: Number(period.fiscal_year),
+            periodNumber: Number(period.period_number),
+            lastRegularPeriod: Number(period.last_regular_period),
+            isAdjustment: period.is_adjustment,
+            bookId: args.bookId,
+            subsidiaryIds: args.subsidiaryIds ?? [],
+          })
+        )
+          continue;
+        async function userForRole(
+          roleKey: string | null,
+          excluding?: string,
+        ): Promise<string | null> {
+          if (!roleKey) return null;
+          const user = (await tx.execute(sql`
+          select distinct u.id from users u
+            left join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
+            left join app_roles ar on ar.id = ra.role_id
+           where u.org_id = ${args.orgId} and u.is_active and (u.role = ${roleKey} or ar.key = ${roleKey})
+             ${excluding ? sql`and u.id <> ${excluding}` : sql``}
+           order by u.id limit 1
+        `)) as unknown as { rows: { id: string }[] };
+          return user.rows[0]?.id ?? null;
+        }
+        const configuredOwnerId = await userForRole(
+          step.default_owner_role_key,
+        );
+        if (step.default_owner_role_key && !configuredOwnerId) {
+          throw new CloseError(
+            `no active user holds owner role ${step.default_owner_role_key}`,
+          );
+        }
+        const ownerId = configuredOwnerId ?? args.actorId;
+        const reviewerId = await userForRole(
+          step.default_reviewer_role_key,
+          ownerId,
+        );
+        if (step.default_reviewer_role_key && !reviewerId) {
+          throw new CloseError(
+            `reviewer role ${step.default_reviewer_role_key} has no user independent from the task owner`,
+          );
+        }
+        await tx.execute(sql`
+        insert into close_run_tasks
+          (org_id, run_id, blueprint_step_id, key, title, description, workstream,
+           task_type, completion_mode, gate_type, status, sort_order, owner_id,
+           due_on, evidence_required, created_by, updated_by)
+        values (${args.orgId}, ${runId}, ${step.id}, ${step.key}, ${step.title}, ${step.description},
+                ${step.workstream}, ${step.task_type}, ${step.completion_mode}, ${step.gate_type},
+                'blocked', ${step.sort_order}, ${ownerId},
+                ${addBusinessDays(period.ends_on, Number(step.due_offset_business_days))},
+                ${step.evidence_required}, ${args.actorId}, ${args.actorId})
+        on conflict (run_id, key) do nothing`);
+        if (reviewerId)
+          await tx.execute(sql`update close_run_tasks set reviewer_id = ${reviewerId}
+        where run_id = ${runId} and key = ${step.key} and org_id = ${args.orgId}`);
+        materializedSteps++;
+      }
+      if (materializedSteps === 0)
+        throw new CloseError("no blueprint steps apply to this close scope");
+      await tx.execute(sql`
+      insert into close_events (org_id, run_id, event_type, actor_id, payload)
+      values (${args.orgId}, ${runId}, 'run.started', ${args.actorId},
+              ${JSON.stringify({ periodId: args.periodId, bookId: args.bookId, targetCloseDate })}::jsonb)`);
+      return runId;
+    })
+    .then(async (runId) => {
+      await refreshCloseRun(args.orgId, runId, args.actorId);
+      await runCloseAutomations({
+        orgId: args.orgId,
+        runId,
+        trigger: "run_started",
+        eventKey: `run:${runId}:started`,
+        actorId: args.actorId,
+      });
+      return runId;
+    });
+}
+
+async function readinessChecks(
+  orgId: string,
+  runId: string,
+): Promise<ReadinessCheck[]> {
+  const context = (await db.execute(sql`
+    select r.period_id, r.book_id, p.starts_on, p.ends_on, o.base_currency
+      from close_runs r
+      join accounting_periods p on p.id = r.period_id
+      join orgs o on o.id = r.org_id
+     where r.id = ${runId} and r.org_id = ${orgId}`)) as unknown as {
+    rows: {
+      period_id: string;
+      book_id: string;
+      starts_on: string;
+      ends_on: string;
+      base_currency: string;
+    }[];
+  };
+  const ctx = context.rows[0];
+  if (!ctx) throw new CloseError("close run not found");
+
+  const [drafts, bank, depreciation, fx, intercompany, variancePolicy] =
+    (await Promise.all([
+      db.execute(sql`
+      select
+        (select count(*) from journal_entries where org_id = ${orgId} and period_id = ${ctx.period_id} and book_id = ${ctx.book_id} and status = 'draft')
+        +
+        (select count(*) from documents
+          where org_id = ${orgId} and status in ('draft','pending_approval','approved')
+            and coalesce(posting_date, document_date) between ${ctx.starts_on} and ${ctx.ends_on}) as count`),
+      db.execute(sql`
+      select count(*) as count
+        from accounts a
+       where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
+         and not exists (
+           select 1 from reconciliations r
+            where r.org_id = ${orgId} and r.account_id = a.id and r.status = 'signed_off'
+              and r.through_date >= ${ctx.ends_on}
+         )`),
+      db.execute(sql`
+      select count(*) as count
+        from depreciation_schedule_lines l
+        join depreciation_schedules s on s.id = l.schedule_id
+       where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
+         and s.book_id = ${ctx.book_id} and l.journal_entry_id is null and l.planned_amount <> 0`),
+      db.execute(sql`
+      select count(*) as count
+        from (
+          select distinct l.currency
+            from journal_lines l join journal_entries e on e.id = l.entry_id
+           where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id}
+             and l.currency <> ${ctx.base_currency}
+        ) c
+       where not exists (
+         select 1 from fx_rates f where f.org_id = ${orgId} and f.from_currency = c.currency
+           and f.to_currency = ${ctx.base_currency} and f.rate_type = 'spot' and f.as_of <= ${ctx.ends_on}
+       )`),
+      db.execute(sql`
+      select count(*) as count from (
+        select a.id
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id
+          join accounts a on a.id = l.account_id and a.eliminate
+         where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status = 'posted'
+         group by a.id
+        having sum(l.amount) <> 0
+      ) residuals`),
+      db.execute(sql`
+      select coalesce(rules->>'amount', '10000.0000') as amount,
+             coalesce((rules->>'percent')::numeric, 20) as percent
+        from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`),
+    ])) as any[];
+
+  const threshold = variancePolicy.rows[0] ?? {
+    amount: "10000.0000",
+    percent: 20,
+  };
+  const variances = (await db.execute(sql`
+    with current_activity as (
+      select l.account_id, sum(l.amount) as amount
+        from journal_lines l join journal_entries e on e.id = l.entry_id
+       where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status = 'posted'
+       group by l.account_id
+    ), prior_period as (
+      select p2.id from accounting_periods p2
+       where p2.org_id = ${orgId} and p2.ends_on < ${ctx.starts_on} and not p2.is_adjustment
+       order by p2.ends_on desc limit 1
+    ), prior_activity as (
+      select l.account_id, sum(l.amount) as amount
+        from journal_lines l join journal_entries e on e.id = l.entry_id
+       where e.org_id = ${orgId} and e.period_id = (select id from prior_period)
+         and e.book_id = ${ctx.book_id} and e.status = 'posted'
+       group by l.account_id
+    )
+    select count(*) as count
+      from accounts a
+      left join current_activity c on c.account_id = a.id
+      left join prior_activity p on p.account_id = a.id
+     where a.org_id = ${orgId} and not a.is_summary
+       and abs(coalesce(c.amount, 0) - coalesce(p.amount, 0)) >= ${threshold.amount}::numeric
+       and (
+         coalesce(p.amount, 0) = 0
+         or abs((coalesce(c.amount, 0) - p.amount) / nullif(abs(p.amount), 0) * 100) >= ${threshold.percent}::numeric
+       )`)) as unknown as { rows: { count: string }[] };
+
+  return [
+    {
+      code: "drafts-open",
+      taskKey: "drafts-cleared",
+      category: "readiness",
+      severity: "critical",
+      title: "close.diagnostics.drafts-open.title",
+      message: "close.diagnostics.drafts-open.message",
+      count: Number(drafts.rows[0]?.count ?? 0),
+    },
+    {
+      code: "bank-unreconciled",
+      taskKey: "bank-reconciled",
+      category: "banking",
+      severity: "critical",
+      title: "close.diagnostics.bank-unreconciled.title",
+      message: "close.diagnostics.bank-unreconciled.message",
+      count: Number(bank.rows[0]?.count ?? 0),
+    },
+    {
+      code: "depreciation-unposted",
+      taskKey: "depreciation-posted",
+      category: "assets",
+      severity: "error",
+      title: "close.diagnostics.depreciation-unposted.title",
+      message: "close.diagnostics.depreciation-unposted.message",
+      count: Number(depreciation.rows[0]?.count ?? 0),
+    },
+    {
+      code: "fx-missing",
+      taskKey: "fx-ready",
+      category: "foreign_exchange",
+      severity: "critical",
+      title: "close.diagnostics.fx-missing.title",
+      message: "close.diagnostics.fx-missing.message",
+      count: Number(fx.rows[0]?.count ?? 0),
+    },
+    {
+      code: "intercompany-residual",
+      taskKey: "intercompany-balanced",
+      category: "intercompany",
+      severity: "critical",
+      title: "close.diagnostics.intercompany-residual.title",
+      message: "close.diagnostics.intercompany-residual.message",
+      count: Number(intercompany.rows[0]?.count ?? 0),
+    },
+    {
+      code: "material-variances",
+      taskKey: "variance-review",
+      category: "variance",
+      severity: "warning",
+      title: "close.diagnostics.material-variances.title",
+      message: "close.diagnostics.material-variances.message",
+      count: Number(variances.rows[0]?.count ?? 0),
+      details: {
+        amountThreshold: threshold.amount,
+        percentThreshold: Number(threshold.percent),
+      },
+    },
+  ];
+}
+
+export async function refreshCloseRun(
+  orgId: string,
+  runId: string,
+  actorId?: string,
+): Promise<{
+  readinessScore: number;
+  fingerprint: string;
+  invalidated: number;
+  openExceptions: number;
+}> {
+  const runRes = (await db.execute(sql`
+    select period_id, book_id, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId}`)) as unknown as {
+    rows: {
+      period_id: string;
+      book_id: string;
+      data_fingerprint: string | null;
+    }[];
+  };
+  const run = runRes.rows[0];
+  if (!run) throw new CloseError("close run not found");
+  const fingerprint = await periodFingerprint(
+    orgId,
+    run.period_id,
+    run.book_id,
+  );
+  const dataChanged = Boolean(
+    run.data_fingerprint && run.data_fingerprint !== fingerprint,
+  );
+  const checks = await readinessChecks(orgId, runId);
+  const hardChecks = checks.filter((check) => check.severity !== "warning");
+  const readinessScore = Math.round(
+    (hardChecks.filter((check) => check.count === 0).length /
+      Math.max(hardChecks.length, 1)) *
+      100,
+  );
+
+  const outcome = await db.transaction(async (tx) => {
+    let invalidated = 0;
+    if (dataChanged) {
+      const changed = (await tx.execute(sql`
+        update close_run_tasks
+           set status = 'invalidated', completed_at = null, completed_by = null,
+               reviewed_at = null, reviewed_by = null, updated_at = now(), updated_by = ${actorId ?? null}
+         where run_id = ${runId} and org_id = ${orgId}
+           and status in ('complete','submitted') and data_fingerprint is not null
+           and data_fingerprint <> ${fingerprint}
+         returning id`)) as unknown as { rows: { id: string }[] };
+      invalidated = changed.rows.length;
+      await tx.execute(sql`
+        insert into close_events (org_id, run_id, event_type, actor_id, payload)
+        values (${orgId}, ${runId}, 'run.data_changed', ${actorId ?? null},
+                ${JSON.stringify({ invalidated })}::jsonb)`);
+    }
+
+    for (const check of checks) {
+      const task = (await tx.execute(sql`
+        select id from close_run_tasks where run_id = ${runId} and key = ${check.taskKey}`)) as unknown as {
+        rows: { id: string }[];
+      };
+      const taskId = task.rows[0]?.id ?? null;
+      if (check.count > 0) {
+        await tx.execute(sql`
+          insert into close_exceptions
+            (org_id, run_id, task_id, code, category, severity, status, title, message,
+             source, details, created_by, updated_by)
+          values (${orgId}, ${runId}, ${taskId}, ${check.code}, ${check.category}, ${check.severity},
+                  'open', ${check.title}, ${check.message}, 'system',
+                  ${JSON.stringify({ count: check.count, ...(check.details ?? {}) })}::jsonb,
+                  ${actorId ?? null}, ${actorId ?? null})
+          on conflict (run_id, code) do update set
+            task_id = excluded.task_id, severity = excluded.severity, status = 'open',
+            title = excluded.title, message = excluded.message, details = excluded.details,
+            resolved_at = null, resolved_by = null, resolution = null, updated_at = now()`);
+      } else {
+        await tx.execute(sql`
+          update close_exceptions set status = 'resolved', resolved_at = now(),
+                 resolution = 'close.diagnostics.autoResolved', updated_at = now()
+           where run_id = ${runId} and code = ${check.code} and status = 'open'`);
+      }
+      if (taskId) {
+        const status = check.count === 0 ? "complete" : "ready";
+        await tx.execute(sql`
+          update close_run_tasks
+             set status = ${status},
+                 completed_at = ${check.count === 0 ? sql`now()` : sql`null`},
+                 completed_by = ${check.count === 0 ? (actorId ?? null) : null},
+                 data_fingerprint = ${fingerprint},
+                 result = ${JSON.stringify({ count: check.count, checkedAt: new Date().toISOString() })}::jsonb,
+                 updated_at = now(), updated_by = ${actorId ?? null}
+           where id = ${taskId} and completion_mode = 'computed'`);
+      }
+    }
+
+    await resolveTaskDependenciesTx(tx, orgId, runId);
+    await tx.execute(sql`
+      update close_runs set readiness_score = ${readinessScore}, data_fingerprint = ${fingerprint},
+             status = case when ${dataChanged} and status = 'approved' then 'in_progress' else status end,
+             approved_at = case when ${dataChanged} and status = 'approved' then null else approved_at end,
+             approved_by = case when ${dataChanged} and status = 'approved' then null else approved_by end,
+             current_stage = case
+               when status in ('closed','published') then 'publish'
+               when status = 'approved' and not ${dataChanged} then 'lock'
+               when exists (select 1 from close_exceptions x where x.run_id = ${runId}
+                 and x.status = 'open' and x.severity in ('error','critical')) then 'readiness'
+               when exists (select 1 from close_run_tasks t where t.run_id = ${runId}
+                 and t.workstream not in ('review','publish') and t.key not like 'lock-%'
+                 and t.status not in ('complete','waived')) then 'execute'
+               else 'review'
+             end,
+             last_validated_at = now(), updated_at = now(), updated_by = ${actorId ?? null}
+       where id = ${runId} and org_id = ${orgId}`);
+    const open = (await tx.execute(sql`
+      select count(*) as count from close_exceptions where run_id = ${runId} and status = 'open'`)) as unknown as {
+      rows: { count: string }[];
+    };
+    return {
+      readinessScore,
+      fingerprint,
+      invalidated,
+      openExceptions: Number(open.rows[0]?.count ?? 0),
+    };
+  });
+  const automationSubjects = (await db.execute(sql`
+    select t.id as task_id, t.key as task_key, t.status,
+           x.id as exception_id, x.code as exception_code
+      from close_run_tasks t
+      left join close_exceptions x on x.task_id = t.id and x.run_id = t.run_id and x.status = 'open'
+     where t.run_id = ${runId} and t.org_id = ${orgId} and (t.status = 'ready' or x.id is not null)
+  `)) as unknown as {
+    rows: {
+      task_id: string;
+      task_key: string;
+      status: string;
+      exception_id: string | null;
+      exception_code: string | null;
+    }[];
+  };
+  for (const subject of automationSubjects.rows) {
+    if (subject.status === "ready") {
+      await runCloseAutomations({
+        orgId,
+        runId,
+        taskId: subject.task_id,
+        trigger: "task_ready",
+        eventKey: `task:${subject.task_key}:${fingerprint}`,
+        actorId,
+      });
+    }
+    if (subject.exception_id && subject.exception_code) {
+      await runCloseAutomations({
+        orgId,
+        runId,
+        taskId: subject.task_id,
+        exceptionId: subject.exception_id,
+        trigger: "exception_opened",
+        eventKey: `exception:${subject.exception_code}:${fingerprint}`,
+        actorId,
+      });
+    }
+  }
+  return outcome;
+}
+
+async function resolveTaskDependenciesTx(
+  tx: any,
+  orgId: string,
+  runId: string,
+): Promise<void> {
+  await tx.execute(sql`
+    update close_run_tasks t
+       set status = case
+         when t.status in ('complete','submitted','in_progress','changes_requested','waived') then t.status
+         when exists (
+           select 1
+             from close_blueprint_dependencies d
+             join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id
+            where d.step_id = t.blueprint_step_id and dep.status not in ('complete','waived')
+         ) then 'blocked'
+         else 'ready'
+       end,
+       updated_at = now()
+     where t.org_id = ${orgId} and t.run_id = ${runId}`);
+}
+
+export async function updateCloseTask(args: {
+  orgId: string;
+  runId: string;
+  taskId: string;
+  actorId: string;
+  action:
+    "start" | "submit" | "complete" | "approve" | "request_changes" | "waive";
+  notes?: string;
+}): Promise<void> {
+  const fingerprintRes = (await db.execute(sql`
+    select data_fingerprint from close_runs where id = ${args.runId} and org_id = ${args.orgId}`)) as unknown as {
+    rows: { data_fingerprint: string | null }[];
+  };
+  const fingerprint = fingerprintRes.rows[0]?.data_fingerprint;
+  if (!fingerprint)
+    throw new CloseError("validate the close run before updating tasks");
+
+  await db.transaction(async (tx) => {
+    const taskRes = (await tx.execute(sql`
+      select t.*, (select count(*) from close_task_evidence e where e.task_id = t.id) as evidence_count
+        from close_run_tasks t where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
+        for update`)) as unknown as { rows: any[] };
+    const task = taskRes.rows[0];
+    if (!task) throw new CloseError("close task not found");
+    if (task.status === "blocked")
+      throw new CloseError("task dependencies are not complete");
+    if (
+      ["start", "submit", "complete"].includes(args.action) &&
+      task.owner_id &&
+      task.owner_id !== args.actorId
+    ) {
+      throw new CloseError("only the assigned owner can prepare this task");
+    }
+    if (
+      ["approve", "request_changes"].includes(args.action) &&
+      task.reviewer_id &&
+      task.reviewer_id !== args.actorId
+    ) {
+      throw new CloseError("only the assigned reviewer can decide this task");
+    }
+    if (
+      ["complete", "submit"].includes(args.action) &&
+      task.evidence_required &&
+      Number(task.evidence_count) === 0
+    ) {
+      throw new CloseError(
+        "required evidence must be attached before this task can be completed",
+      );
+    }
+
+    let status: string;
+    if (args.action === "start") status = "in_progress";
+    else if (args.action === "submit")
+      status = task.reviewer_id ? "submitted" : "complete";
+    else if (args.action === "complete") status = "complete";
+    else if (args.action === "approve") {
+      if (
+        task.completed_by === args.actorId ||
+        (!task.completed_by && task.owner_id === args.actorId)
+      ) {
+        throw new CloseError("preparer and reviewer must be different people");
+      }
+      status = "complete";
+    } else if (args.action === "request_changes") status = "changes_requested";
+    else status = "waived";
+
+    await tx.execute(sql`
+      update close_run_tasks set
+        status = ${status}, notes = coalesce(${args.notes ?? null}, notes),
+        completed_at = case when ${status} in ('complete','waived') then now() else completed_at end,
+        completed_by = case when ${status} in ('complete','waived') then coalesce(completed_by, ${args.actorId}) else completed_by end,
+        reviewed_at = case when ${args.action} = 'approve' then now() else reviewed_at end,
+        reviewed_by = case when ${args.action} = 'approve' then ${args.actorId} else reviewed_by end,
+        data_fingerprint = case when ${status} in ('complete','submitted','waived') then ${fingerprint} else data_fingerprint end,
+        updated_at = now(), updated_by = ${args.actorId}
+       where id = ${args.taskId}`);
+    if (["approve", "waive"].includes(args.action)) {
+      await tx.execute(sql`
+        insert into close_signoffs
+          (org_id, run_id, task_id, signoff_type, decision, comment, data_fingerprint, signed_by)
+        values (${args.orgId}, ${args.runId}, ${args.taskId},
+                ${args.action === "approve" ? "review" : "waive"},
+                ${args.action === "approve" ? "approved" : "waived"},
+                ${args.notes ?? null}, ${fingerprint}, ${args.actorId})`);
+    }
+    await tx.execute(sql`
+      insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
+      values (${args.orgId}, ${args.runId}, ${args.taskId}, ${`task.${args.action}`}, ${args.actorId},
+              ${JSON.stringify({ status, notes: args.notes ?? null })}::jsonb)`);
+    await resolveTaskDependenciesTx(tx, args.orgId, args.runId);
+  });
+  const ready = (await db.execute(sql`select id, key from close_run_tasks
+    where run_id = ${args.runId} and org_id = ${args.orgId} and status = 'ready'`)) as unknown as {
+    rows: { id: string; key: string }[];
+  };
+  for (const task of ready.rows) {
+    await runCloseAutomations({
+      orgId: args.orgId,
+      runId: args.runId,
+      taskId: task.id,
+      trigger: "task_ready",
+      eventKey: `task:${task.key}:${fingerprint}`,
+      actorId: args.actorId,
+    });
+  }
+}
+
+export async function addCloseEvidence(args: {
+  orgId: string;
+  runId: string;
+  taskId: string;
+  actorId: string;
+  evidenceType:
+    "file" | "report" | "journal" | "reconciliation" | "link" | "note";
+  label: string;
+  fileId?: string;
+  referenceId?: string;
+  referenceUrl?: string;
+  snapshot?: Record<string, unknown>;
+}): Promise<string> {
+  if (!args.label.trim()) throw new CloseError("evidence label is required");
+  const snapshot = args.snapshot ?? {};
+  const contentHash = createHash("sha256")
+    .update(JSON.stringify(snapshot))
+    .digest("hex");
+  const inserted = (await db.execute(sql`
+    insert into close_task_evidence
+      (org_id, run_id, task_id, file_id, evidence_type, reference_id, reference_url,
+       label, snapshot, content_hash, created_by, updated_by)
+    select ${args.orgId}, ${args.runId}, t.id, ${args.fileId ?? null}, ${args.evidenceType},
+           ${args.referenceId ?? null}, ${args.referenceUrl ?? null}, ${args.label.trim()},
+           ${JSON.stringify(snapshot)}::jsonb, ${contentHash}, ${args.actorId}, ${args.actorId}
+      from close_run_tasks t
+     where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
+    returning id`)) as unknown as { rows: { id: string }[] };
+  if (!inserted.rows[0]) throw new CloseError("close task not found");
+  await db.execute(sql`
+    insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
+    values (${args.orgId}, ${args.runId}, ${args.taskId}, 'task.evidence_added', ${args.actorId},
+            ${JSON.stringify({ evidenceId: inserted.rows[0].id, type: args.evidenceType, label: args.label.trim() })}::jsonb)`);
+  return inserted.rows[0].id;
+}
+
+export async function approveCloseRun(
+  orgId: string,
+  runId: string,
+  actorId: string,
+  comment?: string,
+): Promise<void> {
+  await refreshCloseRun(orgId, runId, actorId);
+  await db.transaction(async (tx) => {
+    const run = (await tx.execute(sql`
+      select r.started_by, r.data_fingerprint,
+             coalesce((select (p.rules->>'prohibitSelfApproval')::boolean from close_policies p
+               where p.org_id = r.org_id and p.code = 'independent-approval' and p.is_active limit 1), true) as prohibit_self_approval
+        from close_runs r where r.id = ${runId} and r.org_id = ${orgId} for update`)) as unknown as {
+      rows: {
+        started_by: string | null;
+        data_fingerprint: string | null;
+        prohibit_self_approval: boolean;
+      }[];
+    };
+    if (!run.rows[0]) throw new CloseError("close run not found");
+    if (
+      run.rows[0].prohibit_self_approval &&
+      run.rows[0].started_by === actorId
+    ) {
+      throw new CloseError("the run initiator cannot provide final approval");
+    }
+    const blockers = (await tx.execute(sql`
+      select
+        (select count(*) from close_run_tasks where run_id = ${runId} and gate_type = 'hard'
+          and key not in ('lock-subledgers','lock-gl','publish-package') and status not in ('complete','waived')) as tasks,
+        (select count(*) from close_exceptions where run_id = ${runId} and status = 'open' and severity in ('error','critical')) as exceptions`)) as unknown as {
+      rows: { tasks: string; exceptions: string }[];
+    };
+    if (
+      Number(blockers.rows[0].tasks) > 0 ||
+      Number(blockers.rows[0].exceptions) > 0
+    ) {
+      throw new CloseError(
+        "hard-gated tasks and critical exceptions must be resolved before approval",
+      );
+    }
+    await tx.execute(sql`
+      update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
+             approved_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
+       where id = ${runId}`);
+    await tx.execute(sql`
+      insert into close_signoffs (org_id, run_id, signoff_type, decision, comment, data_fingerprint, signed_by)
+      values (${orgId}, ${runId}, 'approve', 'approved', ${comment ?? null}, ${run.rows[0].data_fingerprint}, ${actorId})`);
+    await tx.execute(sql`
+      insert into close_events (org_id, run_id, event_type, actor_id, payload)
+      values (${orgId}, ${runId}, 'run.approved', ${actorId}, ${JSON.stringify({ comment: comment ?? null })}::jsonb)`);
+  });
+}
+
+async function upsertLock(args: {
+  tx: any;
+  orgId: string;
+  periodId: string;
+  bookId: string;
+  subsidiaryId?: string;
+  module: CloseModule;
+  state: "open" | "soft_closed" | "closed";
+  actorId?: string;
+  reason: string;
+  reopenExpiresAt?: Date;
+}): Promise<void> {
+  await args.tx.execute(sql`
+    insert into period_locks
+      (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by,
+       reason, reopen_expires_at, created_by, updated_by)
+    values (${args.orgId}, ${args.periodId}, ${args.bookId}, ${args.subsidiaryId ?? null},
+            ${args.module}, ${args.state},
+            ${args.state === "closed" ? sql`now()` : sql`null`}, ${args.actorId ?? null}, ${args.reason},
+            ${args.reopenExpiresAt?.toISOString() ?? null}, ${args.actorId ?? null}, ${args.actorId ?? null})
+    on conflict (org_id, period_id, book_id, subsidiary_id, module) do update set
+      state = excluded.state, locked_at = excluded.locked_at, locked_by = excluded.locked_by,
+      reason = excluded.reason, reopen_expires_at = excluded.reopen_expires_at,
+      version = period_locks.version + 1, updated_at = now(), updated_by = excluded.updated_by`);
+}
+
+/** Administrative lock control used by Setup. A closed scope can only be
+ * reopened through the independently approved reopen-case workflow. */
+export async function setPeriodLockState(args: {
+  orgId: string;
+  periodId: string;
+  bookId: string;
+  subsidiaryId?: string;
+  module: CloseModule;
+  state: "open" | "soft_closed" | "closed";
+  actorId: string;
+  reason: string;
+}): Promise<void> {
+  if (!args.reason.trim())
+    throw new CloseError("a lock-state reason is required");
+  await db.transaction(async (tx) => {
+    await assertCloseScope(tx, {
+      ...args,
+      subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
+    });
+    const current = (await tx.execute(sql`
+      select state from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
+        and book_id = ${args.bookId} and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
+        and module = ${args.module} for update`)) as unknown as {
+      rows: { state: string }[];
+    };
+    if (args.state === "open" && current.rows[0]?.state === "closed") {
+      throw new CloseError(
+        "closed periods must be reopened through an approved reopen request",
+      );
+    }
+    if (args.module === "gl" && args.state === "closed") {
+      const openSubledgers = (await tx.execute(sql`
+        select module from period_locks
+         where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
+           and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
+           and module <> 'gl' and state <> 'closed'`)) as unknown as {
+        rows: { module: string }[];
+      };
+      if (openSubledgers.rows.length > 0) {
+        throw new CloseError(
+          `close ${openSubledgers.rows.map((row) => row.module.toUpperCase()).join(", ")} before GL`,
+        );
+      }
+    }
+    if (args.module !== "gl" && args.state === "open") {
+      const gl = (await tx.execute(sql`
+        select state from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
+          and book_id = ${args.bookId} and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
+          and module = 'gl'`)) as unknown as { rows: { state: string }[] };
+      if (gl.rows[0]?.state === "closed")
+        throw new CloseError(
+          "GL must be reopened before a subledger can be opened",
+        );
+    }
+    await upsertLock({ ...args, tx, reason: args.reason.trim() });
+    await tx.execute(sql`
+      insert into close_events (org_id, event_type, actor_id, payload)
+      values (${args.orgId}, 'period.lock_changed', ${args.actorId},
+              ${JSON.stringify({ periodId: args.periodId, bookId: args.bookId, subsidiaryId: args.subsidiaryId ?? null, module: args.module, state: args.state, reason: args.reason.trim() })}::jsonb)`);
+  });
+}
+
+export async function closeApprovedRun(
+  orgId: string,
+  runId: string,
+  actorId: string,
+): Promise<void> {
+  await refreshCloseRun(orgId, runId, actorId);
+  await db.transaction(async (tx) => {
+    const run = (await tx.execute(sql`
+      select period_id, book_id, status, scope from close_runs
+       where id = ${runId} and org_id = ${orgId} for update`)) as unknown as {
+      rows: {
+        period_id: string;
+        book_id: string;
+        status: string;
+        scope: { subsidiaryIds?: string[] };
+      }[];
+    };
+    const row = run.rows[0];
+    if (!row) throw new CloseError("close run not found");
+    if (row.status !== "approved")
+      throw new CloseError(
+        "the close run requires independent approval before locking",
+      );
+    const blockers = (await tx.execute(sql`
+      select count(*) as count from close_exceptions
+       where run_id = ${runId} and status = 'open' and severity in ('error','critical')`)) as unknown as {
+      rows: { count: string }[];
+    };
+    if (Number(blockers.rows[0].count) > 0)
+      throw new CloseError(
+        "critical exceptions reappeared after approval; review the run again",
+      );
+
+    const scopes = row.scope?.subsidiaryIds?.length
+      ? row.scope.subsidiaryIds
+      : [undefined];
+    for (const subsidiaryId of scopes) {
+      for (const module of CLOSE_MODULES.filter((item) => item !== "gl")) {
+        await upsertLock({
+          tx,
+          orgId,
+          periodId: row.period_id,
+          bookId: row.book_id,
+          subsidiaryId,
+          module,
+          state: "closed",
+          actorId,
+          reason: `Close run ${runId}`,
+        });
+      }
+      await upsertLock({
+        tx,
+        orgId,
+        periodId: row.period_id,
+        bookId: row.book_id,
+        subsidiaryId,
+        module: "gl",
+        state: "closed",
+        actorId,
+        reason: `Close run ${runId}`,
+      });
+    }
+    await tx.execute(sql`
+      update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
+             updated_at = now(), updated_by = ${actorId}
+       where run_id = ${runId} and key in ('lock-subledgers','lock-gl')`);
+    await tx.execute(sql`
+      update close_runs set status = 'closed', current_stage = 'publish', closed_at = now(),
+             closed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
+       where id = ${runId}`);
+    await tx.execute(sql`
+      insert into close_events (org_id, run_id, event_type, actor_id, payload)
+      values (${orgId}, ${runId}, 'run.closed', ${actorId}, ${JSON.stringify({ modules: CLOSE_MODULES })}::jsonb)`);
+  });
+  await runCloseAutomations({
+    orgId,
+    runId,
+    trigger: "run_closed",
+    eventKey: `run:${runId}:closed`,
+    actorId,
+  });
+}
+
+export async function publishCloseRun(
+  orgId: string,
+  runId: string,
+  actorId: string,
+  comment?: string,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const run = (await tx.execute(sql`
+      select status, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId} for update`)) as unknown as {
+      rows: { status: string; data_fingerprint: string | null }[];
+    };
+    if (!run.rows[0]) throw new CloseError("close run not found");
+    if (run.rows[0].status !== "closed")
+      throw new CloseError(
+        "the period must be closed before its package can be published",
+      );
+    await tx.execute(sql`
+      update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
+             data_fingerprint = ${run.rows[0].data_fingerprint}, updated_at = now(), updated_by = ${actorId}
+       where run_id = ${runId} and key = 'publish-package'`);
+    await tx.execute(sql`
+      update close_runs set status = 'published', current_stage = 'publish', published_at = now(),
+             published_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
+       where id = ${runId}`);
+    await tx.execute(sql`
+      insert into close_signoffs (org_id, run_id, signoff_type, decision, comment, data_fingerprint, signed_by)
+      values (${orgId}, ${runId}, 'publish', 'approved', ${comment ?? null}, ${run.rows[0].data_fingerprint}, ${actorId})`);
+    await tx.execute(sql`
+      insert into close_events (org_id, run_id, event_type, actor_id, payload)
+      values (${orgId}, ${runId}, 'run.published', ${actorId}, ${JSON.stringify({ comment: comment ?? null })}::jsonb)`);
+    const [publishedRun, tasks, evidence, exceptions, signoffs, events, locks] =
+      (await Promise.all([
+        tx.execute(sql`select r.*, p.name as period_name, p.starts_on, p.ends_on, b.code as book_code, b.name as book_name,
+        bp.name as blueprint_name, bp.version as blueprint_version, pkg.name as package_name, pkg.reports as package_reports
+        from close_runs r join accounting_periods p on p.id = r.period_id join accounting_books b on b.id = r.book_id
+        join close_blueprints bp on bp.id = r.blueprint_id left join close_reporting_packages pkg on pkg.id = r.reporting_package_id
+        where r.id = ${runId} and r.org_id = ${orgId}`),
+        tx.execute(
+          sql`select * from close_run_tasks where run_id = ${runId} and org_id = ${orgId} order by sort_order, id`,
+        ),
+        tx.execute(
+          sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
+        ),
+        tx.execute(
+          sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
+        ),
+        tx.execute(
+          sql`select * from close_signoffs where run_id = ${runId} and org_id = ${orgId} order by signed_at, id`,
+        ),
+        tx.execute(
+          sql`select * from close_events where run_id = ${runId} and org_id = ${orgId} order by at, id`,
+        ),
+        tx.execute(sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId})
+        and book_id = (select book_id from close_runs where id = ${runId}) order by subsidiary_id nulls first, module`),
+      ])) as any[];
+    const snapshot = {
+      format: "openbooks.close-binder.v1",
+      frozenAt: new Date().toISOString(),
+      run: publishedRun.rows[0],
+      tasks: tasks.rows,
+      evidence: evidence.rows,
+      exceptions: exceptions.rows,
+      signoffs: signoffs.rows,
+      events: events.rows,
+      locks: locks.rows,
+    };
+    const binderHash = createHash("sha256")
+      .update(JSON.stringify(snapshot))
+      .digest("hex");
+    await tx.execute(sql`
+      update close_runs set binder_snapshot = ${JSON.stringify(snapshot)}::jsonb, binder_hash = ${binderHash}
+       where id = ${runId} and org_id = ${orgId}`);
+  });
+}
+
+export async function requestPeriodReopen(args: {
+  orgId: string;
+  periodId: string;
+  bookId: string;
+  subsidiaryId?: string;
+  modules: CloseModule[];
+  reason: string;
+  actorId: string;
+}): Promise<string> {
+  if (!args.reason.trim())
+    throw new CloseError("a reopening reason is required");
+  if (
+    args.modules.length === 0 ||
+    args.modules.some((module) => !CLOSE_MODULES.includes(module))
+  ) {
+    throw new CloseError("at least one valid module is required");
+  }
+  await assertCloseScope(db, {
+    ...args,
+    subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
+  });
+  const impact = (await db.execute(sql`
+    select
+      (select count(*) from journal_entries where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}) as entries,
+      (select count(*) from close_signoffs s join close_runs r on r.id = s.run_id
+        where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as signoffs,
+      (select count(*) from close_task_evidence e join close_runs r on r.id = e.run_id
+        where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as evidence`)) as unknown as {
+    rows: Record<string, unknown>[];
+  };
+  const inserted = (await db.execute(sql`
+    insert into close_reopen_requests
+      (org_id, period_id, book_id, subsidiary_id, modules, reason, impact_snapshot,
+       requested_by, created_by, updated_by)
+    values (${args.orgId}, ${args.periodId}, ${args.bookId}, ${args.subsidiaryId ?? null},
+            ${JSON.stringify(args.modules)}::jsonb, ${args.reason.trim()},
+            ${JSON.stringify({ ...impact.rows[0], reports: ["balance-sheet", "pnl", "cash-flow", "trial-balance"] })}::jsonb,
+            ${args.actorId}, ${args.actorId}, ${args.actorId})
+    returning id`)) as unknown as { rows: { id: string }[] };
+  return inserted.rows[0].id;
+}
+
+export async function decidePeriodReopen(args: {
+  orgId: string;
+  requestId: string;
+  actorId: string;
+  approve: boolean;
+  hours?: number;
+}): Promise<void> {
+  await db.transaction(async (tx) => {
+    const request = (await tx.execute(sql`
+      select * from close_reopen_requests
+       where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
+       for update`)) as unknown as { rows: any[] };
+    const row = request.rows[0];
+    if (!row) throw new CloseError("pending reopen request not found");
+    if (row.requested_by === args.actorId)
+      throw new CloseError("a reopen request requires independent approval");
+    if (!args.approve) {
+      await tx.execute(sql`
+        update close_reopen_requests set status = 'rejected', approved_by = ${args.actorId},
+               approved_at = now(), updated_at = now(), updated_by = ${args.actorId}
+         where id = ${args.requestId}`);
+      return;
+    }
+    const policy = (await tx.execute(sql`select rules from close_policies
+      where org_id = ${args.orgId} and code = 'controlled-reopen' and is_active limit 1`)) as unknown as {
+      rows: { rules: { defaultHours?: number; maxHours?: number } }[];
+    };
+    const defaultHours = Number(policy.rows[0]?.rules?.defaultHours ?? 24);
+    const maxHours = Math.max(
+      1,
+      Number(policy.rows[0]?.rules?.maxHours ?? 168),
+    );
+    const requestedHours = Number.isFinite(args.hours)
+      ? Math.trunc(args.hours!)
+      : defaultHours;
+    const hours = Math.min(Math.max(requestedHours, 1), maxHours);
+    const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+    const modules = row.modules as CloseModule[];
+    if (modules.some((module) => !CLOSE_MODULES.includes(module)))
+      throw new CloseError("reopen request contains an invalid module");
+    if (modules.some((module) => module !== "gl") && !modules.includes("gl")) {
+      const gl = (await tx.execute(sql`
+        select state from period_locks where org_id = ${args.orgId} and period_id = ${row.period_id}
+          and book_id = ${row.book_id} and subsidiary_id is not distinct from ${row.subsidiary_id}
+          and module = 'gl'`)) as unknown as { rows: { state: string }[] };
+      if (gl.rows[0]?.state === "closed")
+        throw new CloseError(
+          "GL must be included before a closed subledger can be reopened",
+        );
+    }
+    for (const module of modules) {
+      await upsertLock({
+        tx,
+        orgId: args.orgId,
+        periodId: row.period_id,
+        bookId: row.book_id,
+        subsidiaryId: row.subsidiary_id ?? undefined,
+        module,
+        state: "open",
+        actorId: args.actorId,
+        reason: row.reason,
+        reopenExpiresAt: expiresAt,
+      });
+    }
+    await tx.execute(sql`
+      update close_reopen_requests set status = 'approved', approved_by = ${args.actorId},
+             approved_at = now(), expires_at = ${expiresAt.toISOString()}, updated_at = now(), updated_by = ${args.actorId}
+       where id = ${args.requestId}`);
+    await tx.execute(sql`
+      update close_runs set status = 'in_progress', current_stage = 'review', approved_at = null,
+             approved_by = null, closed_at = null, closed_by = null, published_at = null,
+             published_by = null, updated_at = now(), updated_by = ${args.actorId}
+       where org_id = ${args.orgId} and period_id = ${row.period_id} and book_id = ${row.book_id}`);
+    await tx.execute(sql`
+      update close_run_tasks t set status = 'invalidated', completed_at = null, completed_by = null,
+             reviewed_at = null, reviewed_by = null, updated_at = now(), updated_by = ${args.actorId}
+       from close_runs r where r.id = t.run_id and r.org_id = ${args.orgId}
+         and r.period_id = ${row.period_id} and r.book_id = ${row.book_id}
+         and t.status in ('complete','waived')`);
+  });
+}
+
+export async function recloseExpiredReopens(actorId?: string): Promise<number> {
+  const expired = (await db.execute(sql`
+    select id, org_id, period_id, book_id, subsidiary_id, modules, reason
+      from close_reopen_requests where status = 'approved' and expires_at <= now()`)) as unknown as {
+    rows: any[];
+  };
+  for (const row of expired.rows) {
+    await db.transaction(async (tx) => {
+      for (const module of (row.modules as CloseModule[]).filter(
+        (item) => item !== "gl",
+      )) {
+        await upsertLock({
+          tx,
+          orgId: row.org_id,
+          periodId: row.period_id,
+          bookId: row.book_id,
+          subsidiaryId: row.subsidiary_id ?? undefined,
+          module,
+          state: "closed",
+          actorId,
+          reason: `Automatic re-close: ${row.reason}`,
+        });
+      }
+      if ((row.modules as CloseModule[]).includes("gl")) {
+        await upsertLock({
+          tx,
+          orgId: row.org_id,
+          periodId: row.period_id,
+          bookId: row.book_id,
+          subsidiaryId: row.subsidiary_id ?? undefined,
+          module: "gl",
+          state: "closed",
+          actorId,
+          reason: `Automatic re-close: ${row.reason}`,
+        });
+      }
+      await tx.execute(sql`
+        update close_reopen_requests set status = 'reclosed', reclosed_at = now(), updated_at = now()
+         where id = ${row.id}`);
+      await tx.execute(sql`
+        insert into close_events (org_id, event_type, actor_id, payload)
+        values (${row.org_id}, 'period.automatically_reclosed', ${actorId ?? null},
+                ${JSON.stringify({ requestId: row.id, periodId: row.period_id, bookId: row.book_id, modules: row.modules })}::jsonb)`);
+    });
+  }
+  return expired.rows.length;
+}
+
+type CloseAutomationTrigger =
+  | "run_started"
+  | "task_ready"
+  | "exception_opened"
+  | "deadline_approaching"
+  | "run_closed";
+
+type CloseAutomationContext = {
+  orgId: string;
+  runId: string;
+  trigger: CloseAutomationTrigger;
+  eventKey: string;
+  actorId?: string;
+  taskId?: string;
+  exceptionId?: string;
+};
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string => typeof item === "string" && item.length > 0,
+      )
+    : [];
+}
+
+function conditionMatches(expected: unknown, actual: unknown): boolean {
+  if (expected == null) return true;
+  return Array.isArray(expected)
+    ? expected.includes(actual)
+    : expected === actual;
+}
+
+/** Execute tenant-authored close automation with an idempotent database claim.
+ * A failed action is retained for audit and never reported as successful. */
+export async function runCloseAutomations(
+  context: CloseAutomationContext,
+): Promise<{ completed: number; failed: number }> {
+  const runResult = (await db.execute(sql`
+    select r.*, p.name as period_name, b.name as book_name,
+           t.key as task_key, t.workstream, t.status as task_status,
+           x.severity as exception_severity, x.code as exception_code
+      from close_runs r
+      join accounting_periods p on p.id = r.period_id
+      join accounting_books b on b.id = r.book_id
+      left join close_run_tasks t on t.id = ${context.taskId ?? null} and t.run_id = r.id
+      left join close_exceptions x on x.id = ${context.exceptionId ?? null} and x.run_id = r.id
+     where r.id = ${context.runId} and r.org_id = ${context.orgId}
+  `)) as unknown as { rows: any[] };
+  const run = runResult.rows[0];
+  if (!run) throw new CloseError("close run not found");
+  const rules = (await db.execute(sql`
+    select * from close_automation_rules
+     where org_id = ${context.orgId} and trigger = ${context.trigger} and is_active
+     order by created_at, id
+  `)) as unknown as { rows: any[] };
+  let completed = 0;
+  let failed = 0;
+  for (const rule of rules.rows) {
+    const conditions = (rule.conditions ?? {}) as Record<string, unknown>;
+    const daysUntilDeadline = Math.ceil(
+      (new Date(`${run.target_close_date}T00:00:00Z`).getTime() - Date.now()) /
+        86_400_000,
+    );
+    if (
+      !conditionMatches(conditions.runStatus, run.status) ||
+      !conditionMatches(conditions.taskKey, run.task_key) ||
+      !conditionMatches(conditions.workstream, run.workstream) ||
+      !conditionMatches(conditions.taskStatus, run.task_status) ||
+      !conditionMatches(conditions.severity, run.exception_severity) ||
+      (typeof conditions.minReadiness === "number" &&
+        Number(run.readiness_score) < conditions.minReadiness) ||
+      (typeof conditions.maxReadiness === "number" &&
+        Number(run.readiness_score) > conditions.maxReadiness) ||
+      (typeof conditions.withinDays === "number" &&
+        daysUntilDeadline > conditions.withinDays)
+    )
+      continue;
+
+    const claim = (await db.execute(sql`
+      insert into close_automation_executions
+        (org_id, rule_id, run_id, task_id, trigger, event_key, status, created_by, updated_by)
+      values (${context.orgId}, ${rule.id}, ${context.runId}, ${context.taskId ?? null}, ${context.trigger},
+              ${context.eventKey}, 'running', ${context.actorId ?? null}, ${context.actorId ?? null})
+      on conflict (rule_id, event_key) do nothing returning id
+    `)) as unknown as { rows: { id: string }[] };
+    const executionId = claim.rows[0]?.id;
+    if (!executionId) continue;
+    try {
+      const config = (rule.config ?? {}) as Record<string, unknown>;
+      if (rule.action === "notify") {
+        const users = new Map<string, { id: string }>();
+        if (stringList(config.userIds).length) {
+          const direct =
+            (await db.execute(sql`select id from users where org_id = ${context.orgId} and is_active
+            and id in (${sql.join(
+              stringList(config.userIds).map((id) => sql`${id}`),
+              sql`, `,
+            )})`)) as unknown as { rows: { id: string }[] };
+          for (const user of direct.rows) users.set(user.id, user);
+        }
+        for (const role of stringList(config.roleKeys)) {
+          const roleUsers = (await db.execute(sql`
+            select distinct u.id from users u
+              left join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
+              left join app_roles ar on ar.id = ra.role_id
+             where u.org_id = ${context.orgId} and u.is_active and (u.role = ${role} or ar.key = ${role})
+          `)) as unknown as { rows: { id: string }[] };
+          for (const user of roleUsers.rows) users.set(user.id, user);
+        }
+        if (users.size === 0 && run.started_by)
+          users.set(run.started_by, { id: run.started_by });
+        if (users.size === 0)
+          throw new CloseError(
+            "notification automation resolved no recipients",
+          );
+        for (const user of users.values()) {
+          await db.execute(sql`insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
+            values (${context.orgId}, ${user.id}, 'close', ${String(config.title ?? rule.name)},
+                    ${String(config.body ?? `${run.period_name} · ${run.book_name}`)}, ${`/close?run=${context.runId}`},
+                    ${context.actorId ?? null}, ${context.actorId ?? null})`);
+        }
+      } else if (rule.action === "assign") {
+        if (!context.taskId)
+          throw new CloseError("assignment automation requires a task event");
+        async function resolveUser(
+          userValue: unknown,
+          roleValue: unknown,
+        ): Promise<string | null> {
+          if (typeof userValue === "string") {
+            const direct = (await db.execute(
+              sql`select id from users where id = ${userValue} and org_id = ${context.orgId} and is_active`,
+            )) as unknown as { rows: { id: string }[] };
+            if (direct.rows[0]) return direct.rows[0].id;
+          }
+          if (typeof roleValue === "string") {
+            const byRole =
+              (await db.execute(sql`select distinct u.id from users u
+              left join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
+              left join app_roles ar on ar.id = ra.role_id
+              where u.org_id = ${context.orgId} and u.is_active and (u.role = ${roleValue} or ar.key = ${roleValue})
+              order by u.id limit 1`)) as unknown as { rows: { id: string }[] };
+            if (byRole.rows[0]) return byRole.rows[0].id;
+          }
+          return null;
+        }
+        const ownerId = await resolveUser(
+          config.ownerUserId,
+          config.ownerRoleKey,
+        );
+        const reviewerId = await resolveUser(
+          config.reviewerUserId,
+          config.reviewerRoleKey,
+        );
+        if (!ownerId && !reviewerId)
+          throw new CloseError(
+            "assignment automation resolved no owner or reviewer",
+          );
+        await db.execute(sql`update close_run_tasks set owner_id = coalesce(${ownerId}, owner_id),
+          reviewer_id = coalesce(${reviewerId}, reviewer_id), updated_at = now(), updated_by = ${context.actorId ?? null}
+          where id = ${context.taskId} and run_id = ${context.runId} and org_id = ${context.orgId}`);
+      } else if (rule.action === "run_check") {
+        await refreshCloseRun(context.orgId, context.runId, context.actorId);
+      } else if (rule.action === "complete_task") {
+        if (!context.taskId)
+          throw new CloseError(
+            "complete-task automation requires a task event",
+          );
+        await db.transaction(async (tx) => {
+          const task = (await tx.execute(sql`select evidence_required,
+            (select count(*) from close_task_evidence e where e.task_id = t.id) as evidence_count
+            from close_run_tasks t where t.id = ${context.taskId} and t.run_id = ${context.runId}
+              and t.org_id = ${context.orgId} for update`)) as unknown as {
+            rows: { evidence_required: boolean; evidence_count: string }[];
+          };
+          if (!task.rows[0]) throw new CloseError("automation task not found");
+          if (
+            task.rows[0].evidence_required &&
+            Number(task.rows[0].evidence_count) === 0
+          ) {
+            throw new CloseError(
+              "automatic task requires evidence before completion",
+            );
+          }
+          await tx.execute(sql`update close_run_tasks set status = 'complete', completed_at = now(),
+            completed_by = ${context.actorId ?? run.started_by ?? null}, data_fingerprint = ${run.data_fingerprint},
+            updated_at = now(), updated_by = ${context.actorId ?? null}
+            where id = ${context.taskId} and run_id = ${context.runId} and status not in ('complete','waived')`);
+          await resolveTaskDependenciesTx(tx, context.orgId, context.runId);
+        });
+        await refreshCloseRun(context.orgId, context.runId, context.actorId);
+      } else if (rule.action === "create_task") {
+        const key =
+          typeof config.key === "string" &&
+          /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(config.key)
+            ? config.key
+            : `automation-${rule.id}`;
+        await db.execute(sql`insert into close_run_tasks
+          (org_id, run_id, key, title, description, workstream, task_type, completion_mode, gate_type,
+           status, sort_order, owner_id, due_on, evidence_required, created_by, updated_by)
+          values (${context.orgId}, ${context.runId}, ${key}, ${String(config.title ?? rule.name)},
+                  ${typeof config.description === "string" ? config.description : null},
+                  ${String(config.workstream ?? "review")}, 'action', 'manual', ${String(config.gateType ?? "none")},
+                  'ready', 9000, ${context.actorId ?? run.started_by ?? null}, ${run.target_close_date},
+                  ${config.evidenceRequired === true}, ${context.actorId ?? null}, ${context.actorId ?? null})
+          on conflict (run_id, key) do nothing`);
+      } else if (rule.action === "generate_report") {
+        const report = String(config.report ?? "trial-balance");
+        const target =
+          (await db.execute(sql`select id from close_run_tasks where run_id = ${context.runId}
+          and id = coalesce(${context.taskId ?? null}, id) order by case when key = 'publish-package' then 0 else 1 end, sort_order limit 1`)) as unknown as {
+            rows: { id: string }[];
+          };
+        if (!target.rows[0])
+          throw new CloseError(
+            "report automation could not resolve an evidence task",
+          );
+        const snapshot = {
+          report,
+          periodId: run.period_id,
+          bookId: run.book_id,
+          generatedAt: new Date().toISOString(),
+          fingerprint: run.data_fingerprint,
+        };
+        const hash = createHash("sha256")
+          .update(JSON.stringify(snapshot))
+          .digest("hex");
+        await db.execute(sql`insert into close_task_evidence
+          (org_id, run_id, task_id, evidence_type, reference_url, label, snapshot, content_hash, created_by, updated_by)
+          values (${context.orgId}, ${context.runId}, ${target.rows[0].id}, 'report',
+                  ${`/reports/${report}?period=${run.period_id}&book=${run.book_id}`}, ${String(config.label ?? report)},
+                  ${JSON.stringify(snapshot)}::jsonb, ${hash}, ${context.actorId ?? null}, ${context.actorId ?? null})`);
+      } else if (rule.action === "start_flow") {
+        const subjectKind =
+          typeof config.subjectKind === "string" ? config.subjectKind : "";
+        const subjectId =
+          config.subjectId === "$task"
+            ? context.taskId
+            : config.subjectId === "$run"
+              ? context.runId
+              : config.subjectId;
+        const buttonId =
+          typeof config.buttonId === "string" ? config.buttonId : "";
+        if (!subjectKind || typeof subjectId !== "string" || !buttonId)
+          throw new CloseError(
+            "flow automation requires subjectKind, subjectId, and buttonId",
+          );
+        const { runRecordFlows } = await import("./flows/index.ts");
+        const result = await runRecordFlows(
+          { kind: "manual", buttonId, source: "close_automation" },
+          subjectKind,
+          subjectId,
+          {
+            orgId: context.orgId,
+            userId: context.actorId,
+          },
+        );
+        if (result.runs.length === 0)
+          throw new CloseError("flow automation matched no enabled flow");
+        if (result.runs.some((item) => item.status === "failed"))
+          throw new CloseError("one or more started flows failed");
+      } else {
+        throw new CloseError(
+          `unsupported close automation action: ${rule.action}`,
+        );
+      }
+      await db.execute(sql`update close_automation_executions set status = 'completed', executed_at = now(),
+        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId}`);
+      await db.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
+        values (${context.orgId}, ${context.runId}, ${context.taskId ?? null}, 'automation.completed', ${context.actorId ?? null},
+                ${JSON.stringify({ ruleId: rule.id, executionId, trigger: context.trigger, action: rule.action })}::jsonb)`);
+      completed++;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await db.execute(sql`update close_automation_executions set status = 'failed', error = ${message}, executed_at = now(),
+        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId}`);
+      await db.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
+        values (${context.orgId}, ${context.runId}, ${context.taskId ?? null}, 'automation.failed', ${context.actorId ?? null},
+                ${JSON.stringify({ ruleId: rule.id, executionId, trigger: context.trigger, action: rule.action, error: message })}::jsonb)`);
+      failed++;
+    }
+  }
+  return { completed, failed };
+}
+
+/** Scheduler entrypoint. Each run/rule/day is idempotent across processes. */
+export async function runDueCloseAutomations(): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  const due = (await db.execute(sql`
+    select distinct r.org_id, r.id
+      from close_runs r
+      join close_automation_rules a on a.org_id = r.org_id and a.trigger = 'deadline_approaching' and a.is_active
+     where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 90
+  `)) as unknown as { rows: { org_id: string; id: string }[] };
+  for (const run of due.rows) {
+    await runCloseAutomations({
+      orgId: run.org_id,
+      runId: run.id,
+      trigger: "deadline_approaching",
+      eventKey: `deadline:${today}`,
+    });
+  }
+  return due.rows.length;
+}
