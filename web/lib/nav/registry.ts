@@ -52,6 +52,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'receipts', href: '/receipts', label: 'Customer Payments', iconKey: 'check', group: 'Sales', requiredPermission: 'ar.pay' },
   { key: 'customers', href: '/entities/customers', label: 'Customers', iconKey: 'users', group: 'Sales', requiredPermission: 'parties.read' },
   { key: 'projects', href: '/projects', label: 'Projects', iconKey: 'timer', group: 'Sales', requiredPermission: 'projects.read' },
+  { key: 'items', href: '/items', label: 'Items & Services', iconKey: 'grid', group: 'Sales', requiredPermission: 'items.read' },
 
   // Banking — the bank feed, matching, and reconciliation.
   { key: 'banking', href: '/banking', label: 'Overview', iconKey: 'building', group: 'Banking', requiredPermission: 'banking.read', exact: true },
@@ -61,13 +62,12 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'banking-imports', href: '/banking/imports', label: 'Import History', iconKey: 'database', group: 'Banking', requiredPermission: 'banking.read' },
   { key: 'banking-rules', href: '/banking/rules', label: 'Reconciliation Rules', iconKey: 'workflow', group: 'Banking', requiredPermission: 'banking.reconcile' },
 
-  // Accounting — the ledger core: journals, chart, assets, close, and the item master.
+  // Accounting — the ledger core: journals, chart, assets, tax, close, and budgets.
   { key: 'journal', href: '/journal', label: 'Journals', iconKey: 'journal', group: 'Accounting', requiredPermission: 'gl.read' },
   { key: 'accounts', href: '/accounts', label: 'Chart of Accounts', iconKey: 'layers', group: 'Accounting', requiredPermission: 'gl.read' },
   { key: 'assets', href: '/assets', label: 'Fixed Assets', iconKey: 'building', group: 'Accounting', requiredPermission: 'assets.read' },
   { key: 'tax-filings', href: '/tax', label: 'Tax Filings', iconKey: 'receipt', group: 'Accounting', requiredPermission: 'reports.read' },
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Accounting', requiredPermission: 'close.read' },
-  { key: 'items', href: '/items', label: 'Items & Services', iconKey: 'grid', group: 'Accounting', requiredPermission: 'items.read' },
   { key: 'budgets', href: '/budgets', label: 'Budgets', iconKey: 'target', group: 'Accounting', requiredPermission: 'budgets.read' },
 
   // People & Time — employees and timesheets. The unified party directory
