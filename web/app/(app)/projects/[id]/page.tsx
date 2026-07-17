@@ -30,6 +30,7 @@ import { can } from '../../../../lib/authz'
 import { loadProject } from '../../../api/projects/_lib'
 import { BillingSection } from './BillingSection'
 import { ChargesSection } from './ChargesSection'
+import { RecognizeRevenue } from './RecognizeButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -170,6 +171,12 @@ export default async function ProjectCockpit({
     recovered: chargeList.filter((c) => c.status === 'posted').reduce((a, c) => a + Number(c.cost), 0).toFixed(2),
     billValue: chargeList.reduce((a, c) => a + Number(c.billValue), 0).toFixed(2),
   }
+  // Fixed-price revenue recognized to date (credits of revenue_recognition entries).
+  const recognizedRow = (await db.execute(sql`
+    select coalesce(-sum(l.amount) filter (where l.amount < 0), 0)::numeric(19,4) as recognized
+      from journal_lines l join journal_entries e on e.id = l.entry_id
+     where l.org_id = ${orgId} and l.project_id = ${id} and e.status = 'posted' and e.origin = 'revenue_recognition'`)) as any
+  const recognizedToDate = String(recognizedRow.rows[0]?.recognized ?? '0')
 
   const pr = payload.project
   const s = summary
@@ -300,6 +307,12 @@ export default async function ProjectCockpit({
               tone={overBudget ? 'bad' : undefined}
             />
           </section>
+
+          {pr.billing_method === 'fixed_price' && canManage ? (
+            <section>
+              <RecognizeRevenue projectId={id} recognizedToDate={recognizedToDate} />
+            </section>
+          ) : null}
 
           <section>
             <Card>

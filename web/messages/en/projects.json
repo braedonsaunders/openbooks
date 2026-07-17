@@ -199,5 +199,13 @@
     "created": "Charge posted",
     "failed": "Could not post charge",
     "pickItem": "Pick an item first"
+  },
+  "recognition": {
+    "recognizedToDate": "Revenue recognized to date",
+    "hint": "Percent-complete (cost-to-cost): DR unbilled receivable / CR project revenue.",
+    "recognize": "Recognize revenue",
+    "done": "Recognized {delta} (earned {earned} at {pct}%)",
+    "nothing": "Already fully recognized to date",
+    "failed": "Recognition failed"
   }
 }

@@ -199,5 +199,13 @@
     "created": "Charge comptabilisée",
     "failed": "Impossible de comptabiliser la charge",
     "pickItem": "Choisissez un article"
+  },
+  "recognition": {
+    "recognizedToDate": "Produits comptabilisés à ce jour",
+    "hint": "Selon l'avancement (coût à coût) : DR créance non facturée / CR produits du projet.",
+    "recognize": "Comptabiliser les produits",
+    "done": "Comptabilisé {delta} (acquis {earned} à {pct} %)",
+    "nothing": "Déjà entièrement comptabilisé à ce jour",
+    "failed": "Échec de la comptabilisation"
   }
 }

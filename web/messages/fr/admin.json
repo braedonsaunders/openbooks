@@ -569,6 +569,22 @@
         "fxUnrealizedGainLoss": {
           "label": "Gain/perte de change latent",
           "hint": "Où est comptabilisée la réévaluation de fin de période des soldes en devises"
+        },
+        "laborWip": {
+          "label": "Main-d'œuvre en cours / coût",
+          "hint": "Le coût de la main-d'œuvre approuvée est débité ici (par projet)"
+        },
+        "laborClearing": {
+          "label": "Compensation de main-d'œuvre",
+          "hint": "Crédité lorsque la main-d'œuvre est imputée à un projet; soldé par la paie"
+        },
+        "unbilledReceivable": {
+          "label": "Créance non facturée (actif de contrat)",
+          "hint": "Produits à prix fixe acquis non facturés; libéré à la facturation"
+        },
+        "projectRevenue": {
+          "label": "Produits du projet",
+          "hint": "Crédité par la comptabilisation des produits selon l'avancement"
         }
       }
     },

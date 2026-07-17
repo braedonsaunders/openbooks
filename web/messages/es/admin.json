@@ -525,6 +525,22 @@
         "fxUnrealizedGainLoss": {
           "label": "Ganancia/pérdida cambiaria no realizada",
           "hint": "Donde se registra la revaluación de fin de período de los saldos en moneda extranjera"
+        },
+        "laborWip": {
+          "label": "Mano de obra en curso / costo",
+          "hint": "El costo de mano de obra aprobada se debita aquí (por proyecto)"
+        },
+        "laborClearing": {
+          "label": "Compensación de mano de obra",
+          "hint": "Se acredita cuando la mano de obra se carga a un proyecto; se liquida por nómina"
+        },
+        "unbilledReceivable": {
+          "label": "Cuenta por cobrar no facturada (activo del contrato)",
+          "hint": "Ingresos de precio fijo devengados no facturados; se libera al facturar"
+        },
+        "projectRevenue": {
+          "label": "Ingresos del proyecto",
+          "hint": "Acreditado por el reconocimiento de ingresos por porcentaje de avance"
         }
       }
     },

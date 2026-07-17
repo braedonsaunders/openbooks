@@ -583,6 +583,22 @@
         "fxUnrealizedGainLoss": {
           "label": "Unrealized FX gain/loss",
           "hint": "Where period-end revaluation of foreign-currency balances is booked"
+        },
+        "laborWip": {
+          "label": "Labor WIP / cost",
+          "hint": "Approved labor cost debits here (per project)"
+        },
+        "laborClearing": {
+          "label": "Labor clearing",
+          "hint": "Credited when labor is charged to a project; cleared by payroll"
+        },
+        "unbilledReceivable": {
+          "label": "Unbilled receivable (contract asset)",
+          "hint": "Fixed-price earned-but-unbilled revenue; relieved at invoicing"
+        },
+        "projectRevenue": {
+          "label": "Project revenue",
+          "hint": "Credited by percent-complete revenue recognition"
         }
       }
     },

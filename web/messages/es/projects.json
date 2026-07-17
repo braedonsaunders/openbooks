@@ -199,5 +199,13 @@
     "created": "Cargo contabilizado",
     "failed": "No se pudo contabilizar el cargo",
     "pickItem": "Elija un artículo primero"
+  },
+  "recognition": {
+    "recognizedToDate": "Ingresos reconocidos a la fecha",
+    "hint": "Porcentaje de avance (costo a costo): DR cuenta por cobrar no facturada / CR ingresos del proyecto.",
+    "recognize": "Reconocer ingresos",
+    "done": "Reconocido {delta} (devengado {earned} al {pct}%)",
+    "nothing": "Ya reconocido totalmente a la fecha",
+    "failed": "Falló el reconocimiento"
   }
 }

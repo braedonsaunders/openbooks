@@ -32,6 +32,10 @@ type ControlAccounts = {
   taxPaid: string
   employeePayable: string
   fxUnrealizedGainLoss: string
+  laborWip?: string
+  laborClearing?: string
+  unbilledReceivable?: string
+  projectRevenue?: string
 }
 
 type Initial = {
@@ -61,6 +65,10 @@ const CONTROL_FIELDS: { key: keyof ControlAccounts }[] = [
   { key: 'taxPaid' },
   { key: 'employeePayable' },
   { key: 'fxUnrealizedGainLoss' },
+  { key: 'laborWip' },
+  { key: 'laborClearing' },
+  { key: 'unbilledReceivable' },
+  { key: 'projectRevenue' },
 ]
 
 export function SettingsForm({
@@ -282,7 +290,7 @@ export function SettingsForm({
                 <Label htmlFor={`ctrl-${field.key}`}>{label}</Label>
                 <SearchSelect
                   id={`ctrl-${field.key}`}
-                  value={form.controlAccounts[field.key]}
+                  value={form.controlAccounts[field.key] ?? ''}
                   onChange={(v) => setControl(field.key, v)}
                   options={accountOptions}
                   placeholder={t('controlAccounts.selectPlaceholder')}
