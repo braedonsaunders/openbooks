@@ -143,6 +143,84 @@
     "priority": "Priorité",
     "defaultOwner": "Responsable par défaut",
     "manager": "Gestionnaire",
+    "empty": "Aucun enregistrement de configuration correspondant.",
+    "openRecord": "Ouvrir {name}",
+    "percent": "{value} %",
+    "memberCount": "{count, plural, one {# membre} other {# membres}}",
+    "created": "Enregistrement de configuration CRM créé",
+    "updated": "Enregistrement de configuration CRM mis à jour",
+    "new": {
+      "accountStatuses": "Nouveau statut de compte",
+      "opportunityStatuses": "Nouvelle étape d’occasion",
+      "sources": "Nouvelle source de piste",
+      "territories": "Nouveau territoire",
+      "teams": "Nouvelle équipe commerciale",
+      "quotas": "Nouveau quota"
+    },
+    "search": {
+      "accountStatuses": "Rechercher les statuts de compte",
+      "opportunityStatuses": "Rechercher les étapes d’occasion",
+      "sources": "Rechercher les sources de pistes",
+      "territories": "Rechercher les territoires",
+      "teams": "Rechercher les équipes commerciales",
+      "quotas": "Rechercher les quotas"
+    },
+    "drawer": {
+      "new": {
+        "accountStatuses": "Nouveau statut de compte",
+        "opportunityStatuses": "Nouvelle étape d’occasion",
+        "sources": "Nouvelle source de piste",
+        "territories": "Nouveau territoire",
+        "teams": "Nouvelle équipe commerciale",
+        "quotas": "Nouveau quota"
+      },
+      "edit": {
+        "accountStatuses": "Modifier le statut du compte",
+        "opportunityStatuses": "Modifier l’étape d’occasion",
+        "sources": "Modifier la source de piste",
+        "territories": "Modifier le territoire",
+        "teams": "Modifier l’équipe commerciale",
+        "quotas": "Modifier le quota"
+      },
+      "description": {
+        "accountStatuses": "Contrôler la classification du cycle de vie et le comportement de qualification.",
+        "opportunityStatuses": "Contrôler la probabilité, les prévisions et le comportement de clôture du pipeline.",
+        "sources": "Gérer les sources d’acquisition normalisées utilisées dans le CRM.",
+        "territories": "Configurer la propriété et les règles d’acheminement déterministes.",
+        "teams": "Affecter un gestionnaire et les membres actifs de cette équipe commerciale.",
+        "quotas": "Définir un objectif de période pour un représentant ou une équipe commerciale."
+      }
+    },
+    "fields": {
+      "name": "Nom",
+      "matchMode": "Correspondance des règles",
+      "rules": "Règles d’acheminement (JSON)",
+      "members": "Membres de l’équipe",
+      "targetType": "Type de cible",
+      "isQualified": "Statut qualifié",
+      "isClosed": "Statut fermé",
+      "isWon": "Statut gagné",
+      "isDefault": "Par défaut",
+      "isActive": "Actif"
+    },
+    "states": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "yes": "Oui",
+      "no": "Non"
+    },
+    "matchModes": {
+      "all": "Respecter toutes les règles",
+      "any": "Respecter une règle"
+    },
+    "targetTypes": {
+      "user": "Représentant commercial",
+      "team": "Équipe commerciale"
+    },
+    "validation": {
+      "nameRequired": "Saisissez un nom.",
+      "invalidRules": "Les règles d’acheminement doivent être un tableau JSON valide."
+    },
     "tabs": {
       "accountStatuses": "Statuts des comptes",
       "opportunityStatuses": "Étapes des occasions",
@@ -163,7 +241,13 @@
       "manager_name": "Gestionnaire",
       "period_start": "Début de la période",
       "period_end": "Fin de la période",
-      "amount": "Montant"
+      "amount": "Montant",
+      "is_qualified": "Qualifié",
+      "is_closed": "Fermé",
+      "is_active": "Statut",
+      "member_count": "Membres",
+      "target_name": "Cible",
+      "currency": "Devise"
     }
   },
   "validation": {

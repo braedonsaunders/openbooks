@@ -143,6 +143,78 @@
     "priority": "Priority",
     "defaultOwner": "Default owner",
     "manager": "Manager",
+    "empty": "No matching setup records.",
+    "openRecord": "Open {name}",
+    "percent": "{value}%",
+    "memberCount": "{count, plural, one {# member} other {# members}}",
+    "created": "CRM setup record created",
+    "updated": "CRM setup record updated",
+    "new": {
+      "accountStatuses": "New account status",
+      "opportunityStatuses": "New opportunity stage",
+      "sources": "New lead source",
+      "territories": "New territory",
+      "teams": "New sales team",
+      "quotas": "New quota"
+    },
+    "search": {
+      "accountStatuses": "Search account statuses",
+      "opportunityStatuses": "Search opportunity stages",
+      "sources": "Search lead sources",
+      "territories": "Search territories",
+      "teams": "Search sales teams",
+      "quotas": "Search quotas"
+    },
+    "drawer": {
+      "new": {
+        "accountStatuses": "New account status",
+        "opportunityStatuses": "New opportunity stage",
+        "sources": "New lead source",
+        "territories": "New territory",
+        "teams": "New sales team",
+        "quotas": "New quota"
+      },
+      "edit": {
+        "accountStatuses": "Edit account status",
+        "opportunityStatuses": "Edit opportunity stage",
+        "sources": "Edit lead source",
+        "territories": "Edit territory",
+        "teams": "Edit sales team",
+        "quotas": "Edit quota"
+      },
+      "description": {
+        "accountStatuses": "Control relationship lifecycle classification and qualification behavior.",
+        "opportunityStatuses": "Control pipeline probability, forecast treatment, and close behavior.",
+        "sources": "Maintain the normalized acquisition sources used across CRM.",
+        "territories": "Configure ownership and deterministic routing rules.",
+        "teams": "Assign a manager and the active members of this sales team.",
+        "quotas": "Set a period target for one sales representative or team."
+      }
+    },
+    "fields": {
+      "name": "Name",
+      "matchMode": "Rule matching",
+      "rules": "Routing rules (JSON)",
+      "members": "Team members",
+      "targetType": "Target type",
+      "isQualified": "Qualified status",
+      "isClosed": "Closed status",
+      "isWon": "Won status",
+      "isDefault": "Default",
+      "isActive": "Active"
+    },
+    "states": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "matchModes": { "all": "Match all rules", "any": "Match any rule" },
+    "targetTypes": { "user": "Sales representative", "team": "Sales team" },
+    "validation": {
+      "nameRequired": "Enter a name.",
+      "invalidRules": "Routing rules must be a valid JSON array."
+    },
     "tabs": {
       "accountStatuses": "Account statuses",
       "opportunityStatuses": "Opportunity stages",
@@ -163,7 +235,13 @@
       "manager_name": "Manager",
       "period_start": "Period start",
       "period_end": "Period end",
-      "amount": "Amount"
+      "amount": "Amount",
+      "is_qualified": "Qualified",
+      "is_closed": "Closed",
+      "is_active": "Status",
+      "member_count": "Members",
+      "target_name": "Target",
+      "currency": "Currency"
     }
   },
   "validation": {
