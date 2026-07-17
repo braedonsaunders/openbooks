@@ -28,7 +28,6 @@ export const NAV_MODULES: NavModule[] = [
   // Home — the daily landing surfaces.
   { key: 'dashboard', href: '/dashboard', label: 'Dashboard', iconKey: 'gauge', group: 'Home', exact: true },
   { key: 'assistant', href: '/assistant', label: 'Assistant', iconKey: 'sparkles', group: 'Home', requiredPermission: 'assistant.use' },
-  { key: 'continuous-close', href: '/continuous-close', label: 'Continuous Close', iconKey: 'activity', group: 'Home', requiredPermission: 'assistant.use' },
   { key: 'approvals', href: '/approvals', label: 'Approvals', iconKey: 'check', group: 'Home', requiredPermission: 'ap.approve' },
 
   // CRM — relationship lifecycle, daily activities, pipeline, and forecasts.
@@ -68,6 +67,7 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'assets', href: '/assets', label: 'Fixed Assets', iconKey: 'building', group: 'Accounting', requiredPermission: 'assets.read' },
   { key: 'tax-filings', href: '/tax', label: 'Tax Filings', iconKey: 'receipt', group: 'Accounting', requiredPermission: 'reports.read' },
   { key: 'close', href: '/close', label: 'Period Close', iconKey: 'timer', group: 'Accounting', requiredPermission: 'close.read' },
+  { key: 'continuous-close', href: '/continuous-close', label: 'Continuous Close', iconKey: 'activity', group: 'Accounting', requiredPermission: 'assistant.use' },
   { key: 'budgets', href: '/budgets', label: 'Budgets', iconKey: 'target', group: 'Accounting', requiredPermission: 'budgets.read' },
 
   // People & Time — employees and timesheets. The unified party directory
