@@ -1,0 +1,304 @@
+import 'server-only'
+
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import {
+  loadPaymentDocument,
+  openItemsForParty,
+  PAYMENT_KIND_SIDE,
+  type PaymentKind,
+} from '@openbooks/engine/src/payments.ts'
+import { DocumentDrawer } from './document-drawer'
+import { PaymentDrawer, type OpenItemClient } from '../app/(app)/payments/PaymentDrawer'
+import { OrderDrawer } from '../app/(app)/_order/OrderDrawer'
+import { ExpenseDrawer } from '../app/(app)/expenses/ExpenseDrawer'
+import { JournalDrawer } from '../app/(app)/journal/JournalDrawer'
+import { loadOrder } from '../app/api/_order/lib'
+import type { OrderKind } from '../lib/order-kinds'
+import { can, type Authz } from '../lib/authz'
+import { loadFieldDefs } from '../lib/custom-fields'
+import { resolveFormLayout } from '../lib/customization/resolve'
+import {
+  DOC_KINDS,
+  accountOptions,
+  bankAccountOptions,
+  cardOptions,
+  createPermission,
+  dimensionOptions,
+  itemOptions,
+  loadDocument,
+  partyOptions,
+  postPermission,
+  readPermission,
+  taxCodeOptions,
+} from '../lib/documents'
+import { loadExpenseReport } from '../lib/expenses'
+import { loadJournalDoc } from '../lib/journals'
+import { customSegmentOptions } from '../lib/segments'
+import { isMultiSubsidiary, subsidiaryOptions } from '../lib/subsidiaries'
+
+const PAYMENT_KINDS = new Set(['vendor_payment', 'customer_payment'])
+const ORDER_KINDS = new Set(['quote', 'sales_order', 'purchase_order'])
+
+function canSeeDocument(doc: Record<string, any>, partyId: string, authz: Authz): boolean {
+  return String(doc.org_id) === authz.user.orgId
+    && String(doc.party_id) === partyId
+    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id)))
+}
+
+async function visibleSubsidiaries(authz: Authz) {
+  if (!(await isMultiSubsidiary())) return undefined
+  const options = await subsidiaryOptions()
+  return authz.allowedSubsidiaryIds
+    ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+    : options
+}
+
+/**
+ * Hydrates a transaction selected from a party's Transactions sublist without
+ * leaving the party page. The caller keeps PartyDrawer mounted immediately
+ * below this component; UrlDrawer derives the child close destination by
+ * removing only partyTxn/partyTxnKind from the current URL.
+ */
+export async function RelatedTransactionDrawer({
+  id,
+  kind,
+  partyId,
+  authz,
+  formLayoutId,
+}: {
+  id: string
+  kind: string
+  partyId: string
+  authz: Authz
+  formLayoutId?: string
+}) {
+  if (PAYMENT_KINDS.has(kind)) {
+    const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'
+    if (!can(authz, permission)) return null
+    const paymentKind = kind as PaymentKind
+    const payment = await loadPaymentDocument(id, paymentKind)
+    if (!payment || !canSeeDocument(payment.doc as Record<string, any>, partyId, authz)) return null
+
+    const side = PAYMENT_KIND_SIDE[paymentKind]
+    const partyFilter = side === 'ap'
+      ? sql`(exists (select 1 from vendor_roles vr where vr.party_id = p.id) or p.custom->>'nsKind' = 'vendor')`
+      : sql`(exists (select 1 from customer_roles cr where cr.party_id = p.id) or p.custom->>'nsKind' = 'customer')`
+    const [parties, banks, resolvedForm] = await Promise.all([
+      db.execute(sql`
+        select id, display_name from parties p
+         where p.org_id = ${authz.user.orgId} and ${partyFilter} and p.is_active
+         order by display_name limit 2000`) as any,
+      db.execute(sql`
+        select id, number, name from accounts
+         where org_id = ${authz.user.orgId} and type = 'asset_bank' and is_active and not is_summary
+         order by number nulls last, name`) as any,
+      resolveFormLayout({
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        recordType: kind,
+        userRoles: [authz.user.role],
+        headerDefs: [],
+        lineDefs: [],
+        explicitLayoutId: formLayoutId,
+      }),
+    ])
+    const openItems: OpenItemClient[] = payment.doc.status === 'draft'
+      ? await openItemsForParty(partyId, side)
+      : []
+    return (
+      <PaymentDrawer
+        payment={payment as any}
+        initialOpenItems={openItems}
+        parties={parties.rows}
+        bankAccounts={banks.rows}
+        side={side}
+        basePath={side === 'ap' ? '/payments' : '/receipts'}
+        layout={resolvedForm.layout}
+      />
+    )
+  }
+
+  if (ORDER_KINDS.has(kind)) {
+    const orderKind = kind as OrderKind
+    const permission = orderKind === 'purchase_order' ? 'ap.read' : 'ar.read'
+    if (!can(authz, permission)) return null
+    const order = await loadOrder(id, authz.user.orgId, orderKind)
+    if (!order || !canSeeDocument(order.doc as Record<string, any>, partyId, authz)) return null
+    const roleCondition = orderKind === 'purchase_order'
+      ? sql`(p.custom->>'nsKind' = 'vendor' or exists (select 1 from vendor_roles r where r.party_id = p.id and r.is_active))`
+      : sql`(p.custom->>'nsKind' = 'customer' or exists (select 1 from customer_roles r where r.party_id = p.id and r.is_active))`
+    const [parties, accounts, items, taxCodes, departments, projects, segments, resolvedForm] = await Promise.all([
+      db.execute(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`) as any,
+      db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
+      db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
+      taxCodeOptions(),
+      db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
+      db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
+      customSegmentOptions(authz.user.orgId),
+      resolveFormLayout({
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        recordType: kind,
+        userRoles: [authz.user.role],
+        headerDefs: [],
+        lineDefs: [],
+        explicitLayoutId: formLayoutId,
+      }),
+    ])
+    return (
+      <OrderDrawer
+        order={order as any}
+        kind={orderKind}
+        parties={parties.rows}
+        accounts={accounts.rows}
+        items={items.rows}
+        taxCodes={taxCodes as any}
+        departments={departments.rows}
+        projects={projects.rows}
+        segments={segments}
+        canManage={can(authz, orderKind === 'purchase_order' ? 'ap.create' : 'ar.create')}
+        layout={resolvedForm.layout}
+      />
+    )
+  }
+
+  if (kind === 'expense_report') {
+    if (!can(authz, 'expenses.read')) return null
+    const report = await loadExpenseReport(id)
+    if (!report || !canSeeDocument(report.doc as Record<string, any>, partyId, authz)) return null
+    const [employees, accounts, taxCodes, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
+      db.execute(sql`
+        select p.id, p.display_name from parties p
+         where p.org_id = ${authz.user.orgId} and p.is_active
+           and (p.custom->>'nsKind' = 'employee' or exists (select 1 from employee_roles er where er.party_id = p.id and er.is_active))
+         order by p.display_name limit 2000`) as any,
+      db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('expense','expense_other','cogs') and is_active and not is_summary order by number nulls last`) as any,
+      taxCodeOptions(),
+      dimensionOptions(),
+      loadFieldDefs('documents', 'expense_report'),
+      loadFieldDefs('document_lines', 'expense_report'),
+      customSegmentOptions(authz.user.orgId),
+    ])
+    const resolvedForm = await resolveFormLayout({
+      orgId: authz.user.orgId,
+      userId: authz.user.id,
+      recordType: kind,
+      userRoles: [authz.user.role],
+      headerDefs: headerDefs as any,
+      lineDefs: lineDefs as any,
+      explicitLayoutId: formLayoutId,
+    })
+    return (
+      <ExpenseDrawer
+        report={report as any}
+        employees={employees.rows}
+        accounts={accounts.rows}
+        taxCodes={taxCodes as any}
+        departments={dimensions.departments as any}
+        projects={dimensions.projects as any}
+        segments={segments as any}
+        headerDefs={headerDefs as any}
+        lineDefs={lineDefs as any}
+        canSubmit={can(authz, 'expenses.create')}
+        canPost={can(authz, 'ap.post')}
+        layout={resolvedForm.layout}
+      />
+    )
+  }
+
+  if (kind === 'journal') {
+    if (!can(authz, 'gl.read')) return null
+    const journal = await loadJournalDoc(id)
+    if (!journal || !canSeeDocument(journal.doc as Record<string, any>, partyId, authz)) return null
+    const [parties, accounts, dimensions, headerDefs, lineDefs, subsidiaries, segments] = await Promise.all([
+      db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`) as any,
+      db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
+      dimensionOptions(),
+      loadFieldDefs('documents', 'journal'),
+      loadFieldDefs('document_lines', 'journal'),
+      visibleSubsidiaries(authz),
+      customSegmentOptions(authz.user.orgId),
+    ])
+    const resolvedForm = await resolveFormLayout({
+      orgId: authz.user.orgId,
+      userId: authz.user.id,
+      recordType: kind,
+      userRoles: [authz.user.role],
+      headerDefs: headerDefs as any,
+      lineDefs: lineDefs as any,
+      explicitLayoutId: formLayoutId,
+    })
+    return (
+      <JournalDrawer
+        journal={journal as any}
+        parties={parties.rows}
+        accounts={accounts.rows}
+        departments={dimensions.departments as any}
+        projects={dimensions.projects as any}
+        subsidiaries={subsidiaries}
+        segments={segments as any}
+        headerDefs={headerDefs as any}
+        lineDefs={lineDefs as any}
+        layout={resolvedForm.layout}
+      />
+    )
+  }
+
+  const config = DOC_KINDS[kind]
+  if (!config || !can(authz, readPermission(kind))) return null
+  const payload = await loadDocument(id)
+  if (!payload || !canSeeDocument(payload.doc as Record<string, any>, partyId, authz)) return null
+  const [headerDefs, lineDefs] = await Promise.all([
+    loadFieldDefs('documents', kind),
+    loadFieldDefs('document_lines', kind),
+  ])
+  const [parties, accounts, taxCodes, dimensions, items, cards, banks, subsidiaries, resolvedForm] = await Promise.all([
+    config.partyRole ? partyOptions(config.partyRole) : Promise.resolve(undefined),
+    accountOptions(config),
+    config.hasTax ? taxCodeOptions() : Promise.resolve(undefined),
+    dimensionOptions(),
+    itemOptions(),
+    config.fundingSource === 'card' ? cardOptions() : Promise.resolve(undefined),
+    config.fundingSource === 'bank' || kind === 'transfer' ? bankAccountOptions() : Promise.resolve(undefined),
+    visibleSubsidiaries(authz),
+    resolveFormLayout({
+      orgId: authz.user.orgId,
+      userId: authz.user.id,
+      recordType: kind,
+      userRoles: [authz.user.role],
+      headerDefs: headerDefs as any,
+      lineDefs: lineDefs as any,
+      explicitLayoutId: formLayoutId,
+    }),
+  ])
+  return (
+    <DocumentDrawer
+      payload={payload as any}
+      config={config}
+      basePath={config.family === 'ap' ? '/ap' : config.family === 'ar' ? '/ar' : '/banking/transactions'}
+      parties={parties as any}
+      accounts={accounts as any}
+      taxCodes={taxCodes as any}
+      cards={cards as any}
+      bankAccounts={banks as any}
+      departments={dimensions.departments as any}
+      projects={dimensions.projects as any}
+      locations={dimensions.locations as any}
+      classes={dimensions.classes as any}
+      segments={dimensions.segments as any}
+      builtinSegments={dimensions.builtinSegments as any}
+      items={items as any}
+      subsidiaries={subsidiaries}
+      headerDefs={headerDefs as any}
+      lineDefs={lineDefs as any}
+      canCreate={can(authz, createPermission(kind))}
+      canPost={can(authz, postPermission(kind))}
+      layout={resolvedForm.layout}
+      availableLayouts={resolvedForm.available}
+      currentLayoutId={resolvedForm.row?.id ?? null}
+      recordType={kind}
+      canCustomize={can(authz, 'admin.customization.manage')}
+    />
+  )
+}

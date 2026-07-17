@@ -17,6 +17,7 @@ import { subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { NewPartyButton } from '../../parties/NewPartyButton'
 import { NewPartyRedirect } from '../../parties/NewPartyRedirect'
 import { PartyDrawer, type PartyTab } from '../../parties/PartyDrawer'
+import { RelatedTransactionDrawer } from '../../../../components/related-transaction-drawer'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,8 @@ export default async function EntityRole({
 
   const sp = await searchParams
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
+  const partyTransactionId = pickString(sp.partyTxn)
+  const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting'
@@ -165,6 +168,7 @@ export default async function EntityRole({
       {partyId === 'new' && canManage ? <NewPartyRedirect basePath={basePath} role={role} /> : null}
       {openParty && pickers ? (
         <PartyDrawer
+          key={String(openParty.party.id)}
           payload={openParty as any}
           canManage={canManage}
           role={role}
@@ -178,6 +182,15 @@ export default async function EntityRole({
           accounts={pickers[5].rows}
           taxCodes={pickers[6].rows}
           salesReps={pickers[7].rows}
+        />
+      ) : null}
+      {openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind ? (
+        <RelatedTransactionDrawer
+          id={partyTransactionId}
+          kind={partyTransactionKind}
+          partyId={String(openParty.party.id)}
+          authz={authz}
+          formLayoutId={pickString(sp.form)}
         />
       ) : null}
     </ListPageLayout>
