@@ -21,15 +21,15 @@ export default async function CustomerIntelligencePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('analytics.customer')
-  await requirePermission('reports.read')
+  const authz = await requirePermission('reports.read')
 
   const sp = await searchParams
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
   const [data, profitability] = await Promise.all([
-    customerData({ from: period.from, to: period.to, label: period.label }),
-    customerProfitability({ from: period.from, to: period.to }),
+    customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId),
+    customerProfitability({ from: period.from, to: period.to }, authz.user.orgId),
   ])
 
   return (
