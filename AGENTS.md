@@ -193,6 +193,8 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
 
 ## Git
 
+- Always commit completed work directly to local `main` before handing the
+  task back to the user. Do not leave finished work uncommitted.
 - Commit atomically to `main` as you work — focused, self-contained commits,
   staged intentionally (never sweep unrelated changes). End commit messages
   with the Claude co-author trailer already used in history.

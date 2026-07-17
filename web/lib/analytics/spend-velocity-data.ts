@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { analyticsConfig } from "./config";
 
 /**
  * Spend Velocity — a faithful port of Gantry's SpendVelocity dashboard
@@ -185,7 +186,7 @@ function velocityCAGR(monthlyAmounts: number[], minBase = CFG.minBaseAmount): nu
   return calculateCAGR(start, end, periods);
 }
 
-function velocityAndAcceleration(amounts: number[]): { velocity: number; acceleration: number; trend: VelocityRow["trend"] } {
+function velocityAndAcceleration(amounts: number[], C: typeof CFG = CFG): { velocity: number; acceleration: number; trend: VelocityRow["trend"] } {
   let velocity = 0, acceleration = 0;
   let trend: VelocityRow["trend"] = "stable";
   if (amounts.length >= 2) {
@@ -194,9 +195,9 @@ function velocityAndAcceleration(amounts: number[]): { velocity: number; acceler
       const mid = Math.floor(amounts.length / 2);
       acceleration = velocityCAGR(amounts.slice(mid)) - velocityCAGR(amounts.slice(0, mid + 1));
     }
-    if (velocity > CFG.velocityHighThreshold) trend = acceleration > 0 ? "accelerating" : "high";
-    else if (velocity > CFG.velocityMediumThreshold) trend = "rising";
-    else if (velocity < -CFG.velocityMediumThreshold) trend = "declining";
+    if (velocity > C.velocityHighThreshold) trend = acceleration > 0 ? "accelerating" : "high";
+    else if (velocity > C.velocityMediumThreshold) trend = "rising";
+    else if (velocity < -C.velocityMediumThreshold) trend = "declining";
   } else if (amounts.length === 1) {
     trend = "new";
   }
@@ -209,6 +210,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 
 export async function spendVelocityData(orgId: string, period: { from: string; to: string; label: string }): Promise<SpendVelocityData> {
   const { from, to } = period;
+  const C = { ...CFG, ...(await analyticsConfig(orgId, "spendVelocity")) };
 
   // Period windows for comparison (verbatim: same day-length back-to-back).
   const start = new Date(from + "T00:00:00Z");
@@ -365,7 +367,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const accountVelocity: VelocityRow[] = [...acctMap.values()].map((a) => {
     a.months.sort((x, y) => x.month.localeCompare(y.month));
     const amounts = a.months.map((m) => m.amount);
-    const { velocity, acceleration, trend } = velocityAndAcceleration(amounts);
+    const { velocity, acceleration, trend } = velocityAndAcceleration(amounts, C);
     return {
       id: a.id,
       name: a.name,
@@ -403,7 +405,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const allVendors = [...vendMap.values()].map((v) => {
     v.months.sort((x, y) => x.month.localeCompare(y.month));
     const amounts = v.months.map((m) => m.amount);
-    const { velocity, acceleration, trend } = velocityAndAcceleration(amounts);
+    const { velocity, acceleration, trend } = velocityAndAcceleration(amounts, C);
     return {
       id: v.id, name: v.name, entityType: "vendor" as const,
       totalSpend: v.totalSpend, totalBills: 0, totalExpenses: 0, totalOther: 0, billPct: 0, expensePct: 0,
@@ -415,7 +417,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       monthlyAmounts: amounts, monthLabels: v.months.map((m) => m.month),
     };
   }).sort((x, y) => y.totalSpend - x.totalSpend);
-  const vendorVelocity = allVendors.slice(0, CFG.topVendorsCount);
+  const vendorVelocity = allVendors.slice(0, C.topVendorsCount);
 
   // ---- transaction-type velocity (bills vs expense reports) ------------------
   const typeMonthly = new Map<string, { bill: number; expense: number }>();
@@ -444,7 +446,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     if (stdDev === 0) continue;
     for (const m of a.months) {
       const z = (m.amount - mean) / stdDev;
-      if (Math.abs(z) >= CFG.anomalyStdDevThreshold) {
+      if (Math.abs(z) >= C.anomalyStdDevThreshold) {
         anomalyItems.push({
           accountId: a.id, accountName: a.name, month: m.month, amount: m.amount, expectedAmount: mean,
           deviation: Math.round(((m.amount - mean) / mean) * 100), zScore: r1(z),
@@ -513,7 +515,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   // ---- boiling frog ---------------------------------------------------------------
   const frogAccounts: SpendVelocityData["boilingFrog"]["accounts"] = [];
   for (const a of acctMap.values()) {
-    if (a.months.length < CFG.boilingFrogMonths) continue;
+    if (a.months.length < C.boilingFrogMonths) continue;
     let increases = 0, totalCreep = 0;
     for (let i = 1; i < a.months.length; i++) {
       const prev = a.months[i - 1].amount, curr = a.months[i].amount;
@@ -523,7 +525,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       }
     }
     const monotonicRatio = (increases / (a.months.length - 1)) * 100;
-    if (monotonicRatio >= 50 && totalCreep >= CFG.boilingFrogMinIncrease) {
+    if (monotonicRatio >= 50 && totalCreep >= C.boilingFrogMinIncrease) {
       const startAmount = a.months[0].amount;
       const endAmount = a.months[a.months.length - 1].amount;
       frogAccounts.push({
@@ -567,7 +569,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   // ---- zombie subscriptions -----------------------------------------------------------
   const zombieList: SpendVelocityData["zombies"]["subscriptions"] = [];
   for (const v of vendMap.values()) {
-    if (v.months.length < CFG.zombieMinMonths) continue;
+    if (v.months.length < C.zombieMinMonths) continue;
     const amounts = v.months.map((m) => Math.round(m.amount * 100) / 100);
     const first = amounts[0];
     let isZombie = amounts.every((x) => x === first);
@@ -599,7 +601,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   for (const a of acctMap.values()) {
     const avgTxnSize = a.txns > 0 ? a.totalSpend / a.txns : 0;
     const txnsPerMonth = a.months.length > 0 ? a.txns / a.months.length : 0;
-    if (txnsPerMonth > CFG.fragmentationMinTxns && avgTxnSize < CFG.fragmentationMaxAvgSize) {
+    if (txnsPerMonth > C.fragmentationMinTxns && avgTxnSize < C.fragmentationMaxAvgSize) {
       fragList.push({
         accountId: a.id, accountName: a.name, totalSpend: a.totalSpend, transactionCount: a.txns,
         avgTransactionSize: avgTxnSize, txnsPerMonth: Math.round(txnsPerMonth),
@@ -800,7 +802,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
 
   return {
     period,
-    config: CFG,
+    config: C,
     summary: {
       totalSpend, accountCount: accountVelocity.length,
       avgVelocity: r1(avgVelocity), avgAcceleration: r1(avgAcceleration),

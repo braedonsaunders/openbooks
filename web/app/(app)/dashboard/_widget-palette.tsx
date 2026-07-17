@@ -1,8 +1,8 @@
 'use client'
 
-import { type ReactNode } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { Drawer } from '@openbooks/ui'
 import {
   WIDGETS,
   CATEGORY_LABELS,
@@ -33,6 +33,7 @@ export function WidgetPalette({
   allowedWidgetIds,
   onClose,
 }: WidgetPaletteProps) {
+  const t = useTranslations('dashboard')
   const present = presentIds instanceof Set ? presentIds : new Set(presentIds)
   const allowed = allowedWidgetIds instanceof Set ? allowedWidgetIds : new Set(allowedWidgetIds ?? [])
 
@@ -48,24 +49,17 @@ export function WidgetPalette({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-slate-900/40" onClick={onClose} />
-      <aside className="flex w-96 flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Add widgets
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-          >
-            <X size={16} />
-          </button>
-        </header>
-        <div className="flex-1 overflow-y-auto p-3">
+    <Drawer
+      open
+      onClose={onClose}
+      size="sm"
+      title={t('palette.title')}
+      description={t('palette.subtitle')}
+      bodyClassName="overflow-y-auto p-3"
+    >
           {byCategory.size === 0 && libraryCards.length === 0 ? (
             <p className="px-2 py-4 text-sm text-slate-400">
-              No widgets available to add.
+              {t('palette.empty')}
             </p>
           ) : null}
 
@@ -99,7 +93,7 @@ export function WidgetPalette({
           {libraryCards.length > 0 ? (
             <div className="mb-4">
               <h3 className="mb-2 px-1 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-                Insight cards
+                {t('palette.libraryCards')}
               </h3>
               <div className="space-y-1">
                 {libraryCards.map((c) => (
@@ -124,8 +118,6 @@ export function WidgetPalette({
               </div>
             </div>
           ) : null}
-        </div>
-      </aside>
-    </div>
+    </Drawer>
   )
 }

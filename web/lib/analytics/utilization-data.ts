@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { analyticsConfig } from "./config";
 
 /**
  * Utilization (Billable IQ) — a faithful port of Gantry's Time dashboard
@@ -76,10 +77,8 @@ export interface UtilizationData {
   history: { periodMonths: number; periods: UHistoryPeriod[] };
 }
 
-// Gantry config defaults (Lib_Config time defaults).
-const TARGET_BILLABLE = 70;
-const COST_SPIKE_THRESHOLD = 1000;
-const MIN_HOURS = 10;
+// Threshold defaults live in lib/analytics/config.ts (Gantry Lib_Config time
+// defaults); per-org overrides come from orgs.settings.analytics.utilization.
 
 interface StatRow {
   employee: string;
@@ -145,7 +144,7 @@ const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBi
 type Key = "department" | "item" | "employee";
 
 /** Gantry buildTimeGroup, verbatim semantics. */
-function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>): UGroupRow[] {
+function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number): UGroupRow[] {
   const deptName = new Map<string, string>();
   for (const r of curr) if (r.department && r.department_name) deptName.set(r.department, r.department_name);
 
@@ -190,7 +189,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       range,
       prior: pr,
       deltas: { pctDelta: range.percentBilled - pr.percentBilled, costDelta: range.nonBillableCost - pr.nonBillableCost },
-      meetsMinHours: range.hours >= MIN_HOURS,
+      meetsMinHours: range.hours >= minHours,
     };
     if (key === "employee") {
       row.title = titleByEmp.get(id) ?? "No Title";
@@ -209,6 +208,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
 }
 
 export async function utilizationData(orgId: string, period: { from: string; to: string; label: string }): Promise<UtilizationData> {
+  const cfg = await analyticsConfig(orgId, "utilization");
   const rangeStart = new Date(period.from + "T00:00:00Z");
   const rangeEnd = new Date(period.to + "T00:00:00Z");
   const days = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86_400_000) + 1;
@@ -285,9 +285,9 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   const pCompany = companySum(prior);
 
   const alerts: UAlert[] = [];
-  if (cCompany.percentBilled < TARGET_BILLABLE)
-    alerts.push({ type: "warning", message: `Billable % below ${TARGET_BILLABLE}% target` });
-  if (cCompany.nonBillableCost - pCompany.nonBillableCost > COST_SPIKE_THRESHOLD)
+  if (cCompany.percentBilled < cfg.targetBillablePct)
+    alerts.push({ type: "warning", message: `Billable % below ${cfg.targetBillablePct}% target` });
+  if (cCompany.nonBillableCost - pCompany.nonBillableCost > cfg.costSpikeThreshold)
     alerts.push({
       type: "danger",
       message: `Non-billable cost spiked by $${Math.round(cCompany.nonBillableCost - pCompany.nonBillableCost).toLocaleString("en-US")}`,
@@ -314,7 +314,7 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   return {
     period: { ...period, days },
     prior: { from: priorFrom, to: priorTo },
-    config: { target: TARGET_BILLABLE, costSpike: COST_SPIKE_THRESHOLD, minHours: MIN_HOURS },
+    config: { target: cfg.targetBillablePct, costSpike: cfg.costSpikeThreshold, minHours: cfg.minHours },
     company: {
       range: cCompany,
       prior: pCompany,
@@ -324,9 +324,9 @@ export async function utilizationData(orgId: string, period: { from: string; to:
       },
       alerts,
     },
-    departments: buildGroup(curr, prior, "department", titleByEmp, noBillDepts),
-    items: buildGroup(curr, prior, "item", titleByEmp, noBillDepts),
-    employees: buildGroup(curr, prior, "employee", titleByEmp, noBillDepts),
+    departments: buildGroup(curr, prior, "department", titleByEmp, noBillDepts, cfg.minHours),
+    items: buildGroup(curr, prior, "item", titleByEmp, noBillDepts, cfg.minHours),
+    employees: buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, cfg.minHours),
     history: { periodMonths, periods },
   };
 }

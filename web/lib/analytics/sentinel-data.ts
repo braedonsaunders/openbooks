@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { analyticsConfig } from "./config";
 
 /**
  * Sentinel — transaction integrity forensics, a faithful port of Gantry's
@@ -37,15 +38,12 @@ import { db } from "@openbooks/engine/src/db.ts";
 
 const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", "expense_report", "journal", "customer_credit"] as const;
 
-// Gantry constants, verbatim.
-const DUPLICATE_THRESHOLD_DAYS = 14;
-const DUPLICATE_MIN_AMOUNT = 100;
+// Gantry constants, verbatim. Duplicate/sequential thresholds are per-org
+// configurable (lib/analytics/config.ts) — these are the fixed ones.
 const HIGH_RISK_AMOUNT = 10_000;
 const CRITICAL_RISK_AMOUNT = 25_000;
 const Z_SCORE_THRESHOLD = 3;
 const RSF_THRESHOLD = 10;
-const SEQUENTIAL_MIN = 3;
-const SEQUENTIAL_MIN_DAYS_FOR_FLAG = 7;
 const SEQUENTIAL_HIGH_RISK_DAYS = 30;
 
 const BENFORD_1D: Record<number, number> = {
@@ -104,6 +102,7 @@ export interface AuditEvent {
 export interface SentinelData {
   period: { from: string; to: string; label: string };
   meta: { totalDocs: number; totalAmount: number; days: number; queryMs: number };
+  config: Record<string, number>;
   summary: {
     flaggedCount: number;
     duplicateCount: number;
@@ -146,6 +145,11 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const { from, to } = period;
   const t0 = Date.now();
   const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
+  const cfg = await analyticsConfig(orgId, "sentinel");
+  const DUPLICATE_THRESHOLD_DAYS = cfg.duplicateDays!;
+  const DUPLICATE_MIN_AMOUNT = cfg.duplicateMinAmount!;
+  const SEQUENTIAL_MIN = cfg.sequentialMinCount!;
+  const SEQUENTIAL_MIN_DAYS_FOR_FLAG = cfg.sequentialMinDays!;
 
   // Baseline window for vendor statistics: 36 months before period end (Gantry).
   const end = new Date(to + "T00:00:00Z");
@@ -689,6 +693,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   return {
     period,
     meta: { totalDocs: Number(meta.docs ?? 0), totalAmount: Number(meta.amount ?? 0), days, queryMs: Date.now() - t0 },
+    config: cfg,
     summary: {
       flaggedCount: flagged.length,
       duplicateCount: dupTotal,

@@ -13,6 +13,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart, TrendChart } from '../_ui/charts'
 import { DrillDrawer } from '../_ui/DrillDrawer'
+import { ConfigEditor } from '../_ui/ConfigEditor'
 import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
@@ -762,19 +763,35 @@ function ConfigTab({ data }: { data: SpendVelocityData }) {
   ]
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-      <Panel title="Model & Thresholds" icon={SlidersHorizontal} bodyClassName="p-0">
-        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-          {items.map((i) => (
-            <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
-              </div>
-              <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
+      <div className="space-y-5">
+        <ConfigEditor
+          dashboard="spendVelocity"
+          fields={[
+            { key: 'velocityHighThreshold', label: 'High velocity (%/mo)', help: 'Monthly CAGR above this classifies as accelerating/high', min: 1, max: 100, step: 1 },
+            { key: 'velocityMediumThreshold', label: 'Medium velocity (%/mo)', help: 'Monthly CAGR above this classifies as rising', min: 0, max: 50, step: 1 },
+            { key: 'anomalyStdDevThreshold', label: 'Anomaly σ', help: 'Months beyond this many standard deviations flag as anomalies', min: 1, max: 6, step: 0.1 },
+            { key: 'boilingFrogMonths', label: 'Boiling frog months', help: 'Minimum months of sustained small increases', min: 3, max: 24, step: 1 },
+            { key: 'zombieMinMonths', label: 'Zombie months', help: 'Identical monthly vendor totals for at least this many months', min: 3, max: 24, step: 1 },
+            { key: 'fragmentationMinTxns', label: 'Fragmentation txns/mo', help: 'Monthly transaction count above this (below the size cap) flags fragmentation', min: 5, max: 500, step: 5 },
+            { key: 'fragmentationMaxAvgSize', label: 'Fragmentation avg size ($)', help: 'Average transaction size cap for the fragmentation detector', min: 50, max: 10_000, step: 50 },
+          ]}
+          values={c as unknown as Record<string, number>}
+          defaults={{ velocityHighThreshold: 15, velocityMediumThreshold: 5, anomalyStdDevThreshold: 2.5, boilingFrogMonths: 6, zombieMinMonths: 6, fragmentationMinTxns: 20, fragmentationMaxAvgSize: 500 }}
+        />
+        <Panel title="Model & Thresholds" icon={SlidersHorizontal} bodyClassName="p-0">
+          <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+            {items.map((i) => (
+              <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
+                </div>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      </div>
       <Panel title="Data sources" icon={Info}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
           <p>Spend = expense/COGS journal lines from the four spend document types (the Gantry set):</p>
