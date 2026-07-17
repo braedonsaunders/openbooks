@@ -75,6 +75,8 @@ export interface SetupEntity {
   key: string
   /** DB table name. */
   table: string
+  /** Optional translation key for the singular record name used in drawers. */
+  singularTitleKey?: string
   /** Section this tab lives under (SETUP_GROUPS key). */
   groupKey: string
   /** lucide icon key (mapped in SetupNav). */
@@ -209,6 +211,34 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'dueFromAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'dueToAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+
+  // --- Accounting --------------------------------------------------------
+  {
+    // Every posting, close run, budget, and book-aware schedule belongs to an
+    // accounting book. The API applies the single-active-primary invariant
+    // atomically when these records are changed.
+    key: 'accounting-books',
+    table: 'accounting_books',
+    singularTitleKey: 'entities.accounting-books.singular',
+    actorCols: true,
+    groupKey: 'accounting',
+    iconKey: 'book-open',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'code', kind: 'code' },
+      { key: 'isPrimary', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'isPrimary', kind: 'boolean' },
+      { key: 'isActive', kind: 'boolean', defaultValue: true },
     ],
   },
 

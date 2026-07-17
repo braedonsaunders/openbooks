@@ -8,6 +8,7 @@ import {
 } from "@openbooks/engine/src/close.ts";
 import {
   Badge,
+  Button,
   PageHeader,
   Table,
   TableBody,
@@ -191,21 +192,33 @@ export default async function PeriodClose({
           <PageHeader
             title={t("title")}
             description={t("workspaceDescription")}
+            actions={can(authz, "admin.setup.manage") ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/admin/setup/accounting-books">{t("actions.manageBooks")}</Link>
+              </Button>
+            ) : null}
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder={t("searchPlaceholder")} />
-            <FilterChips
-              basePath="/close"
-              currentParams={sp}
-              paramKey="book"
-              label={t("filters.book")}
-              hideAll
-              defaultValue={selectedBookId}
-              options={books.rows.map((row: any) => ({
-                value: row.id,
-                label: row.name,
-              }))}
-            />
+            {books.rows.length > 1 ? (
+              <FilterChips
+                basePath="/close"
+                currentParams={sp}
+                paramKey="book"
+                label={t("filters.book")}
+                hideAll
+                defaultValue={selectedBookId}
+                options={books.rows.map((row: any) => ({
+                  value: row.id,
+                  label: row.name,
+                }))}
+              />
+            ) : books.rows[0] ? (
+              <div className="inline-flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                <span className="text-slate-500 dark:text-slate-400">{t("filters.book")}:</span>
+                <span className="truncate font-semibold">{books.rows[0].name}</span>
+              </div>
+            ) : null}
             <FilterChips
               basePath="/close"
               currentParams={sp}

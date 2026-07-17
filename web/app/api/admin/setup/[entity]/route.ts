@@ -5,6 +5,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity } from '../../../../../lib/setup/registry'
 import {
   buildRow,
+  coerceBoolean,
   describeDbError,
   idColumn,
   multirefField,
@@ -65,6 +66,19 @@ async function validateEntityIntegrity(
   orgId: string,
   rowId?: string,
 ): Promise<string | null> {
+  if (entity.key === 'accounting-books') {
+    if (coerceBoolean(body.isPrimary) && body.isActive !== undefined && !coerceBoolean(body.isActive)) {
+      return 'primary-active-required'
+    }
+    if (rowId) {
+      const existing = (await db.execute(sql`
+        select is_primary from accounting_books where id = ${rowId} and org_id = ${orgId}`)) as any
+      if (!existing.rows[0]) return 'not found'
+      if (existing.rows[0].is_primary && !coerceBoolean(body.isPrimary)) return 'primary-required'
+      if (existing.rows[0].is_primary && !coerceBoolean(body.isActive)) return 'primary-active-required'
+    }
+  }
+
   if (entity.key === 'segment-definitions') {
     const key = String(body.key ?? '')
     if (!rowId && !/^[a-z][a-z0-9_]{0,62}$/.test(key)) {
@@ -209,6 +223,51 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
   if (integrityError) return NextResponse.json({ error: integrityError }, { status: 400 })
 
+  if (entity.key === 'accounting-books') {
+    try {
+      const id = await db.transaction(async (tx) => {
+        // Serializes primary-book changes for this tenant, including two admins
+        // creating or promoting books at the same time.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
+        const current = (await tx.execute(sql`
+          select exists(
+            select 1 from accounting_books where org_id = ${orgId} and is_primary
+          ) as has_primary`)) as any
+        const isPrimary = coerceBoolean(body.isPrimary) || !current.rows[0]?.has_primary
+        const isActive = isPrimary || body.isActive === undefined || coerceBoolean(body.isActive)
+        if (isPrimary) {
+          const demoted = (await tx.execute(sql`
+            update accounting_books
+               set is_primary = false, updated_at = now(), updated_by = ${actorId}
+             where org_id = ${orgId} and is_primary
+            returning id`)) as any
+          for (const book of demoted.rows) {
+            await tx.execute(sql`
+              insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+              values (${orgId}, 'accounting_books', ${String(book.id)}, 'update',
+                      ${JSON.stringify({ is_primary: false, reason: 'primary-book-reassigned' })}, ${actorId})`)
+          }
+        }
+        const inserted = (await tx.execute(sql`
+          insert into accounting_books
+            (org_id, code, name, is_primary, is_active, created_by, updated_by)
+          values
+            (${orgId}, ${String(body.code)}, ${String(body.name)}, ${isPrimary}, ${isActive}, ${actorId}, ${actorId})
+          returning id`)) as any
+        const id = String(inserted.rows[0].id)
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'accounting_books', ${id}, 'insert',
+                  ${JSON.stringify({ code: body.code, name: body.name, is_primary: isPrimary, is_active: isActive })},
+                  ${actorId})`)
+        return id
+      })
+      return NextResponse.json({ id })
+    } catch (e) {
+      return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
+    }
+  }
+
   // Natural-key uniqueness (these tables mostly lack a DB unique constraint).
   if (entity.naturalKey) {
     const col = toSnake(entity.naturalKey)
@@ -279,6 +338,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   if (integrityError) return NextResponse.json({ error: integrityError }, { status: integrityError === 'not found' ? 404 : 400 })
 
+  if (entity.key === 'accounting-books') {
+    try {
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
+        const existing = (await tx.execute(sql`
+          select id, is_primary from accounting_books
+           where id = ${id} and org_id = ${orgId} for update`)) as any
+        if (!existing.rows[0]) throw new Error('not found')
+        const isPrimary = coerceBoolean(body.isPrimary)
+        const isActive = coerceBoolean(body.isActive)
+        if (existing.rows[0].is_primary && !isPrimary) throw new Error('primary-required')
+        if (isPrimary && !isActive) throw new Error('primary-active-required')
+        if (isPrimary) {
+          const demoted = (await tx.execute(sql`
+            update accounting_books
+               set is_primary = false, updated_at = now(), updated_by = ${actorId}
+             where org_id = ${orgId} and id <> ${id} and is_primary
+            returning id`)) as any
+          for (const book of demoted.rows) {
+            await tx.execute(sql`
+              insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+              values (${orgId}, 'accounting_books', ${String(book.id)}, 'update',
+                      ${JSON.stringify({ is_primary: false, reason: 'primary-book-reassigned' })}, ${actorId})`)
+          }
+        }
+        const updated = (await tx.execute(sql`
+          update accounting_books
+             set name = ${String(body.name)}, is_primary = ${isPrimary}, is_active = ${isActive},
+                 updated_at = now(), updated_by = ${actorId}
+           where id = ${id} and org_id = ${orgId}
+          returning id`)) as any
+        if (!updated.rows.length) throw new Error('not found')
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'accounting_books', ${id}, 'update',
+                  ${JSON.stringify({ name: body.name, is_primary: isPrimary, is_active: isActive })},
+                  ${actorId})`)
+      })
+      return NextResponse.json({ id })
+    } catch (e) {
+      const message = (e as Error).message
+      const error = message === 'primary-required' || message === 'primary-active-required' || message === 'not found'
+        ? message
+        : describeDbError(e)
+      return NextResponse.json({ error }, { status: error === 'not found' ? 404 : 400 })
+    }
+  }
+
   const updateCols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : built.cols
@@ -339,6 +446,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const { orgId, id: actorId } = gate.user
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (entity.key === 'accounting-books') {
+    return NextResponse.json({ error: 'archive-only' }, { status: 405 })
+  }
 
   const url = new URL(req.url)
   const id = url.searchParams.get('id') ?? ''

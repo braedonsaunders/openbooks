@@ -73,7 +73,9 @@ export function SetupDrawer({
   })
   const [busy, setBusy] = useState(false)
 
-  const entityTitle = t(`entities.${entity.key}.title`)
+  const entityTitle = entity.singularTitleKey
+    ? t(entity.singularTitleKey)
+    : t(`entities.${entity.key}.title`)
   const set = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }))
 
   function validate(): string | null {
@@ -134,6 +136,9 @@ export function SetupDrawer({
   function errorMessage(code: unknown): string {
     if (code === 'duplicate') return t('errors.duplicate')
     if (code === 'in-use') return t('errors.inUse')
+    if (code === 'primary-required') return t('errors.primaryRequired')
+    if (code === 'primary-active-required') return t('errors.primaryActiveRequired')
+    if (code === 'archive-only') return t('errors.archiveOnly')
     if (typeof code === 'string' && code) return code
     return tCommon('feedback.saveFailed')
   }

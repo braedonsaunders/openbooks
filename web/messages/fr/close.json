@@ -54,6 +54,7 @@
   "actions": {
     "start": "Démarrer la clôture",
     "starting": "Démarrage…",
+    "manageBooks": "Gérer les livres",
     "resume": "Reprendre",
     "backToPeriods": "Retour aux périodes",
     "revalidate": "Revalider",
@@ -391,6 +392,7 @@
       "approve": "Approuver",
       "reject": "Refuser",
       "cancel": "Annuler",
+      "manageBooks": "Gérer les livres",
       "managePeriod": "Gérer {period}"
     },
     "fields": {
