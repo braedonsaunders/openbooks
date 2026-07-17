@@ -1504,7 +1504,8 @@
       "standardCost": "Standard cost",
       "baseUnit": "Base unit",
       "reorderPoint": "Reorder point",
-      "preferredStockLevel": "Preferred stock level"
+      "preferredStockLevel": "Preferred stock level",
+      "receivedNotBilledAccountId": "Received-not-billed account"
     },
     "options": {
       "appliesTo": {

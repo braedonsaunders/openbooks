@@ -1437,7 +1437,8 @@
       "standardCost": "Costo estándar",
       "baseUnit": "Unidad base",
       "reorderPoint": "Punto de reorden",
-      "preferredStockLevel": "Nivel de stock preferido"
+      "preferredStockLevel": "Nivel de stock preferido",
+      "receivedNotBilledAccountId": "Cuenta de recibido no facturado"
     },
     "options": {
       "appliesTo": {

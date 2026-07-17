@@ -176,8 +176,9 @@ export interface ReceiveInput {
   /** actual unit cost paid. */
   unitCost: string;
   subsidiaryId: string;
-  /** GL account the receipt credits (GRNI / clearing / AP). */
-  offsetAccountId: string;
+  /** GL account the receipt credits (GRNI / clearing). Required unless
+   *  postJournal is false (the source document already moved the GL). */
+  offsetAccountId?: string;
   date: string;
   documentLineId?: string | null;
   lotId?: string | null;
@@ -186,11 +187,16 @@ export interface ReceiveInput {
   projectId?: string | null;
   locationId?: string | null;
   memo?: string | null;
+  /** When false, do NOT post a journal — the caller's document already DR'd
+   *  inventory; we only record the cost layer + movement (linked to linkEntryId). */
+  postJournal?: boolean;
+  linkEntryId?: string | null;
 }
 
 export interface MovementResult {
   movementId: string;
-  entryId: string;
+  /** null when the movement recorded a layer without its own entry (bill receipt). */
+  entryId: string | null;
   value: string;
 }
 
@@ -226,33 +232,48 @@ export async function receiveInventory(orgId: string, actorId: string | null, in
   }
   const offsetTotal = add(inventoryValue, variance); // = qty × actual
 
+  // When the source document already DR'd inventory (postJournal === false), we
+  // skip the entry and only record the layer. Standard costing needs its own
+  // entry to book the variance, so it requires a real offset (a clearing acct).
+  const postJournal = input.postJournal !== false;
+  if (!postJournal && !isZero(variance)) {
+    throw new InventoryError("standard-cost receipts require a received-not-billed account to book purchase variance");
+  }
+  if (postJournal && !input.offsetAccountId) {
+    throw new InventoryError("receipt requires an offset account");
+  }
+
   const lines: JournalLineInput[] = [
     { accountId: profile.assetAccountId, amount: inventoryValue, ...dims, memo: input.memo },
     ...(!isZero(variance)
       ? [{ accountId: profile.varianceAccountId ?? profile.assetAccountId, amount: variance, ...dims, memo: "PPV" }]
       : []),
-    { accountId: input.offsetAccountId, amount: neg(offsetTotal), ...dims, memo: input.memo },
+    { accountId: input.offsetAccountId ?? profile.assetAccountId, amount: neg(offsetTotal), ...dims, memo: input.memo },
   ];
 
-  await validateSubsidiaryRestrictions(db, {
-    orgId,
-    ctx,
-    docSubsidiaryId: input.subsidiaryId,
-    lines: lines.map((l) => ({ ...l, subsidiaryId: input.subsidiaryId })),
-  });
+  if (postJournal) {
+    await validateSubsidiaryRestrictions(db, {
+      orgId,
+      ctx,
+      docSubsidiaryId: input.subsidiaryId,
+      lines: lines.map((l) => ({ ...l, subsidiaryId: input.subsidiaryId })),
+    });
+  }
 
   return await db.transaction(async (tx) => {
-    const entryId = await postInventoryEntry(tx, {
-      orgId,
-      bookId,
-      subsidiaryId: input.subsidiaryId,
-      currency,
-      periodId: period,
-      date: input.date,
-      entryNumber: `INV-RCPT-${input.date}-${input.stockLocationId.slice(0, 8)}`,
-      memo: input.memo ?? "Inventory receipt",
-      lines,
-    });
+    const entryId = postJournal
+      ? await postInventoryEntry(tx, {
+          orgId,
+          bookId,
+          subsidiaryId: input.subsidiaryId,
+          currency,
+          periodId: period,
+          date: input.date,
+          entryNumber: `INV-RCPT-${input.date}-${input.stockLocationId.slice(0, 8)}`,
+          memo: input.memo ?? "Inventory receipt",
+          lines,
+        })
+      : (input.linkEntryId ?? null);
 
     const mv = (await tx.execute(sql`
       insert into inventory_movements
@@ -514,6 +535,161 @@ export async function adjustInventory(orgId: string, actorId: string | null, inp
     projectId: input.projectId,
     locationId: input.locationId,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Document integration — bill receipts & invoice/shipment issues
+// ---------------------------------------------------------------------------
+
+export interface DocumentInventoryLine {
+  lineId: string;
+  itemId: string;
+  stockLocationId: string;
+  /** base-unit quantity for the line (absolute). */
+  quantity: string;
+  /** line extended amount (for unit-cost derivation on receipts). */
+  amount: string;
+  assetAccountId: string;
+  clearingAccountId: string | null;
+  costingMethod: InventoryProfile["costingMethod"];
+}
+
+/** The one active stock location, when the org has exactly one (else null). */
+async function defaultStockLocation(runner: Runner, orgId: string): Promise<string | null> {
+  const r = (await runner.execute(sql`
+    select id from stock_locations where org_id = ${orgId} and is_active`)) as unknown as { rows: { id: string }[] };
+  return r.rows.length === 1 ? r.rows[0].id : null;
+}
+
+/**
+ * The inventory lines of a document: item has a costing profile AND a stock
+ * location resolves (line-level, else the single default). Shared by the
+ * posting-rule account router and the receipt/issue hooks so they always agree
+ * on which lines are inventory.
+ */
+export async function loadDocumentInventoryLines(
+  runner: Runner,
+  orgId: string,
+  documentId: string,
+): Promise<DocumentInventoryLine[]> {
+  const fallback = await defaultStockLocation(runner, orgId);
+  const r = (await runner.execute(sql`
+    select dl.id as line_id, dl.item_id, dl.quantity, dl.amount, dl.stock_location_id,
+           p.asset_account_id, p.received_not_billed_account_id, p.costing_method
+      from document_lines dl
+      join item_inventory_profiles p on p.item_id = dl.item_id
+     where dl.document_id = ${documentId} and dl.org_id = ${orgId}
+       and dl.item_id is not null and dl.quantity <> 0
+     order by dl.line_number`)) as unknown as {
+    rows: {
+      line_id: string; item_id: string; quantity: string; amount: string; stock_location_id: string | null;
+      asset_account_id: string; received_not_billed_account_id: string | null; costing_method: InventoryProfile["costingMethod"];
+    }[];
+  };
+  const out: DocumentInventoryLine[] = [];
+  for (const row of r.rows) {
+    const loc = row.stock_location_id ?? fallback;
+    if (!loc) continue; // no location resolvable → treat as non-inventory
+    out.push({
+      lineId: row.line_id,
+      itemId: row.item_id,
+      stockLocationId: loc,
+      quantity: fromUnits(toUnits(row.quantity) < 0n ? -toUnits(row.quantity) : toUnits(row.quantity)),
+      amount: row.amount,
+      assetAccountId: row.asset_account_id,
+      clearingAccountId: row.received_not_billed_account_id,
+      costingMethod: row.costing_method,
+    });
+  }
+  return out;
+}
+
+/**
+ * lineId → the GL account a vendor bill's inventory line should DEBIT: the
+ * received-not-billed clearing account when configured, else the inventory
+ * asset account directly. Consumed by the posting engine (posting.ts).
+ */
+export async function resolveBillInventoryAccounts(runner: Runner, orgId: string, documentId: string): Promise<Map<string, string>> {
+  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  const map = new Map<string, string>();
+  for (const l of lines) map.set(l.lineId, l.clearingAccountId ?? l.assetAccountId);
+  return map;
+}
+
+/**
+ * After a vendor bill posts, receive each inventory line into stock. If the item
+ * has a clearing account the bill DR'd it, so the receipt posts DR inventory /
+ * CR clearing (draining it, + PPV under standard costing). Otherwise the bill
+ * DR'd inventory directly and we record the layer with no separate entry.
+ * Idempotent: a line that already produced a receipt movement is skipped.
+ */
+export async function applyInventoryReceiptsForBill(
+  orgId: string,
+  actorId: string | null,
+  documentId: string,
+  billEntryId: string,
+  date: string,
+  subsidiaryId: string,
+): Promise<number> {
+  const lines = await loadDocumentInventoryLines(db, orgId, documentId);
+  let count = 0;
+  for (const l of lines) {
+    const seen = (await db.execute(sql`
+      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'receipt' limit 1`)) as unknown as {
+      rows: unknown[];
+    };
+    if (seen.rows[0]) continue;
+    const unitCost = isZero(l.quantity) ? "0" : fromUnits((toUnits(l.amount) * 10_000n) / toUnits(l.quantity));
+    await receiveInventory(orgId, actorId, {
+      itemId: l.itemId,
+      stockLocationId: l.stockLocationId,
+      quantity: l.quantity,
+      unitCost,
+      subsidiaryId,
+      offsetAccountId: l.clearingAccountId ?? undefined,
+      postJournal: l.clearingAccountId != null,
+      linkEntryId: billEntryId,
+      date,
+      documentLineId: l.lineId,
+      memo: "Inventory receipt (bill)",
+    });
+    count++;
+  }
+  return count;
+}
+
+/**
+ * After a customer invoice posts (revenue booked), issue each inventory line to
+ * COGS: DR COGS / CR inventory at the item's costed value. Independent of the
+ * revenue entry. Idempotent per line.
+ */
+export async function applyInventoryIssuesForInvoice(
+  orgId: string,
+  actorId: string | null,
+  documentId: string,
+  date: string,
+  subsidiaryId: string,
+): Promise<number> {
+  const lines = await loadDocumentInventoryLines(db, orgId, documentId);
+  let count = 0;
+  for (const l of lines) {
+    const seen = (await db.execute(sql`
+      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`)) as unknown as {
+      rows: unknown[];
+    };
+    if (seen.rows[0]) continue;
+    await issueInventory(orgId, actorId, {
+      itemId: l.itemId,
+      stockLocationId: l.stockLocationId,
+      quantity: l.quantity,
+      subsidiaryId,
+      date,
+      documentLineId: l.lineId,
+      memo: "COGS (invoice)",
+    });
+    count++;
+  }
+  return count;
 }
 
 export { cmp as compareMoney };
