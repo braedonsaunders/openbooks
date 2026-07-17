@@ -11,8 +11,8 @@ export type WidgetCategory =
 export type WidgetMeta = {
   id: string
   category: WidgetCategory
-  label: string
-  description: string
+  labelKey: string
+  descriptionKey: string
   defaultSize: { w: number; h: number }
   minSize: { w: number; h: number }
   maxSize?: { w?: number; h?: number }
@@ -20,20 +20,11 @@ export type WidgetMeta = {
 }
 
 export const WIDGETS: Record<string, WidgetMeta> = {
-  'kpi-journal-entries': {
-    id: 'kpi-journal-entries',
-    category: 'kpi',
-    label: 'Journal entries',
-    description: 'Total posted journal entries.',
-    defaultSize: { w: 3, h: 2 },
-    minSize: { w: 2, h: 2 },
-    maxSize: { w: 6, h: 4 },
-  },
   'kpi-journal-lines': {
     id: 'kpi-journal-lines',
     category: 'kpi',
-    label: 'Journal lines',
-    description: 'Total posted journal lines.',
+    labelKey: 'widgets.journalLines',
+    descriptionKey: 'catalog.journalLines',
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
@@ -41,8 +32,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'kpi-accounts-active': {
     id: 'kpi-accounts-active',
     category: 'kpi',
-    label: 'Active accounts',
-    description: 'Count of active accounts in the chart of accounts.',
+    labelKey: 'widgets.activeAccounts',
+    descriptionKey: 'catalog.activeAccounts',
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
@@ -50,8 +41,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'kpi-entries-today': {
     id: 'kpi-entries-today',
     category: 'kpi',
-    label: 'Entries today',
-    description: 'Journal entries posted today.',
+    labelKey: 'widgets.entriesToday',
+    descriptionKey: 'catalog.entriesToday',
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
@@ -59,8 +50,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'kpi-pending-approvals': {
     id: 'kpi-pending-approvals',
     category: 'kpi',
-    label: 'Pending approvals',
-    description: 'Approval requests awaiting a decision.',
+    labelKey: 'widgets.pendingApprovals',
+    descriptionKey: 'catalog.pendingApprovals',
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
@@ -69,8 +60,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'kpi-ledger-balance': {
     id: 'kpi-ledger-balance',
     category: 'kpi',
-    label: 'Ledger balance',
-    description: 'Sum of all journal line amounts — should be zero when balanced.',
+    labelKey: 'widgets.ledgerBalance',
+    descriptionKey: 'catalog.ledgerBalance',
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
@@ -78,16 +69,16 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'list-recent-entries': {
     id: 'list-recent-entries',
     category: 'gl',
-    label: 'Recent journal entries',
-    description: 'Last 5 posted journal entries with debits and line counts.',
+    labelKey: 'widgets.recentEntries',
+    descriptionKey: 'catalog.recentEntries',
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
   },
   'list-pending-approvals': {
     id: 'list-pending-approvals',
     category: 'ap',
-    label: 'Pending approvals',
-    description: 'Approval requests awaiting a decision, newest first.',
+    labelKey: 'widgets.pendingApprovalsList',
+    descriptionKey: 'catalog.pendingApprovalsList',
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
     rolesShown: ['admin', 'controller', 'approver'],
@@ -95,16 +86,16 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'personal-in-progress': {
     id: 'personal-in-progress',
     category: 'personal',
-    label: 'In progress',
-    description: 'Your draft documents — bills, invoices, journal entries — to pick up where you left off.',
+    labelKey: 'widgets.inProgress',
+    descriptionKey: 'catalog.inProgress',
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 3, h: 4 },
   },
   'personal-inbox': {
     id: 'personal-inbox',
     category: 'personal',
-    label: 'My approvals',
-    description: 'Approval requests assigned to you.',
+    labelKey: 'widgets.myApprovals',
+    descriptionKey: 'catalog.myApprovals',
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
     rolesShown: ['admin', 'controller', 'approver'],
@@ -112,20 +103,65 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'personal-actions': {
     id: 'personal-actions',
     category: 'personal',
-    label: 'Quick actions',
-    description: 'Common "start something" CTAs — new bill, invoice, journal entry, etc.',
-    defaultSize: { w: 12, h: 2 },
-    minSize: { w: 3, h: 2 },
+    labelKey: 'quickActions.title',
+    descriptionKey: 'catalog.quickActions',
+    defaultSize: { w: 12, h: 3 },
+    minSize: { w: 3, h: 3 },
+  },
+  'kpi-cash-balance': {
+    id: 'kpi-cash-balance',
+    category: 'kpi',
+    labelKey: 'widgets.cashBalance',
+    descriptionKey: 'catalog.cashBalance',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
+  'kpi-open-receivables': {
+    id: 'kpi-open-receivables',
+    category: 'ar',
+    labelKey: 'widgets.openReceivables',
+    descriptionKey: 'catalog.openReceivables',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
+  'kpi-overdue-receivables': {
+    id: 'kpi-overdue-receivables',
+    category: 'ar',
+    labelKey: 'widgets.overdueReceivables',
+    descriptionKey: 'catalog.overdueReceivables',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
+  'kpi-open-payables': {
+    id: 'kpi-open-payables',
+    category: 'ap',
+    labelKey: 'widgets.openPayables',
+    descriptionKey: 'catalog.openPayables',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
+  'kpi-overdue-payables': {
+    id: 'kpi-overdue-payables',
+    category: 'ap',
+    labelKey: 'widgets.overduePayables',
+    descriptionKey: 'catalog.overduePayables',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
   },
 }
 
-export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
-  kpi: 'Headline',
-  gl: 'General ledger',
-  ap: 'Payables',
-  ar: 'Receivables',
-  personal: 'Personal',
-  admin: 'Admin',
+export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {
+  kpi: 'categories.kpi',
+  gl: 'categories.gl',
+  ap: 'categories.ap',
+  ar: 'categories.ar',
+  personal: 'categories.personal',
+  admin: 'categories.admin',
 }
 
 export function widgetsForRole(role: RoleTier): WidgetMeta[] {

@@ -1,15 +1,24 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import {
+  dashboardFinancialMetricsQuery,
+  type DashboardFinancialMetricsRow,
+} from '@openbooks/engine/src/dashboard-reporting.ts'
 import type { Authz } from '@/lib/authz'
 
 export type DashboardMetrics = {
-  journalEntryCount: number
+  baseCurrency: string
   journalLineCount: number
   accountCount: number
   entriesToday: number
   pendingApprovals: number
   ledgerSum: string
+  cashBalance: string
+  openReceivables: string
+  overdueReceivables: string
+  openPayables: string
+  overduePayables: string
   recentEntries: Array<{
     id: string
     entryNumber: string | null
@@ -59,16 +68,16 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   const userId = authz.user.id
   const role = authz.user.role
 
-  const [totals, recentEntries, pendingApprovalList, myApprovalList, draftDocuments] = await Promise.all([
+  const [totals, financials, recentEntries, pendingApprovalList, myApprovalList, draftDocuments] = await Promise.all([
     db.execute(sql`
       select
-        (select count(*) from journal_entries where org_id = ${orgId} and status = 'posted') as journal_entries,
         (select count(*) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId} and e.status = 'posted') as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
         (select count(*) from journal_entries where org_id = ${orgId} and status = 'posted' and posting_date = current_date) as entries_today,
         (select count(*) from approval_requests where org_id = ${orgId} and status = 'pending') as pending_approvals,
         (select coalesce(sum(l.amount), 0) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId}) as ledger_sum
     `),
+    db.execute(dashboardFinancialMetricsQuery(orgId)),
     db.execute(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status,
              count(l.id) as line_count,
@@ -109,13 +118,19 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   ])
 
   const t = (totals as any).rows[0]
+  const financial = (financials as unknown as { rows: DashboardFinancialMetricsRow[] }).rows[0]!
   return {
-    journalEntryCount: Number(t.journal_entries),
+    baseCurrency: financial.base_currency,
     journalLineCount: Number(t.journal_lines),
     accountCount: Number(t.accounts),
     entriesToday: Number(t.entries_today),
     pendingApprovals: Number(t.pending_approvals),
     ledgerSum: t.ledger_sum,
+    cashBalance: financial.cash_balance,
+    openReceivables: financial.open_receivables,
+    overdueReceivables: financial.overdue_receivables,
+    openPayables: financial.open_payables,
+    overduePayables: financial.overdue_payables,
     recentEntries: ((recentEntries as any).rows).map((r: any) => ({
       id: r.id,
       entryNumber: r.entry_number,
@@ -156,12 +171,16 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
 
 /** Metric fields each built-in widget actually renders (see _widget-views.tsx). */
 const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> = {
-  'kpi-journal-entries': ['journalEntryCount'],
   'kpi-journal-lines': ['journalLineCount'],
   'kpi-accounts-active': ['accountCount'],
   'kpi-entries-today': ['entriesToday'],
   'kpi-pending-approvals': ['pendingApprovals'],
   'kpi-ledger-balance': ['ledgerSum'],
+  'kpi-cash-balance': ['baseCurrency', 'cashBalance'],
+  'kpi-open-receivables': ['baseCurrency', 'openReceivables'],
+  'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables'],
+  'kpi-open-payables': ['baseCurrency', 'openPayables'],
+  'kpi-overdue-payables': ['baseCurrency', 'overduePayables'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -170,12 +189,17 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
 }
 
 const EMPTY_METRICS: DashboardMetrics = {
-  journalEntryCount: 0,
+  baseCurrency: 'USD',
   journalLineCount: 0,
   accountCount: 0,
   entriesToday: 0,
   pendingApprovals: 0,
   ledgerSum: '0',
+  cashBalance: '0',
+  openReceivables: '0',
+  overdueReceivables: '0',
+  openPayables: '0',
+  overduePayables: '0',
   recentEntries: [],
   pendingApprovalList: [],
   myApprovalList: [],

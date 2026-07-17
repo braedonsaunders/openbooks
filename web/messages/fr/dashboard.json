@@ -6,12 +6,10 @@
     "afternoon": "Bon après-midi",
     "evening": "Bonsoir"
   },
-  "tenantSummary": "{entries} écritures",
   "header": {
     "customize": "Personnaliser"
   },
   "widgets": {
-    "journalEntries": "Écritures de journal",
     "journalLines": "Lignes de journal",
     "activeAccounts": "Comptes actifs",
     "entriesToday": "Écritures aujourd'hui",
@@ -20,7 +18,44 @@
     "recentEntries": "Écritures récentes",
     "pendingApprovalsList": "Approbations en attente",
     "myApprovals": "Mes approbations",
-    "inProgress": "En cours"
+    "inProgress": "En cours",
+    "cashBalance": "Solde de trésorerie",
+    "openReceivables": "Créances ouvertes",
+    "overdueReceivables": "Créances en retard",
+    "openPayables": "Dettes ouvertes",
+    "overduePayables": "Dettes en retard"
+  },
+  "metricContext": {
+    "today": "Comptabilisées aujourd’hui",
+    "awaitingDecision": "En attente d’une décision",
+    "baseCurrency": "Devise de base · {currency}",
+    "outstanding": "Solde impayé",
+    "pastDue": "Échu"
+  },
+  "categories": {
+    "kpi": "Indicateurs clés",
+    "gl": "Grand livre",
+    "ap": "Comptes fournisseurs",
+    "ar": "Comptes clients",
+    "personal": "Personnel",
+    "admin": "Administration"
+  },
+  "catalog": {
+    "journalLines": "Nombre total de lignes de journal comptabilisées.",
+    "activeAccounts": "Comptes actifs du plan comptable.",
+    "entriesToday": "Écritures de journal comptabilisées aujourd’hui.",
+    "pendingApprovals": "Demandes d’approbation en attente d’une décision.",
+    "ledgerBalance": "Solde net de toutes les lignes; des livres équilibrés doivent afficher zéro.",
+    "recentEntries": "Les cinq écritures de journal les plus récemment comptabilisées.",
+    "pendingApprovalsList": "Les plus récentes demandes en attente d’une décision.",
+    "inProgress": "Vos factures fournisseurs, factures clients et écritures à l’état de brouillon.",
+    "myApprovals": "Demandes d’approbation attribuées à votre rôle.",
+    "quickActions": "Raccourcis vers vos tâches les plus courantes.",
+    "cashBalance": "Solde comptabilisé des comptes bancaires en devise de base.",
+    "openReceivables": "Factures clients impayées en devise de base.",
+    "overdueReceivables": "Factures clients échues en devise de base.",
+    "openPayables": "Factures fournisseurs impayées en devise de base.",
+    "overduePayables": "Factures fournisseurs échues en devise de base."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",

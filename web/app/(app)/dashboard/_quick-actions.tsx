@@ -64,8 +64,7 @@ export function QuickActions({
           </div>
         ) : (
           <div
-            className="grid h-full min-h-0 auto-rows-fr gap-2 p-2.5"
-            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 10rem), 1fr))' }}
+            className="grid h-full min-h-0 auto-rows-fr grid-cols-2 gap-2 p-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
           >
             {items.map((a, i) => (
               <ActionTile key={a.id} action={a} index={i} />

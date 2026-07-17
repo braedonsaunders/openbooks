@@ -3,10 +3,12 @@
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
+  AlertTriangle,
   BookOpen,
-  CheckCircle2,
+  CircleDollarSign,
   ClipboardList,
   FileText,
+  Landmark,
   Layers,
   NotebookPen,
   Receipt,
@@ -14,33 +16,40 @@ import {
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
 import { money } from '@/lib/format'
+import { currencySymbol } from '@/lib/statement-format'
 import type { DashboardMetrics } from './_metrics'
-import type { DashboardQuickAction } from '@openbooks/schema'
 
 export function WidgetCard({
   widgetId,
   data,
-  quickActions,
 }: {
   widgetId: string
   data: DashboardMetrics
-  quickActions?: DashboardQuickAction[] | null
 }) {
   const t = useTranslations('dashboard')
+  const symbol = currencySymbol(data.baseCurrency)
 
   switch (widgetId) {
-    case 'kpi-journal-entries':
-      return <CountTile icon={<NotebookPen size={14} />} label={t('widgets.journalEntries')} value={String(data.journalEntryCount)} href="/journal" />
     case 'kpi-journal-lines':
-      return <CountTile icon={<BookOpen size={14} />} label={t('widgets.journalLines')} value={String(data.journalLineCount)} href="/journal" />
+      return <MetricTile icon={<BookOpen size={15} />} label={t('widgets.journalLines')} value={String(data.journalLineCount)} href="/journal" tone="teal" />
     case 'kpi-accounts-active':
-      return <CountTile icon={<Layers size={14} />} label={t('widgets.activeAccounts')} value={String(data.accountCount)} href="/accounts" />
+      return <MetricTile icon={<Layers size={15} />} label={t('widgets.activeAccounts')} value={String(data.accountCount)} href="/accounts" tone="sky" />
     case 'kpi-entries-today':
-      return <CountTile icon={<FileText size={14} />} label={t('widgets.entriesToday')} value={String(data.entriesToday)} href="/journal" />
+      return <MetricTile icon={<FileText size={15} />} label={t('widgets.entriesToday')} value={String(data.entriesToday)} href="/journal" tone="teal" hint={t('metricContext.today')} />
     case 'kpi-pending-approvals':
-      return <CountTile icon={<ClipboardList size={14} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/approvals" />
+      return <MetricTile icon={<ClipboardList size={15} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/approvals" tone="amber" hint={t('metricContext.awaitingDecision')} />
     case 'kpi-ledger-balance':
-      return <CountTile icon={<Scale size={14} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum)} href="/journal" />
+      return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, symbol)} href="/journal" tone="slate" />
+    case 'kpi-cash-balance':
+      return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, symbol)} href="/banking" tone="emerald" hint={t('metricContext.baseCurrency', { currency: data.baseCurrency })} />
+    case 'kpi-open-receivables':
+      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, symbol)} href="/ar" tone="sky" hint={t('metricContext.outstanding')} />
+    case 'kpi-overdue-receivables':
+      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, symbol)} href="/ar" tone="rose" hint={t('metricContext.pastDue')} />
+    case 'kpi-open-payables':
+      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, symbol)} href="/ap" tone="violet" hint={t('metricContext.outstanding')} />
+    case 'kpi-overdue-payables':
+      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, symbol)} href="/ap" tone="orange" hint={t('metricContext.pastDue')} />
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':
@@ -87,26 +96,51 @@ function CardShell({
   )
 }
 
-function CountTile({
+type MetricTone = 'teal' | 'sky' | 'emerald' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
+
+const METRIC_TONES: Record<MetricTone, { rail: string; icon: string; glow: string }> = {
+  teal: { rail: 'bg-teal-500', icon: 'bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/60 dark:text-teal-300 dark:ring-teal-900', glow: 'bg-teal-400/10 dark:bg-teal-500/5' },
+  sky: { rail: 'bg-sky-500', icon: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/60 dark:text-sky-300 dark:ring-sky-900', glow: 'bg-sky-400/10 dark:bg-sky-500/5' },
+  emerald: { rail: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-900', glow: 'bg-emerald-400/10 dark:bg-emerald-500/5' },
+  amber: { rail: 'bg-amber-500', icon: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-900', glow: 'bg-amber-400/10 dark:bg-amber-500/5' },
+  orange: { rail: 'bg-orange-500', icon: 'bg-orange-50 text-orange-700 ring-orange-100 dark:bg-orange-950/60 dark:text-orange-300 dark:ring-orange-900', glow: 'bg-orange-400/10 dark:bg-orange-500/5' },
+  rose: { rail: 'bg-rose-500', icon: 'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-900', glow: 'bg-rose-400/10 dark:bg-rose-500/5' },
+  violet: { rail: 'bg-violet-500', icon: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/60 dark:text-violet-300 dark:ring-violet-900', glow: 'bg-violet-400/10 dark:bg-violet-500/5' },
+  slate: { rail: 'bg-slate-400', icon: 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700', glow: 'bg-slate-400/10 dark:bg-slate-400/5' },
+}
+
+function MetricTile({
   icon,
   label,
   value,
   href,
+  hint,
+  tone,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   href?: string
+  hint?: string
+  tone: MetricTone
 }) {
+  const colors = METRIC_TONES[tone]
   const inner = (
-    <div className="flex h-full flex-col items-center justify-center gap-1 p-4">
-      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 ring-inset dark:bg-teal-950/50 dark:text-teal-300">
-        {icon}
-      </span>
-      <span className="text-2xl font-bold tracking-tight text-slate-900 tabular-nums dark:text-white">
-        {value}
-      </span>
-      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
+    <div className="relative flex h-full flex-col justify-between overflow-hidden p-4 pl-5">
+      <span className={`absolute inset-y-0 left-0 w-1 ${colors.rail}`} />
+      <span className={`pointer-events-none absolute -top-12 -right-10 h-28 w-28 rounded-full blur-2xl ${colors.glow}`} />
+      <div className="relative flex items-start justify-between gap-3">
+        <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</span>
+        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ${colors.icon}`}>
+          {icon}
+        </span>
+      </div>
+      <div className="relative min-w-0">
+        <div className="truncate text-2xl font-bold tracking-tight text-slate-950 tabular-nums dark:text-white">
+          {value}
+        </div>
+        {hint ? <div className="mt-0.5 truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">{hint}</div> : null}
+      </div>
     </div>
   )
   if (href) {

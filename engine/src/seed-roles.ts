@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { BUILT_IN_ROLES } from "../../web/lib/permissions.ts";
+import { seedDashboardDefaultsForOrg } from "./dashboard-defaults.ts";
 
 /**
  * Seed the RBAC foundation:
@@ -45,9 +46,15 @@ for (const org of orgs.rows) {
     on conflict (org_id, user_id, role_id) do nothing
   `)) as any;
 
+  const dashboardCount = await seedDashboardDefaultsForOrg(
+    org.id,
+    Object.keys(BUILT_IN_ROLES),
+  );
+
   console.log(
     `org "${org.name}": ${Object.keys(BUILT_IN_ROLES).length} built-in roles upserted, ` +
-      `${assigned.rowCount ?? 0} role assignment(s) created from users.role`,
+      `${assigned.rowCount ?? 0} role assignment(s) created from users.role, ` +
+      `${dashboardCount} dashboard default(s) upserted`,
   );
 }
 process.exit(0);

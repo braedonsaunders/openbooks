@@ -55,7 +55,7 @@ async function loadInsightCardNodes(
 export async function loadDashboardView(
   authz: Authz,
   layout: DashboardLayoutData,
-): Promise<{ nodes: Record<string, React.ReactNode>; data: DashboardMetrics }> {
+): Promise<{ nodes: Record<string, React.ReactNode> }> {
   const [metrics, cardNodes] = await Promise.all([
     loadDashboardMetrics(authz),
     loadInsightCardNodes(authz.user.orgId, layout.widgets.map((w) => w.id)),
@@ -71,13 +71,12 @@ export async function loadDashboardView(
           key={w.id}
           widgetId={w.id}
           data={pruneDashboardMetrics(metrics, [w.id])}
-          quickActions={layout.quickActions}
         />
       )
     }
   }
   Object.assign(nodes, cardNodes)
-  return { nodes, data: metrics }
+  return { nodes }
 }
 
 export async function loadDashboardEditCanvas(
@@ -110,7 +109,6 @@ export async function loadDashboardEditCanvas(
         key={id}
         widgetId={id}
         data={pruneDashboardMetrics(data, [id])}
-        quickActions={layout.quickActions}
       />
     )
   }
