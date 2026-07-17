@@ -35,7 +35,7 @@ function isRole(value: string | null): value is RelatedPartyRole {
 
 function isPartyTab(value: string | null): value is PartyTab {
   return value === 'overview' || value === 'transactions' || value === 'contacts'
-    || value === 'addresses' || value === 'accounting'
+    || value === 'addresses' || value === 'accounting' || value === 'audit'
 }
 
 /** Shell-level related-party overlay. Its close URL is the exact page beneath it. */

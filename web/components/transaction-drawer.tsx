@@ -5,9 +5,11 @@ import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
 import { Button, Popover, UrlDrawer } from '@openbooks/ui'
+import { AuditTrailPanel } from './audit-trail-panel'
 
 interface TransactionDrawerProps {
   closeHref: string
+  recordId: string
   title: ReactNode
   description?: ReactNode
   panelClassName?: string
@@ -28,6 +30,7 @@ interface TransactionDrawerProps {
  */
 export function TransactionDrawer({
   closeHref,
+  recordId,
   title,
   description,
   panelClassName,
@@ -40,6 +43,7 @@ export function TransactionDrawer({
   const t = useTranslations('common')
   const searchParams = useSearchParams()
   const [actionsOpen, setActionsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<'details' | 'audit'>('details')
   const hasActions = actions != null || actionsMenuHeader != null
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
@@ -55,6 +59,26 @@ export function TransactionDrawer({
       panelClassName={panelClassName}
       title={title}
       description={description}
+      subtabs={
+        <nav className="-mb-px flex gap-1" aria-label={t('auditTrail.ariaLabel')}>
+          {(['details', 'audit'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
+              className={`border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
+                activeTab === tab
+                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              {t(`auditTrail.tabs.${tab}`)}
+            </button>
+          ))}
+        </nav>
+      }
       headerActions={primaryAction != null || hasActions ? (
         <div className="flex items-center gap-1.5">
           {primaryAction}
@@ -88,9 +112,9 @@ export function TransactionDrawer({
           ) : null}
         </div>
       ) : undefined}
-      footer={footer}
+      footer={activeTab === 'details' ? footer : undefined}
     >
-      {children}
+      {activeTab === 'details' ? children : <AuditTrailPanel table="documents" recordId={recordId} />}
     </UrlDrawer>
   )
 }

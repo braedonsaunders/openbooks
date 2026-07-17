@@ -990,6 +990,7 @@ export function DocumentDrawer({
   return (
     <TransactionDrawer
       closeHref={basePath}
+      recordId={String(doc.id)}
       panelClassName={docTypeMeta(config.kind).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">

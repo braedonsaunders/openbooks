@@ -385,6 +385,7 @@ export function ExpenseDrawer({
   return (
     <TransactionDrawer
       closeHref="/expenses"
+      recordId={String(doc.id)}
       panelClassName={docTypeMeta('expense_report').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">

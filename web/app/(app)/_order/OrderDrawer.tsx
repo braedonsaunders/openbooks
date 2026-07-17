@@ -530,6 +530,7 @@ export function OrderDrawer({
   return (
     <TransactionDrawer
       closeHref={meta.base}
+      recordId={String(doc.id)}
       panelClassName={docTypeMeta(kind).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">

@@ -350,6 +350,7 @@ export function PaymentDrawer({
   return (
     <TransactionDrawer
       closeHref={basePath}
+      recordId={String(doc.id)}
       panelClassName={docTypeMeta(String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">

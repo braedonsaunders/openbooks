@@ -51,7 +51,7 @@ export default async function Parties({
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'contacts'
-    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting'
+    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'audit'
     ? requestedPartyTab
     : 'overview'
   const params = parseListParams(sp, {

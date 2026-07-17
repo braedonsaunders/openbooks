@@ -60,7 +60,7 @@ export default async function EntityRole({
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'contacts'
-    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting'
+    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'audit'
     ? requestedPartyTab
     : 'overview'
   const listParams = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: ['name', 'code'] as const })
