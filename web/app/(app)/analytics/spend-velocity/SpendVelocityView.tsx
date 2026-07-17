@@ -7,12 +7,12 @@ import {
   PieChart as PieIcon, Puzzle, Search, SlidersHorizontal, Snowflake, Target, TrendingDown,
   TrendingUp, UserRound, PiggyBank, Gauge as GaugeIcon,
 } from 'lucide-react'
-import { cn, Select, Drawer, Badge } from '@openbooks/ui'
-import type { SpendVelocityData, VelocityRow, SVTxn } from '../../../../lib/analytics/spend-velocity-data'
+import { cn, Select, Badge } from '@openbooks/ui'
+import type { SpendVelocityData, VelocityRow } from '../../../../lib/analytics/spend-velocity-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart, TrendChart } from '../_ui/charts'
-import { TxnLink } from '../../reports/TxnLink'
+import { DrillDrawer } from '../_ui/DrillDrawer'
 import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
@@ -100,45 +100,6 @@ function HealthGauge({ score, grade }: { score: number; grade: string }) {
 
 type Drill = { kind: 'account' | 'vendor'; id: string; name: string } | null
 
-function DrillDrawer({ drill, transactions, onClose }: { drill: NonNullable<Drill>; transactions: SVTxn[]; onClose: () => void }) {
-  const rows = useMemo(
-    () => transactions.filter((t) => (drill.kind === 'account' ? t.accountId === drill.id : t.partyId === drill.id)),
-    [transactions, drill],
-  )
-  const total = rows.reduce((s, t) => s + t.amount, 0)
-  return (
-    <Drawer open onClose={onClose} size="lg" title={drill.name} description={`${rows.length}${rows.length >= 2000 ? '+' : ''} transactions · ${money(total)} · click a row to open the record`} bodyClassName="p-0 overflow-y-auto">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-white dark:bg-slate-900">
-          <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">Date</th>
-            <th className="px-4 py-2 text-left font-medium">Doc</th>
-            <th className="px-4 py-2 text-left font-medium">{drill.kind === 'account' ? 'Party' : 'Account'}</th>
-            <th className="px-4 py-2 text-right font-medium">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? rows.map((t, i) => (
-            <tr key={`${t.docId}-${i}`} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40">
-              <td className="whitespace-nowrap px-4 py-1.5 tabular-nums text-slate-500 dark:text-slate-400">{t.date}</td>
-              <td className="px-4 py-1.5">
-                <TxnLink entryId={t.docId} docKind={t.kind} docId={t.docId} className="font-medium text-teal-600 hover:underline dark:text-teal-400">
-                  {t.docNumber || t.kind.replace(/_/g, ' ')}
-                </TxnLink>
-                <span className="ml-2 text-[10px] uppercase tracking-wide text-slate-400">{t.kind.replace(/_/g, ' ')}</span>
-              </td>
-              <td className="max-w-48 truncate px-4 py-1.5 text-slate-600 dark:text-slate-300" title={drill.kind === 'account' ? t.partyName : t.accountName}>{drill.kind === 'account' ? t.partyName || '—' : t.accountName}</td>
-              <td className="px-4 py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(t.amount)}</td>
-            </tr>
-          )) : (
-            <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400">No transactions in the loaded window (most-recent 2,000)</td></tr>
-          )}
-        </tbody>
-      </table>
-    </Drawer>
-  )
-}
-
 /* ------------------------------------------------------------------- shell */
 
 export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
@@ -178,7 +139,12 @@ export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
         {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
 
-      {drill ? <DrillDrawer drill={drill} transactions={data.transactions} onClose={() => setDrill(null)} /> : null}
+      <DrillDrawer
+        target={drill ? { kind: drill.kind === 'vendor' ? 'party' : 'account', id: drill.id, name: drill.name } : null}
+        from={data.period.from}
+        to={data.period.to}
+        onClose={() => setDrill(null)}
+      />
     </div>
   )
 }
@@ -818,7 +784,7 @@ function ConfigTab({ data }: { data: SpendVelocityData }) {
             <li><span className="font-medium text-slate-700 dark:text-slate-200">Revenue normalisation</span> uses GL income for the OpEx ratio ({data.revenue.opexRatio}%).</li>
             <li><span className="font-medium text-slate-700 dark:text-slate-200">Shadow IT</span> — unavailable: {data.shadowIT.reason}</li>
           </ul>
-          <p>Drill-downs open the most-recent 2,000 spend transactions; each row links to the real record in its native module.</p>
+          <p>Drill-downs fetch that account or vendor&apos;s full activity for the period on click (searchable, with monthly trend and breakdown); each row links to the real record in its native module.</p>
         </div>
       </Panel>
     </div>

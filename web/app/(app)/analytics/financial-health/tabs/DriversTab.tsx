@@ -8,7 +8,7 @@ import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
 import { fmtMoney, fmtPct } from '../../_ui/format'
 
-export function DriversTab({ data }: { data: HealthData }) {
+export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
   const rev = data.drivers.revenue
   const cost = data.drivers.cost
   const revNet = rev.reduce((a, d) => a + d.change, 0)
@@ -24,14 +24,14 @@ export function DriversTab({ data }: { data: HealthData }) {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DriverPanel title="Revenue Drivers" icon={TrendingUp} rows={rev} />
-        <DriverPanel title="Cost Drivers" icon={TrendingDown} rows={cost} />
+        <DriverPanel title="Revenue Drivers" icon={TrendingUp} rows={rev} onDrill={onDrill} />
+        <DriverPanel title="Cost Drivers" icon={TrendingDown} rows={cost} onDrill={onDrill} />
       </div>
     </div>
   )
 }
 
-function DriverPanel({ title, icon: Icon, rows }: { title: string; icon: typeof Search; rows: DriverRow[] }) {
+function DriverPanel({ title, icon: Icon, rows, onDrill }: { title: string; icon: typeof Search; rows: DriverRow[]; onDrill: (id: string, name: string) => void }) {
   const top = rows.slice(0, 8)
   return (
     <Panel title={title} icon={Icon}>
@@ -52,7 +52,7 @@ function DriverPanel({ title, icon: Icon, rows }: { title: string; icon: typeof 
             </thead>
             <tbody>
               {top.map((d) => (
-                <tr key={d.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                <tr key={d.id} onClick={() => onDrill(d.id, d.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                   <td className="py-1.5 text-slate-700 dark:text-slate-300">{d.name}</td>
                   <td className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</td>
                   <td className={cn('py-1.5 text-right tabular-nums', d.change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</td>
