@@ -91,13 +91,16 @@ export async function resolveProjectFinancials(
         join journal_entries e on e.id = l.entry_id
         join accounts a on a.id = l.account_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'`),
-    // committedCost — open order remainder (approved) for the configured doc kinds.
+    // committedCost — unbilled portion (by line amount) of open (approved)
+    // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
+    // migrated orders often carry the amount but no per-unit price.
     db.execute(sql`
-      select coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price), 0) as committed
+      select coalesce(sum(dl.amount * case when coalesce(dl.quantity,0) > 0
+                 then greatest(0, (dl.quantity - coalesce(dl.quantity_billed,0)) / dl.quantity) else 1 end), 0) as committed
         from document_lines dl join documents d on d.id = dl.document_id
        where dl.org_id = ${orgId} and dl.project_id = ${projectId}
          and d.status = 'approved' and d.kind in (${kindList(committedKinds.length ? committedKinds : ['__none__'])})
-         and dl.quantity > dl.quantity_billed`),
+         and (coalesce(dl.quantity,0) = 0 or dl.quantity_billed is null or dl.quantity_billed < dl.quantity)`),
     // unbilled billable time (bill rate / cost×markup) not yet invoiced.
     db.execute(sql`
       select coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill,
