@@ -84,6 +84,13 @@ const s = (v: unknown): string | null => {
   const t = (v == null ? "" : String(v)).trim();
   return t === "" ? null : t;
 };
+/** Parse a NetSuite numeric field; null for blank or zero (nothing to carry). */
+const num = (v: unknown): number | null => {
+  const t = s(v);
+  if (!t) return null;
+  const n = Number(t.replace(/[$,]/g, ""));
+  return Number.isFinite(n) && n !== 0 ? n : null;
+};
 /** MM/DD/YYYY → ISO YYYY-MM-DD (NetSuite date columns come back US-formatted). */
 const isoDate = (v: unknown): string | null => {
   const t = s(v);
@@ -293,7 +300,7 @@ export class NetSuiteSource implements MigrationSource {
 
   private async projects(): Promise<SourceEntity[]> {
     const rows = await this.q<Record<string, string>>(`
-      SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype,
+      SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype, projectprice,
              customer, projectmanager, custentityproject_foreman AS foreman,
              custentityproject_po_number AS ponumber,
              TO_CHAR(startdate, 'MM/DD/YYYY') AS startdate,
@@ -307,6 +314,9 @@ export class NetSuiteSource implements MigrationSource {
         isActive: !isT(j.isinactive),
         status: NS_PROJECT_STATUS[String(j.entitystatus)] ?? "active",
         billingMethod: NS_BILLING[String(j.jobbillingtype)] ?? null,
+        // NetSuite `projectprice` — the fixed-bid contract price. T&M/cost-billed
+        // jobs price from billable work, so 0/blank stays unset.
+        contractValue: num(j.projectprice),
         customerRef: s(j.customer),
         foremanRef: s(j.foreman),
         managerRef: s(j.projectmanager),

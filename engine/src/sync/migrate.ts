@@ -493,15 +493,24 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       manager: ref(ctx.maps.parties, f.managerRef), po: str(f.customerPoNumber),
       starts: str(f.startsOn), ends: str(f.endsOn), isActive: f.isActive !== false,
     };
+    // The fixed-bid contract price lives in custom.contractValue. Merge it (not
+    // clobber) so re-syncs preserve the ref key + any user-set custom fields.
+    const contractValue = typeof f.contractValue === "number" ? f.contractValue : null;
+    const priceMerge = contractValue != null ? JSON.stringify({ contractValue }) : null;
     const id = await findByRef("projects", orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update projects set name=${name}, code=${vals.code}, status=${vals.status}::text,
         billing_method=${vals.billing}, customer_id=${vals.customer}, foreman_id=${vals.foreman}, manager_id=${vals.manager},
-        customer_po_number=${vals.po}, starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive} where id=${id}`);
+        customer_po_number=${vals.po}, starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive}${
+          priceMerge ? sql`, custom = coalesce(custom, '{}'::jsonb) || ${priceMerge}::jsonb` : sql``
+        } where id=${id}`);
       s.updated++; return id;
     }
+    const insCustom = priceMerge
+      ? JSON.stringify({ ...JSON.parse(custom), contractValue })
+      : custom;
     const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, billing_method, customer_id, foreman_id, manager_id, customer_po_number, starts_on, ends_on, is_active, custom)
-      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, ${vals.billing}, ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
+      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, ${vals.billing}, ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${insCustom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
   }
 
