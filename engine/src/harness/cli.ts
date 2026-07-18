@@ -26,15 +26,16 @@ const cp = await runScenario(orgId, { at, gitSha });
 const pad = (s: string, n: number) => s.padEnd(n);
 console.log(`\n=== Golden fixture: ${cp.orgName} (${cp.orgId}) ===`);
 console.log(`git=${cp.gitSha ?? "?"}  at=${cp.at}`);
+console.log(`cutoff: ${cp.cutoff}  (${cp.cutoffSource}) — balance-mode checks verify as-of this date`);
 console.log(`counts: ${JSON.stringify(cp.counts)}`);
 console.log(`trial balance: debits=${cp.trialBalance.debits} credits=${cp.trialBalance.credits} accounts=${cp.trialBalance.accounts}`);
 
 console.log(`\nchecks:`);
 for (const c of cp.checks) console.log(`  ${c.ok ? "PASS" : "FAIL"}  ${pad(c.name, 22)} ${c.detail}`);
 
-console.log(`\nsubledger ↔ GL tie-out:`);
+console.log(`\nsubledger ↔ GL tie-out (as-of ${cp.cutoff}; residual = GL − aging − directJE):`);
 for (const t of cp.controlTieOut) {
-  console.log(`  ${pad(t.number ?? "", 8)} ${pad(t.kind, 20)} GL=${pad(t.gl, 16)} sub=${pad(t.subledger, 16)} diff=${t.diff}`);
+  console.log(`  ${pad(t.number ?? "", 8)} ${pad(t.kind, 18)} GL=${pad(t.gl, 15)} aging=${pad(t.subledger, 15)} directJE=${pad(t.direct, 13)} residual=${t.diff}`);
 }
 
 console.log(`\nreport latency (inception-scan hot path):`);
