@@ -43,3 +43,4 @@ output/
 
 # scratch/test artifacts
 tmp/
+engine/harness-checkpoints/

@@ -54,8 +54,8 @@ export const TTYPE_KIND: Record<string, string> = {
   VendPymt: "vendor_payment", Check: "check", Transfer: "transfer",
   VendCred: "vendor_credit", CustCred: "customer_credit", CardChrg: "card_charge",
   CardRfnd: "card_refund", Journal: "journal",
-  // Hidden from the current integration role (permission) but classified so the
-  // moment the role can see them they import as REAL payments:
+  // Customer payments and deposits (role now has the permission — imported as
+  // REAL payments through the kernel, not photocopied GL):
   CustPymt: "customer_payment", Deposit: "deposit",
 };
 const NEGATE_DETAIL = new Set(["customer_invoice", "vendor_credit"]);

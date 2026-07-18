@@ -22,6 +22,7 @@
   "scripts": {
     "sync": "tsx src/sync/cli.ts",
     "demo": "tsx src/demo-e2e.ts",
+    "harness": "tsx src/harness/cli.ts",
     "typecheck": "tsc --noEmit"
   }
 }
