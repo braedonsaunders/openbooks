@@ -36,7 +36,7 @@ export default async function Projects({
 
   // party pickers + resolved form layout + cockpit data for the flyout
   // (only when a project is open).
-  const [parties, subsidiaries, cockpit] = openProject
+  const [parties, subsidiaries, cockpit, projectTypesRes] = openProject
     ? await Promise.all([
         db.execute(sql`
           select id, display_name from parties
@@ -44,8 +44,10 @@ export default async function Projects({
            order by display_name limit 2000`) as any,
         subsidiaryOptions(),
         loadProjectCockpit(orgId, openProject.project.id as string),
+        db.execute(sql`select id, name from project_types where org_id = ${orgId} and is_active order by sort_order, name`) as any,
       ])
-    : [null, [], null]
+    : [null, [], null, null]
+  const projectTypes = (projectTypesRes?.rows ?? []) as { id: string; name: string }[]
 
   const resolvedForm = openProject
     ? await resolveFormLayout({
@@ -88,6 +90,7 @@ export default async function Projects({
                 canManage={canManage}
                 layout={resolvedForm?.layout}
                 cockpit={cockpit}
+                projectTypes={projectTypes}
               />
             ) : null}
           </>

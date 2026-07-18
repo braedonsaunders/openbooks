@@ -122,7 +122,8 @@
     "noTasks": "Aucune tâche pour l’instant.",
     "taskNamePlaceholder": "Nom de la tâche…",
     "removeTaskAria": "Retirer la tâche",
-    "customFields": "Champs personnalisés"
+    "customFields": "Champs personnalisés",
+    "projectType": "Type de projet"
   },
   "cockpit": {
     "subtitle": "Poste de pilotage des coûts de chantier",

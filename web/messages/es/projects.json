@@ -122,7 +122,8 @@
     "noTasks": "Aún no hay tareas.",
     "taskNamePlaceholder": "Nombre de la tarea…",
     "removeTaskAria": "Quitar tarea",
-    "customFields": "Campos personalizados"
+    "customFields": "Campos personalizados",
+    "projectType": "Tipo de proyecto"
   },
   "cockpit": {
     "subtitle": "Panel de control de costos de obra",

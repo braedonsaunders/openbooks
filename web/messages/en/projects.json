@@ -122,7 +122,8 @@
     "noTasks": "No tasks yet.",
     "taskNamePlaceholder": "Task name…",
     "removeTaskAria": "Remove task",
-    "customFields": "Custom fields"
+    "customFields": "Custom fields",
+    "projectType": "Project type"
   },
   "cockpit": {
     "subtitle": "Job-costing cockpit",

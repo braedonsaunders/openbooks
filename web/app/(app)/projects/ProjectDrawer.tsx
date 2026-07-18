@@ -93,6 +93,7 @@ export function ProjectDrawer({
   basePath = '/projects',
   layout,
   cockpit,
+  projectTypes = [],
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
@@ -103,6 +104,8 @@ export function ProjectDrawer({
   layout?: FormLayoutConfig
   /** Cockpit data for the financial/time/charges/billing/transactions tabs. */
   cockpit: ProjectCockpitData
+  /** Configurable project types (Setup → Project Types) for the selector. */
+  projectTypes?: { id: string; name: string }[]
 }) {
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
@@ -145,6 +148,7 @@ export function ProjectDrawer({
   const [managerId, setManagerId] = useState<string>(pr.manager_id ?? '')
   const [status, setStatus] = useState<string>(pr.status ?? 'active')
   const [billingMethod, setBillingMethod] = useState<string>(pr.billing_method ?? '')
+  const [projectTypeId, setProjectTypeId] = useState<string>(pr.project_type_id ?? '')
   const [customerPoNumber, setCustomerPoNumber] = useState<string>(pr.customer_po_number ?? '')
   const [startsOn, setStartsOn] = useState<string>(pr.starts_on ?? '')
   const [endsOn, setEndsOn] = useState<string>(pr.ends_on ?? '')
@@ -205,6 +209,7 @@ export function ProjectDrawer({
       managerId: managerId || null,
       status,
       billingMethod: billingMethod || null,
+      projectTypeId: projectTypeId || null,
       customerPoNumber: customerPoNumber || null,
       startsOn: startsOn || null,
       endsOn: endsOn || null,
@@ -224,7 +229,7 @@ export function ProjectDrawer({
           estimatedCost: task.estimatedCost || null,
         })),
     }),
-    [name, code, customerId, foremanId, managerId, status, billingMethod, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
+    [name, code, customerId, foremanId, managerId, status, billingMethod, projectTypeId, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
   )
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
@@ -245,6 +250,7 @@ export function ProjectDrawer({
     setManagerId(pr.manager_id ?? '')
     setStatus(pr.status ?? 'active')
     setBillingMethod(pr.billing_method ?? '')
+    setProjectTypeId(pr.project_type_id ?? '')
     setCustomerPoNumber(pr.customer_po_number ?? '')
     setStartsOn(pr.starts_on ?? '')
     setEndsOn(pr.ends_on ?? '')
@@ -558,6 +564,15 @@ export function ProjectDrawer({
     >
       {tab === 'overview' ? (
         <div className="space-y-7 p-1">
+          {projectTypes.length > 0 ? (
+            <div className="max-w-sm space-y-1.5">
+              <Label>{t('drawer.projectType')}</Label>
+              <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)} disabled={ro}>
+                <option value="">—</option>
+                {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+              </Select>
+            </div>
+          ) : null}
           <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderProjectField} />
 
           {/* WBS tasks (cost budget) */}
