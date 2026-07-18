@@ -219,5 +219,29 @@
     "done": "Recognized {delta} (earned {earned} at {pct}%)",
     "nothing": "Already fully recognized to date",
     "failed": "Recognition failed"
+  },
+  "measures": {
+    "invoiced_to_date": "Invoiced to date",
+    "could_be_invoiced": "Could be invoiced",
+    "total_price": "Total job price",
+    "actual_cost": "Actual cost",
+    "committed_cost": "Committed cost",
+    "total_cost": "Total job cost",
+    "cost_budget": "Cost budget",
+    "remaining_budget": "Remaining budget",
+    "gross_profit": "Gross profit",
+    "margin_pct": "Margin",
+    "revenue_posted": "Revenue posted",
+    "labor_cost": "Labor cost",
+    "burden": "Burden",
+    "billable_value": "Billable value",
+    "unbilled_billable": "Unbilled billable",
+    "hints": {
+      "invoiced_to_date": "Posted customer invoices tagged to this project.",
+      "could_be_invoiced": "Value that can still be invoiced.",
+      "committed_cost": "Open purchase-order commitments.",
+      "total_price": "Contract / selling price of the job.",
+      "total_cost": "All cost incurred and committed."
+    }
   }
 }

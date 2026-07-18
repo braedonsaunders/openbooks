@@ -219,5 +219,29 @@
     "done": "Comptabilisé {delta} (acquis {earned} à {pct} %)",
     "nothing": "Déjà entièrement comptabilisé à ce jour",
     "failed": "Échec de la comptabilisation"
+  },
+  "measures": {
+    "invoiced_to_date": "Facturé à ce jour",
+    "could_be_invoiced": "Facturable",
+    "total_price": "Prix total du projet",
+    "actual_cost": "Coût réel",
+    "committed_cost": "Coût engagé",
+    "total_cost": "Coût total du projet",
+    "cost_budget": "Budget de coûts",
+    "remaining_budget": "Budget restant",
+    "gross_profit": "Bénéfice brut",
+    "margin_pct": "Marge",
+    "revenue_posted": "Revenus comptabilisés",
+    "labor_cost": "Coût de main-d’œuvre",
+    "burden": "Charges indirectes",
+    "billable_value": "Valeur facturable",
+    "unbilled_billable": "Facturable non facturé",
+    "hints": {
+      "invoiced_to_date": "Factures clients comptabilisées liées à ce projet.",
+      "could_be_invoiced": "Valeur encore facturable.",
+      "committed_cost": "Engagements de bons de commande ouverts.",
+      "total_price": "Prix contractuel / de vente du projet.",
+      "total_cost": "Total des coûts engagés et réels."
+    }
   }
 }

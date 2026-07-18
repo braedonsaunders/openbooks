@@ -19,12 +19,11 @@ import type {
  * `nexttransactionlinelink` (linktype 'Payment'); verification reads the
  * posted GL (`transactionaccountingline`) and per-transaction unpaid balances.
  *
- * KNOWN ROLE LIMITATION (surfaced by the live probes, must be fixed in
- * NetSuite by granting the integration role the permissions): CustPymt,
- * Deposit and deletedrecord are invisible to the current token's role — their
- * GL and headers are filtered out server-side. Everything this adapter reads
- * is the role-visible view; once the role can see them, they import natively
- * with zero code change (TTYPE_KIND already classifies them).
+ * AR/DELETION VISIBILITY: the integration role now has the permissions for
+ * CustPymt, Deposit and deletedrecord — all three are visible to SuiteQL, so
+ * customer payments and deposits import natively (TTYPE_KIND classifies them)
+ * and the deleted-record feed is available. Deletions remain report-only:
+ * voiding an already-posted document is a deliberate act, never automatic.
  */
 
 const NS_ACCOUNT_TYPE: Record<string, string> = {
@@ -300,12 +299,27 @@ export class NetSuiteSource implements MigrationSource {
 
   private async projects(): Promise<SourceEntity[]> {
     const rows = await this.q<Record<string, string>>(`
-      SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype, projectprice,
+      SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype,
              customer, projectmanager, custentityproject_foreman AS foreman,
              custentityproject_po_number AS ponumber,
              TO_CHAR(startdate, 'MM/DD/YYYY') AS startdate,
              TO_CHAR(scheduledenddate, 'MM/DD/YYYY') AS enddate
         FROM job`);
+    // `projectprice` (fixed-bid contract price) is feature-gated: it exists only
+    // when Project Management / charge-based billing is enabled, and SuiteQL
+    // rejects the identifier outright in accounts without it. Fetch it in a
+    // separate guarded query so a missing optional field degrades contractValue
+    // to null instead of aborting the whole migration.
+    const priceByRef = new Map<string, string>();
+    try {
+      for (const p of await this.q<{ id: string; projectprice?: string }>(
+        "SELECT id, projectprice FROM job WHERE projectprice IS NOT NULL",
+      )) {
+        if (s(p.projectprice)) priceByRef.set(String(p.id), String(p.projectprice));
+      }
+    } catch {
+      // projectprice not available in this account's feature set — leave unset.
+    }
     return rows.map((j) => ({
       sourceRef: String(j.id),
       fields: {
@@ -316,7 +330,7 @@ export class NetSuiteSource implements MigrationSource {
         billingMethod: NS_BILLING[String(j.jobbillingtype)] ?? null,
         // NetSuite `projectprice` — the fixed-bid contract price. T&M/cost-billed
         // jobs price from billable work, so 0/blank stays unset.
-        contractValue: num(j.projectprice),
+        contractValue: num(priceByRef.get(String(j.id))),
         customerRef: s(j.customer),
         foremanRef: s(j.foreman),
         managerRef: s(j.projectmanager),
@@ -581,7 +595,10 @@ export class NetSuiteSource implements MigrationSource {
         amount: String(l.foreignamount),
       }));
 
-    // deletedrecord is not visible to the current role — deletions unreported.
+    // The deletedrecord feed is now role-visible; on a FULL sweep the reconciler
+    // already derives deletions from refs that vanished from the pulled universe
+    // (see runSync step 5), so we leave deletedRefs empty here rather than
+    // mapping the account-wide deletedrecord table (all record types) per pull.
     return { documents, applications, deletedRefs: [], syncedThrough, unbuildable };
   }
 

@@ -1,17 +1,20 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { projectCostSummary, projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
+import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
+import { resolveProjectFinancials } from '../../../lib/project-financials'
+import { loadProjectType } from '../../../lib/project-type'
 import { listBillingRequests } from '../../../lib/billing-requests'
 import type { ProjectCockpitData } from './ProjectDrawer'
 
 /**
- * Loads everything the project flyout's cockpit tabs need (financials, time,
- * unbilled, charges, billing requests, transactions). Server-only; called from
- * the projects list page when a project flyout is open.
+ * Loads everything the project flyout's cockpit tabs need. The Financials tab is
+ * now profile-driven: the project's project type supplies the P&L measure
+ * definitions + layout, and resolveProjectFinancials computes the measures.
  */
 export async function loadProjectCockpit(orgId: string, projectId: string): Promise<ProjectCockpitData> {
-  const [summary, time, unbilled, billingRequests, chargeRes, itemRes, recognizedRes] = await Promise.all([
-    projectCostSummary(orgId, projectId),
+  const projectType = await loadProjectType(orgId, projectId)
+  const [financials, time, unbilled, billingRequests, chargeRes, itemRes, recognizedRes] = await Promise.all([
+    resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     projectUnbilled(orgId, projectId),
     listBillingRequests(orgId, projectId),
@@ -39,19 +42,13 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
 
   return {
     financials: {
-      contractValue: summary.budget.contractValue,
-      costBudget: summary.budget.cost,
-      actualCost: summary.actual.cost,
-      committedCost: summary.committed.cost,
-      projectedCost: summary.forecast.projectedCost,
-      remainingBudget: summary.forecast.remainingBudget,
-      actualRevenue: summary.actual.revenue,
-      margin: summary.actual.margin,
-      unbilledRevenue: unbilled.revenue,
-      percentSpent: summary.forecast.percentSpent,
-      costByCategory: summary.costByCategory,
-      costByAccount: summary.costByAccount,
+      measures: financials.measures,
+      layout: projectType.financialProfile.layout,
+      costByCategory: financials.costByCategory,
+      costByAccount: financials.costByAccount,
+      billingMethod: financials.billingMethod,
     },
+    projectType: { key: projectType.key, name: projectType.name },
     time,
     unbilled,
     billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
@@ -62,6 +59,6 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       billValue: charges.reduce((a, c) => a + Number(c.billValue), 0).toFixed(2),
     },
     recognizedToDate,
-    transactions: summary.documents as ProjectCockpitData['transactions'],
+    transactions: financials.documents as ProjectCockpitData['transactions'],
   }
 }
