@@ -106,6 +106,20 @@ export interface BackupProfile {
   allowedBackupTypes: string[];
 }
 
+/**
+ * An override layer applied on top of a project type's invoicing/backup
+ * profiles. Set at the CUSTOMER level (parties.custom.invoicingPreference) and
+ * the PROJECT level (projects.custom.invoicingPreference); the effective
+ * preference resolves type default ← customer ← project (project wins). Every
+ * field is optional — undefined/null means "inherit the lower layer".
+ */
+export interface InvoicingPreference {
+  defaultBasis?: string | null;
+  backupRequired?: boolean | null;
+  backupType?: string | null;
+  invoiceTemplateId?: string | null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Table                                                              */
 /* ------------------------------------------------------------------ */

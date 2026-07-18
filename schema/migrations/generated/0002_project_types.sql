@@ -22,3 +22,7 @@ CREATE TABLE IF NOT EXISTS "project_types" (
 CREATE UNIQUE INDEX IF NOT EXISTS "project_types_org_key" ON "project_types" ("org_id", "key");
 --> statement-breakpoint
 ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "project_type_id" uuid;
+--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "invoicing_preference" jsonb;
+--> statement-breakpoint
+ALTER TABLE "parties" ADD COLUMN IF NOT EXISTS "invoicing_preference" jsonb;

@@ -10,6 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
+import type { InvoicingPreference } from "./project-types";
 
 /**
  * One party model. A party is a real-world person or company; ROLES make it
@@ -37,6 +38,8 @@ export const parties = pgTable(
      */
     subsidiaryId: uuid("subsidiary_id"),
     isActive: boolean("is_active").notNull().default(true),
+    /** Customer-level invoicing/backup override (cascades over project type). */
+    invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },

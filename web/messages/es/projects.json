@@ -244,5 +244,17 @@
       "total_price": "Precio contractual / de venta del trabajo.",
       "total_cost": "Todos los costos incurridos y comprometidos."
     }
+  },
+  "invoicingPref": {
+    "heading": "Preferencias de facturación",
+    "defaultBasis": "Base de facturación predeterminada",
+    "backupRequired": "Respaldo requerido",
+    "backupType": "Formato de respaldo",
+    "inherit": "Heredar",
+    "inheritsHint": "hereda: {value}",
+    "yes": "Sí",
+    "no": "No",
+    "customerHint": "Anula el tipo de proyecto para este cliente.",
+    "projectHint": "Anula el tipo/cliente para este proyecto."
   }
 }

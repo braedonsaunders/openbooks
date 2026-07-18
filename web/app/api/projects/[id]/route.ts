@@ -57,6 +57,7 @@ interface PatchBody {
   status?: string
   billingMethod?: string | null
   projectTypeId?: string | null
+  invoicingPreference?: Record<string, unknown> | null
   customerPoNumber?: string | null
   startsOn?: string | null
   endsOn?: string | null
@@ -183,6 +184,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Both live in the same `custom` blob, so build one merged object: start
   // from the existing custom, apply the contractValue delta, then overlay the
   // validated custom-field values (unknown keys already stripped by validate).
+  // Native project-level invoicing override (a real column, not custom jsonb).
+  let invoicingPref: Record<string, unknown> | null | undefined
+  if (body.invoicingPreference !== undefined) {
+    const p = body.invoicingPreference
+    invoicingPref = p == null || (typeof p === 'object' && Object.values(p).every((v) => v == null)) ? null : p
+  }
+
   let mergedCustom: Record<string, unknown> | undefined
   if (body.contractValue !== undefined || body.custom !== undefined) {
     const base = { ...(existing.rows[0].custom ?? {}) }
@@ -250,6 +258,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     update projects set
       name = ${name !== undefined ? name : sql`name`},
       project_type_id = ${projectTypeId !== undefined ? projectTypeId : sql`project_type_id`},
+      invoicing_preference = ${invoicingPref !== undefined ? (invoicingPref === null ? sql`null` : sql`${JSON.stringify(invoicingPref)}::jsonb`) : sql`invoicing_preference`},
       code = ${body.code !== undefined ? strOrNull(body.code) : sql`code`},
       customer_id = ${customerId !== undefined ? customerId : sql`customer_id`},
       foreman_id = ${foremanId !== undefined ? foremanId : sql`foreman_id`},

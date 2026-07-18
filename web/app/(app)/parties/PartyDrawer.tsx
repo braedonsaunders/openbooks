@@ -22,6 +22,7 @@ import {
   UrlDrawer,
   cn,
 } from '@openbooks/ui'
+import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
@@ -149,10 +150,12 @@ export function PartyDrawer({
 }) {
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
+  const tInv = useTranslations('projects.invoicingPref')
   const router = useRouter()
   const [tab, setTab] = useState<PartyTab>(initialTab)
   useEffect(() => setTab(initialTab), [initialTab])
   const p = payload.party
+  const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((payload.party.invoicing_preference as InvoicingPref) ?? {})
   // 'New party' is the server-side draft sentinel stored in the DB — compare
   // and persist it verbatim; only the *displayed* fallback is translated.
   const isPlaceholderName = p.display_name === 'New party'
@@ -248,6 +251,7 @@ export function PartyDrawer({
       phone,
       website,
       custom: customValues,
+      invoicingPreference: invoicingPref,
       subsidiaryId: multiSubsidiary ? subsidiaryId || null : undefined,
       additionalSubsidiaryIds: multiSubsidiary
         ? [...additionalSubsidiaryIds].filter((id) => id !== subsidiaryId)
@@ -292,7 +296,7 @@ export function PartyDrawer({
         isActive: contact.isActive === 'true',
       })),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -316,6 +320,7 @@ export function PartyDrawer({
     setPhone(p.phone ?? '')
     setWebsite(p.website ?? '')
     setCustomValues(p.custom ?? {})
+    setInvoicingPref((p.invoicing_preference as InvoicingPref) ?? {})
     setSubsidiaryId(p.subsidiary_id ?? rootSubsidiaryId)
     setAdditionalSubsidiaryIds(new Set(payload.additionalSubsidiaryIds ?? []))
     setCustomer({
@@ -665,6 +670,7 @@ export function PartyDrawer({
               </label>
             ) : null}
             {role === 'customer' || customer.enabled ? (
+              <>
               <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-3`}>
                 <div className={field}>
                   <Label>{t('paymentTerms')}</Label>
@@ -724,6 +730,14 @@ export function PartyDrawer({
                   </Select>
                 </div>
               </div>
+              <div className="mt-4 space-y-2">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tInv('heading')}</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{tInv('customerHint')}</p>
+                </div>
+                <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
+              </div>
+              </>
             ) : null}
           </div>
           ) : null}
