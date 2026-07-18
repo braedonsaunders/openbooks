@@ -305,20 +305,19 @@ export class NetSuiteSource implements MigrationSource {
              TO_CHAR(startdate, 'MM/DD/YYYY') AS startdate,
              TO_CHAR(scheduledenddate, 'MM/DD/YYYY') AS enddate
         FROM job`);
-    // `projectprice` (fixed-bid contract price) is feature-gated: it exists only
-    // when Project Management / charge-based billing is enabled, and SuiteQL
-    // rejects the identifier outright in accounts without it. Fetch it in a
-    // separate guarded query so a missing optional field degrades contractValue
-    // to null instead of aborting the whole migration.
+    // `jobprice` (fixed-bid contract price; the RESTlet reads the same field) is
+    // feature-gated on some accounts, so fetch it in a separate guarded query —
+    // a missing optional field degrades contractValue to null instead of
+    // aborting the whole migration. (SuiteQL rejects `projectprice`.)
     const priceByRef = new Map<string, string>();
     try {
-      for (const p of await this.q<{ id: string; projectprice?: string }>(
-        "SELECT id, projectprice FROM job WHERE projectprice IS NOT NULL",
+      for (const p of await this.q<{ id: string; jobprice?: string }>(
+        "SELECT id, jobprice FROM job WHERE jobprice IS NOT NULL",
       )) {
-        if (s(p.projectprice)) priceByRef.set(String(p.id), String(p.projectprice));
+        if (s(p.jobprice)) priceByRef.set(String(p.id), String(p.jobprice));
       }
     } catch {
-      // projectprice not available in this account's feature set — leave unset.
+      // jobprice not available in this account's feature set — leave unset.
     }
     return rows.map((j) => ({
       sourceRef: String(j.id),
@@ -328,7 +327,7 @@ export class NetSuiteSource implements MigrationSource {
         isActive: !isT(j.isinactive),
         status: NS_PROJECT_STATUS[String(j.entitystatus)] ?? "active",
         billingMethod: NS_BILLING[String(j.jobbillingtype)] ?? null,
-        // NetSuite `projectprice` — the fixed-bid contract price. T&M/cost-billed
+        // NetSuite `jobprice` — the fixed-bid contract price. T&M/cost-billed
         // jobs price from billable work, so 0/blank stays unset.
         contractValue: num(priceByRef.get(String(j.id))),
         customerRef: s(j.customer),
