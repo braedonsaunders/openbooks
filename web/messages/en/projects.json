@@ -244,5 +244,17 @@
       "total_price": "Contract / selling price of the job.",
       "total_cost": "All cost incurred and committed."
     }
+  },
+  "invoicingPref": {
+    "heading": "Invoicing preferences",
+    "defaultBasis": "Default billing basis",
+    "backupRequired": "Backup required",
+    "backupType": "Backup format",
+    "inherit": "Inherit",
+    "inheritsHint": "inherits: {value}",
+    "yes": "Yes",
+    "no": "No",
+    "customerHint": "Override the project type for this customer.",
+    "projectHint": "Override the type/customer for this project."
   }
 }

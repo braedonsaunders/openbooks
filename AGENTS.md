@@ -208,6 +208,13 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
 
 - Schema files live in `schema/src/` (one domain per file) using the helpers
   (`id()`, `orgRef()`, `auditColumns`, `money()`), org-scoped via `org_id`.
+- NON-NEGOTIABLE — a **native capability you build is a real column/table, never
+  the `custom` jsonb blob**. `custom` is reserved for user/admin-defined custom
+  fields (the customization registry). First-class product features (settings,
+  preferences, profiles, links, flags) get typed columns with a `.$type<…>()`
+  shape and, where relational, their own table + FK — e.g. `projects.
+  invoicing_preference` / `project_types`, not `custom.invoicingPreference`.
+  Storing a feature in `custom` to skip a migration is a bug.
 - FKs live in `schema/migrations/referential-integrity.sql` (the single
   authoritative FK map), kernel invariants in `kernel-constraints.sql`.
 - Migration flow: export new tables from `schema/src/index.ts` → `cd schema &&

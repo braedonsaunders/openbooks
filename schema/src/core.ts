@@ -13,6 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, fxRate, id, orgRef } from "./helpers";
+import type { InvoicingPreference } from "./project-types";
 
 /**
  * An org is a TENANT (NetSuite: account) — one sealed data space, one login
@@ -215,6 +216,9 @@ export const projects = pgTable(
     // The configurable project type carrying the profitability/invoicing/backup
     // profiles. `billing_method` stays as a back-compat coarse classifier.
     projectTypeId: uuid("project_type_id"), // → project_types
+    // Native invoicing/backup override for this project (cascades over the type
+    // and customer). A first-class capability, not a user custom field.
+    invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),
     customerPoNumber: text("customer_po_number"),
     startsOn: date("starts_on"),
     endsOn: date("ends_on"),

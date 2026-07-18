@@ -115,6 +115,7 @@ interface PatchBody {
   phone?: string | null
   website?: string | null
   custom?: Record<string, unknown>
+  invoicingPreference?: Record<string, unknown> | null
   roles?: {
     customer?: CustomerRoleInput
     vendor?: VendorRoleInput
@@ -212,10 +213,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (found.rows.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary')
   }
 
+  // Native customer-level invoicing override (a real column, not custom jsonb).
+  let invoicingPref: Record<string, unknown> | null | undefined
+  if (body.invoicingPreference !== undefined) {
+    const p = body.invoicingPreference
+    invoicingPref = p == null || (typeof p === 'object' && Object.values(p).every((v) => v == null)) ? null : p
+  }
+
   try {
     await db.execute(sql`
       update parties set
         kind = coalesce(${body.kind ?? null}, kind),
+        invoicing_preference = ${invoicingPref !== undefined ? (invoicingPref === null ? sql`null` : sql`${JSON.stringify(invoicingPref)}::jsonb`) : sql`invoicing_preference`},
         display_name = ${displayName !== undefined ? displayName : sql`display_name`},
         legal_name = ${body.legalName !== undefined ? strOrNull(body.legalName) : sql`legal_name`},
         short_code = ${body.shortCode !== undefined ? strOrNull(body.shortCode) : sql`short_code`},

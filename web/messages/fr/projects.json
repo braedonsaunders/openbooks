@@ -244,5 +244,17 @@
       "total_price": "Prix contractuel / de vente du projet.",
       "total_cost": "Total des coûts engagés et réels."
     }
+  },
+  "invoicingPref": {
+    "heading": "Préférences de facturation",
+    "defaultBasis": "Base de facturation par défaut",
+    "backupRequired": "Justificatif requis",
+    "backupType": "Format du justificatif",
+    "inherit": "Hériter",
+    "inheritsHint": "hérite : {value}",
+    "yes": "Oui",
+    "no": "Non",
+    "customerHint": "Remplace le type de projet pour ce client.",
+    "projectHint": "Remplace le type/client pour ce projet."
   }
 }

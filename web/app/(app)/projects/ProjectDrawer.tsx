@@ -10,6 +10,7 @@ import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } f
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
+import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
@@ -149,6 +150,7 @@ export function ProjectDrawer({
   const [status, setStatus] = useState<string>(pr.status ?? 'active')
   const [billingMethod, setBillingMethod] = useState<string>(pr.billing_method ?? '')
   const [projectTypeId, setProjectTypeId] = useState<string>(pr.project_type_id ?? '')
+  const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((pr.invoicing_preference as InvoicingPref) ?? {})
   const [customerPoNumber, setCustomerPoNumber] = useState<string>(pr.customer_po_number ?? '')
   const [startsOn, setStartsOn] = useState<string>(pr.starts_on ?? '')
   const [endsOn, setEndsOn] = useState<string>(pr.ends_on ?? '')
@@ -210,6 +212,7 @@ export function ProjectDrawer({
       status,
       billingMethod: billingMethod || null,
       projectTypeId: projectTypeId || null,
+      invoicingPreference: invoicingPref,
       customerPoNumber: customerPoNumber || null,
       startsOn: startsOn || null,
       endsOn: endsOn || null,
@@ -229,7 +232,7 @@ export function ProjectDrawer({
           estimatedCost: task.estimatedCost || null,
         })),
     }),
-    [name, code, customerId, foremanId, managerId, status, billingMethod, projectTypeId, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
+    [name, code, customerId, foremanId, managerId, status, billingMethod, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
   )
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
@@ -251,6 +254,7 @@ export function ProjectDrawer({
     setStatus(pr.status ?? 'active')
     setBillingMethod(pr.billing_method ?? '')
     setProjectTypeId(pr.project_type_id ?? '')
+    setInvoicingPref((pr.invoicing_preference as InvoicingPref) ?? {})
     setCustomerPoNumber(pr.customer_po_number ?? '')
     setStartsOn(pr.starts_on ?? '')
     setEndsOn(pr.ends_on ?? '')
@@ -574,6 +578,15 @@ export function ProjectDrawer({
             </div>
           ) : null}
           <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderProjectField} />
+
+          {/* Project-level invoicing/backup override (cascades over type ← customer). */}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('invoicingPref.heading')}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('invoicingPref.projectHint')}</p>
+            </div>
+            <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
+          </section>
 
           {/* WBS tasks (cost budget) */}
           <section className="space-y-3">
