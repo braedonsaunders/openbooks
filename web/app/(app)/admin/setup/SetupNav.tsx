@@ -70,6 +70,7 @@ export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: 
   const tClose = useTranslations('close.setup')
   const td = useTranslations('data')
   const tCrm = useTranslations('crm')
+  const tProjectTypes = useTranslations('projectTypes')
   const pathname = usePathname()
   const byGroup = setupEntitiesByGroup()
 
@@ -113,6 +114,15 @@ export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: 
               : group.key === 'currency'
               ? [
                   { href: '/admin/setup/fx-provider', label: t('fxProvider.title'), iconKey: 'coins' },
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
+                ]
+              : group.key === 'billing'
+              ? [
+                  { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),
