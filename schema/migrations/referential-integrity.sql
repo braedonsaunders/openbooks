@@ -59,7 +59,14 @@ alter table projects
   add foreign key (parent_id) references projects(id),
   add foreign key (customer_id) references parties(id),
   add foreign key (foreman_id) references parties(id),
-  add foreign key (manager_id) references parties(id);
+  add foreign key (manager_id) references parties(id),
+  add foreign key (project_type_id) references project_types(id);
+alter table project_types
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (created_by) references users(id) on delete set null,
+  add foreign key (updated_by) references users(id) on delete set null;
+create index if not exists project_types_org on project_types (org_id);
+create index if not exists projects_project_type on projects (project_type_id);
 -- intercompany_pairs FKs live in generated/0028_subsidiaries.sql (the table
 -- was rebuilt there from org refs to subsidiary refs, with its FK set).
 alter table fx_provider_configs

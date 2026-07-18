@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, env, pool } from "../engine/src/db.ts";
 import { ensureCloseDefaults } from "../engine/src/close.ts";
+import { seedProjectTypes } from "../engine/src/seed-project-types.ts";
 import { BUILT_IN_ROLES } from "../web/lib/permissions.ts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -283,6 +284,7 @@ async function main(): Promise<void> {
   await ensureReadRole();
   const orgId = await ensureOrg();
   await seedRoles(orgId);
+  await seedProjectTypes(orgId);
   await seedAdmin(orgId);
   console.log("[bootstrap] done");
   await pool.end();

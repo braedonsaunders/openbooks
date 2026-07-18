@@ -53,6 +53,7 @@ interface ProjectPayload {
 /** Everything the cockpit tabs need — loaded server-side alongside the project. */
 export interface ProjectCockpitData {
   financials: FinancialsData
+  projectType: { key: string; name: string }
   time: CostTimeData
   unbilled: UnbilledClient
   billingRequests: BillingRequestClient[]

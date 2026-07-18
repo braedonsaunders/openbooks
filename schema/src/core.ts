@@ -212,6 +212,9 @@ export const projects = pgTable(
     billingMethod: text("billing_method", {
       enum: ["time_and_materials", "fixed_price", "cost_plus"],
     }),
+    // The configurable project type carrying the profitability/invoicing/backup
+    // profiles. `billing_method` stays as a back-compat coarse classifier.
+    projectTypeId: uuid("project_type_id"), // → project_types
     customerPoNumber: text("customer_po_number"),
     startsOn: date("starts_on"),
     endsOn: date("ends_on"),

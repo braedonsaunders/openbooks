@@ -219,5 +219,29 @@
     "done": "Reconocido {delta} (devengado {earned} al {pct}%)",
     "nothing": "Ya reconocido totalmente a la fecha",
     "failed": "Falló el reconocimiento"
+  },
+  "measures": {
+    "invoiced_to_date": "Facturado a la fecha",
+    "could_be_invoiced": "Se puede facturar",
+    "total_price": "Precio total del trabajo",
+    "actual_cost": "Costo real",
+    "committed_cost": "Costo comprometido",
+    "total_cost": "Costo total del trabajo",
+    "cost_budget": "Presupuesto de costos",
+    "remaining_budget": "Presupuesto restante",
+    "gross_profit": "Utilidad bruta",
+    "margin_pct": "Margen",
+    "revenue_posted": "Ingresos contabilizados",
+    "labor_cost": "Costo de mano de obra",
+    "burden": "Carga fabril",
+    "billable_value": "Valor facturable",
+    "unbilled_billable": "Facturable no facturado",
+    "hints": {
+      "invoiced_to_date": "Facturas de clientes contabilizadas de este proyecto.",
+      "could_be_invoiced": "Valor que aún se puede facturar.",
+      "committed_cost": "Compromisos de órdenes de compra abiertas.",
+      "total_price": "Precio contractual / de venta del trabajo.",
+      "total_cost": "Todos los costos incurridos y comprometidos."
+    }
   }
 }
