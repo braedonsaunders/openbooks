@@ -32,5 +32,15 @@
   "recognition": "Reconocimiento de ingresos",
   "backupRequired": "Respaldo requerido",
   "defaultBackupType": "Tipo de respaldo predeterminado",
-  "allowedBackupTypes": "Tipos de respaldo permitidos"
+  "allowedBackupTypes": "Tipos de respaldo permitidos",
+  "layout": "Diseño del estado de resultados",
+  "addLine": "Agregar línea",
+  "moveUp": "Subir",
+  "moveDown": "Bajar",
+  "removeLine": "Quitar línea",
+  "variant": {
+    "line": "Línea",
+    "subtotal": "Subtotal",
+    "total": "Total"
+  }
 }

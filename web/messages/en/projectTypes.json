@@ -32,5 +32,15 @@
   "recognition": "Revenue recognition",
   "backupRequired": "Backup required",
   "defaultBackupType": "Default backup type",
-  "allowedBackupTypes": "Allowed backup types"
+  "allowedBackupTypes": "Allowed backup types",
+  "layout": "P&L statement layout",
+  "addLine": "Add line",
+  "moveUp": "Move up",
+  "moveDown": "Move down",
+  "removeLine": "Remove line",
+  "variant": {
+    "line": "Line",
+    "subtotal": "Subtotal",
+    "total": "Total"
+  }
 }

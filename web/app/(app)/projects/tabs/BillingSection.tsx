@@ -17,6 +17,17 @@ export interface UnbilledClient {
   costLineCount: number
 }
 
+/** Effective invoicing/backup defaults for this project, resolved through the
+ *  project-type ← customer ← project cascade. Seeds the request-billing form. */
+export interface EffectiveInvoicingClient {
+  allowedBases: string[]
+  defaultBasis: string
+  backupRequired: boolean
+  backupType: string
+  allowedBackupTypes: string[]
+  source: { basis: string; backupRequired: string; backupType: string; template: string }
+}
+
 export interface BillingRequestClient {
   id: string
   requestNumber: string
@@ -47,6 +58,7 @@ export function BillingSection({
   projectId,
   unbilled,
   requests,
+  invoicing,
   canManage,
   formOpen,
   onFormOpenChange,
@@ -54,6 +66,7 @@ export function BillingSection({
   projectId: string
   unbilled: UnbilledClient
   requests: BillingRequestClient[]
+  invoicing: EffectiveInvoicingClient
   canManage: boolean
   /** Request-billing form is opened from the flyout Actions menu. */
   formOpen: boolean
@@ -64,15 +77,24 @@ export function BillingSection({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
+  // Seed the request-billing form from the resolved cascade defaults.
   const [invoiceType, setInvoiceType] = useState('progress')
-  const [basis, setBasis] = useState('date_range')
+  const [basis, setBasis] = useState(invoicing.defaultBasis)
   const [drawAmount, setDrawAmount] = useState('')
   const [startDate, setStartDate] = useState('')
   const [cutoffDate, setCutoffDate] = useState('')
   const [invoiceDescription, setInvoiceDescription] = useState('')
   const [customerPo, setCustomerPo] = useState('')
-  const [backupRequired, setBackupRequired] = useState(true)
-  const [backupType, setBackupType] = useState('costed_timesheets')
+  const [backupRequired, setBackupRequired] = useState(invoicing.backupRequired)
+  const [backupType, setBackupType] = useState(invoicing.backupType)
+
+  // The project type constrains which backup formats are offered; fall back to the
+  // full catalog if it didn't restrict them. 'none' is handled by the required toggle.
+  const ALL_BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only']
+  const allowed = invoicing.allowedBackupTypes.filter((b) => b !== 'none')
+  const backupTypeOptions = allowed.length ? allowed : ALL_BACKUP_TYPES
+  const ALL_BASES = ['date_range', 'draw_amount', 'time_selection', 'milestone']
+  const basisOptions = invoicing.allowedBases.length ? invoicing.allowedBases : ALL_BASES
 
   async function submit() {
     setBusy(true)
@@ -175,10 +197,9 @@ export function BillingSection({
               <div className={field}>
                 <Label>{t('basis')}</Label>
                 <Select value={basis} onChange={(e) => setBasis(e.target.value)}>
-                  <option value="date_range">{t('basisOpt.date_range')}</option>
-                  <option value="draw_amount">{t('basisOpt.draw_amount')}</option>
-                  <option value="time_selection">{t('basisOpt.time_selection')}</option>
-                  <option value="milestone">{t('basisOpt.milestone')}</option>
+                  {basisOptions.map((b) => (
+                    <option key={b} value={b}>{t(`basisOpt.${b}`)}</option>
+                  ))}
                 </Select>
               </div>
               {basis === 'draw_amount' ? (
@@ -218,11 +239,9 @@ export function BillingSection({
                 <div className={field}>
                   <Label>{t('backupType')}</Label>
                   <Select value={backupType} onChange={(e) => setBackupType(e.target.value)}>
-                    <option value="costed_timesheets">{t('backup.costed_timesheets')}</option>
-                    <option value="timesheets_purchases">{t('backup.timesheets_purchases')}</option>
-                    <option value="purchases">{t('backup.purchases')}</option>
-                    <option value="purchases_shop_time">{t('backup.purchases_shop_time')}</option>
-                    <option value="quote_only">{t('backup.quote_only')}</option>
+                    {backupTypeOptions.map((bt) => (
+                      <option key={bt} value={bt}>{t(`backup.${bt}`)}</option>
+                    ))}
                   </Select>
                 </div>
               ) : null}
