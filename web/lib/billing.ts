@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, mulRate, sum } from '@openbooks/engine/src/money.ts'
 import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
+import { loadProjectType } from './project-type'
 import { nextDocumentNumber } from './bills'
 
 /**
@@ -54,6 +55,10 @@ export async function generateInvoiceFromBillingRequest(
 
     const billingMethod: string = req.billing_method_snapshot ?? project.billing_method ?? 'time_and_materials'
     const markup = markupMultiplier((project.custom ?? {}).markupPercent)
+    // The project type's invoicing profile governs line building + the credit
+    // account. Built-in types reproduce the legacy billing_method behaviour.
+    const ptype = await loadProjectType(orgId, project.id)
+    const invoicing = ptype.invoicingProfile
 
     const org = (await tx.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
       rows: { base_currency: string }[]
@@ -74,7 +79,7 @@ export async function generateInvoiceFromBillingRequest(
     // double-count. Inert (falls back to income) unless the account is mapped.
     const recog = await recognitionAccounts(orgId)
     const fixedPriceCreditAcct =
-      billingMethod === 'fixed_price' && recog.unbilledReceivable ? recog.unbilledReceivable : defaultIncomeId
+      invoicing.revenueAccount === 'unbilled_receivable' && recog.unbilledReceivable ? recog.unbilledReceivable : defaultIncomeId
 
     // -- build the invoice lines ------------------------------------------
     interface BuiltLine {
@@ -110,7 +115,7 @@ export async function generateInvoiceFromBillingRequest(
         timeTypeId: null,
         sourceCostLineId: null,
       })
-    } else if (req.basis === 'milestone' || billingMethod === 'fixed_price') {
+    } else if (req.basis === 'milestone' || invoicing.lineBuilder === 'milestone') {
       // Bill the selected (or all open) milestone schedule rows.
       const scheds = (await tx.execute(sql`
         select id, name, amount_billed from billing_schedules
@@ -168,7 +173,7 @@ export async function generateInvoiceFromBillingRequest(
 
       for (const te of timeRows.rows) {
         const rate =
-          billingMethod === 'cost_plus'
+          invoicing.lineBuilder === 'cost_plus'
             ? mulRate(String(te.cost_rate ?? '0'), markup)
             : String(te.bill_rate ?? te.default_rate ?? '0')
         const amount = mulRate(String(te.hours ?? '0'), rate)
@@ -269,7 +274,7 @@ export async function generateInvoiceFromBillingRequest(
     `)
 
     // Advance milestone schedules consumed by this request.
-    if (req.basis === 'milestone' || billingMethod === 'fixed_price') {
+    if (req.basis === 'milestone' || invoicing.lineBuilder === 'milestone') {
       await tx.execute(sql`
         update billing_schedules set billing_request_id = ${requestId}, percent_billed = coalesce(percent_complete, percent_billed), updated_by = ${userId}
          where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null

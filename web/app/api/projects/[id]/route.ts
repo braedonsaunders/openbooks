@@ -56,6 +56,7 @@ interface PatchBody {
   managerId?: string | null
   status?: string
   billingMethod?: string | null
+  projectTypeId?: string | null
   customerPoNumber?: string | null
   startsOn?: string | null
   endsOn?: string | null
@@ -230,9 +231,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // Project type: assigning one also derives the coarse billing_method so the
+  // back-compat classifier stays consistent with the type.
+  let projectTypeId: string | null | undefined
+  let derivedBilling: string | null | undefined
+  if (body.projectTypeId !== undefined) {
+    const v = uuidOrNull(body.projectTypeId)
+    if (v === 'invalid') return bad('Invalid project type')
+    projectTypeId = v
+    if (v) {
+      const pt = (await db.execute(sql`select billing_method from project_types where id = ${v} and org_id = ${user.orgId}`)) as unknown as { rows: { billing_method: string | null }[] }
+      if (pt.rows.length === 0) return bad('Unknown project type')
+      derivedBilling = pt.rows[0].billing_method ?? undefined
+    }
+  }
+
   await db.execute(sql`
     update projects set
       name = ${name !== undefined ? name : sql`name`},
+      project_type_id = ${projectTypeId !== undefined ? projectTypeId : sql`project_type_id`},
       code = ${body.code !== undefined ? strOrNull(body.code) : sql`code`},
       customer_id = ${customerId !== undefined ? customerId : sql`customer_id`},
       foreman_id = ${foremanId !== undefined ? foremanId : sql`foreman_id`},
@@ -240,7 +257,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
       subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
       status = coalesce(${body.status ?? null}, status),
-      billing_method = ${body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`},
+      billing_method = ${body.billingMethod !== undefined ? body.billingMethod : (derivedBilling !== undefined ? derivedBilling : sql`billing_method`)},
       customer_po_number = ${body.customerPoNumber !== undefined ? strOrNull(body.customerPoNumber) : sql`customer_po_number`},
       starts_on = ${startsOn !== undefined ? startsOn : sql`starts_on`},
       ends_on = ${endsOn !== undefined ? endsOn : sql`ends_on`},
