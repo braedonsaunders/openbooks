@@ -180,3 +180,37 @@ export async function reconcileApplications(
     unallocated: fromUnits(unallocated),
   };
 }
+
+/**
+ * Authoritative recompute of `documents.open_balance` for every posted document
+ * of an org, set-based. The per-row `recompute_document_open_balance` function
+ * is the source of truth; the `application_open_balance` trigger keeps it fresh
+ * for normal single-row application changes, but bulk/out-of-band application
+ * edits (repair scripts, historical loads) can leave the denormalized column
+ * stale. Running this at the end of every sync makes open_balance — and thus
+ * AR/AP aging + the open-item verification gate — trustworthy regardless of how
+ * applications were written. Only drifted rows are touched. Returns the count
+ * healed.
+ */
+export async function recomputeOpenBalances(orgId: string): Promise<number> {
+  const res = (await db.execute(sql`
+    update documents d
+       set open_balance = c.ob
+      from (
+        select d.id,
+               case when count(jl.id) = 0 then null
+                    else sum(abs(jl.amount)) - coalesce(sum(ap.applied), 0) end as ob
+          from documents d
+          join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+          left join lateral (
+            select sum(a.amount) as applied
+              from applications a
+             where (a.to_line_id = jl.id or a.from_line_id = jl.id)
+               and a.unapplied_at is null
+          ) ap on true
+         where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
+         group by d.id
+      ) c
+     where d.id = c.id and d.open_balance is distinct from c.ob`)) as unknown as { rowCount?: number };
+  return res.rowCount ?? 0;
+}

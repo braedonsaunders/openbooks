@@ -4,7 +4,7 @@ import { toUnits, fromUnits } from "../money.ts";
 import { postDocument, regenerateGlImpactTx, type PostingDeps } from "../posting.ts";
 import { buildNativeContext, type NativeContext, type NativeDocument } from "./native.ts";
 import { loadEntities, type EntityLoadStats } from "./migrate.ts";
-import { reconcileApplications, type ApplyStats } from "./applications.ts";
+import { reconcileApplications, recomputeOpenBalances, type ApplyStats } from "./applications.ts";
 import { trueUpResidualGl, type TrueUpStats } from "./trueup.ts";
 import type { MigrationSource } from "./source.ts";
 import { verifyAccountMonths, type AccountMonthVerification } from "./verification.ts";
@@ -425,6 +425,14 @@ export async function runSync(
       }
     ).rows[0]?.on === true;
     const trueUp = trueUpEnabled ? await trueUpResidualGl(org.id, source) : null;
+
+    // -- 6c. authoritative open-balance sweep -------------------------------------
+    // The `application_open_balance` trigger keeps open_balance fresh for normal
+    // single-row application changes, but bulk application inserts and any
+    // out-of-band edits can leave the denormalized column stale. Recompute it
+    // set-based now so AR/AP aging and the open-item gate below reflect the real
+    // applied state (only drifted rows are written).
+    await recomputeOpenBalances(org.id);
 
     // -- 7. verify: trial balance -------------------------------------------------
     const theirs = await source.trialBalance();
