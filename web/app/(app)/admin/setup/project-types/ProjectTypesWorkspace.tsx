@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Card, CardContent, Input, Label, Select, Textarea, cn } from '@openbooks/ui'
 import type { FinancialProfile, InvoicingProfile, BackupProfile } from '@openbooks/schema'
 
@@ -40,6 +40,8 @@ const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']
 const RECOGNITIONS = ['as_invoiced', 'percent_complete_cost', 'milestone']
 const BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only', 'none']
+const MEASURE_KEYS = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'burden', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'remaining_budget', 'gross_profit', 'margin_pct']
+const VARIANTS = ['line', 'subtotal', 'total']
 
 function EnumField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
   return (
@@ -101,6 +103,7 @@ const BLANK = (t: string, name: string): ProjectTypeRow => ({
 export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTypeRow[]; dimensions: string[]; incomeAccounts: { id: string; number: string; name: string }[] }) {
   const t = useTranslations('projectTypes')
   const tCommon = useTranslations('common')
+  const tMeasures = useTranslations('projects.measures')
   const router = useRouter()
   const [list, setList] = useState(types)
   const [selId, setSelId] = useState<string>(types[0]?.id ?? 'new')
@@ -212,6 +215,33 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               <EnumField label={t('budgetSource')} value={fp.costBudget.source} options={BUDGET_SOURCES} onChange={(v) => setFp({ costBudget: { source: v as any } })} />
               <div className="sm:col-span-2"><Chips label={t('committedKinds')} all={COMMIT_KINDS} selected={fp.committedCost.docKinds} onToggle={(v) => setFp({ committedCost: { docKinds: toggle(fp.committedCost.docKinds, v) } })} /></div>
               <div className="sm:col-span-2"><Chips label={t('totalCostComponents')} all={['actual_cost', 'committed_cost', 'labor_cost', 'burden']} selected={fp.totalCost.components} onToggle={(v) => setFp({ totalCost: { components: toggle(fp.totalCost.components, v) as any } })} /></div>
+
+              {/* P&L statement layout editor */}
+              <div className="sm:col-span-2 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <Label>{t('layout')}</Label>
+                  <Button variant="outline" size="sm" onClick={() => setFp({ layout: [...fp.layout, { measure: 'invoiced_to_date', variant: 'line' }] })}><Plus size={14} /> {t('addLine')}</Button>
+                </div>
+                <div className="space-y-1.5">
+                  {fp.layout.map((line, i) => {
+                    const upd = (patch: Partial<typeof line>) => setFp({ layout: fp.layout.map((l, j) => (j === i ? { ...l, ...patch } : l)) })
+                    const move = (d: number) => { const next = [...fp.layout]; const [x] = next.splice(i, 1); next.splice(i + d, 0, x); setFp({ layout: next }) }
+                    return (
+                      <div key={i} className="flex items-center gap-2 rounded-md border border-slate-200 p-1.5 dark:border-slate-800">
+                        <Select value={line.measure} onChange={(e) => upd({ measure: e.target.value as any })} className="flex-1">
+                          {MEASURE_KEYS.map((m) => <option key={m} value={m}>{tMeasures(m as never)}</option>)}
+                        </Select>
+                        <Select value={line.variant} onChange={(e) => upd({ variant: e.target.value as any })} className="w-32">
+                          {VARIANTS.map((v) => <option key={v} value={v}>{t(`variant.${v}`)}</option>)}
+                        </Select>
+                        <button type="button" disabled={i === 0} onClick={() => move(-1)} className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200" aria-label={t('moveUp')}><ChevronUp size={16} /></button>
+                        <button type="button" disabled={i === fp.layout.length - 1} onClick={() => move(1)} className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200" aria-label={t('moveDown')}><ChevronDown size={16} /></button>
+                        <button type="button" onClick={() => setFp({ layout: fp.layout.filter((_, j) => j !== i) })} className="rounded p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400" aria-label={t('removeLine')}><X size={16} /></button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           ) : null}
 

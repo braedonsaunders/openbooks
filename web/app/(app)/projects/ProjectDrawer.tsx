@@ -15,7 +15,7 @@ import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
 import { ChargesSection, type ChargeRow, type ChargeItemOption } from './tabs/ChargesSection'
-import { BillingSection, type BillingRequestClient, type UnbilledClient } from './tabs/BillingSection'
+import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
 
 interface PartyOpt {
   id: string
@@ -58,6 +58,8 @@ export interface ProjectCockpitData {
   time: CostTimeData
   unbilled: UnbilledClient
   billingRequests: BillingRequestClient[]
+  /** Effective invoicing/backup defaults after the type←customer←project cascade. */
+  invoicing: EffectiveInvoicingClient
   charges: ChargeRow[]
   items: ChargeItemOption[]
   absorption: { recovered: string; billValue: string }
@@ -672,6 +674,7 @@ export function ProjectDrawer({
           projectId={pr.id}
           unbilled={cockpit.unbilled}
           requests={cockpit.billingRequests}
+          invoicing={cockpit.invoicing}
           canManage={canManage}
           formOpen={billingFormOpen}
           onFormOpenChange={setBillingFormOpen}

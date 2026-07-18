@@ -32,5 +32,15 @@
   "recognition": "Comptabilisation des revenus",
   "backupRequired": "Justificatif requis",
   "defaultBackupType": "Type de justificatif par défaut",
-  "allowedBackupTypes": "Types de justificatif autorisés"
+  "allowedBackupTypes": "Types de justificatif autorisés",
+  "layout": "Disposition du résultat",
+  "addLine": "Ajouter une ligne",
+  "moveUp": "Monter",
+  "moveDown": "Descendre",
+  "removeLine": "Supprimer la ligne",
+  "variant": {
+    "line": "Ligne",
+    "subtotal": "Sous-total",
+    "total": "Total"
+  }
 }

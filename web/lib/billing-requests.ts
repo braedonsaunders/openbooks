@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { resolveInvoicingPreference } from './invoicing-preference.ts'
 
 /** CRUD for project billing requests + milestone schedules. */
 
@@ -40,8 +41,14 @@ export async function createBillingRequest(orgId: string, userId: string, input:
   `)) as unknown as { rows: { id: string; billing_method: string | null; customer_po_number: string | null }[] }
   if (!proj.rows[0]) throw new Error('Project not found')
 
-  const basis = input.basis && BASES.has(input.basis) ? input.basis : 'date_range'
-  const backupType = input.backupType && BACKUP_TYPES.has(input.backupType) ? input.backupType : 'none'
+  // Defaults come from the resolved invoicing preference cascade
+  // (project type ← customer ← project) unless the request overrides them.
+  const eff = await resolveInvoicingPreference(orgId, input.projectId)
+  const basis = input.basis && BASES.has(input.basis) ? input.basis : (BASES.has(eff.defaultBasis) ? eff.defaultBasis : 'date_range')
+  const backupRequired = input.backupRequired ?? eff.backupRequired
+  const backupType = input.backupType && BACKUP_TYPES.has(input.backupType)
+    ? input.backupType
+    : backupRequired && BACKUP_TYPES.has(eff.backupType) ? eff.backupType : 'none'
   const requestNumber = await nextBillingRequestNumber(orgId)
 
   const row = (await db.execute(sql`

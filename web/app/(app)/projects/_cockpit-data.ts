@@ -4,6 +4,7 @@ import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costin
 import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'
 import { listBillingRequests } from '../../../lib/billing-requests'
+import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
 import type { ProjectCockpitData } from './ProjectDrawer'
 
 /**
@@ -13,11 +14,12 @@ import type { ProjectCockpitData } from './ProjectDrawer'
  */
 export async function loadProjectCockpit(orgId: string, projectId: string): Promise<ProjectCockpitData> {
   const projectType = await loadProjectType(orgId, projectId)
-  const [financials, time, unbilled, billingRequests, chargeRes, itemRes, recognizedRes] = await Promise.all([
+  const [financials, time, unbilled, billingRequests, invoicing, chargeRes, itemRes, recognizedRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     projectUnbilled(orgId, projectId),
     listBillingRequests(orgId, projectId),
+    resolveInvoicingPreference(orgId, projectId),
     db.execute(sql`
       select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
              d.total::numeric(19,4) as cost,
@@ -52,6 +54,14 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
     time,
     unbilled,
     billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
+    invoicing: {
+      allowedBases: invoicing.allowedBases,
+      defaultBasis: invoicing.defaultBasis,
+      backupRequired: invoicing.backupRequired,
+      backupType: invoicing.backupType,
+      allowedBackupTypes: invoicing.allowedBackupTypes,
+      source: invoicing.source,
+    },
     charges: charges as ProjectCockpitData['charges'],
     items: items as ProjectCockpitData['items'],
     absorption: {
