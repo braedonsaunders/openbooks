@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ChevronDown, Pencil, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
+import { ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Popover, SearchSelect, Select, Textarea, UrlDrawer, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
@@ -517,7 +517,11 @@ export function ProjectDrawer({
             </Button>
           </div>
         ) : canManage ? (
-          <Popover
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => { setTab('overview'); setMode('edit') }}>
+              {tCommon('actions.edit')}
+            </Button>
+            <Popover
             open={actionsOpen}
             onOpenChange={setActionsOpen}
             align="end"
@@ -536,7 +540,6 @@ export function ProjectDrawer({
             className="w-56 p-1.5"
           >
             <div className="space-y-0.5">
-              {menuItem(<Pencil className="h-3.5 w-3.5" aria-hidden />, tCommon('actions.edit'), () => { setTab('overview'); setMode('edit') })}
               {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('charges'); setChargeFormOpen(true) })}
               {menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
               {billingMethod === 'fixed_price'
@@ -550,6 +553,7 @@ export function ProjectDrawer({
                   : null}
             </div>
           </Popover>
+          </div>
         ) : undefined
       }
       footer={
