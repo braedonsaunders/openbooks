@@ -15,9 +15,12 @@ import type { WorkspaceEnvironments } from "../lib/environments";
 export function EnvironmentPicker({
   env,
   onNavigate,
+  hideHeading = false,
 }: {
   env: WorkspaceEnvironments;
   onNavigate?: () => void;
+  /** Hide the built-in "Workspace" label (e.g. when a parent already titles the view). */
+  hideHeading?: boolean;
 }) {
   const [pending, start] = useTransition();
   const multi = env.tenants.length > 1;
@@ -33,9 +36,11 @@ export function EnvironmentPicker({
 
   return (
     <div>
-      <div className="px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-        Workspace
-      </div>
+      {!hideHeading && (
+        <div className="px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+          Workspace
+        </div>
+      )}
       <div className="max-h-72 overflow-y-auto px-1 pb-1">
         {env.tenants.map((t) => {
           const prodActive =

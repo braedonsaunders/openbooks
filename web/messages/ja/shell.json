@@ -13,7 +13,9 @@
       "accountant": "会計担当者",
       "approver": "承認者",
       "viewer": "閲覧者"
-    }
+    },
+    "organizations": "組織",
+    "superAdmin": "スーパー管理者"
   },
   "language": {
     "label": "言語",

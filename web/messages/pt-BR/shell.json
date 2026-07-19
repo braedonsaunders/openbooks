@@ -13,7 +13,9 @@
       "accountant": "Contador",
       "approver": "Aprovador",
       "viewer": "Visualizador"
-    }
+    },
+    "organizations": "Organizações",
+    "superAdmin": "Superadministrador"
   },
   "language": {
     "label": "Idioma",
