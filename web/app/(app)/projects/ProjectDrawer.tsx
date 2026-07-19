@@ -518,7 +518,7 @@ export function ProjectDrawer({
           </div>
         ) : canManage ? (
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" onClick={() => { setTab('overview'); setMode('edit') }}>
+            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { setTab('overview'); setMode('edit') }}>
               {tCommon('actions.edit')}
             </Button>
             <Popover
