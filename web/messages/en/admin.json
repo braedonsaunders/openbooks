@@ -122,7 +122,12 @@
       "void": "void",
       "approve": "approve",
       "reject": "reject"
-    }
+    },
+    "recordTypeFilter": "Record type",
+    "userFilter": "User",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "clearDates": "Clear dates"
   },
   "customFields": {
     "title": "Custom Fields",

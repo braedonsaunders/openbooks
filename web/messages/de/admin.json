@@ -122,7 +122,12 @@
       "void": "stornieren",
       "approve": "genehmigen",
       "reject": "ablehnen"
-    }
+    },
+    "recordTypeFilter": "Datensatztyp",
+    "userFilter": "Benutzer",
+    "dateFrom": "Von",
+    "dateTo": "Bis",
+    "clearDates": "Datumsangaben löschen"
   },
   "customFields": {
     "title": "Benutzerdefinierte Felder",

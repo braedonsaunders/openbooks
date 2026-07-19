@@ -118,7 +118,12 @@
       "void": "annulation",
       "approve": "approbation",
       "reject": "rejet"
-    }
+    },
+    "recordTypeFilter": "Type d’enregistrement",
+    "userFilter": "Utilisateur",
+    "dateFrom": "Du",
+    "dateTo": "Au",
+    "clearDates": "Effacer les dates"
   },
   "customFields": {
     "title": "Champs personnalisés",
