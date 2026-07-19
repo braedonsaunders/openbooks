@@ -9,7 +9,7 @@
 import { type SidebarNavGroup } from './sidebar-nav'
 import type { Locale } from '../i18n/config'
 import type { NavMode } from '../lib/nav-mode'
-import { Logo } from './brand-logo'
+import { BrandHomeLink } from './brand-home-link'
 import { AppSidebar } from './app-sidebar'
 import { TopNav } from './top-nav'
 import { GlobalSearch } from './global-search'
@@ -74,7 +74,7 @@ export function AppShell({
               // The rail (and its logo) is gone — brand moves into the header
               // on desktop.
               <>
-                <Logo className="hidden h-7 w-auto shrink-0 lg:block" />
+                <BrandHomeLink className="hidden lg:inline-flex" />
                 <TopNav groups={navigationGroups} />
                 <div className="flex-1 lg:hidden" />
                 <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" />

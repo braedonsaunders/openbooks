@@ -97,6 +97,9 @@
   "meta": {
     "description": "La suite de gestion ouverte. Menez vos affaires à livres ouverts."
   },
+  "brand": {
+    "home": "Aller au tableau de bord"
+  },
   "sidebar": {
     "expand": "Déployer la barre latérale",
     "collapse": "Réduire la barre latérale"
