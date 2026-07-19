@@ -65,13 +65,20 @@ export class ErpNextSource implements MigrationSource {
 
   // --- master data ---------------------------------------------------------------
 
-  async entities(): Promise<EntityStream[]> {
+  async entities(since?: Date | null): Promise<EntityStream[]> {
+    // Daily-mirror efficiency: parties and items honor `since` via `modified`;
+    // accounts/taxes are small structural streams pulled in full.
     return [
       { resource: "accounts", records: await this.accounts() },
       { resource: "tax_codes", records: await this.taxCodes() },
-      { resource: "parties", records: await this.parties() },
-      { resource: "items", records: await this.items() },
+      { resource: "parties", records: await this.parties(since) },
+      { resource: "items", records: await this.items(since) },
     ];
+  }
+
+  /** ERPNext list filter for an incremental pull. */
+  private sinceFilter(since?: Date | null): (string | number)[][] {
+    return since ? [["modified", ">", since.toISOString().slice(0, 19).replace("T", " ")]] : [];
   }
 
   async accountingPeriods(): Promise<SourceEntity[]> {
@@ -142,12 +149,12 @@ export class ErpNextSource implements MigrationSource {
       });
   }
 
-  private async parties(): Promise<SourceEntity[]> {
+  private async parties(since?: Date | null): Promise<SourceEntity[]> {
     const customers = await this.client.listAll<{ name: string; customer_name: string; customer_type: string; disabled: 0 | 1 }>(
-      "Customer", ["name", "customer_name", "customer_type", "disabled"],
+      "Customer", ["name", "customer_name", "customer_type", "disabled"], this.sinceFilter(since),
     );
     const suppliers = await this.client.listAll<{ name: string; supplier_name: string; supplier_type: string; disabled: 0 | 1 }>(
-      "Supplier", ["name", "supplier_name", "supplier_type", "disabled"],
+      "Supplier", ["name", "supplier_name", "supplier_type", "disabled"], this.sinceFilter(since),
     );
     return [
       ...customers.map((c) => ({
@@ -169,9 +176,9 @@ export class ErpNextSource implements MigrationSource {
     ];
   }
 
-  private async items(): Promise<SourceEntity[]> {
+  private async items(since?: Date | null): Promise<SourceEntity[]> {
     const rows = await this.client.listAll<{ name: string; item_code: string; item_name: string; is_stock_item: 0 | 1; disabled: 0 | 1 }>(
-      "Item", ["name", "item_code", "item_name", "is_stock_item", "disabled"],
+      "Item", ["name", "item_code", "item_name", "is_stock_item", "disabled"], this.sinceFilter(since),
     );
     return rows.map((i) => ({
       sourceRef: i.name,

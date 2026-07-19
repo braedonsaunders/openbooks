@@ -97,12 +97,15 @@ export class XeroSource implements MigrationSource {
 
   // --- master data ----------------------------------------------------------------
 
-  async entities(): Promise<EntityStream[]> {
+  async entities(since?: Date | null): Promise<EntityStream[]> {
+    // Daily-mirror efficiency: contacts and items honor `since` via Xero's
+    // If-Modified-Since header; accounts/taxes are small structural streams
+    // pulled in full.
     return [
       { resource: "accounts", records: await this.accounts() },
       { resource: "tax_codes", records: await this.taxCodes() },
-      { resource: "parties", records: await this.parties() },
-      { resource: "items", records: await this.items() },
+      { resource: "parties", records: await this.parties(since) },
+      { resource: "items", records: await this.items(since) },
     ];
   }
 
@@ -167,8 +170,8 @@ export class XeroSource implements MigrationSource {
     }));
   }
 
-  private async parties(): Promise<SourceEntity[]> {
-    const rows = await this.client.listAll<XeroContact>("Contacts", "Contacts", { includeArchived: "true" });
+  private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    const rows = await this.client.listAll<XeroContact>("Contacts", "Contacts", { includeArchived: "true" }, since);
     return rows.map((c) => ({
       sourceRef: c.ContactID,
       fields: {
@@ -180,8 +183,8 @@ export class XeroSource implements MigrationSource {
     }));
   }
 
-  private async items(): Promise<SourceEntity[]> {
-    const data = await this.client.get<{ Items: XeroItem[] }>("Items");
+  private async items(since?: Date | null): Promise<SourceEntity[]> {
+    const data = await this.client.get<{ Items: XeroItem[] }>("Items", {}, since);
     return (data.Items ?? []).map((i) => ({
       sourceRef: i.ItemID,
       naturalKey: i.Code || null,

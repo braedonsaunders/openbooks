@@ -66,13 +66,20 @@ export class DynamicsSource implements MigrationSource {
 
   // --- master data ----------------------------------------------------------------
 
-  async entities(): Promise<EntityStream[]> {
+  async entities(since?: Date | null): Promise<EntityStream[]> {
+    // Daily-mirror efficiency: customers/vendors/items honor `since` via the
+    // OData lastModifiedDateTime filter; accounts/taxes pull in full (small).
     return [
       { resource: "accounts", records: await this.accounts() },
       { resource: "tax_codes", records: await this.taxCodes() },
-      { resource: "parties", records: await this.parties() },
-      { resource: "items", records: await this.items() },
+      { resource: "parties", records: await this.parties(since) },
+      { resource: "items", records: await this.items(since) },
     ];
+  }
+
+  /** OData params for an incremental pull ({} = full). */
+  private sinceParams(since?: Date | null): Record<string, string> {
+    return since ? { $filter: `lastModifiedDateTime ge ${since.toISOString()}` } : {};
   }
 
   private async accounts(): Promise<SourceEntity[]> {
@@ -107,10 +114,10 @@ export class DynamicsSource implements MigrationSource {
     }));
   }
 
-  private async parties(): Promise<SourceEntity[]> {
+  private async parties(since?: Date | null): Promise<SourceEntity[]> {
     const [customers, vendors] = await Promise.all([
-      this.client.list<BCParty>("customers"),
-      this.client.list<BCParty>("vendors"),
+      this.client.list<BCParty>("customers", this.sinceParams(since)),
+      this.client.list<BCParty>("vendors", this.sinceParams(since)),
     ]);
     const mk = (p: BCParty): SourceEntity => ({
       sourceRef: p.id,
@@ -119,8 +126,8 @@ export class DynamicsSource implements MigrationSource {
     return [...customers.map(mk), ...vendors.map(mk)];
   }
 
-  private async items(): Promise<SourceEntity[]> {
-    const rows = await this.client.list<BCItem>("items");
+  private async items(since?: Date | null): Promise<SourceEntity[]> {
+    const rows = await this.client.list<BCItem>("items", this.sinceParams(since));
     return rows.map((i) => ({
       sourceRef: i.id,
       naturalKey: i.number ?? null,

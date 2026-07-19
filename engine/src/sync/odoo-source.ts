@@ -74,13 +74,20 @@ export class OdooSource implements MigrationSource {
 
   // --- master data --------------------------------------------------------------
 
-  async entities(): Promise<EntityStream[]> {
+  async entities(since?: Date | null): Promise<EntityStream[]> {
+    // Daily-mirror efficiency: partners and products honor `since` via
+    // write_date; accounts/taxes are small structural streams pulled in full.
     return [
       { resource: "accounts", records: await this.accounts() },
       { resource: "tax_codes", records: await this.taxCodes() },
-      { resource: "parties", records: await this.parties() },
-      { resource: "items", records: await this.items() },
+      { resource: "parties", records: await this.parties(since) },
+      { resource: "items", records: await this.items(since) },
     ];
+  }
+
+  /** Odoo domain term for an incremental pull. */
+  private sinceDomain(since?: Date | null): unknown[] {
+    return since ? [["write_date", ">=", since.toISOString().slice(0, 19).replace("T", " ")]] : [];
   }
 
   async accountingPeriods(): Promise<SourceEntity[]> {
@@ -153,11 +160,11 @@ export class OdooSource implements MigrationSource {
     }));
   }
 
-  private async parties(): Promise<SourceEntity[]> {
+  private async parties(since?: Date | null): Promise<SourceEntity[]> {
     const rows = await this.client.searchReadAll<{
       id: number; name: string; company_type: string; email: string | false;
       phone: string | false; active: boolean;
-    }>("res.partner", [["active", "in", [true, false]]], ["id", "name", "company_type", "email", "phone", "active"]);
+    }>("res.partner", [["active", "in", [true, false]], ...this.sinceDomain(since)], ["id", "name", "company_type", "email", "phone", "active"]);
     return rows.map((p) => ({
       sourceRef: String(p.id),
       fields: {
@@ -170,10 +177,10 @@ export class OdooSource implements MigrationSource {
     }));
   }
 
-  private async items(): Promise<SourceEntity[]> {
+  private async items(since?: Date | null): Promise<SourceEntity[]> {
     const rows = await this.client.searchReadAll<{
       id: number; default_code: string | false; name: string; detailed_type: string; active: boolean;
-    }>("product.product", [["active", "in", [true, false]]], ["id", "default_code", "name", "detailed_type", "active"]);
+    }>("product.product", [["active", "in", [true, false]], ...this.sinceDomain(since)], ["id", "default_code", "name", "detailed_type", "active"]);
     return rows.map((p) => ({
       sourceRef: String(p.id),
       naturalKey: p.default_code || null,
