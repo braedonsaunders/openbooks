@@ -459,7 +459,7 @@
       "legalName": "Razón social",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
       "country": "País",
-      "countryPlaceholder": "CA",
+      "countryPlaceholder": "Seleccione un país…",
       "countryHint": "Código ISO de dos letras (p. ej., CA, US, GB).",
       "defaultLanguage": "Idioma predeterminado",
       "defaultLanguageHint": "El idioma en que se muestra la aplicación para todos los que no hayan elegido el suyo en el menú de la cuenta.",
@@ -1279,10 +1279,6 @@
         "title": "Worker Comp Groups",
         "description": "Workers' compensation rate groups for labor costing."
       },
-      "labor-burden-rates": {
-        "title": "Labor Burden Rates",
-        "description": "Effective-dated burden rates applied to labor cost."
-      },
       "asset-categories": {
         "title": "Asset Categories",
         "description": "Default depreciation method and accounts for fixed assets."
@@ -1346,6 +1342,10 @@
       "bom-components": {
         "title": "Lista de materiales",
         "description": "Componentes consumidos para ensamblar cada artículo."
+      },
+      "overhead-rates": {
+        "title": "Tasas de gastos generales",
+        "description": "Tasas de gastos generales con fecha de vigencia aplicadas al costo de mano de obra."
       }
     },
     "fields": {
@@ -1505,10 +1505,6 @@
         "fullyDepreciate": "Depreciar por completo",
         "retainBalance": "Conservar el saldo"
       },
-      "burdenMethod": {
-        "live": "Live",
-        "standard": "Standard"
-      },
       "fxRateType": {
         "spot": "Al contado",
         "average": "Promedio",
@@ -1556,6 +1552,10 @@
         "staging": "Preparación",
         "transit": "Tránsito",
         "quarantine": "Cuarentena"
+      },
+      "overheadMethod": {
+        "live": "Live",
+        "standard": "Standard"
       }
     }
   },

@@ -521,7 +521,7 @@
       "legalName": "正式名称",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
       "country": "国",
-      "countryPlaceholder": "CA",
+      "countryPlaceholder": "国を選択…",
       "countryHint": "2文字のISOコード（例: CA、US、GB）。",
       "defaultLanguage": "デフォルト言語",
       "defaultLanguageHint": "アカウントメニューで自分の言語を選択していないすべての人に対して、アプリが表示される言語です。",

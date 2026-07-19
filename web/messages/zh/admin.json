@@ -521,7 +521,7 @@
       "legalName": "法定名称",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
       "country": "国家/地区",
-      "countryPlaceholder": "CA",
+      "countryPlaceholder": "选择国家…",
       "countryHint": "两位字母 ISO 代码（如 CA、US、GB）。",
       "defaultLanguage": "默认语言",
       "defaultLanguageHint": "对于尚未在账户菜单中自选语言的所有人，应用所呈现的语言。",
