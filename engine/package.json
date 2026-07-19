@@ -5,15 +5,16 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1087.0",
-    "@openbooks/schema": "*",
-    "@openbooks/forms-core": "*",
-    "drizzle-orm": "*",
-    "pg": "^8",
-    "quickjs-emscripten": "^0.31",
-    "@openbooks/jobs": "*",
     "@openbooks/emails": "*",
+    "@openbooks/forms-core": "*",
+    "@openbooks/jobs": "*",
+    "@openbooks/schema": "*",
     "bullmq": "^5.80.2",
-    "ioredis": "^5.11.1"
+    "drizzle-orm": "*",
+    "fast-xml-parser": "^5.10.1",
+    "ioredis": "^5.11.1",
+    "pg": "^8",
+    "quickjs-emscripten": "^0.31"
   },
   "devDependencies": {
     "@types/pg": "^8",

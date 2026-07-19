@@ -7,7 +7,7 @@
     "loading": "加载中…",
     "empty": {
       "title": "尚无连接。",
-      "hint": "添加 NetSuite 或 QuickBooks Online 以开始迁移。"
+      "hint": "添加源会计系统以开始迁移。"
     },
     "status": {
       "active": "已启用",
@@ -26,7 +26,8 @@
     "runMigration": "运行迁移",
     "pauseMirror": "暂停镜像",
     "enableMirror": "启用镜像",
-    "edit": "编辑"
+    "edit": "编辑",
+    "downloadQwc": "下载 Web Connector"
   },
   "runs": {
     "heading": "最近运行",
@@ -97,6 +98,16 @@
     "redirectLabel": "需注册的重定向 URI：",
     "copy": "复制"
   },
+  "qbd": {
+    "setupTitle": "QuickBooks Desktop 设置",
+    "setupHint": "保存后，从连接卡片下载 Web Connector 文件。在运行 QuickBooks 的 Windows 计算机上导入，以 QuickBooks 管理员身份批准只读访问，并在 Web Connector 中输入此密码。",
+    "lastContact": "Web Connector 上次连接：{time}",
+    "notConnected": "Web Connector 尚未连接",
+    "capture": "采集 {status}：{completed}/{total} 个请求",
+    "captureStatus": { "queued": "排队中", "running": "运行中", "complete": "已完成", "failed": "失败", "cancelled": "已取消" },
+    "documentation": "文档",
+    "qwcDescription": "用于会计迁移和核对的只读连接器"
+  },
   "sources": {
     "netsuite": {
       "blurb": "基于令牌（TBA）访问 SuiteQL。在 NetSuite 中创建集成 + 访问令牌，然后粘贴这四个值。原生交易、核销和订单将通过真实过账引擎进行迁移和镜像。"
@@ -106,6 +117,17 @@
     },
     "erpnext": {
       "blurb": "使用您的 ERPNext URL 和 API 密钥 + 密钥连接（用户 → 设置 → API 访问）。发票、账单、付款条目和日记账将通过真实过账引擎原生迁移和镜像。"
+    },
+    "qbd": {
+      "blurb": "通过 Intuit Web Connector 连接 QuickBooks Desktop。首次授权和采集期间必须保持 QuickBooks 打开；无需配置 Windows 入站防火墙规则。",
+      "options": { "US": "美国", "CA": "加拿大", "UK": "英国", "AU": "澳大利亚", "NZ": "新西兰" },
+      "fields": {
+        "historyStartDate": { "label": "历史开始日期", "help": "要迁移的最早记账日期。每次镜像都会重新检查完整范围，以检测历史修改和删除。" },
+        "region": { "label": "QuickBooks 地区" },
+        "baseCurrency": { "label": "本位币" },
+        "companyFile": { "label": "公司文件路径（可选）", "help": "留空则使用 Web Connector 运行时已打开的公司。" },
+        "webConnectorPassword": { "label": "Web Connector 密码", "help": "导入 .QWC 文件后，在 QuickBooks Web Connector 中输入一次此密码。" }
+      }
     },
     "qbo": {
       "blurb": "输入您的 Intuit 应用的客户端 ID + 密钥（developer.intuit.com → Keys & credentials），保存后点击“连接”以授权某个公司。发票、账单、付款、贷记、日记账和存款将原生迁移和镜像。",

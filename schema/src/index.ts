@@ -42,3 +42,4 @@ export * from "./crm-core";
 export * from "./crm-sales";
 export * from "./ap-capture";
 export * from "./project-types";
+export * from "./qbd";

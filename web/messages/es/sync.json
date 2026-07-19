@@ -7,7 +7,7 @@
     "loading": "Cargando…",
     "empty": {
       "title": "Aún no hay conexiones.",
-      "hint": "Agregue NetSuite o QuickBooks Online para iniciar una migración."
+      "hint": "Agregue un sistema contable de origen para iniciar una migración."
     },
     "status": {
       "active": "activa",
@@ -26,7 +26,8 @@
     "runMigration": "Ejecutar migración",
     "pauseMirror": "Pausar espejo",
     "enableMirror": "Activar espejo",
-    "edit": "Editar"
+    "edit": "Editar",
+    "downloadQwc": "Descargar Web Connector"
   },
   "runs": {
     "heading": "Ejecuciones recientes",
@@ -97,6 +98,16 @@
     "redirectLabel": "URI de redirección para registrar:",
     "copy": "Copiar"
   },
+  "qbd": {
+    "setupTitle": "Configuración de QuickBooks Desktop",
+    "setupHint": "Después de guardar, descargue el archivo de Web Connector desde la tarjeta de conexión. Impórtelo en el equipo Windows que ejecuta QuickBooks, apruebe el acceso de solo lectura como administrador de QuickBooks e ingrese esta contraseña en Web Connector.",
+    "lastContact": "Último contacto de Web Connector: {time}",
+    "notConnected": "Web Connector aún no se ha conectado",
+    "capture": "Captura {status}: {completed}/{total} solicitudes",
+    "captureStatus": { "queued": "en cola", "running": "en curso", "complete": "completa", "failed": "fallida", "cancelled": "cancelada" },
+    "documentation": "Documentación",
+    "qwcDescription": "Conector de solo lectura para migración y conciliación contable"
+  },
   "sources": {
     "netsuite": {
       "blurb": "Acceso por token (TBA) a SuiteQL. Cree una integración y un token de acceso en NetSuite y pegue los cuatro valores. Las transacciones nativas, las aplicaciones de pago y los pedidos migran y se reflejan a través del motor de contabilización real."
@@ -106,6 +117,17 @@
     },
     "erpnext": {
       "blurb": "Conéctese con su URL de ERPNext y una clave + secreto API (Usuario → Ajustes → Acceso API). Las facturas de venta y de compra, los registros de pago y los asientos migran y se reflejan de forma nativa a través del motor de contabilización real."
+    },
+    "qbd": {
+      "blurb": "Conecte QuickBooks Desktop mediante Web Connector de Intuit. QuickBooks debe estar abierto para la autorización inicial y durante las capturas; no se requiere una regla de firewall entrante en Windows.",
+      "options": { "US": "Estados Unidos", "CA": "Canadá", "UK": "Reino Unido", "AU": "Australia", "NZ": "Nueva Zelanda" },
+      "fields": {
+        "historyStartDate": { "label": "Fecha inicial del historial", "help": "La primera fecha contable que se migrará. Cada espejo vuelve a comprobar todo el intervalo para detectar cambios y eliminaciones históricas." },
+        "region": { "label": "Región de QuickBooks" },
+        "baseCurrency": { "label": "Moneda base" },
+        "companyFile": { "label": "Ruta del archivo de empresa (opcional)", "help": "Déjelo en blanco para usar la empresa que esté abierta cuando se ejecute Web Connector." },
+        "webConnectorPassword": { "label": "Contraseña de Web Connector", "help": "Ingrese esta contraseña una vez en QuickBooks Web Connector después de importar el archivo .QWC." }
+      }
     },
     "qbo": {
       "blurb": "Ingrese el Client ID y el Secret de su aplicación de Intuit (developer.intuit.com → Keys & credentials), guarde y luego haga clic en Conectar para autorizar una empresa. Las facturas de venta y de compra, pagos, notas de crédito, asientos y depósitos migran y se reflejan de forma nativa.",

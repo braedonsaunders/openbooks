@@ -83,6 +83,24 @@ alter table payment_cards
   add foreign key (holder_party_id) references parties(id),
   add foreign key (liability_account_id) references accounts(id);
 
+-- external connections and QuickBooks Desktop Web Connector bridge
+alter table connections
+  add foreign key (org_id) references orgs(id) on delete cascade;
+alter table sync_runs
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (connection_id) references connections(id) on delete set null;
+alter table qbd_captures
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (connection_id) references connections(id) on delete cascade;
+alter table qbd_sessions
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (connection_id) references connections(id) on delete cascade;
+alter table qbd_requests
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (connection_id) references connections(id) on delete cascade,
+  add foreign key (capture_id) references qbd_captures(id) on delete cascade,
+  add foreign key (session_id) references qbd_sessions(id) on delete set null;
+
 -- parties
 alter table customer_roles
   add foreign key (party_id) references parties(id),

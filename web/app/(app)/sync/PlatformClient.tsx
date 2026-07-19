@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plug, RefreshCw, Play, FlaskConical, Trash2, Plus, Pencil, Copy, ExternalLink } from 'lucide-react'
+import { Plug, RefreshCw, Play, FlaskConical, Trash2, Plus, Pencil, Copy, ExternalLink, Download, BookOpen } from 'lucide-react'
+import Link from 'next/link'
 import { PagedTable, type PagedColumn } from '../../../components/paged-table'
 import {
   Badge,
@@ -50,6 +51,11 @@ interface Connection {
   lastRunAt: string | null
   lastError: string | null
   hasSecrets: boolean
+  qbdStatus?: {
+    heartbeat: string | null
+    captureStatus: string | null
+    captureProgress: { completed?: number; total?: number } | null
+  } | null
 }
 interface Run {
   id: string
@@ -314,6 +320,13 @@ export function PlatformClient() {
                       {t('actions.reconnect')}
                     </Button>
                   ) : null}
+                  {c.source === 'qbd' ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`/api/platform/connections/${c.id}/qwc`} download>
+                        <Download size={14} /> {t('actions.downloadQwc')}
+                      </a>
+                    </Button>
+                  ) : null}
                   <Button variant="outline" size="sm" disabled={busy === `${c.id}:test`} onClick={() => test(c)}>
                     <FlaskConical size={14} /> {t('actions.test')}
                   </Button>
@@ -338,6 +351,23 @@ export function PlatformClient() {
                 {t('connections.lastRun', { lastRun: fmt(c.lastRunAt), cursor: fmt(c.cursor) })}
                 {c.lastError ? <span className="text-red-500"> · {c.lastError}</span> : null}
               </div>
+              {c.source === 'qbd' ? (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <span>{c.qbdStatus?.heartbeat ? t('qbd.lastContact', { time: fmt(c.qbdStatus.heartbeat) }) : t('qbd.notConnected')}</span>
+                  {c.qbdStatus?.captureStatus ? (
+                    <span>{t('qbd.capture', {
+                      status: t.has(`qbd.captureStatus.${c.qbdStatus.captureStatus}`)
+                        ? t(`qbd.captureStatus.${c.qbdStatus.captureStatus}`)
+                        : c.qbdStatus.captureStatus,
+                      completed: c.qbdStatus.captureProgress?.completed ?? 0,
+                      total: c.qbdStatus.captureProgress?.total ?? 0,
+                    })}</span>
+                  ) : null}
+                  <Link href="/docs/quickbooks-desktop-connector" className="inline-flex items-center gap-1 text-sky-700 hover:underline dark:text-sky-300">
+                    <BookOpen size={12} /> {t('qbd.documentation')}
+                  </Link>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -485,6 +515,12 @@ function ConnectionDrawer({
   // fallback for a source that has no message entry yet.
   const blurbKey = def ? `sources.${def.source}.blurb` : ''
   const blurb = def ? (t.has(blurbKey) ? t(blurbKey) : def.blurb) : ''
+  const fieldLabel = (f: FieldSpec) => def && t.has(`sources.${def.source}.fields.${f.key}.label`)
+    ? t(`sources.${def.source}.fields.${f.key}.label`)
+    : f.label
+  const fieldHelp = (f: FieldSpec) => def && t.has(`sources.${def.source}.fields.${f.key}.help`)
+    ? t(`sources.${def.source}.fields.${f.key}.help`)
+    : f.help
 
   async function save() {
     if (!def) return
@@ -551,6 +587,12 @@ function ConnectionDrawer({
             {def.authKind === 'oauth2' && def.oauthSetup ? (
               <OauthSetupBox source={def.source} setup={def.oauthSetup} />
             ) : null}
+            {def.source === 'qbd' ? (
+              <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs text-slate-600 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-slate-300">
+                <p className="font-medium text-sky-800 dark:text-sky-300">{t('qbd.setupTitle')}</p>
+                <p className="mt-1">{t('qbd.setupHint')}</p>
+              </div>
+            ) : null}
             <div>
               <Label>{t('drawer.name')}</Label>
               <Input value={displayName} placeholder={def.displayName} onChange={(e) => setDisplayName(e.target.value)} />
@@ -558,7 +600,7 @@ function ConnectionDrawer({
 
             {def.configFields.map((f) => (
               <div key={f.key}>
-                <Label>{f.label}{f.required ? ' *' : ''}</Label>
+                <Label>{fieldLabel(f)}{f.required ? ' *' : ''}</Label>
                 {f.kind === 'select' ? (
                   <Select
                     value={config[f.key] ?? ''}
@@ -566,7 +608,9 @@ function ConnectionDrawer({
                   >
                     <option value="">{t('drawer.select')}</option>
                     {configOptions(f, currencies).map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+                      <option key={o.value} value={o.value}>
+                        {def && t.has(`sources.${def.source}.options.${o.value}`) ? t(`sources.${def.source}.options.${o.value}`) : o.label}
+                      </option>
                     ))}
                   </Select>
                 ) : (
@@ -576,7 +620,7 @@ function ConnectionDrawer({
                     onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}
                   />
                 )}
-                {f.help ? <p className="mt-1 text-xs text-slate-400">{f.help}</p> : null}
+                {fieldHelp(f) ? <p className="mt-1 text-xs text-slate-400">{fieldHelp(f)}</p> : null}
               </div>
             ))}
 
@@ -588,7 +632,7 @@ function ConnectionDrawer({
                 <div className="space-y-3">
                   {def.secretFields.map((f) => (
                     <div key={f.key}>
-                      <Label>{f.label}{f.required && !editing ? ' *' : ''}</Label>
+                      <Label>{fieldLabel(f)}{f.required && !editing ? ' *' : ''}</Label>
                       <Input
                         type="password"
                         autoComplete="off"
@@ -596,6 +640,7 @@ function ConnectionDrawer({
                         value={secrets[f.key] ?? ''}
                         onChange={(e) => setSecrets((s) => ({ ...s, [f.key]: e.target.value }))}
                       />
+                      {fieldHelp(f) ? <p className="mt-1 text-xs text-slate-400">{fieldHelp(f)}</p> : null}
                     </div>
                   ))}
                 </div>

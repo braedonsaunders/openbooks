@@ -577,5 +577,13 @@ export async function runSync(
       errorMessage: (e as Error).message,
     }).where(eq(schema.syncRuns.id, run!.id));
     throw e;
+  } finally {
+    if (source.dispose) {
+      try {
+        await source.dispose();
+      } catch (cleanupError) {
+        console.error(`[sync:${source.name}] source cleanup failed:`, cleanupError);
+      }
+    }
   }
 }

@@ -13,6 +13,7 @@ import { XeroClient, type XeroApp, type XeroTokens } from "../xero.ts";
 import { XeroSource } from "./xero-source.ts";
 import { DynamicsClient, type DynamicsApp, type DynamicsTokens } from "../dynamics.ts";
 import { DynamicsSource } from "./dynamics-source.ts";
+import { QbdSource } from "./qbd-source.ts";
 import { sealJson } from "../secrets.ts";
 import type { MigrationSource } from "./source.ts";
 
@@ -109,6 +110,33 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
     ],
   },
   {
+    source: "qbd",
+    displayName: "QuickBooks Desktop",
+    authKind: "token",
+    blurb: "Install the downloaded Web Connector file on the Windows computer that runs QuickBooks Desktop, authorize the company once as an administrator, and keep QuickBooks open while a migration or mirror capture runs.",
+    configFields: [
+      { key: "historyStartDate", label: "History start date", placeholder: "2010-01-01", required: true, help: "The earliest posting date to migrate. Each mirror rechecks this complete range so historical edits and deletions are detected." },
+      {
+        key: "region",
+        label: "QuickBooks region",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "US", label: "United States" },
+          { value: "CA", label: "Canada" },
+          { value: "UK", label: "United Kingdom" },
+          { value: "AU", label: "Australia" },
+          { value: "NZ", label: "New Zealand" },
+        ],
+      },
+      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies", required: true },
+      { key: "companyFile", label: "Company file path (optional)", placeholder: "C:\\Quickbooks Data\\Company.QBW", help: "Leave blank to use whichever company is open when Web Connector runs." },
+    ],
+    secretFields: [
+      { key: "webConnectorPassword", label: "Web Connector password", required: true, help: "You will enter this once in QuickBooks Web Connector after importing the .QWC file." },
+    ],
+  },
+  {
     source: "qbo",
     displayName: "QuickBooks Online",
     authKind: "oauth2",
@@ -192,6 +220,38 @@ export function sourceType(source: string): SourceTypeManifest | undefined {
   return SOURCE_TYPES.find((s) => s.source === source);
 }
 
+export function validateSourceConfig(manifest: SourceTypeManifest, config: Record<string, unknown>): string | null {
+  for (const field of manifest.configFields) {
+    const value = String(config[field.key] ?? "").trim();
+    if (field.required && !value) return `${field.label} is required`;
+    if (value && field.kind === "select" && field.options && !field.options.some((option) => option.value === value)) {
+      return `${field.label} has an invalid value`;
+    }
+  }
+  if (manifest.source === "qbd") {
+    const historyStart = String(config.historyStartDate ?? "");
+    const parsedHistoryStart = new Date(`${historyStart}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(historyStart) || Number.isNaN(parsedHistoryStart.getTime()) || parsedHistoryStart.toISOString().slice(0, 10) !== historyStart) {
+      return "History start date must be a valid YYYY-MM-DD date";
+    }
+    if (historyStart < "1901-01-01" || historyStart > new Date().toISOString().slice(0, 10)) {
+      return "History start date must be between 1901-01-01 and today";
+    }
+    const companyFile = String(config.companyFile ?? "").trim();
+    if (companyFile && !/^[A-Za-z]:\\.+\.QBW$/i.test(companyFile)) {
+      return "Company file path must be a full Windows path ending in .QBW";
+    }
+  }
+  return null;
+}
+
+export function validateSourceSecret(source: string, key: string, value: string): string | null {
+  if (source === "qbd" && key === "webConnectorPassword" && value.length < 16) {
+    return "Web Connector password must be at least 16 characters";
+  }
+  return null;
+}
+
 // --- Stored connections ------------------------------------------------------
 
 export interface ConnectionRow {
@@ -250,6 +310,16 @@ interface DynamicsSecrets extends Partial<DynamicsTokens> {
 
 /** Build a live adapter from a stored connection (credentials unsealed here). */
 export function buildSource(conn: ConnectionRow): MigrationSource {
+  if (conn.source === "qbd") {
+    const cfg = conn.config as { historyStartDate?: string; baseCurrency?: string };
+    if (!cfg.historyStartDate) throw new Error("QuickBooks Desktop connection needs a history start date");
+    return new QbdSource({
+      orgId: conn.orgId,
+      connectionId: conn.id,
+      historyStartDate: String(cfg.historyStartDate),
+      baseCurrency: cfg.baseCurrency ? String(cfg.baseCurrency) : undefined,
+    });
+  }
   if (conn.source === "netsuite") {
     const secret = unsealJson<Partial<NetSuiteCreds>>(conn.secrets);
     const cfg = conn.config as { account?: string; host?: string; baseCurrency?: string };

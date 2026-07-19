@@ -4,6 +4,7 @@ import { MIGRATION_QUEUE, enqueueMigration, getBlockingConnection, type Migratio
 import { db } from "../db.ts";
 import { buildSource, getConnection } from "../sync/connection.ts";
 import { runFullMigration, runSync } from "../sync/sync.ts";
+import { purgeExpiredQbdBridgeData } from "../qbd/bridge.ts";
 
 /**
  * Consumes the `migration` queue: build the tenant's adapter from its stored
@@ -55,6 +56,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
 export function startMirrorScheduler(): void {
   const tick = async () => {
     try {
+      await purgeExpiredQbdBridgeData();
       const due = (await db.execute(sql`
         select id, org_id as "orgId" from connections
          where mirror_enabled and status = 'active'

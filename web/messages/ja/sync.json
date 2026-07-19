@@ -7,7 +7,7 @@
     "loading": "読み込み中…",
     "empty": {
       "title": "接続はまだありません。",
-      "hint": "NetSuite または QuickBooks Online を追加して移行を開始してください。"
+      "hint": "移行を開始するには、移行元の会計システムを追加してください。"
     },
     "status": {
       "active": "有効",
@@ -26,7 +26,8 @@
     "runMigration": "移行を実行",
     "pauseMirror": "ミラーを一時停止",
     "enableMirror": "ミラーを有効化",
-    "edit": "編集"
+    "edit": "編集",
+    "downloadQwc": "Web Connector をダウンロード"
   },
   "runs": {
     "heading": "最近の実行",
@@ -97,6 +98,16 @@
     "redirectLabel": "登録するリダイレクトURI:",
     "copy": "コピー"
   },
+  "qbd": {
+    "setupTitle": "QuickBooks Desktop の設定",
+    "setupHint": "保存後、接続カードから Web Connector ファイルをダウンロードします。QuickBooks を実行している Windows コンピューターで取り込み、QuickBooks 管理者として読み取り専用アクセスを承認し、このパスワードを Web Connector に入力してください。",
+    "lastContact": "Web Connector の最終接続: {time}",
+    "notConnected": "Web Connector はまだ接続していません",
+    "capture": "キャプチャ {status}: {completed}/{total} リクエスト",
+    "captureStatus": { "queued": "待機中", "running": "実行中", "complete": "完了", "failed": "失敗", "cancelled": "キャンセル" },
+    "documentation": "ドキュメント",
+    "qwcDescription": "会計移行と照合のための読み取り専用コネクター"
+  },
   "sources": {
     "netsuite": {
       "blurb": "SuiteQL へのトークンベース (TBA) アクセスです。NetSuite で統合とアクセストークンを作成し、4つの値を貼り付けてください。ネイティブ取引、適用、注文は、実際の記帳エンジンを通じて移行およびミラーされます。"
@@ -106,6 +117,17 @@
     },
     "erpnext": {
       "blurb": "ERPNext の URL と API キー + シークレット（ユーザー → 設定 → API アクセス）で接続します。請求書、仕入請求書、支払エントリ、仕訳は、実際の記帳エンジンを通じてネイティブに移行およびミラーされます。"
+    },
+    "qbd": {
+      "blurb": "Intuit Web Connector を介して QuickBooks Desktop に接続します。初回承認時とキャプチャ実行中は QuickBooks を開いておく必要があります。Windows ファイアウォールの受信規則は不要です。",
+      "options": { "US": "米国", "CA": "カナダ", "UK": "英国", "AU": "オーストラリア", "NZ": "ニュージーランド" },
+      "fields": {
+        "historyStartDate": { "label": "履歴の開始日", "help": "移行する最初の転記日です。ミラーのたびに全期間を再確認し、過去の変更や削除を検出します。" },
+        "region": { "label": "QuickBooks の地域" },
+        "baseCurrency": { "label": "基準通貨" },
+        "companyFile": { "label": "会社ファイルのパス（任意）", "help": "空欄の場合、Web Connector 実行時に開いている会社を使用します。" },
+        "webConnectorPassword": { "label": "Web Connector パスワード", "help": ".QWC ファイルを取り込んだ後、QuickBooks Web Connector に一度入力してください。" }
+      }
     },
     "qbo": {
       "blurb": "Intuit アプリのクライアント ID + シークレット（developer.intuit.com → Keys & credentials）を入力し、保存してから、Connect をクリックして会社を承認してください。請求書、仕入請求書、支払、クレジット、仕訳、預金がネイティブに移行およびミラーされます。",

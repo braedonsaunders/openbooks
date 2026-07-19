@@ -7,7 +7,7 @@
     "loading": "Wird geladen…",
     "empty": {
       "title": "Noch keine Verbindungen.",
-      "hint": "Fügen Sie NetSuite oder QuickBooks Online hinzu, um eine Migration zu starten."
+      "hint": "Fügen Sie ein Buchhaltungs-Quellsystem hinzu, um eine Migration zu starten."
     },
     "status": {
       "active": "Aktiv",
@@ -26,7 +26,8 @@
     "runMigration": "Migration ausführen",
     "pauseMirror": "Spiegelung pausieren",
     "enableMirror": "Spiegelung aktivieren",
-    "edit": "Bearbeiten"
+    "edit": "Bearbeiten",
+    "downloadQwc": "Web Connector herunterladen"
   },
   "runs": {
     "heading": "Letzte Läufe",
@@ -97,6 +98,16 @@
     "redirectLabel": "Zu registrierende Redirect-URI:",
     "copy": "Kopieren"
   },
+  "qbd": {
+    "setupTitle": "QuickBooks Desktop einrichten",
+    "setupHint": "Laden Sie nach dem Speichern die Web-Connector-Datei von der Verbindungskarte herunter. Importieren Sie sie auf dem Windows-Computer mit QuickBooks, genehmigen Sie als QuickBooks-Administrator den schreibgeschützten Zugriff und geben Sie dieses Kennwort im Web Connector ein.",
+    "lastContact": "Letzter Web-Connector-Kontakt: {time}",
+    "notConnected": "Web Connector hat noch keine Verbindung hergestellt",
+    "capture": "Erfassung {status}: {completed}/{total} Anfragen",
+    "captureStatus": { "queued": "wartend", "running": "läuft", "complete": "abgeschlossen", "failed": "fehlgeschlagen", "cancelled": "abgebrochen" },
+    "documentation": "Dokumentation",
+    "qwcDescription": "Schreibgeschützter Connector für Buchhaltungsmigration und Abstimmung"
+  },
   "sources": {
     "netsuite": {
       "blurb": "Token-basierter (TBA) Zugriff auf SuiteQL. Erstellen Sie in NetSuite eine Integration + ein Access-Token und fügen Sie dann die vier Werte ein. Native Transaktionen, Anwendungen und Aufträge werden über die echte Buchungs-Engine migriert und gespiegelt."
@@ -106,6 +117,17 @@
     },
     "erpnext": {
       "blurb": "Verbinden Sie sich mit Ihrer ERPNext-URL und einem API-Schlüssel + Secret (Benutzer → Einstellungen → API-Zugriff). Rechnungen, Eingangsrechnungen, Zahlungseinträge und Journale werden nativ über die echte Buchungs-Engine migriert und gespiegelt."
+    },
+    "qbd": {
+      "blurb": "Verbinden Sie QuickBooks Desktop über den Intuit Web Connector. QuickBooks muss für die einmalige Autorisierung und während der Erfassungen geöffnet sein; eine eingehende Windows-Firewallregel ist nicht erforderlich.",
+      "options": { "US": "Vereinigte Staaten", "CA": "Kanada", "UK": "Vereinigtes Königreich", "AU": "Australien", "NZ": "Neuseeland" },
+      "fields": {
+        "historyStartDate": { "label": "Beginn des Verlaufs", "help": "Das früheste zu migrierende Buchungsdatum. Jede Spiegelung prüft den gesamten Zeitraum erneut, um historische Änderungen und Löschungen zu erkennen." },
+        "region": { "label": "QuickBooks-Region" },
+        "baseCurrency": { "label": "Basiswährung" },
+        "companyFile": { "label": "Pfad zur Firmendatei (optional)", "help": "Leer lassen, um die beim Lauf des Web Connectors geöffnete Firma zu verwenden." },
+        "webConnectorPassword": { "label": "Web-Connector-Kennwort", "help": "Geben Sie dieses Kennwort nach dem Import der .QWC-Datei einmal in QuickBooks Web Connector ein." }
+      }
     },
     "qbo": {
       "blurb": "Geben Sie die Client-ID + das Secret Ihrer Intuit-App ein (developer.intuit.com → Keys & credentials), speichern Sie und klicken Sie dann auf Verbinden, um ein Unternehmen zu autorisieren. Rechnungen, Eingangsrechnungen, Zahlungen, Gutschriften, Journale und Einzahlungen werden nativ migriert und gespiegelt.",

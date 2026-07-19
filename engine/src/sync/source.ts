@@ -132,4 +132,7 @@ export interface MigrationSource {
 
   /** Live per-document unpaid balances (AR/AP aging verification). */
   openItems?(): Promise<SourceOpenItem[]>;
+
+  /** Release short-lived source material (for example raw bridge responses). */
+  dispose?(): Promise<void>;
 }
