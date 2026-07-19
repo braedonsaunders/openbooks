@@ -14,7 +14,8 @@ import { dateTime } from '../../../../lib/format'
 
 export const dynamic = 'force-dynamic'
 
-// Raw table names ("audit_log", "journal_entries") → friendly labels.
+// Raw record-type tokens (table names or document kinds like "customer_invoice")
+// → friendly labels: "Customer Invoice", "Journal Entry", "Budget Scenarios".
 const humanize = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
 const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'destructive' | 'outline'> = {
@@ -42,31 +43,40 @@ export default async function Audit({
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'at', allowedSorts: ['at'] as const, perPage: 50 })
   const action = pickString(sp.action)
-  const table = pickString(sp.table)
+  const rtype = pickString(sp.rtype)
   const actor = pickString(sp.actor)
   const from = pickString(sp.from)
   const to = pickString(sp.to)
 
+  // Effective record type: the raw table for most rows, but the document's KIND
+  // (customer_invoice, vendor_bill, journal_entry, …) for the shared `documents`
+  // table so the filter splits it into its transaction types. Deleted documents
+  // (no kind) fall back to "documents".
+  const rtypeExpr = sql`case when a.table_name = 'documents' then coalesce(d.kind, 'documents') else a.table_name end`
+  const auditFrom = sql`
+    from audit_log a
+    left join users u on u.id = a.actor_id
+    left join documents d on a.table_name = 'documents' and d.id = a.row_id`
+
   const where = sql`true
     ${action ? sql` and a.action = ${action}` : sql``}
-    ${table ? sql` and a.table_name = ${table}` : sql``}
+    ${rtype ? sql` and (${rtypeExpr}) = ${rtype}` : sql``}
     ${actor ? (actor === 'system' ? sql` and a.actor_id is null` : sql` and a.actor_id = ${actor}`) : sql``}
     ${from ? sql` and a.at >= ${from}::date` : sql``}
     ${to ? sql` and a.at < (${to}::date + interval '1 day')` : sql``}
-    ${params.q ? sql` and (a.table_name ilike ${'%' + params.q + '%'} or u.name ilike ${'%' + params.q + '%'} or a.row_id::text = ${params.q})` : sql``}`
+    ${params.q ? sql` and ((${rtypeExpr}) ilike ${'%' + params.q + '%'} or u.name ilike ${'%' + params.q + '%'} or a.row_id::text = ${params.q})` : sql``}`
 
-  const [rows, totalRow, actions, tables, users] = await Promise.all([
+  const [rows, totalRow, actions, rtypes, users] = await Promise.all([
     db.execute(sql`
-      select a.*, u.name as actor_name
-        from audit_log a
-        left join users u on u.id = a.actor_id
+      select a.*, u.name as actor_name, (${rtypeExpr}) as rtype
+        ${auditFrom}
        where ${where}
        order by a.at desc
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
-    db.execute(sql`select count(*) as n from audit_log a left join users u on u.id = a.actor_id where ${where}`) as any,
+    db.execute(sql`select count(*) as n ${auditFrom} where ${where}`) as any,
     db.execute(sql`select action, count(*) as n from audit_log group by 1 order by 2 desc`) as any,
-    db.execute(sql`select table_name, count(*) as n from audit_log group by 1 order by 2 desc limit 50`) as any,
+    db.execute(sql`select (${rtypeExpr}) as rtype, count(*) as n ${auditFrom} group by 1 order by 2 desc limit 60`) as any,
     db.execute(sql`
       select a.actor_id, u.name, count(*) as n
         from audit_log a left join users u on u.id = a.actor_id
@@ -90,9 +100,9 @@ export default async function Audit({
             <FilterChips
               basePath="/admin/audit"
               currentParams={sp}
-              paramKey="table"
+              paramKey="rtype"
               label={t('recordTypeFilter')}
-              options={tables.rows.map((r: any) => ({ value: r.table_name, label: humanize(r.table_name), count: Number(r.n) }))}
+              options={rtypes.rows.map((r: any) => ({ value: r.rtype, label: humanize(r.rtype), count: Number(r.n) }))}
             />
             <FilterChips
               basePath="/admin/audit"
@@ -144,7 +154,7 @@ export default async function Audit({
                   <TableCell>
                     <Badge variant={ACTION_VARIANT[r.action] ?? 'secondary'}>{actionLabel(r.action)}</Badge>
                   </TableCell>
-                  <TableCell>{humanize(r.table_name)}</TableCell>
+                  <TableCell>{humanize(r.rtype)}</TableCell>
                   <TableCell className="font-mono text-xs text-slate-500">{String(r.row_id).slice(0, 8)}…</TableCell>
                   <TableCell className="max-w-md">
                     <pre className="overflow-x-auto font-mono text-[11px] text-slate-500 dark:text-slate-400">
