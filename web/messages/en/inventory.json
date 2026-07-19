@@ -58,7 +58,7 @@
     "selectAccount": "Select an account",
     "quantityDelta": "Quantity (+/-)",
     "offsetAccount": "Offset account",
-    "offsetHint": "The account credited for the receipt (clearing / GRNI / opening balance).",
+    "offsetHint": "The account credited for the receipt (clearing, goods-received-not-invoiced, or opening balance).",
     "memoPlaceholder": "Optional note",
     "missingFields": "Item, location, and quantity are required",
     "failed": "Movement failed",

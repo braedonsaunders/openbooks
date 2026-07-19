@@ -141,6 +141,7 @@ export function ScriptDrawer({
 
   const isScheduled = triggerPoint === 'scheduled'
   const isEndpoint = triggerPoint === 'endpoint'
+  const endpointUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/scripts/e/${endpointSlug.trim()}`
   const isBulk = triggerPoint === 'bulk'
   // Record narrowing applies to lifecycle triggers and client scripts;
   // endpoint/bulk/scheduled scripts aren't tied to a record at all.
@@ -365,6 +366,25 @@ export function ScriptDrawer({
                       placeholder="my-endpoint"
                       className="font-mono text-[13px]"
                     />
+                    {endpointSlug.trim() && (
+                      <div className="space-y-1 pt-1">
+                        <Label>{t('drawer.endpointUrl')}</Label>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 truncate rounded bg-slate-100 px-2 py-1.5 font-mono text-xs dark:bg-slate-800" title={endpointUrl}>
+                            {endpointUrl}
+                          </code>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { navigator.clipboard?.writeText(endpointUrl); toast.success(t('drawer.urlCopied')) }}
+                          >
+                            {t('drawer.copyUrl')}
+                          </Button>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.endpointUrlHint')}</p>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="space-y-1.5">

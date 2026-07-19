@@ -1,5 +1,10 @@
 {
   "title": "Apps",
   "description": "Installed apps you can open.",
-  "empty": "No apps are installed. An administrator can install one from Admin Center → App Builder."
+  "empty": "No apps are installed. An administrator can install one from Admin Center → App Builder.",
+  "frame": {
+    "loading": "Loading…",
+    "failedTitle": "This app couldn't be opened.",
+    "failedHint": "Try refreshing. If it keeps happening, contact your administrator."
+  }
 }

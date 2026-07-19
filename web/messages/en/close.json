@@ -364,7 +364,7 @@
       "title": "Close policies",
       "description": "Configure materiality, lock, review, segregation, and exception controls.",
       "formTitle": "Policy configuration",
-      "rulesHint": "Advanced JSON rules allow tenant-specific thresholds and applicability without deployment changes."
+      "rulesHint": "Set custom materiality thresholds and control where each policy applies — no developer involvement needed."
     },
     "automation": {
       "title": "Close automation",

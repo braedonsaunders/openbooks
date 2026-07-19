@@ -98,19 +98,19 @@
   },
   "audit": {
     "title": "Audit Log",
-    "description": "Immutable business history, including complete before/after document and GL impact for posted amendments and deletion tombstones.",
-    "searchPlaceholder": "Search table, actor, or row id…",
+    "description": "A complete, tamper-proof history of every change, with full before/after detail and GL impact for posted amendments and deletions.",
+    "searchPlaceholder": "Search record type, user, or reference…",
     "actionFilter": "Action",
     "empty": {
       "title": "No audit entries yet",
-      "description": "Business-layer mutations will appear here as modules record their changes."
+      "description": "Changes to your records will appear here as they happen."
     },
     "table": {
       "when": "When",
-      "actor": "Actor",
+      "actor": "User",
       "action": "Action",
-      "tableName": "Table",
-      "row": "Row",
+      "tableName": "Record type",
+      "row": "Reference",
       "changes": "Changes"
     },
     "systemActor": "system",
@@ -448,6 +448,10 @@
         "timeout": "timeout"
       },
       "endpointSlug": "Endpoint slug",
+      "endpointUrl": "Callable URL",
+      "endpointUrlHint": "Send requests to this URL to run the script.",
+      "copyUrl": "Copy",
+      "urlCopied": "Endpoint URL copied",
       "customRecordsGroup": "Custom records",
       "builtInGroup": "Transactions",
       "noRuns": "No runs yet — this script has never executed.",
@@ -651,7 +655,7 @@
     "requestFailed": "Request failed",
     "editRolesFor": "Edit roles for {name}",
     "rolesFor": "Roles — {name}",
-    "noRoles": "No roles yet — seed the built-in roles or create one under Manage roles.",
+    "noRoles": "No roles yet — create one under Manage roles.",
     "builtInBadge": "built-in",
     "deactivateConfirm": "Deactivate {name}? They will be signed out and unable to sign in until reactivated.",
     "deactivate": "Deactivate",
@@ -770,7 +774,7 @@
   "ai": {
     "metaTitle": "AI settings",
     "title": "AI settings",
-    "description": "Choose the AI provider the assistant uses. The API key is stored encrypted — never in a file or environment variable.",
+    "description": "Choose the AI provider the assistant uses. Your API key is encrypted at rest and never shown again after you save it.",
     "enabledLabel": "Enable AI features",
     "providerLabel": "Provider",
     "baseUrlLabel": "Base URL",
@@ -1031,7 +1035,7 @@
     },
     "fxProvider": {
       "title": "Exchange rate provider",
-      "description": "Import daily spot rates into the tenant currency registry and keep them current automatically.",
+      "description": "Import daily spot rates into your organization's currencies and keep them current automatically.",
       "provider": "Provider",
       "providers": {
         "bank_of_canada": "Bank of Canada",
@@ -1041,11 +1045,11 @@
       "providerHelp": {
         "bank_of_canada": "Official daily averages with CAD as the source anchor. No API key required.",
         "ecb": "Official business-day reference rates with EUR as the source anchor. No API key required.",
-        "open_exchange_rates": "Broad commercial coverage using your tenant's API key. Plan limits may apply."
+        "open_exchange_rates": "Broad commercial coverage using your own API key. Plan limits may apply."
       },
       "displayName": "Configuration name",
       "displayNamePlaceholder": "Daily corporate rates",
-      "baseCurrency": "Tenant base currency",
+      "baseCurrency": "Base currency",
       "selectCurrency": "Select a currency…",
       "schedule": "Synchronization schedule",
       "schedules": {
@@ -1062,7 +1066,7 @@
       "removeCurrency": "Remove {currency}",
       "noCurrencies": "Add at least one foreign currency.",
       "apiKey": "Provider API key",
-      "apiKeyPlaceholder": "Enter the tenant API key",
+      "apiKeyPlaceholder": "Enter your API key",
       "secretStored": "A sealed key is stored — enter a value to replace it",
       "clearSecret": "Remove the stored API key",
       "enabled": "Enable provider synchronization",
@@ -1185,7 +1189,8 @@
         "contentType": "Content type",
         "formatterScript": "Formatter JavaScript",
         "profile": "Bank profile",
-        "cron": "Cron expression",
+        "cron": "Schedule",
+        "cronHint": "Pick a preset, or enter a custom schedule (cron syntax) for full control.",
         "timezone": "Time zone",
         "action": "When due",
         "party": "Counterparty",
@@ -1222,7 +1227,7 @@
       },
       "originator": {
         "title": "Originator credentials",
-        "newHint": "Stored encrypted for this tenant and profile.",
+        "newHint": "Stored encrypted for your organization and this profile.",
         "editHint": "Credentials are write-only. Leave every field blank to keep the saved values."
       },
       "accounting": {
@@ -1265,7 +1270,13 @@
       },
       "select": "Select…",
       "allSubsidiaries": "All subsidiaries",
-      "empty": "No matching records.",
+      "schedulePresets": {
+        "daily": "Daily",
+        "weekdays": "Weekdays",
+        "weekly": "Weekly (Mon)",
+        "monthly": "Monthly (1st)"
+      },
+      "empty": "No records to show.",
       "manualDelivery": "Manual download",
       "runApproval": "Required",
       "automatic": "Automatic",
@@ -1384,7 +1395,7 @@
       },
       "fx-rates": {
         "title": "Exchange Rates",
-        "description": "Tenant-owned daily rates used to post foreign-currency transactions."
+        "description": "Your organization's daily rates used to post foreign-currency transactions."
       },
       "consolidated-fx-rates": {
         "title": "Consolidated Exchange Rates",
@@ -1650,7 +1661,7 @@
     "new": {
       "button": "New flow",
       "title": "New flow",
-      "description": "Pick the record type this flow runs over. You will design the graph next.",
+      "description": "Pick the record type this flow runs over. You'll design the steps next.",
       "name": "Name",
       "namePlaceholder": "e.g. Bill approval over $10,000",
       "subject": "Record type",
@@ -1773,7 +1784,7 @@
       "subject": "Subject",
       "body": "Body",
       "attachPdf": "Attach the record PDF",
-      "attachPdfHint": "Uses the tenant's active PDF template for this record type.",
+      "attachPdfHint": "Uses your organization's active PDF template for this record type.",
       "interpolationHint": "Insert record values with '{{'field'}}' tokens",
       "availableFields": "Available fields",
       "title": "Title",

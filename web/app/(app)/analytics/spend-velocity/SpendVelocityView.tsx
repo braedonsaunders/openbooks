@@ -273,7 +273,7 @@ function DetectorGrid({ data, compact, selected, onSelect }: { data: SpendVeloci
     { key: 'concentration', label: 'Concentration', icon: PieIcon, tone: 'text-amber-500', count: `${Math.round(data.concentration.summary.top1Share)}%`, active: data.concentration.summary.top1Share > 25, metric: `${Math.round(data.concentration.summary.top5Share)}%`, sub: 'top 5 share', desc: 'Category over-reliance' },
     { key: 'cliff', label: 'Commit. Cliff', icon: Mountain, tone: 'text-sky-500', count: `${cliff.velocityGap}%`, active: cliff.status !== 'healthy', metric: `${cliff.poVelocity}%`, sub: 'PO velocity', desc: 'PO vs SO velocity gap' },
     { key: 'seasonal', label: 'Seasonal', icon: Snowflake, tone: 'text-teal-500', count: String(data.seasonal.insights.length), active: data.seasonal.insights.length > 0, metric: String(data.seasonal.patterns.filter((p) => p.isHigh || p.isLow).length), sub: 'off-pattern months', desc: 'Off-pattern spending' },
-    { key: 'shadow', label: 'Shadow IT', icon: Bug, tone: 'text-pink-500', count: '—', active: false, metric: 'N/A', sub: 'needs line vendors', desc: 'Viral software adoption' },
+    { key: 'shadow', label: 'Shadow IT', icon: Bug, tone: 'text-pink-500', count: '—', active: false, metric: '—', sub: 'not available', desc: 'Viral software adoption' },
   ]
 
   if (compact) {

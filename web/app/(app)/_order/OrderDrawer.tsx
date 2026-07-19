@@ -383,9 +383,9 @@ export function OrderDrawer({
   async function remove() {
     if (
       !(await confirmDialog({
-        title: 'Delete this order?',
-        message: 'This permanently deletes the order and its lines. This cannot be undone.',
-        confirmLabel: 'Delete',
+        title: t('deleteConfirmTitle'),
+        message: t('deleteConfirmMessage'),
+        confirmLabel: tCommon('actions.delete'),
         tone: 'danger',
       }))
     )
@@ -393,7 +393,7 @@ export function OrderDrawer({
     setBusy(true)
     const res = await fetch(`${apiBase}/${doc.id}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success('Order deleted')
+      toast.success(t('toastDeleted'))
       router.push(meta.base)
       router.refresh()
     } else {
@@ -575,7 +575,7 @@ export function OrderDrawer({
             <PdfButton recordType={kind} recordId={String(doc.id)} />
             <SendButton recordType={kind} recordId={String(doc.id)} />
             {isDraft ? (
-              <Button disabled={busy || !canIssue} onClick={issue}>
+              <Button disabled={busy || !canIssue} onClick={issue} title={!canIssue ? t('issueHint') : undefined}>
                 {t('issue')}
               </Button>
             ) : null}

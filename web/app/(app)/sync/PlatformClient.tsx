@@ -129,6 +129,7 @@ export function PlatformClient() {
   // otherwise fall back to the raw value (e.g. a kind added server-side first).
   const statusLabel = (s: string) => (t.has(`connections.status.${s}`) ? t(`connections.status.${s}`) : s)
   const kindLabel = (k: string) => (t.has(`runs.kind.${k}`) ? t(`runs.kind.${k}`) : k)
+  const sourceLabel = (s: string) => data?.sourceTypes.find((st) => st.source === s)?.displayName ?? s
   const runStatusLabel = (s: string) => (t.has(`runs.status.${s}`) ? t(`runs.status.${s}`) : s)
 
   function runResult(r: Run): string {
@@ -237,7 +238,7 @@ export function PlatformClient() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <span className="font-medium text-slate-800 dark:text-slate-100">{c.displayName}</span>
-                  <Badge variant="secondary">{c.source}</Badge>
+                  <Badge variant="secondary">{sourceLabel(c.source)}</Badge>
                   <Badge variant={STATUS_VARIANT[c.status] ?? 'secondary'}>{statusLabel(c.status)}</Badge>
                   {c.mirrorEnabled ? <Badge variant="success">{t('connections.mirrorBadge', { schedule: c.mirrorSchedule })}</Badge> : null}
                 </div>

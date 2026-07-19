@@ -25,7 +25,19 @@ export interface ProjectTypeRow {
 type SubTab = 'general' | 'profitability' | 'invoicing' | 'backup'
 const SUBTABS: SubTab[] = ['general', 'profitability', 'invoicing', 'backup']
 
-const humanize = (v: string) => v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+// Friendly labels for enum tokens that plain title-casing would mangle
+// (acronyms/abbreviations like "je", "tm", "wbs", "pct").
+const LABELS: Record<string, string> = {
+  payroll_je: 'Payroll journal entry',
+  tm_actual: 'Time & materials actuals',
+  wbs_estimates: 'WBS estimates',
+  margin_pct: 'Margin %',
+  in_actual_cost: 'From actual cost',
+  time_and_materials: 'Time & materials',
+  could_be_invoiced: 'Could be invoiced',
+  percent_complete_cost: 'Percent complete (cost)',
+}
+const humanize = (v: string) => LABELS[v] ?? v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
 const BILLING_METHODS = ['', 'time_and_materials', 'fixed_price', 'cost_plus']
 const COST_SOURCES = ['account_types', 'account_group']

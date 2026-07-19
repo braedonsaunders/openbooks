@@ -409,8 +409,8 @@ export function AssistantApp({
                 suggestions={suggestions}
                 onPick={(s) => void send(s)}
                 canSend={aiEnabled}
-                title={t('welcomeTitle')}
-                description={t('welcome')}
+                title={aiEnabled ? t('welcomeTitle') : t('notConfiguredTitle')}
+                description={aiEnabled ? t('welcome') : t('errors.notConfigured')}
               />
             ) : (
               <div className="space-y-6">

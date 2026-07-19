@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   APP_CSP,
   bridgeClientSource,
@@ -35,6 +36,7 @@ export function AppFrame({
   appKey: string
   context: BridgeContext
 }) {
+  const t = useTranslations('apps.frame')
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [bundle, setBundle] = useState<BundleResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -98,14 +100,15 @@ export function AppFrame({
 
   if (error) {
     return (
-      <div style={{ padding: 24, color: 'var(--destructive, #b91c1c)' }}>
-        <strong>App failed to load.</strong>
-        <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 13 }}>{error}</div>
+      <div style={{ padding: 24 }}>
+        <strong>{t('failedTitle')}</strong>
+        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 13 }}>{t('failedHint')}</div>
+        <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, opacity: 0.45 }}>{error}</div>
       </div>
     )
   }
   if (!srcDoc) {
-    return <div style={{ padding: 24, opacity: 0.6 }}>Loading app…</div>
+    return <div style={{ padding: 24, opacity: 0.6 }}>{t('loading')}</div>
   }
   return (
     <iframe

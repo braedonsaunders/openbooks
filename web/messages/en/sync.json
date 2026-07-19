@@ -10,12 +10,12 @@
       "hint": "Add NetSuite or QuickBooks Online to start a migration."
     },
     "status": {
-      "active": "active",
-      "paused": "paused",
-      "error": "error",
-      "unconfigured": "unconfigured"
+      "active": "Active",
+      "paused": "Paused",
+      "error": "Error",
+      "unconfigured": "Not configured"
     },
-    "mirrorBadge": "mirror: {schedule}",
+    "mirrorBadge": "Mirror: {schedule}",
     "lastRun": "Last run: {lastRun} · Synced through: {cursor}"
   },
   "actions": {
@@ -38,14 +38,14 @@
       "result": "Result"
     },
     "kind": {
-      "full_migration": "full migration",
-      "incremental": "incremental",
-      "mirror": "mirror"
+      "full_migration": "Full migration",
+      "incremental": "Incremental",
+      "mirror": "Mirror"
     },
     "status": {
-      "ok": "ok",
-      "failed": "failed",
-      "running": "running"
+      "ok": "Succeeded",
+      "failed": "Failed",
+      "running": "Running"
     },
     "stats": {
       "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
@@ -63,8 +63,8 @@
     "authFailed": "Authorization failed ({status})",
     "queuingMigration": "Queuing full migration…",
     "queuingMirror": "Queuing mirror…",
-    "migrationQueued": "Migration queued — runs on the worker",
-    "mirrorQueued": "Mirror queued — runs on the worker",
+    "migrationQueued": "Migration queued — we'll run it in the background",
+    "mirrorQueued": "Mirror queued — running in the background",
     "testing": "Testing connection…",
     "connected": "Connected",
     "connectedDetail": "Connected — {detail}",
