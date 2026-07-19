@@ -530,11 +530,19 @@ export class NetSuiteSource implements MigrationSource {
     );
     const syncedThrough = new Date(nowRows[0]!.now.replace(" ", "T") + "Z");
 
-    // Headers: changed-since (incremental) or full id-window sweep.
+    // Headers: changed-since (incremental) or full id-window sweep. A COUNT
+    // first gives a real total so the UI shows "pulling X of Y transactions".
+    const [{ n: totalStr }] = await this.q<{ n: string }>(
+      since
+        ? `SELECT COUNT(*) AS n FROM transaction t WHERE t.lastmodifieddate >= TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`
+        : "SELECT COUNT(*) AS n FROM transaction t",
+    );
+    const totalTxns = Number(totalStr ?? 0);
     const headers: NsHeader[] = [];
     if (since) {
       const clause = `t.lastmodifieddate >= TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`;
       headers.push(...(await this.q<NsHeader>(`SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause}`)));
+      ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
     } else {
       const [{ m }] = await this.q<{ m: string }>("SELECT MAX(t.id) AS m FROM transaction t");
       const maxId = Number(m ?? 0);
@@ -545,6 +553,7 @@ export class NetSuiteSource implements MigrationSource {
             `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id > ${lo} AND t.id <= ${lo + W}`,
           )),
         );
+        ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
       }
     }
 
@@ -554,6 +563,7 @@ export class NetSuiteSource implements MigrationSource {
     for (let i = 0; i < tids.length; i += 150) {
       const chunk = tids.slice(i, i + 150);
       if (chunk.length === 0) continue;
+      ctx.onProgress?.({ phase: "pull", message: "Pulling transaction lines…", current: Math.min(i + 150, tids.length), total: tids.length });
       const rows = await this.q<NsLine>(
         `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")})`,
       );

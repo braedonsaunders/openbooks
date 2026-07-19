@@ -34,11 +34,13 @@ export interface QboLine {
   Amount?: number;
   Description?: string;
   DetailType: string;
-  SalesItemLineDetail?: { ItemRef?: Ref; ItemAccountRef?: Ref; TaxCodeRef?: Ref };
-  ItemBasedExpenseLineDetail?: { ItemRef?: Ref; ItemAccountRef?: Ref };
-  AccountBasedExpenseLineDetail?: { AccountRef?: Ref };
+  SalesItemLineDetail?: { ItemRef?: Ref; ItemAccountRef?: Ref; TaxCodeRef?: Ref; CustomerRef?: Ref };
+  ItemBasedExpenseLineDetail?: { ItemRef?: Ref; ItemAccountRef?: Ref; CustomerRef?: Ref };
+  AccountBasedExpenseLineDetail?: { AccountRef?: Ref; CustomerRef?: Ref };
   DiscountLineDetail?: { DiscountAccountRef?: Ref };
-  JournalEntryLineDetail?: { PostingType?: string; AccountRef?: Ref };
+  // QBO line-level Entity (customer/vendor/employee) — carried on JE lines, and
+  // AR/AP journal lines require it (QBO enforces AR⇒Customer, AP⇒Vendor).
+  JournalEntryLineDetail?: { PostingType?: string; AccountRef?: Ref; Entity?: { Type?: string; EntityRef?: Ref } };
   DepositLineDetail?: { AccountRef?: Ref };
   LinkedTxn?: LinkedTxn[];
 }
@@ -105,11 +107,21 @@ export function buildNativeFromQbo(
     referenceNumber: t.DocNumber ?? sourceRef,
   };
   let n = 0;
-  const mk = (accountId: string, units: bigint, description: string | null = null): NativeDocLine => ({
+  const mk = (accountId: string, units: bigint, description: string | null = null, partyId: string | null = null): NativeDocLine => ({
     accountId, itemId: null, amount: fromUnits(units),
     taxAmount: "0", taxOverridden: false, taxCodeId: null,
-    departmentId: null, projectId: null, description, lineNumber: ++n,
+    partyId, departmentId: null, projectId: null, description, lineNumber: ++n,
   });
+  // QBO line Entity → openbooks party (source stores parties prefixed by kind).
+  const entityParty = (e?: { Type?: string; EntityRef?: Ref }): string | null => {
+    const id = e?.EntityRef?.value;
+    if (!id) return null;
+    const prefix = e.Type === "Vendor" ? "V:" : e.Type === "Employee" ? "E:" : "C:";
+    return ctx.partyByRef.get(`${prefix}${id}`) ?? null;
+  };
+  // Billable customer on an expense/item line (sub-customer/project cost).
+  const lineCustomer = (ref?: Ref): string | null =>
+    ref?.value ? ctx.partyByRef.get(`C:${ref.value}`) ?? null : null;
 
   /** Detail lines for item/account-based documents, positive convention. */
   const detailLines = (income: boolean, sign: 1n | -1n): NativeDocLine[] | { skip: string } => {
@@ -126,18 +138,18 @@ export function buildNativeFromQbo(
             ? ctx.accountByRef.get((income ? opts.itemIncomeAccount : opts.itemExpenseAccount).get(d.ItemRef.value) ?? "")?.id ?? null
             : null);
         if (!a) return { skip: `unmapped item ${d?.ItemRef?.value ?? "(markup/no item)"}` };
-        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null));
+        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null, lineCustomer(d?.CustomerRef)));
       } else if (l.DetailType === "ItemBasedExpenseLineDetail") {
         const d = l.ItemBasedExpenseLineDetail;
         const a =
           acct(d?.ItemAccountRef) ??
           (d?.ItemRef?.value ? ctx.accountByRef.get(opts.itemExpenseAccount.get(d.ItemRef.value) ?? "")?.id ?? null : null);
         if (!a) return { skip: `unmapped item ${d?.ItemRef?.value ?? "(no item)"}` };
-        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null));
+        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null, lineCustomer(d?.CustomerRef)));
       } else if (l.DetailType === "AccountBasedExpenseLineDetail") {
         const a = acct(l.AccountBasedExpenseLineDetail?.AccountRef);
         if (!a) return { skip: `unmapped account ${l.AccountBasedExpenseLineDetail?.AccountRef?.value}` };
-        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null));
+        out.push(mk(a, txn(l.Amount) * sign, l.Description ?? null, lineCustomer(l.AccountBasedExpenseLineDetail?.CustomerRef)));
       } else if (l.DetailType === "DiscountLineDetail") {
         const a = acct(l.DiscountLineDetail?.DiscountAccountRef);
         if (a) out.push(mk(a, -txn(l.Amount) * sign, l.Description ?? "Discount"));
@@ -223,7 +235,8 @@ export function buildNativeFromQbo(
         if (!a) return { skip: `unmapped account ${l.JournalEntryLineDetail?.AccountRef?.value}` };
         const amt = txn(l.Amount);
         if (amt === 0n) continue;
-        lines.push(mk(a, l.JournalEntryLineDetail?.PostingType === "Credit" ? -amt : amt, l.Description ?? null));
+        lines.push(mk(a, l.JournalEntryLineDetail?.PostingType === "Credit" ? -amt : amt, l.Description ?? null,
+          entityParty(l.JournalEntryLineDetail?.Entity)));
       }
       if (lines.length < 2) return { skip: "journal with fewer than 2 lines" };
       return { ...base, kind: "journal", partyId: null, controlAccountId: null, lines };

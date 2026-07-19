@@ -13,6 +13,12 @@ import type { PostingDeps } from "../posting.ts";
 export interface NativeDocLine {
   accountId: string | null;
   itemId: string | null;
+  /** Line-level subledger entity (customer/vendor/employee → parties). Source
+   *  systems carry the entity on the LINE (NetSuite line "Name", QBO line
+   *  Entity); AR/AP journal legs settle/age by it. Null falls back to the
+   *  header party at posting time. A source line entity that is a job resolves
+   *  to `projectId` instead. */
+  partyId?: string | null;
   amount: string;
   taxAmount: string;
   taxOverridden: boolean;
@@ -55,11 +61,27 @@ export interface NativeDocument {
   lines: NativeDocLine[];
 }
 
+/** Live progress emitted during a sync so the UI can show a real bar. */
+export interface SyncProgress {
+  phase: "starting" | "entities" | "pull" | "post" | "applications" | "verify" | "done";
+  message: string;
+  /** X of Y for the current phase (omit when not countable). */
+  current?: number;
+  total?: number;
+  docsNew?: number;
+  docsAmended?: number;
+  docsUnchanged?: number;
+  docsFailed?: number;
+  ordersNew?: number;
+}
+
 export interface NativeContext {
   orgId: string;
   refKey: string;
   baseCurrency: string;
   control: PostingDeps["control"];
+  /** Best-effort progress sink so an adapter's pull can report "X of Y". */
+  onProgress?: (p: SyncProgress) => void;
   accountByRef: Map<string, { id: string; number: string | null; name: string; type: string }>;
   /** Reverse: openbooks account id → its source ref (control-account checks). */
   accountRefById: Map<string, string>;

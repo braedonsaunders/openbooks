@@ -50,7 +50,8 @@ export async function reconcileApplications(
   // -- open AR/AP lines per source ref ----------------------------------------
   const lineRows = (await db.execute(sql`
     select d.custom->>${refKey} as ref, l.id as line_id, e.posting_date::text as pdate,
-           l.line_number as line_no, abs(l.amount) as amt
+           l.line_number as line_no, abs(l.amount) as amt,
+           l.account_id as account_id, l.party_id as party_id
       from journal_entries e
       join documents d on d.id = e.source_document_id
       join journal_lines l on l.entry_id = e.id and l.is_open_item
@@ -58,14 +59,14 @@ export async function reconcileApplications(
      where e.origin = 'document' and d.org_id = ${orgId}
        and a.type in ('liability_payable', 'asset_receivable')
        and d.custom->>${refKey} is not null`)) as unknown as {
-    rows: { ref: string; line_id: string; pdate: string; line_no: number; amt: string }[];
+    rows: { ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null }[];
   };
 
-  interface OpenLine { lineId: string; remaining: bigint; date: string; lineNo: number }
+  interface OpenLine { lineId: string; remaining: bigint; date: string; lineNo: number; accountId: string; partyId: string | null }
   const linesByRef = new Map<string, OpenLine[]>();
   for (const r of lineRows.rows) {
     const arr = linesByRef.get(r.ref) ?? [];
-    arr.push({ lineId: r.line_id, remaining: toUnits(r.amt), date: r.pdate, lineNo: r.line_no });
+    arr.push({ lineId: r.line_id, remaining: toUnits(r.amt), date: r.pdate, lineNo: r.line_no, accountId: r.account_id, partyId: r.party_id });
     linesByRef.set(r.ref, arr);
   }
   for (const arr of linesByRef.values()) arr.sort((a, b) => a.lineNo - b.lineNo);
@@ -130,6 +131,23 @@ export async function reconcileApplications(
       // emit a from_line_id === to_line_id application (it breaks subledger↔GL
       // tie-out and represents no real settlement).
       if (payLines[pi]!.lineId === appLines[ai]!.lineId) { ai++; continue; }
+      // A settlement is always SAME control account AND SAME subledger party:
+      // a customer's AR credit settles that customer's AR debit — never AR↔AP,
+      // and never one party against another. Source "payment" links between
+      // multi-account journals and their reversals (month-end accruals, opening
+      // balances) span AR and AP lines for different entities; pairing across
+      // account or party would draw an open item down with an unrelated leg and
+      // corrupt aging. Skip such pairings (advance the lagging pointer); a leg
+      // with no same-account/same-party counterpart simply stays open (reported
+      // as unallocated), which is the faithful outcome.
+      if (
+        payLines[pi]!.accountId !== appLines[ai]!.accountId ||
+        payLines[pi]!.partyId !== appLines[ai]!.partyId
+      ) {
+        if (payLines[pi]!.lineNo <= appLines[ai]!.lineNo) pi++;
+        else ai++;
+        continue;
+      }
       const alloc = [remaining, payLines[pi]!.remaining, appLines[ai]!.remaining]
         .reduce((a, b) => (b < a ? b : a));
       if (alloc <= 0n) {

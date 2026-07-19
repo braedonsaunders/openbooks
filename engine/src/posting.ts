@@ -144,7 +144,7 @@ const cardRule: RuleFn = (doc, lines, deps) => {
     accountId: l.accountId!,
     amount: l.amount,
     memo: l.description,
-    partyId: doc.partyId,
+    partyId: l.partyId ?? doc.partyId,
     paymentCardId: doc.paymentCardId,
     ...dims(doc, l),
   }));
@@ -265,7 +265,7 @@ export const RULES: Record<string, RuleFn> = {
       accountId: deps.inventoryAssetByLine?.get(l.id) ?? l.accountId!,
       amount: l.amount, // debit expense / inventory
       memo: l.description,
-      partyId: doc.partyId,
+      partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
@@ -291,7 +291,7 @@ export const RULES: Record<string, RuleFn> = {
       accountId: deps.deferralAccountByLine?.get(l.id) ?? l.accountId!,
       amount: neg(l.amount), // credit income / deferred revenue
       memo: l.description,
-      partyId: doc.partyId,
+      partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, -1, deps.taxCollectedByCode);
@@ -345,7 +345,7 @@ export const RULES: Record<string, RuleFn> = {
       accountId: l.accountId!,
       amount: l.amount,
       memo: l.description,
-      partyId: doc.partyId,
+      partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
@@ -376,7 +376,11 @@ export const RULES: Record<string, RuleFn> = {
       amount: l.amount,
       subsidiaryId: l.subsidiaryId,
       memo: l.description,
-      partyId: doc.partyId,
+      // Line-level entity: a journal line names its own customer/vendor (source
+      // systems put the entity on the LINE, e.g. NetSuite opening-balance /
+      // month-end journals — AR to a customer, AP to a vendor — with no header
+      // party). Falls back to the header party when the line has none.
+      partyId: l.partyId ?? doc.partyId,
       // An AR/AP leg on a journal is an OPEN ITEM: a credit can settle
       // invoices, a debit can be settled — any crediting document applies.
       isOpenItem: deps.openItemAccountIds?.has(l.accountId!) ?? false,
@@ -393,7 +397,7 @@ export const RULES: Record<string, RuleFn> = {
       accountId: l.accountId!,
       amount: l.amount, // debit line account
       memo: l.description,
-      partyId: doc.partyId,
+      partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
@@ -419,7 +423,7 @@ export const RULES: Record<string, RuleFn> = {
       accountId: l.accountId!,
       amount: neg(l.amount), // credit each source
       memo: l.description,
-      partyId: doc.partyId,
+      partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const total = sum(lines.map((l) => l.amount)); // positive = money in
@@ -444,7 +448,7 @@ export const RULES: Record<string, RuleFn> = {
       accountId: l.accountId!,
       amount: neg(l.amount), // credit expense (reverse of bill)
       memo: l.description,
-      partyId: doc.partyId,
+      partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, -1, deps.taxPaidByCode);
@@ -469,7 +473,7 @@ export const RULES: Record<string, RuleFn> = {
       accountId: l.accountId!,
       amount: l.amount, // debit income (reverse of invoice)
       memo: l.description,
-      partyId: doc.partyId,
+      partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
     const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, 1, deps.taxCollectedByCode);
@@ -725,6 +729,19 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
     throw new PostingError(`posting rule for ${doc.kind} does not balance (sum=${total})`);
   }
 
+  // -- open-item lines must carry a subledger party (AR/AP faithfulness) ----
+  // Every source system (NetSuite line "Name", QBO line Entity) puts a
+  // customer/vendor on each AR/AP line, and both enforce AR⇒customer, AP⇒vendor.
+  // An open-item leg with no party can't age or net by entity — the exact defect
+  // that let party-less month-end journals corrupt the subledger↔GL tie-out.
+  // Fail loudly rather than post a party-less receivable/payable.
+  const orphanOpenItem = kernelLines.find((l) => l.isOpenItem && !l.partyId);
+  if (orphanOpenItem) {
+    throw new PostingError(
+      `open-item line on account ${orphanOpenItem.accountId} has no party — every AR/AP line must carry its customer/vendor (line entity)`,
+    );
+  }
+
   // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----
   const subApplied = await applySubsidiaries(db, effectiveDoc, kernelLines);
   await validateRequiredDimensions(db, doc.orgId, subApplied.lines);
@@ -846,6 +863,14 @@ function buildProjection(doc: Doc, lines: DocLine[], deps: PostingDeps): KernelL
   if (kl.length < 2) throw new PostingError("posting produced fewer than 2 lines");
   if (!isZero(sum(kl.map((l) => l.amount)))) {
     throw new PostingError(`posting rule for ${doc.kind} does not balance`);
+  }
+  // Same AR/AP faithfulness guard as postDocument (this path runs on amend /
+  // re-materialization): an open-item leg must carry its subledger party.
+  const orphan = kl.find((l) => l.isOpenItem && !l.partyId);
+  if (orphan) {
+    throw new PostingError(
+      `open-item line on account ${orphan.accountId} has no party — every AR/AP line must carry its customer/vendor (line entity)`,
+    );
   }
   return kl;
 }

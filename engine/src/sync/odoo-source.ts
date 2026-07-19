@@ -50,7 +50,7 @@ const MOVE_FIELDS = [
   "id", "name", "move_type", "state", "partner_id", "invoice_date", "invoice_date_due",
   "date", "ref", "payment_id", "statement_line_id", "write_date",
 ];
-const LINE_FIELDS = ["id", "move_id", "account_id", "name", "balance", "display_type", "tax_ids", "tax_line_id"];
+const LINE_FIELDS = ["id", "move_id", "account_id", "name", "balance", "display_type", "tax_ids", "tax_line_id", "partner_id"];
 
 /** Odoo datetime "YYYY-MM-DD HH:MM:SS" (UTC) → Date. */
 const odooTs = (s: string): Date => new Date(s.replace(" ", "T") + "Z");
