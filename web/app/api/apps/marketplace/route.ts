@@ -8,8 +8,8 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardPermission('apps.manage')
   if (gate instanceof NextResponse) return gate
-  const listings = await listListings()
-  return NextResponse.json({ listings, orgId: gate.user.orgId })
+  const { listings, total } = await listListings({ page: 1, perPage: 100 })
+  return NextResponse.json({ listings, total, orgId: gate.user.orgId })
 }
 
 /**

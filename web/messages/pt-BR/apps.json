@@ -1,7 +1,44 @@
 {
   "title": "Apps",
   "description": "Apps instalados que você pode abrir.",
-  "empty": "Nenhum app está instalado. Um administrador pode instalar um em Central de Administração → Construtor de Apps.",
+  "searchPlaceholder": "Pesquisar apps instalados…",
+  "version": "Versão {version}",
+  "noDescription": "Nenhuma descrição fornecida.",
+  "actions": {
+    "library": "Biblioteca de Apps",
+    "documentation": "Documentação",
+    "open": "Abrir app",
+    "openAria": "Abrir {name}"
+  },
+  "empty": {
+    "title": "Nenhum app instalado",
+    "description": "Explore a Biblioteca de Apps para encontrar extensões para sua organização.",
+    "action": "Explorar a Biblioteca"
+  },
+  "noResults": {
+    "title": "Nenhum app encontrado",
+    "description": "Tente outro nome, chave ou descrição."
+  },
+  "library": {
+    "title": "Biblioteca de Apps",
+    "description": "Descubra e instale extensões para sua organização.",
+    "searchPlaceholder": "Pesquisar na Biblioteca de Apps…",
+    "install": "Instalar",
+    "update": "Atualizar",
+    "installed": "Instalado",
+    "installing": "Instalando…",
+    "installSuccess": "“{name}” foi instalado",
+    "updateSuccess": "“{name}” foi atualizado",
+    "installFailed": "Não foi possível instalar o app.",
+    "empty": {
+      "title": "A Biblioteca de Apps está vazia",
+      "description": "Os apps publicados aparecerão aqui quando estiverem disponíveis."
+    },
+    "noResults": {
+      "title": "Nenhum app encontrado",
+      "description": "Tente outro nome, chave ou descrição."
+    }
+  },
   "frame": {
     "loading": "Carregando…",
     "failedTitle": "Não foi possível abrir este app.",

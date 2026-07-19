@@ -1,7 +1,44 @@
 {
   "title": "Apps",
   "description": "Installed apps you can open.",
-  "empty": "No apps are installed. An administrator can install one from Admin Center → App Builder.",
+  "searchPlaceholder": "Search installed apps…",
+  "version": "Version {version}",
+  "noDescription": "No description provided.",
+  "actions": {
+    "library": "App Library",
+    "documentation": "Documentation",
+    "open": "Open app",
+    "openAria": "Open {name}"
+  },
+  "empty": {
+    "title": "No apps installed",
+    "description": "Browse the App Library to find extensions for your organization.",
+    "action": "Browse App Library"
+  },
+  "noResults": {
+    "title": "No apps found",
+    "description": "Try a different name, key, or description."
+  },
+  "library": {
+    "title": "App Library",
+    "description": "Discover and install extensions for your organization.",
+    "searchPlaceholder": "Search the App Library…",
+    "install": "Install",
+    "update": "Update",
+    "installed": "Installed",
+    "installing": "Installing…",
+    "installSuccess": "Installed “{name}”",
+    "updateSuccess": "Updated “{name}”",
+    "installFailed": "App installation failed.",
+    "empty": {
+      "title": "The App Library is empty",
+      "description": "Published apps will appear here when they become available."
+    },
+    "noResults": {
+      "title": "No apps found",
+      "description": "Try a different name, key, or description."
+    }
+  },
   "frame": {
     "loading": "Loading…",
     "failedTitle": "This app couldn't be opened.",

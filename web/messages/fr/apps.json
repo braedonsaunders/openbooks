@@ -1,5 +1,47 @@
 {
   "title": "Applications",
   "description": "Applications installées que vous pouvez ouvrir.",
-  "empty": "Aucune application n’est installée. Un administrateur peut en installer une depuis Centre d’administration → Créateur d’applications."
+  "searchPlaceholder": "Rechercher dans les applications installées…",
+  "version": "Version {version}",
+  "noDescription": "Aucune description fournie.",
+  "actions": {
+    "library": "Bibliothèque d’applications",
+    "documentation": "Documentation",
+    "open": "Ouvrir l’application",
+    "openAria": "Ouvrir {name}"
+  },
+  "empty": {
+    "title": "Aucune application installée",
+    "description": "Parcourez la bibliothèque d’applications pour trouver des extensions pour votre organisation.",
+    "action": "Parcourir la bibliothèque"
+  },
+  "noResults": {
+    "title": "Aucune application trouvée",
+    "description": "Essayez un autre nom, une autre clé ou une autre description."
+  },
+  "library": {
+    "title": "Bibliothèque d’applications",
+    "description": "Découvrez et installez des extensions pour votre organisation.",
+    "searchPlaceholder": "Rechercher dans la bibliothèque…",
+    "install": "Installer",
+    "update": "Mettre à jour",
+    "installed": "Installée",
+    "installing": "Installation…",
+    "installSuccess": "« {name} » a été installée",
+    "updateSuccess": "« {name} » a été mise à jour",
+    "installFailed": "L’installation de l’application a échoué.",
+    "empty": {
+      "title": "La bibliothèque d’applications est vide",
+      "description": "Les applications publiées apparaîtront ici dès qu’elles seront disponibles."
+    },
+    "noResults": {
+      "title": "Aucune application trouvée",
+      "description": "Essayez un autre nom, une autre clé ou une autre description."
+    }
+  },
+  "frame": {
+    "loading": "Chargement…",
+    "failedTitle": "Impossible d’ouvrir cette application.",
+    "failedHint": "Essayez d’actualiser la page. Si le problème persiste, contactez votre administrateur."
+  }
 }

@@ -5,6 +5,7 @@
 import type { DocArticle, DocCategory } from './types'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
+import { apps } from './articles/apps'
 
 export type { DocArticle, DocCategory } from './types'
 
@@ -23,9 +24,16 @@ export const DOC_CATEGORIES: DocCategory[] = [
     icon: 'timer',
     order: 2,
   },
+  {
+    key: 'apps',
+    title: 'Apps & Extensions',
+    description: 'Install, use, update, and administer organization extensions.',
+    icon: 'grid',
+    order: 3,
+  },
 ]
 
-export const DOC_ARTICLES: DocArticle[] = [welcome, projectTypes]
+export const DOC_ARTICLES: DocArticle[] = [welcome, projectTypes, apps]
 
 const BY_SLUG = new Map(DOC_ARTICLES.map((a) => [a.slug, a]))
 const CATEGORY_BY_KEY = new Map(DOC_CATEGORIES.map((c) => [c.key, c]))

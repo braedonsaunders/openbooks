@@ -1,5 +1,47 @@
 {
   "title": "Aplicaciones",
   "description": "Aplicaciones instaladas que puede abrir.",
-  "empty": "No hay aplicaciones instaladas. Un administrador puede instalar una desde Centro de administración → Creador de aplicaciones."
+  "searchPlaceholder": "Buscar aplicaciones instaladas…",
+  "version": "Versión {version}",
+  "noDescription": "No se proporcionó ninguna descripción.",
+  "actions": {
+    "library": "Biblioteca de aplicaciones",
+    "documentation": "Documentación",
+    "open": "Abrir aplicación",
+    "openAria": "Abrir {name}"
+  },
+  "empty": {
+    "title": "No hay aplicaciones instaladas",
+    "description": "Explore la Biblioteca de aplicaciones para encontrar extensiones para su organización.",
+    "action": "Explorar la biblioteca"
+  },
+  "noResults": {
+    "title": "No se encontraron aplicaciones",
+    "description": "Pruebe con otro nombre, clave o descripción."
+  },
+  "library": {
+    "title": "Biblioteca de aplicaciones",
+    "description": "Descubra e instale extensiones para su organización.",
+    "searchPlaceholder": "Buscar en la Biblioteca de aplicaciones…",
+    "install": "Instalar",
+    "update": "Actualizar",
+    "installed": "Instalada",
+    "installing": "Instalando…",
+    "installSuccess": "Se instaló «{name}»",
+    "updateSuccess": "Se actualizó «{name}»",
+    "installFailed": "No se pudo instalar la aplicación.",
+    "empty": {
+      "title": "La Biblioteca de aplicaciones está vacía",
+      "description": "Las aplicaciones publicadas aparecerán aquí cuando estén disponibles."
+    },
+    "noResults": {
+      "title": "No se encontraron aplicaciones",
+      "description": "Pruebe con otro nombre, clave o descripción."
+    }
+  },
+  "frame": {
+    "loading": "Cargando…",
+    "failedTitle": "No se pudo abrir esta aplicación.",
+    "failedHint": "Pruebe a actualizar la página. Si el problema continúa, contacte con su administrador."
+  }
 }
