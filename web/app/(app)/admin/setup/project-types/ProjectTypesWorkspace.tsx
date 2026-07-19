@@ -43,7 +43,7 @@ const humanize = (v: string) => LABELS[v] ?? v.replace(/_/g, ' ').replace(/\b\w/
 const BILLING_METHODS = ['', 'time_and_materials', 'fixed_price', 'cost_plus']
 const COST_SOURCES = ['account_types', 'account_group']
 const LABOR_SOURCES = ['in_actual_cost', 'time_rate', 'payroll_je', 'account_group']
-const BURDEN_SOURCES = ['none', 'account_group']
+const OVERHEAD_SOURCES = ['none', 'account_group']
 const PRICE_METHODS = ['contract_field', 'billable_value', 'not_to_exceed', 'cost_plus']
 const CBI_FORMULAS = ['price_minus_invoiced', 'unbilled_billable']
 const BUDGET_SOURCES = ['wbs_estimates', 'none']
@@ -53,7 +53,7 @@ const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']
 const RECOGNITIONS = ['as_invoiced', 'percent_complete_cost', 'milestone']
 const BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only', 'none']
-const MEASURE_KEYS = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'burden', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'remaining_budget', 'gross_profit', 'margin_pct']
+const MEASURE_KEYS = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'overhead', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'remaining_budget', 'gross_profit', 'margin_pct']
 const VARIANTS = ['line', 'subtotal', 'total']
 
 function EnumField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
@@ -94,7 +94,7 @@ const BLANK = (t: string, name: string): ProjectTypeRow => ({
     invoicedToDate: { docKinds: ['customer_invoice'], creditKinds: ['customer_credit'] },
     actualCost: { source: 'account_types', accountTypes: ['expense', 'cogs', 'expense_other', 'expense_deferred'] },
     laborCost: { source: 'in_actual_cost' },
-    burden: { source: 'none' },
+    overhead: { source: 'none' },
     committedCost: { docKinds: ['purchase_order'] },
     billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: 'bill_rate' },
     costBudget: { source: 'wbs_estimates' },
@@ -226,11 +226,11 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as any } })} />
               {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as any } })} />
-              <EnumField label={t('burdenSource')} value={fp.burden.source} options={BURDEN_SOURCES} onChange={(v) => setFp({ burden: { ...fp.burden, source: v as any } })} />
-              {fp.burden.source === 'account_group' ? <EnumField label={t('burdenDimension')} value={fp.burden.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ burden: { ...fp.burden, dimension: v || undefined } })} /> : <div />}
+              <EnumField label={t('overheadSource')} value={fp.overhead.source} options={OVERHEAD_SOURCES} onChange={(v) => setFp({ overhead: { ...fp.overhead, source: v as any } })} />
+              {fp.overhead.source === 'account_group' ? <EnumField label={t('overheadDimension')} value={fp.overhead.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ overhead: { ...fp.overhead, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('budgetSource')} value={fp.costBudget.source} options={BUDGET_SOURCES} onChange={(v) => setFp({ costBudget: { source: v as any } })} />
               <div className="sm:col-span-2"><Chips label={t('committedKinds')} all={COMMIT_KINDS} selected={fp.committedCost.docKinds} onToggle={(v) => setFp({ committedCost: { docKinds: toggle(fp.committedCost.docKinds, v) } })} /></div>
-              <div className="sm:col-span-2"><Chips label={t('totalCostComponents')} all={['actual_cost', 'committed_cost', 'labor_cost', 'burden']} selected={fp.totalCost.components} onToggle={(v) => setFp({ totalCost: { components: toggle(fp.totalCost.components, v) as any } })} /></div>
+              <div className="sm:col-span-2"><Chips label={t('totalCostComponents')} all={['actual_cost', 'committed_cost', 'labor_cost', 'overhead']} selected={fp.totalCost.components} onToggle={(v) => setFp({ totalCost: { components: toggle(fp.totalCost.components, v) as any } })} /></div>
 
               {/* P&L statement layout editor */}
               <div className="sm:col-span-2 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">

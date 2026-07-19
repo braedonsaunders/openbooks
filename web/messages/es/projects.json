@@ -234,7 +234,6 @@
     "margin_pct": "Margen",
     "revenue_posted": "Ingresos contabilizados",
     "labor_cost": "Costo de mano de obra",
-    "burden": "Carga fabril",
     "billable_value": "Valor facturable",
     "unbilled_billable": "Facturable no facturado",
     "hints": {
@@ -243,7 +242,8 @@
       "committed_cost": "Compromisos de órdenes de compra abiertas.",
       "total_price": "Precio contractual / de venta del trabajo.",
       "total_cost": "Todos los costos incurridos y comprometidos."
-    }
+    },
+    "overhead": "Gastos generales"
   },
   "invoicingPref": {
     "heading": "Preferencias de facturación",

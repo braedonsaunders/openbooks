@@ -26,7 +26,7 @@ export type ProjectMeasureKey =
   | "revenue_posted"
   | "actual_cost"
   | "labor_cost"
-  | "burden"
+  | "overhead"
   | "committed_cost"
   | "billable_value"
   | "unbilled_billable"
@@ -38,7 +38,7 @@ export type ProjectMeasureKey =
   | "margin_pct"
   | "remaining_budget";
 
-/** How `actual_cost` / `burden` select GL cost. Either raw account types or a
+/** How `actual_cost` / `overhead` select GL cost. Either raw account types or a
  *  named account-group dimension (reusing web/lib/account-groups). */
 export interface CostSource {
   source: "account_types" | "account_group" | "none";
@@ -57,8 +57,8 @@ export interface FinancialProfile {
   actualCost: CostSource;
   /** Labor cost source (payroll JE vs time-entry rate vs an account group). */
   laborCost: { source: "in_actual_cost" | "time_rate" | "payroll_je" | "account_group" | "none"; dimension?: string; groupKeys?: string[] };
-  /** Overhead/burden applied to the job. */
-  burden: CostSource;
+  /** Overhead applied to the job. */
+  overhead: CostSource;
   /** Open commitments: doc kinds whose unbilled remainder is "committed". */
   committedCost: { docKinds: string[] };
   /** Statistical billable value of all work (drives T&M price + could-be-invoiced). */
@@ -74,7 +74,7 @@ export interface FinancialProfile {
   /** Could-be-invoiced / backlog definition. */
   couldBeInvoiced: { formula: "price_minus_invoiced" | "unbilled_billable" };
   /** Which base cost measures sum into total_cost. */
-  totalCost: { components: Array<"actual_cost" | "committed_cost" | "labor_cost" | "burden"> };
+  totalCost: { components: Array<"actual_cost" | "committed_cost" | "labor_cost" | "overhead"> };
   /** Ordered P&L statement lines rendered on the Financials tab. */
   layout: PnlLine[];
 }
@@ -197,7 +197,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      burden: { source: "none" },
+      overhead: { source: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
       costBudget: STANDARD_BUDGET,
@@ -225,7 +225,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      burden: { source: "none" },
+      overhead: { source: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
       costBudget: STANDARD_BUDGET,
@@ -253,7 +253,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      burden: { source: "none" },
+      overhead: { source: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "cost_times_markup" },
       costBudget: STANDARD_BUDGET,
@@ -281,7 +281,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      burden: { source: "none" },
+      overhead: { source: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
       costBudget: STANDARD_BUDGET,

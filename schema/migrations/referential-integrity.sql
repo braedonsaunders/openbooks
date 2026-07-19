@@ -150,6 +150,7 @@ alter table document_lines
   add foreign key (item_id) references items(id),
   add foreign key (account_id) references accounts(id),
   add foreign key (tax_code_id) references tax_codes(id),
+  add foreign key (party_id) references parties(id),
   add foreign key (employee_id) references parties(id),
   add foreign key (time_entry_id) references time_entries(id),
   add foreign key (time_type_id) references time_types(id),
@@ -165,7 +166,7 @@ alter table items
   add foreign key (recognition_rule_id) references recognition_rules(id),
   add foreign key (deferred_account_id) references accounts(id),
   add foreign key (cost_recovery_account_id) references accounts(id);
-alter table labor_burden_rates add foreign key (department_id) references departments(id);
+alter table overhead_rates add foreign key (department_id) references departments(id);
 
 -- approvals
 alter table approval_requests add foreign key (policy_id) references approval_policies(id);

@@ -234,11 +234,11 @@ export const items = pgTable(
 );
 
 /**
- * Labor burden rates — a real accounting concept here (was a NetSuite custom
- * record driving hand-built payroll JEs). The burden engine posts
- * origin='labor_burden' journals: DR project WIP/COGS, CR burden absorbed.
+ * Overhead rates — a real job-costing concept here (was a NetSuite custom
+ * record driving hand-built payroll JEs). Drives overhead absorption on jobs:
+ * DR project WIP/COGS, CR overhead applied.
  */
-export const laborBurdenRates = pgTable("labor_burden_rates", {
+export const overheadRates = pgTable("overhead_rates", {
   id: id(),
   orgId: orgRef(),
   departmentId: uuid("department_id"),

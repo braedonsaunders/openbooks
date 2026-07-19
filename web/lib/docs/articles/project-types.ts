@@ -13,7 +13,7 @@ export const projectTypes: DocArticle = {
     'profitability',
     'invoicing',
     'backup',
-    'burden',
+    'overhead',
     'billing method',
     'fixed price',
     'time and materials',
@@ -86,9 +86,9 @@ computed. Each measure has a configurable **source**.
 - **Labor cost source** — how labor cost is measured: **In Actual Cost** (already
   included in actual cost), **Time Rate** (hours times cost rate), **Payroll JE**
   (from posted payroll journals), or **Account Group**.
-- **Burden source** — overhead applied on top of direct labor. Today the options
+- **Overhead source** — overhead applied on top of direct labor. Today the options
   are **None** or **Account Group** (allocate from a posted overhead pool). More
-  burden-costing methods — including a per-labor-hour rate scoped by department —
+  overhead-costing methods — including a per-labor-hour rate scoped by department —
   are being added; this article will be updated when they ship.
 - **Cost budget source** — **Wbs Estimates** (roll up the project's work-breakdown
   estimates) or **None**.
@@ -96,7 +96,7 @@ computed. Each measure has a configurable **source**.
   Order**, **Sales Order**, or both. The committed amount is the unbilled
   remainder of those documents.
 - **Total cost components** — which base measures sum into **Total cost**
-  (actual cost, committed cost, labor cost, burden). Only select a component once,
+  (actual cost, committed cost, labor cost, overhead). Only select a component once,
   so you do not double-count — for example, do not add **Labor Cost** separately
   if labor is already inside **Actual Cost**.
 
@@ -171,14 +171,14 @@ match an external system to the penny. The general approach:
 
 1. Set **Invoiced to date** to count the same customer documents the legacy
    system counts.
-2. Point **Actual cost** (and **Burden**) at the account groups that mirror the
+2. Point **Actual cost** (and **Overhead**) at the account groups that mirror the
    legacy cost pools.
 3. Choose the **Total price method** and **Could-be-invoiced formula** that match
    the legacy definitions.
 4. Confirm the numbers against a sample of known projects before relying on them.
 
-If you are migrating from a system that applies burden as a per-labor-hour rate
-by department, note the expanded burden methods referenced above — that method is
+If you are migrating from a system that applies overhead as a per-labor-hour rate
+by department, note the expanded overhead methods referenced above — that method is
 being added specifically to support this pattern.
 `,
 }
