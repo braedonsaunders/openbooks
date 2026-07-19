@@ -1326,6 +1326,108 @@
           "total": 1284
         }
       ]
+    },
+    {
+      "at": "2026-07-19T21:12:33.768Z",
+      "sha": "be3241fc004be87ef169c76600afb62c95579290",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1566,
+      "functions": 3777,
+      "loc": 545287,
+      "languages": 13,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 60,
+          "lines": 326387
+        },
+        {
+          "ext": "ts",
+          "pct": 20,
+          "lines": 111338
+        },
+        {
+          "ext": "tsx",
+          "pct": 14,
+          "lines": 78934
+        },
+        {
+          "ext": "sql",
+          "pct": 4,
+          "lines": 20742
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 66,
+      "deadPct": 1.7,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 4.3,
+      "securityIssues": 141,
+      "patterns": 8,
+      "duplicates": 51,
+      "layerViolations": 1387,
+      "connections": 6742,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 51,
+      "testRatio": 3.3,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 1187
+        },
+        {
+          "name": "engine",
+          "count": 162
+        },
+        {
+          "name": "packages",
+          "count": 106
+        },
+        {
+          "name": "schema",
+          "count": 73
+        },
+        {
+          "name": "extraction",
+          "count": 20
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 68,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 371,
+        "transitive": 1128,
+        "total": 1499
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 371,
+          "transitive": 1128,
+          "total": 1499
+        },
+        {
+          "path": "engine/src/depreciation-formula.ts",
+          "direct": 168,
+          "transitive": 1127,
+          "total": 1295
+        },
+        {
+          "path": "engine/src/sandbox/verify-rls.ts",
+          "direct": 286,
+          "transitive": 995,
+          "total": 1281
+        }
+      ]
     }
   ]
 }
