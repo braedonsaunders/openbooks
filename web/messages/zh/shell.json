@@ -13,7 +13,9 @@
       "accountant": "会计",
       "approver": "审批人",
       "viewer": "查看者"
-    }
+    },
+    "organizations": "组织",
+    "superAdmin": "超级管理员"
   },
   "language": {
     "label": "语言",

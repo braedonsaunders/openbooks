@@ -13,7 +13,9 @@
       "accountant": "Buchhalter",
       "approver": "Genehmiger",
       "viewer": "Betrachter"
-    }
+    },
+    "organizations": "Organisationen",
+    "superAdmin": "Super-Admin"
   },
   "language": {
     "label": "Sprache",
