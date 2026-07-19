@@ -1,0 +1,153 @@
+{
+  "hub": {
+    "title": "Analytics",
+    "description": "Native intelligence dashboards — profitability, cash, customers, vendors and forensic risk, computed live from your ledger.",
+    "searchPlaceholder": "Search analytics…",
+    "noMatches": "No dashboards match your search.",
+    "planned": "Planned",
+    "groups": {
+      "profitability": "Profitability & performance",
+      "operations": "Cash & operations",
+      "relationships": "Customers & vendors",
+      "forensics": "Risk & forensics"
+    },
+    "cards": {
+      "financialHealthTitle": "Financial Health",
+      "financialHealthDesc": "Margin & ratio scorecard with a composite health score",
+      "trueCostTitle": "True Cost",
+      "trueCostDesc": "Overhead burden absorption and selling-rate builder",
+      "utilizationTitle": "Utilization",
+      "utilizationDesc": "Billable time, utilization and service-item profit",
+      "customerTitle": "Customer Intelligence",
+      "customerDesc": "Segmentation, lifetime value and customer profitability",
+      "vendorTitle": "Vendor Performance",
+      "vendorDesc": "Spend concentration, payment behavior and vendor scorecards",
+      "sentinelTitle": "Sentinel",
+      "sentinelDesc": "Forensic transaction integrity and anomaly detection",
+      "spendVelocityTitle": "Spend Velocity",
+      "spendVelocityDesc": "Spend acceleration, subscription creep and shadow IT",
+      "cashflowTitle": "Cash Flow",
+      "cashflowDesc": "Weekly cash forecast, runway and AP/AR aging"
+    }
+  },
+  "financialHealth": {
+    "title": "Financial Health",
+    "description": "Profitability, efficiency and operating ratios with a composite health score.",
+    "backToHub": "Analytics",
+    "tabs": {
+      "overview": "Overview",
+      "margin": "Margin",
+      "items": "Items",
+      "segments": "Segments",
+      "forecast": "Forecast",
+      "scenarios": "Scenarios",
+      "budget": "Budget",
+      "drivers": "Drivers",
+      "ratios": "Ratios",
+      "configuration": "Configuration"
+    },
+    "kpi": {
+      "revenue": "Revenue",
+      "grossMargin": "Gross Margin",
+      "operatingIncome": "Operating Income",
+      "breakeven": "Breakeven"
+    },
+    "kpiSub": {
+      "growth": "YoY {pct}",
+      "grossProfit": "GP: {amount}",
+      "opex": "OpEx: {amount}",
+      "perMonth": "per month"
+    },
+    "score": {
+      "title": "Financial Health Score",
+      "overall": "Overall",
+      "excellent": "Excellent",
+      "good": "Good",
+      "average": "Average",
+      "needsWork": "Needs Work"
+    },
+    "categories": {
+      "profitability": "Profitability",
+      "efficiency": "Efficiency",
+      "operating": "Operations"
+    },
+    "subKpi": {
+      "roic": "ROIC",
+      "ebitdaMargin": "EBITDA Margin",
+      "opLeverage": "Op Leverage",
+      "rule40": "Rule of 40"
+    },
+    "subKpiSub": {
+      "returnOnCapital": "Return on Invested Capital",
+      "earningsMargin": "Earnings Margin",
+      "sensitivity": "Sensitivity",
+      "growthProfit": "Growth + Profit"
+    },
+    "gridHint": "Click any ratio for details",
+    "pnl": {
+      "title": "P&L Summary",
+      "lineItem": "Line Item",
+      "amount": "Amount",
+      "pctRevenue": "% Rev",
+      "revenue": "Revenue",
+      "cogs": "Cost of Goods Sold",
+      "grossProfit": "Gross Profit",
+      "opex": "Operating Expenses",
+      "operatingIncome": "Operating Income",
+      "otherIncome": "Other Income",
+      "otherExpense": "Other Expense",
+      "netIncome": "Net Income"
+    },
+    "budget": {
+      "measuredAgainst": "Measured against <strong>{name}</strong> (FY{year}, {status}) — budget lines over the selected range. Manage scenarios in <link>Budgets</link>.",
+      "totalBudget": "Total Budget",
+      "budgetedAccounts": "{count, plural, one {# budgeted account} other {# budgeted accounts}}",
+      "totalActual": "Total Actual",
+      "normalizedIncome": "income sign-normalized",
+      "overBudget": "Over Budget",
+      "onWatch": "{count} on watch",
+      "coverage": "Coverage",
+      "coverageSub": "accounts with a budget line",
+      "tableTitle": "Budget vs Actual ({count})",
+      "search": "Search accounts…",
+      "csv": "CSV",
+      "all": "All",
+      "status": { "on-track": "On Track", "watch": "Watch", "over": "Over", "no-budget": "No Budget" },
+      "columns": { "account": "Account", "type": "Type", "budget": "Budget", "actual": "Actual", "progress": "Progress", "variance": "Variance", "variancePct": "Variance %", "status": "Status" },
+      "showing": "Showing {from}–{to} of {total} accounts",
+      "previous": "Previous",
+      "next": "Next",
+      "noBudgetTitle": "No formal budget for this period",
+      "noBudgetDescription": "Create and approve a budget scenario to see real account-level variance. This dashboard does not substitute synthetic benchmark targets.",
+      "createBudget": "Create a budget"
+    }
+  },
+  "customer": {
+    "title": "Customer Intelligence",
+    "backToHub": "Analytics"
+  },
+  "vendor": {
+    "title": "Vendor Performance",
+    "backToHub": "Analytics"
+  },
+  "cashflow": {
+    "title": "Cash Flow",
+    "backToHub": "Analytics"
+  },
+  "trueCost": {
+    "title": "True Cost",
+    "backToHub": "Analytics"
+  },
+  "utilization": {
+    "title": "Utilization",
+    "backToHub": "Analytics"
+  },
+  "spendVelocity": {
+    "title": "Spend Velocity",
+    "backToHub": "Analytics"
+  },
+  "sentinel": {
+    "title": "Sentinel",
+    "backToHub": "Analytics"
+  }
+}

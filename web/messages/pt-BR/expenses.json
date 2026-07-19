@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Expense Reports",
+    "description": "Employee expense reports — draft → approval → posted against the employee payable.",
+    "searchPlaceholder": "Search reports, employees, memos…",
+    "emptyTitle": "No expense reports yet",
+    "emptyDescription": "Enter the first expense report to start the reimbursement workflow.",
+    "columns": {
+      "report": "Report"
+    }
+  },
+  "actions": {
+    "newReport": "New expense report",
+    "submitForApproval": "Submit for approval"
+  },
+  "drawer": {
+    "autosaveHint": "Draft — changes save automatically.",
+    "viewGlImpact": "View GL impact",
+    "reportDate": "Report date",
+    "selectEmployeePlaceholder": "Select employee…",
+    "accountPlaceholder": "Account…",
+    "noTax": "No tax",
+    "deleteTitle": "Delete this expense report?",
+    "deleteDraftBody": "This permanently deletes the draft expense report. This cannot be undone.",
+    "deletePostedBody": "This permanently deletes the expense report and removes its ledger impact. This cannot be undone.",
+    "columns": {
+      "taxAmount": "Tax amt"
+    },
+    "saveState": {
+      "saved": "All changes saved",
+      "dirty": "Unsaved changes…",
+      "error": "Save failed — fix and retry"
+    },
+    "totals": "Subtotal {subtotal} · Tax {tax} · <strong>Total {total}</strong>"
+  },
+  "toasts": {
+    "submitted": "Submitted for approval",
+    "posted": "Posted to the ledger",
+    "actionFailed": "Action failed",
+    "autosaveFailed": "Autosave failed",
+    "deleted": "Expense report deleted",
+    "deleteFailed": "Delete failed",
+    "draftFailed": "Could not create a draft expense report"
+  }
+}

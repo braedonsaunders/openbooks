@@ -1,0 +1,85 @@
+{
+  "title": "Query Console",
+  "subtitle": "Real PostgreSQL, read-only. SELECT-only role, 10s timeout. ⌘⏎ to run.",
+  "description": "Real PostgreSQL — not a query dialect. Runs read-only under a SELECT-only role with a 10-second timeout. ⌘⏎ to run.",
+  "readOnlyBadge": "Read-only",
+  "run": "Run",
+  "running": "Running…",
+  "clear": "Clear",
+  "rowLimit": "Limit",
+  "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
+  "failed": "Failed",
+  "queryError": "Query error",
+  "rowCount": "{count, plural, one {# row} other {# rows}}",
+  "truncated": "Truncated at {max}",
+  "ranSelection": "Ran selection",
+  "resultsIdle": "No results yet",
+  "resultsIdleHint": "Results appear here",
+  "filterResults": "Filter rows…",
+  "copyCsv": "Copy",
+  "copiedCsv": "Copied results as CSV",
+  "copyFailed": "Copy failed",
+  "runToSeeResults": "Run a query to see results",
+  "runHint": "Write SQL above, then press Run or ⌘⏎. Select text to run just that.",
+  "emptyResultSet": "Query returned no columns",
+  "noFilterMatch": "No rows match your filter",
+  "run_legacy": "Run query",
+  "rail": {
+    "schema": "Schema",
+    "snippets": "Snippets",
+    "history": "History"
+  },
+  "schema": {
+    "searchPlaceholder": "Search tables & columns…",
+    "noMatch": "No matching tables",
+    "insertTable": "Click to insert table name",
+    "insertColumn": "Click to insert column name"
+  },
+  "history": {
+    "count": "{count, plural, one {# query} other {# queries}}",
+    "clear": "Clear",
+    "rows": "{count, plural, one {# row} other {# rows}}",
+    "failed": "Failed",
+    "empty": "Queries you run appear here"
+  },
+  "snippetSaved": "Saved “{name}”",
+  "snippets": {
+    "save": "Save",
+    "namePlaceholder": "Name this query…",
+    "savedHeading": "Saved",
+    "examplesHeading": "Examples",
+    "delete": "Delete snippet",
+    "trialBalance": {
+      "label": "Trial balance",
+      "description": "Signed balance per account, non-zero only."
+    },
+    "topAccounts": {
+      "label": "Largest balances",
+      "description": "The 15 accounts with the biggest absolute balance."
+    },
+    "recentEntries": {
+      "label": "Recent journal entries",
+      "description": "The 50 most recent entries with status and origin."
+    },
+    "monthlyActivity": {
+      "label": "Monthly activity",
+      "description": "Posted entries and debit totals by month."
+    },
+    "unbalancedEntries": {
+      "label": "Unbalanced entries",
+      "description": "Entries whose lines don't net to zero."
+    },
+    "entriesByOrigin": {
+      "label": "Entries by origin",
+      "description": "Count of entries grouped by their source origin."
+    },
+    "tableSizes": {
+      "label": "Table row counts",
+      "description": "Estimated live rows per table, largest first."
+    },
+    "listColumns": {
+      "label": "List all columns",
+      "description": "Every column in the public schema with its type."
+    }
+  }
+}

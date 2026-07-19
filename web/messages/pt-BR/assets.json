@@ -1,0 +1,119 @@
+{
+  "dispose": {
+    "label": "Dispose",
+    "writeOff": "Write off (no proceeds)",
+    "proceeds": "Sale proceeds",
+    "account": "Deposit proceeds to",
+    "selectAccount": "Select an account…",
+    "date": "Disposal date",
+    "action": "Post disposal",
+    "writeOffAction": "Post write-off",
+    "working": "Posting…",
+    "done": "Disposed — gain/loss {gainLoss}"
+  },
+  "remeasure": {
+    "label": "Revalue",
+    "newValue": "New carrying value",
+    "date": "Date",
+    "action": "Apply",
+    "working": "Applying…",
+    "done": "{kind} — {delta}"
+  },
+  "taxPools": {
+    "title": "Tax Depreciation (CCA)",
+    "description": "Compute capital cost allowance by class pool for a tax year.",
+    "taxYear": "Tax year",
+    "run": "Run",
+    "running": "Running…",
+    "done": "Computed {count} pools",
+    "empty": "No assets with a tax class for this year.",
+    "totals": "Total",
+    "columns": {
+      "class": "Class",
+      "opening": "Opening UCC",
+      "additions": "Additions",
+      "dispositions": "Dispositions",
+      "allowance": "CCA",
+      "closing": "Closing UCC",
+      "recapture": "Recapture",
+      "terminalLoss": "Terminal loss"
+    }
+  },
+  "list": {
+    "title": "Fixed Assets",
+    "description": "The asset register behind depreciation — cost, accumulated depreciation, and net book value per asset.",
+    "searchPlaceholder": "Search name, number, serial…",
+    "emptyTitle": "No fixed assets yet",
+    "emptyDescription": "Add the first asset to start the register and depreciation schedules.",
+    "newButton": "New asset",
+    "createDraftFailed": "Could not create a draft asset",
+    "runDepreciation": "Run depreciation"
+  },
+  "labels": {
+    "number": "Number",
+    "category": "Category",
+    "cost": "Cost",
+    "accumulated": "Accumulated depreciation",
+    "nbv": "Net book value",
+    "salvage": "Salvage value",
+    "acquiredOn": "Acquired",
+    "inServiceOn": "In service",
+    "method": "Method",
+    "lifeMonths": "Useful life (months)",
+    "ratePercent": "Rate (%/yr)",
+    "serialNumber": "Serial number",
+    "description": "Description",
+    "assetAccount": "Asset account",
+    "accumulatedAccount": "Accumulated depreciation account",
+    "expenseAccount": "Depreciation expense account"
+  },
+  "methods": {
+    "straight_line": "Straight-line",
+    "declining_balance": "Declining balance",
+    "double_declining": "Double declining balance",
+    "units_of_production": "Units of production",
+    "manual": "Manual"
+  },
+  "status": {
+    "draft": "Draft",
+    "in_service": "In service",
+    "fully_depreciated": "Fully depreciated",
+    "disposed": "Disposed",
+    "written_off": "Written off"
+  },
+  "errors": {
+    "invalidSubsidiary": "Choose an active, non-elimination subsidiary.",
+    "noAvailableSubsidiary": "Your role has no active subsidiary available for this asset."
+  },
+  "drawer": {
+    "newAsset": "New asset",
+    "editing": "Editing — Save to apply changes",
+    "identity": "Identity",
+    "depreciation": "Depreciation",
+    "accounts": "GL accounts",
+    "schedule": "Depreciation schedule",
+    "scheduleEmpty": "No schedule yet — set cost, in-service date, method, and useful life, then save.",
+    "period": "Period",
+    "planned": "Planned",
+    "postedAmount": "Posted",
+    "runForAsset": "Run depreciation",
+    "placeInService": "Place in service",
+    "viewEntry": "View entry",
+    "noAccount": "—",
+    "selectAccount": "Select account",
+    "selectCategory": "Select category",
+    "saveFailed": "Save failed",
+    "runFailed": "Run failed",
+    "deleteBlocked": "This asset has posted depreciation and cannot be deleted.",
+    "deleteTitle": "Delete this asset?",
+    "deleteMessage": "This permanently deletes the draft asset and its schedule. This cannot be undone.",
+    "deleted": "Asset deleted",
+    "unsavedChanges": "Unsaved changes"
+  },
+  "run": {
+    "asOf": "As of",
+    "posted": "Posted {count} entries totalling {amount}",
+    "nothingDue": "Nothing due to depreciate",
+    "someSkipped": "{count} skipped"
+  }
+}

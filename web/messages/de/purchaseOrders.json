@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "Purchase Orders",
+    "description": "Non-posting vendor commitments — issue, then convert into a bill on receipt.",
+    "searchPlaceholder": "Search purchase orders, vendors, memo…",
+    "converted": "Converted",
+    "emptyTitle": "No purchase orders yet",
+    "emptyDescription": "Create the first purchase order to start the procure-to-pay workflow.",
+    "newButton": "New purchase order",
+    "createDraftFailed": "Could not create a draft purchase order"
+  },
+  "shared": {
+    "kinds": {
+      "salesOrder": "Sales order",
+      "invoice": "Invoice",
+      "bill": "Bill"
+    },
+    "docKind": "{kind, select, quote {Estimate} sales_order {Sales order} purchase_order {Purchase order} customer_invoice {Invoice} vendor_bill {Bill} other {{kind}}}",
+    "partyLabel": "{kind, select, purchase_order {Vendor} other {Customer}}",
+    "selectPartyPlaceholder": "{kind, select, purchase_order {Select vendor…} other {Select customer…}}",
+    "dateLabel": "{kind, select, quote {Estimate date} other {Order date}}",
+    "expiryLabel": "{kind, select, quote {Expiry date} sales_order {Ship / due date} purchase_order {Expected date} other {Date}}",
+    "draftAutosave": "Draft — changes save automatically.",
+    "issue": "Issue",
+    "convertTo": "Convert to {target}",
+    "convertCreated": "{target} {number} created",
+    "convertFailed": "Conversion failed",
+    "actionFailed": "Action failed",
+    "autosaveFailed": "Autosave failed",
+    "toastIssued": "Issued",
+    "toastVoided": "Voided",
+    "voidConfirmTitle": "Void this document?",
+    "voidConfirmMessage": "Voiding cancels the order. This cannot be undone.",
+    "deleteConfirmTitle": "Delete this order?",
+    "deleteConfirmMessage": "This permanently deletes the order and its lines. This cannot be undone.",
+    "toastDeleted": "Order deleted",
+    "issueHint": "Add a customer or vendor and at least one line to issue this order.",
+    "convertedProgress": "Converted {billed}/{ordered}",
+    "fullyConverted": "Fully converted",
+    "allChangesSaved": "All changes saved",
+    "saveFailedRetry": "Save failed — fix and retry",
+    "unsavedChanges": "Unsaved changes…",
+    "totals": {
+      "subtotal": "Subtotal {amount}",
+      "tax": "Tax {amount}",
+      "total": "Total {amount}"
+    },
+    "columns": {
+      "item": "Item",
+      "account": "{kind, select, purchase_order {Account} other {Income account}}",
+      "accountPlaceholder": "Account…",
+      "qty": "Qty",
+      "unitPrice": "Unit price",
+      "taxAmount": "Tax amt",
+      "noTax": "No tax"
+    },
+    "linksTitle": "Origin / Converted into",
+    "linkCreatedFrom": "Created from",
+    "linkConvertedInto": "Converted into"
+  }
+}

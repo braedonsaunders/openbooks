@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "Journal",
+    "description": "{count, plural, one {# posted entry} other {# posted entries}} · audited; closed periods are immutable.",
+    "searchPlaceholder": "Search entry number or memo…",
+    "originFilter": "Origin",
+    "draftsHeading": "Draft journals — not yet posted",
+    "columns": {
+      "entry": "Entry",
+      "origin": "Origin",
+      "debits": "Debits"
+    }
+  },
+  "origins": {
+    "manual": "Manual",
+    "closing": "Closing",
+    "allocation": "Allocation",
+    "revaluation": "Revaluation",
+    "laborBurden": "Labor burden",
+    "depreciation": "Depreciation",
+    "revenueRecognition": "Revenue recognition",
+    "fxSettlement": "FX settlement",
+    "translation": "Translation"
+  },
+  "detail": {
+    "notFound": "Entry not found",
+    "origin": "origin: {origin}",
+    "reverses": "reverses {number}",
+    "openItemBadge": "open item",
+    "totals": "Totals",
+    "columns": {
+      "debit": "Debit",
+      "credit": "Credit",
+      "openItem": "Open item"
+    }
+  },
+  "newButton": {
+    "label": "New journal",
+    "createFailed": "Could not create a draft journal"
+  },
+  "drawer": {
+    "draftDescription": "Draft — changes save automatically. Debits and credits must balance to post.",
+    "autosaveWithParty": "{party} · changes save automatically",
+    "autosave": "changes save automatically",
+    "postFailed": "Posting failed",
+    "postedToast": "Posted to the ledger",
+    "autosaveFailed": "Autosave failed",
+    "viewGlImpact": "View GL impact",
+    "allChangesSaved": "All changes saved",
+    "saveFailedRetry": "Save failed — fix and retry",
+    "unsavedChanges": "Unsaved changes…",
+    "deleteTitle": "Delete this journal?",
+    "deleteDraftBody": "This permanently deletes the draft journal. This cannot be undone.",
+    "deletePostedBody": "This permanently deletes the journal and removes its ledger impact. This cannot be undone.",
+    "deleted": "Journal deleted",
+    "deleteFailed": "Delete failed",
+    "totals": "Debits <strong>{debits}</strong> · Credits <strong>{credits}</strong>",
+    "outOfBalance": "Out of balance · {amount}",
+    "balanced": "Balanced",
+    "referenceNumber": "Reference #",
+    "noParty": "No party",
+    "accountPlaceholder": "Account…",
+    "columns": {
+      "debit": "Debit",
+      "credit": "Credit"
+    }
+  }
+}
