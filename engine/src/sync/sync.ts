@@ -2,7 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db.ts";
 import { toUnits, fromUnits } from "../money.ts";
 import { postDocument, regenerateGlImpactTx, type PostingDeps } from "../posting.ts";
-import { buildNativeContext, type NativeContext, type NativeDocument } from "./native.ts";
+import { buildNativeContext, type NativeContext, type NativeDocument, type SyncProgress } from "./native.ts";
 import { loadEntities, type EntityLoadStats } from "./migrate.ts";
 import { reconcileApplications, recomputeOpenBalances, type ApplyStats } from "./applications.ts";
 import { trueUpResidualGl, type TrueUpStats } from "./trueup.ts";
@@ -91,7 +91,7 @@ function nativeKey(d: NativeDocument): string {
     d.kind, d.partyId, d.subsidiaryId, d.documentDate, d.dueDate, d.memo, d.referenceNumber, d.controlAccountId, d.extraDims ?? {},
     d.lines.map((l) => [
       l.accountId, l.itemId, toUnits(l.amount).toString(), toUnits(l.taxAmount).toString(),
-      l.taxOverridden, l.taxCodeId, l.departmentId, l.projectId, l.subsidiaryId, l.extraDims ?? {}, l.description,
+      l.taxOverridden, l.taxCodeId, l.partyId ?? null, l.departmentId, l.projectId, l.subsidiaryId, l.extraDims ?? {}, l.description,
     ]),
   ]);
 }
@@ -109,11 +109,11 @@ async function storedKey(docId: string): Promise<string> {
   const lines = (
     (await db.execute(sql`
       select account_id, item_id, amount, tax_amount, tax_overridden, tax_code_id,
-             department_id, project_id, subsidiary_id, extra_dims, description
+             party_id, department_id, project_id, subsidiary_id, extra_dims, description
         from document_lines where document_id = ${docId} order by line_number`)) as unknown as {
       rows: {
         account_id: string | null; item_id: string | null; amount: string; tax_amount: string;
-        tax_overridden: boolean; tax_code_id: string | null; department_id: string | null;
+        tax_overridden: boolean; tax_code_id: string | null; party_id: string | null; department_id: string | null;
         project_id: string | null; subsidiary_id: string | null; extra_dims: Record<string, string>; description: string | null;
       }[];
     }
@@ -122,9 +122,23 @@ async function storedKey(docId: string): Promise<string> {
     d!.kind, d!.party_id, d!.subsidiary_id, d!.ddate, d!.due, d!.memo, d!.reference_number, d!.ctrl, d!.extra_dims ?? {},
     lines.map((l) => [
       l.account_id, l.item_id, toUnits(l.amount).toString(), toUnits(l.tax_amount).toString(),
-      l.tax_overridden, l.tax_code_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims ?? {}, l.description,
+      l.tax_overridden, l.tax_code_id, l.party_id ?? null, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims ?? {}, l.description,
     ]),
   ]);
+}
+
+/** Best-effort live progress write (throttled) so the platform page can show a
+ *  real "pulling/posting X of Y" bar. Never fails a sync — progress is cosmetic. */
+const _progressAt = new Map<string, number>();
+async function setProgress(runId: string, p: SyncProgress, force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && now - (_progressAt.get(runId) ?? 0) < 700) return;
+  _progressAt.set(runId, now);
+  try {
+    await db.execute(sql`update sync_runs set progress = ${JSON.stringify(p)}::jsonb where id = ${runId}`);
+  } catch {
+    /* progress is best-effort */
+  }
 }
 
 /** Denormalize a posted document's header totals from its journal entry. */
@@ -182,8 +196,10 @@ export async function runSync(
     //    Default ON for mirrors too: the upsert-by-ref loader is idempotent, and
     //    a new customer/account/item referenced by a new transaction must exist
     //    before the document builds.
+    await setProgress(run!.id, { phase: "starting", message: "Connecting…" }, true);
     let entityStats: EntityLoadStats | undefined;
     if ((opts.loadEntitiesFirst ?? true) && source.entities) {
+      await setProgress(run!.id, { phase: "entities", message: "Loading accounts, parties, items…" }, true);
       entityStats = await loadEntities(source, org.id, since);
     }
 
@@ -220,9 +236,12 @@ export async function runSync(
     }
 
     const ctx: NativeContext = await buildNativeContext(org.id, refKey, source.baseCurrency);
+    // Pull-phase progress: the adapter reports "X of Y transactions" as it streams.
+    ctx.onProgress = (p) => { void setProgress(run!.id, p); };
     const deps: PostingDeps = { control: ctx.control, cardLiabilityAccountId: ctx.control.ap };
 
     // -- 3. pull native changes -------------------------------------------------
+    await setProgress(run!.id, { phase: "pull", message: "Pulling transactions…" }, true);
     const changes = await source.nativeChanges(since, ctx);
 
     // -- 4. existing documents by source ref -------------------------------------
@@ -241,7 +260,15 @@ export async function runSync(
     const skipped: string[] = [];
     for (const u of changes.unbuildable) skipped.push(`${u.ref}: ${u.reason}`);
 
+    const totalDocs = changes.documents.length;
+    let docIndex = 0;
     for (const sourceDoc of changes.documents) {
+      docIndex++;
+      await setProgress(run!.id, {
+        phase: "post", message: "Posting transactions…",
+        current: docIndex, total: totalDocs,
+        docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
+      });
       const doc: NativeDocument = {
         ...sourceDoc,
         subsidiaryId: sourceDoc.subsidiaryId ?? ctx.rootSubsidiaryId,
@@ -288,6 +315,7 @@ export async function runSync(
                 taxCodeId: l.taxCodeId,
                 taxAmount: l.taxAmount,
                 taxOverridden: l.taxOverridden,
+                partyId: l.partyId ?? null,
                 departmentId: l.departmentId,
                 projectId: l.projectId,
                 subsidiaryId: l.subsidiaryId,
@@ -354,6 +382,7 @@ export async function runSync(
               taxCodeId: l.taxCodeId,
               taxAmount: l.taxAmount,
               taxOverridden: l.taxOverridden,
+              partyId: l.partyId ?? null,
               departmentId: l.departmentId,
               projectId: l.projectId,
               subsidiaryId: l.subsidiaryId,
@@ -409,6 +438,10 @@ export async function runSync(
     }
 
     // -- 6. applications ----------------------------------------------------------
+    await setProgress(run!.id, {
+      phase: "applications", message: "Reconciling payments & credits…",
+      docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
+    }, true);
     const applications =
       changes.applications.length > 0
         ? await reconcileApplications(org.id, refKey, changes.applications)
@@ -435,6 +468,7 @@ export async function runSync(
     await recomputeOpenBalances(org.id);
 
     // -- 7. verify: trial balance -------------------------------------------------
+    await setProgress(run!.id, { phase: "verify", message: "Verifying trial balance & open items…" }, true);
     const theirs = await source.trialBalance();
     const ours = (await db.execute(sql`
       select a.custom->>${refKey} as ref, sum(l.amount) as bal

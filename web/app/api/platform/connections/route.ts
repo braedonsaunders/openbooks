@@ -34,8 +34,8 @@ export async function GET() {
   const runs = (await db.execute(sql`
     select id, connection_id as "connectionId", source, kind, status,
            started_at as "startedAt", finished_at as "finishedAt",
-           synced_through as "syncedThrough", stats, error_message as "errorMessage", triggered_by as "triggeredBy"
-      from sync_runs where org_id = ${orgId} order by started_at desc limit 20`)) as unknown as {
+           synced_through as "syncedThrough", stats, progress, error_message as "errorMessage", triggered_by as "triggeredBy"
+      from sync_runs where org_id = ${orgId} order by started_at desc limit 200`)) as unknown as {
     rows: Record<string, unknown>[]
   }
   // Configured currencies power any `optionsSource: 'currencies'` config field.

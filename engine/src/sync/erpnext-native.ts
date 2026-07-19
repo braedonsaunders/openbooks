@@ -52,7 +52,9 @@ export interface ErpJournal {
   posting_date: string;
   docstatus: number;
   user_remark?: string | null;
-  accounts: { account: string; debit: number; credit: number }[];
+  // ERPNext JE lines carry their own party (party_type Customer/Supplier +
+  // party) — its per-line AR/AP subledger mechanism.
+  accounts: { account: string; debit: number; credit: number; party_type?: string | null; party?: string | null }[];
 }
 
 const num = (v: number): bigint => toUnits((v ?? 0).toFixed(2));
@@ -62,12 +64,20 @@ function line(
   amountUnits: bigint,
   n: number,
   description: string | null = null,
+  partyId: string | null = null,
 ): NativeDocLine {
   return {
     accountId, itemId: null, amount: fromUnits(amountUnits),
     taxAmount: "0", taxOverridden: false, taxCodeId: null,
-    departmentId: null, projectId: null, description, lineNumber: n,
+    partyId, departmentId: null, projectId: null, description, lineNumber: n,
   };
+}
+
+/** ERPNext JE line party (party_type Customer/Supplier) → openbooks party. */
+function erpLineParty(ctx: NativeContext, row: { party_type?: string | null; party?: string | null }): string | null {
+  if (!row.party) return null;
+  const prefix = row.party_type === "Supplier" ? "S:" : "C:";
+  return ctx.partyByRef.get(`${prefix}${row.party}`) ?? null;
 }
 
 export function buildErpInvoice(ctx: NativeContext, inv: ErpInvoice): NativeDocument | { skip: string } {
@@ -170,7 +180,7 @@ export function buildErpJournal(ctx: NativeContext, je: ErpJournal): NativeDocum
     if (!accountId) return { skip: `unmapped account ${row.account}` };
     const amt = num(row.debit) - num(row.credit);
     if (amt === 0n) continue;
-    lines.push(line(accountId, amt, ++n));
+    lines.push(line(accountId, amt, ++n, null, erpLineParty(ctx, row)));
   }
   if (lines.length < 2) return { skip: "journal with fewer than 2 lines" };
   return {

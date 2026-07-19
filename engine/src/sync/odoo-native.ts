@@ -44,6 +44,8 @@ export interface OdooMoveLine {
   display_type: string;
   tax_ids: number[];
   tax_line_id: unknown;
+  /** Line-level partner (customer/vendor) — Odoo carries it per move line. */
+  partner_id: unknown;
 }
 
 /** Stored-amount sign per kind (see posting rules): rule(detail) reproduces GL. */
@@ -93,6 +95,9 @@ export function buildNativeFromOdoo(
   };
   const acct = (l: OdooMoveLine): string | null =>
     ctx.accountByRef.get(m2oId(l.account_id) ?? "")?.id ?? null;
+  // Line-level subledger entity (Odoo puts the partner on each move line).
+  const lineParty = (l: OdooMoveLine): string | null =>
+    ctx.partyByRef.get(m2oId(l.partner_id) ?? "") ?? null;
   const acctType = (l: OdooMoveLine): string | null =>
     ctx.accountByRef.get(m2oId(l.account_id) ?? "")?.type ?? null;
 
@@ -133,7 +138,7 @@ export function buildNativeFromOdoo(
       out.push({
         accountId: a, itemId: null, amount: fromUnits(num(l.balance)),
         taxAmount: "0", taxOverridden: false, taxCodeId: null,
-        departmentId: null, projectId: null,
+        partyId: lineParty(l), departmentId: null, projectId: null,
         description: l.name || null, lineNumber: ++n,
       });
     }
@@ -158,7 +163,7 @@ export function buildNativeFromOdoo(
       amount: fromUnits(num(l.balance) * BigInt(sign)),
       taxAmount: "0", taxOverridden: false,
       taxCodeId: code?.id ?? null,
-      departmentId: null, projectId: null,
+      partyId: lineParty(l), departmentId: null, projectId: null,
       description: l.name || null, lineNumber: ++n,
     };
     out.push(row);

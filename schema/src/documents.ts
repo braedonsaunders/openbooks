@@ -118,6 +118,17 @@ export const documentLines = pgTable(
      */
     taxOverridden: boolean("tax_overridden").notNull().default(false),
 
+    /**
+     * Line-level subledger entity — the customer/vendor/employee this specific
+     * line belongs to (→ parties), independent of the header party. Faithful to
+     * how every source system models a transaction line: NetSuite's line "Name"
+     * / QBO's line Entity. AR/AP legs on journals (e.g. opening-balance/month-end
+     * entries) carry their party HERE, not on the header. Polymorphic "line
+     * entity" = this party_id OR the projectId below (a job); the import routes
+     * the source line entity to whichever it resolves to.
+     */
+    partyId: uuid("party_id"),
+
     // Line dimensions (override header defaults).
     departmentId: uuid("department_id"),
     projectId: uuid("project_id"),
@@ -151,6 +162,7 @@ export const documentLines = pgTable(
   (t) => [
     index("doc_lines_document").on(t.documentId),
     index("doc_lines_project_billable").on(t.projectId, t.isBillable),
+    index("doc_lines_party").on(t.partyId),
     check("doc_lines_target", sql`${t.itemId} IS NOT NULL OR ${t.accountId} IS NOT NULL`),
   ],
 );

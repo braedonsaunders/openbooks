@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plug, RefreshCw, Play, FlaskConical, Trash2, Plus, Pencil, Copy, ExternalLink } from 'lucide-react'
+import { PagedTable, type PagedColumn } from '../../../components/paged-table'
 import {
   Badge,
   Button,
@@ -12,12 +13,6 @@ import {
   Label,
   PageHeader,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@openbooks/ui'
 
 // --- shapes (mirror the API responses) ---------------------------------------
@@ -75,6 +70,17 @@ interface Run {
     openItems?: { checked?: number; matches?: number; mismatches?: unknown[] } | null
     periods?: { checked?: number; matches?: number } | null
   }
+  progress?: {
+    phase?: string
+    message?: string
+    current?: number
+    total?: number
+    docsNew?: number
+    docsAmended?: number
+    docsUnchanged?: number
+    docsFailed?: number
+    ordersNew?: number
+  }
   errorMessage: string | null
   triggeredBy: string | null
 }
@@ -114,6 +120,14 @@ export function PlatformClient() {
 
   useEffect(() => { void load() }, [load])
 
+  // Live-poll while any run is in flight so the progress bar advances.
+  const anyRunning = (data?.runs ?? []).some((r) => r.status === 'running')
+  useEffect(() => {
+    if (!anyRunning) return
+    const t = setInterval(() => { void load() }, 2500)
+    return () => clearInterval(t)
+  }, [anyRunning, load])
+
   // Surface an OAuth callback result (e.g. QuickBooks), then clean the URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -144,6 +158,53 @@ export function PlatformClient() {
     if (s.periods) parts.push(t('runs.stats.periods', { matches: s.periods.matches ?? 0, checked: s.periods.checked ?? 0 }))
     return parts.join(' · ')
   }
+
+  /** Live progress bar for an in-flight run, else the final result summary. */
+  function runResultNode(r: Run) {
+    if (r.status === 'running' && r.progress?.phase) {
+      const p = r.progress
+      return (
+        <div className="min-w-[240px] space-y-1">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-slate-600 dark:text-slate-300">{p.message ?? runStatusLabel('running')}</span>
+            {p.total ? <span className="tabular-nums text-slate-500">{(p.current ?? 0).toLocaleString()}/{p.total.toLocaleString()}</span> : null}
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+            <div
+              className={`h-full rounded-full bg-blue-500 transition-all duration-500 ${p.total ? '' : 'animate-pulse'}`}
+              style={{ width: p.total ? `${Math.min(100, Math.round((100 * (p.current ?? 0)) / p.total))}%` : '45%' }}
+            />
+          </div>
+          {typeof p.docsNew === 'number' ? (
+            <div className="text-xs text-slate-400">
+              {t('runs.stats.docs', { new: p.docsNew ?? 0, amended: p.docsAmended ?? 0, unchanged: p.docsUnchanged ?? 0 })}
+              {(p.docsFailed ?? 0) > 0 ? ` · ${p.docsFailed} failed` : ''}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+    return <span className="text-slate-500">{runResult(r)}</span>
+  }
+
+  const colHeader = (key: string, fallback: string) => (t.has(`runs.columns.${key}`) ? t(`runs.columns.${key}`) : fallback)
+  const runColumns: PagedColumn<Run>[] = [
+    { key: 'started', header: colHeader('started', 'Started'), cell: (r) => fmt(r.startedAt), search: (r) => fmt(r.startedAt) },
+    { key: 'kind', header: colHeader('kind', 'Kind'), cell: (r) => kindLabel(r.kind), search: (r) => kindLabel(r.kind) },
+    { key: 'source', header: colHeader('source', 'Source'), cell: (r) => sourceLabel(r.source), search: (r) => sourceLabel(r.source) },
+    {
+      key: 'status',
+      header: colHeader('status', 'Status'),
+      cell: (r) => (
+        <Badge variant={r.status === 'ok' ? 'success' : r.status === 'failed' ? 'destructive' : 'secondary'}>
+          {runStatusLabel(r.status)}
+        </Badge>
+      ),
+      search: (r) => runStatusLabel(r.status),
+    },
+    { key: 'trigger', header: colHeader('trigger', 'Trigger'), cell: (r) => r.triggeredBy ?? '—', search: (r) => r.triggeredBy ?? '' },
+    { key: 'result', header: colHeader('result', 'Result'), cell: (r) => runResultNode(r), search: (r) => runResult(r) },
+  ]
 
   async function run(conn: Connection, mode: 'full_migration' | 'mirror') {
     const key = `${conn.id}:${mode}`
@@ -282,36 +343,18 @@ export function PlatformClient() {
         </div>
       )}
 
-      {/* Recent runs */}
+      {/* Recent runs — paginated + searchable */}
       {data && data.runs.length > 0 ? (
         <div className="mt-8 space-y-3">
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('runs.heading')}</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('runs.columns.started')}</TableHead>
-                <TableHead>{t('runs.columns.kind')}</TableHead>
-                <TableHead>{t('runs.columns.status')}</TableHead>
-                <TableHead>{t('runs.columns.trigger')}</TableHead>
-                <TableHead>{t('runs.columns.result')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.runs.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{fmt(r.startedAt)}</TableCell>
-                  <TableCell>{kindLabel(r.kind)}</TableCell>
-                  <TableCell>
-                    <Badge variant={r.status === 'ok' ? 'success' : r.status === 'failed' ? 'destructive' : 'secondary'}>
-                      {runStatusLabel(r.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{r.triggeredBy ?? '—'}</TableCell>
-                  <TableCell className="text-slate-500">{runResult(r)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <PagedTable
+            rows={data.runs}
+            columns={runColumns}
+            pageSize={15}
+            searchable
+            rowKey={(r) => r.id}
+            empty={<p className="text-sm text-slate-500">{t('runs.heading')}</p>}
+          />
         </div>
       ) : null}
 

@@ -158,6 +158,13 @@ export function buildNativeFromNetSuite(
     return ctx.accountByRef.get(ref)?.id ?? null;
   };
   const dept = (l: NsLine): string | null => (l.department ? ctx.deptByRef.get(l.department) ?? null : null);
+  // A NetSuite transaction line's `entity` (the "Name" column) is polymorphic —
+  // it can be a customer/vendor/employee OR a job/project. openbooks ids are
+  // disjoint between parties and projects, so resolve it against both: a party
+  // ref → line party (subledger entity), a job ref → line project. Previously
+  // the entity was force-routed to project only, silently dropping the
+  // customer/vendor on AR/AP journal lines (opening-balance / month-end).
+  const party = (l: NsLine): string | null => (l.entity ? ctx.partyByRef.get(l.entity) ?? null : null);
   const proj = (l: NsLine): string | null => (l.entity ? ctx.projectByRef.get(l.entity) ?? null : null);
   const sub = (l: NsLine): string | null =>
     l.subsidiary ? ctx.subsidiaryByRef.get(l.subsidiary) ?? null : subsidiaryId;
@@ -168,8 +175,8 @@ export function buildNativeFromNetSuite(
   const push = (accountId: string, amtUnits: bigint, l: NsLine, taxCodeId: string | null = null): NativeDocLine => {
     const row: NativeDocLine = {
       accountId, itemId: null, amount: fromUnits(amtUnits), taxAmount: "0", taxOverridden: false,
-      taxCodeId, departmentId: dept(l), projectId: proj(l), description: l.memo ?? null, lineNumber: ++lineNo,
-      subsidiaryId: sub(l),
+      taxCodeId, partyId: party(l), departmentId: dept(l), projectId: proj(l), description: l.memo ?? null,
+      lineNumber: ++lineNo, subsidiaryId: sub(l),
     };
     lines.push(row);
     return row;
@@ -367,6 +374,7 @@ function buildOrder(
       amount: fromUnits(glUnits(l)),
       taxAmount: "0", taxOverridden: false,
       taxCodeId: code?.id ?? null,
+      partyId: l.entity ? ctx.partyByRef.get(l.entity) ?? null : null,
       departmentId: l.department ? ctx.deptByRef.get(l.department) ?? null : null,
       projectId: l.entity ? ctx.projectByRef.get(l.entity) ?? null : null,
       subsidiaryId: l.subsidiary ? ctx.subsidiaryByRef.get(l.subsidiary) ?? null : null,

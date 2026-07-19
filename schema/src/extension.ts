@@ -259,6 +259,10 @@ export const syncRuns = pgTable(
     syncedThrough: timestamp("synced_through", { withTimezone: true }),
     /** { newEntries, reversedEntries, linesInserted, tbAccounts, tbMismatches, ... } */
     stats: jsonb("stats").notNull().default({}),
+    /** Live progress while status='running': { phase, message, current, total,
+     *  docsNew, docsAmended, docsUnchanged, docsFailed }. The platform page
+     *  polls this to show "pulling X of Y transactions", "posting X of Y", etc. */
+    progress: jsonb("progress").notNull().default({}),
     errorMessage: text("error_message"),
     triggeredBy: text("triggered_by"), // "ui", "cli", "worker", "scheduler"
   },
