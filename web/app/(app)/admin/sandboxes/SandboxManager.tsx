@@ -44,8 +44,8 @@ export function SandboxManager({ sandboxes }: { sandboxes: SandboxRow[] }) {
       <Card className="p-4">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">New environment</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          A sandbox is an instant, isolated clone of production. Masked sandboxes scramble PII on copy;
-          all sandboxes have email, payments, and integrations neutered automatically.
+          A sandbox is an instant, isolated clone of production. Masked sandboxes scramble personal data on copy;
+          all sandboxes have email, payments, and integrations safely disabled automatically.
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div className="grow">
@@ -95,7 +95,7 @@ export function SandboxManager({ sandboxes }: { sandboxes: SandboxRow[] }) {
                   {s.masked && <Badge variant="secondary">masked</Badge>}
                 </div>
                 <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {s.storageRows.toLocaleString()} rows ·{" "}
+                  {s.storageRows.toLocaleString()} records ·{" "}
                   {s.lastRefreshAt ? `refreshed ${new Date(s.lastRefreshAt).toLocaleString()}` : "never refreshed"}
                   {s.refreshSchedule ? ` · auto-refresh ${s.refreshSchedule}` : ""}
                 </div>

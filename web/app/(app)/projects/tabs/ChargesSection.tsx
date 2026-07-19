@@ -143,7 +143,7 @@ export function ChargesSection({
           columns={[
             { key: 'number', header: tCommon('labels.number'), cell: (c) => <span className="font-mono text-[13px] font-semibold">{c.documentNumber}</span>, search: (c) => c.documentNumber },
             { key: 'date', header: tCommon('labels.date'), cell: (c) => <span className="text-slate-600 dark:text-slate-300">{c.documentDate}</span> },
-            { key: 'status', header: tCommon('labels.status'), cell: (c) => <Badge variant={statusVariant(c.status)}>{c.status}</Badge> },
+            { key: 'status', header: tCommon('labels.status'), cell: (c) => <Badge variant={statusVariant(c.status)}>{tCommon.has(`status.${c.status}`) ? tCommon(`status.${c.status}`) : c.status}</Badge> },
             { key: 'cost', header: t('cost'), align: 'right', cell: (c) => money(c.cost) },
             { key: 'billValue', header: t('billValue'), align: 'right', cell: (c) => money(c.billValue) },
             { key: 'billed', header: t('billed'), cell: (c) => (c.billed ? <Badge variant="success">{t('billedYes')}</Badge> : <span className="text-slate-400">—</span>) },

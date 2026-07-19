@@ -145,8 +145,8 @@ export function SentinelView({ data }: { data: SentinelData }) {
       {/* Full-dataset proof banner — the anti-"artificial subset" statement. */}
       <p className="flex items-center gap-2 rounded-lg bg-slate-50 px-3.5 py-2 text-xs text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">
         <Database size={13} className="shrink-0 text-teal-500" />
-        Forensics computed in-database over the <span className="font-semibold text-slate-700 dark:text-slate-200">full ledger</span>:
-        {' '}{num(data.meta.totalDocs)} documents · {money(data.meta.totalAmount)} · {num(data.meta.days)} days · analyzed in {(data.meta.queryMs / 1000).toFixed(1)}s — no row caps, no date-range limits.
+        Analyzed across your <span className="font-semibold text-slate-700 dark:text-slate-200">complete ledger</span>:
+        {' '}{num(data.meta.totalDocs)} documents · {money(data.meta.totalAmount)} · {num(data.meta.days)} days · in {(data.meta.queryMs / 1000).toFixed(1)}s — no caps or date-range limits.
       </p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -608,7 +608,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
       {sub === 'duplicates' ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <KpiCard icon={Copy} accent="red" label="Duplicate Pairs" value={num(data.duplicates.total)} sub="full-period self-join" tone="negative" />
+            <KpiCard icon={Copy} accent="red" label="Duplicate Pairs" value={num(data.duplicates.total)} sub="all matching pairs" tone="negative" />
             <KpiCard icon={Scale} accent="amber" label="Value at Risk" value={money(s.totalDuplicateAmount)} sub="sum of pair amounts" />
             <KpiCard icon={Info} accent="slate" label="Rule" value="≤14 days" sub="same vendor + kind + amount, ≥$100" />
           </div>
@@ -669,7 +669,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">Shell-company indicator:</span> if a vendor&apos;s invoice numbers to you are perfectly sequential over weeks or months, you are likely their <em>only</em> customer. Legitimate vendors have numbering gaps from invoicing others. Detected via gaps-and-islands SQL over every vendor reference number.</span>
+            <span><span className="font-semibold">Shell-company indicator:</span> if a vendor&apos;s invoice numbers to you are perfectly sequential over weeks or months, you are likely their <em>only</em> customer. Legitimate vendors have numbering gaps from invoicing others. Detected by scanning every vendor's reference numbers for unbroken runs.</span>
           </p>
           <div className="space-y-4">
             {data.sequential.length ? data.sequential.map((g, i) => (
@@ -859,16 +859,16 @@ function ConfigTab({ data }: { data: SentinelData }) {
           </ul>
         </Panel>
       </div>
-      <Panel title="Engineered for scale" icon={Database}>
+      <Panel title="Complete coverage" icon={Database}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>Every test runs <span className="font-semibold">in the database over the full ledger</span> — no 30-day caps, no per-vendor query loops, no “first 500 rows” sampling:</p>
+          <p>Every check runs across your <span className="font-semibold">complete ledger</span> — no 30-day windows, no per-vendor shortcuts, no sampling. Nothing is skipped:</p>
           <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Benford</span> — one GROUP BY digit aggregate per distribution.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">RSF & z-score</span> — per-vendor baselines via window functions / single aggregates, not N+1 vendor loops.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Sequential runs</span> — gaps-and-islands SQL over every vendor reference number.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Duplicates</span> — indexed set-based self-join; full pair count with only top detail rows shipped.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Benford</span> — flags amounts whose leading digits don’t follow natural spending patterns.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Relative size &amp; z-score</span> — compares each transaction to that vendor’s own history to surface outliers.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Sequential runs</span> — catches suspiciously unbroken sequences of vendor reference numbers.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">Duplicates</span> — compares every pair of transactions to catch repeated or split payments.</li>
           </ul>
-          <p>This period: {num(data.meta.totalDocs)} documents ({money(data.meta.totalAmount)}) across {num(data.meta.days)} days analyzed in {(data.meta.queryMs / 1000).toFixed(1)}s. Detail tables show the top rows per detector; counts and distributions always cover everything.</p>
+          <p>This period: {num(data.meta.totalDocs)} documents ({money(data.meta.totalAmount)}) across {num(data.meta.days)} days, analyzed in {(data.meta.queryMs / 1000).toFixed(1)}s. Detail tables show the top matches per check; the counts and distributions always cover everything.</p>
         </div>
       </Panel>
     </div>

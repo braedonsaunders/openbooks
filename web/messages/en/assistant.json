@@ -10,6 +10,7 @@
   "noConversations": "No conversations yet.",
   "welcomeTitle": "How can I help with the books?",
   "welcome": "Ask about your books — balances, statements, aging, specific bills or entries. The assistant only sees what your permissions allow.",
+  "notConfiguredTitle": "Assistant not set up yet",
   "placeholder": "Ask about your accounts, transactions, or reports…",
   "send": "Send",
   "stop": "Stop",

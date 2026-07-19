@@ -211,7 +211,7 @@
       "searchPlaceholder": "Search reports…",
       "kindFilterLabel": "Kind",
       "emptyTitle": "No reports yet",
-      "emptyDescription": "Seed the built-in reports or build your first custom report to get started.",
+      "emptyDescription": "Build your first custom report to get started.",
       "columns": {
         "report": "Report",
         "kind": "Kind"
@@ -419,7 +419,7 @@
     "entities": {
       "ledger_lines": {
         "label": "Ledger lines",
-        "description": "Journal-line detail joined to entry, account, party and dimensions — the raw GL. One row per posted (or draft) journal line."
+        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft."
       },
       "documents": {
         "label": "Transactions",
@@ -786,7 +786,7 @@
     },
     "gl-activity-by-account-fy": {
       "name": "GL activity by account (this FY)",
-      "description": "Posted journal activity this year, one row per account: net movement and line count. Uses the calendar year until fiscal-period operators land."
+      "description": "Posted journal activity this year, one row per account: net movement and line count. Covers the calendar year."
     },
     "expense-detail-by-department-fy": {
       "name": "Expense detail by department (this FY)",

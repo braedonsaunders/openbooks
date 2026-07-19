@@ -89,12 +89,15 @@ export default async function PdfTemplatesPage({
               <span className="ml-2 text-xs text-slate-400">{t('list.starterHint')}</span>
             </TableCell>
             <TableCell>
-              <Badge variant="secondary">{t('list.builtInStarter')}</Badge>
-            </TableCell>
-            <TableCell>
+              <Badge variant="outline">{t('list.builtIn')}</Badge>{' '}
               {templates.some((tp) => tp.isDefault) ? null : (
                 <Badge variant="default">{t('list.isDefault')}</Badge>
               )}
+            </TableCell>
+            <TableCell>
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                {PAPER_LABEL.letter} · {t('editor.portrait')}
+              </span>
             </TableCell>
             <TableCell className="text-right">
               <NewTemplateButton recordType={recordType} asDuplicateOfStarter />

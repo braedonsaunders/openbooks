@@ -116,7 +116,7 @@
       "mandate": "Debit mandate",
       "openBalance": "Open balance"
     },
-    "bankApproved": "approved",
+    "bankApproved": "on file",
     "bankMissing": "missing",
     "mandateActive": "active",
     "mandateMissing": "missing",
@@ -213,7 +213,7 @@
       "payment": "Payment",
       "bankDetails": "Bank details"
     },
-    "bankApproved": "approved",
+    "bankApproved": "on file",
     "instructionStatus": {
       "pending": "pending",
       "approved": "approved",
@@ -257,8 +257,8 @@
       ,"outcomeSaved": "Bank outcome recorded"
     },
     "deliverSftp": "Deliver to SFTP",
-    "deliverHint": "Write this run's bank file to an SFTP server's outbound folder for the bank to fetch.",
-    "sftpServer": "SFTP server",
-    "noSftpServers": "No SFTP servers configured. Add one in Setup → SFTP Servers."
+    "deliverHint": "Deliver this run's payment file to a bank or partner's SFTP folder for them to fetch.",
+    "sftpServer": "SFTP login",
+    "noSftpServers": "No SFTP logins yet. Add one in Setup → SFTP."
   }
 }

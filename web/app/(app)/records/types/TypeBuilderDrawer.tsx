@@ -313,6 +313,14 @@ export function TypeBuilderDrawer({
   }
 
   const canPublish = saveState === 'saved' && !busy && fieldCount > 0 && issues.length === 0
+  const publishBlockedReason =
+    fieldCount === 0
+      ? t('typeBuilder.publishNeedsField')
+      : issues.length > 0
+        ? t('typeBuilder.publishResolveIssues')
+        : saveState !== 'saved'
+          ? t('typeBuilder.publishNeedsSave')
+          : undefined
 
   return (
     <UrlDrawer
@@ -354,7 +362,7 @@ export function TypeBuilderDrawer({
               </Button>
             </>
           ) : (
-            <Button disabled={!canPublish} onClick={() => lifecycle('publish')}>
+            <Button disabled={!canPublish} onClick={() => lifecycle('publish')} title={!canPublish ? publishBlockedReason : undefined}>
               {type.status === 'archived' ? t('typeBuilder.publishAgain') : t('typeBuilder.publish')}
             </Button>
           )}

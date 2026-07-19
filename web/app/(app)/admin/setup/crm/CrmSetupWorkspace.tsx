@@ -633,6 +633,8 @@ function TerritoryFields({
         value={form.rulesText}
         onChange={(v) => set("rulesText", v)}
         mono
+        placeholder={t("setup.fields.rulesPlaceholder")}
+        hint={t("setup.fields.rulesHint")}
       />
       <ToggleGrid form={form} set={set} keys={["isActive"]} t={t} />
     </>
@@ -800,11 +802,15 @@ function TextAreaField({
   value,
   onChange,
   mono = false,
+  placeholder,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   mono?: boolean;
+  placeholder?: string;
+  hint?: string;
 }) {
   return (
     <div className="space-y-1.5 sm:col-span-2">
@@ -813,8 +819,10 @@ function TextAreaField({
         rows={mono ? 7 : 3}
         className={mono ? "font-mono text-xs" : undefined}
         value={value}
+        placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
+      {hint ? <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p> : null}
     </div>
   );
 }

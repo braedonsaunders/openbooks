@@ -7,6 +7,7 @@
     "paper": "Paper",
     "default": "Default",
     "builtInStarter": "Built-in starter",
+    "builtIn": "Built-in",
     "starterHint": "Printed when no custom template exists — duplicate it to customize",
     "duplicate": "Duplicate",
     "isDefault": "Default"

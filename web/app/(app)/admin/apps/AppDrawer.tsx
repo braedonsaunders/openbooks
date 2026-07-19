@@ -241,8 +241,8 @@ type Tab = (typeof TABS)[number]
 const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', files: 'Files', runs: 'Runs' }
 
 const CAPABILITIES: { key: string; label: string; help: string }[] = [
-  { key: 'records.read', label: 'Read custom records', help: 'ob.records / bridge reads, org-scoped' },
-  { key: 'gl.post', label: 'Create & post journals', help: 'ob.journal.create through the posting engine' },
+  { key: 'records.read', label: 'Read custom records', help: 'Let this app read your custom records' },
+  { key: 'gl.post', label: 'Create & post journals', help: 'Let this app create and post journal entries' },
 ]
 
 interface AppDetail {

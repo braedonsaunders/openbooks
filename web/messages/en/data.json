@@ -7,21 +7,21 @@
   },
   "export": {
     "title": "Export data",
-    "description": "Download any table — configuration, master data, or custom records — as CSV, Excel, or JSON.",
+    "description": "Export any record type — configuration, master data, or custom records — as CSV, Excel, or JSON.",
     "resource": "What to export",
-    "resourcePlaceholder": "Choose a table…",
+    "resourcePlaceholder": "Choose what to export…",
     "columns": "Columns",
     "selectAll": "Select all",
     "clearAll": "Clear all",
     "format": "Format",
     "run": "Export",
     "running": "Exporting…",
-    "empty": "Pick a table to export.",
-    "noColumns": "This table has no exportable columns."
+    "empty": "Pick what to export.",
+    "noColumns": "This record type has no exportable columns."
   },
   "import": {
     "title": "Import data",
-    "description": "Bring rows into any table with column mapping and a dry-run preview before anything is written.",
+    "description": "Bring records into any record type with column mapping and a dry-run preview before anything is written.",
     "step": "Step {n} of {total}",
     "steps": {
       "source": "Source",
@@ -34,7 +34,7 @@
     "file": "File",
     "chooseFile": "Choose a file",
     "orPaste": "…or paste rows",
-    "mode": "When a row already exists",
+    "mode": "When a record already exists",
     "modeInsert": "Skip it (insert new only)",
     "modeUpsert": "Update it (upsert)",
     "next": "Continue",
@@ -68,13 +68,13 @@
   },
   "history": {
     "title": "Import history",
-    "description": "Every import run, with row counts and any errors.",
+    "description": "Every import run, with record counts and any errors.",
     "empty": "No imports yet.",
     "when": "When",
-    "resource": "Table",
+    "resource": "Record type",
     "format": "Format",
     "status": "Status",
-    "rows": "Rows",
+    "rows": "Records",
     "by": "By"
   }
 }

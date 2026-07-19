@@ -280,7 +280,20 @@ function ScheduleFields({ form, set, options, t }: { form: Record<string, any>; 
   const criteria = form.selection_criteria ?? form.selectionCriteria ?? {}
   const setCriteria = (key: string, value: unknown) => set('selectionCriteria', { ...criteria, [key]: value })
   return <><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field><Field label={t('fields.profile')}><Select value={form.payment_bank_profile_id ?? form.paymentBankProfileId ?? ''} onChange={(e) => set('paymentBankProfileId', e.target.value)}><option value="">{t('select')}</option>{options.profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
-    <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.cron')}><Input className="font-mono" value={form.cron ?? ''} onChange={(e) => set('cron', e.target.value)} placeholder="0 8 * * 1" /></Field><Field label={t('fields.timezone')}><Input value={form.timezone ?? 'UTC'} onChange={(e) => set('timezone', e.target.value)} /></Field></div>
+    <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.cron')}>
+      <div className="mb-1.5 flex flex-wrap gap-1.5">
+        {([['daily', '0 8 * * *'], ['weekdays', '0 8 * * 1-5'], ['weekly', '0 8 * * 1'], ['monthly', '0 8 1 * *']] as const).map(([key, expr]) => (
+          <button key={key} type="button" onClick={() => set('cron', expr)}
+            className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+              (form.cron ?? '') === expr ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-400 dark:bg-teal-950/40 dark:text-teal-300'
+                : 'border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400')}>
+            {t(`schedulePresets.${key}`)}
+          </button>
+        ))}
+      </div>
+      <Input className="font-mono" value={form.cron ?? ''} onChange={(e) => set('cron', e.target.value)} placeholder="0 8 * * 1" />
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('fields.cronHint')}</p>
+    </Field><Field label={t('fields.timezone')}><Input value={form.timezone ?? 'UTC'} onChange={(e) => set('timezone', e.target.value)} /></Field></div>
     <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="mb-3 text-sm font-semibold">{t('criteria.title')}</h3><div className="grid gap-4 sm:grid-cols-2"><Field label={t('criteria.dueThroughDays')}><Input type="number" min={0} value={criteria.dueThroughDays ?? 0} onChange={(e) => setCriteria('dueThroughDays', Number(e.target.value))} /></Field><Field label={t('criteria.minimumAmount')}><Input type="number" min={0} step="0.01" value={criteria.minimumAmount ?? ''} onChange={(e) => setCriteria('minimumAmount', e.target.value)} /></Field><Field label={t('criteria.maximumRunAmount')}><Input type="number" min={0} step="0.01" value={criteria.maximumRunAmount ?? ''} onChange={(e) => setCriteria('maximumRunAmount', e.target.value)} /></Field></div><div className="mt-3 space-y-2"><Toggle checked={criteria.captureDiscounts !== false} onChange={(v) => setCriteria('captureDiscounts', v)} label={t('criteria.captureDiscounts')} /><Toggle checked={criteria.applyCredits !== false} onChange={(v) => setCriteria('applyCredits', v)} label={t('criteria.applyCredits')} /></div></div>
     <Field label={t('fields.action')}><Select value={form.action ?? 'create_draft'} onChange={(e) => set('action', e.target.value)}><option value="create_draft">{t('actions.create_draft')}</option><option value="submit_for_approval">{t('actions.submit_for_approval')}</option></Select></Field><Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('isActive', v)} label={t('fields.active')} /></>
 }
