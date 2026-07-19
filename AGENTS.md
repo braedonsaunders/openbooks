@@ -55,6 +55,20 @@ they found it. The roadmap is `GOAL.md`; porting coordination lives in
    hardcoding for true accounting invariants (double-entry, balance = 0,
    closed-period immutability) and pure infra. When unsure whether something is
    "reasonably expected" to be configurable, make it configurable.
+9b. Documentation is part of the feature. The in-app documentation center
+   (`web/lib/docs`, rendered at `/docs`, linked under Administration) is the
+   NetSuite-style help site for end users. When you build or change a user-facing
+   capability — especially a configurable one (rule 9a) — you MUST add or update
+   its article in the SAME change, so the docs never drift from the software. A
+   new configurable surface ships with its article; a changed option updates the
+   article that documents it (and its "updated" date). Wire each config workspace
+   to its article with a "Documentation"/"Learn more" link. Docs are authored as
+   typed TS modules under `web/lib/docs/articles/*` and registered in
+   `web/lib/docs/index.ts` (bundled into JS — deploy-safe under Next standalone,
+   which does NOT trace arbitrary filesystem reads). Authoring convention for the
+   Markdown `body` (no backticks, so the TS template literal stays robust): use
+   **bold** for identifiers/labels/option values and `~~~` tilde fences for code
+   blocks.
 9. Validation gates before any commit: `npx tsc -p web --noEmit` (web has its
    own TypeScript 5.9 — the root has TS7, use `web/node_modules/.bin/tsc`),
    engine typecheck (`npx tsc -p engine --noEmit`), the test suite (`npm test`

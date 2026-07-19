@@ -9,6 +9,7 @@ import shell from './shell.json'
 import login from './login.json'
 import dashboard from './dashboard.json'
 import documents from './documents.json'
+import docs from './docs.json'
 import accounts from './accounts.json'
 import analytics from './analytics.json'
 import admin from './admin.json'
@@ -58,6 +59,7 @@ export default {
   login,
   dashboard,
   documents,
+  docs,
   accounts,
   analytics,
   admin,

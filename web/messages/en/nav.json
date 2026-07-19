@@ -55,7 +55,8 @@
     "crm-activities": "Activities",
     "crm-forecasts": "Forecasts & Quotas",
     "revenue": "Revenue Recognition",
-    "inventory": "Inventory"
+    "inventory": "Inventory",
+    "docs": "Documentation"
   },
   "groups": {
     "home": "Home",
