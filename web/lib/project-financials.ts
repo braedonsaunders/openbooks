@@ -1,8 +1,9 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import type { FinancialProfile, CostSource } from '@openbooks/schema'
+import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from './account-groups'
+import { trueCostData } from './analytics/true-cost-data'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
@@ -44,6 +45,50 @@ function costPredicate(src: CostSource, accountIds: string[]): SQL {
   const types = src.accountTypes ?? []
   if (!types.length) return sql`false`
   return sql`a.type in (${sql.join(types.map((t) => sql`${t}`), sql`, `)})`
+}
+
+/**
+ * rate_engine overhead — the Rassaun/Gantry model. Reuses the True Cost rate
+ * engine's per-department composite burden rate ($/hr = overhead pool ÷ billed
+ * hours) and applies it to THIS project's labor hours:
+ *   overhead = Σ_dept ( project hours-in-dept × dept composite rate )
+ * Purely statistical — no GL posting. Rates are computed live over a trailing
+ * 12-month window (standard/effective-dated rates land with the rate table).
+ */
+async function rateEngineOverhead(
+  orgId: string,
+  projectId: string,
+  cfg: OverheadSource['rateEngine'],
+): Promise<number> {
+  const basis = cfg?.hoursBasis ?? 'billed_hours'
+  const scope = cfg?.scope ?? 'department'
+
+  // Trailing-12-month window ending today (annual overhead ÷ annual hours).
+  const to = new Date()
+  const from = new Date(to)
+  from.setFullYear(from.getFullYear() - 1)
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  const tc = await trueCostData(orgId, { from: iso(from), to: iso(to), label: 'TTM' })
+
+  // Project approved hours by department.
+  const rows = (await db.execute(sql`
+    select te.department_id as dept,
+           coalesce(sum(te.hours), 0) as total,
+           coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
+      from time_entries te
+     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+     group by te.department_id`)) as unknown as { rows: { dept: string | null; total: string; billed: string }[] }
+
+  const hoursOf = (r: { total: string; billed: string }) => n(basis === 'total_hours' ? r.total : r.billed)
+
+  if (scope === 'department') {
+    const rateByDept = new Map(tc.departments.map((d) => [d.id, d.composite]))
+    // Untagged/unknown-department hours fall back to the overall composite.
+    return rows.rows.reduce((sum, r) => sum + hoursOf(r) * (rateByDept.get(r.dept ?? '') ?? tc.kpis.compositeRate), 0)
+  }
+  // flat / class → overall composite × the project's hours.
+  const projectHours = rows.rows.reduce((sum, r) => sum + hoursOf(r), 0)
+  return projectHours * tc.kpis.compositeRate
 }
 
 export async function resolveProjectFinancials(
@@ -165,13 +210,13 @@ export async function resolveProjectFinancials(
   const laborCost = n(laborRes.rows[0]?.labor)
   const totalHours = n(hoursRes.rows[0]?.total)
   // Overhead is a STATISTICAL allocation (never a GL posting by default). Each
-  // method turns a rate into the job's share of company overhead; rate_engine
-  // (per-department composite × project hours) is wired in a follow-up.
+  // method turns a rate into the job's share of company overhead.
   const oh = profile.overhead
   const overhead =
     oh.method === 'account_group_actual' ? n(overheadRes.rows[0]?.overhead)
     : oh.method === 'percent_of_labor' ? laborCost * ((oh.ratePercent ?? 0) / 100)
     : oh.method === 'per_labor_hour' ? totalHours * (oh.ratePerHour ?? 0)
+    : oh.method === 'rate_engine' ? await rateEngineOverhead(orgId, projectId, oh.rateEngine)
     : 0
 
   // billable value: what's invoiceable across all work (time + cost lines).
