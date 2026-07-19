@@ -43,5 +43,12 @@
   },
   "help": "Documentation",
   "overheadSource": "Source des frais généraux",
-  "overheadDimension": "Groupe de comptes de frais généraux"
+  "overheadDimension": "Groupe de comptes de frais généraux",
+  "overheadMethod": "Méthode de frais généraux",
+  "overheadRatePercent": "Frais généraux % de la main-d’œuvre",
+  "overheadRatePerHour": "Frais généraux $/heure de main-d’œuvre",
+  "overheadRateSource": "Source du taux",
+  "overheadHoursBasis": "S’applique à",
+  "overheadScope": "Portée du taux",
+  "overheadRateEngineHint": "Utilise les taux du Modèle de frais généraux (taux composite $/h par département) appliqués aux heures de main-d’œuvre de ce projet. Configurez les pools et la répartition dans l’espace Modèle de frais généraux."
 }

@@ -43,7 +43,8 @@ const humanize = (v: string) => LABELS[v] ?? v.replace(/_/g, ' ').replace(/\b\w/
 const BILLING_METHODS = ['', 'time_and_materials', 'fixed_price', 'cost_plus']
 const COST_SOURCES = ['account_types', 'account_group']
 const LABOR_SOURCES = ['in_actual_cost', 'time_rate', 'payroll_je', 'account_group']
-const OVERHEAD_SOURCES = ['none', 'account_group']
+const OVERHEAD_METHODS = ['none', 'percent_of_labor', 'per_labor_hour', 'rate_engine', 'account_group_actual']
+const ENGINE_DEFAULT = { rateSource: 'live', hoursBasis: 'billed_hours', dimension: 'overhead', scope: 'department' } as const
 const PRICE_METHODS = ['contract_field', 'billable_value', 'not_to_exceed', 'cost_plus']
 const CBI_FORMULAS = ['price_minus_invoiced', 'unbilled_billable']
 const BUDGET_SOURCES = ['wbs_estimates', 'none']
@@ -94,7 +95,7 @@ const BLANK = (t: string, name: string): ProjectTypeRow => ({
     invoicedToDate: { docKinds: ['customer_invoice'], creditKinds: ['customer_credit'] },
     actualCost: { source: 'account_types', accountTypes: ['expense', 'cogs', 'expense_other', 'expense_deferred'] },
     laborCost: { source: 'in_actual_cost' },
-    overhead: { source: 'none' },
+    overhead: { method: 'none' },
     committedCost: { docKinds: ['purchase_order'] },
     billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: 'bill_rate' },
     costBudget: { source: 'wbs_estimates' },
@@ -226,8 +227,22 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as any } })} />
               {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as any } })} />
-              <EnumField label={t('overheadSource')} value={fp.overhead.source} options={OVERHEAD_SOURCES} onChange={(v) => setFp({ overhead: { ...fp.overhead, source: v as any } })} />
-              {fp.overhead.source === 'account_group' ? <EnumField label={t('overheadDimension')} value={fp.overhead.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ overhead: { ...fp.overhead, dimension: v || undefined } })} /> : <div />}
+              <EnumField label={t('overheadMethod')} value={fp.overhead.method} options={OVERHEAD_METHODS} onChange={(v) => setFp({ overhead: { ...fp.overhead, method: v as any } })} />
+              {fp.overhead.method === 'percent_of_labor' ? (
+                <div className="space-y-1.5"><Label>{t('overheadRatePercent')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePercent ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePercent: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
+              ) : fp.overhead.method === 'per_labor_hour' ? (
+                <div className="space-y-1.5"><Label>{t('overheadRatePerHour')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePerHour ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePerHour: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
+              ) : fp.overhead.method === 'account_group_actual' ? (
+                <EnumField label={t('overheadDimension')} value={fp.overhead.accountGroup?.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ overhead: { ...fp.overhead, accountGroup: { dimension: v } } })} />
+              ) : <div />}
+              {fp.overhead.method === 'rate_engine' ? (
+                <>
+                  <EnumField label={t('overheadRateSource')} value={fp.overhead.rateEngine?.rateSource ?? 'live'} options={['live', 'standard']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, rateSource: v as any } } })} />
+                  <EnumField label={t('overheadHoursBasis')} value={fp.overhead.rateEngine?.hoursBasis ?? 'billed_hours'} options={['billed_hours', 'total_hours']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, hoursBasis: v as any } } })} />
+                  <EnumField label={t('overheadScope')} value={fp.overhead.rateEngine?.scope ?? 'department'} options={['flat', 'department', 'class']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, scope: v as any } } })} />
+                  <p className="sm:col-span-2 text-xs text-slate-500 dark:text-slate-400">{t('overheadRateEngineHint')}</p>
+                </>
+              ) : null}
               <EnumField label={t('budgetSource')} value={fp.costBudget.source} options={BUDGET_SOURCES} onChange={(v) => setFp({ costBudget: { source: v as any } })} />
               <div className="sm:col-span-2"><Chips label={t('committedKinds')} all={COMMIT_KINDS} selected={fp.committedCost.docKinds} onToggle={(v) => setFp({ committedCost: { docKinds: toggle(fp.committedCost.docKinds, v) } })} /></div>
               <div className="sm:col-span-2"><Chips label={t('totalCostComponents')} all={['actual_cost', 'committed_cost', 'labor_cost', 'overhead']} selected={fp.totalCost.components} onToggle={(v) => setFp({ totalCost: { components: toggle(fp.totalCost.components, v) as any } })} /></div>
