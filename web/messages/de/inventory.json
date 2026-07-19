@@ -1,78 +1,78 @@
 {
   "list": {
-    "title": "Inventory",
-    "description": "On-hand valuation and stock movements — costed FIFO, moving-average, or standard.",
-    "searchPlaceholder": "Search items or locations…",
-    "emptyTitle": "No inventory yet",
-    "emptyDescription": "Configure an item's costing profile in Setup, then receive stock.",
-    "newButton": "New movement",
-    "view": "View"
+    "title": "Lagerbestand",
+    "description": "Bewertung des vorhandenen Bestands und Lagerbewegungen — bewertet nach FIFO, gleitendem Durchschnitt oder Standard.",
+    "searchPlaceholder": "Artikel oder Standorte durchsuchen…",
+    "emptyTitle": "Noch kein Lagerbestand",
+    "emptyDescription": "Konfigurieren Sie das Bewertungsprofil eines Artikels im Setup und buchen Sie dann Wareneingänge.",
+    "newButton": "Neue Bewegung",
+    "view": "Ansicht"
   },
   "view": {
-    "onhand": "On hand",
-    "movements": "Movements"
+    "onhand": "Bestand",
+    "movements": "Bewegungen"
   },
   "labels": {
-    "item": "Item",
-    "location": "Location",
-    "quantity": "Quantity",
-    "avgCost": "Avg cost",
-    "value": "Value",
-    "date": "Date",
-    "kind": "Type",
-    "unitCost": "Unit cost"
+    "item": "Artikel",
+    "location": "Standort",
+    "quantity": "Menge",
+    "avgCost": "Durchschnittskosten",
+    "value": "Wert",
+    "date": "Datum",
+    "kind": "Typ",
+    "unitCost": "Stückkosten"
   },
   "kind": {
-    "receipt": "Receipt",
-    "issue": "Issue",
-    "transfer_out": "Transfer out",
-    "transfer_in": "Transfer in",
-    "adjustment": "Adjustment",
-    "count": "Count",
-    "assembly_build": "Assembly build",
-    "assembly_consume": "Assembly consume",
-    "return": "Return"
+    "receipt": "Wareneingang",
+    "issue": "Warenausgang",
+    "transfer_out": "Umlagerung aus",
+    "transfer_in": "Umlagerung ein",
+    "adjustment": "Anpassung",
+    "count": "Zählung",
+    "assembly_build": "Baugruppenfertigung",
+    "assembly_consume": "Baugruppenverbrauch",
+    "return": "Rückgabe"
   },
   "drawer": {
-    "title": "Inventory movement",
-    "post": "Post",
-    "action": "Action",
+    "title": "Lagerbewegung",
+    "post": "Buchen",
+    "action": "Aktion",
     "actions": {
-      "receive": "Receive",
-      "issue": "Issue",
-      "adjust": "Adjust",
-      "transfer": "Transfer",
-      "build": "Build assembly",
-      "landed": "Landed cost"
+      "receive": "Vereinnahmen",
+      "issue": "Ausgeben",
+      "adjust": "Anpassen",
+      "transfer": "Umlagern",
+      "build": "Baugruppe fertigen",
+      "landed": "Einstandskosten"
     },
     "hint": {
-      "receive": "Add stock at cost (DR inventory / CR offset).",
-      "issue": "Remove stock to COGS (DR COGS / CR inventory).",
-      "adjust": "Correct on-hand quantity against the adjustment account.",
-      "transfer": "Move stock between two locations at its carried cost.",
-      "build": "Consume components per the BOM and produce the finished good at cost.",
-      "landed": "Capitalize freight/duty onto an item’s on-hand layers."
+      "receive": "Bestand zu Kosten zubuchen (Soll Lager / Haben Gegenkonto).",
+      "issue": "Bestand in die Herstellungskosten ausbuchen (Soll HK / Haben Lager).",
+      "adjust": "Vorhandene Menge gegen das Anpassungskonto korrigieren.",
+      "transfer": "Bestand zwischen zwei Standorten zum fortgeführten Wert umlagern.",
+      "build": "Komponenten gemäß Stückliste verbrauchen und das Fertigerzeugnis zu Kosten produzieren.",
+      "landed": "Fracht/Zoll auf die vorhandenen Bestandsschichten eines Artikels aktivieren."
     },
-    "selectItem": "Select an item",
-    "selectLocation": "Select a location",
-    "selectAccount": "Select an account",
-    "quantityDelta": "Quantity (+/-)",
-    "offsetAccount": "Offset account",
-    "offsetHint": "The account credited for the receipt (clearing, goods-received-not-invoiced, or opening balance).",
-    "memoPlaceholder": "Optional note",
-    "missingFields": "Item, location, and quantity are required",
-    "failed": "Movement failed",
-    "posted": "Posted movement ({value})",
-    "fromLocation": "From location",
-    "toLocation": "To location",
-    "assemblyItem": "Assembly item",
-    "amount": "Amount",
-    "freightAccount": "Freight / duty account",
-    "freightHint": "The account the freight currently sits in; it moves into inventory.",
-    "basis": "Allocation basis",
+    "selectItem": "Artikel auswählen",
+    "selectLocation": "Standort auswählen",
+    "selectAccount": "Konto auswählen",
+    "quantityDelta": "Menge (+/-)",
+    "offsetAccount": "Gegenkonto",
+    "offsetHint": "Das für den Wareneingang im Haben gebuchte Konto (Verrechnung, Wareneingang-nicht-berechnet oder Eröffnungsbilanz).",
+    "memoPlaceholder": "Optionale Notiz",
+    "missingFields": "Artikel, Standort und Menge sind erforderlich",
+    "failed": "Bewegung fehlgeschlagen",
+    "posted": "Bewegung gebucht ({value})",
+    "fromLocation": "Von Standort",
+    "toLocation": "Zu Standort",
+    "assemblyItem": "Baugruppenartikel",
+    "amount": "Betrag",
+    "freightAccount": "Fracht-/Zollkonto",
+    "freightHint": "Das Konto, auf dem die Fracht derzeit liegt; sie wird in den Lagerbestand überführt.",
+    "basis": "Umlagebasis",
     "bases": {
-      "value": "By value",
-      "quantity": "By quantity"
+      "value": "Nach Wert",
+      "quantity": "Nach Menge"
     }
   }
 }

@@ -1,11 +1,11 @@
 {
-  "title": "Documentation",
-  "searchPlaceholder": "Search documentation…",
-  "noResults": "No matching articles.",
-  "lastUpdated": "Last updated {date}",
-  "related": "Related articles",
+  "title": "ドキュメント",
+  "searchPlaceholder": "ドキュメントを検索…",
+  "noResults": "一致する記事がありません。",
+  "lastUpdated": "最終更新 {date}",
+  "related": "関連記事",
   "home": {
-    "title": "Documentation",
-    "subtitle": "Guides and configuration reference for OpenBooks. Browse a category below or search from the sidebar."
+    "title": "ドキュメント",
+    "subtitle": "OpenBooks のガイドと構成リファレンス。下のカテゴリを参照するか、サイドバーから検索してください。"
   }
 }

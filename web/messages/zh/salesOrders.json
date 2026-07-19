@@ -1,12 +1,12 @@
 {
   "list": {
-    "title": "Sales Orders",
-    "description": "Confirmed customer orders — issue, then convert into an invoice as you bill.",
-    "searchPlaceholder": "Search sales orders, customers, memo…",
-    "converted": "Converted",
-    "emptyTitle": "No sales orders yet",
-    "emptyDescription": "Create a sales order, or convert one from an estimate.",
-    "newButton": "New sales order",
-    "createDraftFailed": "Could not create a draft sales order"
+    "title": "销售订单",
+    "description": "已确认的客户订单 — 先发出，再在开票时转换为发票。",
+    "searchPlaceholder": "搜索销售订单、客户、备注…",
+    "converted": "已转换",
+    "emptyTitle": "暂无销售订单",
+    "emptyDescription": "创建一张销售订单，或从报价单转换生成。",
+    "newButton": "新建销售订单",
+    "createDraftFailed": "无法创建草稿销售订单"
   }
 }

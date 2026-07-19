@@ -1,54 +1,54 @@
 {
   "views": {
-    "new": "New view",
+    "new": "新建视图",
     "list": {
-      "title": "Views",
-      "description": "Named, shareable queries over the ledger, documents, parties and accounts — detail rows or grouped summaries. Browse, export and reuse them.",
-      "scopeLabel": "Scope",
-      "searchPlaceholder": "Search views…",
-      "scopeAll": "All",
-      "scopeShared": "Shared",
-      "scopePrivate": "Private",
-      "emptyTitle": "No views yet",
-      "emptyDescription": "Create your first view to query the ledger and reuse it anytime.",
+      "title": "视图",
+      "description": "针对总账、文档、往来方和科目的命名、可共享查询——明细行或分组汇总。浏览、导出并重复使用。",
+      "scopeLabel": "范围",
+      "searchPlaceholder": "搜索视图…",
+      "scopeAll": "全部",
+      "scopeShared": "共享",
+      "scopePrivate": "私有",
+      "emptyTitle": "暂无视图",
+      "emptyDescription": "创建您的第一个视图以查询总账，并随时重复使用。",
       "columns": {
-        "name": "Name",
-        "source": "Source",
-        "scope": "Scope",
-        "updated": "Updated"
+        "name": "名称",
+        "source": "来源",
+        "scope": "范围",
+        "updated": "更新时间"
       },
       "scope": {
-        "shared": "Shared",
-        "private": "Private"
+        "shared": "共享",
+        "private": "私有"
       },
-      "runAction": "Run",
-      "editAction": "Edit"
+      "runAction": "运行",
+      "editAction": "编辑"
     },
     "studio": {
-      "untitled": "Untitled view",
-      "autosaveHint": "Changes save automatically.",
-      "scopeLabel": "Scope",
+      "untitled": "未命名视图",
+      "autosaveHint": "更改自动保存。",
+      "scopeLabel": "范围",
       "scope": {
-        "private": "Private — only you",
-        "shared": "Shared — everyone"
+        "private": "私有——仅您可见",
+        "shared": "共享——所有人可见"
       },
       "exportPdf": "PDF",
       "exportXlsx": "Excel",
       "exportCsv": "CSV",
-      "deleteConfirm": "Delete this view?",
-      "viewResults": "View results"
+      "deleteConfirm": "删除此视图？",
+      "viewResults": "查看结果"
     },
     "run": {
-      "editSearch": "Edit view",
-      "backToList": "Views",
-      "resultsTitle": "Results",
-      "rowsRange": "Showing {from}–{to} of {total} rows",
-      "lastUpdated": "Updated {when}",
-      "refreshHint": "Results run live against current data.",
-      "emptyTitle": "No rows matched",
-      "emptyDescription": "Adjust the search criteria or filters and run again.",
-      "notFoundTitle": "View not found",
-      "notFoundDescription": "It may have been deleted, or you don't have access to it."
+      "editSearch": "编辑视图",
+      "backToList": "视图",
+      "resultsTitle": "结果",
+      "rowsRange": "正在显示第 {from}–{to} 行，共 {total} 行",
+      "lastUpdated": "更新于 {when}",
+      "refreshHint": "结果针对当前数据实时运行。",
+      "emptyTitle": "无匹配的行",
+      "emptyDescription": "请调整搜索条件或筛选器后重新运行。",
+      "notFoundTitle": "未找到视图",
+      "notFoundDescription": "它可能已被删除，或您没有访问权限。"
     }
   }
 }

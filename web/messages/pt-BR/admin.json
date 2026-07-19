@@ -1,1891 +1,1891 @@
 {
   "hub": {
-    "metaTitle": "Admin Center",
-    "title": "Admin Center",
-    "subtitle": "Everything that configures this workspace — company setup, people, and system.",
+    "metaTitle": "Central de administração",
+    "title": "Central de administração",
+    "subtitle": "Tudo que configura este espaço de trabalho — configuração da empresa, pessoas e sistema.",
     "groups": {
-      "company": "Company",
-      "people": "People & access",
-      "workspace": "Workspace",
-      "activity": "Activity & data",
-      "data": "Integrations & data"
+      "company": "Empresa",
+      "people": "Pessoas e acesso",
+      "workspace": "Espaço de trabalho",
+      "activity": "Atividade e dados",
+      "data": "Integrações e dados"
     },
     "cards": {
       "settings": {
-        "title": "Company & Accounting",
-        "description": "Organization identity, base currency, fiscal year & control accounts"
+        "title": "Empresa e Contabilidade",
+        "description": "Identidade da organização, moeda base, ano fiscal e contas de controle"
       },
       "users": {
-        "title": "Users",
-        "description": "Invite people, assign roles & permission overrides"
+        "title": "Usuários",
+        "description": "Convide pessoas, atribua funções e substituições de permissão"
       },
       "roles": {
-        "title": "Roles",
-        "description": "Define roles and exactly what each one grants"
+        "title": "Funções",
+        "description": "Defina funções e exatamente o que cada uma concede"
       },
       "navigation": {
-        "title": "Navigation",
-        "description": "Organize workspaces, menu labels, and mobile shortcuts"
+        "title": "Navegação",
+        "description": "Organize espaços de trabalho, rótulos de menu e atalhos móveis"
       },
       "records": {
-        "title": "Custom Records",
-        "description": "Design your own record types — each becomes a full module with its own list & editor"
+        "title": "Registros personalizados",
+        "description": "Projete seus próprios tipos de registro — cada um se torna um módulo completo com sua própria lista e editor"
       },
       "customFields": {
-        "title": "Custom Fields",
-        "description": "Add typed fields to records across the app"
+        "title": "Campos personalizados",
+        "description": "Adicione campos tipados aos registros em todo o aplicativo"
       },
       "customization": {
-        "title": "Forms & Views",
-        "description": "Customize transaction forms and saved list views per org and per user"
+        "title": "Formulários e visualizações",
+        "description": "Personalize formulários de transação e visualizações de lista salvas por organização e por usuário"
       },
       "pdfTemplates": {
-        "title": "PDF Templates",
-        "description": "Design printable PDF documents for invoices, journals, and every transaction"
+        "title": "Modelos de PDF",
+        "description": "Projete documentos PDF imprimíveis para faturas, lançamentos e todas as transações"
       },
       "scripts": {
         "title": "Scripts",
-        "description": "Sandboxed automation that runs on ledger events"
+        "description": "Automação em sandbox executada em eventos do razão"
       },
       "apps": {
-        "title": "Apps",
-        "description": "Build and install app packages — a sandboxed frontend plus a governed backend"
+        "title": "Aplicativos",
+        "description": "Crie e instale pacotes de aplicativos — um frontend em sandbox mais um backend governado"
       },
       "sandboxes": {
-        "title": "Environments",
-        "description": "Create, refresh, and promote isolated sandbox copies of production"
+        "title": "Ambientes",
+        "description": "Crie, atualize e promova cópias sandbox isoladas da produção"
       },
       "apiKeys": {
-        "title": "API Keys",
-        "description": "Create scoped API keys for integrations and view usage logs"
+        "title": "Chaves de API",
+        "description": "Crie chaves de API com escopo para integrações e veja logs de uso"
       },
       "apiDocs": {
-        "title": "API Docs",
-        "description": "Browse the REST API reference for every record and transaction type"
+        "title": "Documentação da API",
+        "description": "Navegue pela referência da API REST para cada tipo de registro e transação"
       },
       "audit": {
-        "title": "Audit Log",
-        "description": "Every write captured with actor and before/after diffs"
+        "title": "Log de auditoria",
+        "description": "Cada gravação capturada com autor e diffs de antes/depois"
       },
       "sync": {
-        "title": "Migrations & Mirror",
-        "description": "Migrate from NetSuite, QuickBooks and more — then mirror to A/B-run both in parallel"
+        "title": "Migrações e Espelhamento",
+        "description": "Migre do NetSuite, QuickBooks e mais — depois espelhe para executar A/B ambos em paralelo"
       },
       "ai": {
-        "title": "AI",
-        "description": "Provider, models, and encrypted API key for the assistant"
+        "title": "IA",
+        "description": "Provedor, modelos e chave de API criptografada para o assistente"
       },
       "setup": {
-        "title": "Setup",
-        "description": "Tax, dimensions, payment terms, numbering & other configuration"
+        "title": "Configuração",
+        "description": "Impostos, dimensões, condições de pagamento, numeração e outras configurações"
       },
       "email": {
-        "title": "Email delivery",
-        "description": "Configure your email provider so scheduled reports can be sent"
+        "title": "Entrega de e-mail",
+        "description": "Configure seu provedor de e-mail para que relatórios agendados possam ser enviados"
       }
     }
   },
   "buildHub": {
-    "metaTitle": "Build",
-    "title": "Build",
-    "subtitle": "Everything you author on the platform — data model, forms & documents, automation, and the API.",
+    "metaTitle": "Construir",
+    "title": "Construir",
+    "subtitle": "Tudo que você cria na plataforma — modelo de dados, formulários e documentos, automação e a API.",
     "groups": {
-      "model": "Data model",
-      "experience": "Forms & documents",
-      "automation": "Automation & apps",
+      "model": "Modelo de dados",
+      "experience": "Formulários e documentos",
+      "automation": "Automação e aplicativos",
       "api": "API"
     }
   },
   "audit": {
-    "title": "Audit Log",
-    "description": "A complete, tamper-proof history of every change, with full before/after detail and GL impact for posted amendments and deletions.",
-    "searchPlaceholder": "Search record type, user, or reference…",
-    "actionFilter": "Action",
+    "title": "Log de auditoria",
+    "description": "Um histórico completo e à prova de adulteração de cada alteração, com detalhes completos de antes/depois e impacto no razão para emendas e exclusões lançadas.",
+    "searchPlaceholder": "Buscar tipo de registro, usuário ou referência…",
+    "actionFilter": "Ação",
     "empty": {
-      "title": "No audit entries yet",
-      "description": "Changes to your records will appear here as they happen."
+      "title": "Nenhuma entrada de auditoria ainda",
+      "description": "Alterações nos seus registros aparecerão aqui conforme acontecem."
     },
     "table": {
-      "when": "When",
-      "actor": "User",
-      "action": "Action",
-      "tableName": "Record type",
-      "row": "Reference",
-      "changes": "Changes"
+      "when": "Quando",
+      "actor": "Usuário",
+      "action": "Ação",
+      "tableName": "Tipo de registro",
+      "row": "Referência",
+      "changes": "Alterações"
     },
-    "systemActor": "system",
+    "systemActor": "sistema",
     "actions": {
-      "insert": "insert",
-      "update": "update",
-      "delete": "delete",
-      "post": "post",
-      "void": "void",
-      "approve": "approve",
-      "reject": "reject"
+      "insert": "inserção",
+      "update": "atualização",
+      "delete": "exclusão",
+      "post": "lançamento",
+      "void": "cancelamento",
+      "approve": "aprovação",
+      "reject": "rejeição"
     }
   },
   "customFields": {
-    "title": "Custom Fields",
-    "description": "Extend any module — document headers, transaction lines, parties, projects, accounts. Fields render everywhere the record does: drawers, line grids, and reporting.",
-    "searchPlaceholder": "Search fields…",
-    "targetFilter": "Target",
+    "title": "Campos personalizados",
+    "description": "Estenda qualquer módulo — cabeçalhos de documento, linhas de transação, partes, projetos, contas. Os campos aparecem em todo lugar onde o registro aparece: painéis laterais, grades de linhas e relatórios.",
+    "searchPlaceholder": "Pesquisar campos…",
+    "targetFilter": "Alvo",
     "table": {
-      "field": "Field",
-      "key": "Key",
-      "target": "Target",
-      "type": "Type",
-      "required": "Required",
+      "field": "Campo",
+      "key": "Chave",
+      "target": "Alvo",
+      "type": "Tipo",
+      "required": "Obrigatório",
       "status": "Status"
     },
-    "empty": "No custom fields yet.",
-    "statusActive": "active",
-    "statusArchived": "archived",
-    "newField": "New field",
+    "empty": "Nenhum campo personalizado ainda.",
+    "statusActive": "ativo",
+    "statusArchived": "arquivado",
+    "newField": "Novo campo",
     "targets": {
       "documents": {
-        "label": "Transaction header",
-        "description": "One value per transaction (bill, invoice, payment, expense report, journal)."
+        "label": "Cabeçalho da transação",
+        "description": "Um valor por transação (conta a pagar, fatura, pagamento, relatório de despesas, lançamento)."
       },
       "documentLines": {
-        "label": "Transaction lines",
-        "description": "A column on every line of the chosen transaction type."
+        "label": "Linhas de transação",
+        "description": "Uma coluna em cada linha do tipo de transação escolhido."
       },
       "parties": {
-        "label": "Parties",
-        "description": "Vendors, customers, and employees."
+        "label": "Partes",
+        "description": "Fornecedores, clientes e funcionários."
       },
       "projects": {
-        "label": "Projects",
-        "description": "Jobs / projects."
+        "label": "Projetos",
+        "description": "Trabalhos / projetos."
       },
       "accounts": {
-        "label": "Accounts",
-        "description": "Chart of accounts."
+        "label": "Contas",
+        "description": "Plano de contas."
       },
       "items": {
-        "label": "Items & Services",
-        "description": "Products and services."
+        "label": "Itens e serviços",
+        "description": "Produtos e serviços."
       },
       "crmAccounts": {
-        "label": "CRM accounts",
-        "description": "Lead, prospect, and customer qualification profiles."
+        "label": "Contas de CRM",
+        "description": "Perfis de qualificação de lead, prospect e cliente."
       },
       "crmActivities": {
-        "label": "CRM activities",
-        "description": "Calls, visits, events, emails, notes, and tasks."
+        "label": "Atividades de CRM",
+        "description": "Ligações, visitas, eventos, e-mails, notas e tarefas."
       },
       "crmOpportunities": {
-        "label": "CRM opportunities",
-        "description": "Pipeline opportunities and forecast details."
+        "label": "Oportunidades de CRM",
+        "description": "Oportunidades de pipeline e detalhes de previsão."
       }
     },
     "kinds": {
       "header": {
-        "vendorBill": "Vendor bills",
-        "customerInvoice": "Customer invoices",
-        "vendorPayment": "Vendor payments",
-        "customerPayment": "Customer payments",
-        "expenseReport": "Expense reports",
-        "journal": "Journal entries",
-        "vendorCredit": "Vendor credits",
-        "customerCredit": "Customer credit memos",
-        "cardCharge": "Card charges",
-        "cardRefund": "Card refunds",
-        "check": "Checks"
+        "vendorBill": "Contas a pagar",
+        "customerInvoice": "Faturas de cliente",
+        "vendorPayment": "Pagamentos a fornecedor",
+        "customerPayment": "Pagamentos de cliente",
+        "expenseReport": "Relatórios de despesas",
+        "journal": "Lançamentos contábeis",
+        "vendorCredit": "Créditos de fornecedor",
+        "customerCredit": "Notas de crédito de cliente",
+        "cardCharge": "Cobranças de cartão",
+        "cardRefund": "Estornos de cartão",
+        "check": "Cheques"
       },
       "lines": {
-        "vendorBill": "Vendor bill lines",
-        "customerInvoice": "Customer invoice lines",
-        "expenseReport": "Expense report lines",
-        "journal": "Journal entry lines",
-        "vendorCredit": "Vendor credit lines",
-        "customerCredit": "Customer credit memo lines",
-        "cardCharge": "Card charge lines",
-        "cardRefund": "Card refund lines",
-        "check": "Check lines"
+        "vendorBill": "Linhas de conta a pagar",
+        "customerInvoice": "Linhas de fatura de cliente",
+        "expenseReport": "Linhas de relatório de despesas",
+        "journal": "Linhas de lançamento contábil",
+        "vendorCredit": "Linhas de crédito de fornecedor",
+        "customerCredit": "Linhas de nota de crédito de cliente",
+        "cardCharge": "Linhas de cobrança de cartão",
+        "cardRefund": "Linhas de estorno de cartão",
+        "check": "Linhas de cheque"
       }
     },
     "types": {
       "text": {
-        "label": "Text",
-        "help": "Single line of text."
+        "label": "Texto",
+        "help": "Uma única linha de texto."
       },
       "longText": {
-        "label": "Text area",
-        "help": "Multiple lines of text."
+        "label": "Área de texto",
+        "help": "Várias linhas de texto."
       },
       "number": {
-        "label": "Number",
-        "help": "A numeric value."
+        "label": "Número",
+        "help": "Um valor numérico."
       },
       "currency": {
-        "label": "Currency",
-        "help": "A money amount (2 decimals)."
+        "label": "Moeda",
+        "help": "Um valor monetário (2 casas decimais)."
       },
       "date": {
-        "label": "Date",
-        "help": "A calendar date."
+        "label": "Data",
+        "help": "Uma data de calendário."
       },
       "boolean": {
-        "label": "Checkbox",
-        "help": "Yes / no."
+        "label": "Caixa de seleção",
+        "help": "Sim / não."
       },
       "select": {
-        "label": "Dropdown (single)",
-        "help": "Choose one from a list."
+        "label": "Lista suspensa (única)",
+        "help": "Escolha uma de uma lista."
       },
       "multiSelect": {
-        "label": "Dropdown (multiple)",
-        "help": "Choose any number from a list."
+        "label": "Lista suspensa (múltipla)",
+        "help": "Escolha qualquer quantidade de uma lista."
       },
       "reference": {
-        "label": "List / Record",
-        "help": "Link to another record (party, project, account, item)."
+        "label": "Lista / Registro",
+        "help": "Vincular a outro registro (parte, projeto, conta, item)."
       }
     },
     "drawer": {
-      "newTitle": "New custom field",
-      "editTitle": "Edit “{label}”",
-      "newDescription": "Extend a record type with your own field.",
-      "createField": "Create field",
-      "saveChanges": "Save changes",
-      "created": "Field created",
-      "updated": "Field updated",
-      "saveFailed": "Could not save the field",
-      "appliesTo": "Applies to",
-      "recordType": "Record type",
-      "whichTransactions": "Which transactions",
-      "allTypes": "All types",
-      "allTypesHint": "Leave as “All types” to apply the field to every kind.",
-      "allKindsSuffix": "all kinds",
-      "lockedAfterCreation": "· locked after creation (values already reference it)",
-      "label": "Label",
-      "labelPlaceholder": "PO Number",
-      "fieldKey": "Field key",
-      "permanent": "(permanent)",
+      "newTitle": "Novo campo personalizado",
+      "editTitle": "Editar “{label}”",
+      "newDescription": "Estenda um tipo de registro com seu próprio campo.",
+      "createField": "Criar campo",
+      "saveChanges": "Salvar alterações",
+      "created": "Campo criado",
+      "updated": "Campo atualizado",
+      "saveFailed": "Não foi possível salvar o campo",
+      "appliesTo": "Aplica-se a",
+      "recordType": "Tipo de registro",
+      "whichTransactions": "Quais transações",
+      "allTypes": "Todos os tipos",
+      "allTypesHint": "Deixe como “Todos os tipos” para aplicar o campo a todos os tipos.",
+      "allKindsSuffix": "todos os tipos",
+      "lockedAfterCreation": "· bloqueado após a criação (valores já o referenciam)",
+      "label": "Rótulo",
+      "labelPlaceholder": "Número do PO",
+      "fieldKey": "Chave do campo",
+      "permanent": "(permanente)",
       "keyPlaceholder": "po_number",
-      "keyHint": "Auto-filled from the label; snake_case.",
-      "type": "Type",
-      "options": "Options",
-      "noOptions": "No options yet — add at least one.",
-      "addOptionPlaceholder": "Add an option…",
-      "removeOption": "Remove {option}",
-      "helpText": "Help text",
-      "optionalSuffix": "(optional)",
-      "helpTextPlaceholder": "Shown under the field",
+      "keyHint": "Preenchido automaticamente a partir do rótulo; snake_case.",
+      "type": "Tipo",
+      "options": "Opções",
+      "noOptions": "Nenhuma opção ainda — adicione ao menos uma.",
+      "addOptionPlaceholder": "Adicionar uma opção…",
+      "removeOption": "Remover {option}",
+      "helpText": "Texto de ajuda",
+      "optionalSuffix": "(opcional)",
+      "helpTextPlaceholder": "Exibido abaixo do campo",
       "placeholder": "Placeholder",
-      "defaultValue": "Default value",
-      "min": "Min",
-      "max": "Max",
-      "showInList": "Show as a column in list views",
-      "referenceTable": "Referenced record type",
-      "referenceTableHint": "The field stores a link to a record of this type.",
-      "displayMode": "Display mode",
-      "displayNormal": "Normal (editable)",
-      "displayHidden": "Hidden (not shown on forms)",
-      "displayDisabled": "Disabled (shown read-only)",
-      "allowedRoles": "Visible to roles",
-      "allowedRolesHint": "Leave unchecked for all roles. Admins always see all fields.",
-      "roleAdmin": "Admin",
+      "defaultValue": "Valor padrão",
+      "min": "Mín.",
+      "max": "Máx.",
+      "showInList": "Mostrar como coluna nas visões de lista",
+      "referenceTable": "Tipo de registro referenciado",
+      "referenceTableHint": "O campo armazena um link para um registro deste tipo.",
+      "displayMode": "Modo de exibição",
+      "displayNormal": "Normal (editável)",
+      "displayHidden": "Oculto (não exibido nos formulários)",
+      "displayDisabled": "Desativado (exibido somente leitura)",
+      "allowedRoles": "Visível para funções",
+      "allowedRolesHint": "Deixe desmarcado para todas as funções. Administradores sempre veem todos os campos.",
+      "roleAdmin": "Administrador",
       "roleController": "Controller",
-      "roleAccountant": "Accountant",
-      "roleApprover": "Approver",
-      "roleViewer": "Viewer"
+      "roleAccountant": "Contador",
+      "roleApprover": "Aprovador",
+      "roleViewer": "Visualizador"
     }
   },
   "navigation": {
-    "title": "Navigation",
-    "description": "Customize every menu layout for the organization: organize workspaces, rename or hide destinations, add links, and choose up to four mobile shortcuts. Permission gates still apply.",
-    "groupLabelAria": "Group label",
-    "moveGroupUp": "Move group up",
-    "moveGroupDown": "Move group down",
-    "itemLabelAria": "Item label",
-    "showItem": "Show item",
-    "hideItem": "Hide item",
-    "moveItemUp": "Move item up",
-    "moveItemDown": "Move item down",
-    "moveToGroup": "Move to workspace",
-    "pinMobile": "Pin to mobile navigation",
-    "unpinMobile": "Remove from mobile navigation",
-    "mobileLimit": "Mobile navigation supports up to four pinned destinations",
-    "linkUrlPrompt": "Link URL (internal route or https://…):",
-    "linkLabelPrompt": "Label:",
-    "addLink": "Add link",
-    "deleteLink": "Delete link",
-    "newGroupPrompt": "Workspace name:",
-    "addGroup": "Add workspace",
-    "deleteGroup": "Delete workspace",
-    "save": "Save navigation",
-    "saved": "Navigation saved",
-    "saveFailed": "Could not save",
-    "resetDefaults": "Reset to defaults"
+    "title": "Navegação",
+    "description": "Personalize todo o layout de menu para a organização: organize espaços de trabalho, renomeie ou oculte destinos, adicione links e escolha até quatro atalhos móveis. As restrições de permissão continuam valendo.",
+    "groupLabelAria": "Rótulo do grupo",
+    "moveGroupUp": "Mover grupo para cima",
+    "moveGroupDown": "Mover grupo para baixo",
+    "itemLabelAria": "Rótulo do item",
+    "showItem": "Mostrar item",
+    "hideItem": "Ocultar item",
+    "moveItemUp": "Mover item para cima",
+    "moveItemDown": "Mover item para baixo",
+    "moveToGroup": "Mover para o espaço de trabalho",
+    "pinMobile": "Fixar na navegação móvel",
+    "unpinMobile": "Remover da navegação móvel",
+    "mobileLimit": "A navegação móvel suporta até quatro destinos fixados",
+    "linkUrlPrompt": "URL do link (rota interna ou https://…):",
+    "linkLabelPrompt": "Rótulo:",
+    "addLink": "Adicionar link",
+    "deleteLink": "Excluir link",
+    "newGroupPrompt": "Nome do espaço de trabalho:",
+    "addGroup": "Adicionar espaço de trabalho",
+    "deleteGroup": "Excluir espaço de trabalho",
+    "save": "Salvar navegação",
+    "saved": "Navegação salva",
+    "saveFailed": "Não foi possível salvar",
+    "resetDefaults": "Restaurar padrões"
   },
   "roles": {
-    "metaTitle": "Roles",
-    "title": "Roles",
-    "description": "Bundles of permissions you assign to users. Built-in roles ship with the app; create custom roles for anything finer-grained.",
-    "manageUsers": "Manage users",
-    "searchPlaceholder": "Search role name, key, or description…",
-    "typeFilter": "Type",
-    "builtIn": "Built-in",
-    "custom": "Custom",
-    "emptyTitle": "No roles yet",
-    "emptyDescription": "Run the role seed script (engine/src/seed-roles.ts) to create the built-in roles, or create a custom role.",
-    "noMatchTitle": "No matching roles",
-    "noMatchDescription": "Adjust the search or type filter.",
+    "metaTitle": "Funções",
+    "title": "Funções",
+    "description": "Conjuntos de permissões que você atribui aos usuários. Funções integradas vêm com o aplicativo; crie funções personalizadas para qualquer coisa mais granular.",
+    "manageUsers": "Gerenciar usuários",
+    "searchPlaceholder": "Buscar nome, chave ou descrição da função…",
+    "typeFilter": "Tipo",
+    "builtIn": "Integrada",
+    "custom": "Personalizada",
+    "emptyTitle": "Nenhuma função ainda",
+    "emptyDescription": "Execute o script de seed de funções (engine/src/seed-roles.ts) para criar as funções integradas, ou crie uma função personalizada.",
+    "noMatchTitle": "Nenhuma função correspondente",
+    "noMatchDescription": "Ajuste a busca ou o filtro de tipo.",
     "table": {
-      "key": "Key",
-      "permissions": "Permissions",
-      "members": "Members"
+      "key": "Chave",
+      "permissions": "Permissões",
+      "members": "Membros"
     },
-    "newRole": "New role",
+    "newRole": "Nova função",
     "drawer": {
-      "newTitle": "New role",
-      "lockedDescription": "The Administrator role always carries every permission and cannot be edited.",
-      "builtInDescription": "Built-in role: the name and key are fixed, but you can adjust its permissions.",
-      "newDescription": "Name the role, then pick the permissions it grants.",
-      "deleteRole": "Delete role",
-      "createRole": "Create role",
-      "saveChanges": "Save changes",
-      "nameRequired": "Role name is required",
-      "saveFailed": "Saving the role failed",
-      "created": "Role created",
-      "updated": "Role updated",
-      "deleteConfirm": "Delete the “{name}” role? Users holding it lose its permissions immediately.",
-      "deleteFailed": "Deleting the role failed",
-      "deleted": "Role deleted",
-      "namePlaceholder": "AP clerk",
+      "newTitle": "Nova função",
+      "lockedDescription": "A função Administrador sempre carrega todas as permissões e não pode ser editada.",
+      "builtInDescription": "Função integrada: o nome e a chave são fixos, mas você pode ajustar suas permissões.",
+      "newDescription": "Nomeie a função e escolha as permissões que ela concede.",
+      "deleteRole": "Excluir função",
+      "createRole": "Criar função",
+      "saveChanges": "Salvar alterações",
+      "nameRequired": "O nome da função é obrigatório",
+      "saveFailed": "Falha ao salvar a função",
+      "created": "Função criada",
+      "updated": "Função atualizada",
+      "deleteConfirm": "Excluir a função “{name}”? Os usuários que a possuem perdem suas permissões imediatamente.",
+      "deleteFailed": "Falha ao excluir a função",
+      "deleted": "Função excluída",
+      "namePlaceholder": "Auxiliar de contas a pagar",
       "keyPlaceholder": "ap_clerk",
-      "descriptionPlaceholder": "What is this role for?",
-      "permissionsHeading": "Permissions",
-      "selectedCount": "{count} selected",
-      "subsidiaryHeading": "Subsidiary access",
-      "subsidiaryModeAll": "All subsidiaries",
-      "subsidiaryModeSubtree": "A subsidiary and its children",
-      "subsidiaryModeList": "Specific subsidiaries",
-      "subsidiaryPlaceholder": "Choose a subsidiary…",
-      "subsidiarySearchPlaceholder": "Search subsidiaries…",
-      "subsidiaryRequired": "Choose a subsidiary",
-      "subsidiaryListRequired": "Select at least one subsidiary"
+      "descriptionPlaceholder": "Para que serve esta função?",
+      "permissionsHeading": "Permissões",
+      "selectedCount": "{count} selecionadas",
+      "subsidiaryHeading": "Acesso a subsidiárias",
+      "subsidiaryModeAll": "Todas as subsidiárias",
+      "subsidiaryModeSubtree": "Uma subsidiária e suas filhas",
+      "subsidiaryModeList": "Subsidiárias específicas",
+      "subsidiaryPlaceholder": "Escolha uma subsidiária…",
+      "subsidiarySearchPlaceholder": "Buscar subsidiárias…",
+      "subsidiaryRequired": "Escolha uma subsidiária",
+      "subsidiaryListRequired": "Selecione ao menos uma subsidiária"
     }
   },
   "scripts": {
     "title": "Scripts",
-    "description": "Real JavaScript, run in a sandbox at document trigger points — validate, mutate whitelisted fields, or veto with ob.abort(). Every run is recorded.",
-    "searchPlaceholder": "Search scripts…",
-    "triggerFilter": "Trigger",
+    "description": "JavaScript real, executado em um sandbox nos pontos de gatilho de documento — valide, altere campos permitidos ou vete com ob.abort(). Cada execução é registrada.",
+    "searchPlaceholder": "Buscar scripts…",
+    "triggerFilter": "Gatilho",
     "table": {
       "script": "Script",
-      "trigger": "Trigger",
-      "kind": "Kind",
-      "runs": "Runs",
-      "lastRun": "Last run",
+      "trigger": "Gatilho",
+      "kind": "Tipo",
+      "runs": "Execuções",
+      "lastRun": "Última execução",
       "status": "Status"
     },
-    "empty": "No scripts yet — automate a document workflow.",
-    "allKinds": "all",
-    "statusActive": "active",
-    "statusDisabled": "disabled",
+    "empty": "Nenhum script ainda — automatize um fluxo de trabalho de documento.",
+    "allKinds": "todos",
+    "statusActive": "ativo",
+    "statusDisabled": "desativado",
     "triggers": {
-      "beforeSubmit": "before submit",
-      "beforePost": "before post",
-      "afterPost": "after post",
-      "beforeVoid": "before void",
-      "scheduled": "scheduled",
+      "beforeSubmit": "antes do envio",
+      "beforePost": "antes do lançamento",
+      "afterPost": "após o lançamento",
+      "beforeVoid": "antes do cancelamento",
+      "scheduled": "agendado",
       "endpoint": "endpoint",
-      "bulk": "bulk",
-      "client": "client"
+      "bulk": "em massa",
+      "client": "cliente"
     },
     "kinds": {
-      "vendorBill": "vendor bill",
-      "customerInvoice": "customer invoice",
-      "vendorPayment": "vendor payment",
-      "customerPayment": "customer payment",
-      "expenseReport": "expense report",
-      "journal": "journal",
-      "vendorCredit": "vendor credit",
-      "customerCredit": "customer credit",
-      "cardCharge": "card charge",
-      "cardRefund": "card refund",
-      "check": "check",
-      "deposit": "deposit",
-      "transfer": "transfer",
-      "purchaseOrder": "purchase order",
-      "salesOrder": "sales order",
-      "quote": "quote"
+      "vendorBill": "conta a pagar",
+      "customerInvoice": "fatura",
+      "vendorPayment": "pagamento a fornecedor",
+      "customerPayment": "recebimento de cliente",
+      "expenseReport": "relatório de despesas",
+      "journal": "lançamento contábil",
+      "vendorCredit": "crédito de fornecedor",
+      "customerCredit": "crédito de cliente",
+      "cardCharge": "cobrança de cartão",
+      "cardRefund": "estorno de cartão",
+      "check": "cheque",
+      "deposit": "depósito",
+      "transfer": "transferência",
+      "purchaseOrder": "pedido de compra",
+      "salesOrder": "pedido de venda",
+      "quote": "orçamento"
     },
     "drawer": {
-      "newScript": "New script",
-      "newTitle": "New script",
-      "description": "Sandboxed JavaScript (QuickJS) — no filesystem or network. ob.query runs read-only SQL.",
-      "createScript": "Create script",
-      "saveScript": "Save script",
-      "created": "Script created",
-      "saved": "Script saved",
-      "saveFailed": "Could not save the script",
-      "namePlaceholder": "AP policy: big bills need a memo",
-      "trigger": "Trigger",
-      "documentKind": "Document kind",
-      "allKindsOption": "All kinds",
-      "cron": "Cron schedule",
-      "cronHint": "— min hr dom mon dow (UTC)",
-      "source": "Source",
-      "sourceHint": "— must define function main(ctx)",
-      "timeoutMs": "Timeout (ms)",
-      "runOrder": "Run order",
-      "recentRuns": "Recent runs",
-      "runNow": "Run now",
-      "runOk": "Ran in {ms} ms",
-      "runFailed": "Run failed",
-      "delete": "Delete",
-      "deleteConfirm": "Delete this script? Its run history is kept for audit.",
-      "deleteFailed": "Could not delete the script",
-      "deleted": "Script deleted",
+      "newScript": "Novo script",
+      "newTitle": "Novo script",
+      "description": "JavaScript em sandbox (QuickJS) — sem sistema de arquivos nem rede. ob.query executa SQL somente leitura.",
+      "createScript": "Criar script",
+      "saveScript": "Salvar script",
+      "created": "Script criado",
+      "saved": "Script salvo",
+      "saveFailed": "Não foi possível salvar o script",
+      "namePlaceholder": "Política de contas a pagar: contas grandes exigem memorando",
+      "trigger": "Gatilho",
+      "documentKind": "Tipo de documento",
+      "allKindsOption": "Todos os tipos",
+      "cron": "Agendamento cron",
+      "cronHint": "— min hr dom mês dsem (UTC)",
+      "source": "Código-fonte",
+      "sourceHint": "— deve definir a função main(ctx)",
+      "timeoutMs": "Tempo limite (ms)",
+      "runOrder": "Ordem de execução",
+      "recentRuns": "Execuções recentes",
+      "runNow": "Executar agora",
+      "runOk": "Executado em {ms} ms",
+      "runFailed": "Falha na execução",
+      "delete": "Excluir",
+      "deleteConfirm": "Excluir este script? Seu histórico de execução é mantido para auditoria.",
+      "deleteFailed": "Não foi possível excluir o script",
+      "deleted": "Script excluído",
       "runStatus": {
         "ok": "ok",
-        "aborted": "aborted",
-        "error": "error",
-        "timeout": "timeout"
+        "aborted": "abortado",
+        "error": "erro",
+        "timeout": "tempo esgotado"
       },
-      "endpointSlug": "Endpoint slug",
-      "endpointUrl": "Callable URL",
-      "endpointUrlHint": "Send requests to this URL to run the script.",
-      "copyUrl": "Copy",
-      "urlCopied": "Endpoint URL copied",
-      "customRecordsGroup": "Custom records",
-      "builtInGroup": "Transactions",
-      "noRuns": "No runs yet — this script has never executed.",
-      "selectRun": "Select a run on the Recent Runs tab to inspect its log.",
-      "logEmpty": "This run produced no log output."
+      "endpointSlug": "Slug do endpoint",
+      "endpointUrl": "URL chamável",
+      "endpointUrlHint": "Envie requisições para esta URL para executar o script.",
+      "copyUrl": "Copiar",
+      "urlCopied": "URL do endpoint copiada",
+      "customRecordsGroup": "Registros personalizados",
+      "builtInGroup": "Transações",
+      "noRuns": "Nenhuma execução ainda — este script nunca foi executado.",
+      "selectRun": "Selecione uma execução na aba Execuções recentes para inspecionar seu log.",
+      "logEmpty": "Esta execução não produziu saída de log."
     },
     "tabs": {
-      "general": "General",
-      "code": "Code",
-      "runs": "Recent Runs",
-      "log": "Execution Log"
+      "general": "Geral",
+      "code": "Código",
+      "runs": "Execuções recentes",
+      "log": "Log de execução"
     }
   },
   "apiKeys": {
-    "title": "API Keys",
-    "description": "Scoped API keys for integrations and automation. Each key carries a subset of permissions — a request is allowed only when both the key's scopes and the owner's effective permissions cover it.",
-    "searchPlaceholder": "Search keys, owners…",
-    "empty": "No API keys yet — create one to start building integrations.",
+    "title": "Chaves de API",
+    "description": "Chaves de API com escopo para integrações e automação. Cada chave carrega um subconjunto de permissões — uma requisição só é permitida quando tanto os escopos da chave quanto as permissões efetivas do proprietário a cobrem.",
+    "searchPlaceholder": "Buscar chaves, proprietários…",
+    "empty": "Nenhuma chave de API ainda — crie uma para começar a construir integrações.",
     "table": {
-      "name": "Name",
-      "key": "Key",
-      "owner": "Owner",
-      "scopes": "Scopes",
-      "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
-      "fullScope": "Full scope (inherits owner)",
-      "lastUsed": "Last used",
+      "name": "Nome",
+      "key": "Chave",
+      "owner": "Proprietário",
+      "scopes": "Escopos",
+      "scopesCount": "{count, plural, one {# permissão} other {# permissões}}",
+      "fullScope": "Escopo total (herda do proprietário)",
+      "lastUsed": "Último uso",
       "status": "Status"
     },
-    "statusActive": "active",
-    "statusRevoked": "revoked",
+    "statusActive": "ativa",
+    "statusRevoked": "revogada",
     "drawer": {
-      "newKey": "New API key",
-      "newTitle": "New API key",
-      "description": "Create a scoped key for programmatic access to the REST API. The plaintext key is shown once — store it securely.",
-      "nameRequired": "A name is required",
-      "namePlaceholder": "Production sync integration",
-      "descriptionPlaceholder": "What is this key for?",
-      "saveFailed": "Could not save the key",
-      "created": "Key created",
-      "updated": "Key updated",
-      "revoke": "Revoke",
-      "revokeConfirm": "Revoke this key? All integrations using it will stop working immediately. This cannot be undone.",
-      "revokeFailed": "Could not revoke the key",
-      "revoked": "Key revoked",
-      "revokedNotice": "This key has been revoked and can no longer authenticate requests.",
-      "keyCreated": "Copy your API key",
-      "keyCreatedHint": "This is the only time the full key will be shown. Store it securely — you won't be able to see it again.",
-      "copy": "Copy",
-      "copied": "Copied to clipboard",
-      "createKey": "Create key",
-      "saveChanges": "Save changes",
-      "scopesHeading": "Permission scopes",
-      "scopesHint": "Select the permissions this key grants. Leave empty to inherit the owner's full permission set. A key never grants more than its owner has.",
-      "fullScope": "Full scope (inherits owner permissions)",
-      "scopesCount": "{count, plural, one {# permission selected} other {# permissions selected}}"
+      "newKey": "Nova chave de API",
+      "newTitle": "Nova chave de API",
+      "description": "Crie uma chave com escopo para acesso programático à API REST. A chave em texto simples é mostrada uma vez — armazene-a com segurança.",
+      "nameRequired": "Um nome é obrigatório",
+      "namePlaceholder": "Integração de sincronização de produção",
+      "descriptionPlaceholder": "Para que serve esta chave?",
+      "saveFailed": "Não foi possível salvar a chave",
+      "created": "Chave criada",
+      "updated": "Chave atualizada",
+      "revoke": "Revogar",
+      "revokeConfirm": "Revogar esta chave? Todas as integrações que a usam pararão de funcionar imediatamente. Isso não pode ser desfeito.",
+      "revokeFailed": "Não foi possível revogar a chave",
+      "revoked": "Chave revogada",
+      "revokedNotice": "Esta chave foi revogada e não pode mais autenticar requisições.",
+      "keyCreated": "Copie sua chave de API",
+      "keyCreatedHint": "Esta é a única vez que a chave completa será mostrada. Armazene-a com segurança — você não poderá vê-la novamente.",
+      "copy": "Copiar",
+      "copied": "Copiado para a área de transferência",
+      "createKey": "Criar chave",
+      "saveChanges": "Salvar alterações",
+      "scopesHeading": "Escopos de permissão",
+      "scopesHint": "Selecione as permissões que esta chave concede. Deixe vazio para herdar o conjunto completo de permissões do proprietário. Uma chave nunca concede mais do que seu proprietário possui.",
+      "fullScope": "Escopo total (herda as permissões do proprietário)",
+      "scopesCount": "{count, plural, one {# permissão selecionada} other {# permissões selecionadas}}"
     }
   },
   "settings": {
-    "metaTitle": "Company & Accounting",
-    "title": "Company & Accounting",
-    "description": "Organization identity, base currency, fiscal calendar and the control accounts the ledger posts through.",
+    "metaTitle": "Empresa e Contabilidade",
+    "title": "Empresa e Contabilidade",
+    "description": "Identidade da organização, moeda base, calendário fiscal e as contas de controle pelas quais o razão lança.",
     "organization": {
-      "title": "Organization",
-      "description": "How this company is identified across the app.",
-      "displayName": "Display name",
+      "title": "Organização",
+      "description": "Como esta empresa é identificada em todo o aplicativo.",
+      "displayName": "Nome de exibição",
       "displayNamePlaceholder": "Acme Manufacturing",
-      "legalName": "Legal name",
+      "legalName": "Razão social",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
-      "country": "Country",
+      "country": "País",
       "countryPlaceholder": "CA",
-      "countryHint": "Two-letter ISO code (e.g. CA, US, GB).",
-      "defaultLanguage": "Default language",
-      "defaultLanguageHint": "The language the app renders in for everyone who hasn’t picked their own in the account menu.",
-      "baseCurrency": "Base currency",
-      "baseCurrencyHint": "The reporting currency the ledger balances in. Add more currencies before switching.",
-      "reportPdfStyle": "Financial report PDF style",
-      "reportPdfStyleModern": "Modern (branded)",
+      "countryHint": "Código ISO de duas letras (ex.: CA, US, GB).",
+      "defaultLanguage": "Idioma padrão",
+      "defaultLanguageHint": "O idioma em que o aplicativo é exibido para todos que ainda não escolheram o seu próprio no menu da conta.",
+      "baseCurrency": "Moeda base",
+      "baseCurrencyHint": "A moeda de relatório em que o razão se equilibra. Adicione mais moedas antes de trocar.",
+      "reportPdfStyle": "Estilo de PDF de relatório financeiro",
+      "reportPdfStyleModern": "Moderno (com marca)",
       "reportPdfStyleFormal": "Formal (GAAP)",
-      "reportPdfStyleHint": "How exported financial statements look: Modern uses your brand accent and a sans-serif face; Formal is a classic serif, greyscale, audit-ready statement."
+      "reportPdfStyleHint": "Como as demonstrações financeiras exportadas aparecem: Moderno usa a cor de destaque da sua marca e uma fonte sem serifa; Formal é uma demonstração serifada clássica, em escala de cinza, pronta para auditoria."
     },
     "fiscal": {
-      "title": "Fiscal year",
-      "description": "The month your financial year begins. Everything fiscal-year-aware — reports, period close, presets — reads this.",
-      "startsIn": "Fiscal year starts in",
-      "runs": "Fiscal year runs",
+      "title": "Ano fiscal",
+      "description": "O mês em que seu ano financeiro começa. Tudo que reconhece o ano fiscal — relatórios, fechamento de período, predefinições — lê isto.",
+      "startsIn": "O ano fiscal começa em",
+      "runs": "O ano fiscal vai de",
       "range": "{start} → {end}",
-      "warning": "Changing the start month re-labels <strong>every accounting period</strong> — their fiscal year, period number and name are re-derived from each period’s start date the moment you save. Journal entries and dates are untouched, but reports and period-close groupings will shift to the new calendar."
+      "warning": "Alterar o mês de início rerrotula <strong>todos os períodos contábeis</strong> — seu ano fiscal, número e nome de período são rederivados da data de início de cada período no momento em que você salva. Lançamentos contábeis e datas permanecem intocados, mas relatórios e agrupamentos de fechamento de período mudarão para o novo calendário."
     },
     "months": {
-      "january": "January",
-      "february": "February",
-      "march": "March",
-      "april": "April",
-      "may": "May",
-      "june": "June",
-      "july": "July",
-      "august": "August",
-      "september": "September",
-      "october": "October",
-      "november": "November",
-      "december": "December"
+      "january": "Janeiro",
+      "february": "Fevereiro",
+      "march": "Março",
+      "april": "Abril",
+      "may": "Maio",
+      "june": "Junho",
+      "july": "Julho",
+      "august": "Agosto",
+      "september": "Setembro",
+      "october": "Outubro",
+      "november": "Novembro",
+      "december": "Dezembro"
     },
     "controlAccounts": {
-      "title": "Control accounts",
-      "description": "The general-ledger accounts subledgers and tax post through. Only postable (non-summary) accounts appear.",
-      "selectPlaceholder": "Select an account…",
-      "searchPlaceholder": "Search accounts…",
+      "title": "Contas de controle",
+      "description": "As contas do livro-razão pelas quais os subrazões e impostos lançam. Apenas contas lançáveis (não sintéticas) aparecem.",
+      "selectPlaceholder": "Selecione uma conta…",
+      "searchPlaceholder": "Buscar contas…",
       "fields": {
         "ar": {
-          "label": "Accounts receivable",
-          "hint": "Customer balances post here"
+          "label": "Contas a receber",
+          "hint": "Saldos de clientes são lançados aqui"
         },
         "ap": {
-          "label": "Accounts payable",
-          "hint": "Vendor balances post here"
+          "label": "Contas a pagar",
+          "hint": "Saldos de fornecedores são lançados aqui"
         },
         "bank": {
-          "label": "Default bank",
-          "hint": "Default cash account for vendor and customer payments"
+          "label": "Banco padrão",
+          "hint": "Conta de caixa padrão para pagamentos de fornecedores e clientes"
         },
         "taxCollected": {
-          "label": "Tax collected",
-          "hint": "Sales tax owed on invoices"
+          "label": "Imposto arrecadado",
+          "hint": "Imposto sobre vendas devido em faturas"
         },
         "taxPaid": {
-          "label": "Tax paid",
-          "hint": "Recoverable tax on bills"
+          "label": "Imposto pago",
+          "hint": "Imposto recuperável em contas a pagar"
         },
         "employeePayable": {
-          "label": "Employee payable",
-          "hint": "Expense reimbursements owed to staff"
+          "label": "A pagar a funcionários",
+          "hint": "Reembolsos de despesas devidos à equipe"
         },
         "fxUnrealizedGainLoss": {
-          "label": "Unrealized FX gain/loss",
-          "hint": "Where period-end revaluation of foreign-currency balances is booked"
+          "label": "Ganho/perda cambial não realizado",
+          "hint": "Onde a reavaliação de fim de período de saldos em moeda estrangeira é registrada"
         },
         "laborWip": {
-          "label": "Labor WIP / cost",
-          "hint": "Approved labor cost debits here (per project)"
+          "label": "Mão de obra em WIP / custo",
+          "hint": "Custos de mão de obra aprovados são debitados aqui (por projeto)"
         },
         "laborClearing": {
-          "label": "Labor clearing",
-          "hint": "Credited when labor is charged to a project; cleared by payroll"
+          "label": "Compensação de mão de obra",
+          "hint": "Creditada quando a mão de obra é apropriada a um projeto; compensada pela folha de pagamento"
         },
         "unbilledReceivable": {
-          "label": "Unbilled receivable (contract asset)",
-          "hint": "Fixed-price earned-but-unbilled revenue; relieved at invoicing"
+          "label": "A receber não faturado (ativo de contrato)",
+          "hint": "Receita de preço fixo ganha mas não faturada; baixada no faturamento"
         },
         "projectRevenue": {
-          "label": "Project revenue",
-          "hint": "Credited by percent-complete revenue recognition"
+          "label": "Receita de projeto",
+          "hint": "Creditada pelo reconhecimento de receita por percentual de conclusão"
         }
       }
     },
     "documentKinds": {
-      "vendorBill": "Vendor bill",
-      "customerInvoice": "Customer invoice",
-      "vendorPayment": "Vendor payment",
-      "customerPayment": "Customer payment",
-      "expenseReport": "Expense report",
-      "journal": "Journal"
+      "vendorBill": "Conta a pagar",
+      "customerInvoice": "Fatura",
+      "vendorPayment": "Pagamento a fornecedor",
+      "customerPayment": "Recebimento de cliente",
+      "expenseReport": "Relatório de despesas",
+      "journal": "Lançamento contábil"
     },
     "numbering": {
-      "title": "Document numbering",
-      "description": "Sequences that generate document numbers. Prefix and padding shown for each kind.",
-      "empty": "No sequences configured yet.",
+      "title": "Numeração de documentos",
+      "description": "Sequências que geram números de documentos. Prefixo e preenchimento mostrados para cada tipo.",
+      "empty": "Nenhuma sequência configurada ainda.",
       "table": {
-        "document": "Document",
-        "prefix": "Prefix",
-        "next": "Next #",
-        "padding": "Padding",
-        "example": "Example"
+        "document": "Documento",
+        "prefix": "Prefixo",
+        "next": "Próximo nº",
+        "padding": "Preenchimento",
+        "example": "Exemplo"
       }
     },
     "validation": {
-      "nameRequired": "Display name is required",
-      "countryRequired": "Country is required"
+      "nameRequired": "O nome de exibição é obrigatório",
+      "countryRequired": "O país é obrigatório"
     },
-    "saved": "Settings saved",
-    "savedPeriodsRederived": "Settings saved — accounting periods re-labelled to the new fiscal year",
-    "saveSettings": "Save settings"
+    "saved": "Configurações salvas",
+    "savedPeriodsRederived": "Configurações salvas — períodos contábeis rerrotulados para o novo ano fiscal",
+    "saveSettings": "Salvar configurações"
   },
   "users": {
-    "metaTitle": "Users",
-    "title": "Users",
-    "description": "Who can sign in, and which roles they hold. A user’s access is the union of their assigned roles; users with no assignment fall back to their legacy role.",
-    "manageRoles": "Manage roles",
-    "searchPlaceholder": "Search name or email…",
+    "metaTitle": "Usuários",
+    "title": "Usuários",
+    "description": "Quem pode fazer login e quais funções possui. O acesso de um usuário é a união de suas funções atribuídas; usuários sem atribuição recorrem à sua função legada.",
+    "manageRoles": "Gerenciar funções",
+    "searchPlaceholder": "Buscar nome ou e-mail…",
     "statusFilter": "Status",
-    "emptyTitle": "No users match",
-    "emptySearchDescription": "No users match your search. Try a different term or status filter.",
-    "emptyFilterDescription": "Try a different status filter.",
+    "emptyTitle": "Nenhum usuário corresponde",
+    "emptySearchDescription": "Nenhum usuário corresponde à sua busca. Tente outro termo ou filtro de status.",
+    "emptyFilterDescription": "Tente outro filtro de status.",
     "table": {
-      "roles": "Roles",
-      "lastSignIn": "Last sign-in"
+      "roles": "Funções",
+      "lastSignIn": "Último login"
     },
-    "you": "you",
-    "legacyRole": "legacy: {role}",
-    "statusActive": "active",
-    "statusInactive": "inactive",
-    "requestFailed": "Request failed",
-    "editRolesFor": "Edit roles for {name}",
-    "rolesFor": "Roles — {name}",
-    "noRoles": "No roles yet — create one under Manage roles.",
-    "builtInBadge": "built-in",
-    "deactivateConfirm": "Deactivate {name}? They will be signed out and unable to sign in until reactivated.",
-    "deactivate": "Deactivate",
-    "reactivate": "Reactivate",
-    "deactivated": "{name} deactivated",
-    "reactivated": "{name} reactivated"
+    "you": "você",
+    "legacyRole": "legada: {role}",
+    "statusActive": "ativo",
+    "statusInactive": "inativo",
+    "requestFailed": "Falha na requisição",
+    "editRolesFor": "Editar funções de {name}",
+    "rolesFor": "Funções — {name}",
+    "noRoles": "Nenhuma função ainda — crie uma em Gerenciar funções.",
+    "builtInBadge": "integrada",
+    "deactivateConfirm": "Desativar {name}? A pessoa será desconectada e não poderá fazer login até ser reativada.",
+    "deactivate": "Desativar",
+    "reactivate": "Reativar",
+    "deactivated": "{name} desativado",
+    "reactivated": "{name} reativado"
   },
   "permissions": {
     "groups": {
-      "gl": "General ledger",
-      "close": "Periods & close",
-      "ap": "Accounts payable",
-      "ar": "Accounts receivable",
-      "reports": "Reports",
-      "budgets": "Budgets & forecasts",
+      "gl": "Livro-razão",
+      "close": "Períodos e fechamento",
+      "ap": "Contas a pagar",
+      "ar": "Contas a receber",
+      "reports": "Relatórios",
+      "budgets": "Orçamentos e previsões",
       "insights": "Insights",
-      "items": "Items & services",
-      "projects": "Projects & job costing",
-      "time": "Time & timesheets",
-      "records": "Custom records",
-      "assistant": "AI assistant",
-      "sql": "Query workbench",
-      "sync": "Migrations & Mirror",
-      "scripts": "Scripting",
-      "flows": "Flows",
-      "apps": "Apps",
-      "documents": "File Cabinet",
-      "admin": "Administration",
-      "assets": "Fixed assets & depreciation",
-      "data": "Import & Export",
-      "crm": "Customer relationship management"
+      "items": "Itens e serviços",
+      "projects": "Projetos e apropriação de custos",
+      "time": "Tempo e planilhas de horas",
+      "records": "Registros personalizados",
+      "assistant": "Assistente de IA",
+      "sql": "Bancada de consultas",
+      "sync": "Migrações e Espelhamento",
+      "scripts": "Scripts",
+      "flows": "Fluxos",
+      "apps": "Aplicativos",
+      "documents": "Arquivo de documentos",
+      "admin": "Administração",
+      "assets": "Ativos imobilizados e depreciação",
+      "data": "Importação e exportação",
+      "crm": "Gestão de relacionamento com o cliente"
     },
-    "gl_read": "View journals and balances",
-    "gl_manage": "Manage the chart of accounts",
-    "gl_post": "Post journal entries",
-    "periods_manage": "Configure fiscal calendars, periods, and locks",
-    "close_read": "View close runs and evidence",
-    "close_run": "Execute close tasks and validation",
-    "close_approve": "Review, approve, and lock close runs",
-    "close_reopen": "Request and approve controlled reopenings",
-    "ap_read": "View bills",
-    "ap_create": "Create and submit bills",
-    "ap_approve": "Approve or reject bills",
-    "ap_post": "Post bills to the ledger",
-    "ap_pay": "Pay bills",
-    "ar_read": "View invoices",
-    "ar_create": "Create and submit invoices",
-    "ar_approve": "Approve or reject invoices",
-    "ar_post": "Post invoices to the ledger",
-    "ar_pay": "Record customer payments",
-    "reports_read": "View reports",
-    "reports_create": "Create and save reports",
-    "reports_schedule": "Schedule report delivery",
-    "budgets_read": "View budgets and forecasts",
-    "budgets_manage": "Create and edit budget drafts",
-    "budgets_approve": "Approve and archive official budgets",
-    "insights_read": "View insights and the library",
-    "insights_create": "Build cards and dashboards",
-    "insights_publish": "Publish to the shared library",
-    "items_read": "View items and services",
-    "items_manage": "Create and edit items",
-    "projects_read": "View projects and job costing",
-    "projects_manage": "Create and edit projects",
-    "time_read": "View timesheets",
-    "time_manage": "Enter and edit time",
-    "time_approve": "Approve timesheets",
-    "records_read": "View custom records",
-    "records_create": "Create and edit custom records",
-    "records_manage_types": "Design custom record types",
-    "assistant_use": "Use the AI assistant",
-    "assistant_write": "Let the assistant draft records",
-    "sql_execute": "Run read-only SQL queries",
-    "sync_run": "Run external-source syncs",
-    "scripts_manage": "Manage user scripts",
-    "scripts_execute": "Call endpoint scripts",
-    "flows_manage": "Author and manage flows",
-    "flows_approve": "Act on flow approval gates",
-    "apps_use": "Use installed apps",
-    "apps_manage": "Install and manage apps",
-    "parties_read": "View parties",
-    "parties_manage": "Manage parties",
-    "banking_read": "View banking",
-    "banking_reconcile": "Reconcile bank accounts",
-    "expenses_read": "View expense reports",
-    "expenses_create": "Enter expense reports",
-    "admin_custom_fields_manage": "Manage custom fields",
-    "admin_users_manage": "Manage users and role assignments",
-    "admin_roles_manage": "Manage roles and permissions",
-    "admin_nav_manage": "Customize navigation",
-    "admin_customization_manage": "Customize transaction forms and list views",
-    "admin_audit_read": "View the audit log",
-    "admin_ai_manage": "Manage AI settings",
-    "admin_sandboxes_manage": "Create and manage sandbox environments",
-    "api_keys_manage": "Manage API keys",
-    "assets_read": "View fixed assets and depreciation",
-    "assets_manage": "Create and edit assets, run depreciation",
-    "documents_read": "Browse the file cabinet",
-    "documents_manage": "Upload, move, rename, and delete files",
-    "admin_setup_manage": "Manage setup & configuration",
-    "data_export": "Export data",
-    "data_import": "Import data",
-    "crm_accounts_read": "View CRM accounts",
-    "crm_accounts_create": "Create leads and prospects",
-    "crm_accounts_manage": "Manage CRM accounts",
-    "crm_accounts_assign": "Assign and route CRM accounts",
-    "crm_activities_read": "View CRM activities",
-    "crm_activities_manage": "Create and manage CRM activities",
-    "crm_opportunities_read": "View opportunities",
-    "crm_opportunities_manage": "Create and manage opportunities",
-    "crm_opportunities_close": "Close won or lost opportunities",
-    "crm_forecasts_read": "View sales forecasts",
-    "crm_forecasts_manage": "Create forecast snapshots",
-    "crm_forecasts_override": "Override team forecasts",
-    "crm_setup_manage": "Manage CRM setup"
+    "gl_read": "Ver lançamentos e saldos",
+    "gl_manage": "Gerenciar o plano de contas",
+    "gl_post": "Lançar lançamentos contábeis",
+    "periods_manage": "Configurar calendários fiscais, períodos e bloqueios",
+    "close_read": "Ver execuções de fechamento e evidências",
+    "close_run": "Executar tarefas de fechamento e validação",
+    "close_approve": "Revisar, aprovar e bloquear execuções de fechamento",
+    "close_reopen": "Solicitar e aprovar reaberturas controladas",
+    "ap_read": "Ver contas a pagar",
+    "ap_create": "Criar e enviar contas a pagar",
+    "ap_approve": "Aprovar ou rejeitar contas a pagar",
+    "ap_post": "Lançar contas a pagar no razão",
+    "ap_pay": "Pagar contas a pagar",
+    "ar_read": "Ver faturas",
+    "ar_create": "Criar e enviar faturas",
+    "ar_approve": "Aprovar ou rejeitar faturas",
+    "ar_post": "Lançar faturas no razão",
+    "ar_pay": "Registrar recebimentos de clientes",
+    "reports_read": "Ver relatórios",
+    "reports_create": "Criar e salvar relatórios",
+    "reports_schedule": "Agendar entrega de relatórios",
+    "budgets_read": "Ver orçamentos e previsões",
+    "budgets_manage": "Criar e editar rascunhos de orçamento",
+    "budgets_approve": "Aprovar e arquivar orçamentos oficiais",
+    "insights_read": "Ver insights e a biblioteca",
+    "insights_create": "Criar cartões e painéis",
+    "insights_publish": "Publicar na biblioteca compartilhada",
+    "items_read": "Ver itens e serviços",
+    "items_manage": "Criar e editar itens",
+    "projects_read": "Ver projetos e apropriação de custos",
+    "projects_manage": "Criar e editar projetos",
+    "time_read": "Ver planilhas de horas",
+    "time_manage": "Registrar e editar tempo",
+    "time_approve": "Aprovar planilhas de horas",
+    "records_read": "Ver registros personalizados",
+    "records_create": "Criar e editar registros personalizados",
+    "records_manage_types": "Projetar tipos de registro personalizados",
+    "assistant_use": "Usar o assistente de IA",
+    "assistant_write": "Permitir que o assistente rascunhe registros",
+    "sql_execute": "Executar consultas SQL somente leitura",
+    "sync_run": "Executar sincronizações de fontes externas",
+    "scripts_manage": "Gerenciar scripts de usuário",
+    "scripts_execute": "Chamar scripts de endpoint",
+    "flows_manage": "Criar e gerenciar fluxos",
+    "flows_approve": "Agir sobre gates de aprovação de fluxo",
+    "apps_use": "Usar aplicativos instalados",
+    "apps_manage": "Instalar e gerenciar aplicativos",
+    "parties_read": "Ver partes",
+    "parties_manage": "Gerenciar partes",
+    "banking_read": "Ver banco",
+    "banking_reconcile": "Conciliar contas bancárias",
+    "expenses_read": "Ver relatórios de despesas",
+    "expenses_create": "Registrar relatórios de despesas",
+    "admin_custom_fields_manage": "Gerenciar campos personalizados",
+    "admin_users_manage": "Gerenciar usuários e atribuições de função",
+    "admin_roles_manage": "Gerenciar funções e permissões",
+    "admin_nav_manage": "Personalizar navegação",
+    "admin_customization_manage": "Personalizar formulários de transação e visualizações de lista",
+    "admin_audit_read": "Ver o log de auditoria",
+    "admin_ai_manage": "Gerenciar configurações de IA",
+    "admin_sandboxes_manage": "Criar e gerenciar ambientes sandbox",
+    "api_keys_manage": "Gerenciar chaves de API",
+    "assets_read": "Ver ativos imobilizados e depreciação",
+    "assets_manage": "Criar e editar ativos, executar depreciação",
+    "documents_read": "Navegar pelo arquivo de documentos",
+    "documents_manage": "Enviar, mover, renomear e excluir arquivos",
+    "admin_setup_manage": "Gerenciar configuração",
+    "data_export": "Exportar dados",
+    "data_import": "Importar dados",
+    "crm_accounts_read": "Ver contas de CRM",
+    "crm_accounts_create": "Criar leads e prospects",
+    "crm_accounts_manage": "Gerenciar contas de CRM",
+    "crm_accounts_assign": "Atribuir e rotear contas de CRM",
+    "crm_activities_read": "Ver atividades de CRM",
+    "crm_activities_manage": "Criar e gerenciar atividades de CRM",
+    "crm_opportunities_read": "Ver oportunidades",
+    "crm_opportunities_manage": "Criar e gerenciar oportunidades",
+    "crm_opportunities_close": "Fechar oportunidades ganhas ou perdidas",
+    "crm_forecasts_read": "Ver previsões de vendas",
+    "crm_forecasts_manage": "Criar snapshots de previsão",
+    "crm_forecasts_override": "Sobrepor previsões da equipe",
+    "crm_setup_manage": "Gerenciar configuração de CRM"
   },
   "ai": {
-    "metaTitle": "AI settings",
-    "title": "AI settings",
-    "description": "Choose the AI provider the assistant uses. Your API key is encrypted at rest and never shown again after you save it.",
-    "enabledLabel": "Enable AI features",
-    "providerLabel": "Provider",
-    "baseUrlLabel": "Base URL",
-    "baseUrlRequired": "(required)",
-    "baseUrlOptional": "(optional override)",
-    "baseUrlDefault": "Leave blank to use the default: {url}",
-    "baseUrlHint": "A public HTTPS OpenAI-compatible endpoint.",
-    "keyLabel": "API key",
-    "keyPlaceholder": "Paste your provider API key",
-    "keySavedPlaceholder": "•••••••••••• (saved — type to replace)",
-    "keySavedHint": "A key is on file, encrypted at rest. Type a new one to replace it.",
-    "keyHint": "Stored encrypted at rest; it never leaves the server.",
-    "modelsLabel": "Models",
-    "fastModelLabel": "Fast model",
-    "fastModelHint": "quick lookups",
-    "smartModelLabel": "Smart model",
-    "smartModelHint": "the assistant",
-    "save": "Save settings",
-    "saved": "AI settings saved.",
-    "saveFailed": "The settings could not be saved.",
-    "keyCleared": "API key removed.",
-    "removeKey": "Remove API key",
-    "testConnection": "Test connection",
-    "testFailed": "The test request failed.",
+    "metaTitle": "Configurações de IA",
+    "title": "Configurações de IA",
+    "description": "Escolha o provedor de IA que o assistente usa. Sua chave de API é criptografada em repouso e nunca é exibida novamente após você salvá-la.",
+    "enabledLabel": "Ativar recursos de IA",
+    "providerLabel": "Provedor",
+    "baseUrlLabel": "URL base",
+    "baseUrlRequired": "(obrigatório)",
+    "baseUrlOptional": "(substituição opcional)",
+    "baseUrlDefault": "Deixe em branco para usar o padrão: {url}",
+    "baseUrlHint": "Um endpoint público HTTPS compatível com OpenAI.",
+    "keyLabel": "Chave de API",
+    "keyPlaceholder": "Cole a chave de API do seu provedor",
+    "keySavedPlaceholder": "•••••••••••• (salva — digite para substituir)",
+    "keySavedHint": "Há uma chave em arquivo, criptografada em repouso. Digite uma nova para substituí-la.",
+    "keyHint": "Armazenada criptografada em repouso; ela nunca sai do servidor.",
+    "modelsLabel": "Modelos",
+    "fastModelLabel": "Modelo rápido",
+    "fastModelHint": "consultas rápidas",
+    "smartModelLabel": "Modelo inteligente",
+    "smartModelHint": "o assistente",
+    "save": "Salvar configurações",
+    "saved": "Configurações de IA salvas.",
+    "saveFailed": "Não foi possível salvar as configurações.",
+    "keyCleared": "Chave de API removida.",
+    "removeKey": "Remover chave de API",
+    "testConnection": "Testar conexão",
+    "testFailed": "A solicitação de teste falhou.",
     "agents": {
-      "title": "Continuous close agents",
-      "description": "Continuously monitor close readiness and surface evidence-backed accounting and finance exceptions.",
-      "reviewWork": "Review findings",
-      "globallyDisabled": "AI features are off. Both agents and their scheduled runs are stopped, regardless of the controls below.",
-      "enabled": "Enabled",
-      "automaticRuns": "Run automatically",
-      "cadence": "Schedule",
-      "materiality": "Materiality threshold",
-      "materialityHint": "The default monetary floor used by controls unless a detector overrides it.",
-      "materialitySummary": "Materiality {amount}",
+      "title": "Agentes de fechamento contínuo",
+      "description": "Monitoram continuamente a prontidão para o fechamento e destacam exceções contábeis e financeiras respaldadas por evidências.",
+      "reviewWork": "Revisar constatações",
+      "globallyDisabled": "Os recursos de IA estão desativados. Ambos os agentes e suas execuções agendadas estão parados, independentemente dos controles abaixo.",
+      "enabled": "Ativado",
+      "automaticRuns": "Executar automaticamente",
+      "cadence": "Agendamento",
+      "materiality": "Limite de materialidade",
+      "materialityHint": "O piso monetário padrão usado pelos controles, a menos que um detector o substitua.",
+      "materialitySummary": "Materialidade {amount}",
       "cadences": {
-        "daily": "Daily",
-        "weekly": "Weekly"
+        "daily": "Diário",
+        "weekly": "Semanal"
       },
-      "manualOnly": "Manual runs",
-      "controlsEnabled": "{count} of {total} controls on",
-      "configure": "Configure",
-      "drawerTitle": "Configure {agent}",
-      "drawerDescription": "Control scheduling, materiality, and exactly which accounting checks this agent evaluates.",
-      "operationTitle": "Agent operation",
-      "operationDescription": "Master availability and automatic execution for this agent.",
-      "detectorControlsTitle": "Detector controls",
-      "detectorControlsDescription": "Each control can be disabled independently and tuned to your operating thresholds.",
-      "controlOn": "On",
-      "controlOff": "Off",
-      "customMateriality": "Override the agent materiality for this control",
-      "detectorMateriality": "Control materiality threshold",
-      "inheritedMateriality": "Uses the agent threshold of {amount}.",
-      "disabledFindingBehavior": "Turning a control off stops that check. Existing findings remain available and are not marked resolved.",
-      "reasoningTitle": "Agent reasoning and narratives",
-      "reasoningDescription": "Give this agent the same governed read tools as the assistant so it can investigate evidence, connect drivers, and create reviewable analysis. It cannot change or post records.",
+      "manualOnly": "Execuções manuais",
+      "controlsEnabled": "{count} de {total} controles ativos",
+      "configure": "Configurar",
+      "drawerTitle": "Configurar {agent}",
+      "drawerDescription": "Controle o agendamento, a materialidade e exatamente quais verificações contábeis este agente avalia.",
+      "operationTitle": "Operação do agente",
+      "operationDescription": "Disponibilidade principal e execução automática deste agente.",
+      "detectorControlsTitle": "Controles de detector",
+      "detectorControlsDescription": "Cada controle pode ser desativado de forma independente e ajustado aos seus limites operacionais.",
+      "controlOn": "Ativo",
+      "controlOff": "Inativo",
+      "customMateriality": "Substituir a materialidade do agente para este controle",
+      "detectorMateriality": "Limite de materialidade do controle",
+      "inheritedMateriality": "Usa o limite do agente de {amount}.",
+      "disabledFindingBehavior": "Desativar um controle interrompe essa verificação. As constatações existentes permanecem disponíveis e não são marcadas como resolvidas.",
+      "reasoningTitle": "Raciocínio e narrativas do agente",
+      "reasoningDescription": "Dê a este agente as mesmas ferramentas de leitura governadas do assistente para que ele possa investigar evidências, conectar fatores e criar análises revisáveis. Ele não pode alterar nem lançar registros.",
       "reasoning": {
         "rootCauseAnalysis": {
-          "title": "Root-cause analysis",
-          "description": "Investigate supporting transactions and explain the specific drivers behind each finding."
+          "title": "Análise de causa-raiz",
+          "description": "Investiga as transações de suporte e explica os fatores específicos por trás de cada constatação."
         },
         "recommendations": {
-          "title": "Recommended actions",
-          "description": "Suggest concrete, reviewable next steps based on the evidence gathered."
+          "title": "Ações recomendadas",
+          "description": "Sugere próximos passos concretos e revisáveis com base nas evidências reunidas."
         },
         "narrative": {
-          "title": "Management narrative",
-          "description": "Create a close-readiness brief or financial performance summary from current reports and trends."
+          "title": "Narrativa gerencial",
+          "description": "Cria um resumo de prontidão para o fechamento ou de desempenho financeiro a partir dos relatórios e tendências atuais."
         }
       },
-      "modelTier": "Analysis model",
+      "modelTier": "Modelo de análise",
       "modelTiers": {
-        "smart": "Smart model — deeper analysis",
-        "fast": "Fast model — lower cost"
+        "smart": "Modelo inteligente — análise mais aprofundada",
+        "fast": "Modelo rápido — menor custo"
       },
-      "maxToolSteps": "Maximum tool steps",
-      "maxToolStepsHint": "Caps how many report and record lookups one run may perform (4–30).",
-      "resetRecommended": "Reset recommended defaults",
-      "cancel": "Cancel",
-      "saveConfiguration": "Save agent",
-      "configurationSaved": "Agent configuration saved.",
-      "configurationSaveFailed": "The agent configuration could not be saved.",
+      "maxToolSteps": "Máximo de etapas de ferramenta",
+      "maxToolStepsHint": "Limita quantas consultas de relatório e registro uma execução pode realizar (4–30).",
+      "resetRecommended": "Restaurar padrões recomendados",
+      "cancel": "Cancelar",
+      "saveConfiguration": "Salvar agente",
+      "configurationSaved": "Configuração do agente salva.",
+      "configurationSaveFailed": "Não foi possível salvar a configuração do agente.",
       "parameterLabel": "{label} ({unit})",
       "units": {
-        "days": "days",
-        "count": "items",
+        "days": "dias",
+        "count": "itens",
         "percent": "%",
-        "multiple": "× materiality",
-        "points": "percentage points"
+        "multiple": "× materialidade",
+        "points": "pontos percentuais"
       },
       "parameters": {
-        "criticalAgeDays": "Critical after",
-        "criticalItemCount": "Critical item count",
-        "criticalMaterialityMultiple": "Critical materiality multiple",
-        "staleAfterDays": "Stale after",
-        "minimumVariancePercent": "Minimum unfavorable variance",
-        "criticalVariancePercent": "Critical unfavorable variance",
-        "minimumDeclinePercent": "Minimum revenue decline",
-        "criticalDeclinePercent": "Critical revenue decline",
-        "minimumDropPoints": "Minimum margin drop",
-        "criticalDropPoints": "Critical margin drop"
+        "criticalAgeDays": "Crítico após",
+        "criticalItemCount": "Contagem crítica de itens",
+        "criticalMaterialityMultiple": "Múltiplo crítico de materialidade",
+        "staleAfterDays": "Desatualizado após",
+        "minimumVariancePercent": "Variação desfavorável mínima",
+        "criticalVariancePercent": "Variação desfavorável crítica",
+        "minimumDeclinePercent": "Queda de receita mínima",
+        "criticalDeclinePercent": "Queda de receita crítica",
+        "minimumDropPoints": "Queda de margem mínima",
+        "criticalDropPoints": "Queda de margem crítica"
       },
       "detectors": {
         "unmatched_bank_activity": {
-          "title": "Unmatched bank activity",
-          "description": "Finds unmatched statement lines by bank account, measures total exposure, and escalates aging, volume, or materiality concentrations."
+          "title": "Atividade bancária não conciliada",
+          "description": "Encontra linhas de extrato não conciliadas por conta bancária, mede a exposição total e escala preocupações de envelhecimento, volume ou concentração de materialidade."
         },
         "reconciliation_difference": {
-          "title": "Reconciliation differences",
-          "description": "Compares in-progress statement balances with reconciled ledger activity and flags every non-zero difference."
+          "title": "Diferenças de conciliação",
+          "description": "Compara saldos de extrato em andamento com a atividade conciliada do razão e sinaliza toda diferença diferente de zero."
         },
         "stale_accounting_documents": {
-          "title": "Stale accounting documents",
-          "description": "Finds draft or pending bills, invoices, credits, expenses, and journals that have exceeded the configured age."
+          "title": "Documentos contábeis desatualizados",
+          "description": "Encontra contas a pagar, faturas, créditos, despesas e lançamentos em rascunho ou pendentes que ultrapassaram a idade configurada."
         },
         "missing_approved_budget": {
-          "title": "Missing approved budget",
-          "description": "Confirms that an approved budget covers the current operating period before variance analysis runs."
+          "title": "Orçamento aprovado ausente",
+          "description": "Confirma que um orçamento aprovado cobre o período operacional atual antes da execução da análise de variação."
         },
         "unfavorable_budget_variance": {
-          "title": "Unfavorable budget variance",
-          "description": "Evaluates income shortfalls and expense overruns using exact amounts plus configurable percentage severity thresholds."
+          "title": "Variação orçamentária desfavorável",
+          "description": "Avalia déficits de receita e estouros de despesa usando valores exatos mais limites de severidade percentual configuráveis."
         },
         "period_revenue_decline": {
-          "title": "Period revenue decline",
-          "description": "Compares the two latest completed periods and flags material revenue deterioration."
+          "title": "Queda de receita do período",
+          "description": "Compara os dois últimos períodos concluídos e sinaliza deterioração de receita relevante."
         },
         "gross_margin_decline": {
-          "title": "Gross-margin decline",
-          "description": "Compares completed-period gross margin and flags material compression in percentage points."
+          "title": "Queda da margem bruta",
+          "description": "Compara a margem bruta de períodos concluídos e sinaliza compressão relevante em pontos percentuais."
         }
       },
       "accounting": {
-        "title": "Accounting agent",
-        "description": "Continuous bookkeeping and close readiness controls.",
-        "coverage": "Checks unmatched bank activity, reconciliation differences, and stale draft or pending accounting documents."
+        "title": "Agente contábil",
+        "description": "Controles contínuos de escrituração e prontidão para o fechamento.",
+        "coverage": "Verifica atividade bancária não conciliada, diferenças de conciliação e documentos contábeis em rascunho ou pendentes desatualizados."
       },
       "finance": {
-        "title": "Finance agent",
-        "description": "Continuous variance and performance controls.",
-        "coverage": "Checks approved-budget variances, revenue decline, gross-margin decline, and missing budget coverage."
+        "title": "Agente financeiro",
+        "description": "Controles contínuos de variação e desempenho.",
+        "coverage": "Verifica variações de orçamento aprovado, queda de receita, queda da margem bruta e cobertura orçamentária ausente."
       },
-      "lastRun": "Last run: {date} · {status}",
-      "nextRun": "Next scheduled run: {date}",
-      "neverRun": "Not run yet",
-      "runNow": "Run now",
-      "scanComplete": "Scan complete: {detected} detected, {resolved} resolved.",
-      "scanFailed": "The agent scan failed.",
+      "lastRun": "Última execução: {date} · {status}",
+      "nextRun": "Próxima execução agendada: {date}",
+      "neverRun": "Ainda não executado",
+      "runNow": "Executar agora",
+      "scanComplete": "Varredura concluída: {detected} detectados, {resolved} resolvidos.",
+      "scanFailed": "A varredura do agente falhou.",
       "runStatus": {
-        "completed": "completed",
-        "failed": "failed",
-        "skipped": "skipped",
-        "running": "running"
+        "completed": "concluído",
+        "failed": "falhou",
+        "skipped": "ignorado",
+        "running": "em execução"
       }
     },
     "documentCapture": {
-      "title": "AP document capture",
-      "description": "Extract vendor bills and credits into an evidence-backed review queue. This uses the same organization AI kill switch, while its document provider credential remains independently encrypted.",
-      "openQueue": "Open capture queue",
-      "enabled": "Enable AP document capture",
-      "globallyDisabled": "AI features are off. Document capture is stopped regardless of this control.",
-      "endpoint": "Document provider endpoint",
-      "endpointHint": "Your organization's public Azure AI Document Intelligence endpoint.",
-      "key": "Document provider API key",
-      "keyPlaceholder": "Paste the document provider key",
-      "removeKey": "Remove document provider key",
-      "keyRemoved": "Document provider key removed.",
-      "model": "Invoice model",
-      "confidence": "Review confidence threshold",
-      "confidenceHint": "Values below this 0–1 threshold are flagged for review.",
-      "autoDraft": "Automatically create drafts only for fully matched purchase orders",
-      "test": "Test document provider",
+      "title": "Captura de documentos de contas a pagar",
+      "description": "Extraia contas a pagar e créditos de fornecedores para uma fila de revisão respaldada por evidências. Isso usa o mesmo interruptor geral de IA da organização, enquanto a credencial do provedor de documentos permanece criptografada de forma independente.",
+      "openQueue": "Abrir fila de captura",
+      "enabled": "Ativar captura de documentos de contas a pagar",
+      "globallyDisabled": "Os recursos de IA estão desativados. A captura de documentos está parada independentemente deste controle.",
+      "endpoint": "Endpoint do provedor de documentos",
+      "endpointHint": "O endpoint público do Azure AI Document Intelligence da sua organização.",
+      "key": "Chave de API do provedor de documentos",
+      "keyPlaceholder": "Cole a chave do provedor de documentos",
+      "removeKey": "Remover chave do provedor de documentos",
+      "keyRemoved": "Chave do provedor de documentos removida.",
+      "model": "Modelo de fatura",
+      "confidence": "Limite de confiança para revisão",
+      "confidenceHint": "Valores abaixo deste limite de 0 a 1 são sinalizados para revisão.",
+      "autoDraft": "Criar rascunhos automaticamente apenas para pedidos de compra totalmente correspondidos",
+      "test": "Testar provedor de documentos",
       "testResult": {
-        "connected": "Connected to the document provider.",
-        "failed": "The document provider test failed.",
-        "missing": "Enter an endpoint and API key first."
+        "connected": "Conectado ao provedor de documentos.",
+        "failed": "O teste do provedor de documentos falhou.",
+        "missing": "Insira primeiro um endpoint e uma chave de API."
       }
     },
     "models": {
-      "load": "Load models",
-      "reload": "Reload models",
-      "loading": "Loading…",
-      "loaded": "{count, plural, one {# model available} other {# models available}}",
-      "loadError": "Could not load models.",
-      "none": "No models",
-      "pick": "Pick a model…",
-      "loadFirst": "Load models first, or type the id manually",
-      "pickFromList": "Pick from list",
-      "typeManually": "Type manually",
-      "current": "{id} (current)",
-      "hint": "Load the live model list with your API key, or type a model id manually.",
-      "idPlaceholder": "model id"
+      "load": "Carregar modelos",
+      "reload": "Recarregar modelos",
+      "loading": "Carregando…",
+      "loaded": "{count, plural, one {# modelo disponível} other {# modelos disponíveis}}",
+      "loadError": "Não foi possível carregar os modelos.",
+      "none": "Nenhum modelo",
+      "pick": "Escolha um modelo…",
+      "loadFirst": "Carregue os modelos primeiro ou digite o id manualmente",
+      "pickFromList": "Escolher da lista",
+      "typeManually": "Digitar manualmente",
+      "current": "{id} (atual)",
+      "hint": "Carregue a lista de modelos ao vivo com sua chave de API ou digite um id de modelo manualmente.",
+      "idPlaceholder": "id do modelo"
     }
   },
   "setup": {
-    "title": "Setup",
-    "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "title": "Configuração",
+    "description": "Configure impostos, dimensões, prazos e os dados de referência sobre os quais sua contabilidade opera.",
     "taxLibrary": {
-      "title": "Tax return library",
-      "description": "Import maintained return structures for Canada, the United Kingdom, Australia, New Zealand, and a United States state/local workpaper.",
-      "pack": "Jurisdiction pack",
-      "optionInstalled": "{country} · {name} · installed",
+      "title": "Biblioteca de declarações fiscais",
+      "description": "Importe estruturas de declaração mantidas para Canadá, Reino Unido, Austrália, Nova Zelândia e um papel de trabalho estadual/local dos Estados Unidos.",
+      "pack": "Pacote de jurisdição",
+      "optionInstalled": "{country} · {name} · instalado",
       "optionAvailable": "{country} · {name}",
-      "import": "Import pack",
-      "reset": "Reset to library defaults",
-      "working": "Importing…",
-      "importSuccess": "Tax return pack imported",
-      "resetSuccess": "Tax return pack reset to library defaults",
-      "usNotice": "The United States has no federal sales-tax return. This workpaper must be customized for every state and local filing jurisdiction."
+      "import": "Importar pacote",
+      "reset": "Restaurar padrões da biblioteca",
+      "working": "Importando…",
+      "importSuccess": "Pacote de declaração fiscal importado",
+      "resetSuccess": "Pacote de declaração fiscal restaurado aos padrões da biblioteca",
+      "usNotice": "Os Estados Unidos não têm declaração federal de imposto sobre vendas. Este papel de trabalho deve ser personalizado para cada jurisdição estadual e local de apuração."
     },
     "taxOfficial": {
-      "title": "Official filing form",
-      "description": "Upload an official fillable PDF only when the jurisdiction accepts or requires that form. Map its fields under Tax Return Boxes.",
-      "upload": "Upload official PDF",
-      "uploading": "Uploading…",
-      "uploaded": "Official form uploaded",
-      "remove": "Remove",
-      "removed": "Official form removed",
-      "none": "No official PDF uploaded"
+      "title": "Formulário oficial de apuração",
+      "description": "Envie um PDF oficial preenchível somente quando a jurisdição aceitar ou exigir esse formulário. Mapeie seus campos em Caixas da Declaração Fiscal.",
+      "upload": "Enviar PDF oficial",
+      "uploading": "Enviando…",
+      "uploaded": "Formulário oficial enviado",
+      "remove": "Remover",
+      "removed": "Formulário oficial removido",
+      "none": "Nenhum PDF oficial enviado"
     },
-    "new": "New",
-    "empty": "Nothing here yet.",
-    "statusActive": "Active",
-    "statusArchived": "Archived",
-    "yes": "Yes",
-    "selectPlaceholder": "Select…",
-    "searchPlaceholder": "Search…",
-    "created": "Created",
-    "updated": "Saved",
-    "deleted": "Deleted",
-    "confirmDelete": "Delete this record? This cannot be undone.",
+    "new": "Novo",
+    "empty": "Nada aqui ainda.",
+    "statusActive": "Ativo",
+    "statusArchived": "Arquivado",
+    "yes": "Sim",
+    "selectPlaceholder": "Selecionar…",
+    "searchPlaceholder": "Buscar…",
+    "created": "Criado",
+    "updated": "Salvo",
+    "deleted": "Excluído",
+    "confirmDelete": "Excluir este registro? Esta ação não pode ser desfeita.",
     "validation": {
-      "required": "{field} is required"
+      "required": "{field} é obrigatório"
     },
     "drawer": {
-      "newTitle": "New {name}",
-      "editTitle": "Edit {name}"
+      "newTitle": "Novo {name}",
+      "editTitle": "Editar {name}"
     },
     "errors": {
-      "duplicate": "A record with that code already exists.",
-      "inUse": "This record is in use and can't be deleted.",
-      "primaryRequired": "Choose another accounting book as primary before removing primary status from this one.",
-      "primaryActiveRequired": "The primary accounting book must remain active.",
-      "archiveOnly": "Accounting books are retained for ledger history and can only be archived.",
-      "invalidUrl": "Enter a valid http:// or https:// government filing URL."
+      "duplicate": "Já existe um registro com esse código.",
+      "inUse": "Este registro está em uso e não pode ser excluído.",
+      "primaryRequired": "Escolha outro livro contábil como principal antes de remover o status de principal deste.",
+      "primaryActiveRequired": "O livro contábil principal deve permanecer ativo.",
+      "archiveOnly": "Os livros contábeis são mantidos para o histórico do razão e só podem ser arquivados.",
+      "invalidUrl": "Informe uma URL de apuração governamental http:// ou https:// válida."
     },
     "groups": {
-      "company": "Company",
-      "accounting": "Accounting",
-      "taxes": "Taxes",
-      "dimensions": "Dimensions",
-      "billing": "Billing & numbering",
-      "workforce": "Workforce",
-      "assets": "Assets",
-      "currency": "Currency",
-      "revenue": "Revenue",
-      "inventory": "Inventory"
+      "company": "Empresa",
+      "accounting": "Contabilidade",
+      "taxes": "Impostos",
+      "dimensions": "Dimensões",
+      "billing": "Faturamento e numeração",
+      "workforce": "Força de trabalho",
+      "assets": "Ativos",
+      "currency": "Moeda",
+      "revenue": "Receita",
+      "inventory": "Estoque"
     },
     "fxProvider": {
-      "title": "Exchange rate provider",
-      "description": "Import daily spot rates into your organization's currencies and keep them current automatically.",
-      "provider": "Provider",
+      "title": "Provedor de taxas de câmbio",
+      "description": "Importe taxas à vista diárias para as moedas da sua organização e mantenha-as atualizadas automaticamente.",
+      "provider": "Provedor",
       "providers": {
         "bank_of_canada": "Bank of Canada",
-        "ecb": "European Central Bank",
+        "ecb": "Banco Central Europeu",
         "open_exchange_rates": "Open Exchange Rates"
       },
       "providerHelp": {
-        "bank_of_canada": "Official daily averages with CAD as the source anchor. No API key required.",
-        "ecb": "Official business-day reference rates with EUR as the source anchor. No API key required.",
-        "open_exchange_rates": "Broad commercial coverage using your own API key. Plan limits may apply."
+        "bank_of_canada": "Médias diárias oficiais com o CAD como âncora de origem. Nenhuma chave de API necessária.",
+        "ecb": "Taxas de referência oficiais de dias úteis com o EUR como âncora de origem. Nenhuma chave de API necessária.",
+        "open_exchange_rates": "Ampla cobertura comercial usando sua própria chave de API. Limites de plano podem se aplicar."
       },
-      "displayName": "Configuration name",
-      "displayNamePlaceholder": "Daily corporate rates",
-      "baseCurrency": "Base currency",
-      "selectCurrency": "Select a currency…",
-      "schedule": "Synchronization schedule",
+      "displayName": "Nome da configuração",
+      "displayNamePlaceholder": "Taxas corporativas diárias",
+      "baseCurrency": "Moeda base",
+      "selectCurrency": "Selecione uma moeda…",
+      "schedule": "Agenda de sincronização",
       "schedules": {
-        "manual": "Manual only",
-        "daily": "Daily",
-        "weekdays": "Weekdays",
-        "weekly": "Weekly"
+        "manual": "Somente manual",
+        "daily": "Diária",
+        "weekdays": "Dias úteis",
+        "weekly": "Semanal"
       },
-      "syncHourUtc": "Synchronization hour (UTC)",
-      "lookbackDays": "Revision lookback (days)",
-      "currencies": "Currencies to import",
-      "addCurrency": "Add a currency…",
-      "searchCurrencies": "Search currencies…",
-      "removeCurrency": "Remove {currency}",
-      "noCurrencies": "Add at least one foreign currency.",
-      "apiKey": "Provider API key",
-      "apiKeyPlaceholder": "Enter your API key",
-      "secretStored": "A sealed key is stored — enter a value to replace it",
-      "clearSecret": "Remove the stored API key",
-      "enabled": "Enable provider synchronization",
-      "saved": "Exchange rate provider saved.",
-      "test": "Test provider",
-      "testPassed": "Provider returned {observations} observations and {rates} normalized rates.",
-      "testFailed": "The provider test failed.",
-      "syncNow": "Synchronize now",
-      "syncPassed": "Imported {observations} observations and processed {rates} normalized rates.",
-      "syncFailed": "Exchange rate synchronization failed.",
-      "health": "Provider health",
-      "lastSuccess": "Last successful import",
-      "lastObservation": "Latest observation",
-      "nextSync": "Next synchronization",
-      "latestRun": "Latest run",
-      "noRuns": "The provider has not been run yet.",
+      "syncHourUtc": "Hora de sincronização (UTC)",
+      "lookbackDays": "Retrospectiva de revisão (dias)",
+      "currencies": "Moedas a importar",
+      "addCurrency": "Adicionar uma moeda…",
+      "searchCurrencies": "Buscar moedas…",
+      "removeCurrency": "Remover {currency}",
+      "noCurrencies": "Adicione ao menos uma moeda estrangeira.",
+      "apiKey": "Chave de API do provedor",
+      "apiKeyPlaceholder": "Informe sua chave de API",
+      "secretStored": "Uma chave lacrada está armazenada — informe um valor para substituí-la",
+      "clearSecret": "Remover a chave de API armazenada",
+      "enabled": "Habilitar sincronização do provedor",
+      "saved": "Provedor de taxas de câmbio salvo.",
+      "test": "Testar provedor",
+      "testPassed": "O provedor retornou {observations} observações e {rates} taxas normalizadas.",
+      "testFailed": "O teste do provedor falhou.",
+      "syncNow": "Sincronizar agora",
+      "syncPassed": "Importadas {observations} observações e processadas {rates} taxas normalizadas.",
+      "syncFailed": "A sincronização de taxas de câmbio falhou.",
+      "health": "Saúde do provedor",
+      "lastSuccess": "Última importação bem-sucedida",
+      "lastObservation": "Observação mais recente",
+      "nextSync": "Próxima sincronização",
+      "latestRun": "Execução mais recente",
+      "noRuns": "O provedor ainda não foi executado.",
       "runStatus": {
-        "running": "Running",
-        "ok": "Successful",
-        "failed": "Failed"
+        "running": "Em execução",
+        "ok": "Bem-sucedida",
+        "failed": "Falhou"
       },
-      "runSummary": "{observations} observations · {inserted} inserted · {updated} updated · {preserved} manual overrides preserved",
-      "overridePolicy": "Rates edited in Setup become protected manual overrides. Provider imports never replace them."
+      "runSummary": "{observations} observações · {inserted} inseridas · {updated} atualizadas · {preserved} substituições manuais preservadas",
+      "overridePolicy": "Taxas editadas na Configuração tornam-se substituições manuais protegidas. As importações do provedor nunca as substituem."
     },
     "paymentOperations": {
-      "title": "Payments & Banking",
-      "description": "Configure payment rails, funding profiles, schedules, approvals, delivery, and debit mandates.",
+      "title": "Pagamentos e Bancos",
+      "description": "Configure canais de pagamento, perfis de financiamento, agendas, aprovações, entrega e mandatos de débito.",
       "tabs": {
-        "profiles": "Bank profiles",
-        "formats": "Payment formats",
-        "schedules": "Schedules",
-        "mandates": "Debit mandates"
+        "profiles": "Perfis bancários",
+        "formats": "Formatos de pagamento",
+        "schedules": "Agendas",
+        "mandates": "Mandatos de débito"
       },
       "search": {
-        "profiles": "Search profiles…",
-        "formats": "Search formats…",
-        "schedules": "Search schedules…",
-        "mandates": "Search mandates…"
+        "profiles": "Buscar perfis…",
+        "formats": "Buscar formatos…",
+        "schedules": "Buscar agendas…",
+        "mandates": "Buscar mandatos…"
       },
-      "state": "State",
+      "state": "Estado",
       "new": {
-        "profiles": "New profile",
-        "formats": "New custom format",
-        "schedules": "New schedule",
-        "mandates": "New mandate"
+        "profiles": "Novo perfil",
+        "formats": "Novo formato personalizado",
+        "schedules": "Nova agenda",
+        "mandates": "Novo mandato"
       },
       "columns": {
-        "name": "Name",
-        "bank": "Funding account",
-        "format": "Format",
-        "currency": "Currency",
-        "delivery": "Delivery",
-        "approval": "Run approval",
+        "name": "Nome",
+        "bank": "Conta de financiamento",
+        "format": "Formato",
+        "currency": "Moeda",
+        "delivery": "Entrega",
+        "approval": "Aprovação da execução",
         "status": "Status",
-        "code": "Code",
-        "rail": "Rail",
-        "direction": "Direction",
-        "profile": "Profile",
-        "cron": "Schedule",
-        "nextRun": "Next run",
-        "action": "Action",
-        "reference": "Reference",
-        "party": "Counterparty",
-        "scheme": "Scheme",
-        "signedOn": "Signed",
-        "expiresOn": "Expires"
+        "code": "Código",
+        "rail": "Canal",
+        "direction": "Direção",
+        "profile": "Perfil",
+        "cron": "Agenda",
+        "nextRun": "Próxima execução",
+        "action": "Ação",
+        "reference": "Referência",
+        "party": "Contraparte",
+        "scheme": "Esquema",
+        "signedOn": "Assinado",
+        "expiresOn": "Expira"
       },
       "states": {
-        "active": "Active",
-        "archived": "Archived",
-        "pending": "Pending",
-        "suspended": "Suspended",
-        "revoked": "Revoked",
-        "expired": "Expired"
+        "active": "Ativo",
+        "archived": "Arquivado",
+        "pending": "Pendente",
+        "suspended": "Suspenso",
+        "revoked": "Revogado",
+        "expired": "Expirado"
       },
       "rails": {
-        "cpa005_credit": "CPA-005 credit",
-        "nacha_credit": "NACHA credit",
-        "sepa_credit": "SEPA credit",
-        "nacha_debit": "NACHA debit",
-        "sepa_debit": "SEPA debit",
+        "cpa005_credit": "Crédito CPA-005",
+        "nacha_credit": "Crédito NACHA",
+        "sepa_credit": "Crédito SEPA",
+        "nacha_debit": "Débito NACHA",
+        "sepa_debit": "Débito SEPA",
         "positive_pay": "Positive Pay",
-        "wire": "Wire",
+        "wire": "Transferência bancária",
         "cheque": "Cheque",
-        "custom": "Custom"
+        "custom": "Personalizado"
       },
       "directions": {
-        "credit": "Credit",
-        "debit": "Debit",
-        "both": "Credit and debit"
+        "credit": "Crédito",
+        "debit": "Débito",
+        "both": "Crédito e débito"
       },
       "actions": {
-        "create_draft": "Create draft",
-        "submit_for_approval": "Submit for approval"
+        "create_draft": "Criar rascunho",
+        "submit_for_approval": "Enviar para aprovação"
       },
       "schemes": {
         "nacha": "NACHA",
         "sepa_core": "SEPA Core",
         "sepa_b2b": "SEPA B2B",
-        "custom": "Custom"
+        "custom": "Personalizado"
       },
       "fields": {
-        "name": "Name",
-        "currency": "Currency",
-        "bankAccount": "Funding account",
-        "format": "Payment format",
-        "subsidiary": "Subsidiary",
-        "country": "Country",
-        "sftpServer": "Existing SFTP server",
-        "sftpFolder": "Outbound folder",
-        "requireRunApproval": "Require payment-run approval",
-        "requireFileApproval": "Require generated-file approval",
-        "autoRemittance": "Send remittance advice automatically",
-        "discountAccount": "Early-payment discount account",
-        "positivePayAccountReference": "Institution account reference",
-        "active": "Active",
-        "code": "Code",
-        "direction": "Direction",
-        "extension": "File extension",
-        "contentType": "Content type",
-        "formatterScript": "Formatter JavaScript",
-        "profile": "Bank profile",
-        "cron": "Schedule",
-        "cronHint": "Pick a preset, or enter a custom schedule (cron syntax) for full control.",
-        "timezone": "Time zone",
-        "action": "When due",
-        "party": "Counterparty",
-        "partyBankAccount": "Approved bank account",
-        "scheme": "Mandate scheme",
-        "reference": "Mandate reference",
+        "name": "Nome",
+        "currency": "Moeda",
+        "bankAccount": "Conta de financiamento",
+        "format": "Formato de pagamento",
+        "subsidiary": "Subsidiária",
+        "country": "País",
+        "sftpServer": "Servidor SFTP existente",
+        "sftpFolder": "Pasta de saída",
+        "requireRunApproval": "Exigir aprovação da execução de pagamento",
+        "requireFileApproval": "Exigir aprovação do arquivo gerado",
+        "autoRemittance": "Enviar aviso de remessa automaticamente",
+        "discountAccount": "Conta de desconto por pagamento antecipado",
+        "positivePayAccountReference": "Referência da conta na instituição",
+        "active": "Ativo",
+        "code": "Código",
+        "direction": "Direção",
+        "extension": "Extensão do arquivo",
+        "contentType": "Tipo de conteúdo",
+        "formatterScript": "JavaScript formatador",
+        "profile": "Perfil bancário",
+        "cron": "Agenda",
+        "cronHint": "Escolha uma predefinição ou informe uma agenda personalizada (sintaxe cron) para controle total.",
+        "timezone": "Fuso horário",
+        "action": "Quando vencido",
+        "party": "Contraparte",
+        "partyBankAccount": "Conta bancária aprovada",
+        "scheme": "Esquema do mandato",
+        "reference": "Referência do mandato",
         "status": "Status",
-        "signedOn": "Signed on",
-        "validFrom": "Valid from",
-        "expiresOn": "Expires on"
+        "signedOn": "Assinado em",
+        "validFrom": "Válido a partir de",
+        "expiresOn": "Expira em"
       },
       "secretFields": {
-        "originatorId": "Originator ID",
-        "originatorShortName": "Short name",
-        "originatorLongName": "Long name",
-        "dataCentre": "Data centre",
-        "institution": "Institution",
-        "transit": "Transit",
-        "account": "Account number",
-        "transactionCode": "Transaction code",
-        "odfiRouting": "ODFI routing",
-        "immediateDestination": "Immediate destination",
-        "immediateOrigin": "Immediate origin",
-        "destinationName": "Destination name",
-        "originName": "Origin name",
-        "companyName": "Company name",
-        "companyId": "Company ID",
-        "entryClassCode": "Entry class",
-        "entryDescription": "Entry description",
-        "originatorName": "Originator name",
-        "originatorIban": "Originator IBAN",
-        "originatorBic": "Originator BIC",
-        "creditorId": "Creditor ID"
+        "originatorId": "ID do originador",
+        "originatorShortName": "Nome curto",
+        "originatorLongName": "Nome longo",
+        "dataCentre": "Centro de dados",
+        "institution": "Instituição",
+        "transit": "Trânsito",
+        "account": "Número da conta",
+        "transactionCode": "Código da transação",
+        "odfiRouting": "Roteamento ODFI",
+        "immediateDestination": "Destino imediato",
+        "immediateOrigin": "Origem imediata",
+        "destinationName": "Nome do destino",
+        "originName": "Nome da origem",
+        "companyName": "Nome da empresa",
+        "companyId": "ID da empresa",
+        "entryClassCode": "Classe de entrada",
+        "entryDescription": "Descrição da entrada",
+        "originatorName": "Nome do originador",
+        "originatorIban": "IBAN do originador",
+        "originatorBic": "BIC do originador",
+        "creditorId": "ID do credor"
       },
       "originator": {
-        "title": "Originator credentials",
-        "newHint": "Stored encrypted for your organization and this profile.",
-        "editHint": "Credentials are write-only. Leave every field blank to keep the saved values."
+        "title": "Credenciais do originador",
+        "newHint": "Armazenadas criptografadas para sua organização e este perfil.",
+        "editHint": "As credenciais são somente gravação. Deixe todos os campos em branco para manter os valores salvos."
       },
       "accounting": {
-        "title": "Accounting and bank references",
-        "noDiscountAccount": "Do not capture discounts",
-        "hint": "The discount account records savings earned when a run captures an available payment-term discount."
+        "title": "Referências contábeis e bancárias",
+        "noDiscountAccount": "Não registrar descontos",
+        "hint": "A conta de desconto registra a economia obtida quando uma execução captura um desconto disponível de prazo de pagamento."
       },
       "delivery": {
-        "title": "Delivery",
-        "manual": "Manual download",
-        "existingSftpHint": "SFTP servers are managed once in the existing SFTP setup. This profile only selects one for delivery."
+        "title": "Entrega",
+        "manual": "Download manual",
+        "existingSftpHint": "Os servidores SFTP são gerenciados uma única vez na configuração de SFTP existente. Este perfil apenas seleciona um para a entrega."
       },
       "criteria": {
-        "title": "Selection criteria",
-        "dueThroughDays": "Include bills due within (days)",
-        "minimumAmount": "Minimum bill amount",
-        "maximumRunAmount": "Maximum run amount",
-        "captureDiscounts": "Capture available early-payment discounts",
-        "applyCredits": "Apply available credits"
+        "title": "Critérios de seleção",
+        "dueThroughDays": "Incluir contas com vencimento em (dias)",
+        "minimumAmount": "Valor mínimo da conta",
+        "maximumRunAmount": "Valor máximo da execução",
+        "captureDiscounts": "Capturar descontos disponíveis por pagamento antecipado",
+        "applyCredits": "Aplicar créditos disponíveis"
       },
       "drawer": {
         "new": {
-          "profiles": "New bank profile",
-          "formats": "New custom payment format",
-          "schedules": "New payment schedule",
-          "mandates": "New debit mandate"
+          "profiles": "Novo perfil bancário",
+          "formats": "Novo formato de pagamento personalizado",
+          "schedules": "Nova agenda de pagamento",
+          "mandates": "Novo mandato de débito"
         },
         "edit": {
-          "profiles": "Edit bank profile",
-          "formats": "Edit payment format",
-          "schedules": "Edit payment schedule",
-          "mandates": "Edit debit mandate"
+          "profiles": "Editar perfil bancário",
+          "formats": "Editar formato de pagamento",
+          "schedules": "Editar agenda de pagamento",
+          "mandates": "Editar mandato de débito"
         },
         "description": {
-          "profiles": "Connect a funding account to a payment rail and delivery policy.",
-          "formats": "Define file metadata and sandboxed JavaScript for a custom bank format.",
-          "schedules": "Select eligible transactions on a repeatable schedule.",
-          "mandates": "Record the authorization required to collect funds from a counterparty."
+          "profiles": "Conecte uma conta de financiamento a um canal de pagamento e a uma política de entrega.",
+          "formats": "Defina os metadados do arquivo e o JavaScript em sandbox para um formato bancário personalizado.",
+          "schedules": "Selecione transações elegíveis em uma agenda repetível.",
+          "mandates": "Registre a autorização necessária para cobrar fundos de uma contraparte."
         }
       },
-      "select": "Select…",
-      "allSubsidiaries": "All subsidiaries",
+      "select": "Selecionar…",
+      "allSubsidiaries": "Todas as subsidiárias",
       "schedulePresets": {
-        "daily": "Daily",
-        "weekdays": "Weekdays",
-        "weekly": "Weekly (Mon)",
-        "monthly": "Monthly (1st)"
+        "daily": "Diária",
+        "weekdays": "Dias úteis",
+        "weekly": "Semanal (seg)",
+        "monthly": "Mensal (dia 1)"
       },
-      "empty": "No records to show.",
-      "manualDelivery": "Manual download",
-      "runApproval": "Required",
-      "automatic": "Automatic",
-      "any": "Any",
-      "builtInFormatHint": "This built-in formatter is maintained by the payment engine. Its executable definition cannot be edited here.",
-      "save": "Save",
-      "saving": "Saving…",
-      "saved": "Saved",
-      "cancel": "Cancel",
-      "saveFailed": "Could not save the configuration."
+      "empty": "Nenhum registro para exibir.",
+      "manualDelivery": "Download manual",
+      "runApproval": "Obrigatória",
+      "automatic": "Automática",
+      "any": "Qualquer",
+      "builtInFormatHint": "Este formatador integrado é mantido pelo mecanismo de pagamento. Sua definição executável não pode ser editada aqui.",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "saved": "Salvo",
+      "cancel": "Cancelar",
+      "saveFailed": "Não foi possível salvar a configuração."
     },
     "entities": {
       "company": {
-        "title": "Company & Accounting",
-        "description": "Organization identity, base currency, fiscal year, and control accounts."
+        "title": "Empresa e Contabilidade",
+        "description": "Identidade da organização, moeda base, ano fiscal e contas de controle."
       },
       "tax-codes": {
-        "title": "Tax Codes",
-        "description": "Rates you charge and pay, and the accounts they post to."
+        "title": "Códigos de Imposto",
+        "description": "Alíquotas que você cobra e paga, e as contas em que são lançadas."
       },
       "tax-rates": {
-        "title": "Tax Rates",
-        "description": "Effective-dated rate history for each tax code."
+        "title": "Alíquotas de Imposto",
+        "description": "Histórico de alíquotas com datas de vigência para cada código de imposto."
       },
       "tax-groups": {
-        "title": "Tax Groups",
-        "description": "Bundle several tax codes to apply together on a line."
+        "title": "Grupos de Imposto",
+        "description": "Agrupe vários códigos de imposto para aplicá-los em conjunto em uma linha."
       },
       "tax-return-forms": {
-        "title": "Tax Returns",
-        "description": "Configure a government tax return: its boxes, how each is computed, and how it is filed."
+        "title": "Declarações Fiscais",
+        "description": "Configure uma declaração fiscal governamental: suas caixas, como cada uma é calculada e como é apurada."
       },
       "tax-report-lines": {
-        "title": "Tax Return Boxes",
-        "description": "Map tax codes onto the boxes of a tax return, or compute a box from other boxes."
+        "title": "Caixas da Declaração Fiscal",
+        "description": "Mapeie códigos de imposto nas caixas de uma declaração fiscal, ou calcule uma caixa a partir de outras caixas."
       },
       "classes": {
         "title": "Classes",
-        "description": "A reporting dimension for slicing transactions."
+        "description": "Uma dimensão de relatório para segmentar transações."
       },
       "segment-definitions": {
-        "title": "Segments",
-        "description": "Configure built-in and custom accounting segments across transactions, accounts, and reports."
+        "title": "Segmentos",
+        "description": "Configure segmentos contábeis integrados e personalizados em transações, contas e relatórios."
       },
       "segment-values": {
-        "title": "Segment Values",
-        "description": "Manage the selectable values and hierarchies for custom segments."
+        "title": "Valores de Segmento",
+        "description": "Gerencie os valores selecionáveis e as hierarquias de segmentos personalizados."
       },
       "departments": {
-        "title": "Departments",
-        "description": "A reporting dimension for slicing transactions."
+        "title": "Departamentos",
+        "description": "Uma dimensão de relatório para segmentar transações."
       },
       "locations": {
-        "title": "Locations",
-        "description": "A reporting dimension for slicing transactions."
+        "title": "Localizações",
+        "description": "Uma dimensão de relatório para segmentar transações."
       },
       "payment-terms": {
-        "title": "Payment Terms",
-        "description": "Net and early-payment discount terms for bills and invoices."
+        "title": "Prazos de Pagamento",
+        "description": "Prazos líquidos e de desconto por pagamento antecipado para contas a pagar e faturas."
       },
       "number-sequences": {
-        "title": "Number Sequences",
-        "description": "Document numbering prefixes and counters."
+        "title": "Sequências de Numeração",
+        "description": "Prefixos e contadores de numeração de documentos."
       },
       "time-types": {
-        "title": "Time Types",
-        "description": "Cost multipliers and billable defaults for timesheets."
+        "title": "Tipos de Tempo",
+        "description": "Multiplicadores de custo e padrões de faturabilidade para folhas de horas."
       },
       "worker-comp-groups": {
-        "title": "Worker Comp Groups",
-        "description": "Workers' compensation rate groups for labor costing."
+        "title": "Grupos de Seguro Acidentário",
+        "description": "Grupos de alíquota de seguro acidentário para custeio de mão de obra."
       },
       "labor-burden-rates": {
-        "title": "Labor Burden Rates",
-        "description": "Effective-dated burden rates applied to labor cost."
+        "title": "Taxas de Encargos de Mão de Obra",
+        "description": "Taxas de encargos com datas de vigência aplicadas ao custo de mão de obra."
       },
       "asset-categories": {
-        "title": "Asset Categories",
-        "description": "Default depreciation method and accounts for fixed assets."
+        "title": "Categorias de Ativo",
+        "description": "Método de depreciação e contas padrão para ativos imobilizados."
       },
       "depreciation-methods": {
-        "title": "Depreciation Methods",
-        "description": "Author custom depreciation formulas — the formula builder."
+        "title": "Métodos de Depreciação",
+        "description": "Crie fórmulas de depreciação personalizadas — o construtor de fórmulas."
       },
       "depreciation-book-policies": {
-        "title": "Book Depreciation Policies",
-        "description": "Per-book, per-category method for multi-book depreciation."
+        "title": "Políticas de Depreciação por Livro",
+        "description": "Método por livro e por categoria para depreciação multilivro."
       },
       "currencies": {
-        "title": "Currencies",
-        "description": "Currency codes and their minor-unit precision."
+        "title": "Moedas",
+        "description": "Códigos de moeda e sua precisão de unidade menor."
       },
       "sftp": {
         "title": "SFTP"
       },
       "payment-operations": {
-        "title": "Payments & Banking",
-        "description": "Payment formats, funding profiles, schedules, and debit mandates."
+        "title": "Pagamentos e Bancos",
+        "description": "Formatos de pagamento, perfis de financiamento, agendas e mandatos de débito."
       },
       "account-groups": {
-        "title": "Account Groups",
-        "description": "Reporting classifications of your chart of accounts (e.g. cost pools). Groups auto-classify accounts by rule, with per-account overrides."
+        "title": "Grupos de Conta",
+        "description": "Classificações de relatório do seu plano de contas (por exemplo, pools de custo). Os grupos classificam contas automaticamente por regra, com substituições por conta."
       },
       "subsidiaries": {
-        "title": "Subsidiaries",
-        "description": "The legal entities inside your organization — a consolidation tree with one root."
+        "title": "Subsidiárias",
+        "description": "As entidades legais dentro da sua organização — uma árvore de consolidação com uma raiz."
       },
       "intercompany-pairs": {
-        "title": "Intercompany Pairs",
-        "description": "Due-from / due-to account mappings for transactions that cross two subsidiaries."
+        "title": "Pares Intercompanhia",
+        "description": "Mapeamentos de contas a receber de / a pagar a para transações que cruzam duas subsidiárias."
       },
       "accounting-books": {
-        "title": "Accounting Books",
-        "singular": "accounting book",
-        "description": "Manage the primary, tax, statutory, and reporting books that own ledger entries and close controls."
+        "title": "Livros Contábeis",
+        "singular": "livro contábil",
+        "description": "Gerencie os livros principal, fiscal, estatutário e de relatório que detêm os lançamentos do razão e os controles de fechamento."
       },
       "fx-rates": {
-        "title": "Exchange Rates",
-        "description": "Your organization's daily rates used to post foreign-currency transactions."
+        "title": "Taxas de Câmbio",
+        "description": "As taxas diárias da sua organização usadas para lançar transações em moeda estrangeira."
       },
       "consolidated-fx-rates": {
-        "title": "Consolidated Exchange Rates",
-        "description": "Period current, average, and historical rates used for subsidiary consolidation."
+        "title": "Taxas de Câmbio Consolidadas",
+        "description": "Taxas atual, média e histórica do período usadas para a consolidação de subsidiárias."
       },
       "recognition-rules": {
-        "title": "Recognition Rules",
-        "description": "How revenue is recognized over time — method, timing, and accounts (ASC 606)."
+        "title": "Regras de Reconhecimento",
+        "description": "Como a receita é reconhecida ao longo do tempo — método, momento e contas (ASC 606)."
       },
       "fair-value-prices": {
-        "title": "Fair Value Prices",
-        "description": "Standalone selling prices used to allocate bundle revenue across obligations."
+        "title": "Preços de Valor Justo",
+        "description": "Preços de venda autônomos usados para alocar a receita de pacotes entre as obrigações."
       },
       "stock-locations": {
-        "title": "Stock Locations",
-        "description": "Physical bins, zones, and warehouses under the locations dimension."
+        "title": "Locais de Estoque",
+        "description": "Compartimentos, zonas e armazéns físicos sob a dimensão de localizações."
       },
       "item-inventory-profiles": {
-        "title": "Item Costing",
-        "description": "Costing method, inventory accounts, tracking, and standard cost per item."
+        "title": "Custeio de Itens",
+        "description": "Método de custeio, contas de estoque, rastreamento e custo padrão por item."
       },
       "bom-components": {
-        "title": "Bill of Materials",
-        "description": "Components consumed to build each assembly item."
+        "title": "Lista de Materiais",
+        "description": "Componentes consumidos para montar cada item de montagem."
       }
     },
     "fields": {
-      "code": "Code",
-      "name": "Name",
-      "appliesTo": "Applies to",
-      "recoverablePercent": "Recoverable %",
-      "isActive": "Active",
-      "isPrimary": "Primary book",
-      "country": "Country",
-      "region": "Region",
-      "collectedAccountId": "Tax collected account",
-      "paidAccountId": "Tax paid account",
-      "taxCodeId": "Tax code",
-      "ratePercent": "Rate %",
-      "effectiveFrom": "Effective from",
-      "effectiveTo": "Effective to",
-      "members": "Tax codes",
-      "reportCode": "Report code",
-      "lineCode": "Line code",
-      "label": "Label",
-      "basis": "Basis",
-      "sign": "Sign",
-      "submissionChannel": "Submission channel",
-      "governmentFormat": "Government format",
-      "submissionUrl": "Government filing URL",
-      "officialPdfFileId": "Official PDF",
-      "watermark": "Watermark",
-      "sequence": "Order",
-      "formula": "Formula",
-      "pdfField": "PDF field",
-      "parentId": "Parent",
-      "netDays": "Net days",
-      "discountDays": "Discount days",
-      "discountPercent": "Discount %",
-      "documentKind": "Document",
-      "prefix": "Prefix",
-      "nextNumber": "Next number",
-      "padding": "Padding",
-      "gapless": "Gapless",
-      "costMultiplier": "Cost multiplier",
-      "isBillableDefault": "Billable by default",
-      "category": "Category",
-      "method": "Method",
-      "postsGl": "Posts to GL",
-      "bookId": "Book",
-      "categoryId": "Asset category",
-      "convention": "Convention",
-      "lifeMonths": "Life (months)",
-      "departmentId": "Department",
-      "defaultMethod": "Default method",
-      "defaultConvention": "Depreciation convention",
-      "endOfLife": "End of life",
-      "defaultLifeMonths": "Default life (months)",
-      "assetAccountId": "Inventory asset account",
-      "accumulatedDepreciationAccountId": "Accumulated depreciation account",
-      "depreciationExpenseAccountId": "Depreciation expense account",
-      "gainLossAccountId": "Gain / loss account",
-      "minorUnits": "Minor units",
-      "key": "Key",
-      "dimension": "Dimension",
-      "color": "Colour",
-      "sortOrder": "Sort order",
-      "legalName": "Legal name",
-      "baseCurrency": "Base currency",
-      "isElimination": "Elimination",
-      "fromSubsidiaryId": "From subsidiary",
-      "toSubsidiaryId": "To subsidiary",
-      "dueFromAccountId": "Due-from account",
-      "dueToAccountId": "Due-to account",
-      "asOf": "As of",
-      "fromCurrency": "From currency",
-      "toCurrency": "To currency",
-      "rateType": "Rate type",
-      "rate": "Rate",
-      "source": "Source",
-      "periodId": "Accounting period",
-      "currentRate": "Current rate",
-      "averageRate": "Average rate",
-      "historicalRate": "Historical rate",
-      "subsidiaryId": "Subsidiary",
-      "subsidiaryIncludeChildren": "Include child subsidiaries",
-      "pluralName": "Plural name",
-      "sourceKind": "Source",
-      "isHierarchical": "Hierarchical",
-      "showOnHeader": "Show on transaction header",
-      "showOnLines": "Show on transaction lines",
-      "showInReports": "Show in reports",
-      "allowAccountRequirement": "Allow as an account requirement",
-      "segmentId": "Segment",
-      "description": "Description",
-      "recognitionPeriods": "Recognition periods",
-      "startDateSource": "Start date source",
-      "endDateSource": "End date source",
-      "periodOffset": "Period offset",
-      "startOffsetDays": "Start offset (days)",
-      "initialAmountPercent": "Initial amount %",
-      "deferredAccountId": "Deferred revenue account",
-      "recognizedAccountId": "Recognized revenue account",
-      "isForecast": "Forecast rule",
+      "code": "Código",
+      "name": "Nome",
+      "appliesTo": "Aplica-se a",
+      "recoverablePercent": "% recuperável",
+      "isActive": "Ativo",
+      "isPrimary": "Livro principal",
+      "country": "País",
+      "region": "Região",
+      "collectedAccountId": "Conta de imposto arrecadado",
+      "paidAccountId": "Conta de imposto pago",
+      "taxCodeId": "Código de imposto",
+      "ratePercent": "% da alíquota",
+      "effectiveFrom": "Vigente a partir de",
+      "effectiveTo": "Vigente até",
+      "members": "Códigos de imposto",
+      "reportCode": "Código do relatório",
+      "lineCode": "Código da linha",
+      "label": "Rótulo",
+      "basis": "Base",
+      "sign": "Sinal",
+      "submissionChannel": "Canal de envio",
+      "governmentFormat": "Formato governamental",
+      "submissionUrl": "URL de apuração governamental",
+      "officialPdfFileId": "PDF oficial",
+      "watermark": "Marca d'água",
+      "sequence": "Ordem",
+      "formula": "Fórmula",
+      "pdfField": "Campo do PDF",
+      "parentId": "Pai",
+      "netDays": "Dias líquidos",
+      "discountDays": "Dias de desconto",
+      "discountPercent": "% de desconto",
+      "documentKind": "Documento",
+      "prefix": "Prefixo",
+      "nextNumber": "Próximo número",
+      "padding": "Preenchimento",
+      "gapless": "Sem lacunas",
+      "costMultiplier": "Multiplicador de custo",
+      "isBillableDefault": "Faturável por padrão",
+      "category": "Categoria",
+      "method": "Método",
+      "postsGl": "Lança no razão",
+      "bookId": "Livro",
+      "categoryId": "Categoria de ativo",
+      "convention": "Convenção",
+      "lifeMonths": "Vida útil (meses)",
+      "departmentId": "Departamento",
+      "defaultMethod": "Método padrão",
+      "defaultConvention": "Convenção de depreciação",
+      "endOfLife": "Fim da vida útil",
+      "defaultLifeMonths": "Vida útil padrão (meses)",
+      "assetAccountId": "Conta de ativo de estoque",
+      "accumulatedDepreciationAccountId": "Conta de depreciação acumulada",
+      "depreciationExpenseAccountId": "Conta de despesa de depreciação",
+      "gainLossAccountId": "Conta de ganho / perda",
+      "minorUnits": "Unidades menores",
+      "key": "Chave",
+      "dimension": "Dimensão",
+      "color": "Cor",
+      "sortOrder": "Ordem de classificação",
+      "legalName": "Razão social",
+      "baseCurrency": "Moeda base",
+      "isElimination": "Eliminação",
+      "fromSubsidiaryId": "Subsidiária de origem",
+      "toSubsidiaryId": "Subsidiária de destino",
+      "dueFromAccountId": "Conta a receber de",
+      "dueToAccountId": "Conta a pagar a",
+      "asOf": "Na data de",
+      "fromCurrency": "Moeda de origem",
+      "toCurrency": "Moeda de destino",
+      "rateType": "Tipo de taxa",
+      "rate": "Taxa",
+      "source": "Origem",
+      "periodId": "Período contábil",
+      "currentRate": "Taxa atual",
+      "averageRate": "Taxa média",
+      "historicalRate": "Taxa histórica",
+      "subsidiaryId": "Subsidiária",
+      "subsidiaryIncludeChildren": "Incluir subsidiárias filhas",
+      "pluralName": "Nome no plural",
+      "sourceKind": "Origem",
+      "isHierarchical": "Hierárquico",
+      "showOnHeader": "Exibir no cabeçalho da transação",
+      "showOnLines": "Exibir nas linhas da transação",
+      "showInReports": "Exibir nos relatórios",
+      "allowAccountRequirement": "Permitir como requisito de conta",
+      "segmentId": "Segmento",
+      "description": "Descrição",
+      "recognitionPeriods": "Períodos de reconhecimento",
+      "startDateSource": "Origem da data de início",
+      "endDateSource": "Origem da data de término",
+      "periodOffset": "Deslocamento de período",
+      "startOffsetDays": "Deslocamento de início (dias)",
+      "initialAmountPercent": "% do valor inicial",
+      "deferredAccountId": "Conta de receita diferida",
+      "recognizedAccountId": "Conta de receita reconhecida",
+      "isForecast": "Regra de previsão",
       "itemId": "Item",
-      "unitPrice": "Unit price",
-      "lowValue": "Low value",
-      "highValue": "High value",
-      "currency": "Currency",
-      "locationId": "Location",
-      "kind": "Kind",
-      "costingMethod": "Costing method",
-      "tracking": "Tracking",
-      "cogsAccountId": "COGS account",
-      "adjustmentAccountId": "Adjustment account",
-      "varianceAccountId": "Variance account",
-      "standardCost": "Standard cost",
-      "baseUnit": "Base unit",
-      "reorderPoint": "Reorder point",
-      "preferredStockLevel": "Preferred stock level",
-      "receivedNotBilledAccountId": "Received-not-billed account",
-      "assemblyItemId": "Assembly item",
-      "componentItemId": "Component item",
-      "quantityPer": "Quantity per"
+      "unitPrice": "Preço unitário",
+      "lowValue": "Valor mínimo",
+      "highValue": "Valor máximo",
+      "currency": "Moeda",
+      "locationId": "Localização",
+      "kind": "Tipo",
+      "costingMethod": "Método de custeio",
+      "tracking": "Rastreamento",
+      "cogsAccountId": "Conta de CMV",
+      "adjustmentAccountId": "Conta de ajuste",
+      "varianceAccountId": "Conta de variação",
+      "standardCost": "Custo padrão",
+      "baseUnit": "Unidade base",
+      "reorderPoint": "Ponto de reposição",
+      "preferredStockLevel": "Nível de estoque preferido",
+      "receivedNotBilledAccountId": "Conta de recebido-não-faturado",
+      "assemblyItemId": "Item de montagem",
+      "componentItemId": "Item componente",
+      "quantityPer": "Quantidade por"
     },
     "options": {
       "appliesTo": {
-        "sales": "Sales",
-        "purchases": "Purchases",
-        "both": "Both"
+        "sales": "Vendas",
+        "purchases": "Compras",
+        "both": "Ambos"
       },
       "basis": {
-        "collected": "Tax collected (output)",
-        "paid": "Tax paid / ITCs (input)",
-        "net": "Net amount",
-        "tax": "Tax amount"
+        "collected": "Imposto arrecadado (saída)",
+        "paid": "Imposto pago / créditos (entrada)",
+        "net": "Valor líquido",
+        "tax": "Valor do imposto"
       },
       "sign": {
-        "positive": "Add (+)",
-        "negative": "Subtract (−)"
+        "positive": "Somar (+)",
+        "negative": "Subtrair (−)"
       },
       "channel": {
-        "printPdf": "Print & mail (official PDF)",
-        "fileUpload": "Electronic file upload",
-        "efileApi": "E-file (API)",
-        "portalManual": "Government portal (enter by hand)"
+        "printPdf": "Imprimir e enviar por correio (PDF oficial)",
+        "fileUpload": "Envio de arquivo eletrônico",
+        "efileApi": "Envio eletrônico (API)",
+        "portalManual": "Portal governamental (preencher manualmente)"
       },
       "governmentFormat": {
-        "portalEntry": "Online portal entry",
-        "certifiedFile": "Certified government file",
-        "api": "Compatible software / API",
-        "paper": "Official paper form"
+        "portalEntry": "Preenchimento em portal online",
+        "certifiedFile": "Arquivo governamental certificado",
+        "api": "Software compatível / API",
+        "paper": "Formulário oficial em papel"
       },
       "method": {
-        "straightLine": "Straight line",
-        "decliningBalance": "Declining balance",
-        "doubleDeclining": "Double declining"
+        "straightLine": "Linha reta",
+        "decliningBalance": "Saldo decrescente",
+        "doubleDeclining": "Saldo duplo decrescente"
       },
       "convention": {
-        "fullMonth": "Full month",
-        "midMonth": "Mid-month",
-        "halfYear": "Half-year"
+        "fullMonth": "Mês inteiro",
+        "midMonth": "Meio do mês",
+        "halfYear": "Meio ano"
       },
       "endOfLife": {
-        "fullyDepreciate": "Fully depreciate",
-        "retainBalance": "Retain balance"
+        "fullyDepreciate": "Depreciar totalmente",
+        "retainBalance": "Reter saldo"
       },
       "burdenMethod": {
-        "live": "Live",
-        "standard": "Standard"
+        "live": "Ao vivo",
+        "standard": "Padrão"
       },
       "fxRateType": {
-        "spot": "Spot",
-        "average": "Average",
-        "historical": "Historical"
+        "spot": "À vista",
+        "average": "Média",
+        "historical": "Histórica"
       },
       "rateSource": {
-        "derived": "Derived",
+        "derived": "Derivada",
         "manual": "Manual"
       },
       "recognitionMethod": {
-        "pointInTime": "Point in time",
-        "straightLineEven": "Straight-line, even periods",
-        "straightLineProrate": "Straight-line, prorate first & last",
-        "straightLineDaily": "Straight-line, exact days",
-        "percentComplete": "Percent complete",
-        "milestone": "Milestone",
-        "usage": "Usage"
+        "pointInTime": "Em um ponto no tempo",
+        "straightLineEven": "Linha reta, períodos iguais",
+        "straightLineProrate": "Linha reta, ratear primeiro e último",
+        "straightLineDaily": "Linha reta, dias exatos",
+        "percentComplete": "Percentual concluído",
+        "milestone": "Marco",
+        "usage": "Uso"
       },
       "startDateSource": {
-        "obligation": "Obligation start",
-        "document": "Document date",
-        "fulfillment": "Fulfillment",
-        "event": "Event",
-        "contract": "Contract start"
+        "obligation": "Início da obrigação",
+        "document": "Data do documento",
+        "fulfillment": "Cumprimento",
+        "event": "Evento",
+        "contract": "Início do contrato"
       },
       "endDateSource": {
-        "term": "Term length",
-        "obligation": "Obligation end",
-        "contract": "Contract end"
+        "term": "Duração do prazo",
+        "obligation": "Fim da obrigação",
+        "contract": "Fim do contrato"
       },
       "costingMethod": {
         "fifo": "FIFO",
-        "movingAverage": "Moving average",
-        "standard": "Standard cost"
+        "movingAverage": "Média móvel",
+        "standard": "Custo padrão"
       },
       "tracking": {
-        "none": "None",
-        "lot": "Lot",
-        "serial": "Serial"
+        "none": "Nenhum",
+        "lot": "Lote",
+        "serial": "Série"
       },
       "stockLocationKind": {
-        "warehouse": "Warehouse",
-        "zone": "Zone",
-        "bin": "Bin",
-        "staging": "Staging",
-        "transit": "Transit",
-        "quarantine": "Quarantine"
+        "warehouse": "Armazém",
+        "zone": "Zona",
+        "bin": "Compartimento",
+        "staging": "Preparação",
+        "transit": "Trânsito",
+        "quarantine": "Quarentena"
       }
     }
   },
   "flows": {
     "title": "Flows",
-    "description": "Visual automations over your records — a trigger starts a run, conditions branch, actions do the work, and approval gates pause for people.",
-    "searchPlaceholder": "Search flows…",
-    "subjectFilter": "Record type",
+    "description": "Automações visuais sobre seus registros — um gatilho inicia uma execução, condições ramificam, ações realizam o trabalho e portões de aprovação pausam para pessoas.",
+    "searchPlaceholder": "Pesquisar flows…",
+    "subjectFilter": "Tipo de registro",
     "table": {
       "flow": "Flow",
-      "subject": "Record type",
-      "nodes": "Nodes",
-      "lastRun": "Last run",
-      "updated": "Updated",
+      "subject": "Tipo de registro",
+      "nodes": "Nós",
+      "lastRun": "Última execução",
+      "updated": "Atualizado",
       "status": "Status"
     },
     "empty": {
-      "title": "No flows yet",
-      "description": "A flow starts at a trigger, branches on conditions, pauses at approval gates, and finishes with actions — emails, notifications, field updates, and status changes.",
-      "cta": "New flow"
+      "title": "Nenhum flow ainda",
+      "description": "Um flow começa em um gatilho, ramifica em condições, pausa em portões de aprovação e termina com ações — e-mails, notificações, atualizações de campo e mudanças de status.",
+      "cta": "Novo flow"
     },
-    "statusEnabled": "enabled",
-    "statusDisabled": "disabled",
-    "neverRan": "never",
+    "statusEnabled": "ativado",
+    "statusDisabled": "desativado",
+    "neverRan": "nunca",
     "new": {
-      "button": "New flow",
-      "title": "New flow",
-      "description": "Pick the record type this flow runs over. You'll design the steps next.",
-      "name": "Name",
-      "namePlaceholder": "e.g. Bill approval over $10,000",
-      "subject": "Record type",
-      "subjectPlaceholder": "Choose a record type…",
-      "create": "Create flow",
-      "failed": "Could not create the flow"
+      "button": "Novo flow",
+      "title": "Novo flow",
+      "description": "Escolha o tipo de registro sobre o qual este flow será executado. Você desenhará as etapas em seguida.",
+      "name": "Nome",
+      "namePlaceholder": "ex.: Aprovação de conta a pagar acima de US$ 10.000",
+      "subject": "Tipo de registro",
+      "subjectPlaceholder": "Escolha um tipo de registro…",
+      "create": "Criar flow",
+      "failed": "Não foi possível criar o flow"
     },
     "actions": {
-      "enable": "Enable",
-      "disable": "Disable",
-      "delete": "Delete",
-      "deleteConfirmTitle": "Delete flow",
-      "deleteConfirm": "Delete “{name}”? Its run history is removed too.",
-      "deleted": "Flow deleted",
-      "deleteFailed": "Could not delete the flow",
-      "updateFailed": "Could not update the flow"
+      "enable": "Ativar",
+      "disable": "Desativar",
+      "delete": "Excluir",
+      "deleteConfirmTitle": "Excluir flow",
+      "deleteConfirm": "Excluir “{name}”? Seu histórico de execuções também será removido.",
+      "deleted": "Flow excluído",
+      "deleteFailed": "Não foi possível excluir o flow",
+      "updateFailed": "Não foi possível atualizar o flow"
     },
     "builder": {
-      "save": "Save",
-      "saved": "Flow saved",
-      "saveFailed": "Could not save the flow",
-      "unsaved": "Unsaved changes",
-      "enabledToggle": "Enabled",
-      "namePlaceholder": "Flow name",
-      "errorsTitle": "Fix these to save the flow",
-      "warningsTitle": "Warnings — the flow saves, but may not run as expected",
-      "warningsBadge": "{count, plural, one {# warning} other {# warnings}}",
+      "save": "Salvar",
+      "saved": "Flow salvo",
+      "saveFailed": "Não foi possível salvar o flow",
+      "unsaved": "Alterações não salvas",
+      "enabledToggle": "Ativado",
+      "namePlaceholder": "Nome do flow",
+      "errorsTitle": "Corrija estes itens para salvar o flow",
+      "warningsTitle": "Avisos — o flow é salvo, mas pode não ser executado como esperado",
+      "warningsBadge": "{count, plural, one {# aviso} other {# avisos}}",
       "tabs": {
-        "canvas": "Canvas",
-        "runs": "Runs"
+        "canvas": "Tela",
+        "runs": "Execuções"
       },
       "palette": {
-        "title": "Add",
-        "trigger": "Trigger",
-        "condition": "Condition",
-        "action": "Action",
-        "gate": "Approval"
+        "title": "Adicionar",
+        "trigger": "Gatilho",
+        "condition": "Condição",
+        "action": "Ação",
+        "gate": "Aprovação"
       },
       "canvasEmpty": {
-        "title": "Start with a trigger",
-        "description": "Triggers start a run, conditions branch it, approval gates pause it for people, and actions finish the work. Add a trigger, then drag from its handle to connect the next step."
+        "title": "Comece com um gatilho",
+        "description": "Gatilhos iniciam uma execução, condições a ramificam, portões de aprovação a pausam para pessoas e ações concluem o trabalho. Adicione um gatilho e depois arraste da sua alça para conectar a próxima etapa."
       },
       "inspector": {
-        "empty": "Select a node to configure it",
-        "deleteNode": "Delete node",
-        "nodeId": "Node"
+        "empty": "Selecione um nó para configurá-lo",
+        "deleteNode": "Excluir nó",
+        "nodeId": "Nó"
       }
     },
     "node": {
-      "trigger": "Trigger",
-      "condition": "Condition",
-      "action": "Action",
-      "gate": "Approval",
-      "conditionDefault": "If…",
-      "gateDefault": "Approval"
+      "trigger": "Gatilho",
+      "condition": "Condição",
+      "action": "Ação",
+      "gate": "Aprovação",
+      "conditionDefault": "Se…",
+      "gateDefault": "Aprovação"
     },
     "edge": {
-      "then": "then",
-      "else": "else",
-      "approve": "approve",
-      "reject": "reject"
+      "then": "então",
+      "else": "senão",
+      "approve": "aprovar",
+      "reject": "rejeitar"
     },
     "trigger": {
-      "kind": "When",
+      "kind": "Quando",
       "kinds": {
-        "on_create": "A record is created",
-        "on_update": "A record is updated",
-        "on_submit": "A record is submitted for approval",
-        "before_post": "Before a record posts",
-        "after_post": "After a record posts",
-        "before_void": "Before a record is voided",
-        "status_change": "The status changes",
-        "on_field_value": "A field matches a condition",
-        "scheduled": "On a schedule",
-        "manual": "A user clicks a button"
+        "on_create": "Um registro é criado",
+        "on_update": "Um registro é atualizado",
+        "on_submit": "Um registro é enviado para aprovação",
+        "before_post": "Antes de um registro ser lançado",
+        "after_post": "Depois de um registro ser lançado",
+        "before_void": "Antes de um registro ser anulado",
+        "status_change": "O status muda",
+        "on_field_value": "Um campo corresponde a uma condição",
+        "scheduled": "Em um agendamento",
+        "manual": "Um usuário clica em um botão"
       },
-      "from": "From status",
-      "to": "To status",
-      "anyStatus": "Any status",
-      "rule": "When the record matches",
-      "cron": "Cron schedule",
-      "cronHint": "minute · hour · day of month · month · day of week",
-      "cronExample": "e.g. 0 8 * * 1 = Mondays at 08:00",
-      "timezone": "Time zone (optional)",
-      "selectRecords": "Run once for each matching record",
-      "selectRecordsHint": "The schedule searches this record type and starts a separate run for every match.",
-      "selectRule": "Record filter (optional)",
-      "selectRuleAdd": "Add record filter",
-      "selectRuleRemove": "Remove record filter",
-      "selectLimit": "Maximum records per run",
-      "buttonLabel": "Button label",
-      "confirmText": "Confirmation message (optional)",
-      "requirePermission": "Required permission (optional)",
-      "permissionPlaceholder": "Choose a permission…",
-      "showIf": "Only show the button when…",
-      "showIfAdd": "Add visibility condition",
-      "showIfRemove": "Remove visibility condition",
-      "buttonPreview": "Record button preview",
-      "buttonHint": "This button appears in the record header when the flow is enabled and its permission and visibility conditions pass.",
-      "defaultButtonLabel": "Run flow"
+      "from": "Do status",
+      "to": "Para o status",
+      "anyStatus": "Qualquer status",
+      "rule": "Quando o registro corresponde",
+      "cron": "Agendamento cron",
+      "cronHint": "minuto · hora · dia do mês · mês · dia da semana",
+      "cronExample": "ex.: 0 8 * * 1 = segundas-feiras às 08:00",
+      "timezone": "Fuso horário (opcional)",
+      "selectRecords": "Executar uma vez para cada registro correspondente",
+      "selectRecordsHint": "O agendamento pesquisa este tipo de registro e inicia uma execução separada para cada correspondência.",
+      "selectRule": "Filtro de registros (opcional)",
+      "selectRuleAdd": "Adicionar filtro de registros",
+      "selectRuleRemove": "Remover filtro de registros",
+      "selectLimit": "Máximo de registros por execução",
+      "buttonLabel": "Rótulo do botão",
+      "confirmText": "Mensagem de confirmação (opcional)",
+      "requirePermission": "Permissão necessária (opcional)",
+      "permissionPlaceholder": "Escolha uma permissão…",
+      "showIf": "Mostrar o botão somente quando…",
+      "showIfAdd": "Adicionar condição de visibilidade",
+      "showIfRemove": "Remover condição de visibilidade",
+      "buttonPreview": "Pré-visualização do botão do registro",
+      "buttonHint": "Este botão aparece no cabeçalho do registro quando o flow está ativado e suas condições de permissão e visibilidade são atendidas.",
+      "defaultButtonLabel": "Executar flow"
     },
     "condition": {
-      "rule": "Branch when",
-      "label": "Label (optional)",
-      "labelPlaceholder": "e.g. Over $10,000",
-      "hint": "The “then” branch runs when the rule passes; “else” runs when it fails."
+      "rule": "Ramificar quando",
+      "label": "Rótulo (opcional)",
+      "labelPlaceholder": "ex.: Acima de US$ 10.000",
+      "hint": "A ramificação “então” é executada quando a regra é atendida; “senão” é executada quando ela falha."
     },
     "action": {
-      "kind": "Action",
+      "kind": "Ação",
       "kinds": {
-        "send_email": "Send an email",
-        "notify": "Send an in-app notification",
-        "set_field": "Set a field",
-        "change_status": "Change the status",
-        "post_document": "Post the document",
-        "lock_record": "Lock the record",
-        "unlock_record": "Unlock the record"
+        "send_email": "Enviar um e-mail",
+        "notify": "Enviar uma notificação no app",
+        "set_field": "Definir um campo",
+        "change_status": "Alterar o status",
+        "post_document": "Lançar o documento",
+        "lock_record": "Bloquear o registro",
+        "unlock_record": "Desbloquear o registro"
       },
-      "recipients": "Recipients",
-      "subject": "Subject",
-      "body": "Body",
-      "attachPdf": "Attach the record PDF",
-      "attachPdfHint": "Uses your organization's active PDF template for this record type.",
-      "interpolationHint": "Insert record values with '{{'field'}}' tokens",
-      "availableFields": "Available fields",
-      "title": "Title",
-      "notifyBody": "Message (optional)",
-      "href": "Link to open (optional)",
-      "field": "Field",
-      "value": "Value",
-      "valueSource": "Value source",
+      "recipients": "Destinatários",
+      "subject": "Assunto",
+      "body": "Corpo",
+      "attachPdf": "Anexar o PDF do registro",
+      "attachPdfHint": "Usa o modelo de PDF ativo da sua organização para este tipo de registro.",
+      "interpolationHint": "Insira valores do registro com tokens '{{'field'}}'",
+      "availableFields": "Campos disponíveis",
+      "title": "Título",
+      "notifyBody": "Mensagem (opcional)",
+      "href": "Link a abrir (opcional)",
+      "field": "Campo",
+      "value": "Valor",
+      "valueSource": "Origem do valor",
       "valueSources": {
-        "literal": "A fixed value",
-        "today": "Today's date",
-        "now": "Current date and time",
-        "currentUser": "Current user's name",
-        "expression": "Existing formula expression"
+        "literal": "Um valor fixo",
+        "today": "Data de hoje",
+        "now": "Data e hora atuais",
+        "currentUser": "Nome do usuário atual",
+        "expression": "Expressão de fórmula existente"
       },
-      "expressionPreserved": "This existing formula expression is preserved. Formula editing is available through the form expression builder.",
-      "status": "New status",
-      "postDocumentHint": "Posts the document to the ledger through the normal posting pipeline. Nothing to configure.",
-      "lockReason": "Lock reason",
-      "lockReasonPlaceholder": "e.g. Approved — payment is final",
-      "lockExemptRoles": "Exempt roles",
-      "lockExemptHint": "Admins are always exempt; selected roles may still edit.",
-      "unlockHint": "Removes the flow lock so the record can be edited again."
+      "expressionPreserved": "Esta expressão de fórmula existente é preservada. A edição de fórmula está disponível pelo construtor de expressões do formulário.",
+      "status": "Novo status",
+      "postDocumentHint": "Lança o documento no razão pelo pipeline de lançamento normal. Nada a configurar.",
+      "lockReason": "Motivo do bloqueio",
+      "lockReasonPlaceholder": "ex.: Aprovado — o pagamento é final",
+      "lockExemptRoles": "Funções isentas",
+      "lockExemptHint": "Administradores estão sempre isentos; as funções selecionadas ainda podem editar.",
+      "unlockHint": "Remove o bloqueio do flow para que o registro possa ser editado novamente."
     },
     "gate": {
-      "title": "Title",
-      "titlePlaceholder": "e.g. Controller approval",
-      "assignees": "Approvers",
-      "mode": "Quorum",
-      "modeAny": "Any one may decide",
-      "modeAll": "All must approve",
-      "signature": "Require a typed signature",
-      "preventSelfApproval": "Prevent self-approval",
-      "preventSelfApprovalHint": "The submitter is removed from the approver list; if necessary, the request routes to their supervisor.",
-      "reminderAfter": "Remind after (hours)",
-      "escalateAfter": "Escalate after (hours)",
-      "escalateTo": "Escalate to",
-      "noEscalation": "No escalation",
-      "hint": "The run pauses here until the approver quorum decides, then continues on the “approve” or “reject” branch."
+      "title": "Título",
+      "titlePlaceholder": "ex.: Aprovação do controller",
+      "assignees": "Aprovadores",
+      "mode": "Quórum",
+      "modeAny": "Qualquer um pode decidir",
+      "modeAll": "Todos devem aprovar",
+      "signature": "Exigir uma assinatura digitada",
+      "preventSelfApproval": "Impedir autoaprovação",
+      "preventSelfApprovalHint": "O solicitante é removido da lista de aprovadores; se necessário, a solicitação é roteada ao supervisor dele.",
+      "reminderAfter": "Lembrar após (horas)",
+      "escalateAfter": "Escalar após (horas)",
+      "escalateTo": "Escalar para",
+      "noEscalation": "Sem escalonamento",
+      "hint": "A execução pausa aqui até que o quórum de aprovadores decida, e então continua na ramificação “aprovar” ou “rejeitar”."
     },
     "targets": {
       "types": {
-        "user": "A specific user",
-        "role": "Everyone in a role",
-        "submitter": "The submitter",
-        "supervisor": "The submitter's supervisor",
-        "field": "A record field (user)",
-        "email": "Email address(es)"
+        "user": "Um usuário específico",
+        "role": "Todos em uma função",
+        "submitter": "O solicitante",
+        "supervisor": "O supervisor do solicitante",
+        "field": "Um campo do registro (usuário)",
+        "email": "Endereço(s) de e-mail"
       },
-      "add": "Add recipient",
-      "addAssignee": "Add approver",
-      "remove": "Remove",
-      "pickUser": "Choose a user…",
-      "pickRole": "Choose a role…",
-      "pickField": "Choose a field…",
-      "emailPlaceholder": "ops@example.com, cfo@example.com"
+      "add": "Adicionar destinatário",
+      "addAssignee": "Adicionar aprovador",
+      "remove": "Remover",
+      "pickUser": "Escolha um usuário…",
+      "pickRole": "Escolha uma função…",
+      "pickField": "Escolha um campo…",
+      "emailPlaceholder": "ops@exemplo.com, cfo@exemplo.com"
     },
     "logic": {
-      "groupAnd": "All of…",
-      "groupOr": "Any of…",
-      "groupNot": "Not…",
+      "groupAnd": "Todos de…",
+      "groupOr": "Qualquer um de…",
+      "groupNot": "Nenhum de…",
       "ops": {
-        "eq": "equals",
-        "ne": "does not equal",
-        "gt": "is greater than",
-        "gte": "is at least",
-        "lt": "is less than",
-        "lte": "is at most",
-        "in": "is one of",
-        "notIn": "is not one of",
-        "isSet": "is set",
-        "isNotSet": "is empty"
+        "eq": "é igual a",
+        "ne": "não é igual a",
+        "gt": "é maior que",
+        "gte": "é pelo menos",
+        "lt": "é menor que",
+        "lte": "é no máximo",
+        "in": "é um de",
+        "notIn": "não é um de",
+        "isSet": "está preenchido",
+        "isNotSet": "está vazio"
       },
-      "addRule": "Add condition",
-      "addGroup": "Add group",
-      "remove": "Remove",
-      "valuePlaceholder": "Value",
-      "listPlaceholder": "Comma-separated values",
-      "true": "True",
-      "false": "False"
+      "addRule": "Adicionar condição",
+      "addGroup": "Adicionar grupo",
+      "remove": "Remover",
+      "valuePlaceholder": "Valor",
+      "listPlaceholder": "Valores separados por vírgula",
+      "true": "Verdadeiro",
+      "false": "Falso"
     },
     "runs": {
-      "title": "Recent runs",
+      "title": "Execuções recentes",
       "empty": {
-        "title": "No runs yet",
-        "description": "Enable the flow and trigger it — every run lands here with its status and any error."
+        "title": "Nenhuma execução ainda",
+        "description": "Ative o flow e acione-o — cada execução aparece aqui com seu status e qualquer erro."
       },
       "status": {
-        "running": "running",
-        "waiting": "waiting",
-        "completed": "completed",
-        "failed": "failed",
-        "cancelled": "cancelled"
+        "running": "em execução",
+        "waiting": "aguardando",
+        "completed": "concluída",
+        "failed": "falhou",
+        "cancelled": "cancelada"
       },
       "table": {
         "status": "Status",
-        "trigger": "Trigger",
-        "subject": "Record",
-        "started": "Started",
-        "finished": "Finished",
-        "error": "Error"
+        "trigger": "Gatilho",
+        "subject": "Registro",
+        "started": "Iniciada",
+        "finished": "Concluída",
+        "error": "Erro"
       }
     }
   }

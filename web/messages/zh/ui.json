@@ -1,76 +1,76 @@
 {
   "pagination": {
-    "outOfRange": "Page {page} is past the end of these results.",
-    "showing": "Showing <strong>{from}</strong>–<strong>{to}</strong> of <strong>{total}</strong>",
-    "goToLastPageAria": "Go to last page, page {page}",
-    "goToPage": "Go to page {page}",
-    "previousPageAria": "Previous page",
-    "nextPageAria": "Next page",
-    "prev": "Prev",
-    "pageOf": "Page {page} of {pages}"
+    "outOfRange": "第 {page} 页已超出这些结果的末尾。",
+    "showing": "显示 <strong>{from}</strong>–<strong>{to}</strong>，共 <strong>{total}</strong>",
+    "goToLastPageAria": "转到最后一页，第 {page} 页",
+    "goToPage": "转到第 {page} 页",
+    "previousPageAria": "上一页",
+    "nextPageAria": "下一页",
+    "prev": "上一页",
+    "pageOf": "第 {page} 页，共 {pages} 页"
   },
   "search": {
-    "placeholder": "Search…",
-    "clearAria": "Clear search"
+    "placeholder": "搜索…",
+    "clearAria": "清除搜索"
   },
   "confirm": {
-    "defaultTitle": "Confirm"
+    "defaultTitle": "确认"
   },
   "select": {
-    "placeholder": "Select…",
-    "searchPlaceholder": "Search…",
-    "noMatches": "No matches",
-    "searching": "Searching…"
+    "placeholder": "选择…",
+    "searchPlaceholder": "搜索…",
+    "noMatches": "无匹配项",
+    "searching": "搜索中…"
   },
   "sparkline": {
-    "noTrend": "No trend data",
-    "trend": "Trend: {count} points from {first} to {last}"
+    "noTrend": "无趋势数据",
+    "trend": "趋势：{count} 个数据点，从 {first} 到 {last}"
   },
   "attachments": {
-    "tooLarge": "{name} exceeds the 25 MB limit",
-    "attached": "Attached {name}",
-    "attachFailed": "Could not attach {name}",
-    "removed": "Removed {name}",
-    "removeFailed": "Could not remove attachment",
-    "empty": "No files attached yet.",
-    "downloadAria": "Download {name}",
-    "removeAria": "Remove {name}",
-    "uploading": "{count, plural, one {Uploading # file…} other {Uploading # files…}}",
-    "dropFiles": "Drop files here or <browse>browse</browse>",
-    "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · up to 25 MB"
+    "tooLarge": "{name} 超出 25 MB 限制",
+    "attached": "已附加 {name}",
+    "attachFailed": "无法附加 {name}",
+    "removed": "已移除 {name}",
+    "removeFailed": "无法移除附件",
+    "empty": "尚未附加任何文件。",
+    "downloadAria": "下载 {name}",
+    "removeAria": "移除 {name}",
+    "uploading": "{count, plural, one {正在上传 # 个文件…} other {正在上传 # 个文件…}}",
+    "dropFiles": "将文件拖放到此处或<browse>浏览</browse>",
+    "acceptHint": "PDF、图像、CSV、XLSX、DOCX、TXT · 最大 25 MB"
   },
   "recordFields": {
-    "inactiveSelected": "(currently selected — inactive)",
-    "ratingAria": "Rating out of {max}",
-    "ratingValueAria": "{value} of {max}",
-    "loadAccountsFailed": "Could not load accounts — reload to retry.",
-    "loadPartiesFailed": "Could not load parties — reload to retry.",
-    "selectAccount": "Select account…",
-    "selectParty": "Select party…",
-    "noFields": "No fields to show — the record type has no visible fields.",
-    "lineItems": "Line items",
-    "rowCount": "{count, plural, one {# row} other {# rows}}",
-    "noRows": "No rows yet.",
-    "rowActions": "Row actions",
-    "removeRow": "Remove row",
-    "addRow": "Add row",
-    "maxRowsReached": "Maximum of {count} rows reached."
+    "inactiveSelected": "（当前所选 — 未启用）",
+    "ratingAria": "评分（满分 {max}）",
+    "ratingValueAria": "{max} 中的 {value}",
+    "loadAccountsFailed": "无法加载科目 — 请重新加载以重试。",
+    "loadPartiesFailed": "无法加载往来单位 — 请重新加载以重试。",
+    "selectAccount": "选择科目…",
+    "selectParty": "选择往来单位…",
+    "noFields": "无可显示的字段 — 该记录类型没有可见字段。",
+    "lineItems": "行项目",
+    "rowCount": "{count, plural, one {# 行} other {# 行}}",
+    "noRows": "暂无行。",
+    "rowActions": "行操作",
+    "removeRow": "移除行",
+    "addRow": "添加行",
+    "maxRowsReached": "已达到最多 {count} 行。"
   },
   "lineGrid": {
-    "addLine": "Add line",
-    "keyboardHint": "Enter adds/moves down · Alt+↑/↓ reorders · ⌘D duplicates · ⌘⌫ removes",
-    "lineActionsAria": "Line {number} actions",
-    "insertAbove": "Insert above",
-    "insertBelow": "Insert below",
-    "removeLine": "Remove line",
-    "clearLine": "Clear line",
+    "addLine": "添加行",
+    "keyboardHint": "Enter 添加/下移 · Alt+↑/↓ 重排 · ⌘D 复制 · ⌘⌫ 移除",
+    "lineActionsAria": "第 {number} 行操作",
+    "insertAbove": "在上方插入",
+    "insertBelow": "在下方插入",
+    "removeLine": "移除行",
+    "clearLine": "清空行",
     "tax": {
-      "overriddenAria": "Tax overridden",
-      "overriddenTitle": "Tax manually overridden — differs from the computed rate",
-      "overriddenShortTitle": "Tax manually overridden",
-      "computedOverriddenTitle": "Computed {amount} · overridden",
-      "resetAria": "Reset tax to computed",
-      "resetTitle": "Reset to computed {amount}"
+      "overriddenAria": "税额已覆盖",
+      "overriddenTitle": "税额已手动覆盖 — 与计算得出的税率不同",
+      "overriddenShortTitle": "税额已手动覆盖",
+      "computedOverriddenTitle": "计算值 {amount} · 已覆盖",
+      "resetAria": "将税额重置为计算值",
+      "resetTitle": "重置为计算值 {amount}"
     }
   }
 }

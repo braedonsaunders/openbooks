@@ -1,281 +1,281 @@
 {
-  "title": "Insights",
+  "title": "洞察",
   "tabs": {
-    "cards": "Cards",
-    "dashboards": "Dashboards"
+    "cards": "卡片",
+    "dashboards": "仪表板"
   },
   "viz": {
-    "table": "Table",
-    "bar": "Bar",
-    "line": "Line",
-    "area": "Area",
-    "pie": "Pie",
+    "table": "表格",
+    "bar": "柱状图",
+    "line": "折线图",
+    "area": "面积图",
+    "pie": "饼图",
     "empty": {
-      "noData": "No data for this query.",
-      "pickFields": "Pick a dimension and at least one measure to chart this."
+      "noData": "此查询无数据。",
+      "pickFields": "选择一个维度和至少一个度量以生成图表。"
     },
-    "noRows": "No rows.",
+    "noRows": "无行。",
     "values": {
-      "yes": "Yes",
-      "no": "No",
-      "active": "Active",
-      "inactive": "Inactive"
+      "yes": "是",
+      "no": "否",
+      "active": "启用",
+      "inactive": "停用"
     }
   },
   "status": {
-    "published": "Published"
+    "published": "已发布"
   },
   "actions": {
-    "publish": "Publish",
-    "unpublish": "Unpublish"
+    "publish": "发布",
+    "unpublish": "取消发布"
   },
   "autosave": {
-    "saved": "All changes saved",
-    "unsaved": "Unsaved changes…",
-    "failed": "Autosave failed"
+    "saved": "所有更改已保存",
+    "unsaved": "有未保存的更改…",
+    "failed": "自动保存失败"
   },
   "errors": {
-    "queryFailed": "Query failed",
-    "updateFailed": "Update failed"
+    "queryFailed": "查询失败",
+    "updateFailed": "更新失败"
   },
   "empty": {
-    "dashboardNoCards": "This dashboard has no cards yet."
+    "dashboardNoCards": "此仪表板尚无卡片。"
   },
   "cards": {
-    "description": "Build chart and table cards from a query over the ledger, then arrange them on dashboards.",
-    "searchPlaceholder": "Search cards…",
-    "emptyTitle": "No cards yet",
-    "emptyDescription": "Build your first card — pick a source, choose what to measure and group by, and pick a chart.",
-    "sourceColumn": "Source",
-    "chartColumn": "Chart",
-    "newButton": "New card",
-    "createDraftFailed": "Could not create a draft card"
+    "description": "基于对总账的查询构建图表和表格卡片，然后将它们排布到仪表板上。",
+    "searchPlaceholder": "搜索卡片…",
+    "emptyTitle": "暂无卡片",
+    "emptyDescription": "构建您的第一张卡片 — 选择数据源，确定要度量和分组的内容，并选择图表。",
+    "sourceColumn": "数据源",
+    "chartColumn": "图表",
+    "newButton": "新建卡片",
+    "createDraftFailed": "无法创建草稿卡片"
   },
   "dashboards": {
-    "description": "Arrange published cards on shared dashboards.",
-    "searchPlaceholder": "Search dashboards…",
-    "emptyTitle": "No dashboards yet",
-    "emptyDescription": "Create a dashboard, then drop your published cards onto it.",
-    "cardsColumn": "Cards",
-    "newButton": "New dashboard",
-    "createDraftFailed": "Could not create a draft dashboard"
+    "description": "将已发布的卡片排布到共享仪表板上。",
+    "searchPlaceholder": "搜索仪表板…",
+    "emptyTitle": "暂无仪表板",
+    "emptyDescription": "创建一个仪表板，然后将已发布的卡片放到上面。",
+    "cardsColumn": "卡片",
+    "newButton": "新建仪表板",
+    "createDraftFailed": "无法创建草稿仪表板"
   },
   "cardStudio": {
-    "untitled": "Untitled card",
-    "autosaveHint": "Changes save automatically. Preview updates live.",
-    "nameRequiredToPublish": "Name the card to publish it",
-    "saveFailedRetry": "Save failed — fix and retry",
-    "namePlaceholder": "Monthly spend by department",
-    "sourceLabel": "Source",
-    "measuresTitle": "Measures",
-    "measuresEmpty": "Add a measure to aggregate (or leave empty for a detail table).",
-    "ofRows": "of rows",
-    "selectFieldPlaceholder": "Select field…",
-    "removeMeasure": "Remove measure",
-    "groupByTitle": "Group by",
-    "groupByEmpty": "Group rows by a dimension to summarize them.",
-    "binExact": "Exact",
+    "untitled": "未命名卡片",
+    "autosaveHint": "更改自动保存。预览实时更新。",
+    "nameRequiredToPublish": "为卡片命名以将其发布",
+    "saveFailedRetry": "保存失败 — 请修正后重试",
+    "namePlaceholder": "按部门统计每月支出",
+    "sourceLabel": "数据源",
+    "measuresTitle": "度量",
+    "measuresEmpty": "添加要聚合的度量（或留空以生成明细表）。",
+    "ofRows": "行数",
+    "selectFieldPlaceholder": "选择字段…",
+    "removeMeasure": "移除度量",
+    "groupByTitle": "分组依据",
+    "groupByEmpty": "按维度对行分组以进行汇总。",
+    "binExact": "精确",
     "bins": {
-      "day": "by day",
-      "week": "by week",
-      "month": "by month",
-      "quarter": "by quarter",
-      "year": "by year"
+      "day": "按日",
+      "week": "按周",
+      "month": "按月",
+      "quarter": "按季度",
+      "year": "按年"
     },
-    "removeDimension": "Remove dimension",
-    "filtersTitle": "Filters",
-    "filtersEmpty": "No filters — the card covers all rows.",
-    "removeFilter": "Remove filter",
+    "removeDimension": "移除维度",
+    "filtersTitle": "筛选器",
+    "filtersEmpty": "无筛选器 — 该卡片涵盖所有行。",
+    "removeFilter": "移除筛选器",
     "filterPlaceholderList": "a, b, c",
     "filterPlaceholderNumber": "30",
     "filterPlaceholderDate": "YYYY-MM-DD",
-    "filterPlaceholderValue": "Value",
-    "previewRequestFailed": "Preview request failed",
-    "runningPreview": "Running preview…",
-    "buildToPreview": "Build a query to preview.",
-    "rowCount": "{count, plural, one {# row} other {# rows}}",
-    "capped": "(capped at 10,000)",
-    "duration": "{ms} ms",
-    "publishedToast": "Card published",
-    "draftToast": "Card returned to draft",
-    "deleteConfirm": "Delete this card? It will be removed from any dashboards.",
-    "deleteFailed": "Could not delete the card",
-    "deletedToast": "Card deleted"
+    "filterPlaceholderValue": "值",
+    "previewRequestFailed": "预览请求失败",
+    "runningPreview": "正在运行预览…",
+    "buildToPreview": "构建查询以进行预览。",
+    "rowCount": "{count, plural, one {# 行} other {# 行}}",
+    "capped": "（上限 10,000）",
+    "duration": "{ms} 毫秒",
+    "publishedToast": "卡片已发布",
+    "draftToast": "卡片已退回草稿",
+    "deleteConfirm": "删除此卡片？它将从所有仪表板中移除。",
+    "deleteFailed": "无法删除卡片",
+    "deletedToast": "卡片已删除"
   },
   "vizSettings": {
-    "category": "Category",
-    "auto": "Auto",
-    "value": "Value",
-    "allMeasures": "All measures",
-    "stacked": "Stacked",
-    "horizontal": "Horizontal",
-    "smooth": "Smooth",
-    "showValues": "Values",
-    "hideLegend": "Hide legend"
+    "category": "类别",
+    "auto": "自动",
+    "value": "值",
+    "allMeasures": "所有度量",
+    "stacked": "堆叠",
+    "horizontal": "水平",
+    "smooth": "平滑",
+    "showValues": "数值",
+    "hideLegend": "隐藏图例"
   },
   "cardTile": {
-    "loadFailed": "Could not load this card"
+    "loadFailed": "无法加载此卡片"
   },
   "builder": {
-    "back": "Dashboards",
-    "untitled": "Untitled dashboard",
-    "pinToHome": "Pin to home",
-    "unpin": "Unpin",
-    "namePlaceholder": "Executive overview",
-    "addCard": "Add a card:",
-    "noPublishedCards": "No published cards yet. <link>Build and publish a card</link> to place it here.",
-    "emptyEditor": "Add published cards above to build this dashboard.",
+    "back": "仪表板",
+    "untitled": "未命名仪表板",
+    "pinToHome": "固定到主页",
+    "unpin": "取消固定",
+    "namePlaceholder": "高管概览",
+    "addCard": "添加卡片：",
+    "noPublishedCards": "尚无已发布的卡片。<link>构建并发布一张卡片</link>以将其放在此处。",
+    "emptyEditor": "在上方添加已发布的卡片以构建此仪表板。",
     "widths": {
-      "third": "Third",
-      "half": "Half",
-      "twoThirds": "Two-thirds",
-      "full": "Full"
+      "third": "三分之一",
+      "half": "二分之一",
+      "twoThirds": "三分之二",
+      "full": "整宽"
     },
     "heights": {
-      "short": "Short",
-      "medium": "Medium",
-      "tall": "Tall"
+      "short": "矮",
+      "medium": "中",
+      "tall": "高"
     },
-    "cardWidth": "Card width",
-    "cardHeight": "Card height",
-    "removeCard": "Remove card",
-    "unavailableCard": "This card is unavailable (deleted or unpublished).",
-    "pinnedToast": "Pinned to your home",
-    "unpinnedToast": "Unpinned",
-    "pinFailed": "Could not update pin",
-    "publishedToast": "Dashboard published",
-    "draftToast": "Dashboard returned to draft",
-    "deleteConfirm": "Delete this dashboard?",
-    "deletedToast": "Dashboard deleted",
-    "deleteFailed": "Could not delete the dashboard"
+    "cardWidth": "卡片宽度",
+    "cardHeight": "卡片高度",
+    "removeCard": "移除卡片",
+    "unavailableCard": "此卡片不可用（已删除或未发布）。",
+    "pinnedToast": "已固定到您的主页",
+    "unpinnedToast": "已取消固定",
+    "pinFailed": "无法更新固定",
+    "publishedToast": "仪表板已发布",
+    "draftToast": "仪表板已退回草稿",
+    "deleteConfirm": "删除此仪表板？",
+    "deletedToast": "仪表板已删除",
+    "deleteFailed": "无法删除仪表板"
   },
   "catalog": {
     "sources": {
       "ledger_lines": {
-        "label": "Ledger lines",
-        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail."
+        "label": "总账明细",
+        "description": "每一条日记账明细及其分录、科目、往来方和维度 — 完整的总账明细。"
       },
       "documents": {
-        "label": "Documents",
-        "description": "Business documents — bills, invoices, payments, orders — with party and dimension labels."
+        "label": "文档",
+        "description": "业务文档 — 应付账单、发票、付款、订单 — 附带往来方和维度标签。"
       },
       "parties": {
-        "label": "Parties",
-        "description": "Customers, vendors and employees — one row per party with its role flags."
+        "label": "往来方",
+        "description": "客户、供应商和员工 — 每个往来方一行，附带其角色标志。"
       },
       "accounts": {
-        "label": "Accounts",
-        "description": "The chart of accounts — number, name, type and posting flags."
+        "label": "科目",
+        "description": "会计科目表 — 编号、名称、类型和过账标志。"
       }
     },
     "fields": {
       "ledger_lines": {
-        "posting_date": "Posting date",
-        "entry_number": "Entry #",
-        "entry_status": "Entry status",
-        "entry_origin": "Origin",
-        "account_number": "Account #",
-        "account_name": "Account",
-        "account_type": "Account type",
-        "party": "Party",
-        "department": "Department",
-        "project": "Project",
-        "location": "Location",
-        "class": "Class",
-        "memo": "Memo",
-        "amount": "Amount (base)",
-        "debit": "Debit",
-        "credit": "Credit",
-        "quantity": "Quantity",
-        "currency": "Currency"
+        "posting_date": "过账日期",
+        "entry_number": "分录 #",
+        "entry_status": "分录状态",
+        "entry_origin": "来源",
+        "account_number": "科目 #",
+        "account_name": "科目",
+        "account_type": "科目类型",
+        "party": "往来方",
+        "department": "部门",
+        "project": "项目",
+        "location": "地点",
+        "class": "类别",
+        "memo": "摘要",
+        "amount": "金额（本位币）",
+        "debit": "借方",
+        "credit": "贷方",
+        "quantity": "数量",
+        "currency": "币种"
       },
       "documents": {
-        "kind": "Kind",
-        "document_number": "Document #",
-        "party": "Party",
-        "status": "Status",
-        "document_date": "Document date",
-        "due_date": "Due date",
-        "department": "Department",
-        "project": "Project",
-        "currency": "Currency",
-        "subtotal": "Subtotal",
-        "tax_total": "Tax",
-        "total": "Total",
-        "document_count": "Document"
+        "kind": "类型",
+        "document_number": "文档 #",
+        "party": "往来方",
+        "status": "状态",
+        "document_date": "文档日期",
+        "due_date": "到期日",
+        "department": "部门",
+        "project": "项目",
+        "currency": "币种",
+        "subtotal": "小计",
+        "tax_total": "税",
+        "total": "合计",
+        "document_count": "文档"
       },
       "parties": {
-        "display_name": "Name",
-        "kind": "Kind",
-        "is_active": "Active",
-        "is_customer": "Customer",
-        "is_vendor": "Vendor",
-        "is_employee": "Employee",
-        "hired_on": "Hired on",
-        "created_at": "Created at"
+        "display_name": "名称",
+        "kind": "类型",
+        "is_active": "启用",
+        "is_customer": "客户",
+        "is_vendor": "供应商",
+        "is_employee": "员工",
+        "hired_on": "入职日期",
+        "created_at": "创建时间"
       },
       "accounts": {
-        "number": "Account #",
-        "name": "Name",
-        "type": "Type",
-        "is_summary": "Summary",
-        "is_active": "Active",
-        "account_count": "Account"
+        "number": "科目 #",
+        "name": "名称",
+        "type": "类型",
+        "is_summary": "汇总",
+        "is_active": "启用",
+        "account_count": "科目"
       }
     }
   },
   "aggs": {
-    "sum": "Sum",
-    "avg": "Average",
-    "count": "Count",
-    "min": "Minimum",
-    "max": "Maximum"
+    "sum": "求和",
+    "avg": "平均值",
+    "count": "计数",
+    "min": "最小值",
+    "max": "最大值"
   },
   "operators": {
-    "eq": "equals",
-    "neq": "not equals",
-    "in": "is any of",
-    "not_in": "is none of",
-    "gt": "greater than",
-    "gte": "on or after / ≥",
-    "lt": "less than",
-    "lte": "on or before / ≤",
-    "contains": "contains",
-    "is_null": "is empty",
-    "is_not_null": "is set",
-    "last_n_days": "within last N days",
-    "this_month": "is this month",
-    "this_quarter": "is this quarter",
-    "this_year": "is this year",
-    "ytd": "year to date"
+    "eq": "等于",
+    "neq": "不等于",
+    "in": "是其中任一",
+    "not_in": "均不是",
+    "gt": "大于",
+    "gte": "在此日期当天或之后 / ≥",
+    "lt": "小于",
+    "lte": "在此日期当天或之前 / ≤",
+    "contains": "包含",
+    "is_null": "为空",
+    "is_not_null": "已设置",
+    "last_n_days": "在最近 N 天内",
+    "this_month": "为本月",
+    "this_quarter": "为本季度",
+    "this_year": "为本年",
+    "ytd": "年初至今"
   },
   "measureLabels": {
-    "count": "Count",
-    "sum": "Total {field}",
-    "avg": "Avg {field}",
-    "min": "Min {field}",
-    "max": "Max {field}",
-    "binned": "{field} ({bin})",
+    "count": "计数",
+    "sum": "{field}合计",
+    "avg": "{field}平均值",
+    "min": "{field}最小值",
+    "max": "{field}最大值",
+    "binned": "{field}（{bin}）",
     "bins": {
-      "day": "day",
-      "week": "week",
-      "month": "month",
-      "quarter": "quarter",
-      "year": "year"
+      "day": "日",
+      "week": "周",
+      "month": "月",
+      "quarter": "季度",
+      "year": "年"
     }
   },
   "compileErrors": {
-    "unknown_source": "Unknown source “{subject}”",
-    "unknown_field": "Unknown field “{subject}”",
-    "unknown_aggregation": "Unknown aggregation “{subject}”",
-    "aggregation_needs_field": "The “{subject}” aggregation needs a field",
-    "not_a_dimension": "“{subject}” cannot be used to group",
-    "not_a_measure": "“{subject}” is not a numeric measure",
-    "unknown_operator": "Unknown filter operator “{subject}”",
-    "unknown_bin": "Unknown date bucket “{subject}”",
-    "contains_needs_text": "The “contains” filter needs a text value",
-    "last_n_days_needs_number": "The “within last N days” filter needs a number",
-    "no_columns": "The query selects no columns",
-    "timeout": "Query took too long — narrow the range or add filters."
+    "unknown_source": "未知数据源“{subject}”",
+    "unknown_field": "未知字段“{subject}”",
+    "unknown_aggregation": "未知聚合“{subject}”",
+    "aggregation_needs_field": "“{subject}”聚合需要一个字段",
+    "not_a_dimension": "“{subject}”无法用于分组",
+    "not_a_measure": "“{subject}”不是数值度量",
+    "unknown_operator": "未知筛选运算符“{subject}”",
+    "unknown_bin": "未知日期分桶“{subject}”",
+    "contains_needs_text": "“包含”筛选器需要一个文本值",
+    "last_n_days_needs_number": "“在最近 N 天内”筛选器需要一个数字",
+    "no_columns": "该查询未选择任何列",
+    "timeout": "查询耗时过长 — 请缩小范围或添加筛选器。"
   }
 }

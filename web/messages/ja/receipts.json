@@ -1,9 +1,9 @@
 {
   "page": {
-    "title": "Customer Payments",
-    "description": "Customer payments received and applied to open invoices through the kernel.",
-    "newReceipt": "New customer payment",
-    "newCollectionRun": "New collection run",
-    "tabs": { "receipts": "Receipts", "collections": "Direct-debit runs" }
+    "title": "得意先入金",
+    "description": "得意先から受領し、カーネルを通じて未消込の請求書に充当された入金。",
+    "newReceipt": "新規得意先入金",
+    "newCollectionRun": "新規回収バッチ",
+    "tabs": { "receipts": "入金", "collections": "口座振替バッチ" }
   }
 }

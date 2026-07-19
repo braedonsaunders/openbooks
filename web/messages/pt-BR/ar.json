@@ -1,62 +1,62 @@
 {
   "list": {
-    "title": "Invoices",
-    "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted through the kernel.",
-    "searchPlaceholder": "Search invoices, credits, customers, refs…",
-    "emptyTitle": "No invoices yet",
-    "emptyDescription": "Enter the first customer invoice or credit memo to start the AR workflow.",
+    "title": "Faturas",
+    "description": "Faturas de clientes e notas de crédito — seu contas a receber: rascunho → aprovação → lançado pelo kernel.",
+    "searchPlaceholder": "Buscar faturas, créditos, clientes, refs…",
+    "emptyTitle": "Nenhuma fatura ainda",
+    "emptyDescription": "Registre a primeira fatura de cliente ou nota de crédito para iniciar o fluxo de contas a receber.",
     "columns": {
-      "number": "Number",
-      "invoice": "Invoice",
+      "number": "Número",
+      "invoice": "Fatura",
       "ref": "Ref"
     }
   },
   "kinds": {
-    "invoice": "Invoice",
-    "credit": "Credit"
+    "invoice": "Fatura",
+    "credit": "Crédito"
   },
   "actions": {
-    "new": "New",
-    "newInvoice": "New invoice",
-    "newCredit": "New customer credit",
-    "submitForApproval": "Submit for approval"
+    "new": "Novo",
+    "newInvoice": "Nova fatura",
+    "newCredit": "Novo crédito de cliente",
+    "submitForApproval": "Enviar para aprovação"
   },
   "drawer": {
-    "editingHint": "Editing — Save to apply changes",
-    "viewGlImpact": "View GL impact",
-    "dateLabel": "Invoice date",
-    "dueDate": "Due date",
-    "reference": "Customer ref #",
-    "accountColumn": "Income account",
-    "accountPlaceholder": "Account…",
-    "noTax": "No tax",
-    "taxAmountColumn": "Tax amt",
-    "selectCustomerPlaceholder": "Select customer…",
-    "selectVendorPlaceholder": "Select vendor…",
+    "editingHint": "Editando — Salve para aplicar as alterações",
+    "viewGlImpact": "Ver impacto no razão",
+    "dateLabel": "Data da fatura",
+    "dueDate": "Data de vencimento",
+    "reference": "Nº de ref. do cliente",
+    "accountColumn": "Conta de receita",
+    "accountPlaceholder": "Conta…",
+    "noTax": "Sem imposto",
+    "taxAmountColumn": "Val. imposto",
+    "selectCustomerPlaceholder": "Selecionar cliente…",
+    "selectVendorPlaceholder": "Selecionar fornecedor…",
     "subtotalAmount": "Subtotal {amount}",
-    "taxTotalAmount": "Tax {amount}",
+    "taxTotalAmount": "Imposto {amount}",
     "totalAmount": "Total {amount}",
-    "balanceDueAmount": "Balance due {amount}",
+    "balanceDueAmount": "Saldo devedor {amount}",
     "saveState": {
-      "saved": "All changes saved",
-      "error": "Save failed — fix and retry",
-      "dirty": "Unsaved changes…"
+      "saved": "Todas as alterações salvas",
+      "error": "Falha ao salvar — corrija e tente novamente",
+      "dirty": "Alterações não salvas…"
     },
-    "deleteTitle": "Delete this document?",
-    "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone.",
-    "formLabel": "Form",
-    "formSetPreferred": "Set as my preferred",
-    "formSetPreferredDone": "Preferred form saved",
-    "formPreferredCleared": "Preferred form cleared",
-    "formPreferredFailed": "Could not save the preferred form"
+    "deleteTitle": "Excluir este documento?",
+    "deleteDraftBody": "Isso exclui permanentemente o rascunho. Isso não pode ser desfeito.",
+    "deletePostedBody": "Isso exclui permanentemente o documento e remove seu impacto no razão. Isso não pode ser desfeito.",
+    "formLabel": "Formulário",
+    "formSetPreferred": "Definir como meu preferido",
+    "formSetPreferredDone": "Formulário preferido salvo",
+    "formPreferredCleared": "Formulário preferido removido",
+    "formPreferredFailed": "Não foi possível salvar o formulário preferido"
   },
   "toasts": {
-    "actionFailed": "Action failed",
-    "submitted": "Submitted for approval",
-    "posted": "Posted to the ledger",
-    "createDraftFailed": "Could not create a draft",
-    "deleted": "Document deleted",
-    "deleteFailed": "Delete failed"
+    "actionFailed": "Falha na ação",
+    "submitted": "Enviado para aprovação",
+    "posted": "Lançado no razão",
+    "createDraftFailed": "Não foi possível criar um rascunho",
+    "deleted": "Documento excluído",
+    "deleteFailed": "Falha ao excluir"
   }
 }

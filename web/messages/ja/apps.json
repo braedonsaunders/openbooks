@@ -1,10 +1,10 @@
 {
-  "title": "Apps",
-  "description": "Installed apps you can open.",
-  "empty": "No apps are installed. An administrator can install one from Admin Center → App Builder.",
+  "title": "アプリ",
+  "description": "開くことができるインストール済みのアプリ。",
+  "empty": "インストール済みのアプリはありません。管理者は「管理センター → アプリビルダー」からインストールできます。",
   "frame": {
-    "loading": "Loading…",
-    "failedTitle": "This app couldn't be opened.",
-    "failedHint": "Try refreshing. If it keeps happening, contact your administrator."
+    "loading": "読み込み中…",
+    "failedTitle": "このアプリを開けませんでした。",
+    "failedHint": "更新してみてください。問題が続く場合は、管理者にお問い合わせください。"
   }
 }

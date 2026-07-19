@@ -1,126 +1,126 @@
 {
-  "title": "Migrations & Mirror",
-  "description": "Connect an external accounting system, migrate in one click, then mirror it daily to A/B-run both in parallel.",
+  "title": "Migrações e espelhamento",
+  "description": "Conecte um sistema contábil externo, migre com um clique e depois espelhe-o diariamente para executar ambos em paralelo (A/B).",
   "connections": {
-    "heading": "Connections",
-    "add": "Add connection",
-    "loading": "Loading…",
+    "heading": "Conexões",
+    "add": "Adicionar conexão",
+    "loading": "Carregando…",
     "empty": {
-      "title": "No connections yet.",
-      "hint": "Add NetSuite or QuickBooks Online to start a migration."
+      "title": "Nenhuma conexão ainda.",
+      "hint": "Adicione o NetSuite ou o QuickBooks Online para iniciar uma migração."
     },
     "status": {
-      "active": "Active",
-      "paused": "Paused",
-      "error": "Error",
-      "unconfigured": "Not configured"
+      "active": "Ativa",
+      "paused": "Pausada",
+      "error": "Erro",
+      "unconfigured": "Não configurada"
     },
-    "mirrorBadge": "Mirror: {schedule}",
-    "lastRun": "Last run: {lastRun} · Synced through: {cursor}"
+    "mirrorBadge": "Espelhamento: {schedule}",
+    "lastRun": "Última execução: {lastRun} · Sincronizado até: {cursor}"
   },
   "actions": {
-    "connect": "Connect",
-    "reconnect": "Reconnect",
-    "test": "Test",
-    "mirrorNow": "Mirror now",
-    "runMigration": "Run migration",
-    "pauseMirror": "Pause mirror",
-    "enableMirror": "Enable mirror",
-    "edit": "Edit"
+    "connect": "Conectar",
+    "reconnect": "Reconectar",
+    "test": "Testar",
+    "mirrorNow": "Espelhar agora",
+    "runMigration": "Executar migração",
+    "pauseMirror": "Pausar espelhamento",
+    "enableMirror": "Ativar espelhamento",
+    "edit": "Editar"
   },
   "runs": {
-    "heading": "Recent runs",
+    "heading": "Execuções recentes",
     "columns": {
-      "started": "Started",
-      "kind": "Kind",
+      "started": "Iniciada",
+      "kind": "Tipo",
       "status": "Status",
-      "trigger": "Trigger",
-      "result": "Result"
+      "trigger": "Gatilho",
+      "result": "Resultado"
     },
     "kind": {
-      "full_migration": "Full migration",
+      "full_migration": "Migração completa",
       "incremental": "Incremental",
-      "mirror": "Mirror"
+      "mirror": "Espelhamento"
     },
     "status": {
-      "ok": "Succeeded",
-      "failed": "Failed",
-      "running": "Running"
+      "ok": "Concluída",
+      "failed": "Falhou",
+      "running": "Em execução"
     },
     "stats": {
-      "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
-      "applied": "{count} applied",
-      "tb": "TB {matches}/{accounts}",
-      "tbOff": "({count} off)",
-      "openItems": "open items {matches}/{checked}",
-      "periods": "periods {matches}/{checked}"
+      "docs": "+{new} docs · {amended} alterados · {unchanged} inalterados",
+      "applied": "{count} aplicados",
+      "tb": "BV {matches}/{accounts}",
+      "tbOff": "({count} com diferença)",
+      "openItems": "itens em aberto {matches}/{checked}",
+      "periods": "períodos {matches}/{checked}"
     }
   },
   "toast": {
-    "loadFailed": "Failed to load connections (HTTP {status})",
-    "authorized": "Connection authorized",
-    "authDenied": "Authorization was declined",
-    "authFailed": "Authorization failed ({status})",
-    "queuingMigration": "Queuing full migration…",
-    "queuingMirror": "Queuing mirror…",
-    "migrationQueued": "Migration queued — we'll run it in the background",
-    "mirrorQueued": "Mirror queued — running in the background",
-    "testing": "Testing connection…",
-    "connected": "Connected",
-    "connectedDetail": "Connected — {detail}",
-    "testFailed": "Connection failed: {error}",
-    "unknownError": "unknown error",
-    "removed": "Connection removed",
-    "created": "Connection created",
-    "updated": "Connection updated",
-    "copied": "Redirect URI copied",
-    "copyFailed": "Could not copy — select and copy the text manually"
+    "loadFailed": "Falha ao carregar as conexões (HTTP {status})",
+    "authorized": "Conexão autorizada",
+    "authDenied": "A autorização foi recusada",
+    "authFailed": "Falha na autorização ({status})",
+    "queuingMigration": "Enfileirando migração completa…",
+    "queuingMirror": "Enfileirando espelhamento…",
+    "migrationQueued": "Migração enfileirada — vamos executá-la em segundo plano",
+    "mirrorQueued": "Espelhamento enfileirado — executando em segundo plano",
+    "testing": "Testando conexão…",
+    "connected": "Conectado",
+    "connectedDetail": "Conectado — {detail}",
+    "testFailed": "Falha na conexão: {error}",
+    "unknownError": "erro desconhecido",
+    "removed": "Conexão removida",
+    "created": "Conexão criada",
+    "updated": "Conexão atualizada",
+    "copied": "URI de redirecionamento copiado",
+    "copyFailed": "Não foi possível copiar — selecione e copie o texto manualmente"
   },
-  "confirmDelete": "Delete connection \"{name}\"? Migrated data stays; only the link is removed.",
+  "confirmDelete": "Excluir a conexão \"{name}\"? Os dados migrados permanecem; apenas o vínculo é removido.",
   "drawer": {
-    "addTitle": "Add connection",
-    "editTitle": "Edit connection",
-    "description": "Connect an external accounting system. Credentials are encrypted at rest and never shown again.",
-    "cancel": "Cancel",
-    "saving": "Saving…",
-    "saveChanges": "Save changes",
-    "create": "Create connection",
-    "system": "System",
-    "selectSystem": "Select a system…",
-    "name": "Connection name",
-    "select": "Select…",
-    "credentials": "Credentials (encrypted at rest, never displayed again)",
-    "keepCurrent": "Leave blank to keep current"
+    "addTitle": "Adicionar conexão",
+    "editTitle": "Editar conexão",
+    "description": "Conecte um sistema contábil externo. As credenciais são criptografadas em repouso e nunca são exibidas novamente.",
+    "cancel": "Cancelar",
+    "saving": "Salvando…",
+    "saveChanges": "Salvar alterações",
+    "create": "Criar conexão",
+    "system": "Sistema",
+    "selectSystem": "Selecione um sistema…",
+    "name": "Nome da conexão",
+    "select": "Selecionar…",
+    "credentials": "Credenciais (criptografadas em repouso, nunca exibidas novamente)",
+    "keepCurrent": "Deixe em branco para manter as atuais"
   },
   "oauth": {
-    "title": "One-time app setup in the <link>{portal}</link>",
-    "redirectLabel": "Redirect URI to register:",
-    "copy": "Copy"
+    "title": "Configuração única do app no <link>{portal}</link>",
+    "redirectLabel": "URI de redirecionamento para registrar:",
+    "copy": "Copiar"
   },
   "sources": {
     "netsuite": {
-      "blurb": "Token-based (TBA) access to SuiteQL. Create an integration + access token in NetSuite, then paste the four values. Native transactions, applications and orders migrate and mirror through the real posting engine."
+      "blurb": "Acesso baseado em token (TBA) ao SuiteQL. Crie uma integração + token de acesso no NetSuite e cole os quatro valores. Transações nativas, aplicações e pedidos migram e são espelhados pelo mecanismo de lançamento real."
     },
     "odoo": {
-      "blurb": "Connect with your Odoo URL, database, user and an API key (Settings → My Profile → Account Security → API Keys). Invoices, bills, payments and journals migrate and mirror natively through the real posting engine."
+      "blurb": "Conecte com a URL do seu Odoo, banco de dados, usuário e uma chave de API (Configurações → Meu perfil → Segurança da conta → Chaves de API). Faturas, contas a pagar, pagamentos e lançamentos migram e são espelhados nativamente pelo mecanismo de lançamento real."
     },
     "erpnext": {
-      "blurb": "Connect with your ERPNext URL and an API key + secret (User → Settings → API Access). Invoices, bills, payment entries and journals migrate and mirror natively through the real posting engine."
+      "blurb": "Conecte com a URL do seu ERPNext e uma chave + segredo de API (Usuário → Configurações → Acesso à API). Faturas, contas a pagar, entradas de pagamento e lançamentos migram e são espelhados nativamente pelo mecanismo de lançamento real."
     },
     "qbo": {
-      "blurb": "Enter your Intuit app's Client ID + Secret (developer.intuit.com → Keys & credentials), save, then click Connect to authorize a company. Invoices, bills, payments, credits, journals and deposits migrate and mirror natively.",
+      "blurb": "Informe o Client ID + Secret do seu app da Intuit (developer.intuit.com → Keys & credentials), salve e clique em Conectar para autorizar uma empresa. Faturas, contas a pagar, pagamentos, créditos, lançamentos e depósitos migram e são espelhados nativamente.",
       "steps": [
-        "Create an app (QuickBooks Online and Payments) with the com.intuit.quickbooks.accounting scope.",
-        "Under Keys & credentials, add the Redirect URI shown below (use Development keys for a sandbox company, Production keys for a live one).",
-        "Copy the Client ID and Client Secret into this form, save, then click Connect."
+        "Crie um app (QuickBooks Online and Payments) com o escopo com.intuit.quickbooks.accounting.",
+        "Em Keys & credentials, adicione o URI de redirecionamento mostrado abaixo (use as chaves de Development para uma empresa sandbox, chaves de Production para uma empresa em produção).",
+        "Copie o Client ID e o Client Secret para este formulário, salve e clique em Conectar."
       ]
     },
     "xero": {
-      "blurb": "Enter your Xero app's Client ID + Secret (developer.xero.com → My Apps), save, then click Connect to authorize an organisation. Invoices, bills, credit notes, payments, journals and bank transactions migrate and mirror natively.",
+      "blurb": "Informe o Client ID + Secret do seu app do Xero (developer.xero.com → My Apps), salve e clique em Conectar para autorizar uma organização. Faturas, contas a pagar, notas de crédito, pagamentos, lançamentos e transações bancárias migram e são espelhados nativamente.",
       "steps": [
-        "Create a new app (integration type: Web app); the company URL can be this site's address.",
-        "Add the Redirect URI shown below to the app's OAuth 2.0 redirect URIs.",
-        "Copy the Client ID, generate a Client Secret, paste both into this form, save, then click Connect."
+        "Crie um novo app (tipo de integração: Web app); a URL da empresa pode ser o endereço deste site.",
+        "Adicione o URI de redirecionamento mostrado abaixo aos URIs de redirecionamento OAuth 2.0 do app.",
+        "Copie o Client ID, gere um Client Secret, cole ambos neste formulário, salve e clique em Conectar."
       ]
     }
   }

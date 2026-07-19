@@ -1,7 +1,7 @@
 {
   "tagline": "run on open books",
-  "password": "Password",
-  "invalidCredentials": "Invalid email or password",
-  "signIn": "Sign in",
-  "signingIn": "Signing in…"
+  "password": "密码",
+  "invalidCredentials": "邮箱或密码无效",
+  "signIn": "登录",
+  "signingIn": "登录中…"
 }

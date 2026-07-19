@@ -1,153 +1,153 @@
 {
   "hub": {
-    "title": "Analytics",
-    "description": "Native intelligence dashboards — profitability, cash, customers, vendors and forensic risk, computed live from your ledger.",
-    "searchPlaceholder": "Search analytics…",
-    "noMatches": "No dashboards match your search.",
-    "planned": "Planned",
+    "title": "Análises",
+    "description": "Painéis de inteligência nativos — rentabilidade, caixa, clientes, fornecedores e risco forense, calculados ao vivo a partir do seu razão.",
+    "searchPlaceholder": "Buscar análises…",
+    "noMatches": "Nenhum painel corresponde à sua busca.",
+    "planned": "Planejado",
     "groups": {
-      "profitability": "Profitability & performance",
-      "operations": "Cash & operations",
-      "relationships": "Customers & vendors",
-      "forensics": "Risk & forensics"
+      "profitability": "Rentabilidade e desempenho",
+      "operations": "Caixa e operações",
+      "relationships": "Clientes e fornecedores",
+      "forensics": "Risco e análise forense"
     },
     "cards": {
-      "financialHealthTitle": "Financial Health",
-      "financialHealthDesc": "Margin & ratio scorecard with a composite health score",
-      "trueCostTitle": "True Cost",
-      "trueCostDesc": "Overhead burden absorption and selling-rate builder",
-      "utilizationTitle": "Utilization",
-      "utilizationDesc": "Billable time, utilization and service-item profit",
-      "customerTitle": "Customer Intelligence",
-      "customerDesc": "Segmentation, lifetime value and customer profitability",
-      "vendorTitle": "Vendor Performance",
-      "vendorDesc": "Spend concentration, payment behavior and vendor scorecards",
+      "financialHealthTitle": "Saúde financeira",
+      "financialHealthDesc": "Placar de margens e índices com uma pontuação composta de saúde",
+      "trueCostTitle": "Custo real",
+      "trueCostDesc": "Absorção de custos indiretos e construtor de preço de venda",
+      "utilizationTitle": "Utilização",
+      "utilizationDesc": "Tempo faturável, utilização e lucro por item de serviço",
+      "customerTitle": "Inteligência de clientes",
+      "customerDesc": "Segmentação, valor do ciclo de vida e rentabilidade de clientes",
+      "vendorTitle": "Desempenho de fornecedores",
+      "vendorDesc": "Concentração de gastos, comportamento de pagamento e placares de fornecedores",
       "sentinelTitle": "Sentinel",
-      "sentinelDesc": "Forensic transaction integrity and anomaly detection",
-      "spendVelocityTitle": "Spend Velocity",
-      "spendVelocityDesc": "Spend acceleration, subscription creep and shadow IT",
-      "cashflowTitle": "Cash Flow",
-      "cashflowDesc": "Weekly cash forecast, runway and AP/AR aging"
+      "sentinelDesc": "Integridade forense de transações e detecção de anomalias",
+      "spendVelocityTitle": "Velocidade de gastos",
+      "spendVelocityDesc": "Aceleração de gastos, crescimento de assinaturas e TI paralela",
+      "cashflowTitle": "Fluxo de caixa",
+      "cashflowDesc": "Previsão semanal de caixa, autonomia e aging de contas a pagar/receber"
     }
   },
   "financialHealth": {
-    "title": "Financial Health",
-    "description": "Profitability, efficiency and operating ratios with a composite health score.",
-    "backToHub": "Analytics",
+    "title": "Saúde financeira",
+    "description": "Índices de rentabilidade, eficiência e operação com uma pontuação composta de saúde.",
+    "backToHub": "Análises",
     "tabs": {
-      "overview": "Overview",
-      "margin": "Margin",
-      "items": "Items",
-      "segments": "Segments",
-      "forecast": "Forecast",
-      "scenarios": "Scenarios",
-      "budget": "Budget",
-      "drivers": "Drivers",
-      "ratios": "Ratios",
-      "configuration": "Configuration"
+      "overview": "Visão geral",
+      "margin": "Margem",
+      "items": "Itens",
+      "segments": "Segmentos",
+      "forecast": "Previsão",
+      "scenarios": "Cenários",
+      "budget": "Orçamento",
+      "drivers": "Fatores",
+      "ratios": "Índices",
+      "configuration": "Configuração"
     },
     "kpi": {
-      "revenue": "Revenue",
-      "grossMargin": "Gross Margin",
-      "operatingIncome": "Operating Income",
-      "breakeven": "Breakeven"
+      "revenue": "Receita",
+      "grossMargin": "Margem bruta",
+      "operatingIncome": "Resultado operacional",
+      "breakeven": "Ponto de equilíbrio"
     },
     "kpiSub": {
-      "growth": "YoY {pct}",
-      "grossProfit": "GP: {amount}",
-      "opex": "OpEx: {amount}",
-      "perMonth": "per month"
+      "growth": "A/A {pct}",
+      "grossProfit": "LB: {amount}",
+      "opex": "Despesas op.: {amount}",
+      "perMonth": "por mês"
     },
     "score": {
-      "title": "Financial Health Score",
-      "overall": "Overall",
-      "excellent": "Excellent",
-      "good": "Good",
-      "average": "Average",
-      "needsWork": "Needs Work"
+      "title": "Pontuação de saúde financeira",
+      "overall": "Geral",
+      "excellent": "Excelente",
+      "good": "Boa",
+      "average": "Média",
+      "needsWork": "Precisa melhorar"
     },
     "categories": {
-      "profitability": "Profitability",
-      "efficiency": "Efficiency",
-      "operating": "Operations"
+      "profitability": "Rentabilidade",
+      "efficiency": "Eficiência",
+      "operating": "Operações"
     },
     "subKpi": {
       "roic": "ROIC",
-      "ebitdaMargin": "EBITDA Margin",
-      "opLeverage": "Op Leverage",
-      "rule40": "Rule of 40"
+      "ebitdaMargin": "Margem EBITDA",
+      "opLeverage": "Alavancagem op.",
+      "rule40": "Regra dos 40"
     },
     "subKpiSub": {
-      "returnOnCapital": "Return on Invested Capital",
-      "earningsMargin": "Earnings Margin",
-      "sensitivity": "Sensitivity",
-      "growthProfit": "Growth + Profit"
+      "returnOnCapital": "Retorno sobre o capital investido",
+      "earningsMargin": "Margem de lucro",
+      "sensitivity": "Sensibilidade",
+      "growthProfit": "Crescimento + lucro"
     },
-    "gridHint": "Click any ratio for details",
+    "gridHint": "Clique em qualquer índice para ver os detalhes",
     "pnl": {
-      "title": "P&L Summary",
-      "lineItem": "Line Item",
-      "amount": "Amount",
-      "pctRevenue": "% Rev",
-      "revenue": "Revenue",
-      "cogs": "Cost of Goods Sold",
-      "grossProfit": "Gross Profit",
-      "opex": "Operating Expenses",
-      "operatingIncome": "Operating Income",
-      "otherIncome": "Other Income",
-      "otherExpense": "Other Expense",
-      "netIncome": "Net Income"
+      "title": "Resumo do DRE",
+      "lineItem": "Item de linha",
+      "amount": "Valor",
+      "pctRevenue": "% Rec.",
+      "revenue": "Receita",
+      "cogs": "Custo dos produtos vendidos",
+      "grossProfit": "Lucro bruto",
+      "opex": "Despesas operacionais",
+      "operatingIncome": "Resultado operacional",
+      "otherIncome": "Outras receitas",
+      "otherExpense": "Outras despesas",
+      "netIncome": "Lucro líquido"
     },
     "budget": {
-      "measuredAgainst": "Measured against <strong>{name}</strong> (FY{year}, {status}) — budget lines over the selected range. Manage scenarios in <link>Budgets</link>.",
-      "totalBudget": "Total Budget",
-      "budgetedAccounts": "{count, plural, one {# budgeted account} other {# budgeted accounts}}",
-      "totalActual": "Total Actual",
-      "normalizedIncome": "income sign-normalized",
-      "overBudget": "Over Budget",
-      "onWatch": "{count} on watch",
-      "coverage": "Coverage",
-      "coverageSub": "accounts with a budget line",
-      "tableTitle": "Budget vs Actual ({count})",
-      "search": "Search accounts…",
+      "measuredAgainst": "Medido em relação a <strong>{name}</strong> (EF{year}, {status}) — linhas de orçamento no intervalo selecionado. Gerencie cenários em <link>Orçamentos</link>.",
+      "totalBudget": "Orçamento total",
+      "budgetedAccounts": "{count, plural, one {# conta orçada} other {# contas orçadas}}",
+      "totalActual": "Total real",
+      "normalizedIncome": "sinal de receita normalizado",
+      "overBudget": "Acima do orçamento",
+      "onWatch": "{count} em observação",
+      "coverage": "Cobertura",
+      "coverageSub": "contas com linha de orçamento",
+      "tableTitle": "Orçado vs. real ({count})",
+      "search": "Buscar contas…",
       "csv": "CSV",
-      "all": "All",
-      "status": { "on-track": "On Track", "watch": "Watch", "over": "Over", "no-budget": "No Budget" },
-      "columns": { "account": "Account", "type": "Type", "budget": "Budget", "actual": "Actual", "progress": "Progress", "variance": "Variance", "variancePct": "Variance %", "status": "Status" },
-      "showing": "Showing {from}–{to} of {total} accounts",
-      "previous": "Previous",
-      "next": "Next",
-      "noBudgetTitle": "No formal budget for this period",
-      "noBudgetDescription": "Create and approve a budget scenario to see real account-level variance. This dashboard does not substitute synthetic benchmark targets.",
-      "createBudget": "Create a budget"
+      "all": "Todas",
+      "status": { "on-track": "No caminho certo", "watch": "Observação", "over": "Acima", "no-budget": "Sem orçamento" },
+      "columns": { "account": "Conta", "type": "Tipo", "budget": "Orçamento", "actual": "Real", "progress": "Progresso", "variance": "Variação", "variancePct": "Variação %", "status": "Status" },
+      "showing": "Exibindo {from}–{to} de {total} contas",
+      "previous": "Anterior",
+      "next": "Próximo",
+      "noBudgetTitle": "Nenhum orçamento formal para este período",
+      "noBudgetDescription": "Crie e aprove um cenário de orçamento para ver a variação real no nível da conta. Este painel não substitui por metas de benchmark sintéticas.",
+      "createBudget": "Criar um orçamento"
     }
   },
   "customer": {
-    "title": "Customer Intelligence",
-    "backToHub": "Analytics"
+    "title": "Inteligência de clientes",
+    "backToHub": "Análises"
   },
   "vendor": {
-    "title": "Vendor Performance",
-    "backToHub": "Analytics"
+    "title": "Desempenho de fornecedores",
+    "backToHub": "Análises"
   },
   "cashflow": {
-    "title": "Cash Flow",
-    "backToHub": "Analytics"
+    "title": "Fluxo de caixa",
+    "backToHub": "Análises"
   },
   "trueCost": {
-    "title": "True Cost",
-    "backToHub": "Analytics"
+    "title": "Custo real",
+    "backToHub": "Análises"
   },
   "utilization": {
-    "title": "Utilization",
-    "backToHub": "Analytics"
+    "title": "Utilização",
+    "backToHub": "Análises"
   },
   "spendVelocity": {
-    "title": "Spend Velocity",
-    "backToHub": "Analytics"
+    "title": "Velocidade de gastos",
+    "backToHub": "Análises"
   },
   "sentinel": {
     "title": "Sentinel",
-    "backToHub": "Analytics"
+    "backToHub": "Análises"
   }
 }

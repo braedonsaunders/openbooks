@@ -1,93 +1,93 @@
 {
-  "title": "Approvals",
-  "description": "Everything waiting on you across flows and policies, plus where your own submissions stand.",
+  "title": "Genehmigungen",
+  "description": "Alles, was in Flows und Richtlinien auf Sie wartet, sowie der Status Ihrer eigenen Einreichungen.",
   "tabs": {
-    "mine": "My approvals",
-    "submitted": "Submitted by me",
-    "all": "All approvals"
+    "mine": "Meine Genehmigungen",
+    "submitted": "Von mir eingereicht",
+    "all": "Alle Genehmigungen"
   },
   "empty": {
-    "title": "Nothing waiting on you",
-    "description": "Approvals assigned, routed, or delegated to you will appear here."
+    "title": "Nichts wartet auf Sie",
+    "description": "Genehmigungen, die Ihnen zugewiesen, weitergeleitet oder delegiert wurden, werden hier angezeigt."
   },
   "emptySubmitted": {
-    "title": "No pending submissions",
-    "description": "Documents you submit for approval will appear here while they wait."
+    "title": "Keine ausstehenden Einreichungen",
+    "description": "Dokumente, die Sie zur Genehmigung einreichen, werden hier angezeigt, während sie warten."
   },
   "emptyAll": {
-    "title": "Nothing pending",
-    "description": "There are no pending approvals in this organization."
+    "title": "Nichts ausstehend",
+    "description": "In dieser Organisation gibt es keine ausstehenden Genehmigungen."
   },
   "table": {
-    "document": "Document",
-    "kind": "Kind",
-    "step": "Step",
-    "decision": "Decision",
-    "stepNumber": "step {number}",
-    "approval": "Approval",
-    "requested": "Requested",
-    "source": "Source",
-    "assignee": "Assignee",
-    "pendingWith": "Pending with",
-    "waitingSince": "Waiting since"
+    "document": "Dokument",
+    "kind": "Art",
+    "step": "Schritt",
+    "decision": "Entscheidung",
+    "stepNumber": "Schritt {number}",
+    "approval": "Genehmigung",
+    "requested": "Angefordert",
+    "source": "Quelle",
+    "assignee": "Zugewiesen an",
+    "pendingWith": "Ausstehend bei",
+    "waitingSince": "Wartet seit"
   },
   "kinds": {
-    "vendor_bill": "vendor bill",
-    "customer_invoice": "customer invoice",
-    "expense_report": "expense report",
-    "journal": "journal",
-    "purchase_order": "purchase order",
-    "sales_order": "sales order",
-    "quote": "quote"
+    "vendor_bill": "Eingangsrechnung",
+    "customer_invoice": "Ausgangsrechnung",
+    "expense_report": "Spesenabrechnung",
+    "journal": "Buchung",
+    "purchase_order": "Bestellung",
+    "sales_order": "Kundenauftrag",
+    "quote": "Angebot"
   },
   "decide": {
-    "rejectionReason": "Rejection reason:",
-    "decisionFailed": "Decision failed"
+    "rejectionReason": "Ablehnungsgrund:",
+    "decisionFailed": "Entscheidung fehlgeschlagen"
   },
   "source": {
     "flow": "Flow",
-    "legacy": "Policy"
+    "legacy": "Richtlinie"
   },
   "aging": {
-    "days": "{days}d"
+    "days": "{days} T"
   },
   "bulk": {
-    "selected": "{count} selected",
-    "selectAll": "Select all",
-    "selectRow": "Select {document}",
-    "approveSelected": "Approve selected",
-    "rejectSelected": "Reject selected",
-    "rejectTitle": "Reject {count} approvals?",
-    "reasonLabel": "Rejection reason (applied to every selected item)",
-    "approvedCount": "{count} approved",
-    "rejectedCount": "{count} rejected",
-    "failedCount": "{count} failed ({error})"
+    "selected": "{count} ausgewählt",
+    "selectAll": "Alle auswählen",
+    "selectRow": "{document} auswählen",
+    "approveSelected": "Ausgewählte genehmigen",
+    "rejectSelected": "Ausgewählte ablehnen",
+    "rejectTitle": "{count} Genehmigungen ablehnen?",
+    "reasonLabel": "Ablehnungsgrund (wird auf jedes ausgewählte Element angewendet)",
+    "approvedCount": "{count} genehmigt",
+    "rejectedCount": "{count} abgelehnt",
+    "failedCount": "{count} fehlgeschlagen ({error})"
   },
   "ooo": {
-    "button": "Out of office",
-    "title": "Out of office",
-    "description": "Route your incoming approvals to a delegate while you're away.",
-    "delegateTo": "Delegate to",
-    "delegatePlaceholder": "Choose a delegate…",
-    "from": "From",
-    "until": "Until",
-    "invalid": "Pick a delegate and a valid date range",
-    "saved": "Delegation scheduled",
-    "unavailable": "Delegation service is not available yet",
-    "banner": "Your approvals are delegated to {name} until {date}",
-    "endNow": "End now",
-    "ended": "Delegation ended"
+    "button": "Abwesend",
+    "title": "Abwesend",
+    "description": "Leiten Sie eingehende Genehmigungen an einen Vertreter weiter, während Sie abwesend sind.",
+    "delegateTo": "Delegieren an",
+    "delegatePlaceholder": "Vertreter auswählen…",
+    "from": "Von",
+    "until": "Bis",
+    "invalid": "Wählen Sie einen Vertreter und einen gültigen Zeitraum aus",
+    "saved": "Delegation geplant",
+    "unavailable": "Der Delegationsdienst ist noch nicht verfügbar",
+    "banner": "Ihre Genehmigungen sind bis {date} an {name} delegiert",
+    "endNow": "Jetzt beenden",
+    "ended": "Delegation beendet"
   },
   "gates": {
-    "rejectTitle": "Reject this approval?",
-    "waitingOthers": "Recorded — waiting on the other approvers",
-    "delegate": "Delegate",
-    "delegatePlaceholder": "Delegate to…",
-    "delegated": "Approval delegated",
+    "rejectTitle": "Diese Genehmigung ablehnen?",
+    "waitingOthers": "Erfasst — warten auf die übrigen Genehmiger",
+    "delegate": "Delegieren",
+    "delegatePlaceholder": "Delegieren an…",
+    "delegated": "Genehmigung delegiert",
     "badges": {
-      "quorumAll": "All approvers",
-      "reminder": "Reminder {date}",
-      "escalates": "Escalates {date}"
+      "quorumAll": "Alle Genehmiger",
+      "reminder": "Erinnerung {date}",
+      "escalates": "Eskaliert {date}"
     }
   }
 }

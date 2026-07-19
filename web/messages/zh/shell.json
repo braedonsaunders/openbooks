@@ -1,125 +1,128 @@
 {
   "accountMenu": {
-    "account": "Account",
-    "menuAriaLabel": "Account menu",
-    "theme": "Theme",
-    "language": "Language",
-    "menuLayout": "Menu layout",
-    "signOut": "Sign out",
-    "signingOut": "Signing out…",
+    "account": "账户",
+    "menuAriaLabel": "账户菜单",
+    "theme": "主题",
+    "language": "语言",
+    "menuLayout": "菜单布局",
+    "signOut": "退出登录",
+    "signingOut": "正在退出…",
     "roles": {
-      "admin": "Admin",
-      "controller": "Controller",
-      "accountant": "Accountant",
-      "approver": "Approver",
-      "viewer": "Viewer"
+      "admin": "管理员",
+      "controller": "财务总监",
+      "accountant": "会计",
+      "approver": "审批人",
+      "viewer": "查看者"
     }
   },
   "language": {
-    "label": "Language",
-    "orgDefault": "Organization default",
-    "saveFailed": "Could not save your language preference"
+    "label": "语言",
+    "orgDefault": "组织默认",
+    "saveFailed": "无法保存您的语言偏好"
   },
   "menuMode": {
-    "label": "Menu layout",
-    "orgDefault": "Organization default",
-    "saveFailed": "Could not save your menu layout preference",
+    "label": "菜单布局",
+    "orgDefault": "组织默认",
+    "saveFailed": "无法保存您的菜单布局偏好",
     "options": {
-      "sidebar": "Sidebar",
-      "topbar": "Top menu bar"
+      "sidebar": "侧边栏",
+      "topbar": "顶部菜单栏"
     }
   },
   "topNav": {
-    "ariaLabel": "Primary",
-    "more": "More"
+    "ariaLabel": "主要",
+    "more": "更多"
   },
   "apps": {
-    "ariaLabel": "Open apps",
-    "title": "Apps"
+    "ariaLabel": "打开应用",
+    "title": "应用"
   },
   "globalCreate": {
-    "ariaLabel": "Create new",
-    "title": "Create new",
-    "description": "Start a real draft and keep moving.",
-    "createFailed": "Could not create the draft",
+    "ariaLabel": "新建",
+    "title": "新建",
+    "description": "创建真实草稿并持续推进。",
+    "createFailed": "无法创建草稿",
     "groups": {
-      "sales": "Sales",
-      "purchases": "Purchases",
-      "accounting": "Accounting",
-      "peopleAndLists": "People & lists"
+      "sales": "销售",
+      "purchases": "采购",
+      "accounting": "会计",
+      "peopleAndLists": "人员与列表"
     },
     "items": {
-      "invoice": "Invoice",
-      "creditMemo": "Credit memo",
-      "estimate": "Estimate",
-      "salesOrder": "Sales order",
-      "customerPayment": "Customer payment",
-      "bill": "Bill",
-      "vendorCredit": "Vendor credit",
-      "purchaseOrder": "Purchase order",
-      "vendorPayment": "Vendor payment",
-      "journal": "Journal entry",
-      "expense": "Expense report",
-      "cardCharge": "Card charge",
-      "cardRefund": "Card refund",
-      "check": "Check",
-      "deposit": "Bank deposit",
-      "transfer": "Bank transfer",
-      "asset": "Fixed asset",
-      "customer": "Customer",
-      "vendor": "Vendor",
-      "employee": "Employee",
-      "item": "Item or service",
-      "project": "Project"
+      "invoice": "发票",
+      "creditMemo": "贷记通知单",
+      "estimate": "报价单",
+      "salesOrder": "销售订单",
+      "customerPayment": "客户付款",
+      "bill": "账单",
+      "vendorCredit": "供应商贷记",
+      "purchaseOrder": "采购订单",
+      "vendorPayment": "供应商付款",
+      "journal": "日记账分录",
+      "expense": "费用报销单",
+      "cardCharge": "银行卡消费",
+      "cardRefund": "银行卡退款",
+      "check": "支票",
+      "deposit": "银行存款",
+      "transfer": "银行转账",
+      "asset": "固定资产",
+      "customer": "客户",
+      "vendor": "供应商",
+      "employee": "员工",
+      "item": "商品或服务",
+      "project": "项目"
     }
   },
   "relatedParty": {
-    "loadFailed": "Could not open this record"
+    "loadFailed": "无法打开此记录"
   },
   "globalSearch": {
-    "ariaLabel": "Search",
-    "placeholder": "Search everything…",
-    "clear": "Clear search",
-    "searching": "Searching…",
-    "noMatches": "No matches for “{query}”",
-    "navigate": "navigate",
-    "open": "open",
-    "close": "close",
-    "resultCount": "{count, plural, one {# result} other {# results}}",
+    "ariaLabel": "搜索",
+    "placeholder": "搜索一切…",
+    "clear": "清除搜索",
+    "searching": "搜索中…",
+    "noMatches": "没有匹配“{query}”的结果",
+    "navigate": "导航",
+    "open": "打开",
+    "close": "关闭",
+    "resultCount": "{count, plural, one {# 条结果} other {# 条结果}}",
     "groups": {
-      "contacts": "Contacts",
-      "transactions": "Transactions",
-      "accounts": "Accounts",
-      "items": "Items",
-      "projects": "Projects"
+      "contacts": "联系人",
+      "transactions": "交易",
+      "accounts": "科目",
+      "items": "商品",
+      "projects": "项目"
     }
   },
   "meta": {
-    "description": "The open business suite. Run on open books."
+    "description": "开放的商业套件。运行于开放账簿之上。"
+  },
+  "brand": {
+    "home": "前往仪表板"
   },
   "sidebar": {
-    "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
+    "expand": "展开侧边栏",
+    "collapse": "折叠侧边栏"
   },
   "mobileNav": {
-    "openMenu": "Open menu",
-    "menu": "Menu",
-    "primaryAriaLabel": "Primary"
+    "openMenu": "打开菜单",
+    "menu": "菜单",
+    "primaryAriaLabel": "主要"
   },
   "themeToggle": {
-    "label": "Theme",
+    "label": "主题",
     "options": {
-      "light": "Light",
-      "system": "System",
-      "dark": "Dark"
+      "light": "浅色",
+      "system": "跟随系统",
+      "dark": "深色"
     },
-    "current": "Theme: {theme}",
-    "currentHint": "Theme: {theme} (click to change)"
+    "current": "主题：{theme}",
+    "currentHint": "主题：{theme}（点击更改）"
   },
   "notifications": {
-    "ariaLabel": "Notifications",
-    "title": "Notifications",
-    "empty": "You're all caught up",
-    "markAllRead": "Mark all read"
+    "ariaLabel": "通知",
+    "title": "通知",
+    "empty": "您已处理完所有事项",
+    "markAllRead": "全部标为已读"
   }
 }

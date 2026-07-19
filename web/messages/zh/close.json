@@ -1,579 +1,579 @@
 {
-  "title": "Period Close",
-  "description": "Close modules per period with database-enforced posting controls.",
-  "workspaceDescription": "Run a controlled, evidence-backed close from readiness through publication. Every sign-off stays connected to the ledger state it approved.",
-  "importedPeriodLockReason": "Imported source-system period status",
-  "searchPlaceholder": "Search periods…",
-  "stageNavigation": "Close stages",
-  "continuousValidation": "Continuously validated against the ledger · last checked {at}",
-  "runTitle": "{period} close",
+  "title": "期末结账",
+  "description": "按会计期间结账各模块，配以数据库强制的过账管控。",
+  "workspaceDescription": "从就绪评估到发布，运行受控且有据可查的结账流程。每次审签都与其所批准的总账状态保持关联。",
+  "importedPeriodLockReason": "导入的源系统期间状态",
+  "searchPlaceholder": "搜索会计期间…",
+  "stageNavigation": "结账阶段",
+  "continuousValidation": "持续与总账校验 · 上次检查 {at}",
+  "runTitle": "{period} 结账",
   "runDescription": "{book} · {blueprint} v{version}",
   "filters": {
-    "book": "Accounting book",
-    "fiscalYear": "Fiscal year",
+    "book": "会计账簿",
+    "fiscalYear": "会计年度",
     "fyOption": "FY {year}",
-    "status": "Status"
+    "status": "状态"
   },
   "table": {
-    "period": "Period",
-    "range": "Range",
-    "entries": "Entries",
-    "debits": "Debits",
+    "period": "会计期间",
+    "range": "范围",
+    "entries": "分录",
+    "debits": "借方",
     "rangeValue": "{start} → {end}",
-    "status": "Status",
-    "readiness": "Readiness",
-    "action": "Action"
+    "status": "状态",
+    "readiness": "就绪度",
+    "action": "操作"
   },
   "modules": {
-    "ar": "AR",
-    "ap": "AP",
-    "banking": "Banking",
-    "assets": "Assets",
-    "tax": "Tax",
-    "gl": "GL"
+    "ar": "应收",
+    "ap": "应付",
+    "banking": "银行",
+    "assets": "资产",
+    "tax": "税务",
+    "gl": "总账"
   },
-  "status": { "closed": "closed", "open": "open" },
+  "status": { "closed": "已结账", "open": "未结账" },
   "runStatus": {
-    "not_started": "Not started",
-    "draft": "Draft",
-    "in_progress": "In progress",
-    "review": "In review",
-    "approved": "Approved",
-    "closed": "Closed",
-    "published": "Published",
-    "cancelled": "Cancelled"
+    "not_started": "未开始",
+    "draft": "草稿",
+    "in_progress": "进行中",
+    "review": "审核中",
+    "approved": "已审批",
+    "closed": "已结账",
+    "published": "已发布",
+    "cancelled": "已取消"
   },
   "stages": {
-    "scope": "Scope",
-    "readiness": "Readiness",
-    "execute": "Execute",
-    "review": "Review",
-    "lock": "Lock",
-    "publish": "Publish"
+    "scope": "范围",
+    "readiness": "就绪评估",
+    "execute": "执行",
+    "review": "审核",
+    "lock": "锁定",
+    "publish": "发布"
   },
   "actions": {
-    "start": "Start close",
-    "starting": "Starting…",
-    "manageBooks": "Manage books",
-    "resume": "Resume",
-    "backToPeriods": "Back to periods",
-    "revalidate": "Revalidate",
-    "runRevaluation": "Run FX revaluation",
-    "startTask": "Start",
-    "complete": "Complete",
-    "submitReview": "Submit for review",
-    "approve": "Approve",
-    "requestChanges": "Request changes",
-    "addEvidence": "Add evidence",
-    "finalApproval": "Provide final approval",
-    "lockPeriod": "Lock period",
-    "publish": "Publish package",
-    "downloadBinder": "Download immutable audit binder"
+    "start": "开始结账",
+    "starting": "正在开始…",
+    "manageBooks": "管理账簿",
+    "resume": "继续",
+    "backToPeriods": "返回会计期间",
+    "revalidate": "重新校验",
+    "runRevaluation": "运行外币重估",
+    "startTask": "开始",
+    "complete": "完成",
+    "submitReview": "提交审核",
+    "approve": "审批",
+    "requestChanges": "要求修改",
+    "addEvidence": "添加证据",
+    "finalApproval": "提供最终审批",
+    "lockPeriod": "锁定期间",
+    "publish": "发布结账包",
+    "downloadBinder": "下载不可变审计档案"
   },
-  "errors": { "actionFailed": "The close action could not be completed" },
+  "errors": { "actionFailed": "无法完成该结账操作" },
   "messages": {
-    "refresh": "Close state refreshed",
-    "approve": "Close approved",
-    "close": "Period locked",
-    "publish": "Close package published",
-    "taskUpdated": "Task updated",
-    "revaluationPosted": "Foreign-currency balances revalued",
-    "evidenceAdded": "Evidence attached",
-    "automationComplete": "Close automation completed"
+    "refresh": "结账状态已刷新",
+    "approve": "结账已审批",
+    "close": "期间已锁定",
+    "publish": "结账包已发布",
+    "taskUpdated": "任务已更新",
+    "revaluationPosted": "外币余额已重估",
+    "evidenceAdded": "证据已附加",
+    "automationComplete": "结账自动化已完成"
   },
   "metrics": {
-    "readiness": "Readiness",
-    "liveLedger": "Live ledger controls",
-    "progress": "Progress",
-    "tasksComplete": "{completed} of {total} tasks",
-    "criticalPath": "Critical path",
-    "clear": "Clear",
-    "historicalDays": "Historically completes by day {days}",
-    "noPredictedBlocker": "No historical blocker"
+    "readiness": "就绪度",
+    "liveLedger": "实时总账管控",
+    "progress": "进度",
+    "tasksComplete": "{total} 项任务中已完成 {completed} 项",
+    "criticalPath": "关键路径",
+    "clear": "无阻碍",
+    "historicalDays": "历史上于第 {days} 天完成",
+    "noPredictedBlocker": "无历史阻碍项"
   },
   "scope": {
-    "title": "Close scope",
-    "description": "The immutable context for this close run.",
-    "period": "Accounting period",
-    "book": "Accounting book",
-    "blueprint": "Blueprint",
-    "target": "Target close date",
-    "entities": "Entities",
-    "selectedEntities": "{count, plural, one {# selected entity} other {# selected entities}}",
-    "allEntities": "All entities",
-    "package": "Reporting package",
-    "noPackage": "No package selected"
+    "title": "结账范围",
+    "description": "本次结账运行的不可变上下文。",
+    "period": "会计期间",
+    "book": "会计账簿",
+    "blueprint": "蓝图",
+    "target": "目标结账日期",
+    "entities": "实体",
+    "selectedEntities": "{count, plural, one {# 个已选实体} other {# 个已选实体}}",
+    "allEntities": "所有实体",
+    "package": "报告包",
+    "noPackage": "未选择报告包"
   },
   "rehearsal": {
-    "title": "Close rehearsal",
-    "description": "Create an as-of sandbox to rehearse adjustments, consolidation, and reports without touching production books.",
-    "action": "Rehearse in sandbox"
+    "title": "结账预演",
+    "description": "创建一个截至指定时点的沙箱，以预演调整、合并和报表，而不影响正式账簿。",
+    "action": "在沙箱中预演"
   },
   "readiness": {
-    "title": "Ledger readiness",
-    "description": "Live diagnostics detect blockers and invalidate stale sign-offs when the books change.",
-    "score": "ready",
-    "clear": "No blocking ledger exceptions remain."
+    "title": "总账就绪度",
+    "description": "实时诊断可检测阻碍项，并在账簿变动时使过期的审签失效。",
+    "score": "就绪",
+    "clear": "无阻碍性总账异常。"
   },
   "diagnostics": {
     "drafts-open": {
-      "title": "Unposted activity remains",
-      "message": "{count, plural, one {# draft or pending transaction remains in the period.} other {# draft or pending transactions remain in the period.}}"
+      "title": "仍存在未过账活动",
+      "message": "{count, plural, one {本期间内仍有 # 笔草稿或待处理交易。} other {本期间内仍有 # 笔草稿或待处理交易。}}"
     },
     "bank-unreconciled": {
-      "title": "Cash accounts need reconciliation",
-      "message": "{count, plural, one {# reconcilable account is not signed off through period end.} other {# reconcilable accounts are not signed off through period end.}}"
+      "title": "现金科目需要对账",
+      "message": "{count, plural, one {有 # 个可对账科目未截至期末完成审签。} other {有 # 个可对账科目未截至期末完成审签。}}"
     },
     "depreciation-unposted": {
-      "title": "Depreciation remains unposted",
-      "message": "{count, plural, one {# scheduled depreciation line remains unposted.} other {# scheduled depreciation lines remain unposted.}}"
+      "title": "折旧仍未过账",
+      "message": "{count, plural, one {仍有 # 条计划折旧行未过账。} other {仍有 # 条计划折旧行未过账。}}"
     },
     "fx-missing": {
-      "title": "Foreign-exchange rates are missing",
-      "message": "{count, plural, one {# transaction currency has no usable period-end spot rate.} other {# transaction currencies have no usable period-end spot rate.}}"
+      "title": "缺少外币汇率",
+      "message": "{count, plural, one {有 # 种交易货币没有可用的期末即期汇率。} other {有 # 种交易货币没有可用的期末即期汇率。}}"
     },
     "fx-unrevalued": {
-      "title": "Foreign balances are not revalued",
-      "message": "{count, plural, one {# foreign-currency monetary balance has not been revalued to the period-end rate.} other {# foreign-currency monetary balances have not been revalued to the period-end rate.}}"
+      "title": "外币余额未重估",
+      "message": "{count, plural, one {有 # 项外币货币性余额未按期末汇率重估。} other {有 # 项外币货币性余额未按期末汇率重估。}}"
     },
     "intercompany-residual": {
-      "title": "Intercompany activity does not eliminate",
-      "message": "{count, plural, one {# elimination account has a non-zero group residual.} other {# elimination accounts have a non-zero group residual.}}"
+      "title": "关联方往来未能抵销",
+      "message": "{count, plural, one {有 # 个抵销科目存在非零的集团残值。} other {有 # 个抵销科目存在非零的集团残值。}}"
     },
     "material-variances": {
-      "title": "Material fluctuations require explanation",
-      "message": "{count, plural, one {# account exceeds the configured materiality thresholds.} other {# accounts exceed the configured materiality thresholds.}}"
+      "title": "重大波动需要说明",
+      "message": "{count, plural, one {有 # 个科目超过已配置的重要性阈值。} other {有 # 个科目超过已配置的重要性阈值。}}"
     }
   },
   "severity": {
-    "info": "Info",
-    "warning": "Warning",
-    "error": "Error",
-    "critical": "Critical"
+    "info": "信息",
+    "warning": "警告",
+    "error": "错误",
+    "critical": "严重"
   },
   "workstreams": {
-    "readiness": "Readiness",
-    "banking": "Banking",
-    "ar": "Receivables",
-    "ap": "Payables",
-    "assets": "Fixed assets",
-    "tax": "Tax",
-    "payroll": "Payroll",
-    "intercompany": "Intercompany",
-    "gl": "General ledger",
-    "review": "Review",
-    "publish": "Publish"
+    "readiness": "就绪评估",
+    "banking": "银行",
+    "ar": "应收款",
+    "ap": "应付款",
+    "assets": "固定资产",
+    "tax": "税务",
+    "payroll": "薪酬",
+    "intercompany": "关联方往来",
+    "gl": "总账",
+    "review": "审核",
+    "publish": "发布"
   },
-  "gates": { "none": "No gate", "soft": "Soft gate", "hard": "Hard gate" },
+  "gates": { "none": "无关卡", "soft": "软关卡", "hard": "硬关卡" },
   "taskStatus": {
-    "blocked": "Blocked",
-    "ready": "Ready",
-    "in_progress": "In progress",
-    "submitted": "Awaiting review",
-    "changes_requested": "Changes requested",
-    "complete": "Complete",
-    "waived": "Waived",
-    "invalidated": "Revalidation required"
+    "blocked": "受阻",
+    "ready": "就绪",
+    "in_progress": "进行中",
+    "submitted": "待审核",
+    "changes_requested": "已要求修改",
+    "complete": "完成",
+    "waived": "已豁免",
+    "invalidated": "需要重新校验"
   },
   "tasks": {
-    "dependencies": "Depends on: {dependencies}",
-    "notePlaceholder": "Add a note or evidence summary…"
+    "dependencies": "依赖于：{dependencies}",
+    "notePlaceholder": "添加备注或证据摘要…"
   },
   "lock": {
-    "title": "Controlled period lock",
-    "description": "Operational subledgers lock before GL. The database rejects postings after the lock is applied.",
-    "blockedTitle": "Approval is blocked",
-    "blockedDescription": "{count, plural, one {# hard-gated task remains} other {# hard-gated tasks remain}}.",
-    "approvalTitle": "Independent approval and lock",
-    "approvalDescription": "The run initiator cannot provide final approval. Any ledger change after approval reopens review.",
-    "complete": "Period locked by {name}"
+    "title": "受控期间锁定",
+    "description": "操作性子账在总账之前锁定。锁定应用后，数据库将拒绝任何过账。",
+    "blockedTitle": "审批受阻",
+    "blockedDescription": "{count, plural, one {仍有 # 项硬关卡任务} other {仍有 # 项硬关卡任务}}。",
+    "approvalTitle": "独立审批与锁定",
+    "approvalDescription": "结账运行的发起人不能提供最终审批。审批后的任何总账变动都将重新开启审核。",
+    "complete": "期间已由 {name} 锁定"
   },
   "lockStates": {
-    "open": "Open",
-    "soft_closed": "Soft closed",
-    "closed": "Closed"
+    "open": "未锁定",
+    "soft_closed": "软结账",
+    "closed": "已结账"
   },
   "publish": {
-    "package": "Close reporting package",
-    "description": "Review the configured outputs, then freeze the evidence binder and publish the package.",
-    "complete": "Package published by {name}",
-    "closeFirst": "Close and lock the period before publishing."
+    "package": "结账报告包",
+    "description": "审核已配置的输出，然后冻结证据档案并发布报告包。",
+    "complete": "报告包已由 {name} 发布",
+    "closeFirst": "发布前请先完成期间的结账与锁定。"
   },
   "timeline": {
-    "title": "Immutable close timeline",
-    "description": "Tasks, evidence, invalidations, approvals, locks, and publication in one audit trail.",
-    "system": "System"
+    "title": "不可变结账时间线",
+    "description": "任务、证据、失效、审批、锁定和发布，统一记录于一条审计轨迹中。",
+    "system": "系统"
   },
   "events": {
     "run": {
-      "started": "Close run started",
-      "data_changed": "Ledger change invalidated prior work",
-      "approved": "Close received final approval",
-      "closed": "Period locks applied",
-      "published": "Close package published"
+      "started": "结账运行已开始",
+      "data_changed": "总账变动使先前工作失效",
+      "approved": "结账已获得最终审批",
+      "closed": "期间锁定已应用",
+      "published": "结账包已发布"
     },
     "task": {
-      "start": "Task started",
-      "submit": "Task submitted",
-      "complete": "Task completed",
-      "approve": "Task approved",
-      "request_changes": "Changes requested",
-      "waive": "Task waived",
-      "evidence_added": "Evidence attached"
+      "start": "任务已开始",
+      "submit": "任务已提交",
+      "complete": "任务已完成",
+      "approve": "任务已审批",
+      "request_changes": "已要求修改",
+      "waive": "任务已豁免",
+      "evidence_added": "证据已附加"
     },
     "automation": {
-      "completed": "Automation completed",
-      "failed": "Automation failed"
+      "completed": "自动化已完成",
+      "failed": "自动化失败"
     }
   },
   "reports": {
-    "balance-sheet": "Balance sheet",
-    "pnl": "Profit and loss",
-    "cash-flow": "Cash flow statement",
-    "trial-balance": "Trial balance",
-    "general-ledger": "General ledger"
+    "balance-sheet": "资产负债表",
+    "pnl": "利润表",
+    "cash-flow": "现金流量表",
+    "trial-balance": "试算平衡表",
+    "general-ledger": "总账"
   },
   "defaultData": {
-    "calendar": { "name": "Standard fiscal calendar" },
+    "calendar": { "name": "标准会计日历" },
     "blueprint": {
-      "name": "Standard close",
-      "description": "Ledger-native month, quarter, and year-end close"
+      "name": "标准结账",
+      "description": "总账原生的月度、季度和年末结账"
     },
     "policies": {
       "materialVariance": {
-        "name": "Material variance review",
-        "description": "Flags account movements that exceed both the absolute and percentage threshold."
+        "name": "重大差异审核",
+        "description": "标记同时超过绝对阈值和百分比阈值的科目变动。"
       },
       "independentApproval": {
-        "name": "Independent final approval",
-        "description": "The run initiator cannot provide final controller approval."
+        "name": "独立最终审批",
+        "description": "结账运行的发起人不能提供控制人最终审批。"
       },
       "controlledReopen": {
-        "name": "Controlled reopening",
-        "description": "Reopens require a reason, independent approval, and an expiry."
+        "name": "受控重新开启",
+        "description": "重新开启需要理由、独立审批和有效期。"
       }
     },
     "package": {
-      "name": "Management close package",
-      "description": "Core financial statements and close evidence binder"
+      "name": "管理结账包",
+      "description": "核心财务报表和结账证据档案"
     }
   },
   "defaultSteps": {
     "drafts-cleared": {
-      "title": "Clear unposted and pending transactions",
-      "description": "Resolve draft journals and transactions that belong in this period."
+      "title": "清理未过账和待处理交易",
+      "description": "处理属于本期间的草稿日记账和交易。"
     },
     "bank-reconciled": {
-      "title": "Reconcile every cash account",
-      "description": "All reconcilable accounts must be signed off through the period end."
+      "title": "对账每个现金科目",
+      "description": "所有可对账科目都必须截至期末完成审签。"
     },
     "ar-cutoff": {
-      "title": "Complete receivables cutoff",
-      "description": "Confirm billing completeness, unapplied receipts, credits, and aging exceptions."
+      "title": "完成应收款截止",
+      "description": "确认开票完整性、未核销收款、贷记和账龄异常。"
     },
     "ap-cutoff": {
-      "title": "Complete payables cutoff",
-      "description": "Confirm invoice completeness, unbilled liabilities, credits, and payment cutoff."
+      "title": "完成应付款截止",
+      "description": "确认发票完整性、未入账负债、贷记和付款截止。"
     },
     "depreciation-posted": {
-      "title": "Post fixed-asset depreciation",
-      "description": "Run scheduled depreciation and resolve exceptions."
+      "title": "过账固定资产折旧",
+      "description": "运行计划折旧并处理异常。"
     },
     "fx-ready": {
-      "title": "Validate foreign-exchange coverage",
-      "description": "Every transaction currency must have a usable period-end rate."
+      "title": "校验外币汇率覆盖情况",
+      "description": "每种交易货币都必须有可用的期末汇率。"
     },
     "fx-revalued": {
-      "title": "Revalue foreign-currency balances",
-      "description": "Restate open foreign-currency bank, receivable and payable balances to the period-end rate."
+      "title": "重估外币余额",
+      "description": "将未清的外币银行、应收和应付余额按期末汇率重新计价。"
     },
     "intercompany-balanced": {
-      "title": "Reconcile intercompany activity",
-      "description": "Intercompany accounts must balance before eliminations."
+      "title": "对账关联方往来",
+      "description": "关联方科目必须在抵销前保持平衡。"
     },
     "consolidation": {
-      "title": "Derive rates and post eliminations",
-      "description": "Complete consolidation adjustments for multi-entity books."
+      "title": "推导汇率并过账抵销",
+      "description": "完成多实体账簿的合并调整。"
     },
     "variance-review": {
-      "title": "Explain material fluctuations",
-      "description": "Review account movements against the prior period and retain explanations."
+      "title": "说明重大波动",
+      "description": "对照上期审核科目变动并保留说明。"
     },
     "controller-approval": {
-      "title": "Controller sign-off",
-      "description": "Independently review readiness, exceptions, evidence, and reporting outputs."
+      "title": "控制人审签",
+      "description": "独立审核就绪度、异常、证据和报告输出。"
     },
     "lock-subledgers": {
-      "title": "Lock operational subledgers",
-      "description": "Lock AR, AP, banking, assets, and tax before GL."
+      "title": "锁定操作性子账",
+      "description": "在总账之前锁定应收、应付、银行、资产和税务。"
     },
     "lock-gl": {
-      "title": "Lock the general ledger",
-      "description": "Apply the database-enforced GL lock after every prerequisite passes."
+      "title": "锁定总账",
+      "description": "在每项前置条件通过后，应用数据库强制的总账锁定。"
     },
     "publish-package": {
-      "title": "Publish the close package",
-      "description": "Freeze the close binder and publish the configured reporting package."
+      "title": "发布结账包",
+      "description": "冻结结账档案并发布已配置的报告包。"
     }
   },
   "setup": {
-    "title": "Periods & Close",
-    "description": "Design fiscal calendars, generate periods, govern locks and reopenings, version close blueprints, and configure controls, automation, and reporting packages.",
+    "title": "会计期间与结账",
+    "description": "设计会计日历、生成期间、管理锁定与重新开启、对结账蓝图进行版本管理，并配置管控、自动化和报告包。",
     "tabs": {
-      "calendars": "Calendars",
-      "periods": "Periods",
-      "blueprints": "Blueprints",
-      "policies": "Policies",
-      "automation": "Automation",
-      "packages": "Reporting packages"
+      "calendars": "日历",
+      "periods": "会计期间",
+      "blueprints": "蓝图",
+      "policies": "政策",
+      "automation": "自动化",
+      "packages": "报告包"
     },
     "calendars": {
-      "title": "Fiscal calendars",
-      "description": "Define how fiscal years become posting periods.",
-      "startsMonth": "Starts in month {month}",
-      "editTitle": "Edit fiscal calendar",
-      "newTitle": "New fiscal calendar",
-      "formDescription": "Calendar fundamentals are protected once ledger activity exists.",
-      "anchorHint": "Start date of the configured anchor fiscal year.",
-      "configurationHint": "Configure anchorFiscalYear and leapWeekYears, or custom years and period date ranges."
+      "title": "会计日历",
+      "description": "定义会计年度如何转化为过账期间。",
+      "startsMonth": "自第 {month} 个月开始",
+      "editTitle": "编辑会计日历",
+      "newTitle": "新建会计日历",
+      "formDescription": "一旦存在总账活动，日历基础设置即受保护。",
+      "anchorHint": "所配置锚定会计年度的开始日期。",
+      "configurationHint": "配置 anchorFiscalYear 和 leapWeekYears，或自定义年度和期间日期范围。"
     },
     "periods": {
-      "title": "Accounting periods and locks",
-      "description": "Generate, search, lock, soft-close, and request controlled reopenings by book and module.",
-      "searchPlaceholder": "Search accounting periods…",
-      "generateTitle": "Generate accounting periods",
-      "generateDescription": "Create the posting periods for a fiscal calendar and year.",
-      "moduleSummary": "{closed} of {total} modules closed",
-      "lockedOn": "Locked {date}",
-      "lockTitle": "Confirm period lock",
-      "reopenTitle": "Request controlled reopening",
-      "lockDescription": "{module} · {period}. A reason is retained in the immutable close history.",
-      "reopenRequests": "Reopen requests",
-      "requestedBy": "Requested by {name}"
+      "title": "会计期间与锁定",
+      "description": "按账簿和模块生成、搜索、锁定、软结账并申请受控重新开启。",
+      "searchPlaceholder": "搜索会计期间…",
+      "generateTitle": "生成会计期间",
+      "generateDescription": "为某个会计日历和年度创建过账期间。",
+      "moduleSummary": "{total} 个模块中已结账 {closed} 个",
+      "lockedOn": "锁定于 {date}",
+      "lockTitle": "确认期间锁定",
+      "reopenTitle": "申请受控重新开启",
+      "lockDescription": "{module} · {period}。理由将保留在不可变的结账历史中。",
+      "reopenRequests": "重新开启申请",
+      "requestedBy": "申请人 {name}"
     },
     "blueprints": {
-      "title": "Close blueprints",
-      "description": "Build reusable dependency graphs with owners, evidence, automation, and hard or soft gates.",
-      "stepCount": "{count, plural, one {# step} other {# steps}}",
-      "newTitle": "New close blueprint",
-      "newVersionTitle": "Create a new blueprint version",
-      "versionHint": "Published runs keep their original version; edits create a new immutable version.",
-      "steps": "Dependency graph steps"
+      "title": "结账蓝图",
+      "description": "构建可复用的依赖关系图，含负责人、证据、自动化以及硬关卡或软关卡。",
+      "stepCount": "{count, plural, one {# 个步骤} other {# 个步骤}}",
+      "newTitle": "新建结账蓝图",
+      "newVersionTitle": "创建新的蓝图版本",
+      "versionHint": "已发布的运行保留其原始版本；编辑将创建新的不可变版本。",
+      "steps": "依赖关系图步骤"
     },
     "policies": {
-      "title": "Close policies",
-      "description": "Configure materiality, lock, review, segregation, and exception controls.",
-      "formTitle": "Policy configuration",
-      "rulesHint": "Set custom materiality thresholds and control where each policy applies — no developer involvement needed."
+      "title": "结账政策",
+      "description": "配置重要性、锁定、审核、职责分离和异常管控。",
+      "formTitle": "政策配置",
+      "rulesHint": "设置自定义重要性阈值并控制每项政策的适用范围——无需开发人员参与。"
     },
     "automation": {
-      "title": "Close automation",
-      "description": "React to close events with notifications, assignments, checks, tasks, reports, or flows.",
-      "formTitle": "Automation rule"
+      "title": "结账自动化",
+      "description": "以通知、指派、检查、任务、报表或流程响应结账事件。",
+      "formTitle": "自动化规则"
     },
     "packages": {
-      "title": "Reporting packages",
-      "description": "Define the statements, recipients, and delivery configuration published with a close.",
-      "formTitle": "Reporting package",
-      "reportCount": "{count, plural, one {# report} other {# reports}}",
-      "recipientsHint": "One recipient per line."
+      "title": "报告包",
+      "description": "定义随结账一并发布的报表、收件人和投递配置。",
+      "formTitle": "报告包",
+      "reportCount": "{count, plural, one {# 张报表} other {# 张报表}}",
+      "recipientsHint": "每行一个收件人。"
     },
     "actions": {
-      "newCalendar": "New calendar",
-      "newBlueprint": "New blueprint",
-      "newPolicy": "New policy",
-      "newAutomation": "New automation",
-      "newPackage": "New package",
-      "save": "Save",
-      "saving": "Saving…",
-      "saveVersion": "Save new version",
-      "generate": "Generate periods",
-      "addStep": "Add step",
-      "remove": "Remove",
-      "close": "Close",
-      "softClose": "Soft close",
-      "reopen": "Reopen",
-      "requestReopen": "Request reopening",
-      "confirmClose": "Confirm close",
-      "approve": "Approve",
-      "reject": "Reject",
-      "cancel": "Cancel",
-      "manageBooks": "Manage books",
-      "managePeriod": "Manage {period}"
+      "newCalendar": "新建日历",
+      "newBlueprint": "新建蓝图",
+      "newPolicy": "新建政策",
+      "newAutomation": "新建自动化",
+      "newPackage": "新建报告包",
+      "save": "保存",
+      "saving": "正在保存…",
+      "saveVersion": "保存为新版本",
+      "generate": "生成期间",
+      "addStep": "添加步骤",
+      "remove": "移除",
+      "close": "结账",
+      "softClose": "软结账",
+      "reopen": "重新开启",
+      "requestReopen": "申请重新开启",
+      "confirmClose": "确认结账",
+      "approve": "审批",
+      "reject": "拒绝",
+      "cancel": "取消",
+      "manageBooks": "管理账簿",
+      "managePeriod": "管理 {period}"
     },
     "fields": {
-      "name": "Name",
-      "description": "Description",
-      "cadence": "Cadence",
-      "yearStartMonth": "Year start month",
-      "weekStartsOn": "Week starts on",
-      "anchorDate": "Anchor date",
-      "timeZone": "Time zone",
-      "adjustmentPeriod": "Generate an adjustment period",
-      "defaultCalendar": "Default fiscal calendar",
-      "calendar": "Fiscal calendar",
-      "book": "Accounting book",
-      "fiscalYear": "Fiscal year",
-      "reason": "Reason",
-      "periodType": "Period type",
-      "stepKey": "Stable step key",
-      "stepTitle": "Step title",
-      "taskType": "Task type",
-      "dueOffset": "Due offset (business days)",
-      "ownerRole": "Default owner role key",
-      "reviewerRole": "Default reviewer role key",
-      "applicability": "Applicability rules",
-      "workstream": "Workstream",
-      "gate": "Gate",
-      "completion": "Completion",
-      "dependencies": "Dependency keys",
-      "evidenceRequired": "Evidence required",
-      "defaultBlueprint": "Default close blueprint",
-      "code": "Stable code",
-      "policyType": "Policy type",
-      "rules": "Rules",
-      "trigger": "Trigger",
-      "action": "Action",
-      "conditions": "Conditions",
-      "configuration": "Configuration",
-      "reports": "Reports",
-      "recipients": "Recipients",
-      "delivery": "Delivery configuration",
-      "defaultPackage": "Default reporting package",
-      "active": "Active"
+      "name": "名称",
+      "description": "描述",
+      "cadence": "频率",
+      "yearStartMonth": "年度起始月份",
+      "weekStartsOn": "每周起始日",
+      "anchorDate": "锚定日期",
+      "timeZone": "时区",
+      "adjustmentPeriod": "生成调整期间",
+      "defaultCalendar": "默认会计日历",
+      "calendar": "会计日历",
+      "book": "会计账簿",
+      "fiscalYear": "会计年度",
+      "reason": "理由",
+      "periodType": "期间类型",
+      "stepKey": "稳定步骤键",
+      "stepTitle": "步骤标题",
+      "taskType": "任务类型",
+      "dueOffset": "到期偏移（工作日）",
+      "ownerRole": "默认负责人角色键",
+      "reviewerRole": "默认审核人角色键",
+      "applicability": "适用性规则",
+      "workstream": "工作流",
+      "gate": "关卡",
+      "completion": "完成方式",
+      "dependencies": "依赖键",
+      "evidenceRequired": "需要证据",
+      "defaultBlueprint": "默认结账蓝图",
+      "code": "稳定代码",
+      "policyType": "政策类型",
+      "rules": "规则",
+      "trigger": "触发条件",
+      "action": "操作",
+      "conditions": "条件",
+      "configuration": "配置",
+      "reports": "报表",
+      "recipients": "收件人",
+      "delivery": "投递配置",
+      "defaultPackage": "默认报告包",
+      "active": "启用"
     },
     "labels": {
-      "default": "Default",
-      "active": "Active",
-      "inactive": "Inactive"
+      "default": "默认",
+      "active": "启用",
+      "inactive": "停用"
     },
     "cadences": {
-      "monthly": "Calendar months",
-      "four_four_five": "4-4-5 weeks",
-      "four_five_four": "4-5-4 weeks",
-      "five_four_four": "5-4-4 weeks",
-      "thirteen_period": "13 four-week periods",
-      "custom": "Custom periods"
+      "monthly": "日历月",
+      "four_four_five": "4-4-5 周",
+      "four_five_four": "4-5-4 周",
+      "five_four_four": "5-4-4 周",
+      "thirteen_period": "13 个四周期间",
+      "custom": "自定义期间"
     },
     "weekdays": {
-      "0": "Sunday",
-      "1": "Monday",
-      "2": "Tuesday",
-      "3": "Wednesday",
-      "4": "Thursday",
-      "5": "Friday",
-      "6": "Saturday"
+      "0": "星期日",
+      "1": "星期一",
+      "2": "星期二",
+      "3": "星期三",
+      "4": "星期四",
+      "5": "星期五",
+      "6": "星期六"
     },
     "states": {
-      "open": "Open",
-      "soft_closed": "Soft closed",
-      "partial": "Partially closed",
-      "closed": "Closed"
+      "open": "未锁定",
+      "soft_closed": "软结账",
+      "partial": "部分结账",
+      "closed": "已结账"
     },
     "modules": {
-      "ar": "AR",
-      "ap": "AP",
-      "banking": "Banking",
-      "assets": "Assets",
-      "tax": "Tax",
-      "gl": "GL"
+      "ar": "应收",
+      "ap": "应付",
+      "banking": "银行",
+      "assets": "资产",
+      "tax": "税务",
+      "gl": "总账"
     },
     "reopenStates": {
-      "requested": "Requested",
-      "approved": "Approved",
-      "rejected": "Rejected",
-      "expired": "Expired",
-      "reclosed": "Reclosed"
+      "requested": "已申请",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "expired": "已过期",
+      "reclosed": "已重新结账"
     },
     "periodTypes": {
-      "any": "Any close",
-      "month": "Month-end",
-      "quarter": "Quarter-end",
-      "year": "Year-end",
-      "adjustment": "Adjustment"
+      "any": "任意结账",
+      "month": "月末",
+      "quarter": "季末",
+      "year": "年末",
+      "adjustment": "调整"
     },
     "workstreams": {
-      "readiness": "Readiness",
-      "banking": "Banking",
-      "ar": "Receivables",
-      "ap": "Payables",
-      "assets": "Fixed assets",
-      "tax": "Tax",
-      "payroll": "Payroll",
-      "intercompany": "Intercompany",
-      "gl": "General ledger",
-      "review": "Review",
-      "publish": "Publish"
+      "readiness": "就绪评估",
+      "banking": "银行",
+      "ar": "应收款",
+      "ap": "应付款",
+      "assets": "固定资产",
+      "tax": "税务",
+      "payroll": "薪酬",
+      "intercompany": "关联方往来",
+      "gl": "总账",
+      "review": "审核",
+      "publish": "发布"
     },
-    "gates": { "none": "No gate", "soft": "Soft gate", "hard": "Hard gate" },
+    "gates": { "none": "无关卡", "soft": "软关卡", "hard": "硬关卡" },
     "completionModes": {
-      "manual": "Manual",
-      "computed": "Ledger-computed",
-      "automatic": "Automatic"
+      "manual": "手动",
+      "computed": "总账计算",
+      "automatic": "自动"
     },
     "taskTypes": {
-      "check": "Check",
-      "action": "Action",
-      "reconciliation": "Reconciliation",
-      "journal": "Journal",
-      "approval": "Approval",
-      "report": "Report",
-      "publish": "Publication"
+      "check": "检查",
+      "action": "操作",
+      "reconciliation": "对账",
+      "journal": "日记账",
+      "approval": "审批",
+      "report": "报表",
+      "publish": "发布"
     },
     "policyTypes": {
-      "materiality": "Materiality",
-      "lock": "Lock",
-      "review": "Review",
-      "segregation": "Segregation of duties",
-      "exception": "Exception"
+      "materiality": "重要性",
+      "lock": "锁定",
+      "review": "审核",
+      "segregation": "职责分离",
+      "exception": "异常"
     },
     "automationTriggers": {
-      "run_started": "Run started",
-      "task_ready": "Task became ready",
-      "exception_opened": "Exception opened",
-      "deadline_approaching": "Deadline approaching",
-      "run_closed": "Run closed"
+      "run_started": "运行已开始",
+      "task_ready": "任务变为就绪",
+      "exception_opened": "异常已开启",
+      "deadline_approaching": "临近截止日期",
+      "run_closed": "运行已结束"
     },
     "automationActions": {
-      "notify": "Notify",
-      "assign": "Assign",
-      "run_check": "Run check",
-      "complete_task": "Complete task",
-      "create_task": "Create task",
-      "generate_report": "Generate report",
-      "start_flow": "Start flow"
+      "notify": "通知",
+      "assign": "指派",
+      "run_check": "运行检查",
+      "complete_task": "完成任务",
+      "create_task": "创建任务",
+      "generate_report": "生成报表",
+      "start_flow": "启动流程"
     },
     "reports": {
-      "balance-sheet": "Balance sheet",
-      "pnl": "Profit and loss",
-      "cash-flow": "Cash flow statement",
-      "trial-balance": "Trial balance",
-      "general-ledger": "General ledger"
+      "balance-sheet": "资产负债表",
+      "pnl": "利润表",
+      "cash-flow": "现金流量表",
+      "trial-balance": "试算平衡表",
+      "general-ledger": "总账"
     },
-    "table": { "period": "Period", "range": "Range", "entries": "Entries", "status": "Status" },
+    "table": { "period": "会计期间", "range": "范围", "entries": "分录", "status": "状态" },
     "empty": {
-      "calendars": "No fiscal calendars match this search.",
-      "periods": "No accounting periods match these filters.",
-      "blueprints": "No close blueprints match this search.",
-      "policies": "No close policies match this search.",
-      "automation": "No automation rules match this search.",
-      "packages": "No reporting packages match this search."
+      "calendars": "没有与此搜索匹配的会计日历。",
+      "periods": "没有与这些筛选条件匹配的会计期间。",
+      "blueprints": "没有与此搜索匹配的结账蓝图。",
+      "policies": "没有与此搜索匹配的结账政策。",
+      "automation": "没有与此搜索匹配的自动化规则。",
+      "packages": "没有与此搜索匹配的报告包。"
     },
     "messages": {
-      "calendarSaved": "Fiscal calendar saved",
-      "periodsGenerated": "Accounting periods generated",
-      "lockSaved": "Period lock saved",
-      "reopenRequested": "Reopen request submitted",
-      "reopenApproved": "Reopen window approved under the configured policy",
-      "reopenRejected": "Reopen request rejected",
-      "blueprintSaved": "Close blueprint version saved",
-      "policySaved": "Close policy saved",
-      "automationSaved": "Automation rule saved",
-      "packageSaved": "Reporting package saved"
+      "calendarSaved": "会计日历已保存",
+      "periodsGenerated": "会计期间已生成",
+      "lockSaved": "期间锁定已保存",
+      "reopenRequested": "重新开启申请已提交",
+      "reopenApproved": "重新开启窗口已按已配置政策批准",
+      "reopenRejected": "重新开启申请已拒绝",
+      "blueprintSaved": "结账蓝图版本已保存",
+      "policySaved": "结账政策已保存",
+      "automationSaved": "自动化规则已保存",
+      "packageSaved": "报告包已保存"
     },
     "errors": {
-      "actionFailed": "The setup change could not be saved",
-      "invalidConfiguration": "Configuration must be valid and complete"
+      "actionFailed": "无法保存该设置更改",
+      "invalidConfiguration": "配置必须有效且完整"
     }
   }
 }

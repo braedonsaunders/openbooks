@@ -1,54 +1,54 @@
 {
   "views": {
-    "new": "New view",
+    "new": "Nova visualização",
     "list": {
-      "title": "Views",
-      "description": "Named, shareable queries over the ledger, documents, parties and accounts — detail rows or grouped summaries. Browse, export and reuse them.",
-      "scopeLabel": "Scope",
-      "searchPlaceholder": "Search views…",
-      "scopeAll": "All",
-      "scopeShared": "Shared",
-      "scopePrivate": "Private",
-      "emptyTitle": "No views yet",
-      "emptyDescription": "Create your first view to query the ledger and reuse it anytime.",
+      "title": "Visualizações",
+      "description": "Consultas nomeadas e compartilháveis sobre o razão, documentos, partes e contas — linhas de detalhe ou resumos agrupados. Navegue, exporte e reutilize.",
+      "scopeLabel": "Escopo",
+      "searchPlaceholder": "Buscar visualizações…",
+      "scopeAll": "Todas",
+      "scopeShared": "Compartilhadas",
+      "scopePrivate": "Privadas",
+      "emptyTitle": "Nenhuma visualização ainda",
+      "emptyDescription": "Crie sua primeira visualização para consultar o razão e reutilizá-la quando quiser.",
       "columns": {
-        "name": "Name",
-        "source": "Source",
-        "scope": "Scope",
-        "updated": "Updated"
+        "name": "Nome",
+        "source": "Origem",
+        "scope": "Escopo",
+        "updated": "Atualizada"
       },
       "scope": {
-        "shared": "Shared",
-        "private": "Private"
+        "shared": "Compartilhada",
+        "private": "Privada"
       },
-      "runAction": "Run",
-      "editAction": "Edit"
+      "runAction": "Executar",
+      "editAction": "Editar"
     },
     "studio": {
-      "untitled": "Untitled view",
-      "autosaveHint": "Changes save automatically.",
-      "scopeLabel": "Scope",
+      "untitled": "Visualização sem título",
+      "autosaveHint": "As alterações são salvas automaticamente.",
+      "scopeLabel": "Escopo",
       "scope": {
-        "private": "Private — only you",
-        "shared": "Shared — everyone"
+        "private": "Privada — apenas você",
+        "shared": "Compartilhada — todos"
       },
       "exportPdf": "PDF",
       "exportXlsx": "Excel",
       "exportCsv": "CSV",
-      "deleteConfirm": "Delete this view?",
-      "viewResults": "View results"
+      "deleteConfirm": "Excluir esta visualização?",
+      "viewResults": "Ver resultados"
     },
     "run": {
-      "editSearch": "Edit view",
-      "backToList": "Views",
-      "resultsTitle": "Results",
-      "rowsRange": "Showing {from}–{to} of {total} rows",
-      "lastUpdated": "Updated {when}",
-      "refreshHint": "Results run live against current data.",
-      "emptyTitle": "No rows matched",
-      "emptyDescription": "Adjust the search criteria or filters and run again.",
-      "notFoundTitle": "View not found",
-      "notFoundDescription": "It may have been deleted, or you don't have access to it."
+      "editSearch": "Editar visualização",
+      "backToList": "Visualizações",
+      "resultsTitle": "Resultados",
+      "rowsRange": "Exibindo {from}–{to} de {total} linhas",
+      "lastUpdated": "Atualizada {when}",
+      "refreshHint": "Os resultados são executados ao vivo com os dados atuais.",
+      "emptyTitle": "Nenhuma linha correspondeu",
+      "emptyDescription": "Ajuste os critérios de busca ou filtros e execute novamente.",
+      "notFoundTitle": "Visualização não encontrada",
+      "notFoundDescription": "Ela pode ter sido excluída, ou você não tem acesso a ela."
     }
   }
 }

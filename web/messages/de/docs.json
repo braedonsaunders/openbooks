@@ -1,11 +1,11 @@
 {
-  "title": "Documentation",
-  "searchPlaceholder": "Search documentation…",
-  "noResults": "No matching articles.",
-  "lastUpdated": "Last updated {date}",
-  "related": "Related articles",
+  "title": "Dokumentation",
+  "searchPlaceholder": "Dokumentation durchsuchen…",
+  "noResults": "Keine passenden Artikel.",
+  "lastUpdated": "Zuletzt aktualisiert {date}",
+  "related": "Verwandte Artikel",
   "home": {
-    "title": "Documentation",
-    "subtitle": "Guides and configuration reference for OpenBooks. Browse a category below or search from the sidebar."
+    "title": "Dokumentation",
+    "subtitle": "Anleitungen und Konfigurationsreferenz für openbooks. Wählen Sie unten eine Kategorie oder suchen Sie über die Seitenleiste."
   }
 }

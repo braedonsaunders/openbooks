@@ -1,85 +1,85 @@
 {
-  "title": "Query Console",
-  "subtitle": "Real PostgreSQL, read-only. SELECT-only role, 10s timeout. ⌘⏎ to run.",
-  "description": "Real PostgreSQL — not a query dialect. Runs read-only under a SELECT-only role with a 10-second timeout. ⌘⏎ to run.",
-  "readOnlyBadge": "Read-only",
-  "run": "Run",
-  "running": "Running…",
-  "clear": "Clear",
-  "rowLimit": "Limit",
+  "title": "查询控制台",
+  "subtitle": "真实 PostgreSQL，只读。仅 SELECT 角色，10 秒超时。⌘⏎ 运行。",
+  "description": "真实 PostgreSQL — 并非查询方言。在仅 SELECT 角色下以只读方式运行，超时为 10 秒。⌘⏎ 运行。",
+  "readOnlyBadge": "只读",
+  "run": "运行",
+  "running": "运行中…",
+  "clear": "清除",
+  "rowLimit": "限制",
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
-  "failed": "Failed",
-  "queryError": "Query error",
-  "rowCount": "{count, plural, one {# row} other {# rows}}",
-  "truncated": "Truncated at {max}",
-  "ranSelection": "Ran selection",
-  "resultsIdle": "No results yet",
-  "resultsIdleHint": "Results appear here",
-  "filterResults": "Filter rows…",
-  "copyCsv": "Copy",
-  "copiedCsv": "Copied results as CSV",
-  "copyFailed": "Copy failed",
-  "runToSeeResults": "Run a query to see results",
-  "runHint": "Write SQL above, then press Run or ⌘⏎. Select text to run just that.",
-  "emptyResultSet": "Query returned no columns",
-  "noFilterMatch": "No rows match your filter",
-  "run_legacy": "Run query",
+  "failed": "失败",
+  "queryError": "查询错误",
+  "rowCount": "{count, plural, one {# 行} other {# 行}}",
+  "truncated": "已截断至 {max}",
+  "ranSelection": "已运行选定内容",
+  "resultsIdle": "尚无结果",
+  "resultsIdleHint": "结果显示在此处",
+  "filterResults": "筛选行…",
+  "copyCsv": "复制",
+  "copiedCsv": "已将结果复制为 CSV",
+  "copyFailed": "复制失败",
+  "runToSeeResults": "运行查询以查看结果",
+  "runHint": "在上方编写 SQL，然后按运行或 ⌘⏎。选中文本可仅运行该部分。",
+  "emptyResultSet": "查询未返回任何列",
+  "noFilterMatch": "没有行匹配您的筛选条件",
+  "run_legacy": "运行查询",
   "rail": {
     "schema": "Schema",
-    "snippets": "Snippets",
-    "history": "History"
+    "snippets": "代码片段",
+    "history": "历史记录"
   },
   "schema": {
-    "searchPlaceholder": "Search tables & columns…",
-    "noMatch": "No matching tables",
-    "insertTable": "Click to insert table name",
-    "insertColumn": "Click to insert column name"
+    "searchPlaceholder": "搜索表和列…",
+    "noMatch": "没有匹配的表",
+    "insertTable": "点击插入表名",
+    "insertColumn": "点击插入列名"
   },
   "history": {
-    "count": "{count, plural, one {# query} other {# queries}}",
-    "clear": "Clear",
-    "rows": "{count, plural, one {# row} other {# rows}}",
-    "failed": "Failed",
-    "empty": "Queries you run appear here"
+    "count": "{count, plural, one {# 个查询} other {# 个查询}}",
+    "clear": "清除",
+    "rows": "{count, plural, one {# 行} other {# 行}}",
+    "failed": "失败",
+    "empty": "您运行的查询将显示在此处"
   },
-  "snippetSaved": "Saved “{name}”",
+  "snippetSaved": "已保存“{name}”",
   "snippets": {
-    "save": "Save",
-    "namePlaceholder": "Name this query…",
-    "savedHeading": "Saved",
-    "examplesHeading": "Examples",
-    "delete": "Delete snippet",
+    "save": "保存",
+    "namePlaceholder": "为此查询命名…",
+    "savedHeading": "已保存",
+    "examplesHeading": "示例",
+    "delete": "删除代码片段",
     "trialBalance": {
-      "label": "Trial balance",
-      "description": "Signed balance per account, non-zero only."
+      "label": "试算平衡表",
+      "description": "每个科目的带符号余额，仅非零。"
     },
     "topAccounts": {
-      "label": "Largest balances",
-      "description": "The 15 accounts with the biggest absolute balance."
+      "label": "最大余额",
+      "description": "绝对余额最大的 15 个科目。"
     },
     "recentEntries": {
-      "label": "Recent journal entries",
-      "description": "The 50 most recent entries with status and origin."
+      "label": "近期分录",
+      "description": "最近的 50 条分录，含状态和来源。"
     },
     "monthlyActivity": {
-      "label": "Monthly activity",
-      "description": "Posted entries and debit totals by month."
+      "label": "月度活动",
+      "description": "按月统计的已过账分录和借方合计。"
     },
     "unbalancedEntries": {
-      "label": "Unbalanced entries",
-      "description": "Entries whose lines don't net to zero."
+      "label": "不平衡分录",
+      "description": "各行净额不为零的分录。"
     },
     "entriesByOrigin": {
-      "label": "Entries by origin",
-      "description": "Count of entries grouped by their source origin."
+      "label": "按来源分组的分录",
+      "description": "按来源分组统计的分录数量。"
     },
     "tableSizes": {
-      "label": "Table row counts",
-      "description": "Estimated live rows per table, largest first."
+      "label": "表行数统计",
+      "description": "每个表的估计活动行数，最大者优先。"
     },
     "listColumns": {
-      "label": "List all columns",
-      "description": "Every column in the public schema with its type."
+      "label": "列出所有列",
+      "description": "public schema 中的每一列及其类型。"
     }
   }
 }

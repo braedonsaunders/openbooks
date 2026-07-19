@@ -1,281 +1,281 @@
 {
   "title": "Insights",
   "tabs": {
-    "cards": "Cards",
+    "cards": "Karten",
     "dashboards": "Dashboards"
   },
   "viz": {
-    "table": "Table",
-    "bar": "Bar",
-    "line": "Line",
-    "area": "Area",
-    "pie": "Pie",
+    "table": "Tabelle",
+    "bar": "Balken",
+    "line": "Linie",
+    "area": "Fläche",
+    "pie": "Kreis",
     "empty": {
-      "noData": "No data for this query.",
-      "pickFields": "Pick a dimension and at least one measure to chart this."
+      "noData": "Keine Daten für diese Abfrage.",
+      "pickFields": "Wählen Sie eine Dimension und mindestens eine Kennzahl, um dies darzustellen."
     },
-    "noRows": "No rows.",
+    "noRows": "Keine Zeilen.",
     "values": {
-      "yes": "Yes",
-      "no": "No",
-      "active": "Active",
-      "inactive": "Inactive"
+      "yes": "Ja",
+      "no": "Nein",
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
     }
   },
   "status": {
-    "published": "Published"
+    "published": "Veröffentlicht"
   },
   "actions": {
-    "publish": "Publish",
-    "unpublish": "Unpublish"
+    "publish": "Veröffentlichen",
+    "unpublish": "Veröffentlichung zurückziehen"
   },
   "autosave": {
-    "saved": "All changes saved",
-    "unsaved": "Unsaved changes…",
-    "failed": "Autosave failed"
+    "saved": "Alle Änderungen gespeichert",
+    "unsaved": "Nicht gespeicherte Änderungen…",
+    "failed": "Automatisches Speichern fehlgeschlagen"
   },
   "errors": {
-    "queryFailed": "Query failed",
-    "updateFailed": "Update failed"
+    "queryFailed": "Abfrage fehlgeschlagen",
+    "updateFailed": "Aktualisierung fehlgeschlagen"
   },
   "empty": {
-    "dashboardNoCards": "This dashboard has no cards yet."
+    "dashboardNoCards": "Dieses Dashboard hat noch keine Karten."
   },
   "cards": {
-    "description": "Build chart and table cards from a query over the ledger, then arrange them on dashboards.",
-    "searchPlaceholder": "Search cards…",
-    "emptyTitle": "No cards yet",
-    "emptyDescription": "Build your first card — pick a source, choose what to measure and group by, and pick a chart.",
-    "sourceColumn": "Source",
-    "chartColumn": "Chart",
-    "newButton": "New card",
-    "createDraftFailed": "Could not create a draft card"
+    "description": "Erstellen Sie Diagramm- und Tabellenkarten aus einer Abfrage über das Hauptbuch und ordnen Sie sie dann auf Dashboards an.",
+    "searchPlaceholder": "Karten suchen…",
+    "emptyTitle": "Noch keine Karten",
+    "emptyDescription": "Erstellen Sie Ihre erste Karte — wählen Sie eine Quelle, legen Sie fest, was gemessen und gruppiert werden soll, und wählen Sie ein Diagramm.",
+    "sourceColumn": "Quelle",
+    "chartColumn": "Diagramm",
+    "newButton": "Neue Karte",
+    "createDraftFailed": "Es konnte kein Kartenentwurf erstellt werden"
   },
   "dashboards": {
-    "description": "Arrange published cards on shared dashboards.",
-    "searchPlaceholder": "Search dashboards…",
-    "emptyTitle": "No dashboards yet",
-    "emptyDescription": "Create a dashboard, then drop your published cards onto it.",
-    "cardsColumn": "Cards",
-    "newButton": "New dashboard",
-    "createDraftFailed": "Could not create a draft dashboard"
+    "description": "Ordnen Sie veröffentlichte Karten auf gemeinsamen Dashboards an.",
+    "searchPlaceholder": "Dashboards suchen…",
+    "emptyTitle": "Noch keine Dashboards",
+    "emptyDescription": "Erstellen Sie ein Dashboard und legen Sie dann Ihre veröffentlichten Karten darauf ab.",
+    "cardsColumn": "Karten",
+    "newButton": "Neues Dashboard",
+    "createDraftFailed": "Es konnte kein Dashboard-Entwurf erstellt werden"
   },
   "cardStudio": {
-    "untitled": "Untitled card",
-    "autosaveHint": "Changes save automatically. Preview updates live.",
-    "nameRequiredToPublish": "Name the card to publish it",
-    "saveFailedRetry": "Save failed — fix and retry",
-    "namePlaceholder": "Monthly spend by department",
-    "sourceLabel": "Source",
-    "measuresTitle": "Measures",
-    "measuresEmpty": "Add a measure to aggregate (or leave empty for a detail table).",
-    "ofRows": "of rows",
-    "selectFieldPlaceholder": "Select field…",
-    "removeMeasure": "Remove measure",
-    "groupByTitle": "Group by",
-    "groupByEmpty": "Group rows by a dimension to summarize them.",
-    "binExact": "Exact",
+    "untitled": "Unbenannte Karte",
+    "autosaveHint": "Änderungen werden automatisch gespeichert. Die Vorschau aktualisiert sich live.",
+    "nameRequiredToPublish": "Benennen Sie die Karte, um sie zu veröffentlichen",
+    "saveFailedRetry": "Speichern fehlgeschlagen — beheben und erneut versuchen",
+    "namePlaceholder": "Monatliche Ausgaben nach Abteilung",
+    "sourceLabel": "Quelle",
+    "measuresTitle": "Kennzahlen",
+    "measuresEmpty": "Fügen Sie eine Kennzahl zum Aggregieren hinzu (oder lassen Sie das Feld leer für eine Detailtabelle).",
+    "ofRows": "der Zeilen",
+    "selectFieldPlaceholder": "Feld auswählen…",
+    "removeMeasure": "Kennzahl entfernen",
+    "groupByTitle": "Gruppieren nach",
+    "groupByEmpty": "Gruppieren Sie Zeilen nach einer Dimension, um sie zusammenzufassen.",
+    "binExact": "Exakt",
     "bins": {
-      "day": "by day",
-      "week": "by week",
-      "month": "by month",
-      "quarter": "by quarter",
-      "year": "by year"
+      "day": "nach Tag",
+      "week": "nach Woche",
+      "month": "nach Monat",
+      "quarter": "nach Quartal",
+      "year": "nach Jahr"
     },
-    "removeDimension": "Remove dimension",
-    "filtersTitle": "Filters",
-    "filtersEmpty": "No filters — the card covers all rows.",
-    "removeFilter": "Remove filter",
+    "removeDimension": "Dimension entfernen",
+    "filtersTitle": "Filter",
+    "filtersEmpty": "Keine Filter — die Karte umfasst alle Zeilen.",
+    "removeFilter": "Filter entfernen",
     "filterPlaceholderList": "a, b, c",
     "filterPlaceholderNumber": "30",
-    "filterPlaceholderDate": "YYYY-MM-DD",
-    "filterPlaceholderValue": "Value",
-    "previewRequestFailed": "Preview request failed",
-    "runningPreview": "Running preview…",
-    "buildToPreview": "Build a query to preview.",
-    "rowCount": "{count, plural, one {# row} other {# rows}}",
-    "capped": "(capped at 10,000)",
+    "filterPlaceholderDate": "JJJJ-MM-TT",
+    "filterPlaceholderValue": "Wert",
+    "previewRequestFailed": "Vorschauanfrage fehlgeschlagen",
+    "runningPreview": "Vorschau wird ausgeführt…",
+    "buildToPreview": "Erstellen Sie eine Abfrage für die Vorschau.",
+    "rowCount": "{count, plural, one {# Zeile} other {# Zeilen}}",
+    "capped": "(begrenzt auf 10.000)",
     "duration": "{ms} ms",
-    "publishedToast": "Card published",
-    "draftToast": "Card returned to draft",
-    "deleteConfirm": "Delete this card? It will be removed from any dashboards.",
-    "deleteFailed": "Could not delete the card",
-    "deletedToast": "Card deleted"
+    "publishedToast": "Karte veröffentlicht",
+    "draftToast": "Karte in den Entwurf zurückgesetzt",
+    "deleteConfirm": "Diese Karte löschen? Sie wird von allen Dashboards entfernt.",
+    "deleteFailed": "Die Karte konnte nicht gelöscht werden",
+    "deletedToast": "Karte gelöscht"
   },
   "vizSettings": {
-    "category": "Category",
-    "auto": "Auto",
-    "value": "Value",
-    "allMeasures": "All measures",
-    "stacked": "Stacked",
+    "category": "Kategorie",
+    "auto": "Automatisch",
+    "value": "Wert",
+    "allMeasures": "Alle Kennzahlen",
+    "stacked": "Gestapelt",
     "horizontal": "Horizontal",
-    "smooth": "Smooth",
-    "showValues": "Values",
-    "hideLegend": "Hide legend"
+    "smooth": "Geglättet",
+    "showValues": "Werte",
+    "hideLegend": "Legende ausblenden"
   },
   "cardTile": {
-    "loadFailed": "Could not load this card"
+    "loadFailed": "Diese Karte konnte nicht geladen werden"
   },
   "builder": {
     "back": "Dashboards",
-    "untitled": "Untitled dashboard",
-    "pinToHome": "Pin to home",
-    "unpin": "Unpin",
-    "namePlaceholder": "Executive overview",
-    "addCard": "Add a card:",
-    "noPublishedCards": "No published cards yet. <link>Build and publish a card</link> to place it here.",
-    "emptyEditor": "Add published cards above to build this dashboard.",
+    "untitled": "Unbenanntes Dashboard",
+    "pinToHome": "An Startseite anheften",
+    "unpin": "Lösen",
+    "namePlaceholder": "Management-Überblick",
+    "addCard": "Karte hinzufügen:",
+    "noPublishedCards": "Noch keine veröffentlichten Karten. <link>Erstellen und veröffentlichen Sie eine Karte</link>, um sie hier zu platzieren.",
+    "emptyEditor": "Fügen Sie oben veröffentlichte Karten hinzu, um dieses Dashboard zu erstellen.",
     "widths": {
-      "third": "Third",
-      "half": "Half",
-      "twoThirds": "Two-thirds",
-      "full": "Full"
+      "third": "Drittel",
+      "half": "Hälfte",
+      "twoThirds": "Zwei Drittel",
+      "full": "Ganz"
     },
     "heights": {
-      "short": "Short",
-      "medium": "Medium",
-      "tall": "Tall"
+      "short": "Niedrig",
+      "medium": "Mittel",
+      "tall": "Hoch"
     },
-    "cardWidth": "Card width",
-    "cardHeight": "Card height",
-    "removeCard": "Remove card",
-    "unavailableCard": "This card is unavailable (deleted or unpublished).",
-    "pinnedToast": "Pinned to your home",
-    "unpinnedToast": "Unpinned",
-    "pinFailed": "Could not update pin",
-    "publishedToast": "Dashboard published",
-    "draftToast": "Dashboard returned to draft",
-    "deleteConfirm": "Delete this dashboard?",
-    "deletedToast": "Dashboard deleted",
-    "deleteFailed": "Could not delete the dashboard"
+    "cardWidth": "Kartenbreite",
+    "cardHeight": "Kartenhöhe",
+    "removeCard": "Karte entfernen",
+    "unavailableCard": "Diese Karte ist nicht verfügbar (gelöscht oder Veröffentlichung zurückgezogen).",
+    "pinnedToast": "An Ihre Startseite angeheftet",
+    "unpinnedToast": "Gelöst",
+    "pinFailed": "Anheftung konnte nicht aktualisiert werden",
+    "publishedToast": "Dashboard veröffentlicht",
+    "draftToast": "Dashboard in den Entwurf zurückgesetzt",
+    "deleteConfirm": "Dieses Dashboard löschen?",
+    "deletedToast": "Dashboard gelöscht",
+    "deleteFailed": "Das Dashboard konnte nicht gelöscht werden"
   },
   "catalog": {
     "sources": {
       "ledger_lines": {
-        "label": "Ledger lines",
-        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail."
+        "label": "Hauptbuchzeilen",
+        "description": "Jede Journalzeile mit ihrer Buchung, ihrem Konto, ihrer Partei und ihren Dimensionen — das vollständige Hauptbuchdetail."
       },
       "documents": {
-        "label": "Documents",
-        "description": "Business documents — bills, invoices, payments, orders — with party and dimension labels."
+        "label": "Dokumente",
+        "description": "Geschäftsdokumente — Eingangsrechnungen, Ausgangsrechnungen, Zahlungen, Aufträge — mit Partei- und Dimensionsbezeichnungen."
       },
       "parties": {
-        "label": "Parties",
-        "description": "Customers, vendors and employees — one row per party with its role flags."
+        "label": "Parteien",
+        "description": "Kunden, Lieferanten und Mitarbeiter — eine Zeile pro Partei mit ihren Rollenkennzeichen."
       },
       "accounts": {
-        "label": "Accounts",
-        "description": "The chart of accounts — number, name, type and posting flags."
+        "label": "Konten",
+        "description": "Der Kontenplan — Nummer, Name, Typ und Buchungskennzeichen."
       }
     },
     "fields": {
       "ledger_lines": {
-        "posting_date": "Posting date",
-        "entry_number": "Entry #",
-        "entry_status": "Entry status",
-        "entry_origin": "Origin",
-        "account_number": "Account #",
-        "account_name": "Account",
-        "account_type": "Account type",
-        "party": "Party",
-        "department": "Department",
-        "project": "Project",
-        "location": "Location",
-        "class": "Class",
-        "memo": "Memo",
-        "amount": "Amount (base)",
-        "debit": "Debit",
-        "credit": "Credit",
-        "quantity": "Quantity",
-        "currency": "Currency"
+        "posting_date": "Buchungsdatum",
+        "entry_number": "Buchungs-Nr.",
+        "entry_status": "Buchungsstatus",
+        "entry_origin": "Herkunft",
+        "account_number": "Konto-Nr.",
+        "account_name": "Konto",
+        "account_type": "Kontotyp",
+        "party": "Partei",
+        "department": "Abteilung",
+        "project": "Projekt",
+        "location": "Standort",
+        "class": "Klasse",
+        "memo": "Notiz",
+        "amount": "Betrag (Basis)",
+        "debit": "Soll",
+        "credit": "Haben",
+        "quantity": "Menge",
+        "currency": "Währung"
       },
       "documents": {
-        "kind": "Kind",
-        "document_number": "Document #",
-        "party": "Party",
+        "kind": "Art",
+        "document_number": "Dokument-Nr.",
+        "party": "Partei",
         "status": "Status",
-        "document_date": "Document date",
-        "due_date": "Due date",
-        "department": "Department",
-        "project": "Project",
-        "currency": "Currency",
-        "subtotal": "Subtotal",
-        "tax_total": "Tax",
-        "total": "Total",
-        "document_count": "Document"
+        "document_date": "Dokumentdatum",
+        "due_date": "Fälligkeitsdatum",
+        "department": "Abteilung",
+        "project": "Projekt",
+        "currency": "Währung",
+        "subtotal": "Zwischensumme",
+        "tax_total": "Steuer",
+        "total": "Summe",
+        "document_count": "Dokument"
       },
       "parties": {
         "display_name": "Name",
-        "kind": "Kind",
-        "is_active": "Active",
-        "is_customer": "Customer",
-        "is_vendor": "Vendor",
-        "is_employee": "Employee",
-        "hired_on": "Hired on",
-        "created_at": "Created at"
+        "kind": "Art",
+        "is_active": "Aktiv",
+        "is_customer": "Kunde",
+        "is_vendor": "Lieferant",
+        "is_employee": "Mitarbeiter",
+        "hired_on": "Eingestellt am",
+        "created_at": "Erstellt am"
       },
       "accounts": {
-        "number": "Account #",
+        "number": "Konto-Nr.",
         "name": "Name",
-        "type": "Type",
-        "is_summary": "Summary",
-        "is_active": "Active",
-        "account_count": "Account"
+        "type": "Typ",
+        "is_summary": "Sammelkonto",
+        "is_active": "Aktiv",
+        "account_count": "Konto"
       }
     }
   },
   "aggs": {
-    "sum": "Sum",
-    "avg": "Average",
-    "count": "Count",
+    "sum": "Summe",
+    "avg": "Durchschnitt",
+    "count": "Anzahl",
     "min": "Minimum",
     "max": "Maximum"
   },
   "operators": {
-    "eq": "equals",
-    "neq": "not equals",
-    "in": "is any of",
-    "not_in": "is none of",
-    "gt": "greater than",
-    "gte": "on or after / ≥",
-    "lt": "less than",
-    "lte": "on or before / ≤",
-    "contains": "contains",
-    "is_null": "is empty",
-    "is_not_null": "is set",
-    "last_n_days": "within last N days",
-    "this_month": "is this month",
-    "this_quarter": "is this quarter",
-    "this_year": "is this year",
-    "ytd": "year to date"
+    "eq": "gleich",
+    "neq": "ungleich",
+    "in": "ist eines von",
+    "not_in": "ist keines von",
+    "gt": "größer als",
+    "gte": "am oder nach / ≥",
+    "lt": "kleiner als",
+    "lte": "am oder vor / ≤",
+    "contains": "enthält",
+    "is_null": "ist leer",
+    "is_not_null": "ist gesetzt",
+    "last_n_days": "innerhalb der letzten N Tage",
+    "this_month": "ist dieser Monat",
+    "this_quarter": "ist dieses Quartal",
+    "this_year": "ist dieses Jahr",
+    "ytd": "seit Jahresbeginn"
   },
   "measureLabels": {
-    "count": "Count",
-    "sum": "Total {field}",
-    "avg": "Avg {field}",
-    "min": "Min {field}",
-    "max": "Max {field}",
+    "count": "Anzahl",
+    "sum": "Summe {field}",
+    "avg": "Durchschn. {field}",
+    "min": "Min. {field}",
+    "max": "Max. {field}",
     "binned": "{field} ({bin})",
     "bins": {
-      "day": "day",
-      "week": "week",
-      "month": "month",
-      "quarter": "quarter",
-      "year": "year"
+      "day": "Tag",
+      "week": "Woche",
+      "month": "Monat",
+      "quarter": "Quartal",
+      "year": "Jahr"
     }
   },
   "compileErrors": {
-    "unknown_source": "Unknown source “{subject}”",
-    "unknown_field": "Unknown field “{subject}”",
-    "unknown_aggregation": "Unknown aggregation “{subject}”",
-    "aggregation_needs_field": "The “{subject}” aggregation needs a field",
-    "not_a_dimension": "“{subject}” cannot be used to group",
-    "not_a_measure": "“{subject}” is not a numeric measure",
-    "unknown_operator": "Unknown filter operator “{subject}”",
-    "unknown_bin": "Unknown date bucket “{subject}”",
-    "contains_needs_text": "The “contains” filter needs a text value",
-    "last_n_days_needs_number": "The “within last N days” filter needs a number",
-    "no_columns": "The query selects no columns",
-    "timeout": "Query took too long — narrow the range or add filters."
+    "unknown_source": "Unbekannte Quelle „{subject}“",
+    "unknown_field": "Unbekanntes Feld „{subject}“",
+    "unknown_aggregation": "Unbekannte Aggregation „{subject}“",
+    "aggregation_needs_field": "Die Aggregation „{subject}“ benötigt ein Feld",
+    "not_a_dimension": "„{subject}“ kann nicht zum Gruppieren verwendet werden",
+    "not_a_measure": "„{subject}“ ist keine numerische Kennzahl",
+    "unknown_operator": "Unbekannter Filteroperator „{subject}“",
+    "unknown_bin": "Unbekannter Datumsbereich „{subject}“",
+    "contains_needs_text": "Der Filter „enthält“ benötigt einen Textwert",
+    "last_n_days_needs_number": "Der Filter „innerhalb der letzten N Tage“ benötigt eine Zahl",
+    "no_columns": "Die Abfrage wählt keine Spalten aus",
+    "timeout": "Die Abfrage hat zu lange gedauert — grenzen Sie den Bereich ein oder fügen Sie Filter hinzu."
   }
 }

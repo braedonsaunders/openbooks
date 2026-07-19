@@ -1,153 +1,153 @@
 {
   "hub": {
-    "title": "Analytics",
-    "description": "Native intelligence dashboards — profitability, cash, customers, vendors and forensic risk, computed live from your ledger.",
-    "searchPlaceholder": "Search analytics…",
-    "noMatches": "No dashboards match your search.",
-    "planned": "Planned",
+    "title": "アナリティクス",
+    "description": "ネイティブなインテリジェンスダッシュボード — 収益性、キャッシュ、得意先、仕入先、フォレンジックリスクを元帳からリアルタイムで算出します。",
+    "searchPlaceholder": "アナリティクスを検索…",
+    "noMatches": "検索に一致するダッシュボードはありません。",
+    "planned": "予定",
     "groups": {
-      "profitability": "Profitability & performance",
-      "operations": "Cash & operations",
-      "relationships": "Customers & vendors",
-      "forensics": "Risk & forensics"
+      "profitability": "収益性とパフォーマンス",
+      "operations": "キャッシュとオペレーション",
+      "relationships": "得意先と仕入先",
+      "forensics": "リスクとフォレンジック"
     },
     "cards": {
-      "financialHealthTitle": "Financial Health",
-      "financialHealthDesc": "Margin & ratio scorecard with a composite health score",
-      "trueCostTitle": "True Cost",
-      "trueCostDesc": "Overhead burden absorption and selling-rate builder",
-      "utilizationTitle": "Utilization",
-      "utilizationDesc": "Billable time, utilization and service-item profit",
-      "customerTitle": "Customer Intelligence",
-      "customerDesc": "Segmentation, lifetime value and customer profitability",
-      "vendorTitle": "Vendor Performance",
-      "vendorDesc": "Spend concentration, payment behavior and vendor scorecards",
+      "financialHealthTitle": "財務健全性",
+      "financialHealthDesc": "総合的な健全性スコアを備えた利益率・比率のスコアカード",
+      "trueCostTitle": "真のコスト",
+      "trueCostDesc": "間接費負担の吸収と販売レートビルダー",
+      "utilizationTitle": "稼働率",
+      "utilizationDesc": "請求可能時間、稼働率、サービス品目の利益",
+      "customerTitle": "得意先インテリジェンス",
+      "customerDesc": "セグメンテーション、生涯価値、得意先の収益性",
+      "vendorTitle": "仕入先パフォーマンス",
+      "vendorDesc": "支出の集中、支払行動、仕入先スコアカード",
       "sentinelTitle": "Sentinel",
-      "sentinelDesc": "Forensic transaction integrity and anomaly detection",
-      "spendVelocityTitle": "Spend Velocity",
-      "spendVelocityDesc": "Spend acceleration, subscription creep and shadow IT",
-      "cashflowTitle": "Cash Flow",
-      "cashflowDesc": "Weekly cash forecast, runway and AP/AR aging"
+      "sentinelDesc": "フォレンジックな取引の整合性と異常検知",
+      "spendVelocityTitle": "支出速度",
+      "spendVelocityDesc": "支出の加速、サブスクリプションの増殖、シャドーIT",
+      "cashflowTitle": "キャッシュフロー",
+      "cashflowDesc": "週次のキャッシュ予測、ランウェイ、AP/ARエイジング"
     }
   },
   "financialHealth": {
-    "title": "Financial Health",
-    "description": "Profitability, efficiency and operating ratios with a composite health score.",
-    "backToHub": "Analytics",
+    "title": "財務健全性",
+    "description": "総合的な健全性スコアを備えた収益性、効率性、営業比率。",
+    "backToHub": "アナリティクス",
     "tabs": {
-      "overview": "Overview",
-      "margin": "Margin",
-      "items": "Items",
-      "segments": "Segments",
-      "forecast": "Forecast",
-      "scenarios": "Scenarios",
-      "budget": "Budget",
-      "drivers": "Drivers",
-      "ratios": "Ratios",
-      "configuration": "Configuration"
+      "overview": "概要",
+      "margin": "利益率",
+      "items": "品目",
+      "segments": "セグメント",
+      "forecast": "予測",
+      "scenarios": "シナリオ",
+      "budget": "予算",
+      "drivers": "ドライバー",
+      "ratios": "比率",
+      "configuration": "設定"
     },
     "kpi": {
-      "revenue": "Revenue",
-      "grossMargin": "Gross Margin",
-      "operatingIncome": "Operating Income",
-      "breakeven": "Breakeven"
+      "revenue": "売上高",
+      "grossMargin": "売上総利益率",
+      "operatingIncome": "営業利益",
+      "breakeven": "損益分岐点"
     },
     "kpiSub": {
-      "growth": "YoY {pct}",
-      "grossProfit": "GP: {amount}",
-      "opex": "OpEx: {amount}",
-      "perMonth": "per month"
+      "growth": "前年比 {pct}",
+      "grossProfit": "売上総利益: {amount}",
+      "opex": "販管費: {amount}",
+      "perMonth": "月あたり"
     },
     "score": {
-      "title": "Financial Health Score",
-      "overall": "Overall",
-      "excellent": "Excellent",
-      "good": "Good",
-      "average": "Average",
-      "needsWork": "Needs Work"
+      "title": "財務健全性スコア",
+      "overall": "総合",
+      "excellent": "優秀",
+      "good": "良好",
+      "average": "平均",
+      "needsWork": "要改善"
     },
     "categories": {
-      "profitability": "Profitability",
-      "efficiency": "Efficiency",
-      "operating": "Operations"
+      "profitability": "収益性",
+      "efficiency": "効率性",
+      "operating": "オペレーション"
     },
     "subKpi": {
       "roic": "ROIC",
-      "ebitdaMargin": "EBITDA Margin",
-      "opLeverage": "Op Leverage",
+      "ebitdaMargin": "EBITDAマージン",
+      "opLeverage": "営業レバレッジ",
       "rule40": "Rule of 40"
     },
     "subKpiSub": {
-      "returnOnCapital": "Return on Invested Capital",
-      "earningsMargin": "Earnings Margin",
-      "sensitivity": "Sensitivity",
-      "growthProfit": "Growth + Profit"
+      "returnOnCapital": "投下資本利益率",
+      "earningsMargin": "利益率",
+      "sensitivity": "感応度",
+      "growthProfit": "成長＋利益"
     },
-    "gridHint": "Click any ratio for details",
+    "gridHint": "比率をクリックすると詳細が表示されます",
     "pnl": {
-      "title": "P&L Summary",
-      "lineItem": "Line Item",
-      "amount": "Amount",
-      "pctRevenue": "% Rev",
-      "revenue": "Revenue",
-      "cogs": "Cost of Goods Sold",
-      "grossProfit": "Gross Profit",
-      "opex": "Operating Expenses",
-      "operatingIncome": "Operating Income",
-      "otherIncome": "Other Income",
-      "otherExpense": "Other Expense",
-      "netIncome": "Net Income"
+      "title": "損益計算書サマリー",
+      "lineItem": "項目",
+      "amount": "金額",
+      "pctRevenue": "対売上比",
+      "revenue": "売上高",
+      "cogs": "売上原価",
+      "grossProfit": "売上総利益",
+      "opex": "営業費用",
+      "operatingIncome": "営業利益",
+      "otherIncome": "営業外収益",
+      "otherExpense": "営業外費用",
+      "netIncome": "純利益"
     },
     "budget": {
-      "measuredAgainst": "Measured against <strong>{name}</strong> (FY{year}, {status}) — budget lines over the selected range. Manage scenarios in <link>Budgets</link>.",
-      "totalBudget": "Total Budget",
-      "budgetedAccounts": "{count, plural, one {# budgeted account} other {# budgeted accounts}}",
-      "totalActual": "Total Actual",
-      "normalizedIncome": "income sign-normalized",
-      "overBudget": "Over Budget",
-      "onWatch": "{count} on watch",
-      "coverage": "Coverage",
-      "coverageSub": "accounts with a budget line",
-      "tableTitle": "Budget vs Actual ({count})",
-      "search": "Search accounts…",
+      "measuredAgainst": "<strong>{name}</strong>（FY{year}、{status}）を基準に測定 — 選択した範囲の予算ラインです。シナリオの管理は<link>予算</link>で行えます。",
+      "totalBudget": "予算合計",
+      "budgetedAccounts": "{count, plural, one {#件の予算計上勘定} other {#件の予算計上勘定}}",
+      "totalActual": "実績合計",
+      "normalizedIncome": "収益の符号を正規化",
+      "overBudget": "予算超過",
+      "onWatch": "{count}件が要注意",
+      "coverage": "カバレッジ",
+      "coverageSub": "予算ラインのある勘定",
+      "tableTitle": "予算対実績（{count}）",
+      "search": "勘定を検索…",
       "csv": "CSV",
-      "all": "All",
-      "status": { "on-track": "On Track", "watch": "Watch", "over": "Over", "no-budget": "No Budget" },
-      "columns": { "account": "Account", "type": "Type", "budget": "Budget", "actual": "Actual", "progress": "Progress", "variance": "Variance", "variancePct": "Variance %", "status": "Status" },
-      "showing": "Showing {from}–{to} of {total} accounts",
-      "previous": "Previous",
-      "next": "Next",
-      "noBudgetTitle": "No formal budget for this period",
-      "noBudgetDescription": "Create and approve a budget scenario to see real account-level variance. This dashboard does not substitute synthetic benchmark targets.",
-      "createBudget": "Create a budget"
+      "all": "すべて",
+      "status": { "on-track": "順調", "watch": "要注意", "over": "超過", "no-budget": "予算なし" },
+      "columns": { "account": "勘定", "type": "タイプ", "budget": "予算", "actual": "実績", "progress": "進捗", "variance": "差異", "variancePct": "差異率", "status": "ステータス" },
+      "showing": "{total}件中 {from}〜{to} を表示",
+      "previous": "前へ",
+      "next": "次へ",
+      "noBudgetTitle": "この期間の正式な予算がありません",
+      "noBudgetDescription": "予算シナリオを作成して承認すると、実際の勘定単位の差異が表示されます。このダッシュボードは合成のベンチマーク目標で代用することはありません。",
+      "createBudget": "予算を作成"
     }
   },
   "customer": {
-    "title": "Customer Intelligence",
-    "backToHub": "Analytics"
+    "title": "得意先インテリジェンス",
+    "backToHub": "アナリティクス"
   },
   "vendor": {
-    "title": "Vendor Performance",
-    "backToHub": "Analytics"
+    "title": "仕入先パフォーマンス",
+    "backToHub": "アナリティクス"
   },
   "cashflow": {
-    "title": "Cash Flow",
-    "backToHub": "Analytics"
+    "title": "キャッシュフロー",
+    "backToHub": "アナリティクス"
   },
   "trueCost": {
-    "title": "True Cost",
-    "backToHub": "Analytics"
+    "title": "真のコスト",
+    "backToHub": "アナリティクス"
   },
   "utilization": {
-    "title": "Utilization",
-    "backToHub": "Analytics"
+    "title": "稼働率",
+    "backToHub": "アナリティクス"
   },
   "spendVelocity": {
-    "title": "Spend Velocity",
-    "backToHub": "Analytics"
+    "title": "支出速度",
+    "backToHub": "アナリティクス"
   },
   "sentinel": {
     "title": "Sentinel",
-    "backToHub": "Analytics"
+    "backToHub": "アナリティクス"
   }
 }
