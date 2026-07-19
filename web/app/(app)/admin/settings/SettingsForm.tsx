@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { CalendarClock } from 'lucide-react'
 import {
@@ -21,6 +21,7 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
+import { countryOptions } from '../../../../lib/countries'
 
 export type AccountOption = { id: string; label: string; type: string }
 
@@ -82,6 +83,8 @@ export function SettingsForm({
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
+  const locale = useLocale()
+  const countries = useMemo(() => countryOptions(locale), [locale])
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(initial)
@@ -161,17 +164,13 @@ export function SettingsForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="country">{t('organization.country')}</Label>
-            <Input
-              id="country"
+            <SearchSelect
+              ariaLabel={t('organization.country')}
               value={form.country}
-              onChange={(e) => setForm((f) => ({ ...f, country: e.target.value.toUpperCase() }))}
+              onChange={(value) => setForm((f) => ({ ...f, country: (value ?? '').toUpperCase() }))}
+              options={countries}
               placeholder={t('organization.countryPlaceholder')}
-              maxLength={2}
-              className="uppercase"
             />
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('organization.countryHint')}
-            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="defaultLocale">{t('organization.defaultLanguage')}</Label>

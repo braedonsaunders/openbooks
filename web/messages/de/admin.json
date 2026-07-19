@@ -521,7 +521,7 @@
       "legalName": "Rechtlicher Name",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
       "country": "Land",
-      "countryPlaceholder": "CA",
+      "countryPlaceholder": "Land auswählen…",
       "countryHint": "Zweistelliger ISO-Code (z. B. CA, US, GB).",
       "defaultLanguage": "Standardsprache",
       "defaultLanguageHint": "Die Sprache, in der die App für alle angezeigt wird, die im Kontomenü keine eigene ausgewählt haben.",
