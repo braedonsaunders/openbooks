@@ -79,13 +79,21 @@ export class QboSource implements MigrationSource {
 
   // --- master data ---------------------------------------------------------------
 
-  async entities(): Promise<EntityStream[]> {
+  async entities(since?: Date | null): Promise<EntityStream[]> {
+    // Daily-mirror efficiency: the high-volume streams (parties, items) honor
+    // `since` via Metadata.LastUpdatedTime; the small structural streams
+    // (accounts, tax rates) always pull in full. Full migration = everything.
     return [
       { resource: "accounts", records: await this.accounts() },
       { resource: "tax_codes", records: await this.taxCodes() },
-      { resource: "parties", records: await this.parties() },
-      { resource: "items", records: await this.items() },
+      { resource: "parties", records: await this.parties(since) },
+      { resource: "items", records: await this.items(since) },
     ];
+  }
+
+  /** QBO query WHERE clause for an incremental pull ("" = full). */
+  private sinceWhere(since?: Date | null): string {
+    return since ? `Metadata.LastUpdatedTime >= '${since.toISOString()}'` : "";
   }
 
   async accountingPeriods(): Promise<SourceEntity[]> {
@@ -147,11 +155,12 @@ export class QboSource implements MigrationSource {
     }));
   }
 
-  private async parties(): Promise<SourceEntity[]> {
+  private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    const where = this.sinceWhere(since);
     const [customers, vendors, employees] = [
-      await this.client.queryAll<QboParty>("Customer"),
-      await this.client.queryAll<QboParty>("Vendor"),
-      await this.client.queryAll<QboParty>("Employee"),
+      await this.client.queryAll<QboParty>("Customer", where),
+      await this.client.queryAll<QboParty>("Vendor", where),
+      await this.client.queryAll<QboParty>("Employee", where),
     ];
     const mk = (prefix: string, kind: string) => (p: QboParty): SourceEntity => ({
       sourceRef: `${prefix}:${p.Id}`,
@@ -168,8 +177,8 @@ export class QboSource implements MigrationSource {
     ];
   }
 
-  private async items(): Promise<SourceEntity[]> {
-    const rows = await this.client.queryAll<QboItem>("Item");
+  private async items(since?: Date | null): Promise<SourceEntity[]> {
+    const rows = await this.client.queryAll<QboItem>("Item", this.sinceWhere(since));
     return rows
       .filter((i) => i.Type !== "Category")
       .map((i) => ({

@@ -175,23 +175,53 @@ export class NetSuiteSource implements MigrationSource {
     return { ok: true, detail: `${rows[0]?.n ?? 0} accounts visible` };
   }
 
+  /** SuiteQL timestamp literal for a watermark. */
+  private ts(since: Date): string {
+    return `TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`;
+  }
+
+  /**
+   * Incremental pull: run the query with a `lastmodifieddate >= since` filter
+   * appended; if the account's SuiteQL rejects the filter (feature-gated
+   * column), fall back to the unfiltered pull — a daily mirror must never
+   * silently miss records, so the fallback is always the FULL stream.
+   */
+  private async qSince<T = Record<string, unknown>>(
+    fullSql: string,
+    since: Date | null | undefined,
+    filteredSql?: string,
+  ): Promise<T[]> {
+    if (!since) return this.q<T>(fullSql);
+    try {
+      return await this.q<T>(filteredSql ?? `${fullSql} WHERE lastmodifieddate >= ${this.ts(since)}`);
+    } catch {
+      return this.q<T>(fullSql);
+    }
+  }
+
   // --- master data ------------------------------------------------------------
 
   async entities(since?: Date | null): Promise<EntityStream[]> {
     // Dependency order: a stream's foreign refs must be landable from earlier
     // streams (parties before projects/addresses/contacts; accounts/terms/depts
     // before party roles; timeTypes before time entries).
+    //
+    // The high-volume streams (items, parties, projects, addresses, contacts,
+    // time entries) honor `since` so a daily mirror pulls only what changed —
+    // the tiny structural streams (subsidiaries, accounts, departments, terms,
+    // time types) always pull in full: they're a handful of rows and must never
+    // go stale. A full migration (since=null) pulls everything.
     return [
       { resource: "subsidiaries", records: await this.subsidiaries() },
       { resource: "accounts", records: await this.accounts() },
       { resource: "departments", records: await this.departments() },
       { resource: "payment_terms", records: this.paymentTerms() },
       { resource: "time_types", records: await this.timeTypes() },
-      { resource: "items", records: await this.items() },
-      { resource: "parties", records: await this.parties() },
-      { resource: "projects", records: await this.projects() },
-      { resource: "addresses", records: await this.addresses() },
-      { resource: "contacts", records: await this.contacts() },
+      { resource: "items", records: await this.items(since) },
+      { resource: "parties", records: await this.parties(since) },
+      { resource: "projects", records: await this.projects(since) },
+      { resource: "addresses", records: await this.addresses(since) },
+      { resource: "contacts", records: await this.contacts(since) },
       { resource: "time_entries", records: await this.timeEntries(since ?? null) },
     ];
   }
@@ -297,22 +327,24 @@ export class NetSuiteSource implements MigrationSource {
     }));
   }
 
-  private async projects(): Promise<SourceEntity[]> {
-    const rows = await this.q<Record<string, string>>(`
+  private async projects(since?: Date | null): Promise<SourceEntity[]> {
+    const rows = await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype,
              customer, projectmanager, custentityproject_foreman AS foreman,
              custentityproject_po_number AS ponumber,
              TO_CHAR(startdate, 'MM/DD/YYYY') AS startdate,
              TO_CHAR(scheduledenddate, 'MM/DD/YYYY') AS enddate
-        FROM job`);
+        FROM job`, since);
     // `jobprice` (fixed-bid contract price; the RESTlet reads the same field) is
     // feature-gated on some accounts, so fetch it in a separate guarded query —
     // a missing optional field degrades contractValue to null instead of
     // aborting the whole migration. (SuiteQL rejects `projectprice`.)
     const priceByRef = new Map<string, string>();
     try {
-      for (const p of await this.q<{ id: string; jobprice?: string }>(
+      for (const p of await this.qSince<{ id: string; jobprice?: string }>(
         "SELECT id, jobprice FROM job WHERE jobprice IS NOT NULL",
+        since,
+        since ? `SELECT id, jobprice FROM job WHERE jobprice IS NOT NULL AND lastmodifieddate >= ${this.ts(since)}` : undefined,
       )) {
         if (s(p.jobprice)) priceByRef.set(String(p.id), String(p.jobprice));
       }
@@ -340,9 +372,10 @@ export class NetSuiteSource implements MigrationSource {
     }));
   }
 
-  private async items(): Promise<SourceEntity[]> {
-    const rows = await this.q<{ id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string; category?: string }>(
+  private async items(since?: Date | null): Promise<SourceEntity[]> {
+    const rows = await this.qSince<{ id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string; category?: string }>(
       "SELECT id, itemid, displayname, itemtype, isinactive, BUILTIN.DF(custitem_category) AS category FROM item",
+      since,
     );
     const out: SourceEntity[] = [];
     for (const i of rows) {
@@ -384,24 +417,24 @@ export class NetSuiteSource implements MigrationSource {
     }));
   }
 
-  private async parties(): Promise<SourceEntity[]> {
-    const customers = await this.q<Record<string, string>>(`
+  private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    const customers = await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
              url, terms, creditlimit, salesrep, taxitem, receivablesaccount, subsidiary,
              custentitycustomer_shortform AS shortform
-        FROM customer`);
-    const vendors = await this.q<Record<string, string>>(`
+        FROM customer`, since);
+    const vendors = await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
              terms, legalname, taxidnum, is1099eligible, payablesaccount, expenseaccount, subsidiary
-        FROM vendor`);
-    const employees = await this.q<Record<string, string>>(`
+        FROM vendor`, since);
+    const employees = await this.qSince<Record<string, string>>(`
       SELECT id, entityid, firstname, lastname, isinactive, email, homephone,
              mobilephone, phone, department, supervisor,
              subsidiary,
              TO_CHAR(hiredate, 'MM/DD/YYYY') AS hiredate,
              TO_CHAR(releasedate, 'MM/DD/YYYY') AS releasedate,
              custentityemployee_has_benefits AS benefits, initials
-        FROM employee`);
+        FROM employee`, since);
 
     const out: SourceEntity[] = [];
     for (const c of customers) {
@@ -457,15 +490,22 @@ export class NetSuiteSource implements MigrationSource {
     return out;
   }
 
-  private async addresses(): Promise<SourceEntity[]> {
+  private async addresses(since?: Date | null): Promise<SourceEntity[]> {
     const out: SourceEntity[] = [];
     for (const kind of ["customer", "vendor", "employee"] as const) {
       const label = kind === "vendor" ? "" : "ab.label,";
-      const rows = await this.q<Record<string, string>>(`
+      const full = `
         SELECT ab.internalid AS abid, ab.entity, ab.defaultbilling, ab.defaultshipping, ${label}
                ea.addr1, ea.addr2, ea.addr3, ea.city, ea.state, ea.zip, ea.country
           FROM ${kind}addressbook ab
-          JOIN ${kind}addressbookentityaddress ea ON ea.nkey = ab.addressbookaddress`);
+          JOIN ${kind}addressbookentityaddress ea ON ea.nkey = ab.addressbookaddress`;
+      // Address books carry no timestamp of their own; editing one bumps the
+      // parent record's lastmodifieddate, so filter through the parent.
+      const rows = await this.qSince<Record<string, string>>(
+        full,
+        since,
+        since ? `${full} WHERE ab.entity IN (SELECT id FROM ${kind} WHERE lastmodifieddate >= ${this.ts(since)})` : undefined,
+      );
       for (const a of rows) {
         out.push({
           sourceRef: `${kind}:${a.abid}`,
@@ -482,11 +522,11 @@ export class NetSuiteSource implements MigrationSource {
     return out;
   }
 
-  private async contacts(): Promise<SourceEntity[]> {
-    const rows = await this.q<Record<string, string>>(`
+  private async contacts(since?: Date | null): Promise<SourceEntity[]> {
+    const rows = await this.qSince<Record<string, string>>(`
       SELECT id, company, contactrole, email, phone, officephone, mobilephone,
              title, entityid, firstname, lastname, fax, isinactive
-        FROM contact`);
+        FROM contact`, since);
     return rows.map((c) => ({
       sourceRef: String(c.id),
       fields: {
@@ -592,10 +632,29 @@ export class NetSuiteSource implements MigrationSource {
       documents.push(built.doc);
     }
 
-    // The FULL application graph (the reconciler is delta-safe; ~19 pages).
-    const links = await this.q<{ previousdoc: string; nextdoc: string; foreignamount: string }>(
-      "SELECT previousdoc, nextdoc, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment'",
-    );
+    // The application graph. A full sweep pulls the whole universe (~19 pages);
+    // an incremental mirror pulls only links whose PAYING document is in this
+    // pull's changed set — applying, editing, or unapplying an application
+    // always bumps the payment/credit's lastmodifieddate, so every new or
+    // changed link has its nextdoc here. Filtering on nextdoc alone keeps the
+    // chunks disjoint (no duplicate rows to double-count), and the reconciler
+    // is delta-safe/insert-only so a narrower pull never disturbs existing
+    // applications.
+    type Link = { previousdoc: string; nextdoc: string; foreignamount: string };
+    const links: Link[] = [];
+    if (since) {
+      for (let i = 0; i < tids.length; i += 150) {
+        const chunk = tids.slice(i, i + 150);
+        if (chunk.length === 0) continue;
+        links.push(...(await this.q<Link>(
+          `SELECT previousdoc, nextdoc, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND nextdoc IN (${chunk.join(",")})`,
+        )));
+      }
+    } else {
+      links.push(...(await this.q<Link>(
+        "SELECT previousdoc, nextdoc, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment'",
+      )));
+    }
     const applications = links
       .filter((l) => l.foreignamount != null && Number(l.foreignamount) > 0)
       .map((l) => ({
