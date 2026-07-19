@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { sealJson } from '@openbooks/engine/src/secrets.ts'
-import { listConnections, sourceType, SOURCE_TYPES } from '@openbooks/engine/src/sync/connection.ts'
+import { listConnections, sourceType, SOURCE_TYPES, validateSourceConfig, validateSourceSecret } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -43,8 +43,21 @@ export async function GET() {
     select code, name from currencies order by code`)) as unknown as {
     rows: { code: string; name: string }[]
   }
+  const qbdStatuses = (await db.execute(sql`
+    select c.id as "connectionId",
+           (select max(s.last_seen_at) from qbd_sessions s where s.connection_id = c.id) as heartbeat,
+           capture.status as "captureStatus", capture.progress as "captureProgress"
+      from connections c
+      left join lateral (
+        select status, progress from qbd_captures qc
+         where qc.connection_id = c.id order by qc.created_at desc limit 1
+      ) capture on true
+     where c.org_id = ${orgId} and c.source = 'qbd'`)) as unknown as {
+    rows: Array<{ connectionId: string; heartbeat: Date | null; captureStatus: string | null; captureProgress: Record<string, number> | null }>
+  }
+  const qbdByConnection = new Map(qbdStatuses.rows.map((row) => [row.connectionId, row]))
   return NextResponse.json({
-    connections: rows.map(toClient),
+    connections: rows.map((row) => ({ ...toClient(row), qbdStatus: qbdByConnection.get(row.id) ?? null })),
     runs: runs.rows,
     currencies: currencies.rows,
     sourceTypes: SOURCE_TYPES.map((s) => ({
@@ -78,20 +91,23 @@ export async function POST(req: Request) {
   const displayName = String(body.displayName ?? '').trim() || manifest.displayName
   const config = body.config ?? {}
 
-  // Validate required non-secret config fields.
-  for (const f of manifest.configFields) {
-    if (f.required && !String((config as Record<string, unknown>)[f.key] ?? '').trim()) {
-      return NextResponse.json({ error: `${f.label} is required` }, { status: 400 })
-    }
-  }
+  const configError = validateSourceConfig(manifest, config)
+  if (configError) return NextResponse.json({ error: configError }, { status: 400 })
 
   // Seal any provided secret fields (all-or-nothing per field).
   const provided: Record<string, string> = {}
   for (const f of manifest.secretFields) {
     const v = body.secrets?.[f.key]
-    if (v !== undefined && v !== null && String(v) !== '') provided[f.key] = String(v)
+    if (v !== undefined && v !== null && String(v) !== '') {
+      const secretError = validateSourceSecret(manifest.source, f.key, String(v))
+      if (secretError) return NextResponse.json({ error: secretError }, { status: 400 })
+      provided[f.key] = String(v)
+    }
   }
   const hasAllSecrets = manifest.secretFields.every((f) => !f.required || provided[f.key])
+  if (manifest.source === 'qbd' && !hasAllSecrets) {
+    return NextResponse.json({ error: 'Web Connector password is required' }, { status: 400 })
+  }
   const sealed = Object.keys(provided).length > 0 ? sealJson(provided) : null
   // OAuth connections still need the consent flow before they can run, even
   // once their app credentials are saved — so they start "unconfigured".

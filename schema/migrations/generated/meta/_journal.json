@@ -134,6 +134,13 @@
       "when": 1784172272045,
       "tag": "0018_robust_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784503495001,
+      "tag": "0019_qbd_web_connector",
+      "breakpoints": true
     }
   ]
 }

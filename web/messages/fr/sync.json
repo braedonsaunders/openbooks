@@ -7,7 +7,7 @@
     "loading": "Chargement…",
     "empty": {
       "title": "Aucune connexion pour le moment.",
-      "hint": "Ajoutez NetSuite ou QuickBooks Online pour démarrer une migration."
+      "hint": "Ajoutez un système comptable source pour démarrer une migration."
     },
     "status": {
       "active": "active",
@@ -26,7 +26,8 @@
     "runMigration": "Lancer la migration",
     "pauseMirror": "Suspendre le miroir",
     "enableMirror": "Activer le miroir",
-    "edit": "Modifier"
+    "edit": "Modifier",
+    "downloadQwc": "Télécharger Web Connector"
   },
   "runs": {
     "heading": "Exécutions récentes",
@@ -97,6 +98,16 @@
     "redirectLabel": "URI de redirection à enregistrer :",
     "copy": "Copier"
   },
+  "qbd": {
+    "setupTitle": "Configuration de QuickBooks Desktop",
+    "setupHint": "Après l’enregistrement, téléchargez le fichier Web Connector depuis la fiche de connexion. Importez-le sur l’ordinateur Windows exécutant QuickBooks, approuvez l’accès en lecture seule en tant qu’administrateur QuickBooks et saisissez ce mot de passe dans Web Connector.",
+    "lastContact": "Dernier contact de Web Connector : {time}",
+    "notConnected": "Web Connector ne s’est pas encore connecté",
+    "capture": "Capture {status} : {completed}/{total} requêtes",
+    "captureStatus": { "queued": "en attente", "running": "en cours", "complete": "terminée", "failed": "échouée", "cancelled": "annulée" },
+    "documentation": "Documentation",
+    "qwcDescription": "Connecteur en lecture seule pour la migration et le rapprochement comptables"
+  },
   "sources": {
     "netsuite": {
       "blurb": "Accès par jeton (TBA) à SuiteQL. Créez une intégration et un jeton d’accès dans NetSuite, puis collez les quatre valeurs. Les transactions natives, les lettrages et les commandes migrent et se synchronisent en miroir via le véritable moteur de comptabilisation."
@@ -106,6 +117,17 @@
     },
     "erpnext": {
       "blurb": "Connectez-vous avec votre URL ERPNext et une clé + un secret API (Utilisateur → Paramètres → Accès API). Les factures clients et fournisseurs, les écritures de paiement et les journaux migrent et se synchronisent en miroir nativement via le véritable moteur de comptabilisation."
+    },
+    "qbd": {
+      "blurb": "Connectez QuickBooks Desktop via Web Connector d’Intuit. QuickBooks doit être ouvert pour l’autorisation initiale et pendant les captures ; aucune règle de pare-feu Windows entrante n’est requise.",
+      "options": { "US": "États-Unis", "CA": "Canada", "UK": "Royaume-Uni", "AU": "Australie", "NZ": "Nouvelle-Zélande" },
+      "fields": {
+        "historyStartDate": { "label": "Date de début de l’historique", "help": "Première date de comptabilisation à migrer. Chaque miroir revérifie toute cette plage pour détecter les modifications et suppressions historiques." },
+        "region": { "label": "Région QuickBooks" },
+        "baseCurrency": { "label": "Devise de base" },
+        "companyFile": { "label": "Chemin du fichier société (facultatif)", "help": "Laissez vide pour utiliser la société ouverte lors de l’exécution de Web Connector." },
+        "webConnectorPassword": { "label": "Mot de passe Web Connector", "help": "Saisissez ce mot de passe une fois dans QuickBooks Web Connector après l’importation du fichier .QWC." }
+      }
     },
     "qbo": {
       "blurb": "Saisissez l’ID client et le secret de votre application Intuit (developer.intuit.com → Keys & credentials), enregistrez, puis cliquez sur Connecter pour autoriser une société. Les factures clients et fournisseurs, paiements, avoirs, écritures et dépôts migrent et se synchronisent en miroir nativement.",

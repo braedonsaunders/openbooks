@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { sealJson, unsealJson } from '@openbooks/engine/src/secrets.ts'
-import { getConnection, sourceType } from '@openbooks/engine/src/sync/connection.ts'
+import { getConnection, sourceType, validateSourceConfig, validateSourceSecret } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission } from '../../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -37,13 +37,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (body.config && typeof body.config === 'object') {
     const merged = { ...existing.config, ...body.config }
+    if (manifest) {
+      const configError = validateSourceConfig(manifest, merged)
+      if (configError) return NextResponse.json({ error: configError }, { status: 400 })
+    }
     sets.push(sql`config = ${JSON.stringify(merged)}::jsonb`)
   }
   if (body.secrets && manifest) {
     const current = unsealJson<Record<string, string>>(existing.secrets) ?? {}
     for (const f of manifest.secretFields) {
       const v = body.secrets[f.key]
-      if (v !== undefined && v !== null && String(v) !== '') current[f.key] = String(v)
+      if (v !== undefined && v !== null && String(v) !== '') {
+        const secretError = validateSourceSecret(existing.source, f.key, String(v))
+        if (secretError) return NextResponse.json({ error: secretError }, { status: 400 })
+        current[f.key] = String(v)
+      }
     }
     sets.push(sql`secrets = ${sealJson(current)}`)
     // Providing credentials clears the "unconfigured" state.
