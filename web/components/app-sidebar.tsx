@@ -8,7 +8,7 @@ import { useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Badge, cn } from '@openbooks/ui'
-import { Logo } from './brand-logo'
+import { BrandHomeLink } from './brand-home-link'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 import { useNavGroups } from './use-platform-nav'
 import { ThemeToggle } from './theme-toggle'
@@ -52,7 +52,7 @@ export function AppSidebar({
           collapsed ? 'justify-center' : 'gap-2',
         )}
       >
-        {collapsed ? null : <Logo className="h-7 w-auto" />}
+        {collapsed ? null : <BrandHomeLink />}
         <button
           type="button"
           onClick={toggle}

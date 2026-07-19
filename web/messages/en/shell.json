@@ -97,6 +97,9 @@
   "meta": {
     "description": "The open business suite. Run on open books."
   },
+  "brand": {
+    "home": "Go to dashboard"
+  },
   "sidebar": {
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar"

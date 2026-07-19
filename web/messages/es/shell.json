@@ -97,6 +97,9 @@
   "meta": {
     "description": "La suite empresarial abierta. Opere con libros abiertos."
   },
+  "brand": {
+    "home": "Ir al panel"
+  },
   "sidebar": {
     "expand": "Expandir la barra lateral",
     "collapse": "Contraer la barra lateral"
