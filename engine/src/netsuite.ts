@@ -73,6 +73,55 @@ function oauthHeader(creds: NetSuiteCreds, method: string, url: string, query: R
   );
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * One SuiteQL page with a hard timeout + retry. A bare fetch has NO timeout —
+ * a stalled connection hangs a migration forever (observed live: 65 minutes
+ * dead in the water on a dropped socket). 60s abort per attempt, 4 attempts
+ * with backoff on 429/5xx/network errors; the OAuth header is regenerated per
+ * attempt (fresh nonce/timestamp).
+ */
+async function suiteqlPage(
+  creds: NetSuiteCreds,
+  url: string,
+  query: string,
+  limit: number,
+  offset: number,
+): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 60_000);
+    try {
+      const qp = { limit, offset };
+      const res = await fetch(`${url}?limit=${limit}&offset=${offset}`, {
+        method: "POST",
+        headers: {
+          Authorization: oauthHeader(creds, "POST", url, qp),
+          "Content-Type": "application/json",
+          Prefer: "transient",
+        },
+        body: JSON.stringify({ q: query }),
+        signal: ctl.signal,
+      });
+      if ((res.status === 429 || res.status >= 500) && attempt < 4) {
+        lastErr = new Error(`SuiteQL HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+        const retryAfter = Number(res.headers.get("retry-after") ?? 0);
+        await sleep(retryAfter > 0 ? retryAfter * 1000 : attempt * 2000);
+        continue;
+      }
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < 4) await sleep(attempt * 2000);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("SuiteQL failed after retries");
+}
+
 export async function suiteql<T = Record<string, unknown>>(
   query: string,
   creds: NetSuiteCreds,
@@ -82,16 +131,7 @@ export async function suiteql<T = Record<string, unknown>>(
   const rows: T[] = [];
   let offset = 0;
   for (;;) {
-    const qp = { limit, offset };
-    const res = await fetch(`${url}?limit=${limit}&offset=${offset}`, {
-      method: "POST",
-      headers: {
-        Authorization: oauthHeader(creds, "POST", url, qp),
-        "Content-Type": "application/json",
-        Prefer: "transient",
-      },
-      body: JSON.stringify({ q: query }),
-    });
+    const res = await suiteqlPage(creds, url, query, limit, offset);
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`SuiteQL HTTP ${res.status}: ${body.slice(0, 500)}`);
