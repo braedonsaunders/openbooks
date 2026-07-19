@@ -1359,7 +1359,7 @@
         "description": "Currency codes and their minor-unit precision."
       },
       "sftp": {
-        "title": "SFTP Servers"
+        "title": "SFTP"
       },
       "payment-operations": {
         "title": "Payments & Banking",

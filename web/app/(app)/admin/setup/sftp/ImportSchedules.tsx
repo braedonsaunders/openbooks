@@ -76,6 +76,11 @@ export function ImportSchedules({ schedules, servers, accounts }: { schedules: S
         <Button variant="outline" size="sm" disabled={!canCreate} onClick={() => setCreating(true)}><Plus size={14} /> {t('newSchedule')}</Button>
       </div>
       <p className="text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
+      {!canCreate ? (
+        <p className="text-sm text-amber-700 dark:text-amber-300">
+          {servers.length === 0 ? t('needsLogin') : t('needsAccount')}
+        </p>
+      ) : null}
 
       {schedules.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-300 px-3 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">{t('empty')}</p>

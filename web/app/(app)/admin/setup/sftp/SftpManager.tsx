@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { KeyRound, Plus, RotateCcw, Server, Settings2, Trash2 } from 'lucide-react'
+import { Copy, KeyRound, Plus, RotateCcw, Server, Settings2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Drawer, Input, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@openbooks/ui'
 import { confirmDialog } from '../../../../../lib/confirm'
@@ -89,24 +89,31 @@ export function SftpManager({ servers, daemon, empty }: { servers: Srv[]; daemon
 
   return (
     <div className="space-y-4">
-      {/* connection details — where clients connect (all from the DB, no env) */}
+      {/* the endpoint — the single shared SFTP server clients connect to (all from the DB, no env) */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-3">
           <div className="mr-auto flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            <Server size={15} className="text-teal-600 dark:text-teal-400" /> {t('connection')}
+            <Server size={15} className="text-teal-600 dark:text-teal-400" /> {t('endpointTitle')}
             {daemon.enabled ? <Badge variant="success">{t('running')}</Badge> : <Badge variant="secondary">{t('disabled')}</Badge>}
           </div>
           <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}><Settings2 size={14} /> {t('settings')}</Button>
         </div>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('endpointHint')}</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <ConnField label={t('host')} value={daemon.host} />
-          <ConnField label={t('port')} value={String(daemon.port)} />
-          <ConnField label={t('fingerprint')} value={daemon.fingerprint || '—'} />
+          <ConnField label={t('host')} value={daemon.host} copyable />
+          <ConnField label={t('port')} value={String(daemon.port)} copyable />
+          <ConnField label={t('fingerprint')} value={daemon.fingerprint || '—'} copyable={!!daemon.fingerprint} />
         </div>
-        <p className="mt-3 font-mono text-xs text-slate-500 dark:text-slate-400">{connStr}</p>
+        <div className="mt-3">
+          <ConnField label={t('connectCommand')} value={connStr} copyable />
+        </div>
       </div>
 
-      <div className="flex justify-end">
+      {/* logins — per-partner credentials the endpoint authenticates */}
+      <div className="flex items-center gap-2">
+        <h3 className="mr-auto flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <KeyRound size={15} className="text-teal-600 dark:text-teal-400" /> {t('loginsTitle')}
+        </h3>
         <Button onClick={() => setCreating(true)}><Plus size={15} /> {t('newServer')}</Button>
       </div>
 
@@ -204,11 +211,20 @@ export function SftpManager({ servers, daemon, empty }: { servers: Srv[]; daemon
   )
 }
 
-function ConnField({ label, value }: { label: string; value: string }) {
+function ConnField({ label, value, copyable }: { label: string; value: string; copyable?: boolean }) {
+  const t = useTranslations('banking.sftp')
   return (
     <div className="space-y-1">
       <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</div>
-      <code className="block truncate rounded bg-slate-100 px-2 py-1.5 font-mono text-[13px] dark:bg-slate-800" title={value}>{value}</code>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 truncate rounded bg-slate-100 px-2 py-1.5 font-mono text-[13px] dark:bg-slate-800" title={value}>{value}</code>
+        {copyable ? (
+          <Button variant="outline" size="sm" title={t('copyField', { label })}
+            onClick={() => { navigator.clipboard?.writeText(value); toast.success(t('copied', { label })) }}>
+            <Copy size={14} />
+          </Button>
+        ) : null}
+      </div>
     </div>
   )
 }
