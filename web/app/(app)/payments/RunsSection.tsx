@@ -176,6 +176,16 @@ export async function RunsSection({
     `) as any : Promise.resolve({ rows: [] }),
   ])
 
+  // Bills handed over from the AP cockpit's pay-run planner (?preselect=id,id).
+  // Fetched by id so they pre-check regardless of the list's pagination.
+  const preselectIds = (pickString(sp.preselect)?.split(',') ?? []).filter(isUuid)
+  const preselected = building && preselectIds.length
+    ? ((await db.execute(sql`
+        with open_bills as (${openBillsCte})
+        select * from open_bills where open > 0 and id in (${sql.join(preselectIds.map((id) => sql`${id}`), sql`, `)})
+      `)) as any).rows as RunBill[]
+    : []
+
   const runsTotal = runCounts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
   const runsFilteredTotal = Number(runFilteredCount.rows[0]?.n ?? 0)
   const runThProps = {
@@ -379,6 +389,7 @@ export async function RunsSection({
             dir={billParams.dir}
             mode={collections ? 'collections' : 'payments'}
             basePath={basePath}
+            preselected={preselected}
             toolbar={
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>

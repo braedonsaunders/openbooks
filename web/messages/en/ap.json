@@ -67,8 +67,14 @@
     "configure": "Configure it under Admin Center → AI.",
     "search": "Search files, vendors, invoice numbers…",
     "status": {
-      "queued": "Queued", "extracting": "Extracting", "needs_review": "Needs review", "ready": "Ready",
-      "duplicate": "Possible duplicate", "failed": "Failed", "materialized": "Draft created", "rejected": "Rejected"
+      "queued": "Queued",
+      "extracting": "Extracting",
+      "needs_review": "Needs review",
+      "ready": "Ready",
+      "duplicate": "Possible duplicate",
+      "failed": "Failed",
+      "materialized": "Draft created",
+      "rejected": "Rejected"
     },
     "emptyTitle": "No captured documents",
     "emptyDescription": "Upload PDF, JPEG, PNG, or TIFF vendor documents to begin.",
@@ -87,7 +93,15 @@
     "openDraft": "Open AP draft",
     "bill": "Vendor bill",
     "credit": "Vendor credit",
-    "columns": { "document": "Document", "vendor": "Vendor", "invoice": "Invoice #", "date": "Invoice date", "total": "Total", "status": "Status", "received": "Received" },
+    "columns": {
+      "document": "Document",
+      "vendor": "Vendor",
+      "invoice": "Invoice #",
+      "date": "Invoice date",
+      "total": "Total",
+      "status": "Status",
+      "received": "Received"
+    },
     "saving": "Saving corrections…",
     "unsaved": "Unsaved corrections",
     "saved": "All corrections saved",
@@ -99,14 +113,30 @@
     "confidencePercent": "{percent}%",
     "highlightEvidence": "Highlight this evidence in the source document",
     "fields": {
-      "kind": "Document type", "vendor": "Vendor", "vendorPlaceholder": "Select vendor…",
-      "invoiceNumber": "Invoice number", "invoiceDate": "Invoice date", "dueDate": "Due date", "currency": "Currency",
-      "purchaseOrder": "Purchase order", "purchaseOrderPlaceholder": "Select purchase order…", "memo": "Memo",
-      "subtotal": "Subtotal", "taxTotal": "Tax", "total": "Total"
+      "kind": "Document type",
+      "vendor": "Vendor",
+      "vendorPlaceholder": "Select vendor…",
+      "invoiceNumber": "Invoice number",
+      "invoiceDate": "Invoice date",
+      "dueDate": "Due date",
+      "currency": "Currency",
+      "purchaseOrder": "Purchase order",
+      "purchaseOrderPlaceholder": "Select purchase order…",
+      "memo": "Memo",
+      "subtotal": "Subtotal",
+      "taxTotal": "Tax",
+      "total": "Total"
     },
     "lines": {
-      "title": "Extracted lines", "add": "Add line", "description": "Description", "account": "Account",
-      "accountPlaceholder": "Select account…", "quantity": "Qty", "unitPrice": "Unit price", "amount": "Amount", "tax": "Tax",
+      "title": "Extracted lines",
+      "add": "Add line",
+      "description": "Description",
+      "account": "Account",
+      "accountPlaceholder": "Select account…",
+      "quantity": "Qty",
+      "unitPrice": "Unit price",
+      "amount": "Amount",
+      "tax": "Tax",
       "remove": "Remove line {line}"
     },
     "issues": {
@@ -138,5 +168,53 @@
     "createDraftFailed": "Could not create a draft",
     "deleted": "Document deleted",
     "deleteFailed": "Delete failed"
+  },
+  "cockpit": {
+    "title": "Accounts Payable",
+    "description": "Your payables control center — what you owe, what's overdue, and what to pay this week.",
+    "tabs": {
+      "overview": "Overview",
+      "bills": "Bills"
+    },
+    "current": "current",
+    "vendor": "Vendor",
+    "overdueCol": "Overdue",
+    "openCol": "Open",
+    "noPayables": "No open payables. You're all caught up.",
+    "stats": {
+      "openPayables": "Open payables",
+      "overdue": "Overdue",
+      "overdueSub": "{count} bills · {pct}% of open",
+      "dueThisWeek": "Due this week",
+      "next30": "Next 30 days",
+      "dpo": "Days payable (DPO)",
+      "dpoSub": "Avg days to pay",
+      "days": "{n}d"
+    },
+    "panels": {
+      "payRun": "Pay-run planner",
+      "payRunHint": "Bills predicted due this week — select and build a payment run",
+      "payRunHintScheduled": "Recommended under your weekly capacity — oldest due first",
+      "aging": "Payables aging",
+      "schedule": "Cash-out schedule",
+      "scheduleHint": "Predicted payments over {weeks} weeks",
+      "byVendor": "Payables by vendor"
+    },
+    "payRun": {
+      "noCap": "Due this week",
+      "weeklyCap": "Weekly cap",
+      "safeCapacity": "Safe capacity",
+      "startingCash": "Cash on hand {amount}",
+      "overCap": "Over capacity",
+      "deferred": "{amount} defers to later weeks",
+      "selected": "{count} selected",
+      "build": "Build pay run",
+      "empty": "No bills predicted due this week."
+    },
+    "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week. Adjust the cap in the cash-flow forecast configuration.",
+    "forecastLink": {
+      "pre": "Looking to model the weeks ahead?",
+      "link": "Open the cash-flow forecast"
+    }
   }
 }
