@@ -50,7 +50,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
   try {
     // -- Vendor bill → inventory receipt (via clearing) ----------------------
     const billId = await draftDoc(org, "vendor_bill", "BILL-1", {
-      itemId: org.items.fifo, quantity: "50", unitPrice: "2", amount: "100", stockLocationId: org.stockLocationId,
+      itemId: org.items.fifo, quantity: "50", unitPrice: "2", amount: "100", stockLocationId: org.stockLocationId, partyId: org.vendorId,
     });
     const billEntry = await postDocument(billId, deps);
     await applyInventoryReceiptsForBill(org.orgId, null, billId, billEntry, org.date, org.subsidiaryId);
@@ -65,7 +65,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
 
     // -- Customer invoice → COGS issue --------------------------------------
     const invId = await draftDoc(org, "customer_invoice", "INV-1", {
-      itemId: org.items.fifo, quantity: "20", unitPrice: "5", amount: "100", stockLocationId: org.stockLocationId, accountId: org.accounts.revenue,
+      itemId: org.items.fifo, quantity: "20", unitPrice: "5", amount: "100", stockLocationId: org.stockLocationId, accountId: org.accounts.revenue, partyId: org.customerId,
     });
     await postDocument(invId, deps);
     await applyInventoryIssuesForInvoice(org.orgId, null, invId, org.date, org.subsidiaryId);

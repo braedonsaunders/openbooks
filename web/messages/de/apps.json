@@ -1,7 +1,44 @@
 {
   "title": "Apps",
   "description": "Installierte Apps, die Sie öffnen können.",
-  "empty": "Es sind keine Apps installiert. Ein Administrator kann eine über Admin Center → App Builder installieren.",
+  "searchPlaceholder": "Installierte Apps durchsuchen…",
+  "version": "Version {version}",
+  "noDescription": "Keine Beschreibung vorhanden.",
+  "actions": {
+    "library": "App-Bibliothek",
+    "documentation": "Dokumentation",
+    "open": "App öffnen",
+    "openAria": "{name} öffnen"
+  },
+  "empty": {
+    "title": "Keine Apps installiert",
+    "description": "Durchsuchen Sie die App-Bibliothek nach Erweiterungen für Ihre Organisation.",
+    "action": "App-Bibliothek durchsuchen"
+  },
+  "noResults": {
+    "title": "Keine Apps gefunden",
+    "description": "Versuchen Sie es mit einem anderen Namen, Schlüssel oder einer anderen Beschreibung."
+  },
+  "library": {
+    "title": "App-Bibliothek",
+    "description": "Entdecken und installieren Sie Erweiterungen für Ihre Organisation.",
+    "searchPlaceholder": "App-Bibliothek durchsuchen…",
+    "install": "Installieren",
+    "update": "Aktualisieren",
+    "installed": "Installiert",
+    "installing": "Wird installiert…",
+    "installSuccess": "„{name}“ wurde installiert",
+    "updateSuccess": "„{name}“ wurde aktualisiert",
+    "installFailed": "Die App konnte nicht installiert werden.",
+    "empty": {
+      "title": "Die App-Bibliothek ist leer",
+      "description": "Veröffentlichte Apps werden hier angezeigt, sobald sie verfügbar sind."
+    },
+    "noResults": {
+      "title": "Keine Apps gefunden",
+      "description": "Versuchen Sie es mit einem anderen Namen, Schlüssel oder einer anderen Beschreibung."
+    }
+  },
   "frame": {
     "loading": "Wird geladen…",
     "failedTitle": "Diese App konnte nicht geöffnet werden.",

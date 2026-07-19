@@ -22,6 +22,7 @@ Documentation is grouped into categories you can browse from the sidebar:
 
 - **Getting Started** — orientation and core concepts.
 - **Projects & Billing** — project types, profitability, invoicing, and backup.
+- **Apps & Extensions** — finding, installing, updating, and administering apps.
 
 Use the search box at the top of the sidebar to jump straight to a topic.
 

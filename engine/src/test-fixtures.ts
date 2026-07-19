@@ -28,6 +28,7 @@ export interface ScratchOrg {
   items: Record<"fifo" | "movingAvg" | "standard" | "component" | "assembly" | "service", string>;
   recognitionRuleId: string;
   customerId: string;
+  vendorId: string;
   /** a date inside the open period. */
   date: string;
 }
@@ -154,7 +155,12 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${customerId}, ${orgId}, 'customer', 'Acme Customer', true, '{}'::jsonb)`);
 
-  return { orgId, subsidiaryId, periodId, bookId, locationId, stockLocationId, stockLocationId2, accounts, items, recognitionRuleId, customerId, date };
+  const vendorId = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${vendorId}, ${orgId}, 'vendor', 'Acme Vendor', true, '{}'::jsonb)`);
+
+  return { orgId, subsidiaryId, periodId, bookId, locationId, stockLocationId, stockLocationId2, accounts, items, recognitionRuleId, customerId, vendorId, date };
 }
 
 /** Remove all scratch-org data, bypassing the kernel's posted-entry immutability. */

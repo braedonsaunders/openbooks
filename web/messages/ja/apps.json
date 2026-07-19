@@ -1,7 +1,44 @@
 {
   "title": "アプリ",
   "description": "開くことができるインストール済みのアプリ。",
-  "empty": "インストール済みのアプリはありません。管理者は「管理センター → アプリビルダー」からインストールできます。",
+  "searchPlaceholder": "インストール済みアプリを検索…",
+  "version": "バージョン {version}",
+  "noDescription": "説明はありません。",
+  "actions": {
+    "library": "アプリライブラリ",
+    "documentation": "ドキュメント",
+    "open": "アプリを開く",
+    "openAria": "{name} を開く"
+  },
+  "empty": {
+    "title": "インストール済みのアプリはありません",
+    "description": "アプリライブラリで組織向けの拡張機能を探してください。",
+    "action": "アプリライブラリを見る"
+  },
+  "noResults": {
+    "title": "アプリが見つかりません",
+    "description": "別の名前、キー、または説明で検索してください。"
+  },
+  "library": {
+    "title": "アプリライブラリ",
+    "description": "組織向けの拡張機能を見つけてインストールします。",
+    "searchPlaceholder": "アプリライブラリを検索…",
+    "install": "インストール",
+    "update": "更新",
+    "installed": "インストール済み",
+    "installing": "インストール中…",
+    "installSuccess": "「{name}」をインストールしました",
+    "updateSuccess": "「{name}」を更新しました",
+    "installFailed": "アプリをインストールできませんでした。",
+    "empty": {
+      "title": "アプリライブラリは空です",
+      "description": "公開されたアプリが利用可能になると、ここに表示されます。"
+    },
+    "noResults": {
+      "title": "アプリが見つかりません",
+      "description": "別の名前、キー、または説明で検索してください。"
+    }
+  },
   "frame": {
     "loading": "読み込み中…",
     "failedTitle": "このアプリを開けませんでした。",

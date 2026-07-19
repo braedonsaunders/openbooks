@@ -639,14 +639,45 @@ export interface ListingRow {
   updatedAt: string
 }
 
-/** Browse active listings (any org). */
-export async function listListings(): Promise<ListingRow[]> {
-  return rows<ListingRow>(sql`
-    select id, key, name, description, icon_key as "iconKey", version,
-           publisher_org_id as "publisherOrgId", updated_at as "updatedAt"
+export interface ListingPage {
+  listings: ListingRow[]
+  total: number
+}
+
+/** Browse active listings (any org), with server-side search and pagination. */
+export async function listListings({
+  query,
+  page,
+  perPage,
+}: {
+  query?: string
+  page: number
+  perPage: number
+}): Promise<ListingPage> {
+  const where = sql`is_active = true${query
+    ? sql` and (name ilike ${'%' + query + '%'} or key ilike ${'%' + query + '%'} or coalesce(description, '') ilike ${'%' + query + '%'})`
+    : sql``}`
+  const [listings, count] = await Promise.all([
+    rows<ListingRow>(sql`
+      select id, key, name, description, icon_key as "iconKey", version,
+             publisher_org_id as "publisherOrgId", updated_at as "updatedAt"
+        from app_listings
+       where ${where}
+       order by name, key
+       limit ${perPage} offset ${(page - 1) * perPage}`),
+    rows<{ total: string }>(sql`select count(*) as total from app_listings where ${where}`),
+  ])
+  return { listings, total: Number(count[0]?.total ?? 0) }
+}
+
+/** Whether an active marketplace listing exists for an app key. */
+export async function isAppPublished(key: string): Promise<boolean> {
+  const found = await rows<{ found: boolean }>(sql`
+    select true as found
       from app_listings
-     where is_active = true
-     order by name`)
+     where key = ${key} and is_active = true
+     limit 1`)
+  return found.length > 0
 }
 
 /**

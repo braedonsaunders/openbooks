@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Library } from 'lucide-react'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
@@ -10,9 +11,9 @@ import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
-import { listAppFiles, listListings } from '../../../../lib/apps/store'
+import { isAppPublished, listAppFiles } from '../../../../lib/apps/store'
 import type { AppManifest } from '../../../../lib/apps/manifest'
-import { AppsToolbar, AppDrawer, MarketplacePanel } from './AppDrawer'
+import { AppsToolbar, AppDrawer } from './AppDrawer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,6 +25,7 @@ export default async function AppsAdminPage({
 }) {
   const authz = await requirePermission('apps.manage')
   const tHub = await getTranslations('admin.hub')
+  const tApps = await getTranslations('apps')
   const orgId = authz.user.orgId
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 50 })
@@ -34,7 +36,7 @@ export default async function AppsAdminPage({
     ${status ? sql` and a.status = ${status}` : sql``}
     ${params.q ? sql` and (a.name ilike ${'%' + params.q + '%'} or a.key ilike ${'%' + params.q + '%'})` : sql``}`
 
-  const [apps, statuses, totalRow, listings] = await Promise.all([
+  const [apps, statuses, totalRow] = await Promise.all([
     db.execute(sql`
       select a.key, a.name, a.description, a.status, a.show_in_nav as "showInNav",
              a.granted_permissions as "grantedPermissions", a.updated_at as "updatedAt",
@@ -47,7 +49,6 @@ export default async function AppsAdminPage({
     `) as any,
     db.execute(sql`select status, count(*) as n from apps where org_id = ${orgId} group by 1`) as any,
     db.execute(sql`select count(*) as n from apps a where ${where}`) as any,
-    listListings(),
   ])
 
   // Drawer payload for the selected app.
@@ -67,17 +68,18 @@ export default async function AppsAdminPage({
     `)) as any
     const app = detail.rows[0]
     if (app) {
-      const [files, runs] = await Promise.all([
+      const [files, runs, published] = await Promise.all([
         listAppFiles(orgId, appKey).catch(() => []),
         db.execute(sql`
           select endpoint, status, units, logs, error_message, duration_ms, at
             from app_runs where app_id = ${app.id} order by at desc limit 25`) as any,
+        isAppPublished(appKey),
       ])
       drawer = {
         app,
         files,
         runs: runs.rows,
-        isPublished: listings.some((l) => l.key === appKey),
+        isPublished: published,
       }
     }
   }
@@ -93,7 +95,16 @@ export default async function AppsAdminPage({
             back={{ href: '/admin', label: tHub('title') }}
             title="Apps"
             description="Build and install app packages — a sandboxed frontend plus a governed backend, isolated per app."
-            actions={<AppsToolbar />}
+            actions={
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/apps/library">
+                    <Library size={15} /> {tApps('actions.library')}
+                  </Link>
+                </Button>
+                <AppsToolbar />
+              </>
+            }
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder="Search apps…" />
@@ -158,18 +169,6 @@ export default async function AppsAdminPage({
         </TableBody>
       </Table>
       <Pagination basePath="/admin/apps" currentParams={sp} page={params.page} perPage={params.perPage} total={total} />
-
-      <MarketplacePanel
-        listings={listings.map((l) => ({
-          id: l.id,
-          key: l.key,
-          name: l.name,
-          description: l.description,
-          version: l.version,
-          mine: l.publisherOrgId === orgId,
-          installed: apps.rows.some((a: any) => a.key === l.key),
-        }))}
-      />
 
       {appKey && drawer ? (
         <AppDrawer

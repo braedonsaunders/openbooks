@@ -111,60 +111,6 @@ export function AppsToolbar() {
 }
 
 // ---------------------------------------------------------------------------
-// Marketplace panel (below the table)
-// ---------------------------------------------------------------------------
-
-export function MarketplacePanel({
-  listings,
-}: {
-  listings: { id: string; key: string; name: string; description: string | null; version: string; mine: boolean; installed: boolean }[]
-}) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  if (listings.length === 0) return null
-
-  async function install(listingId: string, name: string) {
-    setBusy(true)
-    const res = await fetch('/api/apps/marketplace', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'install', listingId }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (res.ok) {
-      toast.success(`Installed “${name}”`)
-      router.refresh()
-    } else toast.error(data.error || 'Install failed')
-    setBusy(false)
-  }
-
-  return (
-    <section className="mt-8">
-      <h2 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-        Marketplace
-      </h2>
-      <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-        {listings.map((l) => (
-          <div key={l.id} className="flex items-center gap-4 px-3 py-2.5">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{l.name}</span>
-                <Badge variant="secondary">v{l.version}</Badge>
-                {l.mine && <Badge variant="outline">published by you</Badge>}
-              </div>
-              {l.description && <p className="truncate text-xs text-slate-500">{l.description}</p>}
-            </div>
-            <Button size="sm" variant="secondary" disabled={busy} onClick={() => install(l.id, l.name)}>
-              {l.installed ? 'Update from listing' : 'Install'}
-            </Button>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // File tree helpers
 // ---------------------------------------------------------------------------
 
