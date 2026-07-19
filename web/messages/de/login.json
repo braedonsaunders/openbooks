@@ -1,0 +1,7 @@
+{
+  "tagline": "run on open books",
+  "password": "Password",
+  "invalidCredentials": "Invalid email or password",
+  "signIn": "Sign in",
+  "signingIn": "Signing in…"
+}

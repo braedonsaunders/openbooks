@@ -1,0 +1,52 @@
+{
+  "list": {
+    "title": "Revenue Recognition",
+    "description": "Contracts, performance obligations, and recognition schedules (ASC 606).",
+    "searchPlaceholder": "Search contracts…",
+    "emptyTitle": "No revenue contracts yet",
+    "emptyDescription": "Post an invoice with a recognition-rule item to create obligations and schedules.",
+    "runRecognition": "Run recognition"
+  },
+  "labels": {
+    "contract": "Contract",
+    "customer": "Customer",
+    "total": "Total",
+    "recognized": "Recognized",
+    "deferred": "Deferred"
+  },
+  "status": {
+    "draft": "Draft",
+    "active": "Active",
+    "complete": "Complete",
+    "cancelled": "Cancelled"
+  },
+  "obligationStatus": {
+    "open": "Open",
+    "satisfied": "Satisfied",
+    "cancelled": "Cancelled"
+  },
+  "method": {
+    "point_in_time": "Point in time",
+    "straight_line_even": "Straight-line, even",
+    "straight_line_prorate_first_last": "Straight-line, prorated",
+    "straight_line_daily": "Straight-line, daily",
+    "percent_complete": "Percent complete",
+    "milestone": "Milestone",
+    "usage": "Usage"
+  },
+  "run": {
+    "failed": "Recognition run failed",
+    "posted": "Recognized {count, plural, one {# entry} other {# entries}} totaling {amount}",
+    "someSkipped": "{count} skipped",
+    "nothingDue": "Nothing due to recognize"
+  },
+  "drawer": {
+    "obligations": "Obligations",
+    "noSchedule": "No schedule built yet",
+    "period": "Period",
+    "planned": "Planned",
+    "recognized": "Recognized",
+    "postedStatus": "Posted",
+    "plannedStatus": "Planned"
+  }
+}

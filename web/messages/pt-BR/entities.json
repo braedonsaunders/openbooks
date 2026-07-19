@@ -1,0 +1,30 @@
+{
+  "roles": {
+    "customers": {
+      "title": "Customers",
+      "description": "Companies and people you invoice.",
+      "newLabel": "New customer",
+      "emptyTitle": "No customers yet",
+      "emptyDescription": "Add the first customer to start the directory."
+    },
+    "vendors": {
+      "title": "Vendors",
+      "description": "Suppliers you buy from and pay.",
+      "newLabel": "New vendor",
+      "emptyTitle": "No vendors yet",
+      "emptyDescription": "Add the first vendor to start the directory."
+    },
+    "employees": {
+      "title": "Employees",
+      "description": "People on payroll and expense reports.",
+      "newLabel": "New employee",
+      "emptyTitle": "No employees yet",
+      "emptyDescription": "Add the first employee to start the directory."
+    }
+  },
+  "list": {
+    "searchPlaceholder": "Search name, code, email…",
+    "shortCode": "Short code",
+    "phone": "Phone"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "list": {
+    "title": "Chart of Accounts",
+    "description": "Natural-sign current balances (balance-sheet cumulative, P&L this fiscal year), rolled up through summary accounts.",
+    "searchPlaceholder": "Search number or name…",
+    "badges": {
+      "inactive": "inactive",
+      "summary": "summary"
+    }
+  },
+  "types": {
+    "assetBank": "Bank",
+    "assetReceivable": "Accounts Receivable",
+    "assetCurrentOther": "Other Current Assets",
+    "assetFixed": "Fixed Assets",
+    "assetOther": "Other Assets",
+    "liabilityPayable": "Accounts Payable",
+    "liabilityCard": "Corporate Cards",
+    "liabilityCurrentOther": "Other Current Liabilities",
+    "liabilityLongTerm": "Long-Term Liabilities",
+    "equity": "Equity",
+    "income": "Income",
+    "incomeOther": "Other Income",
+    "cogs": "Cost of Goods Sold",
+    "expense": "Expenses",
+    "expenseOther": "Other Expenses",
+    "expenseDeferred": "Deferred Expenses"
+  },
+  "classes": {
+    "asset": "Assets",
+    "liability": "Liabilities",
+    "equity": "Equity",
+    "income": "Income",
+    "expense": "Expenses"
+  },
+  "drawer": {
+    "saved": "Account saved",
+    "typeLocked": "The type cannot change after the account has ledger activity.",
+    "parent": "Parent account",
+    "currencyRestriction": "Currency restriction",
+    "anyCurrency": "Any currency",
+    "allSubsidiaries": "All subsidiaries",
+    "summary": "Summary account",
+    "reconcilable": "Reconcilable",
+    "eliminate": "Eliminate in consolidation",
+    "includeSubsidiaries": "Include child subsidiaries",
+    "requiredDimensions": "Required posting dimensions",
+    "dimensions": {
+      "department": "Department",
+      "location": "Location",
+      "class": "Class",
+      "project": "Project",
+      "party": "Party"
+    },
+    "errors": {
+      "name_required": "Account name is required.",
+      "invalid_type": "Choose a valid account type.",
+      "type_has_transactions": "The account type cannot change after ledger activity exists.",
+      "invalid_parent": "Choose a valid parent account.",
+      "parent_must_be_summary": "The parent must be a summary account.",
+      "parent_cycle": "That parent would create a circular account hierarchy.",
+      "summary_reconcilable_conflict": "A summary account cannot be reconcilable.",
+      "summary_has_transactions": "An account with ledger activity cannot become a summary account.",
+      "summary_has_children": "An account with active children must remain a summary account.",
+      "inactive_has_children": "Deactivate this account’s active children first.",
+      "invalid_currency": "Choose a valid currency.",
+      "invalid_subsidiary": "Choose a valid subsidiary.",
+      "invalid_dimensions": "Choose valid required dimensions.",
+      "invalid_custom_fields": "Review the custom field values.",
+      "number_in_use": "That account number is already in use.",
+      "save_failed": "The account could not be saved."
+    }
+  },
+  "register": {
+    "notFound": "Account not found",
+    "subtitle": "register · {count, plural, one {# line} other {# lines}} · running balance {balance}",
+    "periodFilter": "Filtered to {label}",
+    "columns": {
+      "entry": "Entry",
+      "debit": "Debit",
+      "credit": "Credit"
+    }
+  }
+}

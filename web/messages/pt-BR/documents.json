@@ -1,0 +1,162 @@
+{
+  "list": {
+    "metaTitle": "Documents",
+    "title": "File Cabinet",
+    "description": "Browse, upload, and manage documents across your organization.",
+    "searchPlaceholder": "Search files and folders…",
+    "allFiles": "All Files",
+    "rootFolder": "File Cabinet",
+    "systemAttachments": "Attachments",
+    "empty": {
+      "title": "No files in this folder",
+      "description": "Upload files or create a folder to get started.",
+      "allTitle": "No files yet",
+      "allDescription": "Upload your first file to populate the File Cabinet."
+    },
+    "folderRow": "Folder"
+  },
+  "systemFolders": { "apCapture": "AP capture" },
+  "columns": {
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "createdBy": "Created by",
+    "type": "Type",
+    "location": "Location"
+  },
+  "folderTree": {
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "actions": {
+    "newFolder": "New Folder",
+    "upload": "Upload",
+    "download": "Download",
+    "rename": "Rename",
+    "move": "Move",
+    "replace": "Replace",
+    "delete": "Delete",
+    "attachExisting": "Attach Existing",
+    "detach": "Detach"
+  },
+  "folder": {
+    "create": {
+      "title": "New Folder",
+      "description": "Create a folder to organize your files.",
+      "nameLabel": "Folder name",
+      "namePlaceholder": "Folder name",
+      "parentLabel": "Parent folder",
+      "submit": "Create folder"
+    },
+    "edit": {
+      "title": "Edit Folder",
+      "nameLabel": "Folder name",
+      "parentLabel": "Parent folder",
+      "private": "Private folder",
+      "privateHint": "Only you and administrators can see this folder.",
+      "inactive": "Inactive",
+      "inactiveHint": "Hide this folder from lists.",
+      "save": "Save"
+    },
+    "delete": {
+      "title": "Delete this folder?",
+      "body": "All files in this folder will be permanently deleted. This cannot be undone."
+    },
+    "systemNoDelete": "System folders cannot be deleted or renamed.",
+    "subfolderCount": "{count, plural, one {# folder} other {# folders}}",
+    "fileCount": "{count, plural, one {# file} other {# files}}",
+    "deleteBlocked": "This folder contains files attached to records and can't be deleted."
+  },
+  "file": {
+    "drawer": {
+      "title": "File Details",
+      "name": "Name",
+      "folder": "Folder",
+      "type": "Type",
+      "size": "Size",
+      "created": "Created",
+      "createdBy": "Created by",
+      "modified": "Modified",
+      "modifiedBy": "Modified by",
+      "versions": "Versions",
+      "version": "Version {number}",
+      "current": "current",
+      "noVersions": "No previous versions.",
+      "moveTo": "Move to folder",
+      "replaceTitle": "Replace File",
+      "replaceBody": "Upload a new version of this file. The previous version will be preserved in the version history.",
+      "attachedTo": "Attached to records",
+      "notAttached": "Not attached to any record.",
+      "delete": {
+        "title": "Delete this file?",
+        "body": "The file will be permanently deleted from the File Cabinet and detached from all records. This cannot be undone."
+      }
+    },
+    "preview": {
+      "title": "Preview",
+      "loading": "Loading file…",
+      "loadFailed": "Could not load this file's contents.",
+      "tooLarge": "This file is too large to preview here.",
+      "unsupported": "This file type can't be previewed. Download it to open."
+    }
+  },
+  "upload": {
+    "dropFiles": "Drop files here or <browse>browse</browse>",
+    "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · up to 25 MB",
+    "tooLarge": "{name} exceeds the 25 MB limit",
+    "uploading": "{count, plural, one {Uploading # file…} other {Uploading # files…}}",
+    "selectFolder": "Select a folder to upload to…"
+  },
+  "attach": {
+    "title": "Attach File",
+    "description": "Attach a file from the File Cabinet to this record.",
+    "searchPlaceholder": "Search files…",
+    "empty": "No files found.",
+    "attachExisting": "Attach Existing File",
+    "uploadNew": "Upload New File"
+  },
+  "toasts": {
+    "folderCreated": "Folder created",
+    "folderCreateFailed": "Could not create folder",
+    "folderRenamed": "Folder renamed",
+    "folderRenameFailed": "Could not rename folder",
+    "folderMoved": "Folder moved",
+    "folderMoveFailed": "Could not move folder",
+    "folderDeleted": "Folder deleted",
+    "folderDeleteFailed": "Could not delete folder",
+    "fileRenamed": "File renamed",
+    "fileRenameFailed": "Could not rename file",
+    "fileMoved": "File moved",
+    "fileMoveFailed": "Could not move file",
+    "fileDeleted": "File deleted",
+    "fileDeleteFailed": "Could not delete file",
+    "fileReplaced": "New version uploaded",
+    "fileReplaceFailed": "Could not upload new version",
+    "uploaded": "Uploaded {name}",
+    "uploadFailed": "Could not upload {name}",
+    "attached": "File attached",
+    "attachFailed": "Could not attach file",
+    "detached": "File detached",
+    "detachFailed": "Could not detach file",
+    "linkCopied": "Link copied",
+    "linkCopyFailed": "Could not copy link"
+  },
+  "fileTypes": {
+    "pdf": "PDF",
+    "image": "Image",
+    "csv": "CSV",
+    "spreadsheet": "Spreadsheet",
+    "document": "Document",
+    "text": "Text",
+    "other": "File"
+  },
+  "rowMenu": {
+    "open": "Open",
+    "openFolder": "Open folder",
+    "copyLink": "Copy link"
+  },
+  "rename": {
+    "fileTitle": "Rename file",
+    "folderTitle": "Rename folder"
+  }
+}

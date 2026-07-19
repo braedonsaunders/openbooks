@@ -1,0 +1,72 @@
+{
+  "title": "Tax Filings",
+  "description": "Prepare government tax returns from the ledger and preserve what was filed.",
+  "setup": "Tax filing setup",
+  "notice": "Notice",
+  "period": "{from} to {to}",
+  "form": "Return",
+  "from": "From",
+  "to": "To",
+  "compute": "Compute",
+  "computing": "Computing…",
+  "empty": "Choose a return and a period, then compute.",
+  "adjustmentAria": "Adjustment for {label}",
+  "adjustmentPlaceholder": "0.00",
+  "columns": { "line": "Line", "description": "Description", "amount": "Amount" },
+  "noForms": {
+    "title": "No tax returns configured",
+    "description": "Import a jurisdiction pack or create a return in Setup → Taxes.",
+    "openSetup": "Open tax filing setup"
+  },
+  "export": { "label": "Working-copy export", "pdf": "Working-copy PDF", "csv": "Working-copy CSV", "xlsx": "Working-copy Excel" },
+  "official": { "download": "Filled official form" },
+  "submission": {
+    "title": "How to file this return",
+    "description": "Use the configured filing channel and action below after reviewing the return.",
+    "channelLabel": "Filing channel",
+    "actionLabel": "Required action",
+    "openGovernment": "Open filing instructions",
+    "exportNotice": "Working-copy exports are for review and records. They are not government submission files unless the configured filing method explicitly says otherwise.",
+    "gst34Notice": "GST34 is normally entered in CRA Account or NETFILE. CRA's uploadable .tax file can only be produced by CRA-certified software; PDF, CSV, and Excel are not accepted filing formats."
+  },
+  "channels": {
+    "print_pdf": "Print and mail",
+    "file_upload": "Electronic file upload",
+    "efile_api": "Government e-file API",
+    "portal_manual": "Government online portal"
+  },
+  "governmentFormats": {
+    "portal_entry": "Enter the return online",
+    "certified_file": "Certified government file",
+    "api": "Compatible software/API required",
+    "paper": "Official paper form"
+  },
+  "history": {
+    "title": "Previous filings",
+    "description": "Versioned, immutable snapshots of prepared and submitted returns.",
+    "search": "Search filing history…",
+    "statusLabel": "Status",
+    "empty": "No saved filings match these filters.",
+    "save": "Save to history",
+    "saving": "Saving…",
+    "saved": "Return snapshot saved",
+    "status": { "prepared": "Prepared", "filed": "Filed" },
+    "columns": { "form": "Return", "period": "Period", "version": "Version", "status": "Status", "reference": "Reference", "saved": "Saved" },
+    "drawerDescription": "{from} to {to} · version {version}",
+    "formCode": "Return code",
+    "country": "Country",
+    "reference": "Government confirmation/reference",
+    "referencePlaceholder": "Confirmation number or receipt reference",
+    "filedAt": "Filed at",
+    "markFiledHint": "Only mark this snapshot filed after the government accepts it. This action cannot be undone.",
+    "markFiled": "Mark as filed",
+    "markingFiled": "Marking filed…",
+    "filedSuccess": "Filing marked as filed",
+    "line": "Line",
+    "lineDescription": "Description",
+    "amount": "Amount",
+    "hash": "Snapshot SHA-256: {hash}"
+    ,"snapshotWatermark": "Saved immutable snapshot · SHA-256 {hash}"
+    ,"export": { "pdf": "PDF", "xlsx": "Excel", "csv": "CSV" }
+  }
+}

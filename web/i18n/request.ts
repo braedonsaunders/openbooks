@@ -10,6 +10,10 @@ const MESSAGE_LOADERS: Record<Locale, () => Promise<{ default: Messages }>> = {
   en: () => import("../messages/en"),
   fr: () => import("../messages/fr"),
   es: () => import("../messages/es"),
+  de: () => import("../messages/de"),
+  "pt-BR": () => import("../messages/pt-BR"),
+  zh: () => import("../messages/zh"),
+  ja: () => import("../messages/ja"),
 };
 
 /**
