@@ -1,0 +1,11 @@
+{
+  "title": "Documentation",
+  "searchPlaceholder": "Rechercher dans la documentation…",
+  "noResults": "Aucun article correspondant.",
+  "lastUpdated": "Dernière mise à jour le {date}",
+  "related": "Articles connexes",
+  "home": {
+    "title": "Documentation",
+    "subtitle": "Guides et référence de configuration pour OpenBooks. Parcourez une catégorie ci-dessous ou effectuez une recherche depuis la barre latérale."
+  }
+}

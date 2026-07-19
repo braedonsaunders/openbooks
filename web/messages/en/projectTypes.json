@@ -42,5 +42,6 @@
     "line": "Line",
     "subtotal": "Subtotal",
     "total": "Total"
-  }
+  },
+  "help": "Documentation"
 }

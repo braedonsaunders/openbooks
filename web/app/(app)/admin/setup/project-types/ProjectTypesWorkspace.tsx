@@ -1,10 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Card, CardContent, Input, Label, Select, Textarea, cn } from '@openbooks/ui'
 import type { FinancialProfile, InvoicingProfile, BackupProfile } from '@openbooks/schema'
 
@@ -199,6 +200,9 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               ))}
             </div>
             <div className="flex items-center gap-2">
+              <Link href="/docs/project-types" className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <BookOpen size={13} aria-hidden /> {t('help')}
+              </Link>
               {draft.id !== 'new' ? <Button variant="ghost" size="sm" disabled={busy} onClick={remove}><Trash2 size={14} /> {tCommon('actions.delete')}</Button> : null}
               <Button size="sm" disabled={busy || !draft.name.trim()} onClick={save}>{busy ? tCommon('actions.saving') : tCommon('actions.save')}</Button>
             </div>

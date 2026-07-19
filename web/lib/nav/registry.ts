@@ -435,6 +435,15 @@ export const NAV_MODULES: NavModule[] = [
     group: 'administration',
     exact: true,
   },
+  // Documentation — the in-app help center. No permission gate: available to
+  // every signed-in user (NetSuite-help style), linked under Administration.
+  {
+    key: 'docs',
+    href: '/docs',
+    label: 'Documentation',
+    iconKey: 'book',
+    group: 'administration',
+  },
   {
     key: 'admin-setup',
     href: '/admin/setup',
