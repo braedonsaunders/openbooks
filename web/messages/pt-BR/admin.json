@@ -122,7 +122,12 @@
       "void": "cancelamento",
       "approve": "aprovação",
       "reject": "rejeição"
-    }
+    },
+    "recordTypeFilter": "Tipo de registro",
+    "userFilter": "Usuário",
+    "dateFrom": "De",
+    "dateTo": "Até",
+    "clearDates": "Limpar datas"
   },
   "customFields": {
     "title": "Campos personalizados",

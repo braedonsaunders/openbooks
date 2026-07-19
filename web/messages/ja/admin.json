@@ -122,7 +122,12 @@
       "void": "無効化",
       "approve": "承認",
       "reject": "却下"
-    }
+    },
+    "recordTypeFilter": "レコードタイプ",
+    "userFilter": "ユーザー",
+    "dateFrom": "開始日",
+    "dateTo": "終了日",
+    "clearDates": "日付をクリア"
   },
   "customFields": {
     "title": "カスタムフィールド",
