@@ -124,6 +124,12 @@ export async function reconcileApplications(
     if (!payLines || !appLines) { skippedNoLine++; continue; }
     let pi = 0, ai = 0;
     while (remaining > 0n && pi < payLines.length && ai < appLines.length) {
+      // A line can never settle itself: when a source self-links a document
+      // (paymentRef === appliedRef, e.g. a journal referenced in its own payment
+      // link), payLines and appLines share rows — skip the diagonal so we never
+      // emit a from_line_id === to_line_id application (it breaks subledger↔GL
+      // tie-out and represents no real settlement).
+      if (payLines[pi]!.lineId === appLines[ai]!.lineId) { ai++; continue; }
       const alloc = [remaining, payLines[pi]!.remaining, appLines[ai]!.remaining]
         .reduce((a, b) => (b < a ? b : a));
       if (alloc <= 0n) {
