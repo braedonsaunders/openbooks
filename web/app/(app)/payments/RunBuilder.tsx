@@ -37,6 +37,7 @@ export function RunBuilder({
   pagination,
   mode = 'payments',
   basePath = '/payments',
+  preselected,
 }: {
   bills: RunBill[]
   bankProfiles: {
@@ -54,12 +55,19 @@ export function RunBuilder({
   pagination: ReactNode
   mode?: 'payments' | 'collections'
   basePath?: string
+  /**
+   * Bills to pre-check on mount — e.g. handed over from the AP cockpit's
+   * pay-run planner. Kept as whole rows so their totals survive pagination.
+   */
+  preselected?: RunBill[]
 }) {
   const t = useTranslations('payments.runBuilder')
   const tCommon = useTranslations('common')
   const router = useRouter()
   /** Selected bills (whole row kept so totals survive pagination). */
-  const [selected, setSelected] = useState<Record<string, RunBill>>({})
+  const [selected, setSelected] = useState<Record<string, RunBill>>(() =>
+    Object.fromEntries((preselected ?? []).map((b) => [b.id, b])),
+  )
   const [paymentBankProfileId, setPaymentBankProfileId] = useState('')
   const [scheduledFor, setScheduledFor] = useState('')
   const [captureDiscounts, setCaptureDiscounts] = useState(true)
