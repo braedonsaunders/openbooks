@@ -38,7 +38,7 @@ export type ProjectMeasureKey =
   | "margin_pct"
   | "remaining_budget";
 
-/** How `actual_cost` / `overhead` select GL cost. Either raw account types or a
+/** How `actual_cost` selects GL cost. Either raw account types or a
  *  named account-group dimension (reusing web/lib/account-groups). */
 export interface CostSource {
   source: "account_types" | "account_group" | "none";
@@ -50,6 +50,50 @@ export interface CostSource {
   groupKeys?: string[];
 }
 
+/**
+ * How a project type computes its OVERHEAD allocation — each job's share of the
+ * company's cost of doing business, for a fully-burdened project margin.
+ *
+ * IMPORTANT: overhead is a STATISTICAL / managerial number, NOT a GL posting by
+ * default — the real indirect costs are already period-expensed in the ledger,
+ * so posting overhead onto jobs too would double-count (see the overhead-is-
+ * statistical convention). The `rate_engine` method reuses the True Cost rate
+ * engine (per-department composite $/hr = overhead pool ÷ billed hours) and
+ * applies it to a project's labor: Σ_dept(project hours × dept rate).
+ */
+export interface OverheadSource {
+  method:
+    | "none" //                no overhead
+    | "percent_of_labor" //    laborCost × ratePercent
+    | "per_labor_hour" //      project hours × ratePerHour (flat)
+    | "rate_engine" //         per-department composite burden rate × project hours-by-dept (the Rassaun/Gantry model)
+    | "account_group_actual"; // legacy: sum posted GL to an overhead pool tagged to the project
+  /** For percent_of_labor — the percentage (25 = 25%). */
+  ratePercent?: number;
+  /** For per_labor_hour — the flat dollars per labor hour. */
+  ratePerHour?: number;
+  /** For rate_engine — how the per-department composite rate resolves + applies. */
+  rateEngine?: {
+    /** live = recompute from actuals via the True Cost engine; standard = use the effective-dated overhead_rates table. */
+    rateSource: "live" | "standard";
+    /** Which project hours the $/hr rate multiplies. */
+    hoursBasis: "billed_hours" | "total_hours";
+    /** Account-group dimension holding the overhead cost pools (default "overhead"). */
+    dimension: string;
+    /** How the rate is scoped. */
+    scope: "flat" | "department" | "class";
+  };
+  /** For account_group_actual — the pool selection. */
+  accountGroup?: { dimension: string; groupKeys?: string[] };
+  /**
+   * OPTIONAL GL absorption — off by default (overhead stays statistical). When
+   * enabled, posts Dr overhead-applied / Cr overhead-recovery contra with the
+   * over/under-recovered balance cleared to COGS, so it never double-counts.
+   * For manufacturing / gov-contracting tenants only.
+   */
+  glAbsorption?: { enabled: boolean; appliedAccount?: string; recoveryAccount?: string };
+}
+
 export interface FinancialProfile {
   /** Posted customer docs that count as invoiced (credits subtract). */
   invoicedToDate: { docKinds: string[]; creditKinds: string[] };
@@ -57,8 +101,8 @@ export interface FinancialProfile {
   actualCost: CostSource;
   /** Labor cost source (payroll JE vs time-entry rate vs an account group). */
   laborCost: { source: "in_actual_cost" | "time_rate" | "payroll_je" | "account_group" | "none"; dimension?: string; groupKeys?: string[] };
-  /** Overhead applied to the job. */
-  overhead: CostSource;
+  /** Overhead applied to the job (statistical allocation — see OverheadSource). */
+  overhead: OverheadSource;
   /** Open commitments: doc kinds whose unbilled remainder is "committed". */
   committedCost: { docKinds: string[] };
   /** Statistical billable value of all work (drives T&M price + could-be-invoiced). */
@@ -197,7 +241,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      overhead: { source: "none" },
+      overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
       costBudget: STANDARD_BUDGET,
@@ -225,7 +269,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      overhead: { source: "none" },
+      overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
       costBudget: STANDARD_BUDGET,
@@ -253,7 +297,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      overhead: { source: "none" },
+      overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "cost_times_markup" },
       costBudget: STANDARD_BUDGET,
@@ -281,7 +325,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       invoicedToDate: STANDARD_INVOICED,
       actualCost: STANDARD_COST,
       laborCost: { source: "in_actual_cost" },
-      overhead: { source: "none" },
+      overhead: { method: "none" },
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
       costBudget: STANDARD_BUDGET,

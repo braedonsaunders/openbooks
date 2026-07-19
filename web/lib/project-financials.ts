@@ -64,10 +64,16 @@ export async function resolveProjectFinancials(
   const markup = 1 + n(proj.markup_percent) / 100
   const costBudget = profile.costBudget.source === 'wbs_estimates' ? n(proj.cost_budget) : 0
 
-  // Account-id sets for account-group cost/overhead sources.
+  // Account-id sets for account-group cost sources. Overhead only reads GL when
+  // its method is the legacy account_group_actual; every other method is a
+  // statistical rate applied below (never a GL sum).
+  const overheadCostSource: CostSource =
+    profile.overhead.method === 'account_group_actual' && profile.overhead.accountGroup
+      ? { source: 'account_group', dimension: profile.overhead.accountGroup.dimension, groupKeys: profile.overhead.accountGroup.groupKeys }
+      : { source: 'none' }
   const [costIds, overheadIds] = await Promise.all([
     groupAccountIds(orgId, profile.actualCost),
-    groupAccountIds(orgId, profile.overhead),
+    groupAccountIds(orgId, overheadCostSource),
   ])
 
   const invoiceKinds = profile.invoicedToDate.docKinds
@@ -75,7 +81,7 @@ export async function resolveProjectFinancials(
   const kindList = (ks: string[]) => sql.join(ks.map((k) => sql`${k}`), sql`, `)
   const committedKinds = profile.committedCost.docKinds
 
-  const [invRes, costRes, committedRes, unbilledTimeRes, unbilledLineRes, laborRes, overheadRes, byAccountRes, docRes] = await Promise.all([
+  const [invRes, costRes, committedRes, unbilledTimeRes, unbilledLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
     // invoicedToDate — LINE-level tagging (dl.project_id); credits subtract.
     db.execute(sql`
       select coalesce(sum(dl.amount) filter (where d.kind in (${kindList(invoiceKinds)})), 0)
@@ -124,12 +130,17 @@ export async function resolveProjectFinancials(
         ? db.execute(sql`select coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as labor from time_entries te
              where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`)
         : db.execute(sql`select 0 as labor`),
-    // overhead — posted GL to overhead accounts.
-    profile.overhead.source === 'none'
+    // overhead (account_group_actual only) — posted GL to overhead accounts.
+    profile.overhead.method !== 'account_group_actual'
       ? db.execute(sql`select 0 as overhead`)
-      : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(profile.overhead, overheadIds)}), 0) as overhead
+      : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
            from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'`),
+    // project approved labor hours (base for per-hour / rate-engine overhead).
+    db.execute(sql`select coalesce(sum(te.hours), 0) as total,
+             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
+        from time_entries te
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`),
     // cost by account (for the breakdown subtab) — same cost predicate.
     db.execute(sql`
       select a.id as account_id, a.number, a.name, a.type, coalesce(sum(l.amount), 0) as amount
@@ -152,7 +163,16 @@ export async function resolveProjectFinancials(
   const revenuePosted = n(costRes.rows[0]?.revenue)
   const committedCost = n(committedRes.rows[0]?.committed)
   const laborCost = n(laborRes.rows[0]?.labor)
-  const overhead = n(overheadRes.rows[0]?.overhead)
+  const totalHours = n(hoursRes.rows[0]?.total)
+  // Overhead is a STATISTICAL allocation (never a GL posting by default). Each
+  // method turns a rate into the job's share of company overhead; rate_engine
+  // (per-department composite × project hours) is wired in a follow-up.
+  const oh = profile.overhead
+  const overhead =
+    oh.method === 'account_group_actual' ? n(overheadRes.rows[0]?.overhead)
+    : oh.method === 'percent_of_labor' ? laborCost * ((oh.ratePercent ?? 0) / 100)
+    : oh.method === 'per_labor_hour' ? totalHours * (oh.ratePerHour ?? 0)
+    : 0
 
   // billable value: what's invoiceable across all work (time + cost lines).
   const unbTimeBill = profile.billableValue.includeUnbilledTime ? n(unbilledTimeRes.rows[0]?.bill) : 0
