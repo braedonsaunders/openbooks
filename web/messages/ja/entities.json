@@ -1,30 +1,30 @@
 {
   "roles": {
     "customers": {
-      "title": "Customers",
-      "description": "Companies and people you invoice.",
-      "newLabel": "New customer",
-      "emptyTitle": "No customers yet",
-      "emptyDescription": "Add the first customer to start the directory."
+      "title": "得意先",
+      "description": "請求先となる会社や個人。",
+      "newLabel": "新規得意先",
+      "emptyTitle": "得意先はまだいません",
+      "emptyDescription": "最初の得意先を追加してディレクトリを開始します。"
     },
     "vendors": {
-      "title": "Vendors",
-      "description": "Suppliers you buy from and pay.",
-      "newLabel": "New vendor",
-      "emptyTitle": "No vendors yet",
-      "emptyDescription": "Add the first vendor to start the directory."
+      "title": "仕入先",
+      "description": "購入および支払いを行う仕入先。",
+      "newLabel": "新規仕入先",
+      "emptyTitle": "仕入先はまだいません",
+      "emptyDescription": "最初の仕入先を追加してディレクトリを開始します。"
     },
     "employees": {
-      "title": "Employees",
-      "description": "People on payroll and expense reports.",
-      "newLabel": "New employee",
-      "emptyTitle": "No employees yet",
-      "emptyDescription": "Add the first employee to start the directory."
+      "title": "従業員",
+      "description": "給与および経費精算の対象となる従業員。",
+      "newLabel": "新規従業員",
+      "emptyTitle": "従業員はまだいません",
+      "emptyDescription": "最初の従業員を追加してディレクトリを開始します。"
     }
   },
   "list": {
-    "searchPlaceholder": "Search name, code, email…",
-    "shortCode": "Short code",
-    "phone": "Phone"
+    "searchPlaceholder": "名称、コード、メールを検索…",
+    "shortCode": "短縮コード",
+    "phone": "電話番号"
   }
 }

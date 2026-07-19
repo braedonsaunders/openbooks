@@ -1,12 +1,12 @@
 {
   "list": {
-    "title": "Sales Orders",
-    "description": "Confirmed customer orders — issue, then convert into an invoice as you bill.",
-    "searchPlaceholder": "Search sales orders, customers, memo…",
-    "converted": "Converted",
-    "emptyTitle": "No sales orders yet",
-    "emptyDescription": "Create a sales order, or convert one from an estimate.",
-    "newButton": "New sales order",
-    "createDraftFailed": "Could not create a draft sales order"
+    "title": "Kundenaufträge",
+    "description": "Bestätigte Kundenaufträge — ausstellen und dann bei der Abrechnung in eine Ausgangsrechnung umwandeln.",
+    "searchPlaceholder": "Kundenaufträge, Kunden, Notiz durchsuchen…",
+    "converted": "Umgewandelt",
+    "emptyTitle": "Noch keine Kundenaufträge",
+    "emptyDescription": "Erstellen Sie einen Kundenauftrag oder wandeln Sie einen aus einem Angebot um.",
+    "newButton": "Neuer Kundenauftrag",
+    "createDraftFailed": "Kundenauftragsentwurf konnte nicht erstellt werden"
   }
 }

@@ -1,125 +1,128 @@
 {
   "accountMenu": {
-    "account": "Account",
-    "menuAriaLabel": "Account menu",
-    "theme": "Theme",
-    "language": "Language",
-    "menuLayout": "Menu layout",
-    "signOut": "Sign out",
-    "signingOut": "Signing out…",
+    "account": "Konto",
+    "menuAriaLabel": "Kontomenü",
+    "theme": "Design",
+    "language": "Sprache",
+    "menuLayout": "Menülayout",
+    "signOut": "Abmelden",
+    "signingOut": "Wird abgemeldet…",
     "roles": {
-      "admin": "Admin",
+      "admin": "Administrator",
       "controller": "Controller",
-      "accountant": "Accountant",
-      "approver": "Approver",
-      "viewer": "Viewer"
+      "accountant": "Buchhalter",
+      "approver": "Genehmiger",
+      "viewer": "Betrachter"
     }
   },
   "language": {
-    "label": "Language",
-    "orgDefault": "Organization default",
-    "saveFailed": "Could not save your language preference"
+    "label": "Sprache",
+    "orgDefault": "Organisationsstandard",
+    "saveFailed": "Ihre Spracheinstellung konnte nicht gespeichert werden"
   },
   "menuMode": {
-    "label": "Menu layout",
-    "orgDefault": "Organization default",
-    "saveFailed": "Could not save your menu layout preference",
+    "label": "Menülayout",
+    "orgDefault": "Organisationsstandard",
+    "saveFailed": "Ihre Menülayout-Einstellung konnte nicht gespeichert werden",
     "options": {
-      "sidebar": "Sidebar",
-      "topbar": "Top menu bar"
+      "sidebar": "Seitenleiste",
+      "topbar": "Obere Menüleiste"
     }
   },
   "topNav": {
-    "ariaLabel": "Primary",
-    "more": "More"
+    "ariaLabel": "Primär",
+    "more": "Mehr"
   },
   "apps": {
-    "ariaLabel": "Open apps",
+    "ariaLabel": "Apps öffnen",
     "title": "Apps"
   },
   "globalCreate": {
-    "ariaLabel": "Create new",
-    "title": "Create new",
-    "description": "Start a real draft and keep moving.",
-    "createFailed": "Could not create the draft",
+    "ariaLabel": "Neu erstellen",
+    "title": "Neu erstellen",
+    "description": "Starten Sie einen echten Entwurf und bleiben Sie in Bewegung.",
+    "createFailed": "Entwurf konnte nicht erstellt werden",
     "groups": {
-      "sales": "Sales",
-      "purchases": "Purchases",
-      "accounting": "Accounting",
-      "peopleAndLists": "People & lists"
+      "sales": "Verkauf",
+      "purchases": "Einkauf",
+      "accounting": "Buchhaltung",
+      "peopleAndLists": "Personen & Listen"
     },
     "items": {
-      "invoice": "Invoice",
-      "creditMemo": "Credit memo",
-      "estimate": "Estimate",
-      "salesOrder": "Sales order",
-      "customerPayment": "Customer payment",
-      "bill": "Bill",
-      "vendorCredit": "Vendor credit",
-      "purchaseOrder": "Purchase order",
-      "vendorPayment": "Vendor payment",
-      "journal": "Journal entry",
-      "expense": "Expense report",
-      "cardCharge": "Card charge",
-      "cardRefund": "Card refund",
-      "check": "Check",
-      "deposit": "Bank deposit",
-      "transfer": "Bank transfer",
-      "asset": "Fixed asset",
-      "customer": "Customer",
-      "vendor": "Vendor",
-      "employee": "Employee",
-      "item": "Item or service",
-      "project": "Project"
+      "invoice": "Ausgangsrechnung",
+      "creditMemo": "Gutschrift",
+      "estimate": "Angebot",
+      "salesOrder": "Kundenauftrag",
+      "customerPayment": "Kundenzahlung",
+      "bill": "Eingangsrechnung",
+      "vendorCredit": "Lieferantengutschrift",
+      "purchaseOrder": "Bestellung",
+      "vendorPayment": "Lieferantenzahlung",
+      "journal": "Buchung",
+      "expense": "Spesenabrechnung",
+      "cardCharge": "Kartenbelastung",
+      "cardRefund": "Kartenerstattung",
+      "check": "Scheck",
+      "deposit": "Bankeinzahlung",
+      "transfer": "Banküberweisung",
+      "asset": "Anlagevermögen",
+      "customer": "Kunde",
+      "vendor": "Lieferant",
+      "employee": "Mitarbeiter",
+      "item": "Artikel oder Dienstleistung",
+      "project": "Projekt"
     }
   },
   "relatedParty": {
-    "loadFailed": "Could not open this record"
+    "loadFailed": "Dieser Datensatz konnte nicht geöffnet werden"
   },
   "globalSearch": {
-    "ariaLabel": "Search",
-    "placeholder": "Search everything…",
-    "clear": "Clear search",
-    "searching": "Searching…",
-    "noMatches": "No matches for “{query}”",
-    "navigate": "navigate",
-    "open": "open",
-    "close": "close",
-    "resultCount": "{count, plural, one {# result} other {# results}}",
+    "ariaLabel": "Suchen",
+    "placeholder": "Alles durchsuchen…",
+    "clear": "Suche löschen",
+    "searching": "Wird gesucht…",
+    "noMatches": "Keine Treffer für „{query}“",
+    "navigate": "navigieren",
+    "open": "öffnen",
+    "close": "schließen",
+    "resultCount": "{count, plural, one {# Ergebnis} other {# Ergebnisse}}",
     "groups": {
-      "contacts": "Contacts",
-      "transactions": "Transactions",
-      "accounts": "Accounts",
-      "items": "Items",
-      "projects": "Projects"
+      "contacts": "Kontakte",
+      "transactions": "Transaktionen",
+      "accounts": "Konten",
+      "items": "Artikel",
+      "projects": "Projekte"
     }
   },
   "meta": {
-    "description": "The open business suite. Run on open books."
+    "description": "Die offene Business-Suite. Betrieben mit offenen Büchern."
+  },
+  "brand": {
+    "home": "Zum Dashboard"
   },
   "sidebar": {
-    "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
+    "expand": "Seitenleiste erweitern",
+    "collapse": "Seitenleiste einklappen"
   },
   "mobileNav": {
-    "openMenu": "Open menu",
-    "menu": "Menu",
-    "primaryAriaLabel": "Primary"
+    "openMenu": "Menü öffnen",
+    "menu": "Menü",
+    "primaryAriaLabel": "Primär"
   },
   "themeToggle": {
-    "label": "Theme",
+    "label": "Design",
     "options": {
-      "light": "Light",
+      "light": "Hell",
       "system": "System",
-      "dark": "Dark"
+      "dark": "Dunkel"
     },
-    "current": "Theme: {theme}",
-    "currentHint": "Theme: {theme} (click to change)"
+    "current": "Design: {theme}",
+    "currentHint": "Design: {theme} (zum Ändern klicken)"
   },
   "notifications": {
-    "ariaLabel": "Notifications",
-    "title": "Notifications",
-    "empty": "You're all caught up",
-    "markAllRead": "Mark all read"
+    "ariaLabel": "Benachrichtigungen",
+    "title": "Benachrichtigungen",
+    "empty": "Sie sind auf dem neuesten Stand",
+    "markAllRead": "Alle als gelesen markieren"
   }
 }

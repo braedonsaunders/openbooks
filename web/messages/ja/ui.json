@@ -1,76 +1,76 @@
 {
   "pagination": {
-    "outOfRange": "Page {page} is past the end of these results.",
-    "showing": "Showing <strong>{from}</strong>–<strong>{to}</strong> of <strong>{total}</strong>",
-    "goToLastPageAria": "Go to last page, page {page}",
-    "goToPage": "Go to page {page}",
-    "previousPageAria": "Previous page",
-    "nextPageAria": "Next page",
-    "prev": "Prev",
-    "pageOf": "Page {page} of {pages}"
+    "outOfRange": "ページ {page} はこの結果の末尾を超えています。",
+    "showing": "<strong>{total}</strong> 件中 <strong>{from}</strong>–<strong>{to}</strong> を表示",
+    "goToLastPageAria": "最終ページ(ページ {page})に移動",
+    "goToPage": "ページ {page} に移動",
+    "previousPageAria": "前のページ",
+    "nextPageAria": "次のページ",
+    "prev": "前へ",
+    "pageOf": "{pages} ページ中 {page} ページ"
   },
   "search": {
-    "placeholder": "Search…",
-    "clearAria": "Clear search"
+    "placeholder": "検索…",
+    "clearAria": "検索をクリア"
   },
   "confirm": {
-    "defaultTitle": "Confirm"
+    "defaultTitle": "確認"
   },
   "select": {
-    "placeholder": "Select…",
-    "searchPlaceholder": "Search…",
-    "noMatches": "No matches",
-    "searching": "Searching…"
+    "placeholder": "選択…",
+    "searchPlaceholder": "検索…",
+    "noMatches": "一致するものがありません",
+    "searching": "検索中…"
   },
   "sparkline": {
-    "noTrend": "No trend data",
-    "trend": "Trend: {count} points from {first} to {last}"
+    "noTrend": "トレンドデータがありません",
+    "trend": "トレンド: {first} から {last} までの {count} ポイント"
   },
   "attachments": {
-    "tooLarge": "{name} exceeds the 25 MB limit",
-    "attached": "Attached {name}",
-    "attachFailed": "Could not attach {name}",
-    "removed": "Removed {name}",
-    "removeFailed": "Could not remove attachment",
-    "empty": "No files attached yet.",
-    "downloadAria": "Download {name}",
-    "removeAria": "Remove {name}",
-    "uploading": "{count, plural, one {Uploading # file…} other {Uploading # files…}}",
-    "dropFiles": "Drop files here or <browse>browse</browse>",
-    "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · up to 25 MB"
+    "tooLarge": "{name} は 25 MB の上限を超えています",
+    "attached": "{name} を添付しました",
+    "attachFailed": "{name} を添付できませんでした",
+    "removed": "{name} を削除しました",
+    "removeFailed": "添付ファイルを削除できませんでした",
+    "empty": "まだ添付ファイルはありません。",
+    "downloadAria": "{name} をダウンロード",
+    "removeAria": "{name} を削除",
+    "uploading": "{count, plural, one {# 件のファイルをアップロード中…} other {# 件のファイルをアップロード中…}}",
+    "dropFiles": "ここにファイルをドロップ、または <browse>参照</browse>",
+    "acceptHint": "PDF、画像、CSV、XLSX、DOCX、TXT · 最大 25 MB"
   },
   "recordFields": {
-    "inactiveSelected": "(currently selected — inactive)",
-    "ratingAria": "Rating out of {max}",
-    "ratingValueAria": "{value} of {max}",
-    "loadAccountsFailed": "Could not load accounts — reload to retry.",
-    "loadPartiesFailed": "Could not load parties — reload to retry.",
-    "selectAccount": "Select account…",
-    "selectParty": "Select party…",
-    "noFields": "No fields to show — the record type has no visible fields.",
-    "lineItems": "Line items",
-    "rowCount": "{count, plural, one {# row} other {# rows}}",
-    "noRows": "No rows yet.",
-    "rowActions": "Row actions",
-    "removeRow": "Remove row",
-    "addRow": "Add row",
-    "maxRowsReached": "Maximum of {count} rows reached."
+    "inactiveSelected": "(現在選択中 — 無効)",
+    "ratingAria": "{max} 段階の評価",
+    "ratingValueAria": "{max} 段階中 {value}",
+    "loadAccountsFailed": "勘定を読み込めませんでした — 再読み込みして再試行してください。",
+    "loadPartiesFailed": "取引先を読み込めませんでした — 再読み込みして再試行してください。",
+    "selectAccount": "勘定を選択…",
+    "selectParty": "取引先を選択…",
+    "noFields": "表示するフィールドがありません — このレコードタイプには表示可能なフィールドがありません。",
+    "lineItems": "明細行",
+    "rowCount": "{count, plural, one {# 行} other {# 行}}",
+    "noRows": "まだ行はありません。",
+    "rowActions": "行のアクション",
+    "removeRow": "行を削除",
+    "addRow": "行を追加",
+    "maxRowsReached": "行数の上限 {count} に達しました。"
   },
   "lineGrid": {
-    "addLine": "Add line",
-    "keyboardHint": "Enter adds/moves down · Alt+↑/↓ reorders · ⌘D duplicates · ⌘⌫ removes",
-    "lineActionsAria": "Line {number} actions",
-    "insertAbove": "Insert above",
-    "insertBelow": "Insert below",
-    "removeLine": "Remove line",
-    "clearLine": "Clear line",
+    "addLine": "行を追加",
+    "keyboardHint": "Enter で追加/下へ移動 · Alt+↑/↓ で並べ替え · ⌘D で複製 · ⌘⌫ で削除",
+    "lineActionsAria": "行 {number} のアクション",
+    "insertAbove": "上に挿入",
+    "insertBelow": "下に挿入",
+    "removeLine": "行を削除",
+    "clearLine": "行をクリア",
     "tax": {
-      "overriddenAria": "Tax overridden",
-      "overriddenTitle": "Tax manually overridden — differs from the computed rate",
-      "overriddenShortTitle": "Tax manually overridden",
-      "computedOverriddenTitle": "Computed {amount} · overridden",
-      "resetAria": "Reset tax to computed",
-      "resetTitle": "Reset to computed {amount}"
+      "overriddenAria": "税額を上書き済み",
+      "overriddenTitle": "税額を手動で上書きしています — 計算された税率と異なります",
+      "overriddenShortTitle": "税額を手動で上書き済み",
+      "computedOverriddenTitle": "計算値 {amount} · 上書き済み",
+      "resetAria": "税額を計算値にリセット",
+      "resetTitle": "計算値 {amount} にリセット"
     }
   }
 }

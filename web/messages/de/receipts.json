@@ -1,9 +1,9 @@
 {
   "page": {
-    "title": "Customer Payments",
-    "description": "Customer payments received and applied to open invoices through the kernel.",
-    "newReceipt": "New customer payment",
-    "newCollectionRun": "New collection run",
-    "tabs": { "receipts": "Receipts", "collections": "Direct-debit runs" }
+    "title": "Kundenzahlungen",
+    "description": "Erhaltene Kundenzahlungen, die über den Kernel auf offene Ausgangsrechnungen angewendet werden.",
+    "newReceipt": "Neue Kundenzahlung",
+    "newCollectionRun": "Neuer Einzugslauf",
+    "tabs": { "receipts": "Zahlungseingänge", "collections": "Lastschriftläufe" }
   }
 }

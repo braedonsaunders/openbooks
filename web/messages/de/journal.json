@@ -1,68 +1,68 @@
 {
   "list": {
     "title": "Journal",
-    "description": "{count, plural, one {# posted entry} other {# posted entries}} · audited; closed periods are immutable.",
-    "searchPlaceholder": "Search entry number or memo…",
-    "originFilter": "Origin",
-    "draftsHeading": "Draft journals — not yet posted",
+    "description": "{count, plural, one {# gebuchte Buchung} other {# gebuchte Buchungen}} · geprüft; abgeschlossene Perioden sind unveränderlich.",
+    "searchPlaceholder": "Buchungsnummer oder Notiz durchsuchen…",
+    "originFilter": "Herkunft",
+    "draftsHeading": "Buchungsentwürfe — noch nicht gebucht",
     "columns": {
-      "entry": "Entry",
-      "origin": "Origin",
-      "debits": "Debits"
+      "entry": "Buchung",
+      "origin": "Herkunft",
+      "debits": "Soll"
     }
   },
   "origins": {
-    "manual": "Manual",
-    "closing": "Closing",
-    "allocation": "Allocation",
-    "revaluation": "Revaluation",
-    "laborBurden": "Labor burden",
-    "depreciation": "Depreciation",
-    "revenueRecognition": "Revenue recognition",
-    "fxSettlement": "FX settlement",
-    "translation": "Translation"
+    "manual": "Manuell",
+    "closing": "Abschluss",
+    "allocation": "Umlage",
+    "revaluation": "Neubewertung",
+    "laborBurden": "Lohnnebenkosten",
+    "depreciation": "Abschreibung",
+    "revenueRecognition": "Umsatzrealisierung",
+    "fxSettlement": "Währungsausgleich",
+    "translation": "Umrechnung"
   },
   "detail": {
-    "notFound": "Entry not found",
-    "origin": "origin: {origin}",
-    "reverses": "reverses {number}",
-    "openItemBadge": "open item",
-    "totals": "Totals",
+    "notFound": "Buchung nicht gefunden",
+    "origin": "Herkunft: {origin}",
+    "reverses": "storniert {number}",
+    "openItemBadge": "offener Posten",
+    "totals": "Summen",
     "columns": {
-      "debit": "Debit",
-      "credit": "Credit",
-      "openItem": "Open item"
+      "debit": "Soll",
+      "credit": "Haben",
+      "openItem": "Offener Posten"
     }
   },
   "newButton": {
-    "label": "New journal",
-    "createFailed": "Could not create a draft journal"
+    "label": "Neue Buchung",
+    "createFailed": "Buchungsentwurf konnte nicht erstellt werden"
   },
   "drawer": {
-    "draftDescription": "Draft — changes save automatically. Debits and credits must balance to post.",
-    "autosaveWithParty": "{party} · changes save automatically",
-    "autosave": "changes save automatically",
-    "postFailed": "Posting failed",
-    "postedToast": "Posted to the ledger",
-    "autosaveFailed": "Autosave failed",
-    "viewGlImpact": "View GL impact",
-    "allChangesSaved": "All changes saved",
-    "saveFailedRetry": "Save failed — fix and retry",
-    "unsavedChanges": "Unsaved changes…",
-    "deleteTitle": "Delete this journal?",
-    "deleteDraftBody": "This permanently deletes the draft journal. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the journal and removes its ledger impact. This cannot be undone.",
-    "deleted": "Journal deleted",
-    "deleteFailed": "Delete failed",
-    "totals": "Debits <strong>{debits}</strong> · Credits <strong>{credits}</strong>",
-    "outOfBalance": "Out of balance · {amount}",
-    "balanced": "Balanced",
-    "referenceNumber": "Reference #",
-    "noParty": "No party",
-    "accountPlaceholder": "Account…",
+    "draftDescription": "Entwurf — Änderungen werden automatisch gespeichert. Soll und Haben müssen zum Buchen ausgeglichen sein.",
+    "autosaveWithParty": "{party} · Änderungen werden automatisch gespeichert",
+    "autosave": "Änderungen werden automatisch gespeichert",
+    "postFailed": "Buchung fehlgeschlagen",
+    "postedToast": "In das Hauptbuch gebucht",
+    "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
+    "viewGlImpact": "GL-Auswirkung anzeigen",
+    "allChangesSaved": "Alle Änderungen gespeichert",
+    "saveFailedRetry": "Speichern fehlgeschlagen — korrigieren und erneut versuchen",
+    "unsavedChanges": "Nicht gespeicherte Änderungen…",
+    "deleteTitle": "Diese Buchung löschen?",
+    "deleteDraftBody": "Dadurch wird der Buchungsentwurf dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "deletePostedBody": "Dadurch wird die Buchung dauerhaft gelöscht und ihre Auswirkung auf das Hauptbuch entfernt. Dies kann nicht rückgängig gemacht werden.",
+    "deleted": "Buchung gelöscht",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "totals": "Soll <strong>{debits}</strong> · Haben <strong>{credits}</strong>",
+    "outOfBalance": "Nicht ausgeglichen · {amount}",
+    "balanced": "Ausgeglichen",
+    "referenceNumber": "Referenz-Nr.",
+    "noParty": "Keine Partei",
+    "accountPlaceholder": "Konto…",
     "columns": {
-      "debit": "Debit",
-      "credit": "Credit"
+      "debit": "Soll",
+      "credit": "Haben"
     }
   }
 }

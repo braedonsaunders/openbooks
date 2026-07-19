@@ -1,10 +1,10 @@
 {
   "title": "Apps",
-  "description": "Installed apps you can open.",
-  "empty": "No apps are installed. An administrator can install one from Admin Center → App Builder.",
+  "description": "Installierte Apps, die Sie öffnen können.",
+  "empty": "Es sind keine Apps installiert. Ein Administrator kann eine über Admin Center → App Builder installieren.",
   "frame": {
-    "loading": "Loading…",
-    "failedTitle": "This app couldn't be opened.",
-    "failedHint": "Try refreshing. If it keeps happening, contact your administrator."
+    "loading": "Wird geladen…",
+    "failedTitle": "Diese App konnte nicht geöffnet werden.",
+    "failedHint": "Versuchen Sie es erneut. Wenn das Problem weiterhin auftritt, wenden Sie sich an Ihren Administrator."
   }
 }

@@ -1,52 +1,52 @@
 {
   "list": {
-    "title": "Revenue Recognition",
-    "description": "Contracts, performance obligations, and recognition schedules (ASC 606).",
-    "searchPlaceholder": "Search contracts…",
-    "emptyTitle": "No revenue contracts yet",
-    "emptyDescription": "Post an invoice with a recognition-rule item to create obligations and schedules.",
-    "runRecognition": "Run recognition"
+    "title": "Umsatzrealisierung",
+    "description": "Verträge, Leistungsverpflichtungen und Realisierungspläne (ASC 606).",
+    "searchPlaceholder": "Verträge durchsuchen…",
+    "emptyTitle": "Noch keine Umsatzverträge",
+    "emptyDescription": "Buchen Sie eine Rechnung mit einem Artikel mit Realisierungsregel, um Verpflichtungen und Pläne zu erstellen.",
+    "runRecognition": "Realisierung ausführen"
   },
   "labels": {
-    "contract": "Contract",
-    "customer": "Customer",
-    "total": "Total",
-    "recognized": "Recognized",
-    "deferred": "Deferred"
+    "contract": "Vertrag",
+    "customer": "Kunde",
+    "total": "Gesamt",
+    "recognized": "Realisiert",
+    "deferred": "Abgegrenzt"
   },
   "status": {
-    "draft": "Draft",
-    "active": "Active",
-    "complete": "Complete",
-    "cancelled": "Cancelled"
+    "draft": "Entwurf",
+    "active": "Aktiv",
+    "complete": "Abgeschlossen",
+    "cancelled": "Storniert"
   },
   "obligationStatus": {
-    "open": "Open",
-    "satisfied": "Satisfied",
-    "cancelled": "Cancelled"
+    "open": "Offen",
+    "satisfied": "Erfüllt",
+    "cancelled": "Storniert"
   },
   "method": {
-    "point_in_time": "Point in time",
-    "straight_line_even": "Straight-line, even",
-    "straight_line_prorate_first_last": "Straight-line, prorated",
-    "straight_line_daily": "Straight-line, daily",
-    "percent_complete": "Percent complete",
-    "milestone": "Milestone",
-    "usage": "Usage"
+    "point_in_time": "Zeitpunktbezogen",
+    "straight_line_even": "Linear, gleichmäßig",
+    "straight_line_prorate_first_last": "Linear, anteilig",
+    "straight_line_daily": "Linear, täglich",
+    "percent_complete": "Fertigstellungsgrad",
+    "milestone": "Meilenstein",
+    "usage": "Nutzung"
   },
   "run": {
-    "failed": "Recognition run failed",
-    "posted": "Recognized {count, plural, one {# entry} other {# entries}} totaling {amount}",
-    "someSkipped": "{count} skipped",
-    "nothingDue": "Nothing due to recognize"
+    "failed": "Realisierungslauf fehlgeschlagen",
+    "posted": "{count, plural, one {# Buchung} other {# Buchungen}} realisiert, insgesamt {amount}",
+    "someSkipped": "{count} übersprungen",
+    "nothingDue": "Nichts zur Realisierung fällig"
   },
   "drawer": {
-    "obligations": "Obligations",
-    "noSchedule": "No schedule built yet",
-    "period": "Period",
-    "planned": "Planned",
-    "recognized": "Recognized",
-    "postedStatus": "Posted",
-    "plannedStatus": "Planned"
+    "obligations": "Verpflichtungen",
+    "noSchedule": "Noch kein Plan erstellt",
+    "period": "Zeitraum",
+    "planned": "Geplant",
+    "recognized": "Realisiert",
+    "postedStatus": "Gebucht",
+    "plannedStatus": "Geplant"
   }
 }

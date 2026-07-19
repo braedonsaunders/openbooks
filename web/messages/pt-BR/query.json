@@ -1,85 +1,85 @@
 {
-  "title": "Query Console",
-  "subtitle": "Real PostgreSQL, read-only. SELECT-only role, 10s timeout. ⌘⏎ to run.",
-  "description": "Real PostgreSQL — not a query dialect. Runs read-only under a SELECT-only role with a 10-second timeout. ⌘⏎ to run.",
-  "readOnlyBadge": "Read-only",
-  "run": "Run",
-  "running": "Running…",
-  "clear": "Clear",
-  "rowLimit": "Limit",
+  "title": "Console de Consultas",
+  "subtitle": "PostgreSQL real, somente leitura. Papel SELECT-only, timeout de 10s. ⌘⏎ para executar.",
+  "description": "PostgreSQL real — não um dialeto de consulta. Executa em modo somente leitura sob um papel SELECT-only com timeout de 10 segundos. ⌘⏎ para executar.",
+  "readOnlyBadge": "Somente leitura",
+  "run": "Executar",
+  "running": "Executando…",
+  "clear": "Limpar",
+  "rowLimit": "Limite",
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
-  "failed": "Failed",
-  "queryError": "Query error",
-  "rowCount": "{count, plural, one {# row} other {# rows}}",
-  "truncated": "Truncated at {max}",
-  "ranSelection": "Ran selection",
-  "resultsIdle": "No results yet",
-  "resultsIdleHint": "Results appear here",
-  "filterResults": "Filter rows…",
-  "copyCsv": "Copy",
-  "copiedCsv": "Copied results as CSV",
-  "copyFailed": "Copy failed",
-  "runToSeeResults": "Run a query to see results",
-  "runHint": "Write SQL above, then press Run or ⌘⏎. Select text to run just that.",
-  "emptyResultSet": "Query returned no columns",
-  "noFilterMatch": "No rows match your filter",
-  "run_legacy": "Run query",
+  "failed": "Falhou",
+  "queryError": "Erro na consulta",
+  "rowCount": "{count, plural, one {# linha} other {# linhas}}",
+  "truncated": "Truncado em {max}",
+  "ranSelection": "Seleção executada",
+  "resultsIdle": "Nenhum resultado ainda",
+  "resultsIdleHint": "Os resultados aparecem aqui",
+  "filterResults": "Filtrar linhas…",
+  "copyCsv": "Copiar",
+  "copiedCsv": "Resultados copiados como CSV",
+  "copyFailed": "Falha ao copiar",
+  "runToSeeResults": "Execute uma consulta para ver os resultados",
+  "runHint": "Escreva SQL acima e pressione Executar ou ⌘⏎. Selecione um trecho para executar apenas ele.",
+  "emptyResultSet": "A consulta não retornou colunas",
+  "noFilterMatch": "Nenhuma linha corresponde ao seu filtro",
+  "run_legacy": "Executar consulta",
   "rail": {
     "schema": "Schema",
-    "snippets": "Snippets",
-    "history": "History"
+    "snippets": "Trechos",
+    "history": "Histórico"
   },
   "schema": {
-    "searchPlaceholder": "Search tables & columns…",
-    "noMatch": "No matching tables",
-    "insertTable": "Click to insert table name",
-    "insertColumn": "Click to insert column name"
+    "searchPlaceholder": "Buscar tabelas e colunas…",
+    "noMatch": "Nenhuma tabela correspondente",
+    "insertTable": "Clique para inserir o nome da tabela",
+    "insertColumn": "Clique para inserir o nome da coluna"
   },
   "history": {
-    "count": "{count, plural, one {# query} other {# queries}}",
-    "clear": "Clear",
-    "rows": "{count, plural, one {# row} other {# rows}}",
-    "failed": "Failed",
-    "empty": "Queries you run appear here"
+    "count": "{count, plural, one {# consulta} other {# consultas}}",
+    "clear": "Limpar",
+    "rows": "{count, plural, one {# linha} other {# linhas}}",
+    "failed": "Falhou",
+    "empty": "As consultas que você executar aparecem aqui"
   },
-  "snippetSaved": "Saved “{name}”",
+  "snippetSaved": "“{name}” salvo",
   "snippets": {
-    "save": "Save",
-    "namePlaceholder": "Name this query…",
-    "savedHeading": "Saved",
-    "examplesHeading": "Examples",
-    "delete": "Delete snippet",
+    "save": "Salvar",
+    "namePlaceholder": "Dê um nome a esta consulta…",
+    "savedHeading": "Salvos",
+    "examplesHeading": "Exemplos",
+    "delete": "Excluir trecho",
     "trialBalance": {
-      "label": "Trial balance",
-      "description": "Signed balance per account, non-zero only."
+      "label": "Balancete",
+      "description": "Saldo com sinal por conta, apenas diferentes de zero."
     },
     "topAccounts": {
-      "label": "Largest balances",
-      "description": "The 15 accounts with the biggest absolute balance."
+      "label": "Maiores saldos",
+      "description": "As 15 contas com o maior saldo em valor absoluto."
     },
     "recentEntries": {
-      "label": "Recent journal entries",
-      "description": "The 50 most recent entries with status and origin."
+      "label": "Lançamentos recentes",
+      "description": "Os 50 lançamentos mais recentes com status e origem."
     },
     "monthlyActivity": {
-      "label": "Monthly activity",
-      "description": "Posted entries and debit totals by month."
+      "label": "Atividade mensal",
+      "description": "Lançamentos lançados e totais de débitos por mês."
     },
     "unbalancedEntries": {
-      "label": "Unbalanced entries",
-      "description": "Entries whose lines don't net to zero."
+      "label": "Lançamentos desbalanceados",
+      "description": "Lançamentos cujas linhas não somam zero."
     },
     "entriesByOrigin": {
-      "label": "Entries by origin",
-      "description": "Count of entries grouped by their source origin."
+      "label": "Lançamentos por origem",
+      "description": "Contagem de lançamentos agrupados por sua origem."
     },
     "tableSizes": {
-      "label": "Table row counts",
-      "description": "Estimated live rows per table, largest first."
+      "label": "Contagem de linhas por tabela",
+      "description": "Linhas vivas estimadas por tabela, das maiores primeiro."
     },
     "listColumns": {
-      "label": "List all columns",
-      "description": "Every column in the public schema with its type."
+      "label": "Listar todas as colunas",
+      "description": "Cada coluna do schema public com seu tipo."
     }
   }
 }

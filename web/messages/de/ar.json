@@ -1,62 +1,62 @@
 {
   "list": {
-    "title": "Invoices",
-    "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted through the kernel.",
-    "searchPlaceholder": "Search invoices, credits, customers, refs…",
-    "emptyTitle": "No invoices yet",
-    "emptyDescription": "Enter the first customer invoice or credit memo to start the AR workflow.",
+    "title": "Ausgangsrechnungen",
+    "description": "Kundenrechnungen und Gutschriften — Ihre Forderungen: Entwurf → Genehmigung → über den Kernel gebucht.",
+    "searchPlaceholder": "Rechnungen, Gutschriften, Kunden, Referenzen durchsuchen…",
+    "emptyTitle": "Noch keine Ausgangsrechnungen",
+    "emptyDescription": "Erfassen Sie die erste Ausgangsrechnung oder Gutschrift, um den Forderungs-Workflow zu starten.",
     "columns": {
-      "number": "Number",
-      "invoice": "Invoice",
+      "number": "Nummer",
+      "invoice": "Rechnung",
       "ref": "Ref"
     }
   },
   "kinds": {
-    "invoice": "Invoice",
-    "credit": "Credit"
+    "invoice": "Rechnung",
+    "credit": "Gutschrift"
   },
   "actions": {
-    "new": "New",
-    "newInvoice": "New invoice",
-    "newCredit": "New customer credit",
-    "submitForApproval": "Submit for approval"
+    "new": "Neu",
+    "newInvoice": "Neue Ausgangsrechnung",
+    "newCredit": "Neue Kundengutschrift",
+    "submitForApproval": "Zur Genehmigung einreichen"
   },
   "drawer": {
-    "editingHint": "Editing — Save to apply changes",
-    "viewGlImpact": "View GL impact",
-    "dateLabel": "Invoice date",
-    "dueDate": "Due date",
-    "reference": "Customer ref #",
-    "accountColumn": "Income account",
-    "accountPlaceholder": "Account…",
-    "noTax": "No tax",
-    "taxAmountColumn": "Tax amt",
-    "selectCustomerPlaceholder": "Select customer…",
-    "selectVendorPlaceholder": "Select vendor…",
-    "subtotalAmount": "Subtotal {amount}",
-    "taxTotalAmount": "Tax {amount}",
-    "totalAmount": "Total {amount}",
-    "balanceDueAmount": "Balance due {amount}",
+    "editingHint": "Bearbeitung — Speichern, um Änderungen zu übernehmen",
+    "viewGlImpact": "GL-Auswirkung anzeigen",
+    "dateLabel": "Rechnungsdatum",
+    "dueDate": "Fälligkeitsdatum",
+    "reference": "Kundenreferenz-Nr.",
+    "accountColumn": "Ertragskonto",
+    "accountPlaceholder": "Konto…",
+    "noTax": "Keine Steuer",
+    "taxAmountColumn": "Steuerbetr.",
+    "selectCustomerPlaceholder": "Kunde auswählen…",
+    "selectVendorPlaceholder": "Lieferant auswählen…",
+    "subtotalAmount": "Zwischensumme {amount}",
+    "taxTotalAmount": "Steuer {amount}",
+    "totalAmount": "Gesamt {amount}",
+    "balanceDueAmount": "Offener Betrag {amount}",
     "saveState": {
-      "saved": "All changes saved",
-      "error": "Save failed — fix and retry",
-      "dirty": "Unsaved changes…"
+      "saved": "Alle Änderungen gespeichert",
+      "error": "Speichern fehlgeschlagen — korrigieren und erneut versuchen",
+      "dirty": "Nicht gespeicherte Änderungen…"
     },
-    "deleteTitle": "Delete this document?",
-    "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone.",
-    "formLabel": "Form",
-    "formSetPreferred": "Set as my preferred",
-    "formSetPreferredDone": "Preferred form saved",
-    "formPreferredCleared": "Preferred form cleared",
-    "formPreferredFailed": "Could not save the preferred form"
+    "deleteTitle": "Dieses Dokument löschen?",
+    "deleteDraftBody": "Dadurch wird der Entwurf dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "deletePostedBody": "Dadurch wird das Dokument dauerhaft gelöscht und seine Auswirkung auf das Hauptbuch entfernt. Dies kann nicht rückgängig gemacht werden.",
+    "formLabel": "Formular",
+    "formSetPreferred": "Als bevorzugt festlegen",
+    "formSetPreferredDone": "Bevorzugtes Formular gespeichert",
+    "formPreferredCleared": "Bevorzugtes Formular zurückgesetzt",
+    "formPreferredFailed": "Bevorzugtes Formular konnte nicht gespeichert werden"
   },
   "toasts": {
-    "actionFailed": "Action failed",
-    "submitted": "Submitted for approval",
-    "posted": "Posted to the ledger",
-    "createDraftFailed": "Could not create a draft",
-    "deleted": "Document deleted",
-    "deleteFailed": "Delete failed"
+    "actionFailed": "Aktion fehlgeschlagen",
+    "submitted": "Zur Genehmigung eingereicht",
+    "posted": "In das Hauptbuch gebucht",
+    "createDraftFailed": "Entwurf konnte nicht erstellt werden",
+    "deleted": "Dokument gelöscht",
+    "deleteFailed": "Löschen fehlgeschlagen"
   }
 }

@@ -1,54 +1,54 @@
 {
   "views": {
-    "new": "New view",
+    "new": "新規ビュー",
     "list": {
-      "title": "Views",
-      "description": "Named, shareable queries over the ledger, documents, parties and accounts — detail rows or grouped summaries. Browse, export and reuse them.",
-      "scopeLabel": "Scope",
-      "searchPlaceholder": "Search views…",
-      "scopeAll": "All",
-      "scopeShared": "Shared",
-      "scopePrivate": "Private",
-      "emptyTitle": "No views yet",
-      "emptyDescription": "Create your first view to query the ledger and reuse it anytime.",
+      "title": "ビュー",
+      "description": "元帳、書類、取引先、勘定に対する、名前付きで共有可能なクエリ — 明細行またはグループ化した集計。閲覧、エクスポート、再利用できます。",
+      "scopeLabel": "範囲",
+      "searchPlaceholder": "ビューを検索…",
+      "scopeAll": "すべて",
+      "scopeShared": "共有",
+      "scopePrivate": "プライベート",
+      "emptyTitle": "ビューはまだありません",
+      "emptyDescription": "最初のビューを作成して元帳を照会し、いつでも再利用できます。",
       "columns": {
-        "name": "Name",
-        "source": "Source",
-        "scope": "Scope",
-        "updated": "Updated"
+        "name": "名称",
+        "source": "ソース",
+        "scope": "範囲",
+        "updated": "更新日"
       },
       "scope": {
-        "shared": "Shared",
-        "private": "Private"
+        "shared": "共有",
+        "private": "プライベート"
       },
-      "runAction": "Run",
-      "editAction": "Edit"
+      "runAction": "実行",
+      "editAction": "編集"
     },
     "studio": {
-      "untitled": "Untitled view",
-      "autosaveHint": "Changes save automatically.",
-      "scopeLabel": "Scope",
+      "untitled": "無題のビュー",
+      "autosaveHint": "変更は自動的に保存されます。",
+      "scopeLabel": "範囲",
       "scope": {
-        "private": "Private — only you",
-        "shared": "Shared — everyone"
+        "private": "プライベート — 自分のみ",
+        "shared": "共有 — 全員"
       },
       "exportPdf": "PDF",
       "exportXlsx": "Excel",
       "exportCsv": "CSV",
-      "deleteConfirm": "Delete this view?",
-      "viewResults": "View results"
+      "deleteConfirm": "このビューを削除しますか?",
+      "viewResults": "結果を表示"
     },
     "run": {
-      "editSearch": "Edit view",
-      "backToList": "Views",
-      "resultsTitle": "Results",
-      "rowsRange": "Showing {from}–{to} of {total} rows",
-      "lastUpdated": "Updated {when}",
-      "refreshHint": "Results run live against current data.",
-      "emptyTitle": "No rows matched",
-      "emptyDescription": "Adjust the search criteria or filters and run again.",
-      "notFoundTitle": "View not found",
-      "notFoundDescription": "It may have been deleted, or you don't have access to it."
+      "editSearch": "ビューを編集",
+      "backToList": "ビュー",
+      "resultsTitle": "結果",
+      "rowsRange": "{total} 行中 {from}–{to} を表示",
+      "lastUpdated": "更新 {when}",
+      "refreshHint": "結果は現在のデータに対してリアルタイムで実行されます。",
+      "emptyTitle": "一致する行がありません",
+      "emptyDescription": "検索条件またはフィルターを調整して再度実行してください。",
+      "notFoundTitle": "ビューが見つかりません",
+      "notFoundDescription": "削除されたか、アクセス権がない可能性があります。"
     }
   }
 }

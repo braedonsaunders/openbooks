@@ -1,68 +1,68 @@
 {
   "list": {
-    "title": "Journal",
-    "description": "{count, plural, one {# posted entry} other {# posted entries}} · audited; closed periods are immutable.",
-    "searchPlaceholder": "Search entry number or memo…",
-    "originFilter": "Origin",
-    "draftsHeading": "Draft journals — not yet posted",
+    "title": "仕訳",
+    "description": "{count, plural, one {# 件の記帳済み仕訳} other {# 件の記帳済み仕訳}} · 監査対象。締め切られた期間は変更不可です。",
+    "searchPlaceholder": "仕訳番号またはメモを検索…",
+    "originFilter": "オリジン",
+    "draftsHeading": "下書き仕訳 — まだ記帳されていません",
     "columns": {
-      "entry": "Entry",
-      "origin": "Origin",
-      "debits": "Debits"
+      "entry": "仕訳",
+      "origin": "オリジン",
+      "debits": "借方"
     }
   },
   "origins": {
-    "manual": "Manual",
-    "closing": "Closing",
-    "allocation": "Allocation",
-    "revaluation": "Revaluation",
-    "laborBurden": "Labor burden",
-    "depreciation": "Depreciation",
-    "revenueRecognition": "Revenue recognition",
-    "fxSettlement": "FX settlement",
-    "translation": "Translation"
+    "manual": "手動",
+    "closing": "決算",
+    "allocation": "配賦",
+    "revaluation": "評価替え",
+    "laborBurden": "労務間接費",
+    "depreciation": "減価償却",
+    "revenueRecognition": "収益認識",
+    "fxSettlement": "為替決済",
+    "translation": "換算"
   },
   "detail": {
-    "notFound": "Entry not found",
-    "origin": "origin: {origin}",
-    "reverses": "reverses {number}",
-    "openItemBadge": "open item",
-    "totals": "Totals",
+    "notFound": "仕訳が見つかりません",
+    "origin": "オリジン: {origin}",
+    "reverses": "{number} を戻し",
+    "openItemBadge": "オープン項目",
+    "totals": "合計",
     "columns": {
-      "debit": "Debit",
-      "credit": "Credit",
-      "openItem": "Open item"
+      "debit": "借方",
+      "credit": "貸方",
+      "openItem": "オープン項目"
     }
   },
   "newButton": {
-    "label": "New journal",
-    "createFailed": "Could not create a draft journal"
+    "label": "新規仕訳",
+    "createFailed": "下書き仕訳を作成できませんでした"
   },
   "drawer": {
-    "draftDescription": "Draft — changes save automatically. Debits and credits must balance to post.",
-    "autosaveWithParty": "{party} · changes save automatically",
-    "autosave": "changes save automatically",
-    "postFailed": "Posting failed",
-    "postedToast": "Posted to the ledger",
-    "autosaveFailed": "Autosave failed",
-    "viewGlImpact": "View GL impact",
-    "allChangesSaved": "All changes saved",
-    "saveFailedRetry": "Save failed — fix and retry",
-    "unsavedChanges": "Unsaved changes…",
-    "deleteTitle": "Delete this journal?",
-    "deleteDraftBody": "This permanently deletes the draft journal. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the journal and removes its ledger impact. This cannot be undone.",
-    "deleted": "Journal deleted",
-    "deleteFailed": "Delete failed",
-    "totals": "Debits <strong>{debits}</strong> · Credits <strong>{credits}</strong>",
-    "outOfBalance": "Out of balance · {amount}",
-    "balanced": "Balanced",
-    "referenceNumber": "Reference #",
-    "noParty": "No party",
-    "accountPlaceholder": "Account…",
+    "draftDescription": "下書き — 変更は自動的に保存されます。記帳するには借方と貸方が一致している必要があります。",
+    "autosaveWithParty": "{party} · 変更は自動的に保存されます",
+    "autosave": "変更は自動的に保存されます",
+    "postFailed": "記帳に失敗しました",
+    "postedToast": "元帳に記帳しました",
+    "autosaveFailed": "自動保存に失敗しました",
+    "viewGlImpact": "総勘定元帳への影響を表示",
+    "allChangesSaved": "すべての変更を保存しました",
+    "saveFailedRetry": "保存に失敗しました — 修正して再試行してください",
+    "unsavedChanges": "未保存の変更…",
+    "deleteTitle": "この仕訳を削除しますか?",
+    "deleteDraftBody": "下書き仕訳を完全に削除します。この操作は取り消せません。",
+    "deletePostedBody": "仕訳を完全に削除し、元帳への影響を取り消します。この操作は取り消せません。",
+    "deleted": "仕訳を削除しました",
+    "deleteFailed": "削除に失敗しました",
+    "totals": "借方 <strong>{debits}</strong> · 貸方 <strong>{credits}</strong>",
+    "outOfBalance": "貸借不一致 · {amount}",
+    "balanced": "貸借一致",
+    "referenceNumber": "参照番号",
+    "noParty": "取引先なし",
+    "accountPlaceholder": "勘定…",
     "columns": {
-      "debit": "Debit",
-      "credit": "Credit"
+      "debit": "借方",
+      "credit": "貸方"
     }
   }
 }

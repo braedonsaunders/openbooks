@@ -1,68 +1,68 @@
 {
   "list": {
-    "title": "Journal",
-    "description": "{count, plural, one {# posted entry} other {# posted entries}} · audited; closed periods are immutable.",
-    "searchPlaceholder": "Search entry number or memo…",
-    "originFilter": "Origin",
-    "draftsHeading": "Draft journals — not yet posted",
+    "title": "Lançamentos",
+    "description": "{count, plural, one {# lançamento lançado} other {# lançamentos lançados}} · auditados; períodos fechados são imutáveis.",
+    "searchPlaceholder": "Buscar número do lançamento ou memorando…",
+    "originFilter": "Origem",
+    "draftsHeading": "Lançamentos em rascunho — ainda não lançados",
     "columns": {
-      "entry": "Entry",
-      "origin": "Origin",
-      "debits": "Debits"
+      "entry": "Lançamento",
+      "origin": "Origem",
+      "debits": "Débitos"
     }
   },
   "origins": {
     "manual": "Manual",
-    "closing": "Closing",
-    "allocation": "Allocation",
-    "revaluation": "Revaluation",
-    "laborBurden": "Labor burden",
-    "depreciation": "Depreciation",
-    "revenueRecognition": "Revenue recognition",
-    "fxSettlement": "FX settlement",
-    "translation": "Translation"
+    "closing": "Encerramento",
+    "allocation": "Rateio",
+    "revaluation": "Reavaliação",
+    "laborBurden": "Encargos de mão de obra",
+    "depreciation": "Depreciação",
+    "revenueRecognition": "Reconhecimento de receita",
+    "fxSettlement": "Liquidação cambial",
+    "translation": "Conversão"
   },
   "detail": {
-    "notFound": "Entry not found",
-    "origin": "origin: {origin}",
-    "reverses": "reverses {number}",
-    "openItemBadge": "open item",
-    "totals": "Totals",
+    "notFound": "Lançamento não encontrado",
+    "origin": "origem: {origin}",
+    "reverses": "estorna {number}",
+    "openItemBadge": "item em aberto",
+    "totals": "Totais",
     "columns": {
-      "debit": "Debit",
-      "credit": "Credit",
-      "openItem": "Open item"
+      "debit": "Débito",
+      "credit": "Crédito",
+      "openItem": "Item em aberto"
     }
   },
   "newButton": {
-    "label": "New journal",
-    "createFailed": "Could not create a draft journal"
+    "label": "Novo lançamento",
+    "createFailed": "Não foi possível criar um lançamento rascunho"
   },
   "drawer": {
-    "draftDescription": "Draft — changes save automatically. Debits and credits must balance to post.",
-    "autosaveWithParty": "{party} · changes save automatically",
-    "autosave": "changes save automatically",
-    "postFailed": "Posting failed",
-    "postedToast": "Posted to the ledger",
-    "autosaveFailed": "Autosave failed",
-    "viewGlImpact": "View GL impact",
-    "allChangesSaved": "All changes saved",
-    "saveFailedRetry": "Save failed — fix and retry",
-    "unsavedChanges": "Unsaved changes…",
-    "deleteTitle": "Delete this journal?",
-    "deleteDraftBody": "This permanently deletes the draft journal. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the journal and removes its ledger impact. This cannot be undone.",
-    "deleted": "Journal deleted",
-    "deleteFailed": "Delete failed",
-    "totals": "Debits <strong>{debits}</strong> · Credits <strong>{credits}</strong>",
-    "outOfBalance": "Out of balance · {amount}",
-    "balanced": "Balanced",
-    "referenceNumber": "Reference #",
-    "noParty": "No party",
-    "accountPlaceholder": "Account…",
+    "draftDescription": "Rascunho — as alterações são salvas automaticamente. Débitos e créditos devem estar balanceados para lançar.",
+    "autosaveWithParty": "{party} · as alterações são salvas automaticamente",
+    "autosave": "as alterações são salvas automaticamente",
+    "postFailed": "Falha ao lançar",
+    "postedToast": "Lançado no razão",
+    "autosaveFailed": "Falha ao salvar automaticamente",
+    "viewGlImpact": "Ver impacto no razão",
+    "allChangesSaved": "Todas as alterações salvas",
+    "saveFailedRetry": "Falha ao salvar — corrija e tente novamente",
+    "unsavedChanges": "Alterações não salvas…",
+    "deleteTitle": "Excluir este lançamento?",
+    "deleteDraftBody": "Isso exclui permanentemente o lançamento rascunho. Isso não pode ser desfeito.",
+    "deletePostedBody": "Isso exclui permanentemente o lançamento e remove seu impacto no razão. Isso não pode ser desfeito.",
+    "deleted": "Lançamento excluído",
+    "deleteFailed": "Falha ao excluir",
+    "totals": "Débitos <strong>{debits}</strong> · Créditos <strong>{credits}</strong>",
+    "outOfBalance": "Desbalanceado · {amount}",
+    "balanced": "Balanceado",
+    "referenceNumber": "Nº de referência",
+    "noParty": "Sem parte",
+    "accountPlaceholder": "Conta…",
     "columns": {
-      "debit": "Debit",
-      "credit": "Credit"
+      "debit": "Débito",
+      "credit": "Crédito"
     }
   }
 }

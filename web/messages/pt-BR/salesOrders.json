@@ -1,12 +1,12 @@
 {
   "list": {
-    "title": "Sales Orders",
-    "description": "Confirmed customer orders — issue, then convert into an invoice as you bill.",
-    "searchPlaceholder": "Search sales orders, customers, memo…",
-    "converted": "Converted",
-    "emptyTitle": "No sales orders yet",
-    "emptyDescription": "Create a sales order, or convert one from an estimate.",
-    "newButton": "New sales order",
-    "createDraftFailed": "Could not create a draft sales order"
+    "title": "Pedidos de Venda",
+    "description": "Pedidos de clientes confirmados — emita e depois converta em fatura conforme você fatura.",
+    "searchPlaceholder": "Buscar pedidos de venda, clientes, memorando…",
+    "converted": "Convertido",
+    "emptyTitle": "Nenhum pedido de venda ainda",
+    "emptyDescription": "Crie um pedido de venda ou converta um a partir de um orçamento.",
+    "newButton": "Novo pedido de venda",
+    "createDraftFailed": "Não foi possível criar um pedido de venda rascunho"
   }
 }

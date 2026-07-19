@@ -1,12 +1,12 @@
 {
   "list": {
-    "title": "Estimates",
-    "description": "Non-posting customer quotes — issue, then convert into a sales order or invoice.",
-    "searchPlaceholder": "Search estimates, customers, memo…",
-    "converted": "Converted",
-    "emptyTitle": "No estimates yet",
-    "emptyDescription": "Create the first estimate to start the order-to-cash workflow.",
-    "newButton": "New estimate",
-    "createDraftFailed": "Could not create a draft estimate"
+    "title": "Angebote",
+    "description": "Nicht buchende Kundenangebote — ausstellen und dann in einen Kundenauftrag oder eine Ausgangsrechnung umwandeln.",
+    "searchPlaceholder": "Angebote, Kunden, Notiz durchsuchen…",
+    "converted": "Umgewandelt",
+    "emptyTitle": "Noch keine Angebote",
+    "emptyDescription": "Erstellen Sie das erste Angebot, um den Order-to-Cash-Workflow zu starten.",
+    "newButton": "Neues Angebot",
+    "createDraftFailed": "Angebotsentwurf konnte nicht erstellt werden"
   }
 }

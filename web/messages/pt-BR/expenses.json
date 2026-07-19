@@ -1,45 +1,45 @@
 {
   "list": {
-    "title": "Expense Reports",
-    "description": "Employee expense reports — draft → approval → posted against the employee payable.",
-    "searchPlaceholder": "Search reports, employees, memos…",
-    "emptyTitle": "No expense reports yet",
-    "emptyDescription": "Enter the first expense report to start the reimbursement workflow.",
+    "title": "Relatórios de Despesas",
+    "description": "Relatórios de despesas de funcionários — rascunho → aprovação → lançado contra o passivo do funcionário.",
+    "searchPlaceholder": "Buscar relatórios, funcionários, memorandos…",
+    "emptyTitle": "Nenhum relatório de despesas ainda",
+    "emptyDescription": "Registre o primeiro relatório de despesas para iniciar o fluxo de reembolso.",
     "columns": {
-      "report": "Report"
+      "report": "Relatório"
     }
   },
   "actions": {
-    "newReport": "New expense report",
-    "submitForApproval": "Submit for approval"
+    "newReport": "Novo relatório de despesas",
+    "submitForApproval": "Enviar para aprovação"
   },
   "drawer": {
-    "autosaveHint": "Draft — changes save automatically.",
-    "viewGlImpact": "View GL impact",
-    "reportDate": "Report date",
-    "selectEmployeePlaceholder": "Select employee…",
-    "accountPlaceholder": "Account…",
-    "noTax": "No tax",
-    "deleteTitle": "Delete this expense report?",
-    "deleteDraftBody": "This permanently deletes the draft expense report. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the expense report and removes its ledger impact. This cannot be undone.",
+    "autosaveHint": "Rascunho — as alterações são salvas automaticamente.",
+    "viewGlImpact": "Ver impacto no razão",
+    "reportDate": "Data do relatório",
+    "selectEmployeePlaceholder": "Selecionar funcionário…",
+    "accountPlaceholder": "Conta…",
+    "noTax": "Sem imposto",
+    "deleteTitle": "Excluir este relatório de despesas?",
+    "deleteDraftBody": "Isso exclui permanentemente o relatório de despesas rascunho. Isso não pode ser desfeito.",
+    "deletePostedBody": "Isso exclui permanentemente o relatório de despesas e remove seu impacto no razão. Isso não pode ser desfeito.",
     "columns": {
-      "taxAmount": "Tax amt"
+      "taxAmount": "Val. imposto"
     },
     "saveState": {
-      "saved": "All changes saved",
-      "dirty": "Unsaved changes…",
-      "error": "Save failed — fix and retry"
+      "saved": "Todas as alterações salvas",
+      "dirty": "Alterações não salvas…",
+      "error": "Falha ao salvar — corrija e tente novamente"
     },
-    "totals": "Subtotal {subtotal} · Tax {tax} · <strong>Total {total}</strong>"
+    "totals": "Subtotal {subtotal} · Imposto {tax} · <strong>Total {total}</strong>"
   },
   "toasts": {
-    "submitted": "Submitted for approval",
-    "posted": "Posted to the ledger",
-    "actionFailed": "Action failed",
-    "autosaveFailed": "Autosave failed",
-    "deleted": "Expense report deleted",
-    "deleteFailed": "Delete failed",
-    "draftFailed": "Could not create a draft expense report"
+    "submitted": "Enviado para aprovação",
+    "posted": "Lançado no razão",
+    "actionFailed": "Falha na ação",
+    "autosaveFailed": "Falha ao salvar automaticamente",
+    "deleted": "Relatório de despesas excluído",
+    "deleteFailed": "Falha ao excluir",
+    "draftFailed": "Não foi possível criar um relatório de despesas rascunho"
   }
 }

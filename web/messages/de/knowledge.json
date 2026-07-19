@@ -1,54 +1,54 @@
 {
   "views": {
-    "new": "New view",
+    "new": "Neue Ansicht",
     "list": {
-      "title": "Views",
-      "description": "Named, shareable queries over the ledger, documents, parties and accounts — detail rows or grouped summaries. Browse, export and reuse them.",
-      "scopeLabel": "Scope",
-      "searchPlaceholder": "Search views…",
-      "scopeAll": "All",
-      "scopeShared": "Shared",
-      "scopePrivate": "Private",
-      "emptyTitle": "No views yet",
-      "emptyDescription": "Create your first view to query the ledger and reuse it anytime.",
+      "title": "Ansichten",
+      "description": "Benannte, teilbare Abfragen über Hauptbuch, Dokumente, Parteien und Konten — Detailzeilen oder gruppierte Zusammenfassungen. Durchsuchen, exportieren und wiederverwenden.",
+      "scopeLabel": "Geltungsbereich",
+      "searchPlaceholder": "Ansichten durchsuchen…",
+      "scopeAll": "Alle",
+      "scopeShared": "Geteilt",
+      "scopePrivate": "Privat",
+      "emptyTitle": "Noch keine Ansichten",
+      "emptyDescription": "Erstellen Sie Ihre erste Ansicht, um das Hauptbuch abzufragen und sie jederzeit wiederzuverwenden.",
       "columns": {
         "name": "Name",
-        "source": "Source",
-        "scope": "Scope",
-        "updated": "Updated"
+        "source": "Quelle",
+        "scope": "Geltungsbereich",
+        "updated": "Aktualisiert"
       },
       "scope": {
-        "shared": "Shared",
-        "private": "Private"
+        "shared": "Geteilt",
+        "private": "Privat"
       },
-      "runAction": "Run",
-      "editAction": "Edit"
+      "runAction": "Ausführen",
+      "editAction": "Bearbeiten"
     },
     "studio": {
-      "untitled": "Untitled view",
-      "autosaveHint": "Changes save automatically.",
-      "scopeLabel": "Scope",
+      "untitled": "Unbenannte Ansicht",
+      "autosaveHint": "Änderungen werden automatisch gespeichert.",
+      "scopeLabel": "Geltungsbereich",
       "scope": {
-        "private": "Private — only you",
-        "shared": "Shared — everyone"
+        "private": "Privat — nur Sie",
+        "shared": "Geteilt — alle"
       },
       "exportPdf": "PDF",
       "exportXlsx": "Excel",
       "exportCsv": "CSV",
-      "deleteConfirm": "Delete this view?",
-      "viewResults": "View results"
+      "deleteConfirm": "Diese Ansicht löschen?",
+      "viewResults": "Ergebnisse anzeigen"
     },
     "run": {
-      "editSearch": "Edit view",
-      "backToList": "Views",
-      "resultsTitle": "Results",
-      "rowsRange": "Showing {from}–{to} of {total} rows",
-      "lastUpdated": "Updated {when}",
-      "refreshHint": "Results run live against current data.",
-      "emptyTitle": "No rows matched",
-      "emptyDescription": "Adjust the search criteria or filters and run again.",
-      "notFoundTitle": "View not found",
-      "notFoundDescription": "It may have been deleted, or you don't have access to it."
+      "editSearch": "Ansicht bearbeiten",
+      "backToList": "Ansichten",
+      "resultsTitle": "Ergebnisse",
+      "rowsRange": "{from}–{to} von {total} Zeilen werden angezeigt",
+      "lastUpdated": "Aktualisiert {when}",
+      "refreshHint": "Ergebnisse werden live gegen aktuelle Daten ausgeführt.",
+      "emptyTitle": "Keine Zeilen entsprachen",
+      "emptyDescription": "Passen Sie die Suchkriterien oder Filter an und führen Sie erneut aus.",
+      "notFoundTitle": "Ansicht nicht gefunden",
+      "notFoundDescription": "Sie wurde möglicherweise gelöscht, oder Sie haben keinen Zugriff darauf."
     }
   }
 }

@@ -1,30 +1,30 @@
 {
   "roles": {
     "customers": {
-      "title": "Customers",
-      "description": "Companies and people you invoice.",
-      "newLabel": "New customer",
-      "emptyTitle": "No customers yet",
-      "emptyDescription": "Add the first customer to start the directory."
+      "title": "客户",
+      "description": "您向其开具发票的公司和个人。",
+      "newLabel": "新建客户",
+      "emptyTitle": "暂无客户",
+      "emptyDescription": "添加第一位客户以建立目录。"
     },
     "vendors": {
-      "title": "Vendors",
-      "description": "Suppliers you buy from and pay.",
-      "newLabel": "New vendor",
-      "emptyTitle": "No vendors yet",
-      "emptyDescription": "Add the first vendor to start the directory."
+      "title": "供应商",
+      "description": "您向其采购并付款的供应商。",
+      "newLabel": "新建供应商",
+      "emptyTitle": "暂无供应商",
+      "emptyDescription": "添加第一家供应商以建立目录。"
     },
     "employees": {
-      "title": "Employees",
-      "description": "People on payroll and expense reports.",
-      "newLabel": "New employee",
-      "emptyTitle": "No employees yet",
-      "emptyDescription": "Add the first employee to start the directory."
+      "title": "员工",
+      "description": "在册员工及费用报销人员。",
+      "newLabel": "新建员工",
+      "emptyTitle": "暂无员工",
+      "emptyDescription": "添加第一位员工以建立目录。"
     }
   },
   "list": {
-    "searchPlaceholder": "Search name, code, email…",
-    "shortCode": "Short code",
-    "phone": "Phone"
+    "searchPlaceholder": "搜索名称、代码、邮箱…",
+    "shortCode": "简码",
+    "phone": "电话"
   }
 }

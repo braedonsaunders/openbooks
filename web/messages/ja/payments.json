@@ -1,264 +1,264 @@
 {
   "page": {
-    "title": "Payments",
-    "description": "Manage payment activity and bank runs from selection through settlement.",
-    "newPayment": "New payment",
-    "newRun": "New payment run",
+    "title": "支払",
+    "description": "選択から決済まで、支払業務と銀行支払処理を管理します。",
+    "newPayment": "新規支払",
+    "newRun": "新規支払処理",
     "tabs": {
-      "payments": "Payments",
-      "runs": "Payment runs"
+      "payments": "支払",
+      "runs": "支払処理"
     }
   },
   "list": {
-    "searchPlaceholder": "{side, select, ap {Search payments, vendors, refs…} other {Search payments, customers, refs…}}",
-    "newLabel": "{side, select, ap {New payment} other {New customer payment}}",
+    "searchPlaceholder": "{side, select, ap {支払、仕入先、参照番号を検索…} other {支払、得意先、参照番号を検索…}}",
+    "newLabel": "{side, select, ap {新規支払} other {新規入金}}",
     "columns": {
-      "document": "{side, select, ap {Payment} other {Customer payment}}",
-      "payment": "Payment",
-      "bankAccount": "Bank account",
-      "ref": "Ref"
+      "document": "{side, select, ap {支払} other {入金}}",
+      "payment": "支払",
+      "bankAccount": "銀行勘定",
+      "ref": "参照番号"
     },
     "empty": {
-      "title": "{side, select, ap {No payments yet} other {No customer payments yet}}",
-      "description": "{side, select, ap {Record the first vendor payment to start settling open bills.} other {Record the first customer payment to start settling open invoices.}}"
+      "title": "{side, select, ap {支払がまだありません} other {入金がまだありません}}",
+      "description": "{side, select, ap {最初の仕入先への支払を記録して、未払の仕入請求書の消込を始めましょう。} other {最初の入金を記録して、未回収の請求書の消込を始めましょう。}}"
     }
   },
   "newButton": {
-    "createDraftFailed": "Could not create a draft"
+    "createDraftFailed": "下書きを作成できませんでした"
   },
   "drawer": {
-    "draftHint": "Draft — changes save automatically.",
-    "viewGlImpact": "View GL impact",
-    "postAction": "{side, select, ap {Pay & post} other {Receive & post}}",
-    "bankAccount": "Bank account",
-    "selectPartyPlaceholder": "{side, select, ap {Select vendor…} other {Select customer…}}",
-    "selectBankAccountPlaceholder": "Select bank account…",
-    "referencePlaceholder": "Cheque / EFT ref…",
-    "openItems": "{side, select, ap {Open bills} other {Open invoices}}",
-    "amountReceived": "Amount received",
-    "autoApply": "Auto-apply",
-    "autoApplyFailed": "Could not suggest an application",
-    "autoApplyNone": "No open items match this amount",
-    "autoApplyDone": "Applied to {count, plural, one {# item} other {# items}} ({strategy})",
+    "draftHint": "下書き — 変更は自動的に保存されます。",
+    "viewGlImpact": "総勘定元帳への影響を表示",
+    "postAction": "{side, select, ap {支払して記帳} other {入金して記帳}}",
+    "bankAccount": "銀行勘定",
+    "selectPartyPlaceholder": "{side, select, ap {仕入先を選択…} other {得意先を選択…}}",
+    "selectBankAccountPlaceholder": "銀行勘定を選択…",
+    "referencePlaceholder": "小切手 / EFT 参照番号…",
+    "openItems": "{side, select, ap {未払の仕入請求書} other {未回収の請求書}}",
+    "amountReceived": "受領金額",
+    "autoApply": "自動適用",
+    "autoApplyFailed": "適用案を提示できませんでした",
+    "autoApplyNone": "この金額に一致する未消込項目はありません",
+    "autoApplyDone": "{count, plural, one {# 件の項目} other {# 件の項目}}に適用しました（{strategy}）",
     "autoApplyStrategy": {
-      "reference": "by reference",
-      "exact": "exact match",
-      "fifo": "oldest first",
-      "none": "none"
+      "reference": "参照番号による",
+      "exact": "完全一致",
+      "fifo": "古い順",
+      "none": "なし"
     },
-    "selectPartyHint": "{side, select, ap {Select a vendor to list their open items.} other {Select a customer to list their open items.}}",
-    "loadingOpenItems": "Loading open items…",
-    "noOpenItems": "{side, select, ap {No open bills for this vendor.} other {No open invoices for this customer.}}",
+    "selectPartyHint": "{side, select, ap {仕入先を選択すると、未消込項目が一覧表示されます。} other {得意先を選択すると、未消込項目が一覧表示されます。}}",
+    "loadingOpenItems": "未消込項目を読み込み中…",
+    "noOpenItems": "{side, select, ap {この仕入先に未払の仕入請求書はありません。} other {この得意先に未回収の請求書はありません。}}",
     "columns": {
-      "apply": "Apply",
-      "document": "Document",
-      "due": "Due",
-      "original": "Original",
-      "appliedToDate": "Applied to date",
-      "open": "Open",
-      "appliedOn": "Applied on",
-      "applied": "Applied"
+      "apply": "適用",
+      "document": "ドキュメント",
+      "due": "期日",
+      "original": "元の金額",
+      "appliedToDate": "適用済み累計",
+      "open": "未消込",
+      "appliedOn": "適用日",
+      "applied": "適用額"
     },
-    "applyAriaLabel": "Apply to {document}",
-    "invalidAllocation": "Each applied amount must be greater than zero and no more than the item’s open balance.",
-    "appliedTo": "Applied to",
-    "voidedNote": "This payment was voided; its posting was reversed.",
-    "noLiveApplications": "No live applications.",
+    "applyAriaLabel": "{document} に適用",
+    "invalidAllocation": "適用額はそれぞれ 0 より大きく、項目の未消込残高以下である必要があります。",
+    "appliedTo": "適用先",
+    "voidedNote": "この支払は取り消され、記帳が逆仕訳されました。",
+    "noLiveApplications": "有効な適用はありません。",
     "kind": {
-      "vendorBill": "Bill",
-      "customerInvoice": "Invoice",
-      "expenseReport": "Expense report",
-      "journal": "Journal",
-      "entry": "Entry"
+      "vendorBill": "仕入請求書",
+      "customerInvoice": "請求書",
+      "expenseReport": "経費精算",
+      "journal": "仕訳",
+      "entry": "仕訳"
     },
     "saveState": {
-      "saved": "All changes saved",
-      "error": "Save failed — fix and retry",
-      "dirty": "Unsaved changes…"
+      "saved": "すべての変更を保存しました",
+      "error": "保存に失敗しました — 修正して再試行してください",
+      "dirty": "未保存の変更があります…"
     },
-    "applyingSummary": "{count, plural, one {Applying # item} other {Applying # items}} · <total>Total {amount}</total>",
-    "totalAmount": "Total {amount}",
+    "applyingSummary": "{count, plural, one {# 件の項目に適用中} other {# 件の項目に適用中}} · <total>合計 {amount}</total>",
+    "totalAmount": "合計 {amount}",
     "toasts": {
-      "loadOpenItemsFailed": "Could not load open items",
-      "autosaveFailed": "Autosave failed",
-      "postFailed": "Posting failed",
-      "posted": "{side, select, ap {Payment posted and applied} other {Customer payment posted and applied}}"
+      "loadOpenItemsFailed": "未消込項目を読み込めませんでした",
+      "autosaveFailed": "自動保存に失敗しました",
+      "postFailed": "記帳に失敗しました",
+      "posted": "{side, select, ap {支払を記帳して適用しました} other {入金を記帳して適用しました}}"
     }
   },
   "eft": {
-    "notConfiguredTitle": "EFT origination is not configured",
-    "notConfiguredListDescription": "Payment runs can still be assembled, but bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}.",
-    "notConfiguredDrawerDescription": "Bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}."
+    "notConfiguredTitle": "EFT 送金元が構成されていません",
+    "notConfiguredListDescription": "支払処理は引き続き組み立てられますが、管理者が EFT 送金元の設定を完了するまで銀行ファイルの出力は無効です。不足フィールド：{missing}。",
+    "notConfiguredDrawerDescription": "管理者が EFT 送金元の設定を完了するまで、銀行ファイルの出力は無効です。不足フィールド：{missing}。"
   },
   "configuration": {
-    "notConfiguredTitle": "Payment setup is incomplete",
-    "notConfiguredDescription": "Create a funding profile in <setup>Payments & Banking setup</setup> before assembling a payment run.",
-    "collectionsNotConfiguredTitle": "Direct-debit setup is incomplete",
-    "collectionsNotConfiguredDescription": "Create a debit bank profile and mandates in <setup>Payments & Banking setup</setup> before assembling a collection run.",
-    "runNotReadyTitle": "This payment run is not ready",
-    "runNotReadyDescription": "Complete the profile configuration before generating a file. Missing or invalid: {missing}."
+    "notConfiguredTitle": "支払設定が未完了です",
+    "notConfiguredDescription": "支払処理を組み立てる前に、<setup>支払・銀行設定</setup>で資金プロファイルを作成してください。",
+    "collectionsNotConfiguredTitle": "口座振替設定が未完了です",
+    "collectionsNotConfiguredDescription": "回収処理を組み立てる前に、<setup>支払・銀行設定</setup>で引落銀行プロファイルとマンデートを作成してください。",
+    "runNotReadyTitle": "この支払処理は準備ができていません",
+    "runNotReadyDescription": "ファイルを生成する前に、プロファイル構成を完了してください。不足または不正：{missing}。"
   },
   "runBuilder": {
-    "title": "New payment run",
-    "description": "Choose the funding account and bills, then create a draft run for review.",
-    "collectionTitle": "New direct-debit run",
-    "collectionDescription": "Choose the collection profile and open invoices, then create a draft run for review.",
-    "noOpenBills": "No posted bills with an open balance match.",
-    "noOpenInvoices": "No posted invoices with an open balance match.",
-    "selectAllAriaLabel": "Select all bills on this page",
-    "selectAriaLabel": "Select {document}",
+    "title": "新規支払処理",
+    "description": "資金勘定と仕入請求書を選択し、確認用の下書き処理を作成します。",
+    "collectionTitle": "新規口座振替処理",
+    "collectionDescription": "回収プロファイルと未回収の請求書を選択し、確認用の下書き処理を作成します。",
+    "noOpenBills": "未消込残高が一致する記帳済みの仕入請求書はありません。",
+    "noOpenInvoices": "未消込残高が一致する記帳済みの請求書はありません。",
+    "selectAllAriaLabel": "このページのすべての仕入請求書を選択",
+    "selectAriaLabel": "{document} を選択",
     "columns": {
-      "bill": "Bill",
-      "invoice": "Invoice",
-      "due": "Due",
-      "ref": "Ref",
-      "bankDetails": "Bank details",
-      "mandate": "Debit mandate",
-      "openBalance": "Open balance"
+      "bill": "仕入請求書",
+      "invoice": "請求書",
+      "due": "期日",
+      "ref": "参照番号",
+      "bankDetails": "銀行情報",
+      "mandate": "引落マンデート",
+      "openBalance": "未消込残高"
     },
-    "bankApproved": "on file",
-    "bankMissing": "missing",
-    "mandateActive": "active",
-    "mandateMissing": "missing",
-    "payFromBankAccount": "Payment bank profile",
-    "selectBankAccountPlaceholder": "Select a payment profile…",
-    "noBankAccounts": "No active payment profiles",
-    "fundsDate": "Funds date",
-    "captureDiscounts": "Capture available early-payment discounts",
-    "applyCredits": "Apply available vendor credits",
-    "selectedForPayment": "Selected for payment",
-    "selectedForCollection": "Selected for collection",
-    "selectionSummary": "{count, plural, one {# bill} other {# bills}} · <total>{amount}</total>",
-    "collectionSummary": "{count, plural, one {# invoice} other {# invoices}} · <total>{amount}</total>",
-    "createRun": "Create payment run",
-    "createCollectionRun": "Create collection run",
+    "bankApproved": "登録済み",
+    "bankMissing": "未登録",
+    "mandateActive": "有効",
+    "mandateMissing": "未登録",
+    "payFromBankAccount": "支払銀行プロファイル",
+    "selectBankAccountPlaceholder": "支払プロファイルを選択…",
+    "noBankAccounts": "有効な支払プロファイルがありません",
+    "fundsDate": "資金日付",
+    "captureDiscounts": "利用可能な早期支払割引を適用する",
+    "applyCredits": "利用可能な仕入先クレジットを適用する",
+    "selectedForPayment": "支払対象に選択",
+    "selectedForCollection": "回収対象に選択",
+    "selectionSummary": "{count, plural, one {# 件の仕入請求書} other {# 件の仕入請求書}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# 件の請求書} other {# 件の請求書}} · <total>{amount}</total>",
+    "createRun": "支払処理を作成",
+    "createCollectionRun": "回収処理を作成",
     "toasts": {
-      "createFailed": "Could not create the payment run",
-      "created": "Payment run {number} created"
+      "createFailed": "支払処理を作成できませんでした",
+      "created": "支払処理 {number} を作成しました"
     }
   },
   "runs": {
-    "collectionRunsHeading": "Direct-debit runs",
-    "collectionDescription": "Approve, generate, deliver, post, and settle customer collection files.",
-    "openInvoicesHeading": "Open invoices",
-    "openInvoicesDescription": "Review open invoices and debit-mandate readiness before selection.",
-    "invoicesSearchPlaceholder": "Search invoices or customers…",
-    "openBillsHeading": "Open bills to pay",
-    "openBillsDescription": "Select bills across vendors; each vendor becomes one payment instruction.",
-    "billsSearchPlaceholder": "Search bills, vendors, refs…",
-    "runsHeading": "Payment runs",
-    "description": "Review drafts, export bank files, and confirm posted payments.",
-    "searchPlaceholder": "Search runs or bank accounts…",
-    "noRunsYet": "No payment runs yet. Create the first run when bills are ready to pay.",
-    "noCollectionRunsYet": "No direct-debit runs yet. Create the first run when authorized invoices are ready to collect.",
+    "collectionRunsHeading": "口座振替処理",
+    "collectionDescription": "得意先の回収ファイルを承認・生成・送付・記帳・決済します。",
+    "openInvoicesHeading": "未回収の請求書",
+    "openInvoicesDescription": "選択前に、未回収の請求書と引落マンデートの準備状況を確認します。",
+    "invoicesSearchPlaceholder": "請求書または得意先を検索…",
+    "openBillsHeading": "支払対象の未払仕入請求書",
+    "openBillsDescription": "複数の仕入先にまたがって仕入請求書を選択します。仕入先ごとに1つの支払指図になります。",
+    "billsSearchPlaceholder": "仕入請求書、仕入先、参照番号を検索…",
+    "runsHeading": "支払処理",
+    "description": "下書きを確認し、銀行ファイルを出力して、記帳済みの支払を確定します。",
+    "searchPlaceholder": "処理または銀行勘定を検索…",
+    "noRunsYet": "支払処理はまだありません。仕入請求書の支払準備ができたら最初の処理を作成してください。",
+    "noCollectionRunsYet": "口座振替処理はまだありません。承認済みの請求書の回収準備ができたら最初の処理を作成してください。",
     "columns": {
-      "run": "Run",
-      "bankAccount": "Bank account",
-      "method": "Method",
-      "fundsDate": "Funds date",
-      "payments": "Payments"
+      "run": "処理",
+      "bankAccount": "銀行勘定",
+      "method": "方法",
+      "fundsDate": "資金日付",
+      "payments": "支払"
     },
     "method": {
       "eft": "EFT",
       "ach": "ACH",
       "sepa": "SEPA",
-      "wire": "Wire",
-      "cheque": "Cheque",
-      "direct_debit": "Direct debit",
+      "wire": "電信送金",
+      "cheque": "小切手",
+      "direct_debit": "口座振替",
       "positive_pay": "Positive Pay",
-      "custom": "Custom"
+      "custom": "カスタム"
     },
     "status": {
-      "confirmed": "Confirmed",
-      "generated": "File generated",
-      "delivered": "Delivered",
-      "settled": "Settled",
-      "returned": "Returned",
-      "partially_failed": "Partially failed",
-      "rejected": "Rejected",
-      "rolled_back": "Rolled back"
+      "confirmed": "確定済み",
+      "generated": "ファイル生成済み",
+      "delivered": "送付済み",
+      "settled": "決済済み",
+      "returned": "返却済み",
+      "partially_failed": "一部失敗",
+      "rejected": "却下",
+      "rolled_back": "ロールバック済み"
     }
   },
   "runDrawer": {
-    "descriptionEft": "Payment run from {bank}",
-    "descriptionEftWithDate": "Payment run from {bank} · funds {date}",
-    "bankAccountFallback": "bank account",
-    "cancelRun": "Cancel run",
-    "downloadFile": "Download file",
-    "downloadBlockedTitle": "Resolve the profile and bank-detail issues first",
-    "submitRun": "Submit for approval",
-    "approve": "Approve run",
-    "reject": "Reject run",
-    "generateFile": "Generate file",
-    "approveFile": "Approve file",
-    "rejectFile": "Reject file",
-    "reprocess": "Reprocess",
-    "rollback": "Roll back",
-    "postPayments": "Post payments",
-    "paymentsSummary": "{count, plural, one {# payment} other {# payments}} · <total>Total {amount}</total>",
-    "payeesMissingBankDetails": "Counterparties with invalid bank details",
-    "filesTitle": "Payment files",
-    "sourcesTitle": "Source transactions",
-    "instructionsTitle": "Payment instructions",
-    "searchInstructions": "Search instructions…",
-    "activityTitle": "Recent activity",
-    "systemActor": "System",
-    "adjustments": "Discount {discount} · credit {credit}",
-    "reason": "Reason",
-    "reasonRequired": "Enter a reason. It is retained in the payment audit trail.",
-    "recordOutcome": "Record outcome",
-    "outcome": { "title": "Bank outcome", "description": "Record settlement or a return for {payee}.", "status": "Outcome", "settled": "Settled", "returned": "Returned", "rejected": "Rejected by bank", "effectiveOn": "Effective date", "bankReference": "Bank reference", "returnCode": "Return code", "returnReason": "Return reason", "reversalWarning": "A return or rejection reverses the posted payment and reopens the affected bills." },
+    "descriptionEft": "{bank} からの支払処理",
+    "descriptionEftWithDate": "{bank} からの支払処理 · 資金日付 {date}",
+    "bankAccountFallback": "銀行勘定",
+    "cancelRun": "処理を取り消し",
+    "downloadFile": "ファイルをダウンロード",
+    "downloadBlockedTitle": "先にプロファイルと銀行情報の問題を解決してください",
+    "submitRun": "承認申請する",
+    "approve": "処理を承認",
+    "reject": "処理を却下",
+    "generateFile": "ファイルを生成",
+    "approveFile": "ファイルを承認",
+    "rejectFile": "ファイルを却下",
+    "reprocess": "再処理",
+    "rollback": "ロールバック",
+    "postPayments": "支払を記帳",
+    "paymentsSummary": "{count, plural, one {# 件の支払} other {# 件の支払}} · <total>合計 {amount}</total>",
+    "payeesMissingBankDetails": "銀行情報が不正な取引相手",
+    "filesTitle": "支払ファイル",
+    "sourcesTitle": "元取引",
+    "instructionsTitle": "支払指図",
+    "searchInstructions": "指図を検索…",
+    "activityTitle": "最近のアクティビティ",
+    "systemActor": "システム",
+    "adjustments": "割引 {discount} · クレジット {credit}",
+    "reason": "理由",
+    "reasonRequired": "理由を入力してください。支払の監査証跡に保持されます。",
+    "recordOutcome": "結果を記録",
+    "outcome": { "title": "銀行の結果", "description": "{payee} の決済または返却を記録します。", "status": "結果", "settled": "決済済み", "returned": "返却済み", "rejected": "銀行により却下", "effectiveOn": "発効日", "bankReference": "銀行参照番号", "returnCode": "返却コード", "returnReason": "返却理由", "reversalWarning": "返却または却下は記帳済みの支払を逆仕訳し、対象の仕入請求書を再度未払に戻します。" },
     "columns": {
-      "payee": "Payee",
-      "payment": "Payment",
-      "bankDetails": "Bank details"
+      "payee": "受取人",
+      "payment": "支払",
+      "bankDetails": "銀行情報"
     },
-    "bankApproved": "on file",
+    "bankApproved": "登録済み",
     "instructionStatus": {
-      "pending": "pending",
-      "approved": "approved",
-      "generated": "generated",
-      "sent": "sent",
-      "settled": "settled",
-      "returned": "returned",
-      "rejected": "rejected",
-      "failed": "failed",
-      "reversed": "reversed",
-      "cancelled": "cancelled"
+      "pending": "保留中",
+      "approved": "承認済み",
+      "generated": "生成済み",
+      "sent": "送信済み",
+      "settled": "決済済み",
+      "returned": "返却済み",
+      "rejected": "却下",
+      "failed": "失敗",
+      "reversed": "逆仕訳済み",
+      "cancelled": "取り消し済み"
     },
-    "fileStatus": { "generated": "generated", "pending_approval": "pending approval", "approved": "approved", "rejected": "rejected", "delivered": "delivered", "superseded": "superseded", "voided": "voided" },
+    "fileStatus": { "generated": "生成済み", "pending_approval": "承認待ち", "approved": "承認済み", "rejected": "却下", "delivered": "送付済み", "superseded": "置換済み", "voided": "無効化済み" },
     "events": {
-      "run_created": "Payment run created", "run_submitted": "Payment run submitted", "run_approved": "Payment run approved", "run_rejected": "Payment run rejected",
-      "file_generated": "Payment file generated", "file_reprocessed": "Payment file reprocessed", "file_approved": "Payment file approved", "file_rejected": "Payment file rejected",
-      "file_downloaded": "Payment file downloaded", "file_delivered_sftp": "Payment file delivered by SFTP", "run_rolled_back": "Payment run rolled back",
-      "file_delivery_failed": "Payment file delivery failed",
-      "instruction_settled": "Payment settled", "instruction_returned": "Payment returned", "instruction_rejected": "Payment rejected"
+      "run_created": "支払処理を作成しました", "run_submitted": "支払処理を申請しました", "run_approved": "支払処理を承認しました", "run_rejected": "支払処理を却下しました",
+      "file_generated": "支払ファイルを生成しました", "file_reprocessed": "支払ファイルを再処理しました", "file_approved": "支払ファイルを承認しました", "file_rejected": "支払ファイルを却下しました",
+      "file_downloaded": "支払ファイルをダウンロードしました", "file_delivered_sftp": "支払ファイルを SFTP で送付しました", "run_rolled_back": "支払処理をロールバックしました",
+      "file_delivery_failed": "支払ファイルの送付に失敗しました",
+      "instruction_settled": "支払を決済しました", "instruction_returned": "支払が返却されました", "instruction_rejected": "支払が却下されました"
     },
-    "confirmPost": "{count, plural, one {Post # payment} other {Post # payments}} totalling {total} to the ledger and apply them to the selected bills?",
-    "confirmCancel": "Cancel run {number}? Its draft payments are deleted; nothing has posted.",
+    "confirmPost": "{count, plural, one {# 件の支払} other {# 件の支払}}（合計 {total}）を総勘定元帳に記帳し、選択した仕入請求書に適用しますか？",
+    "confirmCancel": "処理 {number} を取り消しますか？下書きの支払は削除されます。まだ何も記帳されていません。",
     "toasts": {
-      "postFailed": "Posting failed",
-      "postedWithFailures": "{count} posted; failed: {failures}",
-      "posted": "{count, plural, one {# payment posted and applied} other {# payments posted and applied}}",
-      "cancelFailed": "Could not cancel the run",
-      "cancelled": "Run cancelled",
-      "deliverFailed": "Could not deliver the file",
-      "delivered": "Delivered to {path}"
-      ,"actionFailed": "The payment action failed"
-      ,"submitted": "Payment run submitted"
-      ,"fileGenerated": "Payment file generated"
-      ,"runApproved": "Payment run approved"
-      ,"runRejected": "Payment run rejected"
-      ,"fileApproved": "Payment file approved"
-      ,"fileRejected": "Payment file rejected"
-      ,"fileReprocessed": "Payment file reprocessed"
-      ,"rolledBack": "Payment run rolled back"
-      ,"outcomeFailed": "Could not record the bank outcome"
-      ,"outcomeSaved": "Bank outcome recorded"
+      "postFailed": "記帳に失敗しました",
+      "postedWithFailures": "{count} 件を記帳しました。失敗：{failures}",
+      "posted": "{count, plural, one {# 件の支払を記帳して適用しました} other {# 件の支払を記帳して適用しました}}",
+      "cancelFailed": "処理を取り消せませんでした",
+      "cancelled": "処理を取り消しました",
+      "deliverFailed": "ファイルを送付できませんでした",
+      "delivered": "{path} に送付しました"
+      ,"actionFailed": "支払アクションに失敗しました"
+      ,"submitted": "支払処理を申請しました"
+      ,"fileGenerated": "支払ファイルを生成しました"
+      ,"runApproved": "支払処理を承認しました"
+      ,"runRejected": "支払処理を却下しました"
+      ,"fileApproved": "支払ファイルを承認しました"
+      ,"fileRejected": "支払ファイルを却下しました"
+      ,"fileReprocessed": "支払ファイルを再処理しました"
+      ,"rolledBack": "支払処理をロールバックしました"
+      ,"outcomeFailed": "銀行の結果を記録できませんでした"
+      ,"outcomeSaved": "銀行の結果を記録しました"
     },
-    "deliverSftp": "Deliver to SFTP",
-    "deliverHint": "Deliver this run's payment file to a bank or partner's SFTP folder for them to fetch.",
-    "sftpServer": "SFTP login",
-    "noSftpServers": "No SFTP logins yet. Add one in Setup → SFTP."
+    "deliverSftp": "SFTP に送付",
+    "deliverHint": "この処理の支払ファイルを銀行またはパートナーの SFTP フォルダに送付し、取得してもらいます。",
+    "sftpServer": "SFTP ログイン",
+    "noSftpServers": "SFTP ログインがまだありません。設定 → SFTP で追加してください。"
   }
 }

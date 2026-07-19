@@ -1,125 +1,128 @@
 {
   "accountMenu": {
-    "account": "Account",
-    "menuAriaLabel": "Account menu",
-    "theme": "Theme",
-    "language": "Language",
-    "menuLayout": "Menu layout",
-    "signOut": "Sign out",
-    "signingOut": "Signing out…",
+    "account": "アカウント",
+    "menuAriaLabel": "アカウントメニュー",
+    "theme": "テーマ",
+    "language": "言語",
+    "menuLayout": "メニューレイアウト",
+    "signOut": "サインアウト",
+    "signingOut": "サインアウト中…",
     "roles": {
-      "admin": "Admin",
-      "controller": "Controller",
-      "accountant": "Accountant",
-      "approver": "Approver",
-      "viewer": "Viewer"
+      "admin": "管理者",
+      "controller": "経理責任者",
+      "accountant": "会計担当者",
+      "approver": "承認者",
+      "viewer": "閲覧者"
     }
   },
   "language": {
-    "label": "Language",
-    "orgDefault": "Organization default",
-    "saveFailed": "Could not save your language preference"
+    "label": "言語",
+    "orgDefault": "組織の既定",
+    "saveFailed": "言語設定を保存できませんでした"
   },
   "menuMode": {
-    "label": "Menu layout",
-    "orgDefault": "Organization default",
-    "saveFailed": "Could not save your menu layout preference",
+    "label": "メニューレイアウト",
+    "orgDefault": "組織の既定",
+    "saveFailed": "メニューレイアウト設定を保存できませんでした",
     "options": {
-      "sidebar": "Sidebar",
-      "topbar": "Top menu bar"
+      "sidebar": "サイドバー",
+      "topbar": "トップメニューバー"
     }
   },
   "topNav": {
-    "ariaLabel": "Primary",
-    "more": "More"
+    "ariaLabel": "プライマリ",
+    "more": "その他"
   },
   "apps": {
-    "ariaLabel": "Open apps",
-    "title": "Apps"
+    "ariaLabel": "アプリを開く",
+    "title": "アプリ"
   },
   "globalCreate": {
-    "ariaLabel": "Create new",
-    "title": "Create new",
-    "description": "Start a real draft and keep moving.",
-    "createFailed": "Could not create the draft",
+    "ariaLabel": "新規作成",
+    "title": "新規作成",
+    "description": "実際の下書きを開始して作業を続けましょう。",
+    "createFailed": "下書きを作成できませんでした",
     "groups": {
-      "sales": "Sales",
-      "purchases": "Purchases",
-      "accounting": "Accounting",
-      "peopleAndLists": "People & lists"
+      "sales": "販売",
+      "purchases": "購買",
+      "accounting": "会計",
+      "peopleAndLists": "人物とリスト"
     },
     "items": {
-      "invoice": "Invoice",
-      "creditMemo": "Credit memo",
-      "estimate": "Estimate",
-      "salesOrder": "Sales order",
-      "customerPayment": "Customer payment",
-      "bill": "Bill",
-      "vendorCredit": "Vendor credit",
-      "purchaseOrder": "Purchase order",
-      "vendorPayment": "Vendor payment",
-      "journal": "Journal entry",
-      "expense": "Expense report",
-      "cardCharge": "Card charge",
-      "cardRefund": "Card refund",
-      "check": "Check",
-      "deposit": "Bank deposit",
-      "transfer": "Bank transfer",
-      "asset": "Fixed asset",
-      "customer": "Customer",
-      "vendor": "Vendor",
-      "employee": "Employee",
-      "item": "Item or service",
-      "project": "Project"
+      "invoice": "請求書",
+      "creditMemo": "クレジットメモ",
+      "estimate": "見積",
+      "salesOrder": "受注",
+      "customerPayment": "得意先支払",
+      "bill": "仕入請求書",
+      "vendorCredit": "仕入先クレジット",
+      "purchaseOrder": "発注書",
+      "vendorPayment": "仕入先支払",
+      "journal": "仕訳",
+      "expense": "経費精算書",
+      "cardCharge": "カード請求",
+      "cardRefund": "カード返金",
+      "check": "小切手",
+      "deposit": "銀行預金",
+      "transfer": "銀行振替",
+      "asset": "固定資産",
+      "customer": "得意先",
+      "vendor": "仕入先",
+      "employee": "従業員",
+      "item": "品目またはサービス",
+      "project": "プロジェクト"
     }
   },
   "relatedParty": {
-    "loadFailed": "Could not open this record"
+    "loadFailed": "このレコードを開けませんでした"
   },
   "globalSearch": {
-    "ariaLabel": "Search",
-    "placeholder": "Search everything…",
-    "clear": "Clear search",
-    "searching": "Searching…",
-    "noMatches": "No matches for “{query}”",
-    "navigate": "navigate",
-    "open": "open",
-    "close": "close",
-    "resultCount": "{count, plural, one {# result} other {# results}}",
+    "ariaLabel": "検索",
+    "placeholder": "すべてを検索…",
+    "clear": "検索をクリア",
+    "searching": "検索中…",
+    "noMatches": "「{query}」に一致するものはありません",
+    "navigate": "移動",
+    "open": "開く",
+    "close": "閉じる",
+    "resultCount": "{count, plural, one {# 件の結果} other {# 件の結果}}",
     "groups": {
-      "contacts": "Contacts",
-      "transactions": "Transactions",
-      "accounts": "Accounts",
-      "items": "Items",
-      "projects": "Projects"
+      "contacts": "連絡先",
+      "transactions": "取引",
+      "accounts": "勘定",
+      "items": "品目",
+      "projects": "プロジェクト"
     }
   },
   "meta": {
-    "description": "The open business suite. Run on open books."
+    "description": "オープンなビジネススイート。オープンな帳簿で運用しましょう。"
+  },
+  "brand": {
+    "home": "ダッシュボードへ移動"
   },
   "sidebar": {
-    "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
+    "expand": "サイドバーを展開",
+    "collapse": "サイドバーを折りたたむ"
   },
   "mobileNav": {
-    "openMenu": "Open menu",
-    "menu": "Menu",
-    "primaryAriaLabel": "Primary"
+    "openMenu": "メニューを開く",
+    "menu": "メニュー",
+    "primaryAriaLabel": "プライマリ"
   },
   "themeToggle": {
-    "label": "Theme",
+    "label": "テーマ",
     "options": {
-      "light": "Light",
-      "system": "System",
-      "dark": "Dark"
+      "light": "ライト",
+      "system": "システム",
+      "dark": "ダーク"
     },
-    "current": "Theme: {theme}",
-    "currentHint": "Theme: {theme} (click to change)"
+    "current": "テーマ: {theme}",
+    "currentHint": "テーマ: {theme}（クリックで変更）"
   },
   "notifications": {
-    "ariaLabel": "Notifications",
-    "title": "Notifications",
-    "empty": "You're all caught up",
-    "markAllRead": "Mark all read"
+    "ariaLabel": "通知",
+    "title": "通知",
+    "empty": "未読はありません",
+    "markAllRead": "すべて既読にする"
   }
 }

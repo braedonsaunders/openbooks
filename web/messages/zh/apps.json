@@ -1,10 +1,10 @@
 {
-  "title": "Apps",
-  "description": "Installed apps you can open.",
-  "empty": "No apps are installed. An administrator can install one from Admin Center → App Builder.",
+  "title": "应用",
+  "description": "可打开的已安装应用。",
+  "empty": "尚未安装任何应用。管理员可从管理中心 → 应用构建器中安装。",
   "frame": {
-    "loading": "Loading…",
-    "failedTitle": "This app couldn't be opened.",
-    "failedHint": "Try refreshing. If it keeps happening, contact your administrator."
+    "loading": "加载中…",
+    "failedTitle": "无法打开此应用。",
+    "failedHint": "请尝试刷新。如果问题持续出现，请联系您的管理员。"
   }
 }

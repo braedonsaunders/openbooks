@@ -1,126 +1,126 @@
 {
-  "title": "Migrations & Mirror",
-  "description": "Connect an external accounting system, migrate in one click, then mirror it daily to A/B-run both in parallel.",
+  "title": "迁移与镜像",
+  "description": "连接外部会计系统，一键迁移，然后每日镜像，以并行进行 A/B 运行。",
   "connections": {
-    "heading": "Connections",
-    "add": "Add connection",
-    "loading": "Loading…",
+    "heading": "连接",
+    "add": "添加连接",
+    "loading": "加载中…",
     "empty": {
-      "title": "No connections yet.",
-      "hint": "Add NetSuite or QuickBooks Online to start a migration."
+      "title": "尚无连接。",
+      "hint": "添加 NetSuite 或 QuickBooks Online 以开始迁移。"
     },
     "status": {
-      "active": "Active",
-      "paused": "Paused",
-      "error": "Error",
-      "unconfigured": "Not configured"
+      "active": "已启用",
+      "paused": "已暂停",
+      "error": "错误",
+      "unconfigured": "未配置"
     },
-    "mirrorBadge": "Mirror: {schedule}",
-    "lastRun": "Last run: {lastRun} · Synced through: {cursor}"
+    "mirrorBadge": "镜像：{schedule}",
+    "lastRun": "上次运行：{lastRun} · 已同步至：{cursor}"
   },
   "actions": {
-    "connect": "Connect",
-    "reconnect": "Reconnect",
-    "test": "Test",
-    "mirrorNow": "Mirror now",
-    "runMigration": "Run migration",
-    "pauseMirror": "Pause mirror",
-    "enableMirror": "Enable mirror",
-    "edit": "Edit"
+    "connect": "连接",
+    "reconnect": "重新连接",
+    "test": "测试",
+    "mirrorNow": "立即镜像",
+    "runMigration": "运行迁移",
+    "pauseMirror": "暂停镜像",
+    "enableMirror": "启用镜像",
+    "edit": "编辑"
   },
   "runs": {
-    "heading": "Recent runs",
+    "heading": "最近运行",
     "columns": {
-      "started": "Started",
-      "kind": "Kind",
-      "status": "Status",
-      "trigger": "Trigger",
-      "result": "Result"
+      "started": "开始时间",
+      "kind": "类型",
+      "status": "状态",
+      "trigger": "触发方式",
+      "result": "结果"
     },
     "kind": {
-      "full_migration": "Full migration",
-      "incremental": "Incremental",
-      "mirror": "Mirror"
+      "full_migration": "完整迁移",
+      "incremental": "增量",
+      "mirror": "镜像"
     },
     "status": {
-      "ok": "Succeeded",
-      "failed": "Failed",
-      "running": "Running"
+      "ok": "成功",
+      "failed": "失败",
+      "running": "运行中"
     },
     "stats": {
-      "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
-      "applied": "{count} applied",
-      "tb": "TB {matches}/{accounts}",
-      "tbOff": "({count} off)",
-      "openItems": "open items {matches}/{checked}",
-      "periods": "periods {matches}/{checked}"
+      "docs": "+{new} 份单据 · {amended} 份修订 · {unchanged} 份未变",
+      "applied": "已应用 {count}",
+      "tb": "试算平衡 {matches}/{accounts}",
+      "tbOff": "（{count} 项不符）",
+      "openItems": "未结项 {matches}/{checked}",
+      "periods": "期间 {matches}/{checked}"
     }
   },
   "toast": {
-    "loadFailed": "Failed to load connections (HTTP {status})",
-    "authorized": "Connection authorized",
-    "authDenied": "Authorization was declined",
-    "authFailed": "Authorization failed ({status})",
-    "queuingMigration": "Queuing full migration…",
-    "queuingMirror": "Queuing mirror…",
-    "migrationQueued": "Migration queued — we'll run it in the background",
-    "mirrorQueued": "Mirror queued — running in the background",
-    "testing": "Testing connection…",
-    "connected": "Connected",
-    "connectedDetail": "Connected — {detail}",
-    "testFailed": "Connection failed: {error}",
-    "unknownError": "unknown error",
-    "removed": "Connection removed",
-    "created": "Connection created",
-    "updated": "Connection updated",
-    "copied": "Redirect URI copied",
-    "copyFailed": "Could not copy — select and copy the text manually"
+    "loadFailed": "加载连接失败（HTTP {status}）",
+    "authorized": "连接已授权",
+    "authDenied": "授权被拒绝",
+    "authFailed": "授权失败（{status}）",
+    "queuingMigration": "正在排队完整迁移…",
+    "queuingMirror": "正在排队镜像…",
+    "migrationQueued": "迁移已排队——我们将在后台运行",
+    "mirrorQueued": "镜像已排队——正在后台运行",
+    "testing": "正在测试连接…",
+    "connected": "已连接",
+    "connectedDetail": "已连接——{detail}",
+    "testFailed": "连接失败：{error}",
+    "unknownError": "未知错误",
+    "removed": "连接已移除",
+    "created": "连接已创建",
+    "updated": "连接已更新",
+    "copied": "重定向 URI 已复制",
+    "copyFailed": "无法复制——请手动选择并复制文本"
   },
-  "confirmDelete": "Delete connection \"{name}\"? Migrated data stays; only the link is removed.",
+  "confirmDelete": "删除连接“{name}”？已迁移的数据将保留；仅移除此链接。",
   "drawer": {
-    "addTitle": "Add connection",
-    "editTitle": "Edit connection",
-    "description": "Connect an external accounting system. Credentials are encrypted at rest and never shown again.",
-    "cancel": "Cancel",
-    "saving": "Saving…",
-    "saveChanges": "Save changes",
-    "create": "Create connection",
-    "system": "System",
-    "selectSystem": "Select a system…",
-    "name": "Connection name",
-    "select": "Select…",
-    "credentials": "Credentials (encrypted at rest, never displayed again)",
-    "keepCurrent": "Leave blank to keep current"
+    "addTitle": "添加连接",
+    "editTitle": "编辑连接",
+    "description": "连接外部会计系统。凭据在静态存储时加密，且不会再次显示。",
+    "cancel": "取消",
+    "saving": "保存中…",
+    "saveChanges": "保存更改",
+    "create": "创建连接",
+    "system": "系统",
+    "selectSystem": "选择系统…",
+    "name": "连接名称",
+    "select": "选择…",
+    "credentials": "凭据（静态存储时加密，不会再次显示）",
+    "keepCurrent": "留空以保留当前值"
   },
   "oauth": {
-    "title": "One-time app setup in the <link>{portal}</link>",
-    "redirectLabel": "Redirect URI to register:",
-    "copy": "Copy"
+    "title": "在 <link>{portal}</link> 中进行一次性应用设置",
+    "redirectLabel": "需注册的重定向 URI：",
+    "copy": "复制"
   },
   "sources": {
     "netsuite": {
-      "blurb": "Token-based (TBA) access to SuiteQL. Create an integration + access token in NetSuite, then paste the four values. Native transactions, applications and orders migrate and mirror through the real posting engine."
+      "blurb": "基于令牌（TBA）访问 SuiteQL。在 NetSuite 中创建集成 + 访问令牌，然后粘贴这四个值。原生交易、核销和订单将通过真实过账引擎进行迁移和镜像。"
     },
     "odoo": {
-      "blurb": "Connect with your Odoo URL, database, user and an API key (Settings → My Profile → Account Security → API Keys). Invoices, bills, payments and journals migrate and mirror natively through the real posting engine."
+      "blurb": "使用您的 Odoo URL、数据库、用户和 API 密钥连接（设置 → 我的个人资料 → 账户安全 → API 密钥）。发票、账单、付款和日记账将通过真实过账引擎原生迁移和镜像。"
     },
     "erpnext": {
-      "blurb": "Connect with your ERPNext URL and an API key + secret (User → Settings → API Access). Invoices, bills, payment entries and journals migrate and mirror natively through the real posting engine."
+      "blurb": "使用您的 ERPNext URL 和 API 密钥 + 密钥连接（用户 → 设置 → API 访问）。发票、账单、付款条目和日记账将通过真实过账引擎原生迁移和镜像。"
     },
     "qbo": {
-      "blurb": "Enter your Intuit app's Client ID + Secret (developer.intuit.com → Keys & credentials), save, then click Connect to authorize a company. Invoices, bills, payments, credits, journals and deposits migrate and mirror natively.",
+      "blurb": "输入您的 Intuit 应用的客户端 ID + 密钥（developer.intuit.com → Keys & credentials），保存后点击“连接”以授权某个公司。发票、账单、付款、贷记、日记账和存款将原生迁移和镜像。",
       "steps": [
-        "Create an app (QuickBooks Online and Payments) with the com.intuit.quickbooks.accounting scope.",
-        "Under Keys & credentials, add the Redirect URI shown below (use Development keys for a sandbox company, Production keys for a live one).",
-        "Copy the Client ID and Client Secret into this form, save, then click Connect."
+        "创建一个应用（QuickBooks Online and Payments），并使用 com.intuit.quickbooks.accounting 范围。",
+        "在 Keys & credentials 下，添加下方所示的重定向 URI（沙盒公司使用 Development keys，正式公司使用 Production keys）。",
+        "将客户端 ID 和客户端密钥复制到此表单中，保存后点击“连接”。"
       ]
     },
     "xero": {
-      "blurb": "Enter your Xero app's Client ID + Secret (developer.xero.com → My Apps), save, then click Connect to authorize an organisation. Invoices, bills, credit notes, payments, journals and bank transactions migrate and mirror natively.",
+      "blurb": "输入您的 Xero 应用的客户端 ID + 密钥（developer.xero.com → My Apps），保存后点击“连接”以授权某个组织。发票、账单、贷记通知单、付款、日记账和银行交易将原生迁移和镜像。",
       "steps": [
-        "Create a new app (integration type: Web app); the company URL can be this site's address.",
-        "Add the Redirect URI shown below to the app's OAuth 2.0 redirect URIs.",
-        "Copy the Client ID, generate a Client Secret, paste both into this form, save, then click Connect."
+        "创建一个新应用（集成类型：Web 应用）；公司 URL 可使用本站点的地址。",
+        "将下方所示的重定向 URI 添加到该应用的 OAuth 2.0 重定向 URI 中。",
+        "复制客户端 ID，生成客户端密钥，将两者粘贴到此表单中，保存后点击“连接”。"
       ]
     }
   }

@@ -1,62 +1,62 @@
 {
   "list": {
-    "title": "Invoices",
-    "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted through the kernel.",
-    "searchPlaceholder": "Search invoices, credits, customers, refs…",
-    "emptyTitle": "No invoices yet",
-    "emptyDescription": "Enter the first customer invoice or credit memo to start the AR workflow.",
+    "title": "发票",
+    "description": "客户发票与贷项通知单——您的应收账款：草稿 → 审批 → 通过内核过账。",
+    "searchPlaceholder": "搜索发票、贷项、客户、参考号……",
+    "emptyTitle": "暂无发票",
+    "emptyDescription": "录入第一张客户发票或贷项通知单，以启动应收账款流程。",
     "columns": {
-      "number": "Number",
-      "invoice": "Invoice",
-      "ref": "Ref"
+      "number": "编号",
+      "invoice": "发票",
+      "ref": "参考号"
     }
   },
   "kinds": {
-    "invoice": "Invoice",
-    "credit": "Credit"
+    "invoice": "发票",
+    "credit": "贷项"
   },
   "actions": {
-    "new": "New",
-    "newInvoice": "New invoice",
-    "newCredit": "New customer credit",
-    "submitForApproval": "Submit for approval"
+    "new": "新建",
+    "newInvoice": "新建发票",
+    "newCredit": "新建客户贷项",
+    "submitForApproval": "提交审批"
   },
   "drawer": {
-    "editingHint": "Editing — Save to apply changes",
-    "viewGlImpact": "View GL impact",
-    "dateLabel": "Invoice date",
-    "dueDate": "Due date",
-    "reference": "Customer ref #",
-    "accountColumn": "Income account",
-    "accountPlaceholder": "Account…",
-    "noTax": "No tax",
-    "taxAmountColumn": "Tax amt",
-    "selectCustomerPlaceholder": "Select customer…",
-    "selectVendorPlaceholder": "Select vendor…",
-    "subtotalAmount": "Subtotal {amount}",
-    "taxTotalAmount": "Tax {amount}",
-    "totalAmount": "Total {amount}",
-    "balanceDueAmount": "Balance due {amount}",
+    "editingHint": "编辑中——保存以应用更改",
+    "viewGlImpact": "查看总账影响",
+    "dateLabel": "发票日期",
+    "dueDate": "到期日",
+    "reference": "客户参考编号",
+    "accountColumn": "收入科目",
+    "accountPlaceholder": "科目……",
+    "noTax": "无税",
+    "taxAmountColumn": "税额",
+    "selectCustomerPlaceholder": "选择客户……",
+    "selectVendorPlaceholder": "选择供应商……",
+    "subtotalAmount": "小计 {amount}",
+    "taxTotalAmount": "税 {amount}",
+    "totalAmount": "合计 {amount}",
+    "balanceDueAmount": "应付余额 {amount}",
     "saveState": {
-      "saved": "All changes saved",
-      "error": "Save failed — fix and retry",
-      "dirty": "Unsaved changes…"
+      "saved": "所有更改已保存",
+      "error": "保存失败——修正后重试",
+      "dirty": "有未保存的更改……"
     },
-    "deleteTitle": "Delete this document?",
-    "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone.",
-    "formLabel": "Form",
-    "formSetPreferred": "Set as my preferred",
-    "formSetPreferredDone": "Preferred form saved",
-    "formPreferredCleared": "Preferred form cleared",
-    "formPreferredFailed": "Could not save the preferred form"
+    "deleteTitle": "删除此单据？",
+    "deleteDraftBody": "此操作将永久删除该草稿。此操作无法撤销。",
+    "deletePostedBody": "此操作将永久删除该单据并移除其总账影响。此操作无法撤销。",
+    "formLabel": "表单",
+    "formSetPreferred": "设为我的首选",
+    "formSetPreferredDone": "已保存首选表单",
+    "formPreferredCleared": "已清除首选表单",
+    "formPreferredFailed": "无法保存首选表单"
   },
   "toasts": {
-    "actionFailed": "Action failed",
-    "submitted": "Submitted for approval",
-    "posted": "Posted to the ledger",
-    "createDraftFailed": "Could not create a draft",
-    "deleted": "Document deleted",
-    "deleteFailed": "Delete failed"
+    "actionFailed": "操作失败",
+    "submitted": "已提交审批",
+    "posted": "已过账至总账",
+    "createDraftFailed": "无法创建草稿",
+    "deleted": "已删除单据",
+    "deleteFailed": "删除失败"
   }
 }

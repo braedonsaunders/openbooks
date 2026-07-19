@@ -1,45 +1,45 @@
 {
   "list": {
-    "title": "Expense Reports",
-    "description": "Employee expense reports — draft → approval → posted against the employee payable.",
-    "searchPlaceholder": "Search reports, employees, memos…",
-    "emptyTitle": "No expense reports yet",
-    "emptyDescription": "Enter the first expense report to start the reimbursement workflow.",
+    "title": "费用报销单",
+    "description": "员工费用报销单 — 草稿 → 审批 → 过账至员工应付款。",
+    "searchPlaceholder": "搜索报销单、员工、备注…",
+    "emptyTitle": "暂无费用报销单",
+    "emptyDescription": "录入第一张费用报销单，开始报销流程。",
     "columns": {
-      "report": "Report"
+      "report": "报销单"
     }
   },
   "actions": {
-    "newReport": "New expense report",
-    "submitForApproval": "Submit for approval"
+    "newReport": "新建费用报销单",
+    "submitForApproval": "提交审批"
   },
   "drawer": {
-    "autosaveHint": "Draft — changes save automatically.",
-    "viewGlImpact": "View GL impact",
-    "reportDate": "Report date",
-    "selectEmployeePlaceholder": "Select employee…",
-    "accountPlaceholder": "Account…",
-    "noTax": "No tax",
-    "deleteTitle": "Delete this expense report?",
-    "deleteDraftBody": "This permanently deletes the draft expense report. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the expense report and removes its ledger impact. This cannot be undone.",
+    "autosaveHint": "草稿 — 更改自动保存。",
+    "viewGlImpact": "查看总账影响",
+    "reportDate": "报销单日期",
+    "selectEmployeePlaceholder": "选择员工…",
+    "accountPlaceholder": "科目…",
+    "noTax": "无税",
+    "deleteTitle": "删除此费用报销单？",
+    "deleteDraftBody": "此操作将永久删除该草稿费用报销单。无法撤销。",
+    "deletePostedBody": "此操作将永久删除该费用报销单并移除其总账影响。无法撤销。",
     "columns": {
-      "taxAmount": "Tax amt"
+      "taxAmount": "税额"
     },
     "saveState": {
-      "saved": "All changes saved",
-      "dirty": "Unsaved changes…",
-      "error": "Save failed — fix and retry"
+      "saved": "所有更改已保存",
+      "dirty": "有未保存的更改…",
+      "error": "保存失败 — 请修正后重试"
     },
-    "totals": "Subtotal {subtotal} · Tax {tax} · <strong>Total {total}</strong>"
+    "totals": "小计 {subtotal} · 税 {tax} · <strong>合计 {total}</strong>"
   },
   "toasts": {
-    "submitted": "Submitted for approval",
-    "posted": "Posted to the ledger",
-    "actionFailed": "Action failed",
-    "autosaveFailed": "Autosave failed",
-    "deleted": "Expense report deleted",
-    "deleteFailed": "Delete failed",
-    "draftFailed": "Could not create a draft expense report"
+    "submitted": "已提交审批",
+    "posted": "已过账至总账",
+    "actionFailed": "操作失败",
+    "autosaveFailed": "自动保存失败",
+    "deleted": "费用报销单已删除",
+    "deleteFailed": "删除失败",
+    "draftFailed": "无法创建草稿费用报销单"
   }
 }

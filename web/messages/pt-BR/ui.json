@@ -1,76 +1,76 @@
 {
   "pagination": {
-    "outOfRange": "Page {page} is past the end of these results.",
-    "showing": "Showing <strong>{from}</strong>–<strong>{to}</strong> of <strong>{total}</strong>",
-    "goToLastPageAria": "Go to last page, page {page}",
-    "goToPage": "Go to page {page}",
-    "previousPageAria": "Previous page",
-    "nextPageAria": "Next page",
-    "prev": "Prev",
-    "pageOf": "Page {page} of {pages}"
+    "outOfRange": "A página {page} está além do fim destes resultados.",
+    "showing": "Exibindo <strong>{from}</strong>–<strong>{to}</strong> de <strong>{total}</strong>",
+    "goToLastPageAria": "Ir para a última página, página {page}",
+    "goToPage": "Ir para a página {page}",
+    "previousPageAria": "Página anterior",
+    "nextPageAria": "Próxima página",
+    "prev": "Ant.",
+    "pageOf": "Página {page} de {pages}"
   },
   "search": {
-    "placeholder": "Search…",
-    "clearAria": "Clear search"
+    "placeholder": "Buscar…",
+    "clearAria": "Limpar busca"
   },
   "confirm": {
-    "defaultTitle": "Confirm"
+    "defaultTitle": "Confirmar"
   },
   "select": {
-    "placeholder": "Select…",
-    "searchPlaceholder": "Search…",
-    "noMatches": "No matches",
-    "searching": "Searching…"
+    "placeholder": "Selecionar…",
+    "searchPlaceholder": "Buscar…",
+    "noMatches": "Nenhuma correspondência",
+    "searching": "Buscando…"
   },
   "sparkline": {
-    "noTrend": "No trend data",
-    "trend": "Trend: {count} points from {first} to {last}"
+    "noTrend": "Sem dados de tendência",
+    "trend": "Tendência: {count} pontos de {first} a {last}"
   },
   "attachments": {
-    "tooLarge": "{name} exceeds the 25 MB limit",
-    "attached": "Attached {name}",
-    "attachFailed": "Could not attach {name}",
-    "removed": "Removed {name}",
-    "removeFailed": "Could not remove attachment",
-    "empty": "No files attached yet.",
-    "downloadAria": "Download {name}",
-    "removeAria": "Remove {name}",
-    "uploading": "{count, plural, one {Uploading # file…} other {Uploading # files…}}",
-    "dropFiles": "Drop files here or <browse>browse</browse>",
-    "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · up to 25 MB"
+    "tooLarge": "{name} excede o limite de 25 MB",
+    "attached": "{name} anexado",
+    "attachFailed": "Não foi possível anexar {name}",
+    "removed": "{name} removido",
+    "removeFailed": "Não foi possível remover o anexo",
+    "empty": "Nenhum arquivo anexado ainda.",
+    "downloadAria": "Baixar {name}",
+    "removeAria": "Remover {name}",
+    "uploading": "{count, plural, one {Enviando # arquivo…} other {Enviando # arquivos…}}",
+    "dropFiles": "Solte os arquivos aqui ou <browse>procure</browse>",
+    "acceptHint": "PDF, imagens, CSV, XLSX, DOCX, TXT · até 25 MB"
   },
   "recordFields": {
-    "inactiveSelected": "(currently selected — inactive)",
-    "ratingAria": "Rating out of {max}",
-    "ratingValueAria": "{value} of {max}",
-    "loadAccountsFailed": "Could not load accounts — reload to retry.",
-    "loadPartiesFailed": "Could not load parties — reload to retry.",
-    "selectAccount": "Select account…",
-    "selectParty": "Select party…",
-    "noFields": "No fields to show — the record type has no visible fields.",
-    "lineItems": "Line items",
-    "rowCount": "{count, plural, one {# row} other {# rows}}",
-    "noRows": "No rows yet.",
-    "rowActions": "Row actions",
-    "removeRow": "Remove row",
-    "addRow": "Add row",
-    "maxRowsReached": "Maximum of {count} rows reached."
+    "inactiveSelected": "(selecionado atualmente — inativo)",
+    "ratingAria": "Avaliação de até {max}",
+    "ratingValueAria": "{value} de {max}",
+    "loadAccountsFailed": "Não foi possível carregar as contas — recarregue para tentar novamente.",
+    "loadPartiesFailed": "Não foi possível carregar as partes — recarregue para tentar novamente.",
+    "selectAccount": "Selecionar conta…",
+    "selectParty": "Selecionar parte…",
+    "noFields": "Nenhum campo para exibir — o tipo de registro não tem campos visíveis.",
+    "lineItems": "Itens de linha",
+    "rowCount": "{count, plural, one {# linha} other {# linhas}}",
+    "noRows": "Nenhuma linha ainda.",
+    "rowActions": "Ações da linha",
+    "removeRow": "Remover linha",
+    "addRow": "Adicionar linha",
+    "maxRowsReached": "Máximo de {count} linhas atingido."
   },
   "lineGrid": {
-    "addLine": "Add line",
-    "keyboardHint": "Enter adds/moves down · Alt+↑/↓ reorders · ⌘D duplicates · ⌘⌫ removes",
-    "lineActionsAria": "Line {number} actions",
-    "insertAbove": "Insert above",
-    "insertBelow": "Insert below",
-    "removeLine": "Remove line",
-    "clearLine": "Clear line",
+    "addLine": "Adicionar linha",
+    "keyboardHint": "Enter adiciona/desce · Alt+↑/↓ reordena · ⌘D duplica · ⌘⌫ remove",
+    "lineActionsAria": "Ações da linha {number}",
+    "insertAbove": "Inserir acima",
+    "insertBelow": "Inserir abaixo",
+    "removeLine": "Remover linha",
+    "clearLine": "Limpar linha",
     "tax": {
-      "overriddenAria": "Tax overridden",
-      "overriddenTitle": "Tax manually overridden — differs from the computed rate",
-      "overriddenShortTitle": "Tax manually overridden",
-      "computedOverriddenTitle": "Computed {amount} · overridden",
-      "resetAria": "Reset tax to computed",
-      "resetTitle": "Reset to computed {amount}"
+      "overriddenAria": "Imposto substituído",
+      "overriddenTitle": "Imposto substituído manualmente — difere da taxa calculada",
+      "overriddenShortTitle": "Imposto substituído manualmente",
+      "computedOverriddenTitle": "Calculado {amount} · substituído",
+      "resetAria": "Redefinir imposto para o calculado",
+      "resetTitle": "Redefinir para o calculado {amount}"
     }
   }
 }

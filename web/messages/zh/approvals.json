@@ -1,93 +1,93 @@
 {
-  "title": "Approvals",
-  "description": "Everything waiting on you across flows and policies, plus where your own submissions stand.",
+  "title": "审批",
+  "description": "跨流程和策略等待您处理的所有事项，以及您自己提交事项的状态。",
   "tabs": {
-    "mine": "My approvals",
-    "submitted": "Submitted by me",
-    "all": "All approvals"
+    "mine": "我的审批",
+    "submitted": "我提交的",
+    "all": "全部审批"
   },
   "empty": {
-    "title": "Nothing waiting on you",
-    "description": "Approvals assigned, routed, or delegated to you will appear here."
+    "title": "没有待您处理的事项",
+    "description": "分配、路由或委派给您的审批将显示在此处。"
   },
   "emptySubmitted": {
-    "title": "No pending submissions",
-    "description": "Documents you submit for approval will appear here while they wait."
+    "title": "没有待处理的提交",
+    "description": "您提交审批的单据在等待期间将显示在此处。"
   },
   "emptyAll": {
-    "title": "Nothing pending",
-    "description": "There are no pending approvals in this organization."
+    "title": "没有待处理事项",
+    "description": "此组织中没有待处理的审批。"
   },
   "table": {
-    "document": "Document",
-    "kind": "Kind",
-    "step": "Step",
-    "decision": "Decision",
-    "stepNumber": "step {number}",
-    "approval": "Approval",
-    "requested": "Requested",
-    "source": "Source",
-    "assignee": "Assignee",
-    "pendingWith": "Pending with",
-    "waitingSince": "Waiting since"
+    "document": "单据",
+    "kind": "类型",
+    "step": "步骤",
+    "decision": "决定",
+    "stepNumber": "步骤 {number}",
+    "approval": "审批",
+    "requested": "请求于",
+    "source": "来源",
+    "assignee": "受理人",
+    "pendingWith": "待处理人",
+    "waitingSince": "等待自"
   },
   "kinds": {
-    "vendor_bill": "vendor bill",
-    "customer_invoice": "customer invoice",
-    "expense_report": "expense report",
-    "journal": "journal",
-    "purchase_order": "purchase order",
-    "sales_order": "sales order",
-    "quote": "quote"
+    "vendor_bill": "应付账单",
+    "customer_invoice": "客户发票",
+    "expense_report": "费用报销单",
+    "journal": "日记账",
+    "purchase_order": "采购订单",
+    "sales_order": "销售订单",
+    "quote": "报价单"
   },
   "decide": {
-    "rejectionReason": "Rejection reason:",
-    "decisionFailed": "Decision failed"
+    "rejectionReason": "驳回原因：",
+    "decisionFailed": "决定失败"
   },
   "source": {
-    "flow": "Flow",
-    "legacy": "Policy"
+    "flow": "流程",
+    "legacy": "策略"
   },
   "aging": {
-    "days": "{days}d"
+    "days": "{days}天"
   },
   "bulk": {
-    "selected": "{count} selected",
-    "selectAll": "Select all",
-    "selectRow": "Select {document}",
-    "approveSelected": "Approve selected",
-    "rejectSelected": "Reject selected",
-    "rejectTitle": "Reject {count} approvals?",
-    "reasonLabel": "Rejection reason (applied to every selected item)",
-    "approvedCount": "{count} approved",
-    "rejectedCount": "{count} rejected",
-    "failedCount": "{count} failed ({error})"
+    "selected": "已选择 {count} 项",
+    "selectAll": "全选",
+    "selectRow": "选择 {document}",
+    "approveSelected": "批准所选",
+    "rejectSelected": "驳回所选",
+    "rejectTitle": "驳回 {count} 项审批？",
+    "reasonLabel": "驳回原因（应用于每个所选项目）",
+    "approvedCount": "已批准 {count} 项",
+    "rejectedCount": "已驳回 {count} 项",
+    "failedCount": "失败 {count} 项（{error}）"
   },
   "ooo": {
-    "button": "Out of office",
-    "title": "Out of office",
-    "description": "Route your incoming approvals to a delegate while you're away.",
-    "delegateTo": "Delegate to",
-    "delegatePlaceholder": "Choose a delegate…",
-    "from": "From",
-    "until": "Until",
-    "invalid": "Pick a delegate and a valid date range",
-    "saved": "Delegation scheduled",
-    "unavailable": "Delegation service is not available yet",
-    "banner": "Your approvals are delegated to {name} until {date}",
-    "endNow": "End now",
-    "ended": "Delegation ended"
+    "button": "外出",
+    "title": "外出",
+    "description": "在您离开期间将收到的审批路由给委派人。",
+    "delegateTo": "委派给",
+    "delegatePlaceholder": "选择委派人…",
+    "from": "从",
+    "until": "至",
+    "invalid": "请选择委派人和有效的日期范围",
+    "saved": "已安排委派",
+    "unavailable": "委派服务尚不可用",
+    "banner": "您的审批已委派给 {name}，直至 {date}",
+    "endNow": "立即结束",
+    "ended": "委派已结束"
   },
   "gates": {
-    "rejectTitle": "Reject this approval?",
-    "waitingOthers": "Recorded — waiting on the other approvers",
-    "delegate": "Delegate",
-    "delegatePlaceholder": "Delegate to…",
-    "delegated": "Approval delegated",
+    "rejectTitle": "驳回此审批？",
+    "waitingOthers": "已记录 — 等待其他审批人",
+    "delegate": "委派",
+    "delegatePlaceholder": "委派给…",
+    "delegated": "审批已委派",
     "badges": {
-      "quorumAll": "All approvers",
-      "reminder": "Reminder {date}",
-      "escalates": "Escalates {date}"
+      "quorumAll": "所有审批人",
+      "reminder": "提醒 {date}",
+      "escalates": "升级 {date}"
     }
   }
 }

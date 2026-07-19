@@ -1,52 +1,52 @@
 {
   "list": {
-    "title": "Revenue Recognition",
-    "description": "Contracts, performance obligations, and recognition schedules (ASC 606).",
-    "searchPlaceholder": "Search contracts…",
-    "emptyTitle": "No revenue contracts yet",
-    "emptyDescription": "Post an invoice with a recognition-rule item to create obligations and schedules.",
-    "runRecognition": "Run recognition"
+    "title": "Reconhecimento de Receita",
+    "description": "Contratos, obrigações de desempenho e cronogramas de reconhecimento (ASC 606).",
+    "searchPlaceholder": "Buscar contratos…",
+    "emptyTitle": "Nenhum contrato de receita ainda",
+    "emptyDescription": "Lance uma fatura com um item de regra de reconhecimento para criar obrigações e cronogramas.",
+    "runRecognition": "Executar reconhecimento"
   },
   "labels": {
-    "contract": "Contract",
-    "customer": "Customer",
+    "contract": "Contrato",
+    "customer": "Cliente",
     "total": "Total",
-    "recognized": "Recognized",
-    "deferred": "Deferred"
+    "recognized": "Reconhecido",
+    "deferred": "Diferido"
   },
   "status": {
-    "draft": "Draft",
-    "active": "Active",
-    "complete": "Complete",
-    "cancelled": "Cancelled"
+    "draft": "Rascunho",
+    "active": "Ativo",
+    "complete": "Concluído",
+    "cancelled": "Cancelado"
   },
   "obligationStatus": {
-    "open": "Open",
-    "satisfied": "Satisfied",
-    "cancelled": "Cancelled"
+    "open": "Em aberto",
+    "satisfied": "Cumprida",
+    "cancelled": "Cancelada"
   },
   "method": {
-    "point_in_time": "Point in time",
-    "straight_line_even": "Straight-line, even",
-    "straight_line_prorate_first_last": "Straight-line, prorated",
-    "straight_line_daily": "Straight-line, daily",
-    "percent_complete": "Percent complete",
-    "milestone": "Milestone",
-    "usage": "Usage"
+    "point_in_time": "Ponto no tempo",
+    "straight_line_even": "Linear, uniforme",
+    "straight_line_prorate_first_last": "Linear, proporcional",
+    "straight_line_daily": "Linear, diário",
+    "percent_complete": "Percentual de conclusão",
+    "milestone": "Marco",
+    "usage": "Uso"
   },
   "run": {
-    "failed": "Recognition run failed",
-    "posted": "Recognized {count, plural, one {# entry} other {# entries}} totaling {amount}",
-    "someSkipped": "{count} skipped",
-    "nothingDue": "Nothing due to recognize"
+    "failed": "Falha na execução do reconhecimento",
+    "posted": "{count, plural, one {# lançamento reconhecido} other {# lançamentos reconhecidos}} totalizando {amount}",
+    "someSkipped": "{count} ignorados",
+    "nothingDue": "Nada a reconhecer"
   },
   "drawer": {
-    "obligations": "Obligations",
-    "noSchedule": "No schedule built yet",
-    "period": "Period",
-    "planned": "Planned",
-    "recognized": "Recognized",
-    "postedStatus": "Posted",
-    "plannedStatus": "Planned"
+    "obligations": "Obrigações",
+    "noSchedule": "Nenhum cronograma criado ainda",
+    "period": "Período",
+    "planned": "Planejado",
+    "recognized": "Reconhecido",
+    "postedStatus": "Lançado",
+    "plannedStatus": "Planejado"
   }
 }

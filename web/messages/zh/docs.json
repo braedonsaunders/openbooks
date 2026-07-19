@@ -1,11 +1,11 @@
 {
-  "title": "Documentation",
-  "searchPlaceholder": "Search documentation…",
-  "noResults": "No matching articles.",
-  "lastUpdated": "Last updated {date}",
-  "related": "Related articles",
+  "title": "文档",
+  "searchPlaceholder": "搜索文档…",
+  "noResults": "没有匹配的文章。",
+  "lastUpdated": "最后更新于 {date}",
+  "related": "相关文章",
   "home": {
-    "title": "Documentation",
-    "subtitle": "Guides and configuration reference for OpenBooks. Browse a category below or search from the sidebar."
+    "title": "文档",
+    "subtitle": "openbooks 的指南和配置参考。请在下方浏览分类，或从侧边栏搜索。"
   }
 }

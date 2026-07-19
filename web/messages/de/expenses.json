@@ -1,45 +1,45 @@
 {
   "list": {
-    "title": "Expense Reports",
-    "description": "Employee expense reports — draft → approval → posted against the employee payable.",
-    "searchPlaceholder": "Search reports, employees, memos…",
-    "emptyTitle": "No expense reports yet",
-    "emptyDescription": "Enter the first expense report to start the reimbursement workflow.",
+    "title": "Spesenabrechnungen",
+    "description": "Spesenabrechnungen der Mitarbeiter — Entwurf → Genehmigung → gegen die Mitarbeiterverbindlichkeit gebucht.",
+    "searchPlaceholder": "Abrechnungen, Mitarbeiter, Notizen durchsuchen…",
+    "emptyTitle": "Noch keine Spesenabrechnungen",
+    "emptyDescription": "Erfassen Sie die erste Spesenabrechnung, um den Erstattungs-Workflow zu starten.",
     "columns": {
-      "report": "Report"
+      "report": "Abrechnung"
     }
   },
   "actions": {
-    "newReport": "New expense report",
-    "submitForApproval": "Submit for approval"
+    "newReport": "Neue Spesenabrechnung",
+    "submitForApproval": "Zur Genehmigung einreichen"
   },
   "drawer": {
-    "autosaveHint": "Draft — changes save automatically.",
-    "viewGlImpact": "View GL impact",
-    "reportDate": "Report date",
-    "selectEmployeePlaceholder": "Select employee…",
-    "accountPlaceholder": "Account…",
-    "noTax": "No tax",
-    "deleteTitle": "Delete this expense report?",
-    "deleteDraftBody": "This permanently deletes the draft expense report. This cannot be undone.",
-    "deletePostedBody": "This permanently deletes the expense report and removes its ledger impact. This cannot be undone.",
+    "autosaveHint": "Entwurf — Änderungen werden automatisch gespeichert.",
+    "viewGlImpact": "GL-Auswirkung anzeigen",
+    "reportDate": "Abrechnungsdatum",
+    "selectEmployeePlaceholder": "Mitarbeiter auswählen…",
+    "accountPlaceholder": "Konto…",
+    "noTax": "Keine Steuer",
+    "deleteTitle": "Diese Spesenabrechnung löschen?",
+    "deleteDraftBody": "Dadurch wird der Entwurf der Spesenabrechnung dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "deletePostedBody": "Dadurch wird die Spesenabrechnung dauerhaft gelöscht und ihre Auswirkung auf das Hauptbuch entfernt. Dies kann nicht rückgängig gemacht werden.",
     "columns": {
-      "taxAmount": "Tax amt"
+      "taxAmount": "Steuerbetr."
     },
     "saveState": {
-      "saved": "All changes saved",
-      "dirty": "Unsaved changes…",
-      "error": "Save failed — fix and retry"
+      "saved": "Alle Änderungen gespeichert",
+      "dirty": "Nicht gespeicherte Änderungen…",
+      "error": "Speichern fehlgeschlagen — korrigieren und erneut versuchen"
     },
-    "totals": "Subtotal {subtotal} · Tax {tax} · <strong>Total {total}</strong>"
+    "totals": "Zwischensumme {subtotal} · Steuer {tax} · <strong>Gesamt {total}</strong>"
   },
   "toasts": {
-    "submitted": "Submitted for approval",
-    "posted": "Posted to the ledger",
-    "actionFailed": "Action failed",
-    "autosaveFailed": "Autosave failed",
-    "deleted": "Expense report deleted",
-    "deleteFailed": "Delete failed",
-    "draftFailed": "Could not create a draft expense report"
+    "submitted": "Zur Genehmigung eingereicht",
+    "posted": "In das Hauptbuch gebucht",
+    "actionFailed": "Aktion fehlgeschlagen",
+    "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
+    "deleted": "Spesenabrechnung gelöscht",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "draftFailed": "Entwurf der Spesenabrechnung konnte nicht erstellt werden"
   }
 }
