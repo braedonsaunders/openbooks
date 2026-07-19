@@ -20,8 +20,6 @@
   "costSource": "Origen del costo real",
   "costDimension": "Grupo de cuentas de costo",
   "laborSource": "Origen del costo de mano de obra",
-  "burdenSource": "Origen de carga fabril",
-  "burdenDimension": "Grupo de cuentas de carga",
   "budgetSource": "Origen del presupuesto de costos",
   "committedKinds": "Costo comprometido de",
   "totalCostComponents": "Componentes del costo total",
@@ -43,5 +41,7 @@
     "subtotal": "Subtotal",
     "total": "Total"
   },
-  "help": "Documentación"
+  "help": "Documentación",
+  "overheadSource": "Fuente de gastos generales",
+  "overheadDimension": "Grupo de cuentas de gastos generales"
 }

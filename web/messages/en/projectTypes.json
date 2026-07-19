@@ -20,8 +20,6 @@
   "costSource": "Actual cost source",
   "costDimension": "Cost account group",
   "laborSource": "Labor cost source",
-  "burdenSource": "Burden source",
-  "burdenDimension": "Burden account group",
   "budgetSource": "Cost budget source",
   "committedKinds": "Committed cost from",
   "totalCostComponents": "Total cost components",
@@ -43,5 +41,7 @@
     "subtotal": "Subtotal",
     "total": "Total"
   },
-  "help": "Documentation"
+  "help": "Documentation",
+  "overheadSource": "Overhead source",
+  "overheadDimension": "Overhead account group"
 }

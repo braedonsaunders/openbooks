@@ -123,7 +123,7 @@ const JOURNAL_ENTRY: PdfRecordTypeMeta = {
     { key: 'posting_date', label: 'Posting date', sample: 'Jul 16, 2026' },
     { key: 'status', label: 'Status', sample: 'Posted' },
     { key: 'origin', label: 'Origin', sample: 'Manual' },
-    { key: 'memo', label: 'Memo', sample: 'June labour burden allocation.' },
+    { key: 'memo', label: 'Memo', sample: 'June labour overhead allocation.' },
     { key: 'total_debits', label: 'Total debits', sample: '$12,400.00' },
     { key: 'total_credits', label: 'Total credits', sample: '$12,400.00' },
     ...ORG_FIELDS,
@@ -135,7 +135,7 @@ const JOURNAL_ENTRY: PdfRecordTypeMeta = {
       fields: [
         { key: 'line_number', label: 'Line #', sample: '1' },
         { key: 'account_number', label: 'Account #', sample: '5120' },
-        { key: 'account_name', label: 'Account', sample: 'Labour burden' },
+        { key: 'account_name', label: 'Account', sample: 'Labour overhead' },
         { key: 'memo', label: 'Line memo', sample: 'June allocation' },
         { key: 'debit', label: 'Debit', sample: '$12,400.00' },
         { key: 'credit', label: 'Credit', sample: '' },

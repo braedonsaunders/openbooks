@@ -171,9 +171,9 @@ const END_OF_LIFE = [
   { value: 'retain_balance', labelKey: 'options.endOfLife.retainBalance' },
 ]
 
-const BURDEN_METHODS = [
-  { value: 'live', labelKey: 'options.burdenMethod.live' },
-  { value: 'standard', labelKey: 'options.burdenMethod.standard' },
+const OVERHEAD_METHODS = [
+  { value: 'live', labelKey: 'options.overheadMethod.live' },
+  { value: 'standard', labelKey: 'options.overheadMethod.standard' },
 ]
 
 const FX_RATE_TYPES = [
@@ -866,8 +866,8 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   {
-    key: 'labor-burden-rates',
-    table: 'labor_burden_rates',
+    key: 'overhead-rates',
+    table: 'overhead_rates',
     actorCols: true,
     groupKey: 'workforce',
     iconKey: 'percent',
@@ -885,7 +885,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     fields: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
       { key: 'category', kind: 'text' },
-      { key: 'method', kind: 'select', options: BURDEN_METHODS },
+      { key: 'method', kind: 'select', options: OVERHEAD_METHODS },
       { key: 'ratePercent', kind: 'percent', required: true },
       { key: 'effectiveFrom', kind: 'date', required: true },
       { key: 'effectiveTo', kind: 'date' },

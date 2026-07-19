@@ -20,8 +20,6 @@
   "costSource": "Source du coût réel",
   "costDimension": "Groupe de comptes de coûts",
   "laborSource": "Source du coût de main-d’œuvre",
-  "burdenSource": "Source des charges indirectes",
-  "burdenDimension": "Groupe de comptes de charges",
   "budgetSource": "Source du budget de coûts",
   "committedKinds": "Coût engagé depuis",
   "totalCostComponents": "Composantes du coût total",
@@ -43,5 +41,7 @@
     "subtotal": "Sous-total",
     "total": "Total"
   },
-  "help": "Documentation"
+  "help": "Documentation",
+  "overheadSource": "Source des frais généraux",
+  "overheadDimension": "Groupe de comptes de frais généraux"
 }

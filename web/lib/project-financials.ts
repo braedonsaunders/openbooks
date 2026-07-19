@@ -64,10 +64,10 @@ export async function resolveProjectFinancials(
   const markup = 1 + n(proj.markup_percent) / 100
   const costBudget = profile.costBudget.source === 'wbs_estimates' ? n(proj.cost_budget) : 0
 
-  // Account-id sets for account-group cost/burden sources.
-  const [costIds, burdenIds] = await Promise.all([
+  // Account-id sets for account-group cost/overhead sources.
+  const [costIds, overheadIds] = await Promise.all([
     groupAccountIds(orgId, profile.actualCost),
-    groupAccountIds(orgId, profile.burden),
+    groupAccountIds(orgId, profile.overhead),
   ])
 
   const invoiceKinds = profile.invoicedToDate.docKinds
@@ -75,7 +75,7 @@ export async function resolveProjectFinancials(
   const kindList = (ks: string[]) => sql.join(ks.map((k) => sql`${k}`), sql`, `)
   const committedKinds = profile.committedCost.docKinds
 
-  const [invRes, costRes, committedRes, unbilledTimeRes, unbilledLineRes, laborRes, burdenRes, byAccountRes, docRes] = await Promise.all([
+  const [invRes, costRes, committedRes, unbilledTimeRes, unbilledLineRes, laborRes, overheadRes, byAccountRes, docRes] = await Promise.all([
     // invoicedToDate — LINE-level tagging (dl.project_id); credits subtract.
     db.execute(sql`
       select coalesce(sum(dl.amount) filter (where d.kind in (${kindList(invoiceKinds)})), 0)
@@ -124,10 +124,10 @@ export async function resolveProjectFinancials(
         ? db.execute(sql`select coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as labor from time_entries te
              where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`)
         : db.execute(sql`select 0 as labor`),
-    // burden — posted GL to burden accounts.
-    profile.burden.source === 'none'
-      ? db.execute(sql`select 0 as burden`)
-      : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(profile.burden, burdenIds)}), 0) as burden
+    // overhead — posted GL to overhead accounts.
+    profile.overhead.source === 'none'
+      ? db.execute(sql`select 0 as overhead`)
+      : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(profile.overhead, overheadIds)}), 0) as overhead
            from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'`),
     // cost by account (for the breakdown subtab) — same cost predicate.
@@ -152,7 +152,7 @@ export async function resolveProjectFinancials(
   const revenuePosted = n(costRes.rows[0]?.revenue)
   const committedCost = n(committedRes.rows[0]?.committed)
   const laborCost = n(laborRes.rows[0]?.labor)
-  const burden = n(burdenRes.rows[0]?.burden)
+  const overhead = n(overheadRes.rows[0]?.overhead)
 
   // billable value: what's invoiceable across all work (time + cost lines).
   const unbTimeBill = profile.billableValue.includeUnbilledTime ? n(unbilledTimeRes.rows[0]?.bill) : 0
@@ -166,7 +166,7 @@ export async function resolveProjectFinancials(
 
   // total cost: only the configured components (labor stays inside actual_cost
   // unless split out, avoiding double count).
-  const componentSum: Record<string, number> = { actual_cost: actualCost, committed_cost: committedCost, labor_cost: profile.laborCost.source === 'in_actual_cost' ? 0 : laborCost, burden }
+  const componentSum: Record<string, number> = { actual_cost: actualCost, committed_cost: committedCost, labor_cost: profile.laborCost.source === 'in_actual_cost' ? 0 : laborCost, overhead }
   const totalCost = profile.totalCost.components.reduce((a, k) => a + (componentSum[k] ?? 0), 0)
 
   // total price by method.
@@ -191,7 +191,7 @@ export async function resolveProjectFinancials(
     revenue_posted: revenuePosted,
     actual_cost: actualCost,
     labor_cost: laborCost,
-    burden,
+    overhead,
     committed_cost: committedCost,
     billable_value: billableValue,
     unbilled_billable: unbilledBillable,
