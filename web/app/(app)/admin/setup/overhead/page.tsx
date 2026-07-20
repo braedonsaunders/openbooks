@@ -85,22 +85,28 @@ export default async function OverheadModelSetup() {
         </div>
       </div>
 
-      {/* Current configuration — which overhead policy each project type is
-          actually using, and the state of the published rate card. */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {t('setup.entities.overhead-model.current')}
-        </h3>
-        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-          {card.n > 0 && card.from_date
-            ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
-            : t('setup.entities.overhead-model.noRates')}
-        </p>
-        <div className="flex flex-wrap gap-2">
+      {/* Current configuration — one compact card: rate-card state + composite
+          context on a single line, then a chip per project type. */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('setup.entities.overhead-model.current')}
+          </h3>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {card.n > 0 && card.from_date
+              ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
+              : t('setup.entities.overhead-model.noRates')}
+          </span>
+          <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">${data.kpis.compositeRate.toFixed(2)}/hr</span>
+            {' · '}{Math.round(data.kpis.billedHours).toLocaleString('en-US')} hrs
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
           {typesRes.rows.map((r) => (
             <span
               key={r.id}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs dark:border-slate-700 dark:bg-slate-950"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950"
             >
               <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span>
               <span className="text-slate-400">·</span>

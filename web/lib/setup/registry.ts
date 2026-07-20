@@ -940,7 +940,6 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
     fields: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
-      { key: 'category', kind: 'text' },
       { key: 'rateKind', kind: 'select', options: OVERHEAD_RATE_KINDS },
       { key: 'ratePercent', kind: 'decimal', required: true },
       { key: 'effectiveFrom', kind: 'date', required: true },
