@@ -10,6 +10,7 @@ export {
   type RecordFlowsResult,
 } from "./run.ts";
 export { executeFlowPlan, type ExecuteFlowPlanResult } from "./execute.ts";
+export { submitForApproval, type SubmitResult } from "./submit.ts";
 export {
   decideGate,
   delegateGate,

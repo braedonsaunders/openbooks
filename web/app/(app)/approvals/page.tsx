@@ -2,7 +2,6 @@ import { inArray, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/db.ts'
-import { worklist } from '@openbooks/engine/src/approvals.ts'
 import { worklistGates, type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
 import {
   Badge,
@@ -30,8 +29,8 @@ import type { DelegateOption } from './GateActions'
 export const dynamic = 'force-dynamic'
 
 /**
- * Approval hub — three searchParam-driven tabs over BOTH engines (flow gates
- * + legacy policy steps):
+ * Approval hub — three searchParam-driven tabs over the Flows engine
+ * (flow gates):
  *
  *   • mine      — everything I can act on (direct, role, delegated-to-me),
  *                 with counts-by-kind chips, aging, and bulk approve/reject.
@@ -63,7 +62,6 @@ interface SubmittedRow {
   pendingWith: string | null
   waitingSince: string
   status: string
-  source: 'flow' | 'legacy'
 }
 
 function iso(d: unknown): string {
@@ -94,10 +92,7 @@ export default async function Approvals({
     KIND_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
 
   // ---- My approvals (always loaded: the tab label carries the count) -------
-  const [gates, legacyItems] = await Promise.all([
-    worklistGates(orgId, user.id),
-    worklist(orgId, user.role),
-  ])
+  const gates = await worklistGates(orgId, user.id)
 
   // Flow names for the gate rows (WorklistGate carries only flowId).
   const flowIds = [...new Set(gates.map((g) => g.flowId))]
@@ -110,29 +105,11 @@ export default async function Approvals({
     for (const r of rows) flowNames.set(r.id, r.name)
   }
 
-  // Policy name + requested-at for the legacy rows (worklist() omits both).
-  const requestIds = [...new Set(legacyItems.map((i: any) => String(i.request_id)))]
-  const requestMeta = new Map<string, { createdAt: string; policyName: string }>()
-  if (requestIds.length > 0) {
-    const r = (await db.execute(sql`
-      select r.id, r.created_at as "createdAt", pol.name
-        from approval_requests r
-        join approval_policies pol on pol.id = r.policy_id
-       where r.id in (select jsonb_array_elements_text(${JSON.stringify(requestIds)}::jsonb)::uuid)
-    `)) as unknown as { rows: { id: string; createdAt: Date; name: string }[] }
-    for (const row of r.rows) {
-      requestMeta.set(String(row.id), { createdAt: iso(row.createdAt), policyName: String(row.name) })
-    }
-  }
-
   const gateToRow = (g: WorklistGate, assignee: string | null): ApprovalRow => {
     const kind = g.document?.kind ?? g.subjectKind
     return {
       key: `gate:${g.id}`,
-      source: 'flow',
       gateId: g.id,
-      requestId: null,
-      stepNumber: null,
       documentNumber: g.document?.documentNumber ?? g.subjectId.slice(0, 8),
       kind,
       kindLabel: kindLabel(kind),
@@ -150,154 +127,75 @@ export default async function Approvals({
     }
   }
 
-  const legacyToRow = (i: any): ApprovalRow => {
-    const meta = requestMeta.get(String(i.request_id))
-    return {
-      key: `step:${i.step_id ?? `${i.request_id}:${i.step_number}`}`,
-      source: 'legacy',
-      gateId: null,
-      requestId: String(i.request_id),
-      stepNumber: Number(i.step_number),
-      documentNumber: String(i.document_number),
-      kind: String(i.kind),
-      kindLabel: kindLabel(String(i.kind)),
-      href: approvalRecordHref(String(i.kind), String(i.document_id)),
-      party: i.party ?? null,
-      amount: i.amount != null ? money(i.amount) : null,
-      approvalTitle: t('table.stepNumber', { number: String(i.step_number) }),
-      engineName: meta?.policyName ?? '',
-      requestedAt: meta?.createdAt ?? iso(i.document_date),
-      assignee: i.assignee ?? null,
-      canDelegate: false,
-      quorumAll: false,
-    }
-  }
-
-  const mineRows: ApprovalRow[] = [
-    ...gates.map((g) => gateToRow(g, null)),
-    ...legacyItems.map(legacyToRow),
-  ].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
+  const mineRows: ApprovalRow[] = gates
+    .map((g) => gateToRow(g, null))
+    .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
   const mineCount = mineRows.length
 
   // ---- All approvals (org-wide; only queried when the tab is open) ---------
   let allRows: ApprovalRow[] = []
   if (tab === 'all' && canSeeAll) {
-    const [gatesRes, legacyRes] = (await Promise.all([
-      db.execute(sql`
-        select g.id, g.flow_id as "flowId", g.title, g.quorum, g.created_at as "createdAt",
-               g.subject_kind as "subjectKind", g.subject_id as "subjectId",
-               g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
-               u.name as "assigneeName", f.name as "flowName",
-               d.document_number as "documentNumber", d.kind as "docKind", d.total,
-               p.display_name as "partyName"
-          from flow_gates g
-          join flows f on f.id = g.flow_id
-          left join users u on u.id = g.assignee_user_id
-          left join documents d on d.id = g.subject_id
-          left join parties p on p.id = d.party_id
-         where g.org_id = ${orgId} and g.status = 'pending'
-         order by g.created_at
-      `),
-      db.execute(sql`
-        select s.id as "stepId", s.step_number as "stepNumber", r.id as "requestId", r.amount,
-               r.created_at as "createdAt", pol.name as "policyName",
-               coalesce(ap.display_name, s.assignee_role) as "assignee",
-               d.id as "documentId", d.document_number as "documentNumber", d.kind,
-               p.display_name as "partyName"
-          from approval_steps s
-          join approval_requests r on r.id = s.request_id and r.status = 'pending'
-          join approval_policies pol on pol.id = r.policy_id
-          join documents d on d.id = r.target_id
-          left join parties p on p.id = d.party_id
-          left join parties ap on ap.id = s.assignee_party_id
-         where s.org_id = ${orgId} and s.decision = 'pending' and s.step_number = r.current_step
-         order by r.created_at
-      `),
-    ])) as unknown as { rows: Record<string, any>[] }[]
+    const gatesRes = (await db.execute(sql`
+      select g.id, g.flow_id as "flowId", g.title, g.quorum, g.created_at as "createdAt",
+             g.subject_kind as "subjectKind", g.subject_id as "subjectId",
+             g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
+             u.name as "assigneeName", f.name as "flowName",
+             d.document_number as "documentNumber", d.kind as "docKind", d.total,
+             p.display_name as "partyName"
+        from flow_gates g
+        join flows f on f.id = g.flow_id
+        left join users u on u.id = g.assignee_user_id
+        left join documents d on d.id = g.subject_id
+        left join parties p on p.id = d.party_id
+       where g.org_id = ${orgId} and g.status = 'pending'
+       order by g.created_at
+    `)) as unknown as { rows: Record<string, any>[] }
 
-    const gateRows: ApprovalRow[] = gatesRes.rows.map((g) => {
-      const kind = String(g.docKind ?? g.subjectKind)
-      return {
-        key: `gate:${g.id}`,
-        source: 'flow',
-        gateId: String(g.id),
-        requestId: null,
-        stepNumber: null,
-        documentNumber: g.documentNumber ? String(g.documentNumber) : String(g.subjectId).slice(0, 8),
-        kind,
-        kindLabel: kindLabel(kind),
-        href: approvalRecordHref(kind, String(g.subjectId)),
-        party: g.partyName ?? null,
-        amount: g.total != null ? money(g.total) : null,
-        approvalTitle: String(g.title),
-        engineName: String(g.flowName),
-        requestedAt: iso(g.createdAt),
-        assignee: g.assigneeName ?? g.assigneeRole ?? null,
-        canDelegate: isAdmin,
-        quorumAll: g.quorum === 'all',
-      }
-    })
-    const stepRows: ApprovalRow[] = legacyRes.rows.map((s) => ({
-      key: `step:${s.stepId}`,
-      source: 'legacy',
-      gateId: null,
-      requestId: String(s.requestId),
-      stepNumber: Number(s.stepNumber),
-      documentNumber: String(s.documentNumber),
-      kind: String(s.kind),
-      kindLabel: kindLabel(String(s.kind)),
-      href: approvalRecordHref(String(s.kind), String(s.documentId)),
-      party: s.partyName ?? null,
-      amount: s.amount != null ? money(s.amount) : null,
-      approvalTitle: t('table.stepNumber', { number: String(s.stepNumber) }),
-      engineName: String(s.policyName),
-      requestedAt: iso(s.createdAt),
-      assignee: s.assignee ?? null,
-      canDelegate: false,
-      quorumAll: false,
-    }))
-    allRows = [...gateRows, ...stepRows].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
+    allRows = gatesRes.rows
+      .map((g): ApprovalRow => {
+        const kind = String(g.docKind ?? g.subjectKind)
+        return {
+          key: `gate:${g.id}`,
+          gateId: String(g.id),
+          documentNumber: g.documentNumber ? String(g.documentNumber) : String(g.subjectId).slice(0, 8),
+          kind,
+          kindLabel: kindLabel(kind),
+          href: approvalRecordHref(kind, String(g.subjectId)),
+          party: g.partyName ?? null,
+          amount: g.total != null ? money(g.total) : null,
+          approvalTitle: String(g.title),
+          engineName: String(g.flowName),
+          requestedAt: iso(g.createdAt),
+          assignee: g.assigneeName ?? g.assigneeRole ?? null,
+          canDelegate: isAdmin,
+          quorumAll: g.quorum === 'all',
+        }
+      })
+      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
   }
 
   // ---- Submitted by me ------------------------------------------------------
   let submittedRows: SubmittedRow[] = []
   if (tab === 'submitted') {
-    const [flowRes, legacyRes] = (await Promise.all([
-      db.execute(sql`
-        select r.id as "runId", f.name as "flowName", d.id as "docId",
-               d.document_number as "documentNumber", d.kind, d.total,
-               d.status as "docStatus", p.display_name as "partyName",
-               min(g.created_at) as "waitingSince",
-               string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith"
-          from flow_runs r
-          join flows f on f.id = r.flow_id
-          join flow_gates g on g.run_id = r.id and g.status = 'pending'
-          join documents d on d.id = r.subject_id
-          left join parties p on p.id = d.party_id
-          left join users u on u.id = g.assignee_user_id
-         where r.org_id = ${orgId} and r.status = 'waiting' and d.created_by = ${user.id}
-         group by r.id, f.name, d.id, p.display_name
-         order by min(g.created_at)
-      `),
-      db.execute(sql`
-        select r.id as "requestId", pol.name as "policyName", d.id as "docId",
-               d.document_number as "documentNumber", d.kind, r.amount,
-               d.status as "docStatus", p.display_name as "partyName",
-               r.created_at as "waitingSince",
-               coalesce(ap.display_name, s.assignee_role) as "pendingWith"
-          from approval_requests r
-          join approval_policies pol on pol.id = r.policy_id
-          join documents d on d.id = r.target_id
-          left join parties p on p.id = d.party_id
-          join approval_steps s on s.request_id = r.id and s.step_number = r.current_step
-          left join parties ap on ap.id = s.assignee_party_id
-         where r.org_id = ${orgId} and r.status = 'pending' and r.submitted_by = ${user.id}
-         order by r.created_at
-      `),
-    ])) as unknown as { rows: Record<string, any>[] }[]
+    const flowRes = (await db.execute(sql`
+      select r.id as "runId", f.name as "flowName", d.id as "docId",
+             d.document_number as "documentNumber", d.kind, d.total,
+             d.status as "docStatus", p.display_name as "partyName",
+             min(g.created_at) as "waitingSince",
+             string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith"
+        from flow_runs r
+        join flows f on f.id = r.flow_id
+        join flow_gates g on g.run_id = r.id and g.status = 'pending'
+        join documents d on d.id = r.subject_id
+        left join parties p on p.id = d.party_id
+        left join users u on u.id = g.assignee_user_id
+       where r.org_id = ${orgId} and r.status = 'waiting' and d.created_by = ${user.id}
+       group by r.id, f.name, d.id, p.display_name
+       order by min(g.created_at)
+    `)) as unknown as { rows: Record<string, any>[] }
 
-    submittedRows = [
-      ...flowRes.rows.map(
+    submittedRows = flowRes.rows
+      .map(
         (r): SubmittedRow => ({
           key: `run:${r.runId}`,
           documentNumber: String(r.documentNumber),
@@ -309,25 +207,9 @@ export default async function Approvals({
           pendingWith: r.pendingWith ?? null,
           waitingSince: iso(r.waitingSince),
           status: String(r.docStatus),
-          source: 'flow',
         }),
-      ),
-      ...legacyRes.rows.map(
-        (r): SubmittedRow => ({
-          key: `req:${r.requestId}`,
-          documentNumber: String(r.documentNumber),
-          kind: String(r.kind),
-          href: approvalRecordHref(String(r.kind), String(r.docId)),
-          party: r.partyName ?? null,
-          amount: r.amount != null ? money(r.amount) : null,
-          engineName: String(r.policyName),
-          pendingWith: r.pendingWith ?? null,
-          waitingSince: iso(r.waitingSince),
-          status: String(r.docStatus),
-          source: 'legacy',
-        }),
-      ),
-    ].sort((a, b) => a.waitingSince.localeCompare(b.waitingSince))
+      )
+      .sort((a, b) => a.waitingSince.localeCompare(b.waitingSince))
   }
 
   // Delegate targets (row delegation + out-of-office picker).
@@ -476,12 +358,7 @@ export default async function Approvals({
                     <TableCell>{r.party}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.amount}</TableCell>
                     <TableCell>
-                      <span className="flex flex-col">
-                        <span className="text-slate-900 dark:text-slate-100">{r.engineName}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {r.source === 'flow' ? t('source.flow') : t('source.legacy')}
-                        </span>
-                      </span>
+                      <span className="text-slate-900 dark:text-slate-100">{r.engineName}</span>
                     </TableCell>
                     <TableCell>{r.pendingWith}</TableCell>
                     <TableCell className="text-slate-500 dark:text-slate-400">

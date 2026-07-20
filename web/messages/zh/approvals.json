@@ -23,10 +23,8 @@
     "kind": "类型",
     "step": "步骤",
     "decision": "决定",
-    "stepNumber": "步骤 {number}",
     "approval": "审批",
     "requested": "请求于",
-    "source": "来源",
     "assignee": "受理人",
     "pendingWith": "待处理人",
     "waitingSince": "等待自"
@@ -43,10 +41,6 @@
   "decide": {
     "rejectionReason": "驳回原因：",
     "decisionFailed": "决定失败"
-  },
-  "source": {
-    "flow": "流程",
-    "legacy": "策略"
   },
   "aging": {
     "days": "{days}天"

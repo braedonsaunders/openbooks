@@ -190,12 +190,6 @@ alter table items
   add foreign key (cost_recovery_account_id) references accounts(id);
 alter table overhead_rates add foreign key (department_id) references departments(id);
 
--- approvals
-alter table approval_requests add foreign key (policy_id) references approval_policies(id);
-alter table approval_steps
-  add foreign key (request_id) references approval_requests(id),
-  add foreign key (assignee_party_id) references parties(id);
-
 -- inventory
 alter table stock_locations
   add foreign key (location_id) references locations(id),

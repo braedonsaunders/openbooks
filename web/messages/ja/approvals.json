@@ -23,10 +23,8 @@
     "kind": "種別",
     "step": "ステップ",
     "decision": "判断",
-    "stepNumber": "ステップ {number}",
     "approval": "承認",
     "requested": "申請日",
-    "source": "ソース",
     "assignee": "担当者",
     "pendingWith": "承認待ちの担当者",
     "waitingSince": "待機開始日"
@@ -43,10 +41,6 @@
   "decide": {
     "rejectionReason": "却下理由:",
     "decisionFailed": "判断に失敗しました"
-  },
-  "source": {
-    "flow": "フロー",
-    "legacy": "ポリシー"
   },
   "aging": {
     "days": "{days}日"

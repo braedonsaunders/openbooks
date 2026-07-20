@@ -49,7 +49,7 @@ AssigneeTarget / RecipientTarget: `user` (id), `role`, `submitter`, `supervisor`
 ## Execution model
 
 Record-event flows run in-process at the same hook sites as `runTriggerScripts`
-(`engine/src/approvals.ts` submit, `engine/src/posting.ts` before/after post,
+(`engine/src/flows/submit.ts` submit, `engine/src/posting.ts` before/after post,
 `engine/src/payments.ts` void). Each execution creates a `flow_runs` row; every
 completed action/gate writes a `flow_run_effects` checkpoint keyed
 `${flowId}:action:${nodeId}` so re-execution after a failure resumes where it
@@ -60,10 +60,11 @@ off the existing 60s scheduler tick using worker-safe actions only
 (email/notify — no gates), enforced by an author-time lint.
 
 Document interplay: `on_submit` flows that produce gates put the document in
-`pending_approval`; the approve branch typically carries a
-`change_status: approved` action. If no enabled flow matches a document's
-submit, the legacy `approval_policies` engine (`engine/src/approvals.ts`) is
-the fallback, so existing behavior is preserved.
+`pending_approval`; the approve branch carries a `change_status: approved`
+action that releases it. Flows own approvals outright — there is no separate
+approval engine. When no enabled flow gates a submit, the web layer decides:
+direct-post kinds and credit memos proceed to `approved`, while kinds that
+require approval surface "no approval flow is configured" until one is authored.
 
 Permissions: `flows.manage` (author/admin), `flows.approve` (act on gates —
 assignees can always act on their own). Nav: Flows under Settings/Build;

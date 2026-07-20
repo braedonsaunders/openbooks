@@ -23,10 +23,8 @@
     "kind": "Kind",
     "step": "Step",
     "decision": "Decision",
-    "stepNumber": "step {number}",
     "approval": "Approval",
     "requested": "Requested",
-    "source": "Source",
     "assignee": "Assignee",
     "pendingWith": "Pending with",
     "waitingSince": "Waiting since"
@@ -43,10 +41,6 @@
   "decide": {
     "rejectionReason": "Rejection reason:",
     "decisionFailed": "Decision failed"
-  },
-  "source": {
-    "flow": "Flow",
-    "legacy": "Policy"
   },
   "aging": {
     "days": "{days}d"

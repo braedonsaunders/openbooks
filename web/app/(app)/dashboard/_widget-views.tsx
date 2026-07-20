@@ -37,7 +37,7 @@ export function WidgetCard({
     case 'kpi-entries-today':
       return <MetricTile icon={<FileText size={15} />} label={t('widgets.entriesToday')} value={String(data.entriesToday)} href="/journal" tone="teal" hint={t('metricContext.today')} />
     case 'kpi-pending-approvals':
-      return <MetricTile icon={<ClipboardList size={15} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/approvals" tone="amber" hint={t('metricContext.awaitingDecision')} />
+      return <MetricTile icon={<ClipboardList size={15} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/approvals?tab=all" tone="amber" hint={t('metricContext.awaitingDecision')} />
     case 'kpi-ledger-balance':
       return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, symbol)} href="/journal" tone="slate" />
     case 'kpi-cash-balance':
@@ -53,7 +53,7 @@ export function WidgetCard({
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':
-      return <PendingApprovalsList approvals={data.pendingApprovalList} />
+      return <PendingApprovalsList approvals={data.pendingApprovalList} href="/approvals?tab=all" />
     case 'personal-in-progress':
       return <InProgressList documents={data.draftDocuments} />
     case 'personal-inbox':
@@ -91,7 +91,7 @@ function CardShell({
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       {href ? <Link href={href}>{header}</Link> : header}
-      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
     </div>
   )
 }
@@ -219,11 +219,16 @@ function RecentEntriesList({
 function PendingApprovalsList({
   approvals,
   title,
+  href = '/approvals',
 }: {
   approvals: DashboardMetrics['pendingApprovalList']
   title?: string
+  href?: string
 }) {
   const t = useTranslations('dashboard')
+  const ta = useTranslations('approvals')
+  const kindLabel = (kind: string) =>
+    ta.has(`kinds.${kind}` as never) ? ta(`kinds.${kind}` as never) : kind.replace(/_/g, ' ')
   if (approvals.length === 0) {
     return (
       <CardShell title={title ?? t('widgets.pendingApprovalsList')} icon={<ClipboardList size={14} />}>
@@ -232,20 +237,20 @@ function PendingApprovalsList({
     )
   }
   return (
-    <CardShell title={title ?? t('widgets.pendingApprovalsList')} icon={<ClipboardList size={14} />} href="/approvals">
+    <CardShell title={title ?? t('widgets.pendingApprovalsList')} icon={<ClipboardList size={14} />} href={href}>
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
         {approvals.map((a) => (
           <li key={a.id}>
             <Link
-              href="/approvals"
+              href={href}
               className="flex items-center justify-between gap-2 px-4 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                    {a.targetKind}
+                  <span className="truncate text-sm font-medium capitalize text-slate-800 dark:text-slate-100">
+                    {kindLabel(a.targetKind)}
                   </span>
-                  <Badge variant="warning">Step {a.currentStep}</Badge>
+                  {a.title ? <Badge variant="warning">{a.title}</Badge> : null}
                 </div>
                 <div className="truncate text-xs text-slate-500 dark:text-slate-400">
                   {new Date(a.createdAt).toLocaleDateString()}
@@ -270,6 +275,9 @@ function InProgressList({
   documents: DashboardMetrics['draftDocuments']
 }) {
   const t = useTranslations('dashboard')
+  const ta = useTranslations('approvals')
+  const kindLabel = (kind: string) =>
+    ta.has(`kinds.${kind}` as never) ? ta(`kinds.${kind}` as never) : kind.replace(/_/g, ' ')
   if (documents.length === 0) {
     return (
       <CardShell title={t('widgets.inProgress')} icon={<FileText size={14} />}>
@@ -291,7 +299,7 @@ function InProgressList({
                   <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                     {d.documentNumber}
                   </span>
-                  <Badge variant="outline">{d.kind}</Badge>
+                  <Badge variant="outline" className="capitalize">{kindLabel(d.kind)}</Badge>
                 </div>
                 <div className="truncate text-xs text-slate-500 dark:text-slate-400">
                   {d.documentDate}

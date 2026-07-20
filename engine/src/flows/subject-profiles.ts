@@ -4,7 +4,7 @@ import type { FlowFieldDef, FlowSubjectProfile } from "@openbooks/forms-core";
  * FlowSubjectProfiles for document kinds — the author-time vocabulary the
  * builder UI renders against and `lintAutomationGraph` enforces. One generic
  * documents profile parameterized by kind: every document kind shares the
- * supertype's lifecycle, header fields, and hook sites (approvals.ts submit,
+ * supertype's lifecycle, header fields, and hook sites (flows/submit.ts submit,
  * posting.ts before/after post, payments.ts void), so the profiles differ
  * only in label and, for non-posting kinds, the post_document action.
  *

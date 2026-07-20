@@ -20,11 +20,9 @@ import { auditColumns, id, orgRef } from "./helpers";
  * notifications is the in-app inbox the `notify` action (and gate
  * reminders/escalations) write to.
  *
- * Relationship to the legacy approval_* tables (approvals.ts): flows SUBSUME
- * them. A submit that matches an enabled flow routes through gates here; when
- * no flow matches, the approval_policies engine remains the fallback, so
- * existing behavior is preserved. approval_* stays until flows fully replace
- * it.
+ * Flows own approvals outright: a submit fires the record's on_submit flows
+ * (engine/src/flows/submit.ts), and a flow that produces gates flips the
+ * document to pending_approval. There is no separate approval engine.
  *
  *   flows
  *     └─ flow_runs            (one per trigger firing; run history)

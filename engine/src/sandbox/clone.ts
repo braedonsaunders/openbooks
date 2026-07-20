@@ -57,7 +57,6 @@ export const CUSTOMIZATION_LAYER = new Set([
   "user_permission_overrides",
   "user_dashboard_layouts",
   "role_dashboard_layouts",
-  "approval_policies",
   "account_groups",
   "account_group_members",
   "users",

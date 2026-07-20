@@ -24,10 +24,11 @@ import {
 type DocRow = typeof schema.documents.$inferSelect;
 
 /**
- * Legal change_status transitions for flows. Mirrors what the existing
- * engines do today: submit flips draft → pending_approval (approvals.ts),
- * approve/reject flips pending_approval → approved | draft (approvals.ts
- * decide), and posting/voiding are PIPELINES (posting.ts / payments.ts), not
+ * Legal change_status transitions for flows. submit flips draft →
+ * pending_approval (flows/submit.ts); a gate decision resumes the run, and the
+ * flow's change_status action on the approve/reject branch flips
+ * pending_approval → approved | draft; posting/voiding are PIPELINES
+ * (posting.ts / payments.ts), not
  * bare status writes — a flow reaches 'posted' via the post_document action,
  * never via change_status.
  */

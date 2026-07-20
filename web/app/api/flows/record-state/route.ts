@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgContext } from '@openbooks/engine/src/db.ts'
 import { getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
 import { userRoleKeys } from '@openbooks/engine/src/flows/targets.ts'
-import { getAuthz, can } from '../../../../lib/authz'
+import { getAuthz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -11,36 +11,23 @@ export const runtime = 'nodejs'
 /**
  * Record-level approval state for the document flyout (NetSuite-parity
  * approval UX): who the record is pending with, whether THIS viewer can
- * decide, and a merged chronological approval history — flow_runs +
- * flow_gates (the flows engine) fused with the legacy
- * approval_requests/approval_steps fallback for the same target.
+ * decide, and a chronological approval history — all from the Flows engine
+ * (flow_runs + flow_gates).
  *
  *   GET ?subjectKind=&subjectId= →
  *     {
  *       approvalState: {
  *         status,                                  // document status
- *         pendingWith: [{ name, gateId?, legacy?, since }],
- *         myActions: { gateId?, legacyStep? } | null
+ *         pendingWith: [{ name, gateId, since }],
+ *         myActions: { gateId } | null
  *       },
- *       history: [{ id, type, actor, comment, at, title?, legacy?, delegated? }]
+ *       history: [{ id, type, actor, comment, at, title?, delegated? }]
  *     }
  *
- * myActions mirrors the two decide endpoints' authorization exactly:
- *   • flow gate (engine gates.ts canActOnGate): the row's assignee, a holder
- *     of its assigneeRole, or an org admin;
- *   • legacy step (api/approvals/decide): the kind's approve permission, plus
- *     the step must plausibly be the viewer's (role match / party match /
- *     admin) so we don't paint approve buttons for bystanders who merely hold
- *     the permission.
+ * myActions mirrors the decide endpoint's authorization exactly (engine
+ * gates.ts canActOnGate): the row's assignee, a holder of its assigneeRole,
+ * or an org admin.
  */
-
-// Mirrors web/app/api/approvals/decide/route.ts APPROVE_PERMISSION — the
-// legacy decide endpoint's kind → permission gate.
-const LEGACY_APPROVE_PERMISSION: Record<string, string> = {
-  vendor_bill: 'ap.approve',
-  expense_report: 'ap.approve',
-  customer_invoice: 'ar.approve',
-}
 
 export type ApprovalEventType =
   | 'submitted'
@@ -53,7 +40,6 @@ export type ApprovalEventType =
 export interface PendingWithEntry {
   name: string
   gateId?: string
-  legacy?: boolean
   /** ISO timestamp the assignment has been waiting since. */
   since: string
 }
@@ -66,10 +52,9 @@ export interface ApprovalHistoryEntry {
   comment: string | null
   /** ISO timestamp. */
   at: string
-  /** Gate title / step label, when there is one. */
+  /** Gate title, when there is one. */
   title?: string
-  legacy?: boolean
-  /** Legacy step decided by a delegate. */
+  /** Gate decided by a delegate. */
   delegated?: boolean
 }
 
@@ -79,7 +64,6 @@ export interface RecordApprovalState {
     pendingWith: PendingWithEntry[]
     myActions: {
       gateId?: string
-      legacyStep?: { requestId: string; stepNumber: number }
     } | null
   }
   history: ApprovalHistoryEntry[]
@@ -116,7 +100,7 @@ export async function GET(req: Request) {
   const status = await withOrgContext(orgId, () => adapter.getStatus(subjectId))
   if (status === null) return NextResponse.json({ error: 'record not found' }, { status: 404 })
 
-  const [gates, runs, legacyRequests, roleRows, viewerRow, viewerRoles] = await Promise.all([
+  const [gates, runs, roleRows, viewerRoles] = await Promise.all([
     db.execute(sql`
       select g.id, g.status, g.title, g.comment,
              g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
@@ -138,27 +122,8 @@ export async function GET(req: Request) {
        order by r.started_at
     `) as unknown as Promise<Rows<Record<string, unknown>>>,
     db.execute(sql`
-      select r.id, r.status, r.current_step as "currentStep", r.created_at as "createdAt",
-             u.name as "submitterName",
-             s.id as "stepId", s.step_number as "stepNumber", s.decision,
-             s.assignee_role as "stepRole", s.decided_at as "decidedAt",
-             s.note, s.is_delegated as "isDelegated", s.created_at as "stepCreatedAt",
-             ap.display_name as "assigneePartyName", s.assignee_party_id as "assigneePartyId",
-             du.name as "deciderName"
-        from approval_requests r
-        left join users u on u.id = r.submitted_by
-        join approval_steps s on s.request_id = r.id
-        left join parties ap on ap.id = s.assignee_party_id
-        left join users du on du.id = s.decided_by
-       where r.org_id = ${orgId} and r.target_kind = ${subjectKind} and r.target_id = ${subjectId}
-       order by r.created_at, s.step_number
-    `) as unknown as Promise<Rows<Record<string, unknown>>>,
-    db.execute(sql`
       select key, name from app_roles where org_id = ${orgId}
     `) as unknown as Promise<Rows<{ key: string; name: string }>>,
-    db.execute(sql`
-      select party_id as "partyId" from users where id = ${authz.user.id}
-    `) as unknown as Promise<Rows<{ partyId: string | null }>>,
     userRoleKeys(orgId, authz.user.id),
   ])
 
@@ -166,7 +131,6 @@ export async function GET(req: Request) {
     if (!key) return null
     return roleRows.rows.find((r) => r.key === key)?.name ?? key
   }
-  const viewerPartyId = viewerRow.rows[0]?.partyId ?? null
   const isAdmin = viewerRoles.has('admin')
 
   // --- pendingWith + myActions ---------------------------------------------
@@ -183,27 +147,6 @@ export async function GET(req: Request) {
       isAdmin ||
       (!!g.assigneeRole && viewerRoles.has(String(g.assigneeRole)))
     if (mine && !myActions.gateId) myActions.gateId = String(g.id)
-  }
-
-  for (const s of legacyRequests.rows) {
-    if (s.status !== 'pending' || s.decision !== 'pending') continue
-    if (Number(s.stepNumber) !== Number(s.currentStep)) continue
-    const name =
-      (s.assigneePartyName as string | null) ?? roleLabel(s.stepRole as string | null) ?? '—'
-    pendingWith.push({
-      name,
-      legacy: true,
-      since: iso(s.stepCreatedAt ?? s.createdAt),
-    })
-    const perm = LEGACY_APPROVE_PERMISSION[subjectKind] ?? 'ap.approve'
-    const mine =
-      can(authz, perm) &&
-      (isAdmin ||
-        (!!s.stepRole && viewerRoles.has(String(s.stepRole))) ||
-        (!!s.assigneePartyId && s.assigneePartyId === viewerPartyId))
-    if (mine && !myActions.legacyStep) {
-      myActions.legacyStep = { requestId: String(s.id), stepNumber: Number(s.stepNumber) }
-    }
   }
 
   // --- history --------------------------------------------------------------
@@ -266,42 +209,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const seenRequests = new Set<string>()
-  for (const s of legacyRequests.rows) {
-    if (!seenRequests.has(String(s.id))) {
-      seenRequests.add(String(s.id))
-      history.push({
-        id: `req:${s.id}`,
-        type: 'submitted',
-        actor: (s.submitterName as string | null) ?? null,
-        comment: null,
-        at: iso(s.createdAt),
-        legacy: true,
-      })
-    }
-    if (s.decision === 'approved' || s.decision === 'rejected') {
-      history.push({
-        id: `step:${s.stepId}`,
-        type: s.decision,
-        actor:
-          (s.deciderName as string | null) ??
-          (s.assigneePartyName as string | null) ??
-          roleLabel(s.stepRole as string | null),
-        comment: (s.note as string | null) ?? null,
-        at: iso(s.decidedAt),
-        legacy: true,
-        delegated: s.isDelegated === true,
-      })
-    }
-  }
-
   history.sort((a, b) => a.at.localeCompare(b.at))
 
   const body: RecordApprovalState = {
     approvalState: {
       status,
       pendingWith,
-      myActions: myActions.gateId || myActions.legacyStep ? myActions : null,
+      myActions: myActions.gateId ? myActions : null,
     },
     history,
   }
