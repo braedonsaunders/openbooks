@@ -170,7 +170,7 @@ function ConditionRow({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Select className="h-8 min-w-[10rem]" value={condition.field} onChange={(e) => changeField(e.target.value)}>
+      <Select className="h-8 w-full sm:w-44" value={condition.field} onChange={(e) => changeField(e.target.value)}>
         {catalog.map((f) => (
           <option key={f.key} value={f.key}>
             {f.label}
@@ -178,7 +178,7 @@ function ConditionRow({
         ))}
       </Select>
       <Select
-        className="h-8 min-w-[9rem]"
+        className="h-8 w-full sm:w-40"
         value={condition.op}
         onChange={(e) => onChange({ ...condition, op: e.target.value, value: condition.value })}
       >

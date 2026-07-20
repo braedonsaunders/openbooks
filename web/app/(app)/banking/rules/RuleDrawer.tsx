@@ -189,7 +189,14 @@ export function RuleDrawer({
   const [partyId, setPartyId] = useState(initial.partyId)
   const [memo, setMemo] = useState(initial.memo)
   const [previewAccount, setPreviewAccount] = useState(reconAccounts[0]?.id ?? '')
+  const [scopeOpen, setScopeOpen] = useState(initial.accountScope.length > 0)
+  const [scopeFilter, setScopeFilter] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const scopeMatches = useMemo(
+    () => (scopeFilter ? reconAccounts.filter((a) => a.label.toLowerCase().includes(scopeFilter.toLowerCase())) : reconAccounts),
+    [reconAccounts, scopeFilter],
+  )
 
   const closeHref = '/banking/rules'
 
@@ -257,7 +264,7 @@ export function RuleDrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
-      size="xl"
+      size="2xl"
       title={creating ? t('newTitle') : rule!.name}
       description={t('drawerDescription')}
       headerActions={
@@ -284,9 +291,9 @@ export function RuleDrawer({
         </label>
       }
     >
-      <div className="grid gap-5 p-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid gap-6 p-1 lg:grid-cols-[minmax(0,1fr)_19rem]">
         {/* ---- builder column ---- */}
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-2">
               <Label>{tCommon('labels.name')}</Label>
@@ -299,28 +306,61 @@ export function RuleDrawer({
           </div>
 
           <div className="space-y-1.5">
-            <Label>{t('scope.label')}</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {reconAccounts.map((a) => {
-                const on = scope.includes(a.id)
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setScope((s) => (on ? s.filter((x) => x !== a.id) : [...s, a.id]))}
-                    className={cn(
-                      'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
-                      on
-                        ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
-                        : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300',
-                    )}
-                  >
-                    {a.label}
-                  </button>
-                )
-              })}
+            <div className="flex items-center justify-between gap-2">
+              <Label className="mb-0">{t('scope.label')}</Label>
+              <button
+                type="button"
+                onClick={() => {
+                  if (scopeOpen) setScope([])
+                  setScopeOpen((v) => !v)
+                }}
+                className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+              >
+                {scopeOpen ? t('scope.useAll') : t('scope.limit')}
+              </button>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{scope.length === 0 ? t('scope.allHint') : t('scope.someHint', { count: scope.length })}</p>
+            {!scopeOpen ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('scope.allHint')}</p>
+            ) : (
+              <div className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Input
+                    className="h-8 flex-1"
+                    value={scopeFilter}
+                    onChange={(e) => setScopeFilter(e.target.value)}
+                    placeholder={t('scope.search')}
+                  />
+                  <span className="shrink-0 text-xs text-slate-500 tabular-nums dark:text-slate-400">
+                    {t('scope.selected', { count: scope.length })}
+                  </span>
+                </div>
+                <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                  {scopeMatches.map((a) => {
+                    const on = scope.includes(a.id)
+                    return (
+                      <label
+                        key={a.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() => setScope((s) => (on ? s.filter((x) => x !== a.id) : [...s, a.id]))}
+                          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        <span className="truncate text-slate-700 dark:text-slate-200">{a.label}</span>
+                      </label>
+                    )
+                  })}
+                  {scopeMatches.length === 0 ? (
+                    <p className="px-1.5 py-2 text-xs text-slate-400 dark:text-slate-500">{t('scope.noneFound')}</p>
+                  ) : null}
+                </div>
+                {scope.length === 0 ? (
+                  <p className="px-1 text-xs text-amber-600 dark:text-amber-400">{t('scope.emptyWarn')}</p>
+                ) : null}
+              </div>
+            )}
           </div>
 
           <fieldset className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
@@ -400,8 +440,8 @@ export function RuleDrawer({
         </div>
 
         {/* ---- live preview column ---- */}
-        <div className="space-y-2">
-          <div className="rounded-xl border border-teal-200 p-3 dark:border-teal-900/60">
+        <div className="space-y-2 lg:sticky lg:top-1 lg:self-start">
+          <div className="rounded-xl border border-teal-200 bg-teal-50/30 p-3 dark:border-teal-900/60 dark:bg-teal-950/20">
             <div className="mb-2 flex items-center gap-1.5">
               <Eye size={14} className="text-teal-600 dark:text-teal-400" />
               <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('preview.title')}</span>
@@ -417,6 +457,8 @@ export function RuleDrawer({
             </div>
             {!previewAccount ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('preview.pickAccountHint')}</p>
+            ) : group.rules.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('preview.needCondition')}</p>
             ) : (
               <LivePreview<PreviewData>
                 deps={[previewAccount, JSON.stringify(draftBody.criteria), JSON.stringify(draftBody.outcome), priority]}
