@@ -11,10 +11,26 @@ export const runtime = "nodejs";
  * Cash Flow forecast categories — the openbooks port of Gantry's category
  * config CRUD. Stored as an array at orgs.settings.analytics.cashflowCategories.
  * PUT replaces the whole list (the editor sends the full state); each entry is
- * validated per method and unknown fields are dropped.
+ * validated per method (ALL SEVEN Gantry strategies) and unknown fields are
+ * dropped.
  */
-const METHODS = new Set(["gl_history_average", "vendor_payment_history", "manual_recurring"]);
-const FREQUENCIES = new Set(["weekly", "biweekly", "monthly"]);
+const METHODS = new Set([
+  "gl_history_average",
+  "vendor_payment_history",
+  "credit_card_cycle",
+  "manual_recurring",
+  "formula_expression",
+  "vendor_recurring_average",
+  "bank_register_history",
+]);
+const FREQUENCIES = new Set(["weekly", "biweekly", "bi_weekly", "monthly"]);
+
+const strList = (v: unknown, max: number): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x).slice(0, max) : [];
+const clampNum = (v: unknown, min: number, max: number, dflt: number): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : dflt;
+};
 
 function clean(raw: unknown): ForecastCategory | null {
   if (!raw || typeof raw !== "object") return null;
@@ -29,19 +45,56 @@ function clean(raw: unknown): ForecastCategory | null {
     direction,
     method: method as ForecastCategory["method"],
   };
+
+  // Shared placement + adjustment knobs (getProrationFactor inputs).
+  const day = Number(c.expectedDay);
+  if (c.expectedDay !== "" && c.expectedDay !== null && c.expectedDay !== undefined && Number.isInteger(day) && day >= 0 && day <= 6) {
+    out.expectedDay = day;
+  }
+  const wk = Number(c.expectedWeek);
+  if (c.expectedWeek !== "" && c.expectedWeek !== null && c.expectedWeek !== undefined && Number.isInteger(wk) && wk >= 1 && wk <= 4) {
+    out.expectedWeek = wk;
+  }
+  const adj = Number(c.adjustmentPct);
+  if (Number.isFinite(adj) && adj !== 0) out.adjustmentPct = Math.min(200, Math.max(-90, adj));
+
   if (method === "gl_history_average") {
-    const ids = Array.isArray(c.accountIds) ? c.accountIds.filter((x) => typeof x === "string").slice(0, 50) : [];
+    const ids = strList(c.accountIds, 50);
     if (!ids.length) return null;
-    out.accountIds = ids as string[];
-    const hw = Number(c.historyWeeks);
-    out.historyWeeks = Number.isFinite(hw) ? Math.min(52, Math.max(1, Math.round(hw))) : 12;
-    const adj = Number(c.adjustmentPct);
-    out.adjustmentPct = Number.isFinite(adj) ? Math.min(200, Math.max(-90, adj)) : 0;
-  } else if (method === "vendor_payment_history") {
-    if (typeof c.partyId !== "string" || !c.partyId) return null;
-    out.partyId = c.partyId;
+    out.accountIds = ids;
+    out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
+    if (c.useNetAmt === true) out.useNetAmt = true;
+  } else if (method === "vendor_payment_history" || method === "vendor_recurring_average") {
+    const ids = strList(c.partyIds, 50);
+    if (!ids.length && typeof c.partyId === "string" && c.partyId) ids.push(c.partyId);
+    if (!ids.length) return null;
+    out.partyIds = ids;
+    out.partyId = ids[0];
     out.partyName = typeof c.partyName === "string" ? c.partyName.slice(0, 120) : undefined;
+    out.historyMonths = clampNum(c.historyMonths, 1, 36, method === "vendor_recurring_average" ? 3 : 12);
+  } else if (method === "credit_card_cycle") {
+    const ids = strList(c.cardAccountIds, 20).length ? strList(c.cardAccountIds, 20) : strList(c.accountIds, 20);
+    if (!ids.length) return null;
+    out.cardAccountIds = ids;
+    out.historyMonths = clampNum(c.historyMonths, 1, 24, 6);
+    const threshold = Number(c.significantPaymentThreshold);
+    if (Number.isFinite(threshold) && threshold > 0) out.significantPaymentThreshold = Math.min(1e9, threshold);
+  } else if (method === "formula_expression") {
+    const formula = typeof c.formula === "string" ? c.formula.trim().slice(0, 500) : "";
+    if (!formula) return null;
+    out.formula = formula;
+  } else if (method === "bank_register_history") {
+    const ids = strList(c.bankAccountIds, 20);
+    if (!ids.length) return null;
+    out.bankAccountIds = ids;
+    out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
+    const keywords = strList(c.memoKeywords, 10).map((k) => k.trim().slice(0, 40)).filter(Boolean);
+    if (keywords.length) out.memoKeywords = keywords;
+    if (c.includeTransfers === false) out.includeTransfers = false;
+    if (c.includeChecks === false) out.includeChecks = false;
+    if (c.includeJournals === true) out.includeJournals = true;
   } else {
+    // manual_recurring
     const amount = Number(c.amount);
     if (!Number.isFinite(amount) || amount <= 0) return null;
     out.amount = Math.min(1e9, amount);

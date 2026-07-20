@@ -152,9 +152,10 @@ export interface CashPosition {
   /** Configured recurring forecast flows, per-week — powers the drill + config. */
   categories: CategoryWeekly[];
   apSettings: ApSettings;
-  /** Distinct vendors on open AP — the category editor's vendor picker. */
+  /** Vendors with open AP or payment history — the category editor's picker. */
   vendorOptions: { id: string; name: string }[];
-  accountOptions: { id: string; number: string | null; name: string }[];
+  /** All postable accounts with their type — the editor filters GL / card / bank. */
+  accountOptions: { id: string; number: string | null; name: string; type: string }[];
 }
 
 /**
@@ -172,7 +173,7 @@ export async function cashPosition(
   const asOfIso = resolveAsOf(asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows] = await Promise.all([
     openItems("ar", asOfIso),
     openItems("ap", asOfIso),
     paymentStats("ar", asOfIso),
@@ -180,18 +181,29 @@ export async function cashPosition(
     bankBalances(asOfIso),
     loadCategories(orgId),
     db.execute(sql`
-      select id, number, name from accounts
+      select id, number, name, type from accounts
       where org_id = ${orgId} and is_summary = false
       order by number nulls last, name
     `) as Promise<any>,
+    db.execute(sql`
+      select distinct p.id, p.display_name as name
+      from parties p
+      join documents d on d.party_id = p.id and d.org_id = ${orgId} and d.voided_at is null
+       and d.kind in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')
+      where p.org_id = ${orgId}
+      order by 2
+    `) as Promise<any>,
   ]);
-  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts)));
 
   const startingCash = banks.reduce((a, b) => a + b.balance, 0);
   const arOutstanding = arItems.reduce((a, i) => a + i.remaining, 0);
   const apOutstanding = apItems.reduce((a, i) => a + i.remaining, 0);
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
+  const weekTotals = (byWeek: Map<string, { amount: number }[]>): Record<string, number> =>
+    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, es.reduce((a, e) => a + e.amount, 0)]));
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash };
+  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,
@@ -241,7 +253,7 @@ export async function cashPosition(
     arCoverage: apOutstanding > 0 ? (startingCash + arOutstanding) / apOutstanding : null,
     categories,
     apSettings,
-    vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
-    accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
+    vendorOptions: (vendorRows.rows as any[]).map((v) => ({ id: v.id, name: v.name })),
+    accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
   };
 }

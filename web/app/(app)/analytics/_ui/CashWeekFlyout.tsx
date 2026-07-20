@@ -38,8 +38,26 @@ type TabKey = 'ar' | 'ap' | `cat:${string}`
 const CAT_METHOD_TONE: Record<string, string> = {
   'GL Average': 'text-sky-600 dark:text-sky-400',
   'Vendor History (Median)': 'text-violet-600 dark:text-violet-400',
+  'Credit Card Cycle': 'text-pink-600 dark:text-pink-400',
   'Manual Recurring': 'text-emerald-600 dark:text-emerald-400',
+  'Vendor Recurring (Auto)': 'text-amber-600 dark:text-amber-400',
+  'Bank Register History': 'text-cyan-600 dark:text-cyan-400',
+  'Calculated Formula': 'text-indigo-600 dark:text-indigo-400',
 }
+
+/** Human labels for the meta stats behind each estimate. */
+const META_LABELS: Record<string, string> = {
+  sourceTotal: 'Source total', weeksUsed: 'Weeks used', rawAverage: 'Raw avg', adjustmentPct: 'Adjustment %',
+  finalAverage: 'Weekly avg', monthlyMedian: 'Monthly median', finalWeekly: 'Weekly est', vendors: 'Vendors',
+  vendor: 'Vendor', amount: 'Amount', frequency: 'Frequency', detectedPaymentDay: 'Pays on day',
+  medianPayment: 'Median payment', avgPayment: 'Avg payment', currentBalance: 'Card balance',
+  daysSinceLastPayment: 'Days since paid', dailyBurnRate: 'Daily burn', monthlySpendRate: 'Monthly spend',
+  paymentTrend: 'Trend', monthsAnalyzed: 'Months analyzed', accountsIncluded: 'Accounts',
+  nextPaymentDate: 'Next payment', projectedGrowth: 'Projected growth', samples: 'Samples',
+  interval: 'Interval (days)', avgAmount: 'Avg amount', bankAccounts: 'Bank accounts',
+  historyWeeks: 'History weeks', currentWeekApplied: 'Applied this week', memoKeywords: 'Memo filter',
+}
+const MONEYISH = new Set(['sourceTotal','rawAverage','finalAverage','monthlyMedian','finalWeekly','amount','medianPayment','avgPayment','currentBalance','dailyBurnRate','monthlySpendRate','projectedGrowth','avgAmount','currentWeekApplied'])
 
 /**
  * Per-week cash drill at the legacy Gantry dashboard's full fidelity: KPI
@@ -413,6 +431,17 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
         <List size={11} />
         {cat.logic || '—'}
       </p>
+      {Object.keys(cat.meta).filter((k) => k !== 'method' && k !== 'formula').length ? (
+        <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+          {Object.entries(cat.meta)
+            .filter(([k]) => k !== 'method' && k !== 'formula')
+            .map(([k, v]) => (
+              <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {META_LABELS[k] ?? k}: <span className="font-semibold tabular-nums">{typeof v === 'number' && MONEYISH.has(k) ? money(v) : String(v)}</span>
+              </span>
+            ))}
+        </div>
+      ) : null}
 
       {/* search */}
       <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
@@ -446,7 +475,10 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
             <tbody>
               {paged.map((r, i) => (
                 <tr key={`${r.name}-${r.date ?? ''}-${i}`} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                  <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-200">{r.name}</td>
+                  <td className="px-4 py-2.5">
+                    <span className="font-medium text-slate-700 dark:text-slate-200">{r.name}</span>
+                    {r.details ? <span className="block text-[11px] text-slate-400 dark:text-slate-500">{r.details}</span> : null}
+                  </td>
                   <td className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{r.date ? fmtDate(r.date) : '—'}</td>
                   <td className="px-3 py-2.5 text-center">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{r.type}</span>
