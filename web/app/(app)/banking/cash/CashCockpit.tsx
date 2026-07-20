@@ -11,43 +11,34 @@ import {
   ArrowLeftRight,
   CalendarRange,
   Building2,
-  Clock,
   SlidersHorizontal,
 } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
 import { money, moneyCompact } from '../../../../lib/format'
 import type { CashPosition } from '../../../../lib/cash/cash-position'
-import type { WeekRow } from '../../../../lib/cash/core'
 import { StatTile, CockpitPanel } from '../../../../components/cockpit/ui'
-import { CashWeekFlyout, type CategoryFlow } from '../../analytics/_ui/CashWeekFlyout'
-import { CashflowConfigDrawer } from '../../analytics/_ui/CashflowConfigDrawer'
+import { CashTimeline } from '../../analytics/_ui/CashTimeline'
+import { CashForecastConfigDrawer } from './CashForecastConfigDrawer'
 
 const HORIZONS = [4, 8, 12] as const
 
 /**
  * Cash control center — whole-company liquidity. Fit-to-height app surface:
- * vitals up top, the weekly cash timeline (each week drills into what flows in
- * and out) filling the height, bank accounts beside it. Horizon + full forecast
- * configuration (AP selection rule + recurring categories) are in reach.
- * Every number is rolled through the shared engine, so it agrees with the
- * analytics forecast and the AP planner to the penny.
+ * vitals up top, the FULL-fidelity weekly timeline (expandable weeks with
+ * AR/AP/category chips, deferred column, per-transaction flyout with entity
+ * drill) filling the height, bank accounts beside it. The forecast model
+ * (recurring categories + prediction settings) is configured here; the AP
+ * pay-selection rule lives on the AP cockpit. One shared engine everywhere.
  */
 export function CashCockpit({ data, canConfigure }: { data: CashPosition; canConfigure: boolean }) {
   const t = useTranslations('banking.cash')
   const router = useRouter()
-  const [flyout, setFlyout] = useState<WeekRow | null>(null)
   const [showConfig, setShowConfig] = useState(false)
 
   const runway = data.runwayWeeks === null ? '∞' : t('weeks', { n: data.runwayWeeks.toFixed(1) })
   const runwayTone = data.runwayStatus === 'critical' ? 'negative' : data.runwayStatus === 'caution' ? 'warning' : 'positive'
   const lowestDate = new Date(data.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-
-  const catFlowsFor = (w: WeekRow): CategoryFlow[] => {
-    const wi = data.weeks.indexOf(w)
-    return data.categories
-      .map((c) => ({ name: c.name, direction: c.direction, amount: c.weekly[wi] ?? 0 }))
-      .filter((c) => c.amount > 0)
-  }
+  const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -91,34 +82,21 @@ export function CashCockpit({ data, canConfigure }: { data: CashPosition; canCon
 
       {/* Timeline + bank accounts — fill remaining height, scroll internally */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
-        <CockpitPanel title={t('panels.timeline')} icon={CalendarRange} hint={t('panels.timelineHint', { weeks: data.horizonWeeks })} bodyClassName="min-h-0 overflow-hidden p-0" className="min-h-0 lg:col-span-2">
+        <CockpitPanel
+          title={t('panels.timeline')}
+          icon={CalendarRange}
+          hint={scheduling ? t('panels.timelineHintScheduled') : t('panels.timelineHint', { weeks: data.horizonWeeks })}
+          bodyClassName="min-h-0 overflow-hidden p-0"
+          className="min-h-0 lg:col-span-2"
+        >
           <div className="h-full overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('cols.week')}</th>
-                  <th className="px-3 py-2 text-right font-medium">{t('cols.in')}</th>
-                  <th className="px-3 py-2 text-right font-medium">{t('cols.out')}</th>
-                  <th className="px-3 py-2 text-right font-medium">{t('cols.net')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('cols.ending')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.weeks.map((w) => (
-                  <tr
-                    key={w.weekStart}
-                    onClick={() => setFlyout(w)}
-                    className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
-                  >
-                    <td className="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-200">{w.label}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{w.inflow > 0 ? moneyCompact(w.inflow) : '—'}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{w.outflow > 0 ? moneyCompact(w.outflow) : '—'}</td>
-                    <td className={cn('px-3 py-2.5 text-right tabular-nums', w.net >= 0 ? 'text-slate-700 dark:text-slate-200' : 'text-red-600 dark:text-red-400')}>{moneyCompact(w.net)}</td>
-                    <td className={cn('px-4 py-2.5 text-right font-bold tabular-nums', w.endingCash < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{moneyCompact(w.endingCash)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <CashTimeline
+              weeks={data.weeks}
+              categories={data.categories}
+              weeklyCap={data.apSettings.weeklyCap}
+              restrictToSafe={data.apSettings.restrictToSafe}
+              deferredBeyondHorizon={data.deferredBeyondHorizon}
+            />
           </div>
         </CockpitPanel>
 
@@ -149,15 +127,17 @@ export function CashCockpit({ data, canConfigure }: { data: CashPosition; canCon
         </CockpitPanel>
       </div>
 
-      {flyout ? <CashWeekFlyout week={flyout} categoryFlows={catFlowsFor(flyout)} initialSide="ar" onClose={() => setFlyout(null)} /> : null}
       {showConfig ? (
-        <CashflowConfigDrawer
-          open
+        <CashForecastConfigDrawer
           onClose={() => setShowConfig(false)}
           title={t('configTitle')}
           description={t('configDescription')}
-          weeklyApCap={data.apSettings.weeklyCap}
-          restrictToSafe={data.apSettings.restrictToSafe ? 1 : 0}
+          asOf={data.asOf}
+          horizonWeeks={data.horizonWeeks}
+          dso={data.dso}
+          dpo={data.dpo}
+          weeklyCap={data.apSettings.weeklyCap}
+          restrictToSafe={data.apSettings.restrictToSafe}
           vendorOptions={data.vendorOptions}
           accountOptions={data.accountOptions}
           initialCategories={data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method }))}

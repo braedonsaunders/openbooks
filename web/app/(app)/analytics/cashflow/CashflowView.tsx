@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import {
   University,
@@ -14,23 +15,22 @@ import {
   Route,
   Waypoints,
   AreaChart,
-  ChevronRight,
-  ChevronDown,
+  ArrowUpRight,
   ListOrdered,
   SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import type { CashflowData, WeekRow, SideSummary } from '../../../../lib/analytics/cashflow-data'
-import { ConfigEditor } from '../_ui/ConfigEditor'
-import { CategoryManager } from '../_ui/CategoryManager'
-import { CashWeekFlyout, type CategoryFlow } from '../_ui/CashWeekFlyout'
+import type { CashflowData, SideSummary } from '../../../../lib/analytics/cashflow-data'
 import { Panel } from '../_ui/Panel'
 import { TrendChart, Chart } from '../_ui/charts'
 import { fmtMoney } from '../_ui/format'
 
-const TABS = ['overview', 'weekly', 'category', 'config'] as const
+// Analysis only — the interactive surfaces this view used to carry moved to
+// their operational homes at full fidelity: the weekly timeline + forecast
+// categories to Banking → Cash, the AP pay-selection rule to the AP cockpit.
+const TABS = ['overview', 'category'] as const
 type Tab = (typeof TABS)[number]
-const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', weekly: 'Weekly Timeline', category: 'Category Analysis', config: 'Configuration' }
+const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', category: 'Category Analysis' }
 
 const money = (n: number) => fmtMoney(n, { compact: true })
 const BUCKET_COLORS: Record<string, string> = { Current: '#10b981', '1-30': '#14b8a6', '31-60': '#0ea5e9', '61-90': '#f59e0b', '90+': '#ef4444' }
@@ -62,10 +62,20 @@ export function CashflowView({ data }: { data: CashflowData }) {
 
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
-        {tab === 'weekly' ? <WeeklyTab data={data} /> : null}
         {tab === 'category' ? <CategoryTab data={data} /> : null}
-        {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
+
+      <p className="flex items-center justify-center gap-1 text-center text-xs text-slate-400 dark:text-slate-500">
+        Act on these numbers in the
+        <Link href={'/banking/cash' as any} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
+          Cash cockpit <ArrowUpRight size={12} />
+        </Link>
+        (weekly drill + forecast config) and the
+        <Link href={'/ap' as any} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
+          AP cockpit <ArrowUpRight size={12} />
+        </Link>
+        (pay-run planner + selection rule).
+      </p>
     </div>
   )
 }
@@ -124,98 +134,6 @@ function AgingPanel({ title, side, accent }: { title: string; side: SideSummary;
         ))}
       </div>
     </Panel>
-  )
-}
-
-/* ----------------------------------------------------------- Weekly Timeline */
-function WeeklyTab({ data }: { data: CashflowData }) {
-  const [open, setOpen] = useState<Set<string>>(new Set())
-  const [flyout, setFlyout] = useState<{ week: WeekRow; side: 'ar' | 'ap' } | null>(null)
-  const toggle = (k: string) => setOpen((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
-  const hasCats = data.categories.length > 0
-  const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
-  const cols = 6 + (hasCats ? 2 : 0) + (scheduling ? 1 : 0)
-  const catFlowsFor = (w: WeekRow): CategoryFlow[] => {
-    const wi = data.weeks.indexOf(w)
-    return data.categories
-      .map((c) => ({ name: c.name, direction: c.direction, amount: c.weekly[wi] ?? 0 }))
-      .filter((c) => c.amount > 0)
-  }
-
-  return (
-    <>
-      {scheduling && data.deferredBeyondHorizon > 0 ? (
-        <p className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-          <ListOrdered size={14} className="mt-0.5 shrink-0" />
-          <span><span className="font-semibold">{money(data.deferredBeyondHorizon)} of payables can&apos;t be paid within the horizon</span> under the current AP capacity settings — the backlog spills past the last week.</span>
-        </p>
-      ) : null}
-      <Panel
-        title="Forecast Model"
-        icon={ListOrdered}
-        hint={scheduling ? `Click a week for its transactions · AP scheduled oldest-due-first up to ${data.apSettings.weeklyCap > 0 ? money(data.apSettings.weeklyCap) : 'safe capacity'} per week` : 'Click a week to see the transactions behind it'}
-        bodyClassName="p-0"
-      >
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <th className="w-8 px-2 py-2" />
-              <th className="px-3 py-2 text-left font-medium">Week</th>
-              <th className="px-3 py-2 text-right font-medium">Inflows</th>
-              <th className="px-3 py-2 text-right font-medium">Outflows</th>
-              {hasCats ? <th className="px-3 py-2 text-right font-medium">Other In</th> : null}
-              {hasCats ? <th className="px-3 py-2 text-right font-medium">Other Out</th> : null}
-              {scheduling ? <th className="px-3 py-2 text-right font-medium">Deferred</th> : null}
-              <th className="px-3 py-2 text-right font-medium">Net</th>
-              <th className="px-3 py-2 text-right font-medium">Ending Cash</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.weeks.map((w) => {
-              const isOpen = open.has(w.weekStart)
-              return (
-                <FragmentRows key={w.weekStart}>
-                  <tr className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" onClick={() => toggle(w.weekStart)}>
-                    <td className="px-2 py-2.5 text-center text-slate-400">{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
-                    <td className="px-3 py-2.5 font-medium text-slate-800 dark:text-slate-200">{w.label}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{w.inflow > 0 ? money(w.inflow) : '—'}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{w.outflow > 0 ? money(w.outflow) : '—'}</td>
-                    {hasCats ? <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600/80 dark:text-emerald-400/80">{w.dynamicInflow > 0 ? money(w.dynamicInflow) : '—'}</td> : null}
-                    {hasCats ? <td className="px-3 py-2.5 text-right tabular-nums text-red-600/80 dark:text-red-400/80">{w.dynamicOutflow > 0 ? money(w.dynamicOutflow) : '—'}</td> : null}
-                    {scheduling ? <td className="px-3 py-2.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{w.deferredOut > 0 ? money(w.deferredOut) : '—'}</td> : null}
-                    <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', w.net >= 0 ? 'text-slate-800 dark:text-slate-200' : 'text-red-600 dark:text-red-400')}>{money(w.net)}</td>
-                    <td className={cn('px-3 py-2.5 text-right font-bold tabular-nums', w.endingCash < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(w.endingCash)}</td>
-                  </tr>
-                  {isOpen ? (
-                    <tr className="bg-slate-50/40 dark:bg-slate-800/20">
-                      <td />
-                      <td colSpan={cols - 1} className="px-3 py-2">
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          <button type="button" onClick={() => setFlyout({ week: w, side: 'ar' })} className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 font-medium text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
-                            {w.arEntries.length} AR inflows · {money(w.arEntries.reduce((a, e) => a + e.amount, 0))}
-                          </button>
-                          <button type="button" onClick={() => setFlyout({ week: w, side: 'ap' })} className="rounded-md border border-red-200 bg-red-50 px-2 py-1 font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-                            {w.apEntries.length} AP outflows · {money(w.apEntries.reduce((a, e) => a + e.amount, 0))}
-                          </button>
-                          {data.categories.filter((c) => (c.weekly[data.weeks.indexOf(w)] ?? 0) > 0).map((c) => (
-                            <span key={c.id} className={cn('rounded-md border px-2 py-1 font-medium', c.direction === 'inflow' ? 'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900/50 dark:bg-teal-950/30 dark:text-teal-300' : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300')}>
-                              {c.name} · {money(c.weekly[data.weeks.indexOf(w)] ?? 0)}
-                            </span>
-                          ))}
-                          {w.apCapacity !== null ? <span className="rounded-md border border-slate-200 px-2 py-1 text-slate-500 dark:border-slate-700 dark:text-slate-400">AP capacity {money(w.apCapacity)}</span> : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null}
-                </FragmentRows>
-              )
-            })}
-          </tbody>
-        </table>
-      </Panel>
-
-      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categoryFlows={catFlowsFor(flyout.week)} onClose={() => setFlyout(null)} /> : null}
-    </>
   )
 }
 
@@ -308,69 +226,6 @@ function CategoryTab({ data }: { data: CashflowData }) {
   )
 }
 
-/* ------------------------------------------------------------- Configuration */
-function ConfigTab({ data }: { data: CashflowData }) {
-  const items: { label: string; value: string; note: string }[] = [
-    { label: 'Forecast horizon', value: `${data.horizonWeeks} weeks`, note: 'Weeks of cash projected forward from today' },
-    { label: 'As-of date', value: data.asOf, note: 'Anchor for open balances and predictions' },
-    { label: 'Prediction method', value: 'Statistical → Due date → Global avg', note: 'Per-party average pay/collect days (+½σ buffer), floored at the due date' },
-    { label: 'Overdue push', value: '+7 / +14 / +28 days', note: 'Overdue items pushed forward by how overdue they are (≤30 / ≤60 / >60 days)' },
-    { label: 'Business-day snap', value: 'On', note: 'Predicted dates on a weekend move to the next business day' },
-    { label: 'Global collect / pay days', value: `${data.summary.dso ?? '—'}d / ${data.summary.dpo ?? '—'}d`, note: 'Fallback averages used when a party has no payment history' },
-  ]
-  return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-      <div className="space-y-5">
-        <CategoryManager
-          vendorOptions={data.vendorOptions}
-          accountOptions={data.accountOptions}
-          initialCategories={data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method }))}
-        />
-        <ConfigEditor
-          dashboard="cashflow"
-          fields={[
-            { key: 'weeklyApCap', label: 'Weekly AP cap ($)', help: '0 = unlimited (no scheduling). With a cap, payables are paid oldest-due-first and the rest defers.', min: 0, max: 100_000_000, step: 1000 },
-            { key: 'restrictToSafe', label: 'Restrict to safe capacity (0/1)', help: '1 = never pay beyond available cash that week; overflow defers forward', min: 0, max: 1, step: 1 },
-          ]}
-          values={{ weeklyApCap: data.apSettings.weeklyCap, restrictToSafe: data.apSettings.restrictToSafe ? 1 : 0 }}
-          defaults={{ weeklyApCap: 0, restrictToSafe: 0 }}
-        />
-      </div>
-      <div className="space-y-5">
-      <Panel title="Forecast Model" icon={SlidersHorizontal} bodyClassName="p-0">
-        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-          {items.map((i) => (
-            <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{i.label}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
-              </div>
-              <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-right text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{i.value}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
-      <Panel title="Bank Accounts" icon={University} bodyClassName="p-0">
-        <table className="w-full text-sm">
-          <tbody>
-            {data.bankAccounts.map((b) => (
-              <tr key={b.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{b.name}{b.number ? <span className="ml-2 text-xs text-slate-400">{b.number}</span> : null}</td>
-                <td className={cn('px-4 py-2.5 text-right font-medium tabular-nums', b.balance < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{fmtMoney(b.balance)}</td>
-              </tr>
-            ))}
-            <tr className="border-t border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/30">
-              <td className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-100">Current Cash</td>
-              <td className={cn('px-4 py-2.5 text-right font-bold tabular-nums', data.startingCash < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{fmtMoney(data.startingCash)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </Panel>
-      </div>
-    </div>
-  )
-}
-
 /* -------------------------------------------------------------- primitives */
 function Kpi({ icon: Icon, accent, label, value, sub, tone }: { icon: typeof Wallet; accent: string; label: string; value: string; sub?: string; tone?: 'pos' | 'neg' }) {
   const ACCENT: Record<string, string> = {
@@ -405,10 +260,6 @@ function Vital({ icon: Icon, ring, label, value, hint, badge, split, status }: {
       <p className={cn('text-[11px]', hintTone)}>{hint}</p>
     </div>
   )
-}
-
-function FragmentRows({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
 }
 
 /** Waterfall bridge: Start → +Inflows → −Outflows → Projected End. */

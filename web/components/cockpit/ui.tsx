@@ -126,26 +126,38 @@ export function AgingBars({ buckets, accent }: { buckets: { label: string; amoun
   )
 }
 
-/** Horizontal weekly schedule bars (predicted cash in/out by week). */
+/** Horizontal weekly schedule bars (predicted cash in/out by week). Rows become
+ * clickable when `onSelect` is given — e.g. to open the week's transaction drill. */
 export function ScheduleBars({
   weeks,
   barClass = 'bg-red-400 dark:bg-red-500',
+  onSelect,
 }: {
   weeks: { label: string; amount: number }[]
   barClass?: string
+  onSelect?: (index: number) => void
 }) {
   const max = Math.max(1, ...weeks.map((w) => w.amount))
   return (
-    <div className="space-y-2">
-      {weeks.map((w, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <span className="w-24 shrink-0 truncate text-xs text-slate-500 dark:text-slate-400">{w.label}</span>
-          <div className="h-4 min-w-0 flex-1 overflow-hidden rounded bg-slate-50 dark:bg-slate-800/50">
-            <div className={cn('h-full rounded transition-all', barClass)} style={{ width: `${(w.amount / max) * 100}%` }} />
-          </div>
-          <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">{w.amount > 0 ? compactMoney(w.amount) : '—'}</span>
-        </div>
-      ))}
+    <div className="space-y-1">
+      {weeks.map((w, i) => {
+        const row = (
+          <>
+            <span className="w-24 shrink-0 truncate text-xs text-slate-500 dark:text-slate-400">{w.label}</span>
+            <div className="h-4 min-w-0 flex-1 overflow-hidden rounded bg-slate-50 dark:bg-slate-800/50">
+              <div className={cn('h-full rounded transition-all', barClass)} style={{ width: `${(w.amount / max) * 100}%` }} />
+            </div>
+            <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">{w.amount > 0 ? compactMoney(w.amount) : '—'}</span>
+          </>
+        )
+        return onSelect ? (
+          <button key={i} type="button" onClick={() => onSelect(i)} className="flex w-full items-center gap-3 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40">
+            {row}
+          </button>
+        ) : (
+          <div key={i} className="flex items-center gap-3 px-1 py-0.5">{row}</div>
+        )
+      })}
     </div>
   )
 }

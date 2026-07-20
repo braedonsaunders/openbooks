@@ -13,11 +13,11 @@ import {
   ListChecks,
   SlidersHorizontal,
 } from 'lucide-react'
-import { cn } from '@openbooks/ui'
 import { money, moneyCompact } from '../../../../lib/format'
 import type { ApPosition } from '../../../../lib/cash/ap-position'
 import { StatTile, CockpitPanel, AgingBars, ScheduleBars } from '../../../../components/cockpit/ui'
-import { CashflowConfigDrawer } from '../../analytics/_ui/CashflowConfigDrawer'
+import { CashWeekFlyout, type CategoryFlow } from '../../analytics/_ui/CashWeekFlyout'
+import { ApSelectionConfigDrawer } from './ApSelectionConfigDrawer'
 import { PayRunPlanner } from './PayRunPlanner'
 
 /**
@@ -30,6 +30,12 @@ import { PayRunPlanner } from './PayRunPlanner'
 export function ApCockpit({ data, canConfigure }: { data: ApPosition; canConfigure: boolean }) {
   const t = useTranslations('ap.cockpit')
   const [showConfig, setShowConfig] = useState(false)
+  const [drillWeek, setDrillWeek] = useState<number | null>(null)
+
+  const catFlowsFor = (wi: number): CategoryFlow[] =>
+    data.categories
+      .map((c) => ({ name: c.name, direction: c.direction, amount: c.weekly[wi] ?? 0 }))
+      .filter((c) => c.amount > 0)
 
   const overduePct = data.outstanding > 0 ? Math.round((data.overdue / data.outstanding) * 100) : 0
   const gear = canConfigure ? (
@@ -82,7 +88,11 @@ export function ApCockpit({ data, canConfigure }: { data: ApPosition; canConfigu
           </CockpitPanel>
 
           <CockpitPanel title={t('panels.schedule')} icon={CalendarRange} hint={t('panels.scheduleHint', { weeks: data.horizonWeeks })} className="shrink-0">
-            <ScheduleBars weeks={data.weeks.map((w) => ({ label: w.label.split(' – ')[0]!, amount: w.amount }))} barClass="bg-red-400 dark:bg-red-500" />
+            <ScheduleBars
+              weeks={data.weeks.map((w) => ({ label: w.label.split(' – ')[0]!, amount: w.amount }))}
+              barClass="bg-red-400 dark:bg-red-500"
+              onSelect={(i) => setDrillWeek(i)}
+            />
           </CockpitPanel>
 
           <CockpitPanel title={t('panels.byVendor')} icon={Building2} bodyClassName="min-h-0 overflow-hidden p-0" className="min-h-0 flex-1">
@@ -116,17 +126,22 @@ export function ApCockpit({ data, canConfigure }: { data: ApPosition; canConfigu
         </div>
       </div>
 
+      {drillWeek !== null && data.timeline[drillWeek] ? (
+        <CashWeekFlyout
+          week={data.timeline[drillWeek]!}
+          initialSide="ap"
+          categoryFlows={catFlowsFor(drillWeek)}
+          onClose={() => setDrillWeek(null)}
+        />
+      ) : null}
       {showConfig ? (
-        <CashflowConfigDrawer
-          open
+        <ApSelectionConfigDrawer
           onClose={() => setShowConfig(false)}
           title={t('configTitle')}
           description={t('configDescription')}
-          weeklyApCap={data.payPlan.weeklyCap}
-          restrictToSafe={data.payPlan.restrictToSafe ? 1 : 0}
-          vendorOptions={data.vendorOptions}
-          accountOptions={data.accountOptions}
-          initialCategories={data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method }))}
+          weeklyCap={data.payPlan.weeklyCap}
+          restrictToSafe={data.payPlan.restrictToSafe}
+          dpo={data.dpo}
         />
       ) : null}
     </div>

@@ -142,6 +142,9 @@ export interface CashPosition {
   runwayWeeks: number | null;
   runwayStatus: "healthy" | "caution" | "critical";
   deferredBeyondHorizon: number;
+  /** Global avg collect / pay days (forecast-model fallbacks). */
+  dso: number;
+  dpo: number;
   /** Configured recurring forecast flows, per-week — powers the drill + config. */
   categories: CategoryWeekly[];
   apSettings: ApSettings;
@@ -224,6 +227,8 @@ export async function cashPosition(
     runwayWeeks,
     runwayStatus,
     deferredBeyondHorizon: timeline.deferredBeyondHorizon,
+    dso: arStats.globalAvg,
+    dpo: apStats.globalAvg,
     categories,
     apSettings,
     vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
