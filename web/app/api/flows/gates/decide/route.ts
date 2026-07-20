@@ -10,12 +10,12 @@ export const runtime = 'nodejs'
  * Approve/reject one flow gate. Authorization is layered:
  *
  *   • route — session + org scoping (404 outside the caller's org), plus a
- *     coarse screen: the caller must hold `flows.approve`, be the row's
- *     direct assignee, or the row must be role-assigned (role membership is
- *     the engine's call). Assignees always pass regardless of permissions.
- *   • engine — decideGate() is the source of truth: the row's assignee, a
- *     holder of its assigneeRole, or an org admin. The route never grants
- *     more than the engine allows and never blocks a legitimate assignee.
+ *     coarse screen: the caller must hold `flows.approve` or be the row's
+ *     direct assignee. Assignees always pass regardless of permissions.
+ *   • engine — decideGate() is the source of truth: the row's assignee, an org
+ *     admin, or an active delegate — and it refuses the submitter. The route
+ *     never grants more than the engine allows and never blocks a legitimate
+ *     assignee.
  */
 export async function POST(req: Request) {
   const authz = await getAuthz()
@@ -36,9 +36,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'this approval was already resolved' }, { status: 409 })
   }
   const screened =
-    can(authz, 'flows.approve') ||
-    gate.assignee_user_id === authz.user.id ||
-    gate.assignee_role !== null // role membership is verified by decideGate
+    can(authz, 'flows.approve') || gate.assignee_user_id === authz.user.id
   if (!screened) {
     return NextResponse.json({ error: 'you are not an approver for this gate' }, { status: 403 })
   }

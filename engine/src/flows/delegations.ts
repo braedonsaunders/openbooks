@@ -135,6 +135,12 @@ export async function createDelegation(args: {
   if (!(endsAt.getTime() > startsAt.getTime())) {
     throw new DelegationError("the delegation end must be after its start");
   }
+  // Bound the window so a standing self-delegation can't silently persist for
+  // years (governance): out-of-office coverage is measured in days/weeks.
+  const MAX_DELEGATION_MS = 366 * 24 * 3_600_000;
+  if (endsAt.getTime() - startsAt.getTime() > MAX_DELEGATION_MS) {
+    throw new DelegationError("a delegation may not span more than one year");
+  }
   const to = await verifyUser(orgId, toUserId);
   if (!to) throw new DelegationError("delegate target is not an active user in this org");
 

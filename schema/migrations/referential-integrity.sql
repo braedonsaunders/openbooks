@@ -535,7 +535,9 @@ alter table flow_gates
   add foreign key (flow_id) references flows(id) on delete cascade,
   add foreign key (run_id) references flow_runs(id) on delete cascade,
   add foreign key (assignee_user_id) references users(id),
-  add foreign key (decided_by) references users(id);
+  add foreign key (decided_by) references users(id),
+  add foreign key (delegated_from_user_id) references users(id),
+  add foreign key (on_behalf_of_user_id) references users(id);
 alter table approval_delegations
   add foreign key (org_id) references orgs(id) on delete cascade,
   add foreign key (from_user_id) references users(id),

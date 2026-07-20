@@ -86,6 +86,13 @@ Institutional-grade guarantees (engine-enforced, not author-dependent):
   approval — enforced at decision time (closing the admin / delegated-actor
   bypass), secure by default (only an explicit `preventSelfApproval: false`
   opts out).
+- **Structured audit provenance.** Delegation hand-offs
+  (`flow_gates.delegated_from_user_id`) and on-behalf-of decisions
+  (`on_behalf_of_user_id`) are typed columns, not parsed comment markers — they
+  survive the decision and can't be forged by typing into a comment.
+- **Author-time guardrails.** `lintFlowGraphForSubject` rejects a `change_status`
+  to `approved`/`draft` on a document flow (release is engine-owned), so a flow
+  can't be authored to release a document early or twice.
 - **One-click email approvals** are HMAC-signed with `FLOWS_EMAIL_SECRET` (or,
   absent that, the deployment's `SESSION_SECRET`) and fail closed if neither is
   set; the signature is domain-separated so it can't be replayed elsewhere.

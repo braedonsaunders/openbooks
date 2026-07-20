@@ -12,7 +12,8 @@ import {
   type FlowActors,
 } from "../test-fixtures.ts";
 import { submitForApproval } from "./submit.ts";
-import { decideGate, worklistGates } from "./gates.ts";
+import { decideGate, delegateGate, worklistGates } from "./gates.ts";
+import { createDelegation } from "./delegations.ts";
 
 /**
  * DB-backed contract tests for the approval lifecycle — the sole path gating
@@ -258,6 +259,75 @@ test("concurrent decisions on an 'any' gate release exactly once", { skip: !DB }
     const after = await gateRows({ subjectId: docId });
     assert.equal(after.filter((g) => g.status === "approved").length, 1);
     assert.equal(after.filter((g) => g.status === "cancelled").length, 1);
+  });
+});
+
+async function gateProvenance(id: string): Promise<{
+  assigneeUserId: string | null;
+  decidedBy: string | null;
+  delegatedFromUserId: string | null;
+  onBehalfOfUserId: string | null;
+}> {
+  const r = (await db.execute(sql`
+    select assignee_user_id as "assigneeUserId", decided_by as "decidedBy",
+           delegated_from_user_id as "delegatedFromUserId", on_behalf_of_user_id as "onBehalfOfUserId"
+      from flow_gates where id = ${id}
+  `)) as unknown as { rows: any[] };
+  return r.rows[0]!;
+}
+
+test("delegateGate reassigns and records structured provenance (not a comment)", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+    });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const [gate] = await gateRows({ subjectId: docId });
+
+    await delegateGate(gate!.id, actors.approver1Id, actors.approver2Id);
+    let prov = await gateProvenance(gate!.id);
+    assert.equal(prov.assigneeUserId, actors.approver2Id, "reassigned to the delegate");
+    assert.equal(prov.delegatedFromUserId, actors.approver1Id, "original assignee preserved structurally");
+
+    // The delegate decides; provenance survives the decision.
+    await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver2Id });
+    prov = await gateProvenance(gate!.id);
+    assert.equal(prov.decidedBy, actors.approver2Id);
+    assert.equal(prov.delegatedFromUserId, actors.approver1Id, "hand-off audit not overwritten by the decision");
+    assert.equal(await docStatus(docId), "approved");
+  });
+});
+
+test("an out-of-office delegate decides on behalf of the principal", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+    });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const [gate] = await gateRows({ subjectId: docId });
+
+    // approver1 is out of office; approver2 covers (active window over now).
+    const now = Date.now();
+    await createDelegation({
+      orgId: org.orgId,
+      fromUserId: actors.approver1Id,
+      toUserId: actors.approver2Id,
+      startsAt: new Date(now - 3_600_000),
+      endsAt: new Date(now + 24 * 3_600_000),
+    });
+
+    const res = await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver2Id });
+    assert.equal(res.resumed, "approve");
+    const prov = await gateProvenance(gate!.id);
+    assert.equal(prov.decidedBy, actors.approver2Id, "the delegate is the decider");
+    assert.equal(prov.onBehalfOfUserId, actors.approver1Id, "principal recorded structurally");
+    assert.equal(await docStatus(docId), "approved");
   });
 });
 
