@@ -48,6 +48,8 @@ export interface KernelLine {
 }
 
 export interface PostingDeps {
+  /** Historical replay: bypass source-imported period locks, never user locks. */
+  migration?: boolean;
   /** org-level control accounts (from orgs.settings.controlAccounts). */
   control: {
     ar: string;
@@ -777,6 +779,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
       bookId: book.id,
       subsidiaryIds: subApplied.lines.map((line) => line.subsidiaryId),
       modules: [closeModuleForDocument(doc.kind)],
+      allowImportedLocks: deps.migration,
     });
   } catch (error) {
     if (error instanceof CloseError) throw new PostingError(error.message);
@@ -785,6 +788,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
 
   // -- write entry + lines + flip document, atomically ---------------------
   const entryId = await db.transaction(async (tx) => {
+    if (deps.migration) await tx.execute(sql`set local openbooks.migration = on`);
     const [entry] = await tx
       .insert(schema.journalEntries)
       .values({
@@ -1014,6 +1018,7 @@ export async function regenerateGlImpactTx(
       bookId: entry.bookId,
       subsidiaryIds: kernelLines.map((line) => line.subsidiaryId),
       modules: [closeModuleForDocument(doc.kind)],
+      allowImportedLocks: deps.migration,
     });
     await assertPeriodModulesOpen(tx, {
       orgId: doc.orgId,
@@ -1021,6 +1026,7 @@ export async function regenerateGlImpactTx(
       bookId: entry.bookId,
       subsidiaryIds: existing.map((line) => line.subsidiaryId),
       modules: [closeModuleForDocument(doc.kind)],
+      allowImportedLocks: deps.migration,
     });
   } catch (error) {
     if (error instanceof CloseError) throw new ClosedPeriodError(error.message);

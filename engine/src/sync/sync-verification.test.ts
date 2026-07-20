@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { syncVerificationFailures, type SyncResult } from "./sync.ts";
+import { sourceDeletionCandidates, syncVerificationFailures, type SyncResult } from "./sync.ts";
 
 function result(overrides: Partial<SyncResult> = {}): SyncResult {
   return {
@@ -45,4 +45,11 @@ test("financial cursor gate reports every independent divergence", () => {
     "2 open items differ",
     "4 account-month buckets differ",
   ]);
+});
+
+test("full sweeps detect vanished source records while mirrors require tombstones", () => {
+  const existing = ["1", "2", "3"];
+  const current = ["1", "3", "4"];
+  assert.deepEqual(sourceDeletionCandidates(true, existing, current, ["3", "9"]), ["2", "3"]);
+  assert.deepEqual(sourceDeletionCandidates(false, existing, current, ["3", "9"]), ["3"]);
 });
