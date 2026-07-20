@@ -50,5 +50,5 @@
   "overheadRateSource": "Source du taux",
   "overheadHoursBasis": "S’applique à",
   "overheadScope": "Portée du taux",
-  "overheadRateEngineHint": "Utilise les taux du Modèle de frais généraux (taux composite $/h par département) appliqués aux heures de main-d’œuvre de ce projet. Configurez les pools et la répartition dans l’espace Modèle de frais généraux."
+  "overheadRateEngineHint": "Calcule les frais généraux à partir de la grille de taux publiée et datée ($/heure par département × heures du projet). Gérez les taux dans l’espace Modèle de frais généraux."
 }

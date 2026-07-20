@@ -50,5 +50,5 @@
   "overheadRateSource": "Fuente de la tasa",
   "overheadHoursBasis": "Se aplica a",
   "overheadScope": "Alcance de la tasa",
-  "overheadRateEngineHint": "Usa las tasas del Modelo de gastos generales (tasa compuesta $/h por departamento) aplicadas a las horas de mano de obra de este proyecto. Configure los grupos y la asignación en el espacio Modelo de gastos generales."
+  "overheadRateEngineHint": "Calcula los gastos generales desde la tarjeta de tasas publicada con fecha de vigencia ($/hora por departamento × horas del proyecto). Gestione las tasas en el Modelo de gastos generales."
 }

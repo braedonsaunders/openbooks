@@ -1496,17 +1496,16 @@
         "publish": "Publish rates",
         "wizard": "Setup wizard",
         "publishTitle": "Publish to the rate card",
-        "publishHint": "Locks the current engine rates into effective-dated rows on the Overhead Rates card. Projects on the standard rate source use these until you publish again.",
+        "publishHint": "Locks the engine’s computed rates into effective-dated rows on the Overhead Rates card. Projects cost overhead from these published rates until you publish again — prior periods keep their original rates.",
         "publishConfirm": "Publish",
         "publishDone": "Rates published to the rate card",
         "cancel": "Cancel",
         "wizardTitle": "Set up project overhead",
         "wizardDone": "Overhead configured",
-        "wizardIntro": "Overhead gives every job its share of the cost of running the company — a managerial number on the project P&L, never a ledger posting. Pick how rates are determined:",
+        "wizardIntro": "Overhead gives every job its share of the cost of running the company — a managerial figure on the project P&L, never a ledger posting. Job overhead is always costed from published, effective-dated rates, so closed periods never change. Pick how rates are determined:",
         "recommended": "Recommended",
         "effectiveFrom": "Effective from",
-        "liveNow": "Engine now: ${rate}/hr",
-        "liveExplain": "Projects always use the engine’s current computed composite — self-truing, no publishing step, but historical job margins move as new expenses post.",
+        "liveNow": "Computed from actuals: ${rate}/hr",
         "flatPercent": "Overhead % of labor cost",
         "flatPerHour": "Overhead $ per labor hour",
         "applyHint": "Apply this overhead method to the selected project types. Their P&L gains an Overhead line included in total job cost.",
@@ -1517,11 +1516,7 @@
         "approach": {
           "rate_card": {
             "title": "Department rate card",
-            "desc": "Effective-dated $/hour by department, published from the engine (or entered manually). Stable, auditable job costs — the NetSuite/adminapp model."
-          },
-          "live": {
-            "title": "Live engine rates",
-            "desc": "Always use the current computed composite per department. Self-truing, but past job margins shift as expenses post."
+            "desc": "Effective-dated $/hour rates by department, published from the engine or entered manually. Job costs are stable and auditable — past periods always keep the rates that were in effect."
           },
           "per_hour": {
             "title": "Flat $ per labor hour",
@@ -1531,7 +1526,15 @@
             "title": "Percent of labor cost",
             "desc": "Overhead as a % markup on labor cost. Common in professional services."
           }
-        }
+        },
+        "current": "Current configuration",
+        "ratesActive": "{count} published rates in effect from {date}",
+        "noRates": "No published rates yet — run the setup wizard or publish rates.",
+        "methodNone": "No overhead",
+        "methodCard": "Department rate card",
+        "methodPct": "{rate}% of labor cost",
+        "methodHr": "${rate}/labor hour",
+        "methodGl": "Posted GL (account group)"
       }
     },
     "fields": {

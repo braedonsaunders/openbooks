@@ -21,7 +21,6 @@ export const projectTypes: DocArticle = {
     'not to exceed',
     'P&L',
     'markup',
-    'RESTlet',
     'NetSuite',
   ],
   body: `# Project Types
@@ -93,16 +92,15 @@ computed. Each measure has a configurable **source**.
   - **None** — no overhead on this type.
   - **Percent Of Labor** — labor cost times a flat percentage.
   - **Per Labor Hour** — project hours times a flat dollar rate.
-  - **Rate Engine** — per-department rates applied to the project's labor hours,
-    with a **Rate source** of **standard** (the published, effective-dated rate
-    card in **Company Settings → Projects → Overhead Rates** — stable, auditable
-    job costs) or **live** (always the current computed composite from the
-    **Overhead Model** — self-truing, but historical margins move as expenses
-    post). Rates come from the **Overhead Model** workspace (Company Settings →
-    Projects), which computes each department's composite as overhead pool
-    divided by labor hours; **Publish rates** snapshots those into the rate
-    card, and the **Setup wizard** walks through method, rates, and which
-    project types to apply in one pass.
+  - **Rate Engine** — per-department hourly rates applied to the project's
+    labor, using the rate effective on each time entry's work date. Rates come
+    only from the published, effective-dated rate card (**Company Settings →
+    Projects → Overhead Rates**), so job costs are stable and closed periods
+    never change. The **Overhead Model** workspace (Company Settings →
+    Projects) computes each department's rate from actuals — overhead pool
+    divided by labor hours — as an analytical preview; **Publish rates**
+    locks those into the rate card, and the **Setup wizard** walks through
+    method, rates, and which project types to apply in one pass.
   - **Account Group Actual** — legacy: sum project-tagged GL posted to an
     overhead account group.
 - **Cost budget source** — **Wbs Estimates** (roll up the project's work-breakdown
