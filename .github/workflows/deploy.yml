@@ -149,3 +149,52 @@ jobs:
           done
           echo "::error::App never became healthy at openbooks.cloud.rassaun.com"
           exit 1
+
+  import-netsuite-attachments:
+    needs: deploy
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, dokploy]
+    timeout-minutes: 360
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load the deployed infrastructure environment
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+        run: |
+          set -euo pipefail
+          current="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+            -G "${DOKPLOY_URL%/}/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
+          env_text="$(echo "$current" | jq -r '.env // ""')"
+          required=(OPENBOOKS_DB_URL OPENBOOKS_DATA_KEY S3_ENDPOINT S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY S3_BUCKET)
+          for key in "${required[@]}"; do
+            value="$(printf '%s\n' "$env_text" | sed -n "s/^${key}=//p" | tail -1)"
+            if [ -z "$value" ]; then
+              echo "::error::Dokploy compose environment is missing $key"
+              exit 1
+            fi
+            echo "::add-mask::$value"
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+          done
+          region="$(printf '%s\n' "$env_text" | sed -n 's/^S3_REGION=//p' | tail -1)"
+          if [ -n "$region" ]; then
+            echo "::add-mask::$region"
+            printf 'S3_REGION=%s\n' "$region" >> "$GITHUB_ENV"
+          fi
+
+      - name: Import and verify transaction evidence in MinIO
+        run: >-
+          node --import tsx engine/src/sync/netsuite-attachments.ts
+          --org 019f5ea3-44c5-72c0-ad3b-ef34c19c8763
+          --resolver-script customscript1793
+          --resolver-deploy customdeploy1
+          --concurrency 8
+          --execute
