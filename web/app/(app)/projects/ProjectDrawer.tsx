@@ -331,6 +331,17 @@ export function ProjectDrawer({
             <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder={t('drawer.codePlaceholder')} disabled={ro} />
           </>
         )
+      case 'project_type_id':
+        if (projectTypes.length === 0) return null
+        return (
+          <>
+            <Label>{lbl || t('drawer.projectType')}</Label>
+            <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)} disabled={ro}>
+              <option value="">—</option>
+              {projectTypes.map((projectType) => <option key={projectType.id} value={projectType.id}>{projectType.name}</option>)}
+            </Select>
+          </>
+        )
       case 'customer_id':
         return (
           <>
@@ -560,15 +571,6 @@ export function ProjectDrawer({
     >
       {tab === 'overview' ? (
         <div className="space-y-7 p-1">
-          {projectTypes.length > 0 ? (
-            <div className="max-w-sm space-y-1.5">
-              <Label>{t('drawer.projectType')}</Label>
-              <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)} disabled={ro}>
-                <option value="">—</option>
-                {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-              </Select>
-            </div>
-          ) : null}
           <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderProjectField} />
 
           {/* Project-level invoicing/backup override (cascades over type ← customer). */}

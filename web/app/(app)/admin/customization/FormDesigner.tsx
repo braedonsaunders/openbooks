@@ -12,8 +12,8 @@ import {
   fieldMetaFor,
   getRecordType,
   isCustomFieldKey,
+  mergeRegisteredFieldsIntoLayout,
   type FieldKind,
-  type FieldMeta,
   type FormActionPlacement,
   type FormLayoutConfig,
   type HeaderFieldPlacement,
@@ -94,30 +94,17 @@ function ensureCustomPlaced(
   layout: FormLayoutConfig,
   headerDefs: FieldDef[],
   lineDefs: FieldDef[],
-  meta: { headerFields: FieldMeta[]; lineFields: FieldMeta[] } | undefined,
 ): FormLayoutConfig {
-  const defaultActions = defaultFormLayout(layout.recordType).actions
-  const placedActions = new Set((layout.actions ?? []).map((action) => action.key))
-  layout.actions = [
-    ...(layout.actions ?? []),
-    ...defaultActions.filter((action) => !placedActions.has(action.key)),
-  ]
+  mergeRegisteredFieldsIntoLayout(layout)
   const placedHeader = new Set<string>()
   for (const g of layout.header.groups) for (const f of g.fields) placedHeader.add(f.key)
   const firstGroup = layout.header.groups[0]!
-  // Missing built-in header fields (registry order).
-  for (const f of meta?.headerFields ?? []) {
-    if (!placedHeader.has(f.key)) firstGroup.fields.push({ key: f.key, visible: true, required: f.required ? true : null, labelOverride: null, colSpan: null })
-  }
   for (const d of headerDefs) {
     const k = `cf_${d.key}`
     if (!placedHeader.has(k)) firstGroup.fields.push({ key: k, visible: true, required: d.isRequired ? true : null, labelOverride: null, colSpan: null })
   }
   const placedLine = new Set<string>()
   for (const c of layout.lines.columns) placedLine.add(c.key)
-  for (const f of meta?.lineFields ?? []) {
-    if (!placedLine.has(f.key)) layout.lines.columns.push({ key: f.key, visible: true, width: null, labelOverride: null })
-  }
   for (const d of lineDefs) {
     const k = `cf_${d.key}`
     if (!placedLine.has(k)) layout.lines.columns.push({ key: k, visible: true, width: null, labelOverride: null })
@@ -175,7 +162,7 @@ export function FormDesigner({
       duplicateFrom?.layout ??
       (def?.layout as FormLayoutConfig | undefined) ??
       defaultFormLayout(recordType)
-    return ensureCustomPlaced(structuredClone(base), headerDefs ?? [], lineDefs ?? [], meta)
+    return ensureCustomPlaced(structuredClone(base), headerDefs ?? [], lineDefs ?? [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [def, recordType, duplicateFrom])
 
