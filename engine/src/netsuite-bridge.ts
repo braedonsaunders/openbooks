@@ -251,21 +251,43 @@ export class NetSuiteBridgeClient {
           }
           throw new Error(`NetSuite bulk export failed${errors.length ? `: ${errors.join("; ")}` : ""}`);
         }
+        const seenChunks = new Map<string, string>();
         for (const file of state.files.filter((item) => item.name.startsWith(`ob-chunk-${jobId}-`))) {
           const read = await this.readChunk(file.id);
           const body = JSON.parse(read.contents) as {
             schemaVersion?: number;
             jobId?: string;
             partId?: string;
+            pageIndex?: number;
             rows?: T[];
           };
-          if (body.schemaVersion !== NETSUITE_BRIDGE_SCHEMA_VERSION || body.jobId !== jobId || !body.partId) {
+          if (
+            body.schemaVersion !== NETSUITE_BRIDGE_SCHEMA_VERSION
+            || body.jobId !== jobId
+            || !body.partId
+            || !Number.isSafeInteger(body.pageIndex)
+            || body.pageIndex! < 0
+          ) {
             throw new Error(`NetSuite bulk export returned an invalid chunk ${file.name}`);
           }
           const target = out.get(body.partId);
           if (!target || !Array.isArray(body.rows)) {
             throw new Error(`NetSuite bulk export returned an unknown partition ${body.partId}`);
           }
+          // NetSuite can occasionally execute the same Map/Reduce map key more
+          // than once. File Cabinet then contains duplicate chunk files with
+          // the same logical page. Exactly-once ingestion is mandatory: accept
+          // an identical retry once, but fail closed if its payload conflicts.
+          const chunkKey = `${body.partId}:${body.pageIndex}`;
+          const payload = JSON.stringify(body.rows);
+          const prior = seenChunks.get(chunkKey);
+          if (prior !== undefined) {
+            if (prior !== payload) {
+              throw new Error(`NetSuite bulk export returned conflicting chunk ${chunkKey}`);
+            }
+            continue;
+          }
+          seenChunks.set(chunkKey, payload);
           target.push(...body.rows);
         }
       } finally {

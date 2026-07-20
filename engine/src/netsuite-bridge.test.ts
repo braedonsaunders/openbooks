@@ -79,17 +79,18 @@ test("NetSuite bulk export assembles partition chunks and always cleans up", asy
       status: "complete",
       files: [
         { id: "11", name: `ob-chunk-${jobId}-a-000000.json`, size: 1, createdAt: "", modifiedAt: "" },
+        { id: "14", name: `ob-chunk-${jobId}-a-000000.json`, size: 1, createdAt: "", modifiedAt: "" },
         { id: "12", name: `ob-chunk-${jobId}-b-000000.json`, size: 1, createdAt: "", modifiedAt: "" },
         { id: "13", name: `ob-summary-${jobId}.json`, size: 1, createdAt: "", modifiedAt: "" },
       ],
     } as T;
     if (action === "readChunk") {
-      const partId = String(params.fileId) === "11" ? "a" : "b";
+      const partId = String(params.fileId) === "12" ? "b" : "a";
       return {
         schemaVersion: 1,
         fileId: params.fileId,
         name: "chunk.json",
-        contents: JSON.stringify({ schemaVersion: 1, jobId, partId, rows: [{ id: partId }] }),
+        contents: JSON.stringify({ schemaVersion: 1, jobId, partId, pageIndex: 0, rows: [{ id: partId }] }),
       } as T;
     }
     if (action === "deleteExport") {
@@ -109,5 +110,44 @@ test("NetSuite bulk export assembles partition chunks and always cleans up", asy
     { id: "b", sql: "SELECT 2 AS id FROM DUAL" },
   ]);
   assert.deepEqual(rows, new Map([["a", [{ id: "a" }]], ["b", [{ id: "b" }]]]));
-  assert.deepEqual(actions, ["startExport", "exportStatus", "readChunk", "readChunk", "deleteExport", "deleteExport"]);
+  assert.deepEqual(actions, ["startExport", "exportStatus", "readChunk", "readChunk", "readChunk", "deleteExport", "deleteExport"]);
+});
+
+test("NetSuite bulk export fails closed on conflicting duplicate chunks", async () => {
+  let jobId = "";
+  const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
+    const action = String(params.action);
+    if (action === "startExport") {
+      jobId = String(params.jobId);
+      return { schemaVersion: 1, jobId, taskId: "task-1", partitions: 1 } as T;
+    }
+    if (action === "exportStatus") return {
+      schemaVersion: 1,
+      jobId,
+      status: "complete",
+      files: [
+        { id: "21", name: `ob-chunk-${jobId}-a-000000.json`, size: 1, createdAt: "", modifiedAt: "" },
+        { id: "22", name: `ob-chunk-${jobId}-a-000000.json`, size: 1, createdAt: "", modifiedAt: "" },
+      ],
+    } as T;
+    if (action === "readChunk") return {
+      schemaVersion: 1,
+      fileId: params.fileId,
+      name: "chunk.json",
+      contents: JSON.stringify({
+        schemaVersion: 1,
+        jobId,
+        partId: "a",
+        pageIndex: 0,
+        rows: [{ id: String(params.fileId) }],
+      }),
+    } as T;
+    if (action === "deleteExport") return { schemaVersion: 1, jobId, deleted: 2, remaining: 0 } as T;
+    throw new Error(`unexpected action ${action}`);
+  });
+
+  await assert.rejects(
+    () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
+    /conflicting chunk a:0/,
+  );
 });
