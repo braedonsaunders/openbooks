@@ -22,7 +22,8 @@ import {
 import { cn } from '@openbooks/ui'
 import type { CashflowData, SideSummary } from '../../../../lib/analytics/cashflow-data'
 import { Panel } from '../_ui/Panel'
-import { TrendChart, Chart } from '../_ui/charts'
+import { TrendChart, Chart, cashBridgeOption } from '../_ui/charts'
+import { Vital } from '../_ui/Vital'
 import { fmtMoney } from '../_ui/format'
 
 // Analysis only — the interactive surfaces this view used to carry moved to
@@ -245,49 +246,4 @@ function Kpi({ icon: Icon, accent, label, value, sub, tone }: { icon: typeof Wal
       </div>
     </div>
   )
-}
-
-function Vital({ icon: Icon, ring, label, value, hint, badge, split, status }: { icon: typeof Flame; ring: string; label: string; value: string; hint: string; badge?: string; split?: boolean; status?: string }) {
-  const hintTone = status === 'critical' ? 'text-red-600 dark:text-red-400' : status === 'caution' ? 'text-amber-600 dark:text-amber-400' : status === 'healthy' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between">
-        <span className={cn('grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br text-white', ring)}><Icon size={16} /></span>
-        {badge ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{badge}</span> : null}
-      </div>
-      <p className="mt-3 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">{label}</p>
-      <p className={cn('text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100', split && 'tracking-tight')}>{value}</p>
-      <p className={cn('text-[11px]', hintTone)}>{hint}</p>
-    </div>
-  )
-}
-
-/** Waterfall bridge: Start → +Inflows → −Outflows → Projected End. */
-function cashBridgeOption(startCash: number, inflows: number, outflows: number, end: number): Record<string, unknown> {
-  const afterIn = startCash + inflows
-  const steps = [
-    { label: 'Start', from: 0, to: startCash, color: '#94a3b8' },
-    { label: 'Inflows', from: startCash, to: afterIn, color: '#10b981' },
-    { label: 'Outflows', from: afterIn, to: end, color: '#ef4444' },
-    { label: 'Projected End', from: 0, to: end, color: '#0d9488' },
-  ]
-  const base = steps.map((s) => Math.min(s.from, s.to))
-  const bar = steps.map((s) => Math.abs(s.to - s.from))
-  const money = (n: number) => {
-    const a = Math.abs(n), sign = n < 0 ? '-' : ''
-    if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`
-    if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(0)}K`
-    return `${sign}$${a.toFixed(0)}`
-  }
-  return {
-    grid: { left: 8, right: 12, top: 24, bottom: 8, containLabel: true },
-    tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex])}` },
-    xAxis: { type: 'category', data: steps.map((s) => s.label), axisLine: { lineStyle: { color: 'rgba(148,163,184,0.2)' } }, axisTick: { show: false }, axisLabel: { color: '#94a3b8', fontSize: 10 } },
-    yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(148,163,184,0.15)' } }, axisLabel: { color: '#94a3b8', fontSize: 10, formatter: (v: number) => money(v) } },
-    series: [
-      { type: 'bar', stack: 'b', data: base.map(() => ({ value: 0, itemStyle: { color: 'transparent' } })), silent: true },
-      { type: 'bar', stack: 'b', data: base.map((b) => ({ value: b, itemStyle: { color: 'transparent' } })), silent: true },
-      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i].color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: '#94a3b8', fontSize: 9, formatter: (p: any) => money([startCash, inflows, -outflows, end][p.dataIndex]) } },
-    ],
-  }
 }

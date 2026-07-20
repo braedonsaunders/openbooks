@@ -145,6 +145,10 @@ export interface CashPosition {
   /** Global avg collect / pay days (forecast-model fallbacks). */
   dso: number;
   dpo: number;
+  /** Open AR / AP totals and the Gantry coverage ratio: (cash + AR) / AP. */
+  arOutstanding: number;
+  apOutstanding: number;
+  arCoverage: number | null;
   /** Configured recurring forecast flows, per-week — powers the drill + config. */
   categories: CategoryWeekly[];
   apSettings: ApSettings;
@@ -184,6 +188,8 @@ export async function cashPosition(
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts)));
 
   const startingCash = banks.reduce((a, b) => a + b.balance, 0);
+  const arOutstanding = arItems.reduce((a, i) => a + i.remaining, 0);
+  const apOutstanding = apItems.reduce((a, i) => a + i.remaining, 0);
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
   const timeline = buildTimeline({
@@ -229,6 +235,10 @@ export async function cashPosition(
     deferredBeyondHorizon: timeline.deferredBeyondHorizon,
     dso: arStats.globalAvg,
     dpo: apStats.globalAvg,
+    arOutstanding,
+    apOutstanding,
+    // Gantry formula: (starting cash + AR outstanding) / AP outstanding.
+    arCoverage: apOutstanding > 0 ? (startingCash + arOutstanding) / apOutstanding : null,
     categories,
     apSettings,
     vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),

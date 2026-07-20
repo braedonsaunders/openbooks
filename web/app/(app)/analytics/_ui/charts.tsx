@@ -253,3 +253,88 @@ export function Donut({
   }
   return <Chart option={option} height={height} />
 }
+
+/** Waterfall bridge: Start → +Inflows → −Outflows → Projected End (the
+ * cashflow dashboard's signature chart, shared by analytics and the Cash
+ * cockpit — moved verbatim from CashflowView). */
+export function cashBridgeOption(startCash: number, inflows: number, outflows: number, end: number): EChartsOption {
+  const afterIn = startCash + inflows
+  const steps = [
+    { label: 'Start', from: 0, to: startCash, color: '#94a3b8' },
+    { label: 'Inflows', from: startCash, to: afterIn, color: '#10b981' },
+    { label: 'Outflows', from: afterIn, to: end, color: '#ef4444' },
+    { label: 'Projected End', from: 0, to: end, color: '#0d9488' },
+  ]
+  const base = steps.map((s) => Math.min(s.from, s.to))
+  const bar = steps.map((s) => Math.abs(s.to - s.from))
+  return {
+    grid: baseGrid,
+    tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex])}` },
+    xAxis: catAxis(steps.map((s) => s.label)),
+    yAxis: valAxis('money'),
+    series: [
+      { type: 'bar', stack: 'b', data: base.map(() => ({ value: 0, itemStyle: { color: 'transparent' } })), silent: true },
+      { type: 'bar', stack: 'b', data: base.map((b) => ({ value: b, itemStyle: { color: 'transparent' } })), silent: true },
+      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i]!.color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: any) => money([startCash, inflows, -outflows, end][p.dataIndex]) } },
+    ],
+  }
+}
+
+/** Weekly cash-position forecast: teal area over ending cash with a zero
+ * guard-line and the lowest week flagged; tooltip breaks each week into
+ * in / out / net / ending. */
+export function cashForecastOption(
+  weeks: { label: string; inflow: number; outflow: number; net: number; endingCash: number }[],
+): EChartsOption {
+  const ending = weeks.map((w) => w.endingCash)
+  const min = Math.min(0, ...ending)
+  const lowestIdx = ending.indexOf(Math.min(...ending))
+  return {
+    grid: baseGrid,
+    tooltip: {
+      ...tooltip,
+      formatter: (ps: any[]) => {
+        const w = weeks[ps[0]?.dataIndex]
+        if (!w) return ''
+        return [
+          w.label,
+          `In: ${money(w.inflow)}`,
+          `Out: ${money(w.outflow)}`,
+          `Net: ${money(w.net)}`,
+          `<b>Ending: ${money(w.endingCash)}</b>`,
+        ].join('<br/>')
+      },
+    },
+    xAxis: catAxis(weeks.map((w) => w.label.split(' – ')[0]!)),
+    yAxis: { ...valAxis('money'), min },
+    series: [
+      {
+        name: 'Ending cash',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 2, color: '#0d9488' },
+        itemStyle: { color: '#0d9488' },
+        areaStyle: {
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(13,148,136,0.28)' },
+              { offset: 1, color: 'rgba(13,148,136,0.02)' },
+            ],
+          },
+        },
+        data: ending,
+        markLine: min < 0
+          ? { silent: true, symbol: 'none', lineStyle: { color: NEG, type: 'dashed', width: 1 }, label: { show: false }, data: [{ yAxis: 0 }] }
+          : undefined,
+        markPoint: {
+          symbolSize: 44,
+          label: { fontSize: 9, color: '#fff', formatter: (p: any) => money(p.value) },
+          itemStyle: { color: ending[lowestIdx]! < 0 ? NEG : '#f59e0b' },
+          data: [{ name: 'Lowest', coord: [lowestIdx, ending[lowestIdx]], value: ending[lowestIdx] }],
+        },
+      },
+    ],
+  }
+}
