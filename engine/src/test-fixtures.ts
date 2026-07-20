@@ -202,12 +202,15 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "accounting_books",
       "subsidiaries",
       "accounts",
+      // Trigger-seeded on org insert; must go while the org row still exists —
+      // segment_definition_guard's sandbox-wipe check looks the org up by id,
+      // so a cascade from `delete from orgs` arrives too late and is rejected.
+      "segment_definitions",
+      "project_types",
     ];
     for (const t of tables) {
       await tx.execute(sql`delete from ${sql.raw(t)} where org_id = ${orgId}`);
     }
-    // Leave the now-empty org row: deleting it cascades into other guarded
-    // tables, and an empty scratch org is harmless.
-    await tx.execute(sql`update orgs set name = ${"[test-teardown]"} where id = ${orgId}`);
+    await tx.execute(sql`delete from orgs where id = ${orgId}`);
   });
 }
