@@ -157,10 +157,10 @@ export function FinancialsTab({ data, projectId, billingMethod, recognition, can
           ))}
         </nav>
         {inner === 'category' ? (
-          <PagedTable rows={data.costByCategory} rowKey={(r) => r.category}
+          <PagedTable rows={data.costByCategory} rowKey={(r) => r.category} searchable
             empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('cockpit.noPostedCosts')}</p>}
             columns={[
-              { key: 'category', header: t('cockpit.category'), cell: (r) => (r.category === 'cogs' || r.category === 'operating_expense' ? t(`cockpit.categories.${r.category}`) : r.category) },
+              { key: 'category', header: t('cockpit.category'), search: (r) => r.category, cell: (r) => (r.category === 'cogs' || r.category === 'operating_expense' ? t(`cockpit.categories.${r.category}`) : r.category) },
               { key: 'amount', header: tCommon('labels.amount'), align: 'right', cell: (r) => money(r.amount) },
             ]} />
         ) : (
