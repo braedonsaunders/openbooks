@@ -1,12 +1,13 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
 import { money } from '../../../../lib/format'
 import { orgInfo } from '../../../../lib/data'
 import { ReportPaper } from '../ReportPaper'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 
 export const dynamic = 'force-dynamic'
 

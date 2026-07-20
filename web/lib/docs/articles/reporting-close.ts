@@ -6,7 +6,7 @@ export const financialReports: DocArticle = {
   category: 'reporting',
   order: 1,
   summary: 'Run financial statements, aging, registers, ledger detail, budget, order, and project reports.',
-  updated: '2026-07-19',
+  updated: '2026-07-20',
   keywords: [
     'reports',
     'profit and loss',
@@ -31,6 +31,12 @@ and the report body. This includes statements, detail reports, drill-downs, and
 reports created in the custom report builder and results from saved views. Wide
 reports expand to the available canvas while retaining the same paper header
 and document styling.
+
+Report tables use the financial-statement presentation throughout: unboxed
+rows, a single rule beneath column headings, document typography, right-aligned
+tabular amounts, uppercase section labels, and accounting rules for subtotals
+and totals. They do not use the shaded, bordered, hoverable tables used by
+record lists elsewhere in the application.
 
 The custom report builder uses this surface for its live preview, and **Run
 now** displays the finished custom report on it. Filters and actions remain in

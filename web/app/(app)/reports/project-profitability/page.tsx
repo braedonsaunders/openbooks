@@ -99,6 +99,7 @@ export default async function ProjectProfitabilityPage({
               money: [false, false, true, true, true, true, true, false, false],
               rows,
               links,
+              totalRowIndex: rows.length - 1,
               isEmpty: result.rows.length === 0,
             },
           ],

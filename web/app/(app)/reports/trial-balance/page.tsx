@@ -73,6 +73,7 @@ export default async function TrialBalance({
               money: [false, false, true, true, true],
               rows: dataRows,
               links,
+              totalRowIndex: dataRows.length - 1,
             },
           ],
         }}

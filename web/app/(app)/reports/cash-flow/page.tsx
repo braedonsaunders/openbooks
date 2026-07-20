@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { Badge, PageHeader, Table, TableBody, TableCell, TableRow, cn } from '@openbooks/ui'
+import { Badge, PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
@@ -11,6 +11,7 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
+import { Table, TableBody, TableCell, TableRow, reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,7 +90,7 @@ export default async function CashFlow({
           )}
           {hasMovements ? (
             <>
-              <TableRow>
+              <TableRow className={reportSubtotalRowClass}>
                 <TableCell className="font-bold">{t('netChange')}</TableCell>
                 <TableCell className={cn('text-right font-bold tabular-nums', cf.netChange < 0 && 'text-red-600 dark:text-red-400')}>
                   {m(cf.netChange)}
@@ -99,7 +100,7 @@ export default async function CashFlow({
                 <TableCell className="pl-8 text-slate-500 dark:text-slate-400">{t('openingCash')}</TableCell>
                 <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{m(cf.openingCash)}</TableCell>
               </TableRow>
-              <TableRow>
+              <TableRow className={reportTotalRowClass}>
                 <TableCell className="font-semibold">{t('closingCash')}</TableCell>
                 <TableCell className={cn('text-right font-semibold tabular-nums', cf.closingCash < 0 && 'text-red-600 dark:text-red-400')}>
                   {m(cf.closingCash)}
@@ -132,7 +133,7 @@ function SectionRows({
       <TableRow>
         <TableCell
           colSpan={2}
-          className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:bg-slate-900 dark:text-slate-300"
+          className="pt-4 pb-1 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-300"
         >
           {title}
         </TableCell>
@@ -153,7 +154,7 @@ function SectionRows({
           </TableRow>
         ))
       )}
-      <TableRow>
+      <TableRow className={reportSubtotalRowClass}>
         <TableCell className="font-semibold">{subtotalLabel}</TableCell>
         <TableCell className={cn('text-right font-semibold tabular-nums', subtotal < 0 && 'text-red-600 dark:text-red-400')}>
           {m(subtotal)}
