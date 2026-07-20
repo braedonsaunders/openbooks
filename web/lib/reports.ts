@@ -685,7 +685,7 @@ export async function journalReport(
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where e.org_id = ${orgId} and e.status = 'posted' and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimWhere(opts.dims)}
-     order by e.posting_date desc, e.entry_number desc, l.line_number
+     order by e.posting_date desc, e.entry_number desc, e.id, l.line_number
      limit ${maxLines + 1}
   `)) as unknown as {
     rows: {
@@ -698,14 +698,16 @@ export async function journalReport(
   const rows = truncated ? r.rows.slice(0, maxLines) : r.rows
 
   const entries: JournalReportEntry[] = []
-  let current: JournalReportEntry | null = null
+  const entriesById = new Map<string, JournalReportEntry>()
   for (const x of rows) {
-    if (!current || current.id !== x.id) {
-      current = { id: x.id, entryNumber: x.entry_number, date: x.date, memo: x.entry_memo, origin: x.origin, lines: [], totalDebit: 0, docKind: x.doc_kind, docId: x.doc_id }
-      entries.push(current)
+    let entry = entriesById.get(x.id)
+    if (!entry) {
+      entry = { id: x.id, entryNumber: x.entry_number, date: x.date, memo: x.entry_memo, origin: x.origin, lines: [], totalDebit: 0, docKind: x.doc_kind, docId: x.doc_id }
+      entriesById.set(x.id, entry)
+      entries.push(entry)
     }
     const amt = Number(x.amount)
-    current.lines.push({
+    entry.lines.push({
       accountNumber: x.acct_number,
       accountName: x.acct_name,
       party: x.party,
@@ -713,7 +715,7 @@ export async function journalReport(
       debit: amt > 0 ? amt : 0,
       credit: amt < 0 ? -amt : 0,
     })
-    if (amt > 0) current.totalDebit += amt
+    if (amt > 0) entry.totalDebit += amt
   }
   return { entries, from, to, truncated }
 }
