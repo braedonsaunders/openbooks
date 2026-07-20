@@ -870,6 +870,13 @@ export class ClosedPeriodError extends Error {}
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+export function glProjectionScopeUnchanged(
+  existing: { periodId: string; postingDate: string },
+  next: { periodId: string; postingDate: string },
+): boolean {
+  return existing.periodId === next.periodId && existing.postingDate === next.postingDate;
+}
+
 /** Build + validate the GL-Impact projection (kernel lines) for a document. */
 function buildProjection(doc: Doc, lines: DocLine[], deps: PostingDeps): KernelLine[] {
   const rule = RULES[doc.kind];
@@ -1001,12 +1008,14 @@ export async function regenerateGlImpactTx(
     .where(eq(schema.journalLines.entryId, entry.id))
     .orderBy(asc(schema.journalLines.lineNumber));
 
-  // Unchanged projection (same lines, same period, same posting date + memo) →
-  // this was a non-GL edit; the ledger is untouched (safe in a closed period).
+  // Memo is business metadata, not accounting impact. A memo-only source edit
+  // updates the audited document but never rewrites closed ledger evidence.
+  // Same lines + posting scope means the GL projection is unchanged.
   const unchanged =
-    entry.periodId === period.id &&
-    entry.postingDate === postingDate &&
-    (entry.memo ?? null) === (doc.memo ?? null) &&
+    glProjectionScopeUnchanged(
+      { periodId: entry.periodId, postingDate: entry.postingDate },
+      { periodId: period.id, postingDate },
+    ) &&
     glKey(kernelLines) === glKey(existing as unknown as Parameters<typeof glKey>[0]);
   if (unchanged) return { entryId: entry.id, changed: false };
 
