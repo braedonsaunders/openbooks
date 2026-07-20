@@ -44,7 +44,7 @@ const BILLING_METHODS = ['', 'time_and_materials', 'fixed_price', 'cost_plus']
 const COST_SOURCES = ['account_types', 'account_group']
 const LABOR_SOURCES = ['in_actual_cost', 'time_rate', 'payroll_je', 'account_group']
 const OVERHEAD_METHODS = ['none', 'percent_of_labor', 'per_labor_hour', 'rate_engine', 'account_group_actual']
-const ENGINE_DEFAULT = { rateSource: 'live', hoursBasis: 'billed_hours', dimension: 'overhead', scope: 'department' } as const
+const ENGINE_DEFAULT = { rateSource: 'standard', hoursBasis: 'total_hours', dimension: 'overhead', scope: 'department' } as const
 const PRICE_METHODS = ['contract_field', 'billable_value', 'not_to_exceed', 'cost_plus']
 const CBI_FORMULAS = ['price_minus_invoiced', 'unbilled_billable']
 const BUDGET_SOURCES = ['wbs_estimates', 'none']
@@ -237,7 +237,6 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               ) : <div />}
               {fp.overhead.method === 'rate_engine' ? (
                 <>
-                  <EnumField label={t('overheadRateSource')} value={fp.overhead.rateEngine?.rateSource ?? 'live'} options={['live', 'standard']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, rateSource: v as any } } })} />
                   <EnumField label={t('overheadHoursBasis')} value={fp.overhead.rateEngine?.hoursBasis ?? 'billed_hours'} options={['billed_hours', 'total_hours']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, hoursBasis: v as any } } })} />
                   <EnumField label={t('overheadScope')} value={fp.overhead.rateEngine?.scope ?? 'department'} options={['flat', 'department', 'class']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, scope: v as any } } })} />
                   <p className="sm:col-span-2 text-xs text-slate-500 dark:text-slate-400">{t('overheadRateEngineHint')}</p>

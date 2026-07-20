@@ -50,5 +50,5 @@
   "overheadRateSource": "Rate source",
   "overheadHoursBasis": "Applies to",
   "overheadScope": "Rate scope",
-  "overheadRateEngineHint": "Uses the Overhead Model rates (per-department composite $/hr) applied to this project’s labor hours. Configure the pools and allocation in the Overhead Model workspace."
+  "overheadRateEngineHint": "Costs overhead from the published, effective-dated Overhead Rates card (per-department $/hour × this project’s labor hours). Manage rates in the Overhead Model workspace."
 }

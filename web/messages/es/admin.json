@@ -1422,17 +1422,16 @@
         "publish": "Publicar tasas",
         "wizard": "Asistente de configuración",
         "publishTitle": "Publicar en la tarjeta de tasas",
-        "publishHint": "Fija las tasas actuales del motor en filas con fecha de vigencia en la tarjeta de tasas. Los proyectos con fuente «estándar» las usan hasta la próxima publicación.",
+        "publishHint": "Fija las tasas calculadas del motor en filas con fecha de vigencia de la tarjeta de tasas. Los proyectos usan estas tasas publicadas hasta la próxima publicación — los períodos anteriores conservan sus tasas originales.",
         "publishConfirm": "Publicar",
         "publishDone": "Tasas publicadas en la tarjeta",
         "cancel": "Cancelar",
         "wizardTitle": "Configurar gastos generales de proyecto",
         "wizardDone": "Gastos generales configurados",
-        "wizardIntro": "Los gastos generales dan a cada obra su parte del costo de operar la empresa — una cifra gerencial en el P&L del proyecto, nunca un asiento contable. Elija el método:",
+        "wizardIntro": "Los gastos generales dan a cada obra su parte del costo de operar la empresa — una cifra gerencial en el P&L del proyecto, nunca un asiento contable. Los gastos generales siempre se calculan con tasas publicadas con fecha de vigencia: los períodos cerrados nunca cambian. Elija el método:",
         "recommended": "Recomendado",
         "effectiveFrom": "Vigente desde",
-        "liveNow": "Motor ahora: ${rate}/h",
-        "liveExplain": "Los proyectos usan siempre el compuesto calculado del motor — autoajustable, sin publicación, pero los márgenes históricos cambian al registrar gastos.",
+        "liveNow": "Calculado de reales: ${rate}/h",
         "flatPercent": "Gastos generales % del costo de mano de obra",
         "flatPerHour": "Gastos generales $ por hora de mano de obra",
         "applyHint": "Aplica este método a los tipos de proyecto seleccionados. Su P&L gana una línea de Gastos generales incluida en el costo total.",
@@ -1443,11 +1442,7 @@
         "approach": {
           "rate_card": {
             "title": "Tarjeta de tasas por departamento",
-            "desc": "$/hora con fecha de vigencia por departamento, publicada desde el motor (o manual). Costos estables y auditables — el modelo NetSuite/adminapp."
-          },
-          "live": {
-            "title": "Tasas del motor en vivo",
-            "desc": "Siempre el compuesto calculado actual por departamento. Autoajustable, pero los márgenes pasados cambian."
+            "desc": "Tasas $/hora con fecha de vigencia por departamento, publicadas desde el motor o ingresadas manualmente. Los costos de obra son estables y auditables — los períodos pasados siempre conservan sus tasas vigentes."
           },
           "per_hour": {
             "title": "$ fijo por hora",
@@ -1457,7 +1452,15 @@
             "title": "% del costo de mano de obra",
             "desc": "Gastos generales como recargo sobre la mano de obra. Común en servicios profesionales."
           }
-        }
+        },
+        "current": "Configuración actual",
+        "ratesActive": "{count} tasas publicadas vigentes desde {date}",
+        "noRates": "Aún no hay tasas publicadas — use el asistente o publique tasas.",
+        "methodNone": "Sin gastos generales",
+        "methodCard": "Tarjeta de tasas por departamento",
+        "methodPct": "{rate}% de mano de obra",
+        "methodHr": "{rate} $/hora",
+        "methodGl": "GL contabilizado (grupo de cuentas)"
       }
     },
     "fields": {

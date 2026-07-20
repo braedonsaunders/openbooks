@@ -3,7 +3,6 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from './account-groups'
-import { trueCostData } from './analytics/true-cost-data'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
@@ -48,67 +47,35 @@ function costPredicate(src: CostSource, accountIds: string[]): SQL {
 }
 
 /**
- * rate_engine overhead — the Rassaun/Gantry model. Reuses the True Cost rate
- * engine's per-department composite burden rate ($/hr = overhead pool ÷ billed
- * hours) and applies it to THIS project's labor hours:
- *   overhead = Σ_dept ( project hours-in-dept × dept composite rate )
- * Purely statistical — no GL posting. Rates are computed live over a trailing
- * 12-month window (standard/effective-dated rates land with the rate table).
+ * rate_engine overhead — per-department hourly rates applied to the project's
+ * labor: overhead = Σ ( hours × the rate effective on each entry's work date ).
+ *
+ * Rates come ONLY from the published, effective-dated rate card
+ * (overhead_rates). The Overhead Model's live composite is an analytical
+ * preview that seeds publishing — it is never a costing basis, so job costs
+ * and closed-period margins can never restate retroactively. A department's
+ * rate is the SUM of its effective rows (a card may stack category rows);
+ * per_hour rows cost hours × $rate, percent rows cost labor cost × rate%.
+ * Purely statistical — no GL posting.
  */
 async function rateEngineOverhead(
   orgId: string,
   projectId: string,
   cfg: OverheadSource['rateEngine'],
 ): Promise<number> {
-  const basis = cfg?.hoursBasis ?? 'billed_hours'
-  const scope = cfg?.scope ?? 'department'
-
-  if ((cfg?.rateSource ?? 'live') === 'standard') {
-    // STANDARD: the published rate card (overhead_rates), applied date-effectively
-    // per time entry — the NetSuite/adminapp model, penny-validated against the
-    // synced GL burden. A department's rate is the SUM of its effective rows
-    // (a rate card may stack category rows); per_hour rows bill hours × $rate,
-    // percent rows bill labor cost × rate%.
-    const r = (await db.execute(sql`
-      select coalesce(sum(case when o.rate_kind = 'percent'
-                    then te.hours * coalesce(te.cost_rate, 0) * o.rate_percent / 100
-                    else te.hours * o.rate_percent end), 0) as overhead
-        from time_entries te
-        join overhead_rates o on o.department_id = te.department_id
-          and te.worked_on >= o.effective_from
-          and (o.effective_to is null or te.worked_on <= o.effective_to)
-          and o.org_id = ${orgId}
-       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-         ${basis === 'billed_hours' ? sql`and te.is_billable` : sql``}`)) as unknown as { rows: { overhead: string }[] }
-    return n(r.rows[0]?.overhead)
-  }
-
-  // Trailing-12-month window ending today (annual overhead ÷ annual hours).
-  const to = new Date()
-  const from = new Date(to)
-  from.setFullYear(from.getFullYear() - 1)
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  const tc = await trueCostData(orgId, { from: iso(from), to: iso(to), label: 'TTM' })
-
-  // Project approved hours by department.
-  const rows = (await db.execute(sql`
-    select te.department_id as dept,
-           coalesce(sum(te.hours), 0) as total,
-           coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
+  const basis = cfg?.hoursBasis ?? 'total_hours'
+  const r = (await db.execute(sql`
+    select coalesce(sum(case when o.rate_kind = 'percent'
+                  then te.hours * coalesce(te.cost_rate, 0) * o.rate_percent / 100
+                  else te.hours * o.rate_percent end), 0) as overhead
       from time_entries te
+      join overhead_rates o on o.department_id = te.department_id
+        and te.worked_on >= o.effective_from
+        and (o.effective_to is null or te.worked_on <= o.effective_to)
+        and o.org_id = ${orgId}
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-     group by te.department_id`)) as unknown as { rows: { dept: string | null; total: string; billed: string }[] }
-
-  const hoursOf = (r: { total: string; billed: string }) => n(basis === 'total_hours' ? r.total : r.billed)
-
-  if (scope === 'department') {
-    const rateByDept = new Map(tc.departments.map((d) => [d.id, d.composite]))
-    // Untagged/unknown-department hours fall back to the overall composite.
-    return rows.rows.reduce((sum, r) => sum + hoursOf(r) * (rateByDept.get(r.dept ?? '') ?? tc.kpis.compositeRate), 0)
-  }
-  // flat / class → overall composite × the project's hours.
-  const projectHours = rows.rows.reduce((sum, r) => sum + hoursOf(r), 0)
-  return projectHours * tc.kpis.compositeRate
+       ${basis === 'billed_hours' ? sql`and te.is_billable` : sql``}`)) as unknown as { rows: { overhead: string }[] }
+  return n(r.rows[0]?.overhead)
 }
 
 export async function resolveProjectFinancials(

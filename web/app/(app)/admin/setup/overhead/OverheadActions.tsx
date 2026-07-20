@@ -54,7 +54,7 @@ export function OverheadActions({ departments, projectTypes }: { departments: De
 
   // Wizard state.
   const [step, setStep] = useState(0)
-  const [approach, setApproach] = useState<'rate_card' | 'live' | 'percent' | 'per_hour'>('rate_card')
+  const [approach, setApproach] = useState<'rate_card' | 'percent' | 'per_hour'>('rate_card')
   const [flatRate, setFlatRate] = useState('')
   const [typeIds, setTypeIds] = useState<Set<string>>(() => new Set(projectTypes.map((p) => p.id)))
 
@@ -90,7 +90,7 @@ export function OverheadActions({ departments, projectTypes }: { departments: De
       const overhead =
         approach === 'percent' ? { method: 'percent_of_labor', ratePercent: Number(flatRate) || 0 }
         : approach === 'per_hour' ? { method: 'per_labor_hour', ratePerHour: Number(flatRate) || 0 }
-        : { method: 'rate_engine', rateEngine: { rateSource: approach === 'live' ? 'live' : 'standard', hoursBasis: 'total_hours', dimension: 'overhead', scope: 'department' } }
+        : { method: 'rate_engine', rateEngine: { rateSource: 'standard', hoursBasis: 'total_hours', dimension: 'overhead', scope: 'department' } }
       await post({ action: 'apply', projectTypeIds: [...typeIds], overhead })
       toast.success(t('wizardDone'))
       setOpen(null)
@@ -122,7 +122,6 @@ export function OverheadActions({ departments, projectTypes }: { departments: De
 
   const APPROACHES = [
     { key: 'rate_card', rec: true },
-    { key: 'live', rec: false },
     { key: 'per_hour', rec: false },
     { key: 'percent', rec: false },
   ] as const
@@ -168,7 +167,6 @@ export function OverheadActions({ departments, projectTypes }: { departments: De
             </div>
           ) : step === 1 ? (
             approach === 'rate_card' ? rateTable
-            : approach === 'live' ? <p className="text-sm text-slate-600 dark:text-slate-300">{t('liveExplain')}</p>
             : (
               <div className="max-w-[14rem] space-y-1">
                 <Label>{approach === 'percent' ? t('flatPercent') : t('flatPerHour')}</Label>
