@@ -137,15 +137,7 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
           <KpiCard icon={Scale} accent={under ? 'red' : 'emerald'} label="Absorption" value={`${k.gap < 0 ? '−' : '+'}${money(Math.abs(k.gap))}`} sub={under ? '▲ Under-absorbed' : 'Over-absorbed'} tone={under ? 'negative' : 'positive'} />
           <KpiCard icon={Clock} accent="amber" label="Billed Hours" value={hrs0(k.billedHours)} sub={`${Math.round(k.utilization * 100)}% utilization`} />
         </div>
-      ) : (
-        /* Setup surface: no dashboard chrome — one slim context line so the
-           editor knows what period/base the configured rates resolve against. */
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          <span className="font-semibold text-slate-700 dark:text-slate-200">{rate(k.compositeRate)}</span>
-          {' composite · '}{money0(k.totalOverhead)}{' overhead across '}{k.overheadAccounts}{' accounts · '}
-          {hrs0(k.billedHours)}{' billed hrs'}
-        </p>
-      )}
+      ) : null}
 
       <div className="-mx-1 overflow-x-auto">
         <div className="flex min-w-max items-center gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
