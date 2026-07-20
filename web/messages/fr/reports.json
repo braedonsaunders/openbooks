@@ -72,6 +72,8 @@
     "asOf": "Au",
     "from": "Du",
     "to": "Au",
+    "customer": "Client",
+    "allCustomers": "Tous les clients",
     "breakout": "Ventilation",
     "breakoutNone": "Total",
     "breakoutOpts": {
@@ -333,6 +335,8 @@
     },
     "runner": {
       "downloadCsv": "Télécharger le CSV",
+      "downloadPdf": "Télécharger le PDF",
+      "downloadXlsx": "Télécharger le fichier Excel",
       "runNow": "Exécuter maintenant",
       "runFailed": "L’exécution du rapport a échoué",
       "runComplete": "Exécution du rapport terminée",
@@ -841,6 +845,15 @@
     "pdf": "PDF",
     "xlsx": "Excel",
     "csv": "CSV",
+    "columns": {
+      "accountNumber": "N° de compte",
+      "accountName": "Compte",
+      "amount": "Montant",
+      "balance": "Solde",
+      "type": "Type",
+      "party": "Tiers",
+      "latestDue": "Dernière échéance"
+    },
     "print": "Imprimer",
     "printFailed": "Impossible d'ouvrir la boîte d'impression",
     "export": "Exporter"
@@ -848,7 +861,12 @@
   "projectProfitability": {
     "title": "Rentabilité des projets",
     "empty": "Aucune activité de projet sur cette période.",
+    "searchPlaceholder": "Rechercher des clients ou des projets…",
+    "noCustomer": "Client non attribué",
+    "expandCustomer": "Développer {customer}",
+    "collapseCustomer": "Réduire {customer}",
     "columns": {
+      "customerJob": "Client / Projet",
       "project": "Projet",
       "customer": "Client",
       "revenue": "Produits",

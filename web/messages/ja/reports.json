@@ -72,6 +72,8 @@
     "asOf": "基準日",
     "from": "開始",
     "to": "終了",
+    "customer": "顧客",
+    "allCustomers": "すべての顧客",
     "breakout": "内訳",
     "breakoutNone": "合計",
     "breakoutOpts": {
@@ -859,7 +861,12 @@
   "projectProfitability": {
     "title": "プロジェクト収益性",
     "empty": "この期間にプロジェクト活動はありません。",
+    "searchPlaceholder": "顧客またはジョブを検索…",
+    "noCustomer": "顧客未割り当て",
+    "expandCustomer": "{customer}を展開",
+    "collapseCustomer": "{customer}を折りたたむ",
     "columns": {
+      "customerJob": "顧客 / ジョブ",
       "project": "プロジェクト",
       "customer": "得意先",
       "revenue": "収益",

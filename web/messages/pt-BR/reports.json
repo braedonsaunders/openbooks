@@ -72,6 +72,8 @@
     "asOf": "Em",
     "from": "De",
     "to": "Até",
+    "customer": "Cliente",
+    "allCustomers": "Todos os clientes",
     "breakout": "Detalhamento",
     "breakoutNone": "Total",
     "breakoutOpts": {
@@ -859,7 +861,12 @@
   "projectProfitability": {
     "title": "Rentabilidade de Projetos",
     "empty": "Nenhuma atividade de projeto neste período.",
+    "searchPlaceholder": "Pesquisar clientes ou projetos…",
+    "noCustomer": "Cliente não atribuído",
+    "expandCustomer": "Expandir {customer}",
+    "collapseCustomer": "Recolher {customer}",
     "columns": {
+      "customerJob": "Cliente / Projeto",
       "project": "Projeto",
       "customer": "Cliente",
       "revenue": "Receita",

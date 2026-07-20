@@ -72,6 +72,8 @@
     "asOf": "Stichtag",
     "from": "Von",
     "to": "Bis",
+    "customer": "Kunde",
+    "allCustomers": "Alle Kunden",
     "breakout": "Aufgliederung",
     "breakoutNone": "Gesamt",
     "breakoutOpts": {
@@ -859,7 +861,12 @@
   "projectProfitability": {
     "title": "Projektrentabilität",
     "empty": "Keine Projektbewegungen in dieser Periode.",
+    "searchPlaceholder": "Kunden oder Aufträge suchen…",
+    "noCustomer": "Nicht zugeordneter Kunde",
+    "expandCustomer": "{customer} aufklappen",
+    "collapseCustomer": "{customer} zuklappen",
     "columns": {
+      "customerJob": "Kunde / Auftrag",
       "project": "Projekt",
       "customer": "Kunde",
       "revenue": "Umsatz",

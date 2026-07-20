@@ -237,7 +237,13 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side }), t) }
     }
     case 'project-profitability':
-      return { render: 'data', data: projectProfitabilityExportData(await projectProfitability(period.from, period.to, { dims, orgId }), t) }
+      return {
+        render: 'data',
+        data: projectProfitabilityExportData(
+          await projectProfitability(period.from, period.to, { dims, customerId: q.customerId, search: p.get('q') ?? undefined, orgId }),
+          t,
+        ),
+      }
   }
 
   // --- Legacy single-column statements --------------------------------------

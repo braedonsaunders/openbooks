@@ -285,6 +285,14 @@ export function projectProfitabilityExportData(
       projectName: string; customerName: string | null
       revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number
     }[]
+    customers: {
+      customerName: string | null
+      rows: {
+        projectName: string
+        revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number
+      }[]
+      totals: { revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number }
+    }[]
     totals: { revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number }
     from: string
     to: string
@@ -293,8 +301,7 @@ export function projectProfitabilityExportData(
 ): ExportData {
   const pct = (m: number | null) => (m === null ? '' : `${(m * 100).toFixed(1)}%`)
   const cols = [
-    t('projectProfitability.columns.project'),
-    t('projectProfitability.columns.customer'),
+    t('projectProfitability.columns.customerJob'),
     t('projectProfitability.columns.revenue'),
     t('projectProfitability.columns.cogs'),
     t('projectProfitability.columns.grossProfit'),
@@ -303,12 +310,19 @@ export function projectProfitabilityExportData(
     t('projectProfitability.columns.margin'),
     t('projectProfitability.columns.hours'),
   ]
-  const data = result.rows.map((r) => [
-    r.projectName, r.customerName ?? '',
-    r.revenue, r.cogs, r.grossProfit, r.expenses, r.net, pct(r.margin), r.hours,
-  ] as (string | number)[])
+  const data = result.customers.flatMap((customer) => [
+    [
+      customer.customerName ?? t('projectProfitability.noCustomer'),
+      customer.totals.revenue, customer.totals.cogs, customer.totals.grossProfit,
+      customer.totals.expenses, customer.totals.net, pct(customer.totals.margin), customer.totals.hours,
+    ],
+    ...customer.rows.map((row) => [
+      `  ${row.projectName}`,
+      row.revenue, row.cogs, row.grossProfit, row.expenses, row.net, pct(row.margin), row.hours,
+    ]),
+  ] as (string | number)[][])
   data.push([
-    t('trialBalance.totals'), '',
+    t('trialBalance.totals'),
     result.totals.revenue, result.totals.cogs, result.totals.grossProfit,
     result.totals.expenses, result.totals.net, pct(result.totals.margin), result.totals.hours,
   ])
@@ -325,7 +339,7 @@ export function projectProfitabilityExportData(
         title: t('projectProfitability.title'),
         columns: cols,
         rows: data,
-        align: ['left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+        align: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
       },
     ],
   }

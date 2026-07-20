@@ -12,7 +12,7 @@ test("financial statements exclude draft and other unposted journals", { skip: !
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/db.ts";
     import { toUnits } from "./engine/src/money.ts";
-    import { agingByParty, agingDetail, cashFlow, financialTrends, journalReport, profitAndLoss } from "./web/lib/reports.ts";
+    import { agingByParty, agingDetail, cashFlow, financialTrends, journalReport, profitAndLoss, projectProfitability, transactionDetail } from "./web/lib/reports.ts";
 
     // Exercise persistent application tenants only. Other DB-backed test files
     // create and delete short-lived orgs in parallel; sampling one between its
@@ -50,6 +50,48 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           journal.entries.length,
           org.id + " journal entries are grouped exactly once",
         );
+        const projectReport = await projectProfitability("0001-01-01", "9999-12-31");
+        assert.deepEqual(
+          projectReport.customers.flatMap((customer) => customer.rows.map((row) => row.projectId)).sort(),
+          projectReport.rows.map((row) => row.projectId).sort(),
+          org.id + " every project appears in exactly one customer group",
+        );
+        for (const customer of projectReport.customers) {
+          const sum = (key) => customer.rows.reduce((total, row) => total + row[key], 0);
+          for (const key of ["revenue", "cogs", "grossProfit", "expenses", "net"]) {
+            assert.equal(
+              toUnits(customer.totals[key].toFixed(4)),
+              toUnits(sum(key).toFixed(4)),
+              org.id + " " + (customer.customerName ?? "unassigned") + " " + key + " subtotal",
+            );
+          }
+          assert.equal(customer.totals.hours, sum("hours"), org.id + " customer hours subtotal");
+          if (customer.customerId) {
+            const filtered = await projectProfitability("0001-01-01", "9999-12-31", { customerId: customer.customerId });
+            assert.ok(filtered.rows.every((row) => row.customerId === customer.customerId), org.id + " customer filter scope");
+            assert.deepEqual(
+              filtered.rows.map((row) => row.projectId).sort(),
+              customer.rows.map((row) => row.projectId).sort(),
+              org.id + " customer filter completeness",
+            );
+            break;
+          }
+        }
+        const sampleProject = projectReport.rows[0];
+        if (sampleProject) {
+          const grossDetail = await transactionDetail({
+            accountTypes: ["income", "income_other", "cogs"],
+            from: "0001-01-01", to: "9999-12-31", mode: "flow",
+            dims: { projectId: sampleProject.projectId }, profitSigned: true,
+          });
+          const netDetail = await transactionDetail({
+            accountTypes: ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"],
+            from: "0001-01-01", to: "9999-12-31", mode: "flow",
+            dims: { projectId: sampleProject.projectId }, profitSigned: true,
+          });
+          assert.equal(toUnits(grossDetail.net.toFixed(4)), toUnits(sampleProject.grossProfit.toFixed(4)), org.id + " project gross-profit drill tie-out");
+          assert.equal(toUnits(netDetail.net.toFixed(4)), toUnits(sampleProject.net.toFixed(4)), org.id + " project net-profit drill tie-out");
+        }
         for (const side of ["ar", "ap"]) {
           const positiveKind = side === "ar" ? "customer_invoice" : "vendor_bill";
           const creditKind = side === "ar" ? "customer_credit" : "vendor_credit";

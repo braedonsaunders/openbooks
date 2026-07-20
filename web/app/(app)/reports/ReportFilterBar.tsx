@@ -16,6 +16,8 @@ export type SubsidiaryPickerOption = { id: string; label: string }
 /** Which controls a given report exposes. */
 export type ReportControls = {
   period?: boolean
+  /** Always-visible explicit From/To fields rather than the period preset. */
+  dateRange?: boolean
   /** Balance-style: custom period collapses to a single "as of" date. */
   asOf?: boolean
   breakout?: boolean
@@ -23,6 +25,7 @@ export type ReportControls = {
   compare?: boolean
   basis?: boolean
   dimensions?: boolean
+  customer?: boolean
   /** Subsidiary context dropdown (multi-subsidiary orgs only). */
   subsidiary?: boolean
   showZero?: boolean
@@ -61,12 +64,17 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 export function ReportFilterBar({
   controls,
   dimensions,
+  customers,
+  dateRange,
   subsidiaries,
   actions,
   defaultPeriod = 'this_fiscal_year',
 }: {
   controls: ReportControls
   dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[]; segments?: SegmentOption[]; builtinSegments?: BuiltinSegmentOption[] }
+  customers?: DimOption[]
+  /** Resolved dates displayed until an explicit URL value is selected. */
+  dateRange?: { from: string; to: string }
   /** First entry is the default context (the root, consolidated). */
   subsidiaries?: SubsidiaryPickerOption[]
   actions?: ReactNode
@@ -117,7 +125,7 @@ export function ReportFilterBar({
 
   return (
     <div className="flex flex-wrap items-center gap-x-1 gap-y-2 rounded-xl border border-slate-200 bg-slate-50/60 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900/40">
-      {controls.period !== false && (
+      {controls.period !== false && !controls.dateRange && (
         <Field label={controls.asOf ? t('asOf') : t('period')}>
           <Select
             value={period}
@@ -141,11 +149,35 @@ export function ReportFilterBar({
       {isCustom && controls.asOf && (
         <input type="date" value={params.get('to') ?? ''} onChange={(e) => setParams({ from: e.target.value, to: e.target.value })} className={DATE} />
       )}
-      {isCustom && !controls.asOf && (
+      {isCustom && !controls.asOf && !controls.dateRange && (
         <>
           <input type="date" value={params.get('from') ?? ''} onChange={(e) => setParams({ from: e.target.value })} className={DATE} aria-label={t('from')} />
           <span className="text-slate-400">–</span>
           <input type="date" value={params.get('to') ?? ''} onChange={(e) => setParams({ to: e.target.value })} className={DATE} aria-label={t('to')} />
+        </>
+      )}
+
+      {controls.dateRange && (
+        <>
+          <Field label={t('from')}>
+            <input
+              type="date"
+              value={params.get('from') ?? dateRange?.from ?? ''}
+              onChange={(e) => setParams({ period: 'custom', from: e.target.value, to: params.get('to') ?? dateRange?.to ?? null })}
+              className={DATE}
+              aria-label={t('from')}
+            />
+          </Field>
+          <span className="text-slate-400">–</span>
+          <Field label={t('to')}>
+            <input
+              type="date"
+              value={params.get('to') ?? dateRange?.to ?? ''}
+              onChange={(e) => setParams({ period: 'custom', from: params.get('from') ?? dateRange?.from ?? null, to: e.target.value })}
+              className={DATE}
+              aria-label={t('to')}
+            />
+          </Field>
         </>
       )}
 
@@ -192,6 +224,20 @@ export function ReportFilterBar({
             ))}
           </Select>
         </Field>
+      )}
+
+      {controls.customer && customers && customers.length > 0 && (
+        <Select
+          value={params.get('customer') ?? ''}
+          onChange={(e) => setParams({ customer: e.target.value || null })}
+          className={SELECT}
+          aria-label={t('customer')}
+        >
+          <option value="">{t('allCustomers')}</option>
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>{customer.name}</option>
+          ))}
+        </Select>
       )}
 
       {controls.dimensions && dimensions && (

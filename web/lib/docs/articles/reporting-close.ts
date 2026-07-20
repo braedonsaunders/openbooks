@@ -80,8 +80,11 @@ report.
 ## Other reporting areas
 
 Budget reports compare actual and planned amounts. Order reports show non-posting
-commercial commitments. Project profitability combines project revenue, cost,
-backlog, and configured profitability measures.
+commercial commitments. **Project Profitability** groups customer subtotals with
+each job underneath, combining project revenue, cost, margin, and approved hours.
+Use the **Customer**, **From**, and **To** filters to isolate the exact customer
+and accounting window under review. Every subtotal and job amount can be opened
+in supporting detail without leaving the report.
 
 ## Save and export
 

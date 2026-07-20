@@ -72,6 +72,8 @@
     "asOf": "截至",
     "from": "自",
     "to": "至",
+    "customer": "客户",
+    "allCustomers": "所有客户",
     "breakout": "分列",
     "breakoutNone": "合计",
     "breakoutOpts": {
@@ -859,7 +861,12 @@
   "projectProfitability": {
     "title": "项目盈利能力",
     "empty": "本期间内无项目活动。",
+    "searchPlaceholder": "搜索客户或项目…",
+    "noCustomer": "未分配客户",
+    "expandCustomer": "展开{customer}",
+    "collapseCustomer": "收起{customer}",
     "columns": {
+      "customerJob": "客户 / 项目",
       "project": "项目",
       "customer": "客户",
       "revenue": "收入",
