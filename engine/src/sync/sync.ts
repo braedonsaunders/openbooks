@@ -76,6 +76,21 @@ export function syncVerificationFailures(result: SyncResult): string[] {
   return failures;
 }
 
+export function sourceDeletionCandidates(
+  fullSweep: boolean,
+  existingRefs: Iterable<string>,
+  currentSourceRefs: Iterable<string>,
+  tombstones: Iterable<string>,
+): string[] {
+  const existing = new Set(existingRefs);
+  const deleted = new Set([...tombstones].filter((ref) => existing.has(ref)));
+  if (fullSweep) {
+    const current = new Set(currentSourceRefs);
+    for (const ref of existing) if (!current.has(ref)) deleted.add(ref);
+  }
+  return [...deleted].sort();
+}
+
 class SyncVerificationError extends Error {
   constructor(readonly result: SyncResult) {
     super(`financial verification failed: ${syncVerificationFailures(result).join("; ")}`);
@@ -252,7 +267,13 @@ export async function runSync(
     const ctx: NativeContext = await buildNativeContext(org.id, refKey, source.baseCurrency);
     // Pull-phase progress: the adapter reports "X of Y transactions" as it streams.
     ctx.onProgress = (p) => { void setProgress(run!.id, p); };
-    const deps: PostingDeps = { control: ctx.control, cardLiabilityAccountId: ctx.control.ap };
+    const deps: PostingDeps = {
+      control: ctx.control,
+      cardLiabilityAccountId: ctx.control.ap,
+      // Source replay can cross source-owned historical locks, while
+      // controller-owned close locks remain authoritative.
+      migration: true,
+    };
 
     // -- 3. pull native changes -------------------------------------------------
     await setProgress(run!.id, { phase: "pull", message: "Pulling transactions…" }, true);
@@ -437,18 +458,16 @@ export async function runSync(
     // On a FULL sweep the pulled set is the complete source universe, so any
     // previously-imported ref that vanished was deleted at source (our books
     // only ever contain refs the source once returned).
-    const deletedAtSource = changes.deletedRefs.filter((r) => existing.has(r));
+    const deletedAtSource = new Set(sourceDeletionCandidates(
+      since === null,
+      existing.keys(),
+      [...changes.documents.map((doc) => doc.sourceRef), ...changes.unbuildable.map((row) => row.ref)],
+      changes.deletedRefs,
+    ));
     // A source-CANCELLED transaction that we imported while it was posted is a
     // ledger divergence: flag it like a deletion (report-only, never auto-void).
     for (const u of changes.unbuildable) {
-      if (u.reason === "cancelled" && existing.get(u.ref)?.posted) deletedAtSource.push(u.ref);
-    }
-    if (since === null) {
-      const pulled = new Set(changes.documents.map((d) => d.sourceRef));
-      for (const u of changes.unbuildable) pulled.add(u.ref);
-      for (const ref of existing.keys()) {
-        if (!pulled.has(ref)) deletedAtSource.push(ref);
-      }
+      if (u.reason === "cancelled" && existing.get(u.ref)?.posted) deletedAtSource.add(u.ref);
     }
 
     // -- 6. applications ----------------------------------------------------------
@@ -555,7 +574,7 @@ export async function runSync(
       docsNew, docsAmended, docsUnchanged, ordersNew, docsFailed,
       sourceUnbuildable: changes.unbuildable.length,
       skipped: skipped.slice(0, 200),
-      deletedAtSource,
+      deletedAtSource: [...deletedAtSource].sort(),
       applications,
       trueUp,
       tb: { accounts: trialBalanceRefs.size, matches: tbMatches, mismatches: tbMismatches.slice(0, 50) },

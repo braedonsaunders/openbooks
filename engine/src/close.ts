@@ -14,6 +14,18 @@ export const CLOSE_MODULES = [
 ] as const;
 export type CloseModule = (typeof CLOSE_MODULES)[number];
 
+export function periodLockBlocksPosting(
+  lock: { state: string; reopenExpiresAt: Date | string | null; reason: string | null } | undefined,
+  allowImportedLock: boolean,
+  now = new Date(),
+): boolean {
+  if (!lock) return false;
+  if (allowImportedLock && lock.reason === "close.importedPeriodLockReason") return false;
+  return lock.state === "closed" || (
+    lock.state === "open" && lock.reopenExpiresAt != null && new Date(lock.reopenExpiresAt) <= now
+  );
+}
+
 export function closeModuleForDocument(kind: string): CloseModule {
   if (
     [
@@ -51,6 +63,8 @@ export async function assertPeriodModulesOpen(
     bookId: string;
     subsidiaryIds: string[];
     modules: CloseModule[];
+    /** Historical source replay may cross source-owned locks, never user locks. */
+    allowImportedLocks?: boolean;
   },
 ): Promise<void> {
   const modules = [...new Set<CloseModule>([...args.modules, "gl"])];
@@ -60,16 +74,16 @@ export async function assertPeriodModulesOpen(
   for (const subsidiaryId of subsidiaryIds) {
     for (const module of modules) {
       const result = (await executor.execute(sql`
-        select coalesce(
-          (select state = 'closed' or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now())
-             from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
-              and book_id = ${args.bookId} and subsidiary_id is not distinct from ${subsidiaryId} and module = ${module}),
-          (select state = 'closed' or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now())
-             from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
-              and book_id = ${args.bookId} and subsidiary_id is null and module = ${module}),
-          false
-        ) as closed`)) as unknown as { rows: { closed: boolean }[] };
-      if (result.rows[0]?.closed)
+        select state, reopen_expires_at as "reopenExpiresAt", reason
+          from period_locks
+         where org_id = ${args.orgId} and period_id = ${args.periodId}
+           and book_id = ${args.bookId} and module = ${module}
+           and (subsidiary_id is not distinct from ${subsidiaryId} or subsidiary_id is null)
+         order by (subsidiary_id is not null) desc
+         limit 1`)) as unknown as {
+        rows: { state: string; reopenExpiresAt: Date | string | null; reason: string | null }[];
+      };
+      if (periodLockBlocksPosting(result.rows[0], args.allowImportedLocks === true))
         throw new CloseError(
           `${module.toUpperCase()} is closed for this period and accounting book`,
         );
