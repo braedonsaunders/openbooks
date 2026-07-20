@@ -23,10 +23,8 @@
     "kind": "Art",
     "step": "Schritt",
     "decision": "Entscheidung",
-    "stepNumber": "Schritt {number}",
     "approval": "Genehmigung",
     "requested": "Angefordert",
-    "source": "Quelle",
     "assignee": "Zugewiesen an",
     "pendingWith": "Ausstehend bei",
     "waitingSince": "Wartet seit"
@@ -43,10 +41,6 @@
   "decide": {
     "rejectionReason": "Ablehnungsgrund:",
     "decisionFailed": "Entscheidung fehlgeschlagen"
-  },
-  "source": {
-    "flow": "Flow",
-    "legacy": "Richtlinie"
   },
   "aging": {
     "days": "{days} T"

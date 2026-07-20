@@ -8,7 +8,6 @@ export * from "./ledger";
 export * from "./documents";
 export * from "./tax";
 export * from "./tax-pools";
-export * from "./approvals";
 export * from "./extension";
 export * from "./inventory";
 export * from "./revenue";

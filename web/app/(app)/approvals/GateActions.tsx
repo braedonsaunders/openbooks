@@ -1,11 +1,9 @@
 'use client'
 
-// Per-row decision controls for the unified approvals worklist. One component
-// serves both engines: flow gates (POST /api/flows/gates/decide|delegate) and
-// legacy policy steps (POST /api/approvals/decide). Reject collects a reason
-// via the shared promptDialog; Delegate (flow rows only — the legacy engine
-// has no delegation) shows an inline user picker for the row's direct
-// assignee or an admin.
+// Per-row decision controls for the approvals worklist. Flow gates decide
+// through POST /api/flows/gates/decide|delegate. Reject collects a reason via
+// the shared promptDialog; Delegate shows an inline user picker for the row's
+// direct assignee or an admin.
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -19,18 +17,13 @@ export interface DelegateOption {
   name: string
 }
 
-/** Which engine's endpoint a row's decision goes to. */
-export type ApprovalTarget =
-  | { source: 'flow'; gateId: string }
-  | { source: 'legacy'; requestId: string; stepNumber: number }
-
 export function GateActions({
-  target,
+  gateId,
   canDelegate,
   users,
 }: {
-  target: ApprovalTarget
-  /** Current assignee or admin — shows the delegate picker (flow rows only). */
+  gateId: string
+  /** Current assignee or admin — shows the delegate picker. */
   canDelegate: boolean
   users: DelegateOption[]
 }) {
@@ -52,27 +45,15 @@ export function GateActions({
       comment = reason
     }
     setBusy(true)
-    const res =
-      target.source === 'flow'
-        ? await fetch('/api/flows/gates/decide', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gateId: target.gateId, decision, comment }),
-          })
-        : await fetch('/api/approvals/decide', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              requestId: target.requestId,
-              stepNumber: target.stepNumber,
-              decision,
-              note: comment,
-            }),
-          })
+    const res = await fetch('/api/flows/gates/decide', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gateId, decision, comment }),
+    })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       toast.error(data.error ?? t('decide.decisionFailed'))
-    } else if (target.source === 'flow' && data.resumed === null) {
+    } else if (data.resumed === null) {
       toast.success(t('gates.waitingOthers'))
     } else {
       toast.success(decision === 'approved' ? tc('status.approved') : tc('status.rejected'))
@@ -82,12 +63,12 @@ export function GateActions({
   }
 
   async function delegate(toUserId: string) {
-    if (!toUserId || target.source !== 'flow') return
+    if (!toUserId) return
     setBusy(true)
     const res = await fetch('/api/flows/gates/delegate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gateId: target.gateId, toUserId }),
+      body: JSON.stringify({ gateId, toUserId }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) toast.error(data.error ?? t('decide.decisionFailed'))
@@ -105,7 +86,7 @@ export function GateActions({
       <Button size="sm" variant="outline" disabled={busy} onClick={() => decide('rejected')}>
         {tc('actions.reject')}
       </Button>
-      {target.source === 'flow' && canDelegate && users.length > 0 ? (
+      {canDelegate && users.length > 0 ? (
         delegating ? (
           <span className="inline-flex items-center gap-1">
             <span className="w-44">

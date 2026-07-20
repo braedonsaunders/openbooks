@@ -33,7 +33,7 @@ Register flag. → `party_bank_accounts` + `payment_instructions`
 (remittance email tracking).
 
 **Approvals** — Reviewed, Waiting approval from, Needs Review, Rejection
-Note, Hide Memo On Timesheet. → approval engine (`approval_requests/steps`)
+Note, Hide Memo On Timesheet. → Flows engine (`flows`/`flow_runs`/`flow_gates`)
 + `time_entries.memo_is_private`.
 
 **Compliance** — Tax Total, FA Number, Nature of Transaction Code (GST/HST),

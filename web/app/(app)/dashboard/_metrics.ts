@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { worklistGates } from '@openbooks/engine/src/flows/index.ts'
 import {
   dashboardFinancialMetricsQuery,
   type DashboardFinancialMetricsRow,
@@ -28,29 +29,26 @@ export type DashboardMetrics = {
     lineCount: number
     totalDebits: string
   }>
+  /** Org-wide pending approval gates (flows engine). */
   pendingApprovalList: Array<{
     id: string
     targetKind: string
     targetId: string
     amount: string | null
-    status: string
-    currentStep: number
+    title: string
     createdAt: string
   }>
   /**
-   * Approvals the current user can actually decide: pending requests whose
-   * current step is assigned to the user's role (admins see everything),
-   * mirroring the /approvals worklist query in engine/src/approvals.ts.
-   * Approval steps have no per-user assignment (assignee_party_id has no
-   * linkage to users), so role assignment is the personal scope.
+   * Approval gates the current user can actually decide — direct assignee,
+   * role holder, or delegated-to-them — from worklistGates(), the same query
+   * that backs the /approvals "mine" tab.
    */
   myApprovalList: Array<{
     id: string
     targetKind: string
     targetId: string
     amount: string | null
-    status: string
-    currentStep: number
+    title: string
     createdAt: string
   }>
   draftDocuments: Array<{
@@ -66,15 +64,14 @@ export type DashboardMetrics = {
 export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetrics> {
   const orgId = authz.user.orgId
   const userId = authz.user.id
-  const role = authz.user.role
 
-  const [totals, financials, recentEntries, pendingApprovalList, myApprovalList, draftDocuments] = await Promise.all([
+  const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments] = await Promise.all([
     db.execute(sql`
       select
         (select count(*) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId} and e.status = 'posted') as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
         (select count(*) from journal_entries where org_id = ${orgId} and status = 'posted' and posting_date = current_date) as entries_today,
-        (select count(*) from approval_requests where org_id = ${orgId} and status = 'pending') as pending_approvals,
+        (select count(*) from flow_gates where org_id = ${orgId} and status = 'pending') as pending_approvals,
         (select coalesce(sum(l.amount), 0) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId}) as ledger_sum
     `),
     db.execute(dashboardFinancialMetricsQuery(orgId)),
@@ -90,24 +87,15 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
        limit 5
     `),
     db.execute(sql`
-      select id, target_kind, target_id, amount, status, current_step, created_at
-        from approval_requests
-       where org_id = ${orgId} and status = 'pending'
-       order by created_at desc
+      select g.id, g.title, g.subject_kind, g.subject_id, g.created_at,
+             d.kind as doc_kind, d.total
+        from flow_gates g
+        left join documents d on d.id = g.subject_id
+       where g.org_id = ${orgId} and g.status = 'pending'
+       order by g.created_at desc
        limit 5
     `),
-    db.execute(sql`
-      select r.id, r.target_kind, r.target_id, r.amount, r.status, r.current_step, r.created_at
-        from approval_requests r
-        join approval_steps s
-          on s.request_id = r.id
-         and s.step_number = r.current_step
-         and s.decision = 'pending'
-       where r.org_id = ${orgId} and r.status = 'pending'
-         and (s.assignee_role = ${role} or ${role} = 'admin')
-       order by r.created_at desc
-       limit 5
-    `),
+    worklistGates(orgId, userId),
     db.execute(sql`
       select id, kind, document_number, document_date, total, status
         from documents
@@ -142,21 +130,20 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     })),
     pendingApprovalList: ((pendingApprovalList as any).rows).map((r: any) => ({
       id: r.id,
-      targetKind: r.target_kind,
-      targetId: r.target_id,
-      amount: r.amount,
-      status: r.status,
-      currentStep: Number(r.current_step),
-      createdAt: r.created_at,
+      targetKind: r.doc_kind ?? r.subject_kind,
+      targetId: r.subject_id,
+      amount: r.total ?? null,
+      title: r.title,
+      createdAt:
+        r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
     })),
-    myApprovalList: ((myApprovalList as any).rows).map((r: any) => ({
-      id: r.id,
-      targetKind: r.target_kind,
-      targetId: r.target_id,
-      amount: r.amount,
-      status: r.status,
-      currentStep: Number(r.current_step),
-      createdAt: r.created_at,
+    myApprovalList: myGates.slice(0, 5).map((g) => ({
+      id: g.id,
+      targetKind: g.document?.kind ?? g.subjectKind,
+      targetId: g.subjectId,
+      amount: g.document?.total ?? null,
+      title: g.title,
+      createdAt: g.createdAt instanceof Date ? g.createdAt.toISOString() : String(g.createdAt),
     })),
     draftDocuments: ((draftDocuments as any).rows).map((r: any) => ({
       id: r.id,

@@ -2,9 +2,8 @@
 
 // Contextual approval controls for the record flyout (NetSuite-parity):
 // when a document is pending_approval, the viewer sees green Approve + Reject
-// buttons if the record-state API says they can decide (a flow gate OR a
-// legacy approval step — each routes to its own decide endpoint), or a subtle
-// "Pending with {names}" chip when they cannot. Reject always collects a
+// buttons if the record-state API says they can decide the flow gate, or a
+// subtle "Pending with {names}" chip when they cannot. Reject always collects a
 // reason through the shared promptDialog. A 409 (someone else decided first)
 // toasts and refreshes instead of erroring.
 //
@@ -89,26 +88,13 @@ export function ApprovalActions({
         if (!reason) return
         comment = reason
       }
+      if (!my.gateId) return
       setBusy(true)
-      // A flow gate decides through /api/flows/gates/decide; a legacy
-      // approval step through /api/approvals/decide. Prefer the flow gate
-      // when both exist (flows subsume the policy engine).
-      const res = my.gateId
-        ? await fetch('/api/flows/gates/decide', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gateId: my.gateId, decision, comment }),
-          })
-        : await fetch('/api/approvals/decide', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              requestId: my.legacyStep!.requestId,
-              stepNumber: my.legacyStep!.stepNumber,
-              decision,
-              note: comment,
-            }),
-          })
+      const res = await fetch('/api/flows/gates/decide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gateId: my.gateId, decision, comment }),
+      })
       const data = await res.json().catch(() => ({}))
       if (res.status === 409) {
         toast.info(t('approvalFlow.alreadyDecided'))

@@ -1,10 +1,10 @@
 'use client'
 
-// Unified approval worklist table — flow gates and legacy policy steps in one
-// grid. Owns the bulk-selection state (select-all + per-row checkboxes) and
-// the Approve/Reject-selected actions, which POST to /api/flows/gates/bulk
-// (per-item server-side iteration, no batch cap) and summarize the per-row
-// results in one toast. Single-row actions stay on GateActions.
+// Approval worklist table for flow gates. Owns the bulk-selection state
+// (select-all + per-row checkboxes) and the Approve/Reject-selected actions,
+// which POST to /api/flows/gates/bulk (per-item server-side iteration, no batch
+// cap) and summarize the per-row results in one toast. Single-row actions stay
+// on GateActions.
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -22,15 +22,12 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
-import { GateActions, type ApprovalTarget, type DelegateOption } from './GateActions'
+import { GateActions, type DelegateOption } from './GateActions'
 
 export interface ApprovalRow {
-  /** Stable selection key: `gate:${id}` or `step:${id}`. */
+  /** Stable selection key: `gate:${id}`. */
   key: string
-  source: 'flow' | 'legacy'
-  gateId: string | null
-  requestId: string | null
-  stepNumber: number | null
+  gateId: string
   documentNumber: string
   kind: string
   kindLabel: string
@@ -39,21 +36,15 @@ export interface ApprovalRow {
   party: string | null
   /** Pre-formatted amount (server renders the org's symbol). */
   amount: string | null
-  /** Gate title / "step N". */
+  /** Gate title. */
   approvalTitle: string
-  /** Flow or policy name. */
+  /** Flow name. */
   engineName: string
   /** ISO timestamp the approval was requested — drives the aging chip. */
   requestedAt: string
   assignee: string | null
   canDelegate: boolean
   quorumAll: boolean
-}
-
-function rowTarget(r: ApprovalRow): ApprovalTarget {
-  return r.gateId
-    ? { source: 'flow', gateId: r.gateId }
-    : { source: 'legacy', requestId: r.requestId!, stepNumber: r.stepNumber! }
 }
 
 const DAY_MS = 86_400_000
@@ -126,11 +117,7 @@ export function ApprovalsTable({
       comment = reason
     }
     setBusy(true)
-    const items = chosen.map((r) =>
-      r.gateId
-        ? { gateId: r.gateId }
-        : { requestId: r.requestId!, stepNumber: r.stepNumber! },
-    )
+    const items = chosen.map((r) => ({ gateId: r.gateId }))
     const res = await fetch('/api/flows/gates/bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -203,7 +190,6 @@ export function ApprovalsTable({
             <TableHead className="text-right">{tc('labels.amount')}</TableHead>
             <TableHead>{t('table.approval')}</TableHead>
             <TableHead>{t('table.requested')}</TableHead>
-            <TableHead>{t('table.source')}</TableHead>
             {showAssignee ? <TableHead>{t('table.assignee')}</TableHead> : null}
             {actionsEnabled ? <TableHead>{t('table.decision')}</TableHead> : null}
           </TableRow>
@@ -261,17 +247,12 @@ export function ApprovalsTable({
                   />
                 </span>
               </TableCell>
-              <TableCell>
-                <Badge variant="outline">
-                  {r.source === 'flow' ? t('source.flow') : t('source.legacy')}
-                </Badge>
-              </TableCell>
               {showAssignee ? (
                 <TableCell className="text-slate-500 dark:text-slate-400">{r.assignee}</TableCell>
               ) : null}
               {actionsEnabled ? (
                 <TableCell>
-                  <GateActions target={rowTarget(r)} canDelegate={r.canDelegate} users={users} />
+                  <GateActions gateId={r.gateId} canDelegate={r.canDelegate} users={users} />
                 </TableCell>
               ) : null}
             </TableRow>

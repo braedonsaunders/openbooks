@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { submitForApproval, decide } from '@openbooks/engine/src/approvals.ts'
+import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
 /**
- * Expense report lifecycle: draft → submit (approval engine) → approved → post.
- * Per-action permission gates: submit = expenses.create, decide = ap.approve,
- * post = ap.post.
+ * Expense report lifecycle: draft → submit (Flows approval) → approved → post.
+ * Per-action permission gates: submit = expenses.create, post = ap.post.
+ * Approval decisions are owned by the Flows engine (via the /approvals worklist
+ * and the record flyout → /api/flows/gates/decide), not this route.
  */
 
 async function controlDeps(orgId: string) {
@@ -41,12 +42,8 @@ export async function POST(req: Request) {
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const user = authz.user
   const body = (await req.json()) as {
-    action: 'submit' | 'decide' | 'post'
+    action: 'submit' | 'post'
     documentId?: string
-    requestId?: string
-    stepNumber?: number
-    decision?: 'approved' | 'rejected'
-    note?: string
   }
 
   try {
@@ -58,22 +55,17 @@ export async function POST(req: Request) {
         if (!body.documentId || !(await expenseReport(body.documentId, user.orgId))) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
-        const requestId = await submitForApproval('expense_report', body.documentId)
-        return NextResponse.json({ ok: true, requestId })
-      }
-      case 'decide': {
-        if (!can(authz, 'ap.approve')) {
-          return NextResponse.json({ error: 'missing permission: ap.approve' }, { status: 403 })
+        const { gated, runId } = await submitForApproval('expense_report', body.documentId)
+        if (!gated) {
+          // Expense reports always require approval — an approver, not the
+          // filer, releases them. With no flow configured there's nothing to
+          // approve them, so surface it instead of silently self-approving.
+          return NextResponse.json(
+            { error: 'no approval flow is configured for expense_report' },
+            { status: 422 },
+          )
         }
-        const request = (await db.execute(
-          sql`select id from approval_requests
-               where id = ${body.requestId ?? null} and target_kind = 'expense_report' and org_id = ${user.orgId}`,
-        )) as unknown as { rows: { id: string }[] }
-        if (!request.rows[0]) {
-          return NextResponse.json({ error: 'approval request not found' }, { status: 404 })
-        }
-        const res = await decide(body.requestId!, body.stepNumber!, body.decision!, user.id, body.note)
-        return NextResponse.json({ ok: true, ...res })
+        return NextResponse.json({ ok: true, requestId: runId })
       }
       case 'post': {
         if (!can(authz, 'ap.post')) {

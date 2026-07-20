@@ -68,7 +68,7 @@ first-class concepts.
 | Entity Bank Details (52-field custom record) + approval workflow | `party_bank_accounts` (normalized) + standard approval on change |
 | T&M vs fixed-price billing flags, "Final Invoice" | `billing_method` + `is_final` on invoice documents |
 | WSIB Rate Group / Employee Trade lists | `worker_comp_groups`, `trades` reference tables |
-| Approval fields (waiting-on, rejection note, reviewed) | `approval_requests` / `approval_steps` engine |
+| Approval fields (waiting-on, rejection note, reviewed) | Flows engine (`flows` / `flow_runs` / `flow_gates`) |
 | NOTC / Code of Supply GST-HST lists, Tax Report Mapper | `tax_codes` + `tax_report_lines` mapping |
 | Payment method / EFT notification fields | `payment_runs` + `payment_instructions` |
 | 67 credit-card GL accounts (one per card!) | `payment_cards` subledger under ONE liability account |
@@ -90,7 +90,7 @@ tax         tax_codes, tax_rates, tax_groups, tax_report_lines
 documents   documents (header supertype), document_lines, applications,
             document_links (fulfillment/billing chains)
 ledger      journal_entries, journal_lines  ← controlled-mutation kernel
-approvals   approval_policies, approval_requests, approval_steps
+flows       flows, flow_runs, flow_gates (approvals + automation), notifications
 extension   custom_field_defs, (JSONB `custom` on extensible tables), audit_log
 ```
 

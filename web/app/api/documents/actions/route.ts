@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
-import { submitForApproval } from '@openbooks/engine/src/approvals.ts'
+import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { createObligationsFromInvoice } from '@openbooks/engine/src/revenue-recognition.ts'
 import {
@@ -16,10 +16,11 @@ export const runtime = 'nodejs'
 /**
  * Submit a draft for approval, or post an approved/draft document.
  *
- * For kinds without a seeded approval policy (credit memos today), submit
- * gracefully falls back to marking the document approved so it can be posted —
- * credits still route through the same draft → submit → post flow as bills and
- * invoices, without requiring a per-kind policy seed.
+ * Approvals are owned by the Flows engine: submit fires the record's on_submit
+ * flows. When a flow gates the document it goes pending_approval; when none
+ * does, direct-post kinds and credit memos proceed straight to approved (they
+ * share the same draft → submit → post flow), while other kinds require an
+ * approval flow to be configured.
  */
 export async function POST(req: Request) {
   // Auth first: existence/kind/status of documents is never disclosed to
@@ -52,28 +53,25 @@ export async function POST(req: Request) {
       if (doc.status !== 'draft') {
         return NextResponse.json({ error: `document is ${doc.status}, not draft` }, { status: 422 })
       }
-      try {
-        const requestId = await submitForApproval(doc.kind, doc.id)
-        return NextResponse.json({ ok: true, requestId })
-      } catch (e) {
-        const msg = (e as Error).message
-        if (msg.includes('no active approval policy')) {
-          // No policy seeded for this kind. Only direct-post kinds and credit
-          // memos may skip straight to approved (the credits fallback this
-          // route exists for) — bills and invoices must have a policy, or a
-          // creator could self-approve them.
-          const mayAutoApprove =
-            cfg.directPost || doc.kind === 'vendor_credit' || doc.kind === 'customer_credit'
-          if (!mayAutoApprove) {
-            return NextResponse.json({ error: msg }, { status: 422 })
-          }
-          await db.update(schema.documents)
-            .set({ status: 'approved', updatedBy: user.id })
-            .where(eq(schema.documents.id, doc.id))
-          return NextResponse.json({ ok: true, requestId: null, autoApproved: true })
-        }
-        throw e
+      const { gated, runId } = await submitForApproval(doc.kind, doc.id)
+      if (gated) {
+        return NextResponse.json({ ok: true, requestId: runId })
       }
+      // No flow gated this document. Only direct-post kinds and credit memos
+      // may skip straight to approved — bills and invoices must have an
+      // approval flow, or a creator could self-approve them.
+      const mayAutoApprove =
+        cfg.directPost || doc.kind === 'vendor_credit' || doc.kind === 'customer_credit'
+      if (!mayAutoApprove) {
+        return NextResponse.json(
+          { error: `no approval flow is configured for ${doc.kind}` },
+          { status: 422 },
+        )
+      }
+      await db.update(schema.documents)
+        .set({ status: 'approved', updatedBy: user.id })
+        .where(eq(schema.documents.id, doc.id))
+      return NextResponse.json({ ok: true, requestId: null, autoApproved: true })
     }
     // post
     const deps = await controlDeps(user.orgId)

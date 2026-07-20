@@ -23,10 +23,8 @@
     "kind": "Tipo",
     "step": "Paso",
     "decision": "Decisión",
-    "stepNumber": "paso {number}",
     "approval": "Aprobación",
     "requested": "Solicitada",
-    "source": "Origen",
     "assignee": "Responsable",
     "pendingWith": "Pendiente de",
     "waitingSince": "En espera desde"
@@ -43,10 +41,6 @@
   "decide": {
     "rejectionReason": "Motivo del rechazo:",
     "decisionFailed": "La decisión falló"
-  },
-  "source": {
-    "flow": "Flujo",
-    "legacy": "Política"
   },
   "aging": {
     "days": "{days}d"
