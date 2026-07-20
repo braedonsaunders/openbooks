@@ -58,7 +58,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   await db.execute(sql`
-    delete from account_group_members where group_id = ${id} and account_id = ${accountId}
+    delete from account_group_members where group_id = ${id} and org_id = ${gate.user.orgId} and account_id = ${accountId}
   `);
   return NextResponse.json({ ok: true });
 }

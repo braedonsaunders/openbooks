@@ -73,19 +73,20 @@ export async function loadOpportunity(id: string, orgId: string) {
   `)) as unknown as { rows: Record<string, unknown>[] }
   if (!opportunity.rows[0]) return null
   const [lines, team, documents, activities, history] = await Promise.all([
-    db.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} order by line_number`),
+    db.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${orgId} order by line_number`),
     db.execute(sql`
       select m.*, u.name as user_name, u.email as user_email
         from crm_opportunity_team_members m join users u on u.id = m.user_id
-       where m.opportunity_id = ${id} order by m.is_primary desc, u.name`),
+       where m.opportunity_id = ${id} and m.org_id = ${orgId} order by m.is_primary desc, u.name`),
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency, d.total
         from crm_opportunity_documents od join documents d on d.id = od.document_id
-       where od.opportunity_id = ${id} order by d.document_date desc, d.created_at desc`),
+       where od.opportunity_id = ${id} and od.org_id = ${orgId} and d.org_id = ${orgId}
+       order by d.document_date desc, d.created_at desc`),
     db.execute(sql`
       select a.id, a.kind, a.status, a.subject, a.starts_at, a.due_at, a.completed_at
         from crm_activities a join crm_activity_links l on l.activity_id = a.id
-       where l.subject_kind = 'opportunity' and l.subject_id = ${id}
+       where l.subject_kind = 'opportunity' and l.subject_id = ${id} and l.org_id = ${orgId}
        order by coalesce(a.starts_at, a.due_at, a.created_at) desc`),
     db.execute(sql`
       select e.*, fs.name as from_status_name, ts.name as to_status_name, u.name as actor_name
@@ -93,7 +94,7 @@ export async function loadOpportunity(id: string, orgId: string) {
         left join crm_opportunity_statuses fs on fs.id = e.from_status_id
         join crm_opportunity_statuses ts on ts.id = e.to_status_id
         left join users u on u.id = e.created_by
-       where e.opportunity_id = ${id} order by e.occurred_at desc`),
+       where e.opportunity_id = ${id} and e.org_id = ${orgId} order by e.occurred_at desc`),
   ]) as any[]
   return { opportunity: opportunity.rows[0], lines: lines.rows, team: team.rows, documents: documents.rows, activities: activities.rows, history: history.rows }
 }
@@ -107,13 +108,13 @@ export async function loadActivity(id: string, orgId: string) {
      where a.id = ${id} and a.org_id = ${orgId}`)) as unknown as { rows: Record<string, unknown>[] }
   if (!activity.rows[0]) return null
   const [links, participants] = await Promise.all([
-    db.execute(sql`select * from crm_activity_links where activity_id = ${id} order by created_at`),
+    db.execute(sql`select * from crm_activity_links where activity_id = ${id} and org_id = ${orgId} order by created_at`),
     db.execute(sql`
       select p.*, u.name as user_name, c.name as contact_name
         from crm_activity_participants p
         left join users u on u.id = p.user_id
         left join contacts c on c.id = p.contact_id
-       where p.activity_id = ${id} order by p.created_at`),
+       where p.activity_id = ${id} and p.org_id = ${orgId} order by p.created_at`),
   ]) as any[]
   return { activity: activity.rows[0], links: links.rows, participants: participants.rows }
 }

@@ -184,7 +184,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const effInService =
         body.inServiceOn !== undefined
           ? strOrNull(body.inServiceOn)
-          : ((await db.execute(sql`select in_service_on from fixed_assets where id = ${id}`)) as any).rows[0]
+          : ((await db.execute(sql`select in_service_on from fixed_assets where id = ${id} and org_id = ${user.orgId}`)) as any).rows[0]
               ?.in_service_on
       const effLife = custom.lifeMonths
       if (!effInService) return bad('Set an in-service date before placing the asset in service')

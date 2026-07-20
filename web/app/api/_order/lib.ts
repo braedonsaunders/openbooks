@@ -25,14 +25,15 @@ export interface OrderLineInput {
 }
 
 /** Latest effective rate per tax code, as of now. */
-async function taxRateMap(): Promise<Map<string, number>> {
+async function taxRateMap(orgId: string): Promise<Map<string, number>> {
   const rates = (await db.execute(sql`
     select tc.id, coalesce(tr.rate_percent, 0) as rate
       from tax_codes tc
       left join lateral (
         select rate_percent from tax_rates
-         where tax_code_id = tc.id and effective_from <= now()
+         where org_id = ${orgId} and tax_code_id = tc.id and effective_from <= now()
          order by effective_from desc limit 1) tr on true
+     where tc.org_id = ${orgId}
   `)) as unknown as { rows: { id: string; rate: string }[] }
   return new Map(rates.rows.map((r) => [r.id, Number(r.rate)]))
 }
@@ -68,7 +69,7 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
   const doc = (await db.execute(sql`
     select d.*, p.display_name as party_name
       from documents d
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${kind}
   `)) as unknown as { rows: Record<string, unknown>[] }
   if (!doc.rows[0]) return null
@@ -79,10 +80,10 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
            l.department_id, l.project_id, l.extra_dims,
            i.name as item_name, a.number as account_number, a.name as account_name, tc.code as tax_code
       from document_lines l
-      left join items i on i.id = l.item_id
-      left join accounts a on a.id = l.account_id
-      left join tax_codes tc on tc.id = l.tax_code_id
-     where l.document_id = ${id}
+      left join items i on i.id = l.item_id and i.org_id = l.org_id
+      left join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
+     where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `)) as unknown as { rows: Record<string, unknown>[] }
 
@@ -90,12 +91,12 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
   const links = (await db.execute(sql`
     select 'from' as direction, dl.link_type, d2.id, d2.kind, d2.document_number, d2.status
       from document_links dl
-      join documents d2 on d2.id = dl.from_document_id
+      join documents d2 on d2.id = dl.from_document_id and d2.org_id = dl.org_id
      where dl.to_document_id = ${id} and dl.org_id = ${orgId}
     union all
     select 'to' as direction, dl.link_type, d2.id, d2.kind, d2.document_number, d2.status
       from document_links dl
-      join documents d2 on d2.id = dl.to_document_id
+      join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
      where dl.from_document_id = ${id} and dl.org_id = ${orgId}
     order by 1
   `)) as unknown as { rows: Record<string, unknown>[] }

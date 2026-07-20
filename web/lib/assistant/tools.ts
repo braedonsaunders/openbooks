@@ -180,7 +180,7 @@ const findJournalEntries: AssistantToolDef = {
     toDate: dateInput.optional(),
     limit: z.number().int().min(1).max(50).optional(),
   }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
       query?: string;
       status?: string;
@@ -190,7 +190,7 @@ const findJournalEntries: AssistantToolDef = {
       limit?: number;
     };
     const limit = Math.min(a.limit ?? 20, 50);
-    let where = sql`true`;
+    let where = sql`e.org_id = ${authz.user.orgId}`;
     if (a.query) {
       const like = `%${a.query}%`;
       where = sql`${where} and (e.entry_number ilike ${like} or e.memo ilike ${like})`;
@@ -338,8 +338,8 @@ const findDocuments: AssistantToolDef = {
     }
     const limit = Math.min(a.limit ?? 20, 50);
     let where = a.kind
-      ? sql`d.kind = ${a.kind}`
-      : sql`d.kind in ${kinds}`;
+      ? sql`d.kind = ${a.kind} and d.org_id = ${authz.user.orgId}`
+      : sql`d.org_id = ${authz.user.orgId} and d.kind in ${kinds}`;
     if (a.status) where = sql`${where} and d.status = ${a.status}`;
     if (a.query) {
       const like = `%${a.query}%`;
@@ -404,7 +404,7 @@ const getDocument: AssistantToolDef = {
       select d.*, p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id
-       where d.id = ${a.documentId}
+       where d.id = ${a.documentId} and d.org_id = ${authz.user.orgId}
     `)) as unknown as { rows: any[] };
     const d = doc.rows[0];
     if (!d) return { ok: false, error: "document_not_found" };
@@ -415,9 +415,9 @@ const getDocument: AssistantToolDef = {
              l.tax_amount, a.number as account_number, a.name as account_name,
              i.name as item_name
         from document_lines l
-        left join accounts a on a.id = l.account_id
-        left join items i on i.id = l.item_id
-       where l.document_id = ${a.documentId}
+       left join accounts a on a.id = l.account_id
+       left join items i on i.id = l.item_id
+       where l.document_id = ${a.documentId} and l.org_id = ${authz.user.orgId}
        order by l.line_number
     `)) as unknown as { rows: any[] };
     return {
@@ -469,10 +469,10 @@ const findParties: AssistantToolDef = {
     includeInactive: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).optional(),
   }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { query?: string; includeInactive?: boolean; limit?: number };
     const limit = Math.min(a.limit ?? 20, 50);
-    let where = a.includeInactive ? sql`true` : sql`is_active`;
+    let where = sql`org_id = ${authz.user.orgId} and ${a.includeInactive ? sql`true` : sql`is_active`}`;
     if (a.query) {
       const like = `%${a.query}%`;
       where = sql`${where} and (display_name ilike ${like} or short_code ilike ${like} or email ilike ${like})`;
@@ -532,12 +532,12 @@ const profitAndLossTool: AssistantToolDef = {
     departmentId: uuidInput.optional(),
     projectId: uuidInput.optional(),
   }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { fromDate: string; toDate: string; departmentId?: string; projectId?: string };
     const r = await profitAndLoss(a.fromDate, a.toDate, {
       departmentId: a.departmentId,
       projectId: a.projectId,
-    });
+    }, authz.user.orgId);
     const { items, truncated } = capItems(
       r.items.map((i) => ({
         number: i.number,
@@ -573,9 +573,9 @@ const balanceSheetTool: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ asOf: dateInput }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOf: string };
-    const r = await balanceSheet(a.asOf);
+    const r = await balanceSheet(a.asOf, authz.user.orgId);
     const section = (rows: typeof r.assets) =>
       capItems(
         rows.map((i) => ({
@@ -609,9 +609,9 @@ const trialBalanceTool: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ asOf: dateInput }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOf: string };
-    const rows = await trialBalance(a.asOf);
+    const rows = await trialBalance(a.asOf, undefined, authz.user.orgId);
     const { items, truncated } = capItems(
       rows.map((r) => ({
         number: r.number,
@@ -643,7 +643,7 @@ const agingTool: AssistantToolDef = {
       return { ok: false, error: "forbidden" };
     }
     const limit = Math.min(a.limit ?? 30, 100);
-    const r = await agingByParty(a.side, a.asOf ?? today());
+    const r = await agingByParty(a.side, a.asOf ?? today(), undefined, authz.user.orgId);
     return {
       ok: true,
       data: {
@@ -675,9 +675,9 @@ const cashFlowTool: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ fromDate: dateInput, toDate: dateInput }),
-  execute: async (raw, _authz): Promise<ToolResult> => {
+  execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { fromDate: string; toDate: string };
-    const r = await cashFlow(a.fromDate, a.toDate);
+    const r = await cashFlow(a.fromDate, a.toDate, undefined, authz.user.orgId);
     return {
       ok: true,
       data: {

@@ -360,7 +360,7 @@ async function runDocumentLifecycle(
     return null;
   } catch (e) {
     const status = e instanceof PostingError ? 422 : 500;
-    return { status, body: { error: (e as Error).message, document: await loadDocument(id) } };
+    return { status, body: { error: (e as Error).message, document: await loadDocument(id, user.orgId) } };
   }
 }
 
@@ -383,7 +383,7 @@ async function createDocument(user: SessionUser, docKind: string, body: DocApiBo
   }
   const life = await runDocumentLifecycle(user, draft.id, docKind, body.action);
   if (life) return life;
-  return { status: 201, body: await loadDocument(draft.id) };
+  return { status: 201, body: await loadDocument(draft.id, user.orgId) };
 }
 
 async function updateDocument(user: SessionUser, docKind: string, id: string, body: DocApiBody): Promise<WriteResult> {
@@ -403,7 +403,7 @@ async function updateDocument(user: SessionUser, docKind: string, id: string, bo
   // Posted docs already have GL; only advance the lifecycle for pre-post edits.
   const life = row.status === "posted" ? null : await runDocumentLifecycle(user, id, docKind, body.action);
   if (life) return life;
-  return { status: 200, body: await loadDocument(id) };
+  return { status: 200, body: await loadDocument(id, user.orgId) };
 }
 
 async function deleteDocumentWriter(user: SessionUser, docKind: string, id: string): Promise<WriteResult> {

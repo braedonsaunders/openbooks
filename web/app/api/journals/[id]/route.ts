@@ -28,7 +28,7 @@ async function controlDeps(orgId: string) {
  * rules (migrated journals carry NetSuite's GL). Non-GL edits (memo, reference #)
  * leave this unchanged and never touch the ledger.
  */
-async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, id: string): Promise<string> {
+async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, id: string, orgId: string): Promise<string> {
   const r = (await tx.execute(sql`
     select md5(
       coalesce(d.party_id::text,'') || '~' || coalesce(d.document_date::text,'') || '~' ||
@@ -41,9 +41,9 @@ async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise
         coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
         coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
         '|' order by line_number)
-        from document_lines where document_id = d.id), '')
+        from document_lines where document_id = d.id and org_id = d.org_id), '')
     ) as sig
-    from documents d where d.id = ${id}`)) as { rows: { sig: string }[] }
+    from documents d where d.id = ${id} and d.org_id = ${orgId}`)) as { rows: { sig: string }[] }
   return r.rows[0]?.sig ?? ''
 }
 
@@ -51,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('gl.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const journal = await loadJournalDoc(id)
+  const journal = await loadJournalDoc(id, gate.user.orgId)
   if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(journal)
 }
@@ -179,10 +179,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
       const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
       const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
-      const sigBefore = await glSignature(tx, id)
+        const sigBefore = await glSignature(tx, id, user.orgId)
 
       if (preparedLines) {
-        await tx.execute(sql`delete from document_lines where document_id = ${id}`)
+        await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
           await tx.execute(sql`
@@ -214,7 +214,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // Re-materialize the GL-Impact projection only when the edit actually
       // changed GL-relevant fields (no-op for draft journals and for non-GL
       // edits like memo/reference #, which preserves migrated GL).
-      if ((await glSignature(tx, id)) !== sigBefore) {
+      if ((await glSignature(tx, id, user.orgId)) !== sigBefore) {
         await regenerateGlImpactTx(tx, id, deps, user.id)
       }
       if (auditBefore) {
@@ -236,7 +236,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     throw e
   }
 
-  const journal = await loadJournalDoc(id)
+  const journal = await loadJournalDoc(id, user.orgId)
   return NextResponse.json(journal)
 }
 

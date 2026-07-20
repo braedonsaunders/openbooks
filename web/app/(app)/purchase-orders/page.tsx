@@ -40,19 +40,19 @@ export default async function PurchaseOrders({
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND) : null,
     openId && openId !== 'new'
       ? Promise.all([
-          db.execute(sql`select id, display_name from parties where custom->>'nsKind' = 'vendor' and is_active order by display_name limit 2000`) as any,
-          db.execute(sql`select id, number, name from accounts where is_active and not is_summary order by number nulls last`) as any,
-          db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where is_active order by name limit 2000`) as any,
+          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and custom->>'nsKind' = 'vendor' and is_active order by display_name limit 2000`) as any,
+          db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
+          db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
           db.execute(sql`
             select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
               from tax_codes tc
               left join lateral (
                 select rate_percent from tax_rates
-                 where tax_code_id = tc.id and effective_from <= now()
+                 where org_id = ${authz.user.orgId} and tax_code_id = tc.id and effective_from <= now()
                  order by effective_from desc limit 1) tr on true
-             where tc.is_active order by tc.code`) as any,
-          db.execute(sql`select id, name from departments where is_active order by name`) as any,
-          db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
+             where tc.org_id = ${authz.user.orgId} and tc.is_active order by tc.code`) as any,
+          db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
+          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
           customSegmentOptions(authz.user.orgId),
         ])
       : null,

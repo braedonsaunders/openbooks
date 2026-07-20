@@ -1,6 +1,8 @@
 import 'server-only'
+import { sql } from 'drizzle-orm'
 import { cache } from 'react'
 import { currentUser } from './auth'
+import { db } from '@openbooks/engine/src/db.ts'
 
 /**
  * Resolve the tenant id before querying `orgs`, which cannot be protected by
@@ -17,6 +19,24 @@ const requestOrgId = cache(async (): Promise<string> => {
   return user.orgId
 })
 
+async function requestOrgIdFromSession(): Promise<string | null> {
+  try {
+    const r = (await db.execute(sql`select nullif(current_setting('app.current_org', true), '') as org_id`)) as {
+      rows: { org_id: string | null }[]
+    }
+    return r.rows[0]?.org_id ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function resolveOrgId(orgId?: string | null): Promise<string> {
-  return orgId ?? requestOrgId()
+  if (orgId) return orgId
+  try {
+    return await requestOrgId()
+  } catch {
+    const sessionOrg = await requestOrgIdFromSession()
+    if (sessionOrg) return sessionOrg
+    throw new Error('active organization is required')
+  }
 }

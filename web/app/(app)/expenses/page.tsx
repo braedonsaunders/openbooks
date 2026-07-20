@@ -75,7 +75,7 @@ export default async function Expenses({
   const status = pickString(sp.status)
   const employee = pickString(sp.employee)
 
-  const where = sql`d.kind = 'expense_report'
+  const where = sql`d.kind = 'expense_report' and d.org_id = ${authz.user.orgId}
     ${status ? sql` and d.status = ${status}` : sql``}
     ${employee ? sql` and d.party_id = ${employee}` : sql``}
     ${params.q ? sql` and (d.document_number ilike ${'%' + params.q + '%'} or p.display_name ilike ${'%' + params.q + '%'} or d.memo ilike ${'%' + params.q + '%'})` : sql``}`
@@ -94,6 +94,7 @@ export default async function Expenses({
     db.execute(sql`
       select d.status, count(*) as n from documents d
        where d.kind = 'expense_report'
+         and d.org_id = ${authz.user.orgId}
        group by d.status
     `) as any,
     db.execute(sql`
@@ -101,6 +102,7 @@ export default async function Expenses({
         from documents d
         join parties p on p.id = d.party_id
        where d.kind = 'expense_report'
+         and d.org_id = ${authz.user.orgId}
        group by p.id, p.display_name
        order by p.display_name
     `) as any,
@@ -114,26 +116,28 @@ export default async function Expenses({
     : total
 
   const [openReport, pickers] = await Promise.all([
-    expenseId ? loadExpenseReport(expenseId) : null,
+    expenseId ? loadExpenseReport(expenseId, authz.user.orgId) : null,
     expenseId
       ? Promise.all([
           db.execute(sql`
             select p.id, p.display_name from parties p
              where p.is_active
+               and p.org_id = ${authz.user.orgId}
                and (p.custom->>'nsKind' = 'employee'
                     or exists (select 1 from employee_roles er where er.party_id = p.id))
              order by p.display_name limit 2000`) as any,
-          db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary order by number nulls last`) as any,
+          db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`) as any,
           db.execute(sql`
             select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
               from tax_codes tc
               left join lateral (
                 select rate_percent from tax_rates
-                 where tax_code_id = tc.id and effective_from <= now()
+                 where org_id = ${authz.user.orgId} and tax_code_id = tc.id and effective_from <= now()
                  order by effective_from desc limit 1) tr on true
-             where tc.is_active order by tc.code`) as any,
-          db.execute(sql`select id, name from departments where is_active order by name`) as any,
-          db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
+             where tc.is_active and tc.org_id = ${authz.user.orgId}
+             order by tc.code`) as any,
+          db.execute(sql`select id, name from departments where is_active and org_id = ${authz.user.orgId} order by name`) as any,
+          db.execute(sql`select id, name from projects where is_active and org_id = ${authz.user.orgId} order by name limit 2000`) as any,
           loadFieldDefs('documents', 'expense_report'),
           loadFieldDefs('document_lines', 'expense_report'),
           customSegmentOptions(authz.user.orgId),

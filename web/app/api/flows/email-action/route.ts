@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/db.ts'
 import {
   decideGate,
   verifyEmailActionToken,
@@ -22,9 +22,8 @@ export const runtime = 'nodejs'
  *                   (idempotent: an already-decided gate reports who handled
  *                   it instead of erroring)
  *
- * With no session there is no request-org RLS scope, so queries run in the
- * trusted bypass mode (engine/src/db.ts) — the token, not the org context, is
- * what gates access, and every lookup is keyed by the token's exact gate id.
+ * With no session there is no request-org RLS scope. We resolve the gate first
+ * from the signed token claim, then rerun writes/reads under that gate's org.
  */
 
 function esc(v: unknown): string {
@@ -56,6 +55,7 @@ function page(title: string, bodyHtml: string, status = 200): NextResponse {
 
 interface GateSummary {
   id: string
+  orgId: string
   title: string
   status: string
   subject_kind: string
@@ -70,7 +70,7 @@ interface GateSummary {
 
 async function loadGateSummary(gateId: string): Promise<GateSummary | null> {
   const r = (await db.execute(sql`
-    select g.id, g.title, g.status, g.subject_kind,
+    select g.id, g.org_id as "orgId", g.title, g.status, g.subject_kind,
            du.name as decided_by_name,
            d.document_number, d.kind as doc_kind, d.total, d.currency,
            d.document_date, p.display_name as party_name
@@ -121,7 +121,7 @@ export async function GET(req: Request) {
   const claims = verifyEmailActionToken(token)
   if (!claims) return invalidTokenPage()
 
-  const gate = await loadGateSummary(claims.gateId)
+  const gate = await withBypassContext(() => loadGateSummary(claims.gateId))
   if (!gate) return invalidTokenPage()
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
@@ -156,22 +156,24 @@ export async function POST(req: Request) {
   const claims = verifyEmailActionToken(token)
   if (!claims) return invalidTokenPage()
 
-  const gate = await loadGateSummary(claims.gateId)
+  const gate = await withBypassContext(() => loadGateSummary(claims.gateId))
   if (!gate) return invalidTokenPage()
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
   try {
-    await decideGate({
-      gateId: claims.gateId,
-      decision: claims.decision,
-      userId: claims.assigneeUserId,
-      comment: reason || null,
-    })
+    await withOrgContext(gate.orgId, () =>
+      decideGate({
+        gateId: claims.gateId,
+        decision: claims.decision,
+        userId: claims.assigneeUserId,
+        comment: reason || null,
+      }),
+    )
   } catch (e) {
     if (e instanceof GateError) {
       // Race: someone decided between the check and the update — idempotent.
       if (/already resolved/.test(e.message)) {
-        const fresh = await loadGateSummary(claims.gateId)
+        const fresh = await withOrgContext(gate.orgId, () => loadGateSummary(claims.gateId))
         return fresh ? alreadyHandledPage(fresh) : invalidTokenPage()
       }
       return page('Could not record your decision', `<p style="color:#52525b">${esc(e.message)}</p>`, 409)
@@ -181,9 +183,10 @@ export async function POST(req: Request) {
   }
 
   const approved = claims.decision === 'approved'
+  const updatedGate = await withOrgContext(gate.orgId, () => loadGateSummary(claims.gateId))
   return page(
     approved ? 'Approved' : 'Rejected',
     `<p style="color:#52525b">Your decision was recorded${approved ? '' : reason ? ' with your reason' : ''}. You can close this page.</p>
-     ${documentSummaryHtml(gate)}`,
+     ${documentSummaryHtml(updatedGate ?? gate)}`,
   )
 }

@@ -25,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       from journal_entries e
       left join journal_entries re on re.id = e.reverses_entry_id
       left join documents d on d.id = e.source_document_id
-     where e.id = ${id}
+     where e.id = ${id} and e.org_id = ${authz.user.orgId}
   `)) as unknown as { rows: Record<string, unknown>[] }
   const entry = e.rows[0]
   if (!entry) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -39,7 +39,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       left join parties p on p.id = l.party_id
       left join departments d on d.id = l.department_id
       left join projects pr on pr.id = l.project_id
-     where l.entry_id = ${id}
+     where l.entry_id = ${id} and l.org_id = ${authz.user.orgId}
      order by l.line_number
   `)) as unknown as { rows: Record<string, unknown>[] }
 

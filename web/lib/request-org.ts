@@ -25,5 +25,10 @@ export function setRequestOrg(orgId: string): void {
 
 registerRequestOrgResolver(() => {
   const store = workAsyncStorage.getStore();
-  return store ? requestOrg.get(store) : undefined;
+  // During Next app rendering there is always a request store, even before
+  // `currentUser()` resolves and seeds `setRequestOrg`.
+  // Returning a denied tenant scope for that empty window is safer than silently
+  // falling back to trusted bypass.
+  if (!store) return undefined;
+  return requestOrg.get(store) ?? { orgId: "", bypass: false };
 });

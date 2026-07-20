@@ -9,6 +9,7 @@ import { computeBillTotals, nextDocumentNumber, taxRateMap, type BillLineInput }
 import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
+import { resolveOrgId } from './org-scope'
 
 /**
  * Unified line-based posting-document machinery.
@@ -109,21 +110,22 @@ export async function createDocumentDraft(orgId: string, userId: string, kind: s
  * applications against the posted entry's control open-item line, and
  * `balance_due` = total − applied.
  */
-export async function loadDocument(id: string) {
+export async function loadDocument(id: string, orgId?: string) {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const doc = (await db.execute(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
            ${sql`case when d.status = 'posted' then ap.applied end`} as applied,
            ${sql`case when d.status = 'posted' then d.total - ap.applied end`} as balance_due
       from documents d
-      left join parties p on p.id = d.party_id
-      left join journal_entries e on e.id = d.posted_entry_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
       left join lateral (
         select coalesce(sum(a.amount), 0) as applied
           from journal_lines jl
-          join applications a on a.to_line_id = jl.id and a.unapplied_at is null
-         where jl.entry_id = d.posted_entry_id and jl.is_open_item
+          join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id and a.unapplied_at is null
+         where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
       ) ap on true
-     where d.id = ${id}
+     where d.id = ${id} and d.org_id = ${resolvedOrgId}
   `)) as unknown as { rows: Record<string, unknown>[] }
   if (!doc.rows[0]) return null
   const lines = (await db.execute(sql`
@@ -132,7 +134,7 @@ export async function loadDocument(id: string) {
            l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
            l.extra_dims, l.custom
       from document_lines l
-     where l.document_id = ${id}
+     where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
   `)) as unknown as { rows: Record<string, unknown>[] }
   return { doc: doc.rows[0], lines: lines.rows }
@@ -228,6 +230,7 @@ export class DocumentEditError extends Error {
 async function glSignature(
   tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
   id: string,
+  orgId: string,
 ): Promise<string> {
   const r = (await tx.execute(sql`
     select md5(
@@ -244,9 +247,9 @@ async function glSignature(
         coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' ||
         coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
         '|' order by line_number)
-        from document_lines where document_id = d.id), '')
+        from document_lines where org_id = d.org_id and document_id = d.id), '')
     ) as sig
-    from documents d where d.id = ${id}`)) as { rows: { sig: string }[] }
+    from documents d where d.id = ${id} and d.org_id = ${orgId}`)) as { rows: { sig: string }[] }
   return r.rows[0]?.sig ?? ''
 }
 
@@ -307,7 +310,7 @@ export async function applyDocumentEdit(
     | null = null
   if (body.lines) {
     const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
-    const computed = computeBillTotals(valid, await taxRateMap())
+    const computed = computeBillTotals(valid, await taxRateMap(orgId))
     totals = computed
     // A transfer moves one amount between two accounts; its two legs carry the
     // same amount, so the document total is that amount — NOT the summed legs.
@@ -361,10 +364,10 @@ export async function applyDocumentEdit(
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
       const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
       const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
-      const sigBefore = await glSignature(tx, id)
+      const sigBefore = await glSignature(tx, id, orgId)
 
       if (preparedLines) {
-        await tx.execute(sql`delete from document_lines where document_id = ${id}`)
+        await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
           await tx.execute(sql`
@@ -420,7 +423,7 @@ export async function applyDocumentEdit(
         })
       }
 
-      if ((await glSignature(tx, id)) !== sigBefore) {
+      if ((await glSignature(tx, id, orgId)) !== sigBefore) {
         await regenerateGlImpactTx(tx, id, deps, userId)
       }
       if (auditBefore) {
@@ -505,52 +508,56 @@ export interface Opt {
   subsidiary_id?: string | null
 }
 
-export async function partyOptions(role: 'vendor' | 'customer'): Promise<Opt[]> {
+export async function partyOptions(role: 'vendor' | 'customer', orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const filter =
     role === 'vendor'
       ? sql`custom->>'nsKind' = 'vendor'`
       : sql`(custom->>'nsKind' = 'customer'
-             or exists (select 1 from customer_roles cr where cr.party_id = parties.id))`
+             or exists (select 1 from customer_roles cr where cr.org_id = ${resolvedOrgId} and cr.party_id = parties.id))`
   const r = (await db.execute(sql`
     select id, display_name, subsidiary_id from parties
-     where ${filter} and is_active
+     where org_id = ${resolvedOrgId} and ${filter} and is_active
      order by display_name limit 2000
   `)) as unknown as { rows: Opt[] }
   return r.rows
 }
 
-export async function accountOptions(cfg: DocKindConfig): Promise<Opt[]> {
+export async function accountOptions(cfg: DocKindConfig, orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const typeFilter = cfg.accountTypes
     ? sql` and a.type in (${sql.join(cfg.accountTypes.map((ty) => sql`${ty}`), sql`, `)})`
     : sql``
   const r = (await db.execute(sql`
     select id, number, name from accounts a
-     where a.is_active and not a.is_summary ${typeFilter}
+     where a.org_id = ${resolvedOrgId} and a.is_active and not a.is_summary ${typeFilter}
      order by a.number nulls last
   `)) as unknown as { rows: Opt[] }
   return r.rows
 }
 
-export async function taxCodeOptions(): Promise<Opt[]> {
+export async function taxCodeOptions(orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const r = (await db.execute(sql`
     select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
       from tax_codes tc
       left join lateral (
         select rate_percent from tax_rates
-         where tax_code_id = tc.id and effective_from <= now()
+         where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= now()
          order by effective_from desc limit 1) tr on true
-     where tc.is_active order by tc.code
+     where tc.org_id = ${resolvedOrgId} and tc.is_active order by tc.code
   `)) as unknown as { rows: Opt[] }
   return r.rows
 }
 
-export async function dimensionOptions() {
+export async function dimensionOptions(orgId?: string) {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const [departments, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where is_active order by name`) as any,
-    db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
-    db.execute(sql`select id, name from locations where is_active order by name`) as any,
-    db.execute(sql`select id, name from classes where is_active order by name`) as any,
-    segmentRegistry(),
+    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active order by name`) as any,
+    db.execute(sql`select id, name from projects where org_id = ${resolvedOrgId} and is_active order by name limit 2000`) as any,
+    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active order by name`) as any,
+    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active order by name`) as any,
+    segmentRegistry(resolvedOrgId),
   ])
   return {
     departments: departments.rows as Opt[],
@@ -563,20 +570,22 @@ export async function dimensionOptions() {
 }
 
 /** Active catalog items (for the optional line `item` column). */
-export async function itemOptions(): Promise<Opt[]> {
+export async function itemOptions(orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const r = (await db.execute(sql`
-    select id, code, name from items where is_active order by coalesce(code, name), name limit 2000
+    select id, code, name from items where org_id = ${resolvedOrgId} and is_active order by coalesce(code, name), name limit 2000
   `)) as unknown as { rows: Opt[] }
   return r.rows
 }
 
 /** Active corporate cards (for card_charge / card_refund funding source). */
-export async function cardOptions(): Promise<Opt[]> {
+export async function cardOptions(orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const r = (await db.execute(sql`
     select pc.id, pc.label, pc.last_four, pc.network, pc.liability_account_id, p.display_name as holder
       from payment_cards pc
-      left join parties p on p.id = pc.holder_party_id
-     where pc.is_active
+      left join parties p on p.id = pc.holder_party_id and p.org_id = pc.org_id
+     where pc.org_id = ${resolvedOrgId} and pc.is_active
      order by pc.label
   `)) as unknown as { rows: any[] }
   return r.rows.map((c) => ({
@@ -590,10 +599,11 @@ export async function cardOptions(): Promise<Opt[]> {
 }
 
 /** Reconcilable bank accounts (for check funding source + transfer legs). */
-export async function bankAccountOptions(): Promise<Opt[]> {
+export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const r = (await db.execute(sql`
     select id, number, name from accounts
-     where is_active and not is_summary and reconcilable and type = 'asset_bank'
+     where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'asset_bank'
      order by number nulls last
   `)) as unknown as { rows: Opt[] }
   return r.rows

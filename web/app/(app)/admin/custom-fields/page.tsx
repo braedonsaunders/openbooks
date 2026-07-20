@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
+import { requirePermission } from '../../../../lib/authz'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
@@ -30,6 +31,7 @@ export default async function CustomFields({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  await requirePermission('admin.custom_fields.manage')
   const t = await getTranslations('admin.customFields')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')

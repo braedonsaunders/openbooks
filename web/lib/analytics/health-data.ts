@@ -129,7 +129,7 @@ function monthLabel(ym: string): string {
 }
 
 /** 12-month P&L series ending at the period end (fills gaps with zero). */
-async function monthlySeries(to: string, months = 12): Promise<MonthPoint[]> {
+async function monthlySeries(orgId: string, to: string, months = 12): Promise<MonthPoint[]> {
   const end = new Date(to + "T00:00:00Z");
   const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (months - 1), 1));
   const startIso = start.toISOString().slice(0, 10);
@@ -140,9 +140,10 @@ async function monthlySeries(to: string, months = 12): Promise<MonthPoint[]> {
       sum(case when a.type in ('expense','expense_deferred') then l.amount else 0 end) as opex,
       sum(case when a.type = 'expense_other' then l.amount else 0 end) as other_exp
     from journal_lines l
-    join accounts a on a.id = l.account_id
-    join journal_entries e on e.id = l.entry_id
-    where e.posting_date >= ${startIso} and e.posting_date <= ${to}
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+    where l.org_id = ${orgId}
+      and e.posting_date >= ${startIso} and e.posting_date <= ${to}
       and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
     group by 1
   `)) as any;
@@ -177,6 +178,7 @@ async function monthlySeries(to: string, months = 12): Promise<MonthPoint[]> {
 
 /** Segment breakdown for one dimension (department/class/location) with YoY. */
 async function segmentsBy(
+  orgId: string,
   dimCol: "department_id" | "class_id" | "location_id",
   dimTable: "departments" | "classes" | "locations",
   from: string,
@@ -196,10 +198,11 @@ async function segmentsBy(
       sum(case when a.type in ('expense','expense_deferred') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as opex,
       -sum(case when a.type in ('income','income_other') and e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_revenue
     from journal_lines l
-    join accounts a on a.id = l.account_id
-    join journal_entries e on e.id = l.entry_id
-    left join ${tbl} d on d.id = ${col}
-    where a.type in ('income','income_other','cogs','expense','expense_deferred')
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+    left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
+    where l.org_id = ${orgId}
+      and a.type in ('income','income_other','cogs','expense','expense_deferred')
       and e.posting_date >= ${pFrom} and e.posting_date <= ${to}
     group by 1, 2
     having abs(-sum(case when a.type in ('income','income_other') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end)) > 0.005
@@ -239,7 +242,7 @@ async function segmentsBy(
 }
 
 /** Top account-level movers vs prior year, split into revenue and cost. */
-async function drivers(from: string, to: string): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
+async function drivers(orgId: string, from: string, to: string): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
   const r = (await db.execute(sql`
@@ -247,9 +250,10 @@ async function drivers(from: string, to: string): Promise<{ revenue: DriverRow[]
       sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as cur_raw,
       sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_raw
     from journal_lines l
-    join accounts a on a.id = l.account_id
-    join journal_entries e on e.id = l.entry_id
-    where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+    where l.org_id = ${orgId}
+      and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
       and e.posting_date >= ${pFrom} and e.posting_date <= ${to}
     group by a.id, a.name, a.type
   `)) as any;
@@ -287,7 +291,7 @@ async function drivers(from: string, to: string): Promise<{ revenue: DriverRow[]
  * invoice lines, so the GL-native equivalent is revenue by income/service
  * account — each revenue account is the "line item". Current vs prior year.
  */
-async function itemAnalysis(from: string, to: string): Promise<HealthData["items"]> {
+async function itemAnalysis(orgId: string, from: string, to: string): Promise<HealthData["items"]> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
   let rows: ItemRow[] = [];
@@ -297,9 +301,10 @@ async function itemAnalysis(from: string, to: string): Promise<HealthData["items
         -sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as current,
         -sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior
       from journal_lines l
-      join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id
-      where a.type in ('income','income_other')
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      where l.org_id = ${orgId}
+        and a.type in ('income','income_other')
         and e.posting_date >= ${pFrom} and e.posting_date <= ${to}
       group by a.id, a.name
     `)) as any;
@@ -457,14 +462,14 @@ export async function healthData(period: { from: string; to: string; label: stri
   };
 
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
-    financialHealth(period, benchmarks),
-    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks),
-    monthlySeries(to),
-    segmentsBy("department_id", "departments", from, to).catch(() => []),
-    segmentsBy("class_id", "classes", from, to).catch(() => []),
-    segmentsBy("location_id", "locations", from, to).catch(() => []),
-    drivers(from, to),
-    itemAnalysis(from, to),
+    financialHealth(period, benchmarks, orgId),
+    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId),
+    monthlySeries(orgId, to),
+    segmentsBy(orgId, "department_id", "departments", from, to).catch(() => []),
+    segmentsBy(orgId, "class_id", "classes", from, to).catch(() => []),
+    segmentsBy(orgId, "location_id", "locations", from, to).catch(() => []),
+    drivers(orgId, from, to),
+    itemAnalysis(orgId, from, to),
     budgetVariance(orgId, from, to).catch((): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } })),
   ]);
 

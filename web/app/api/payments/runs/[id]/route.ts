@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         from payment_instructions i
         join parties p on p.id = i.payee_party_id
         left join documents d on d.id = i.payment_document_id
-       where i.payment_run_id = ${id}
+       where i.payment_run_id = ${id} and i.org_id = ${gate.user.orgId}
        order by p.display_name
     `) as unknown as Promise<{ rows: Record<string, unknown>[] }>,
     paymentRunReadiness(id, gate.user.orgId),

@@ -159,7 +159,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Only draft types can be deleted — archive published types instead' }, { status: 422 })
   }
   const records = (await db.execute(sql`
-    select 1 from custom_records where type_id = ${id} limit 1
+    select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id} limit 1
   `)) as any
   if (records.rows.length > 0) {
     return NextResponse.json({ error: 'This type already has records and cannot be deleted' }, { status: 422 })

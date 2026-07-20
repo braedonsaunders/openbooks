@@ -75,7 +75,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (participant.contactId && (!isUuid(participant.contactId) || !(await db.execute(sql`select 1 from contacts where id = ${participant.contactId} and org_id = ${user.orgId}`) as any).rows[0])) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
   }
 
-  await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
     await tx.execute(sql`
       update crm_activities set
         kind = ${body.kind ?? sql`kind`}, status = ${body.status ?? sql`status`},
@@ -94,15 +94,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           when ${body.status ?? null} = 'completed' and completed_at is null then now()
           when ${body.status ?? null} <> 'completed' then null else completed_at end,
         updated_at = now(), updated_by = ${user.id}
-      where id = ${id}`)
+      where id = ${id} and org_id = ${user.orgId}`)
     if (links) {
-      await tx.execute(sql`delete from crm_activity_links where activity_id = ${id}`)
+      await tx.execute(sql`delete from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId}`)
       for (const link of links) await tx.execute(sql`
         insert into crm_activity_links (org_id, activity_id, subject_kind, subject_id, created_by, updated_by)
         values (${user.orgId}, ${id}, ${link.subjectKind}, ${link.subjectId}, ${user.id}, ${user.id})`)
     }
     if (participants) {
-      await tx.execute(sql`delete from crm_activity_participants where activity_id = ${id}`)
+      await tx.execute(sql`delete from crm_activity_participants where activity_id = ${id} and org_id = ${user.orgId}`)
       for (const participant of participants) {
         await tx.execute(sql`
           insert into crm_activity_participants
@@ -113,7 +113,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     await tx.execute(sql`
       update crm_account_profiles cp set last_activity_at = greatest(coalesce(cp.last_activity_at, '-infinity'), now()), updated_at = now()
-       where cp.party_id in (select subject_id from crm_activity_links where activity_id = ${id} and subject_kind = 'account')`)
+       where cp.org_id = ${user.orgId} and cp.party_id in (select subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} and subject_kind = 'account')`)
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'crm_activities', ${id}, 'update', ${JSON.stringify({ before: current.rows[0], requested: body })}::jsonb, ${user.id})`)

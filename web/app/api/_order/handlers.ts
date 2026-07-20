@@ -73,7 +73,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           return NextResponse.json({ error: 'only a draft can be issued' }, { status: 422 })
         }
         const doc = (await db.execute(
-          sql`select party_id, total from documents where id = ${id}`,
+          sql`select party_id, total from documents where id = ${id} and org_id = ${user.orgId}`,
         )) as unknown as { rows: { party_id: string | null; total: string }[] }
         const d = doc.rows[0]!
         if (!d.party_id || Number(d.total) <= 0) {
@@ -83,14 +83,16 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           )
         }
         await db.execute(
-          sql`update documents set status = 'approved', updated_at = now(), updated_by = ${user.id} where id = ${id}`,
+          sql`update documents set status = 'approved', updated_at = now(), updated_by = ${user.id}
+               where id = ${id} and org_id = ${user.orgId}`,
         )
       } else if (body.status === 'voided') {
         if (status === 'voided') {
           return NextResponse.json({ error: 'already voided' }, { status: 422 })
         }
         await db.execute(
-          sql`update documents set status = 'voided', voided_at = now(), updated_at = now(), updated_by = ${user.id} where id = ${id}`,
+          sql`update documents set status = 'voided', voided_at = now(), updated_at = now(), updated_by = ${user.id}
+               where id = ${id} and org_id = ${user.orgId}`,
         )
       }
       const order = await loadOrder(id, user.orgId, cfg.kind)
@@ -114,7 +116,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       const valid = body.lines.filter(
         (l) => (l.itemId || l.accountId) && Number(l.quantity) > 0 && Number(l.unitPrice) >= 0,
       )
-      const computed = computeOrderTotals(valid, await orderTaxRateMap())
+      const computed = computeOrderTotals(valid, await orderTaxRateMap(user.orgId))
       totals = { subtotal: computed.subtotal, taxTotal: computed.taxTotal, total: computed.total }
       preparedLines = []
       for (let i = 0; i < computed.lines.length; i++) {
@@ -129,7 +131,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
 
     await db.transaction(async (tx) => {
       if (preparedLines) {
-        await tx.execute(sql`delete from document_lines where document_id = ${id}`)
+        await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
           await tx.execute(sql`

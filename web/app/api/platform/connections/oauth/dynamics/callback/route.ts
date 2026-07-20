@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { sealJson, unsealJson } from '@openbooks/engine/src/secrets.ts'
 import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine/src/dynamics.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
+import { guardPermission } from '../../../../../../../lib/authz'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -14,6 +15,8 @@ export const maxDuration = 60
  * company in the BC environment, and merge tokens + companyId back onto the row.
  */
 export async function GET(req: Request) {
+  const gate = await guardPermission('admin.setup.manage')
+  if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
   const back = (status: string) => NextResponse.redirect(new URL(`/sync?oauth=${status}`, req.url))
 
@@ -24,6 +27,7 @@ export async function GET(req: Request) {
 
   const st = unsealJson<{ orgId: string; connectionId: string }>(state)
   if (!st?.orgId || !st?.connectionId) return back('badstate')
+  if (st.orgId !== gate.user.orgId) return back('badstate')
   const conn = await getConnection(st.orgId, st.connectionId)
   if (!conn || conn.source !== 'dynamics') return back('notfound')
   const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
