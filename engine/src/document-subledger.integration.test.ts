@@ -5,11 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { toUnits } from "./money.ts";
 import { postDocument } from "./posting.ts";
-import {
-  applyInventoryIssuesForInvoice,
-  applyInventoryReceiptsForBill,
-  getOnHand,
-} from "./inventory.ts";
+import { applyInventoryIssuesForInvoice, applyInventoryReceiptsForBill, getOnHand } from "./inventory.ts";
 import { createObligationsFromInvoice, runRevenueRecognition } from "./revenue-recognition.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
@@ -28,7 +24,15 @@ async function draftDoc(
   org: ScratchOrg,
   kind: string,
   number: string,
-  line: { itemId: string; quantity: string; unitPrice: string; amount: string; stockLocationId?: string; accountId?: string; partyId?: string },
+  line: {
+    itemId: string;
+    quantity: string;
+    unitPrice: string;
+    amount: string;
+    stockLocationId?: string;
+    accountId?: string;
+    partyId?: string;
+  },
 ): Promise<string> {
   const docId = randomUUID();
   await db.execute(sql`
@@ -46,11 +50,22 @@ async function draftDoc(
 
 test("document posting drives inventory receipts, COGS, and revenue recognition", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+  const deps = {
+    control: {
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
+    },
+  };
   try {
     // -- Vendor bill → inventory receipt (via clearing) ----------------------
     const billId = await draftDoc(org, "vendor_bill", "BILL-1", {
-      itemId: org.items.fifo, quantity: "50", unitPrice: "2", amount: "100", stockLocationId: org.stockLocationId, partyId: org.vendorId,
+      itemId: org.items.fifo,
+      quantity: "50",
+      unitPrice: "2",
+      amount: "100",
+      stockLocationId: org.stockLocationId,
+      partyId: org.vendorId,
     });
     const billEntry = await postDocument(billId, deps);
     await applyInventoryReceiptsForBill(org.orgId, null, billId, billEntry, org.date, org.subsidiaryId);
@@ -65,7 +80,13 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
 
     // -- Customer invoice → COGS issue --------------------------------------
     const invId = await draftDoc(org, "customer_invoice", "INV-1", {
-      itemId: org.items.fifo, quantity: "20", unitPrice: "5", amount: "100", stockLocationId: org.stockLocationId, accountId: org.accounts.revenue, partyId: org.customerId,
+      itemId: org.items.fifo,
+      quantity: "20",
+      unitPrice: "5",
+      amount: "100",
+      stockLocationId: org.stockLocationId,
+      accountId: org.accounts.revenue,
+      partyId: org.customerId,
     });
     await postDocument(invId, deps);
     await applyInventoryIssuesForInvoice(org.orgId, null, invId, org.date, org.subsidiaryId);
@@ -80,7 +101,12 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
 
     // -- Customer invoice (service) → deferred → recognized ------------------
     const subId = await draftDoc(org, "customer_invoice", "INV-2", {
-      itemId: org.items.service, quantity: "1", unitPrice: "1200", amount: "1200", accountId: org.accounts.revenue, partyId: org.customerId,
+      itemId: org.items.service,
+      quantity: "1",
+      unitPrice: "1200",
+      amount: "1200",
+      accountId: org.accounts.revenue,
+      partyId: org.customerId,
     });
     await postDocument(subId, deps);
     // Invoice posted to DEFERRED revenue (item carries a recognition rule).
@@ -107,6 +133,91 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
       rows: unknown[];
     };
     assert.equal(bad.rows.length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("percent-complete recognition posts current-period catch-ups and remains open until complete", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const ruleId = randomUUID();
+    const contractId = randomUUID();
+    const obligationId = randomUUID();
+    const scheduleId = randomUUID();
+    await db.execute(sql`
+      insert into recognition_rules
+        (id, org_id, code, name, method, is_forecast, start_date_source, end_date_source,
+         period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+      values (${ruleId}, ${org.orgId}, 'POC', 'Percent complete', 'percent_complete', false,
+              'obligation', 'term', 0, 0, '0', ${org.accounts.deferred}, ${org.accounts.recognized}, true)`);
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, total_transaction_price, currency)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'POC-1', 'active', '2026-07-01', '1000', 'CAD')`);
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id, allocated_price, percent_complete,
+         recognition_starts_on, deferred_account_id, recognized_account_id, status)
+      values (${obligationId}, ${org.orgId}, ${contractId}, 'Implementation', ${ruleId}, '1000', '25',
+              '2026-07-01', ${org.accounts.deferred}, ${org.accounts.recognized}, 'open')`);
+    await db.execute(sql`
+      insert into recognition_schedules (id, org_id, obligation_id, book_id, status, total_amount)
+      values (${scheduleId}, ${org.orgId}, ${obligationId}, ${org.bookId}, 'planned', '1000')`);
+    await db.execute(sql`
+      insert into recognition_schedule_lines (id, org_id, schedule_id, period_id, sequence, planned_amount)
+      values (${randomUUID()}, ${org.orgId}, ${scheduleId}, ${org.periodId}, 1, '250')`);
+
+    const first = await runRevenueRecognition(org.orgId, "2026-07-15", null, obligationId);
+    assert.equal(first.posted, 1);
+    assert.equal(toUnits(first.totalAmount), toUnits("250"));
+    let state = (await db.execute(sql`
+      select o.status, e.posting_date::text as posting_date
+        from performance_obligations o
+        join recognition_schedules s on s.obligation_id = o.id
+        join recognition_schedule_lines l on l.schedule_id = s.id
+        join journal_entries e on e.id = l.journal_entry_id
+       where o.id = ${obligationId} and l.sequence = 1`)) as unknown as {
+      rows: { status: string; posting_date: string }[];
+    };
+    assert.deepEqual(state.rows[0], {
+      status: "open",
+      posting_date: "2026-07-15",
+    });
+
+    await db.execute(sql`
+      update performance_obligations set percent_complete = '100' where id = ${obligationId}`);
+    await db.execute(sql`
+      insert into recognition_schedule_lines (id, org_id, schedule_id, period_id, sequence, planned_amount)
+      values (${randomUUID()}, ${org.orgId}, ${scheduleId}, ${org.periodId}, 2, '750')`);
+
+    const final = await runRevenueRecognition(org.orgId, "2026-07-20", null, obligationId);
+    assert.equal(final.posted, 1);
+    assert.equal(toUnits(final.totalAmount), toUnits("750"));
+    state = (await db.execute(sql`
+      select o.status, e.posting_date::text as posting_date
+        from performance_obligations o
+        join recognition_schedules s on s.obligation_id = o.id
+        join recognition_schedule_lines l on l.schedule_id = s.id
+        join journal_entries e on e.id = l.journal_entry_id
+       where o.id = ${obligationId} and l.sequence = 2`)) as unknown as {
+      rows: { status: string; posting_date: string }[];
+    };
+    assert.deepEqual(state.rows[0], {
+      status: "satisfied",
+      posting_date: "2026-07-20",
+    });
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.deferred)), toUnits("1000"));
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.recognized)), toUnits("-1000"));
+
+    const rerun = await runRevenueRecognition(org.orgId, "2026-07-20", null, obligationId);
+    assert.equal(rerun.posted, 0);
+    const unbalanced = (await db.execute(sql`
+      select entry_id from journal_lines where org_id = ${org.orgId}
+       group by entry_id having sum(amount) <> 0`)) as unknown as {
+      rows: unknown[];
+    };
+    assert.equal(unbalanced.rows.length, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
