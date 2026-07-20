@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-07-16T02:54:12.216Z",
-      "sha": "a7d6eacd0748b5cdc3b097387a4f04cf52058a3d",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 1382,
-      "functions": 1615,
-      "loc": 343284,
-      "languages": 14,
-      "topLanguages": [
-        {
-          "ext": "json",
-          "pct": 55,
-          "lines": 188069
-        },
-        {
-          "ext": "xml",
-          "pct": 18,
-          "lines": 62636
-        },
-        {
-          "ext": "ts",
-          "pct": 12,
-          "lines": 41937
-        },
-        {
-          "ext": "tsx",
-          "pct": 12,
-          "lines": 41130
-        },
-        {
-          "ext": "txt",
-          "pct": 1,
-          "lines": 4237
-        }
-      ],
-      "dead": 41,
-      "deadPct": 2.5,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 1.9,
-      "securityIssues": 52,
-      "patterns": 9,
-      "duplicates": 21,
-      "layerViolations": 564,
-      "connections": 2691,
-      "avgFnLines": 15.4,
-      "longestFn": 16,
-      "testFiles": 5,
-      "testRatio": 0.4,
-      "topFolders": [
-        {
-          "name": "extraction",
-          "count": 620
-        },
-        {
-          "name": "web",
-          "count": 543
-        },
-        {
-          "name": "packages",
-          "count": 94
-        },
-        {
-          "name": "schema",
-          "count": 71
-        },
-        {
-          "name": "engine",
-          "count": 37
-        }
-      ],
-      "folders": 5,
-      "grade": "D",
-      "score": 69,
-      "topBlast": {
-        "path": "web/lib/customization/resolve.ts",
-        "direct": 153,
-        "transitive": 437,
-        "total": 590
-      },
-      "fragility": [
-        {
-          "path": "web/lib/customization/resolve.ts",
-          "direct": 153,
-          "transitive": 437,
-          "total": 590
-        },
-        {
-          "path": "packages/ui/src/utils.ts",
-          "direct": 67,
-          "transitive": 416,
-          "total": 483
-        },
-        {
-          "path": "packages/customization/src/schema.ts",
-          "direct": 65,
-          "transitive": 409,
-          "total": 474
-        }
-      ]
-    },
-    {
       "at": "2026-07-16T03:06:49.847Z",
       "sha": "f885e25803f981a06e9ffce1f05dc121b92dbfbc",
       "pr": null,
@@ -3013,6 +2911,108 @@
         {
           "name": "web",
           "count": 1252
+        },
+        {
+          "name": "engine",
+          "count": 182
+        },
+        {
+          "name": "packages",
+          "count": 106
+        },
+        {
+          "name": "schema",
+          "count": 87
+        },
+        {
+          "name": "extraction",
+          "count": 20
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 66,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 402,
+        "transitive": 1265,
+        "total": 1667
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 402,
+          "transitive": 1265,
+          "total": 1667
+        },
+        {
+          "path": "engine/src/sandbox/verify-rls.ts",
+          "direct": 310,
+          "transitive": 1147,
+          "total": 1457
+        },
+        {
+          "path": "web/app/api/qbd/web-connector/[id]/route.ts",
+          "direct": 227,
+          "transitive": 1229,
+          "total": 1456
+        }
+      ]
+    },
+    {
+      "at": "2026-07-20T14:41:11.075Z",
+      "sha": "ad1d5c18ca60beb8da4f3c83ba67fe19ac74f7dd",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1679,
+      "functions": 4030,
+      "loc": 595511,
+      "languages": 14,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 60,
+          "lines": 359972
+        },
+        {
+          "ext": "ts",
+          "pct": 20,
+          "lines": 121812
+        },
+        {
+          "ext": "tsx",
+          "pct": 14,
+          "lines": 84007
+        },
+        {
+          "ext": "sql",
+          "pct": 4,
+          "lines": 21193
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 67,
+      "deadPct": 1.7,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 4.9,
+      "securityIssues": 156,
+      "patterns": 8,
+      "duplicates": 54,
+      "layerViolations": 1576,
+      "connections": 8307,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 68,
+      "testRatio": 4.1,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 1253
         },
         {
           "name": "engine",
