@@ -120,13 +120,21 @@ export function effectiveLineSubsidiary(
   return lineSubsidiaryId ?? documentSubsidiaryId ?? null;
 }
 
+/** A zero tax amount carries no tax-code identity in a rate-keyed import. */
+export function effectiveTaxCodeId(
+  taxAmount: string,
+  taxCodeId: string | null | undefined,
+): string | null {
+  return toUnits(taxAmount) === 0n ? null : taxCodeId ?? null;
+}
+
 /** Canonical content key of a native document (change detection). */
 function nativeKey(d: NativeDocument): string {
   return JSON.stringify([
     d.kind, d.partyId, d.subsidiaryId, d.documentDate, d.dueDate, d.memo, d.referenceNumber, d.controlAccountId, d.extraDims ?? {},
     d.lines.map((l) => [
       l.accountId, l.itemId, toUnits(l.amount).toString(), toUnits(l.taxAmount).toString(),
-      l.taxOverridden, l.taxCodeId, l.partyId ?? null, l.departmentId, l.projectId,
+      l.taxOverridden, effectiveTaxCodeId(l.taxAmount, l.taxCodeId), l.partyId ?? null, l.departmentId, l.projectId,
       effectiveLineSubsidiary(l.subsidiaryId, d.subsidiaryId), l.extraDims ?? {}, l.description,
     ]),
   ]);
@@ -158,7 +166,7 @@ async function storedKey(docId: string): Promise<string> {
     d!.kind, d!.party_id, d!.subsidiary_id, d!.ddate, d!.due, d!.memo, d!.reference_number, d!.ctrl, d!.extra_dims ?? {},
     lines.map((l) => [
       l.account_id, l.item_id, toUnits(l.amount).toString(), toUnits(l.tax_amount).toString(),
-      l.tax_overridden, l.tax_code_id, l.party_id ?? null, l.department_id, l.project_id,
+      l.tax_overridden, effectiveTaxCodeId(l.tax_amount, l.tax_code_id), l.party_id ?? null, l.department_id, l.project_id,
       effectiveLineSubsidiary(l.subsidiary_id, d!.subsidiary_id), l.extra_dims ?? {}, l.description,
     ]),
   ]);
