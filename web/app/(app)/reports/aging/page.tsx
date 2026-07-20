@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { agingByParty, agingDetail, dimensionOptions, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
@@ -12,6 +12,7 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -144,7 +145,7 @@ export default async function Aging({
               ))
             )}
             {summary.rows.length > 0 ? (
-              <TableRow>
+              <TableRow className={reportTotalRowClass}>
                 <TableCell className="font-bold">{tr('trialBalance.totals')}</TableCell>
                 {BUCKETS.map((b) => (
                   <TableCell key={b} className="text-right font-bold tabular-nums">{m(summary.totals[b])}</TableCell>

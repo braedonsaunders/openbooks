@@ -29,15 +29,32 @@ test('every in-app report result uses the shared paper surface', () => {
   ]
 
   for (const page of directReportPages) {
-    assert.match(source(page), /<(?:ReportPaper|PaperView)\b/, `${page} must render the shared report paper`)
+    const pageSource = source(page)
+    assert.match(pageSource, /<(?:ReportPaper|PaperView)\b/, `${page} must render the shared report paper`)
+    assert.doesNotMatch(
+      pageSource,
+      /import\s*\{[^}]*\bTable\b[^}]*\}\s*from '@openbooks\/ui'/s,
+      `${page} must not use the application list-table chrome`,
+    )
   }
 
   assert.match(source('app/(app)/reports/PaperView.tsx'), /<ReportPaper\b/)
+  assert.match(source('app/(app)/reports/PaperView.tsx'), /from '.\/ReportTable'/)
   assert.match(source('app/(app)/reports/custom/ResultView.tsx'), /<PaperView\b/)
   assert.match(source('app/(app)/reports/custom/builder/[id]/ReportBuilder.tsx'), /<PaperView\b/)
   assert.match(source('app/(app)/reports/custom/run/[id]/ReportRunner.tsx'), /<(?:ResultView|ReportPaper)\b/)
   assert.match(source('app/(app)/knowledge/views/[id]/page.tsx'), /<ResultView\b/)
   assert.match(source('app/(app)/knowledge/views/ViewStudio.tsx'), /<ResultView\b/)
+})
+
+test('report table primitives remain document-like rather than list-like', () => {
+  const table = source('app/(app)/reports/ReportTable.tsx')
+  assert.match(table, /border-slate-300/)
+  assert.match(table, /border-b-\[3px\].*border-double/)
+  assert.doesNotMatch(table, /rounded-(?:md|lg|xl)/)
+  assert.doesNotMatch(table, /hover:bg-/)
+  assert.doesNotMatch(table, /className=[^\n]*sticky/)
+  assert.doesNotMatch(table, /framer-motion/)
 })
 
 test('project profitability establishes tenant scope before report queries', () => {

@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { DocTypeBadge } from '../../../../components/doc-type-badge'
 import { dimensionOptions, journalReport } from '../../../../lib/reports'
@@ -13,6 +13,7 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,7 +68,7 @@ export default async function JournalPage({
                   {e.docKind && <DocTypeBadge kind={e.docKind} icon={false} />}
                 </span>
                 <span className="tabular-nums text-slate-500 dark:text-slate-400">{e.date}</span>
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <span className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
                   {t.has(`journal.origins.${e.origin}`) ? t(`journal.origins.${e.origin}`) : e.origin}
                 </span>
                 {e.memo && <span className="text-slate-500 dark:text-slate-400">{e.memo}</span>}

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { Badge, PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../components/page-layout'
 import { DocTypeBadge } from '../../../../../components/doc-type-badge'
 import { partnerStatement, type AgingSide } from '../../../../../lib/reports'
@@ -14,6 +14,7 @@ import { ExportMenu } from '../../ExportMenu'
 import { TxnLink } from '../../TxnLink'
 import { SaveViewButton } from '../../SaveViewButton'
 import { ReportPaper } from '../../ReportPaper'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../../ReportTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,7 +126,7 @@ export default async function PartnerStatementPage({
               </TableCell>
             </TableRow>
           ))}
-          <TableRow>
+          <TableRow className={reportTotalRowClass}>
             <TableCell colSpan={5} className="text-xs font-semibold">
               {t('statements.closing')}
             </TableCell>

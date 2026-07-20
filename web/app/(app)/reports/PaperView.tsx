@@ -3,6 +3,15 @@
 import Link from 'next/link'
 import { cn } from '@openbooks/ui'
 import { ReportPaper } from './ReportPaper'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  reportTotalRowClass,
+} from './ReportTable'
 
 /**
  * The ONE on-screen renderer for the unified report shape — the common
@@ -30,6 +39,8 @@ export type PaperGroup = {
   money?: boolean[]
   /** Per-cell drill href (parallel to `rows`); null/absent ⇒ plain cell. */
   links?: (string | null | undefined)[][]
+  /** Explicit total row. Ordinary custom result sets must not style their last data row as a total. */
+  totalRowIndex?: number
   isEmpty?: boolean
 }
 
@@ -59,11 +70,6 @@ function fmt(v: PaperCell, isMoney: boolean, currency: string): string {
     return v.toLocaleString(undefined, { maximumFractionDigits: 2 })
   }
   return v
-}
-
-/** A totals-ish row: the export adapters push the grand total as the last row. */
-function isLastRow(rows: unknown[], i: number): boolean {
-  return i === rows.length - 1 && rows.length > 1
 }
 
 export function PaperView({
@@ -99,73 +105,66 @@ export function PaperView({
             <section key={gi} className="space-y-1.5">
               {showTitle ? (
                 <div className="flex items-baseline gap-2">
-                  <h3 className="text-sm font-semibold">{group.title}</h3>
+                  <h3 className="pt-2 text-xs font-semibold tracking-wide uppercase">{group.title}</h3>
                   {group.subtitle ? <span className="text-xs text-slate-500 dark:text-slate-400">{group.subtitle}</span> : null}
                 </div>
               ) : null}
               {group.isEmpty || group.rows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-slate-400 italic">{emptyLabel}</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-300 dark:border-slate-600">
-                        {group.columns.map((c, ci) => (
-                          <th
-                            key={ci}
-                            className={cn(
-                              'px-2 py-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400',
-                              (group.align?.[ci] ?? (ci === 0 ? 'left' : 'right')) === 'right' ? 'text-right' : 'text-left',
-                            )}
-                          >
-                            {c}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.rows.map((row, ri) => {
-                        const total = isLastRow(group.rows, ri)
-                        return (
-                          <tr
-                            key={ri}
-                            className={cn(
-                              'border-b border-slate-100 dark:border-slate-800/70',
-                              total && 'border-t-2 border-slate-300 font-semibold dark:border-slate-600',
-                            )}
-                          >
-                            {row.map((cell, ci) => {
-                              const a = alignOf(ci, cell)
-                              const isMoney = !!group.money?.[ci]
-                              const negative = typeof cell === 'number' && cell < 0
-                              const href = group.links?.[ri]?.[ci]
-                              const text = fmt(cell, isMoney, currency)
-                              return (
-                                <td
-                                  key={ci}
-                                  className={cn(
-                                    'px-2 py-1',
-                                    a === 'right' && 'text-right tabular-nums',
-                                    a === 'center' && 'text-center',
-                                    negative && 'text-red-600 dark:text-red-400',
-                                  )}
-                                >
-                                  {href ? (
-                                    <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
-                                      {text}
-                                    </Link>
-                                  ) : (
-                                    text
-                                  )}
-                                </td>
-                              )
-                            })}
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {group.columns.map((c, ci) => (
+                        <TableHead
+                          key={ci}
+                          className={cn(
+                            (group.align?.[ci] ?? (ci === 0 ? 'left' : 'right')) === 'right' ? 'text-right' : 'text-left',
+                          )}
+                        >
+                          {c}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {group.rows.map((row, ri) => {
+                      const total = group.totalRowIndex === ri
+                      return (
+                        <TableRow
+                          key={ri}
+                          className={cn(total && reportTotalRowClass, total && 'font-semibold')}
+                        >
+                          {row.map((cell, ci) => {
+                            const a = alignOf(ci, cell)
+                            const isMoney = !!group.money?.[ci]
+                            const negative = typeof cell === 'number' && cell < 0
+                            const href = group.links?.[ri]?.[ci]
+                            const text = fmt(cell, isMoney, currency)
+                            return (
+                              <TableCell
+                                key={ci}
+                                className={cn(
+                                  a === 'right' && 'text-right tabular-nums',
+                                  a === 'center' && 'text-center',
+                                  negative && 'text-red-600 dark:text-red-400',
+                                )}
+                              >
+                                {href ? (
+                                  <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                                    {text}
+                                  </Link>
+                                ) : (
+                                  text
+                                )}
+                              </TableCell>
+                            )
+                          })}
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
               )}
             </section>
           )

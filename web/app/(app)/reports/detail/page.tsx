@@ -1,5 +1,5 @@
 import { getTranslations } from 'next-intl/server'
-import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
+import { PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { Pagination } from '../../../../components/pagination'
 import { DocTypeBadge } from '../../../../components/doc-type-badge'
@@ -11,6 +11,7 @@ import { currencySymbol } from '../../../../lib/statement-format'
 import { money } from '../../../../lib/format'
 import { TxnLink } from '../TxnLink'
 import { ReportPaper } from '../ReportPaper'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,7 +120,7 @@ export default async function DrillDetail({
                   <TableCell className="text-right tabular-nums">{l.amount < 0 ? m(-l.amount) : ''}</TableCell>
                 </TableRow>
               ))}
-              <TableRow className="border-t border-slate-300 dark:border-slate-600">
+              <TableRow className={reportTotalRowClass}>
                 <TableCell colSpan={4} className="font-semibold">
                   {t('trialBalance.totals')}
                 </TableCell>
