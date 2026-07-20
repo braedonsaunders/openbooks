@@ -5,6 +5,8 @@ import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableR
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
 import { money } from '../../../../lib/format'
+import { orgInfo } from '../../../../lib/data'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +24,7 @@ export default async function OrdersReport() {
   const tr = await getTranslations('reports')
   const orgId = authz.user.orgId
 
-  const [pipeline, converted] = await Promise.all([
+  const [pipeline, converted, org] = await Promise.all([
     db.execute(sql`
       select kind, status, count(*)::int as n, coalesce(sum(total), 0) as value
         from documents
@@ -34,6 +36,7 @@ export default async function OrdersReport() {
         join document_links dl on dl.from_document_id = d.id
        where d.org_id = ${orgId} and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
        group by d.kind`) as any,
+    orgInfo(orgId),
   ])
 
   const convByKind = new Map<string, number>(converted.rows.map((r: any) => [r.kind, Number(r.converted)]))
@@ -52,8 +55,9 @@ export default async function OrdersReport() {
     <ListPageLayout
       header={<PageHeader back={{ href: '/reports', label: tr('hub.title') }} title={t('title')} description={t('description')} />}
     >
-      <Table>
-        <TableHeader>
+      <ReportPaper company={org?.name ?? ''} title={t('title')} periodPhrase={t('description')} wide>
+        <Table>
+          <TableHeader>
           <TableRow>
             <TableHead>{t('columns.type')}</TableHead>
             <TableHead className="text-right">{t('columns.open')}</TableHead>
@@ -74,9 +78,10 @@ export default async function OrdersReport() {
               <TableCell className="text-right tabular-nums text-slate-400">{r.voided.toLocaleString('en-CA')}</TableCell>
             </TableRow>
           ))}
-        </TableBody>
-      </Table>
-      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t('note')}</p>
+          </TableBody>
+        </Table>
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t('note')}</p>
+      </ReportPaper>
     </ListPageLayout>
   )
 }

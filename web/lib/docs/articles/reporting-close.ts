@@ -23,6 +23,19 @@ export const financialReports: DocArticle = {
 The **Reports** hub groups statutory statements, ledger reports,
 subledger reports, budgets, orders, projects, and custom reports.
 
+## Paper report workspace
+
+Every report result opens on the same in-app paper surface: organization name,
+report title, reporting period or description, summary figures when present,
+and the report body. This includes statements, detail reports, drill-downs, and
+reports created in the custom report builder and results from saved views. Wide
+reports expand to the available canvas while retaining the same paper header
+and document styling.
+
+The custom report builder uses this surface for its live preview, and **Run
+now** displays the finished custom report on it. Filters and actions remain in
+the page toolbar; printable report content remains on the paper.
+
 ## Core statements
 
 - **Profit & Loss** explains income and expense over a period.

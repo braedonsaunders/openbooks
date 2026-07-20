@@ -20,6 +20,7 @@ import { RowsConfig, SortConfig, SummarizeConfig } from '../../reports/query-con
 import { FilterTree } from '../../reports/custom/FilterTree'
 import { ResultView } from '../../reports/custom/ResultView'
 import type { ViewRow, ViewScope } from '../../../../lib/views'
+import { ReportPaper } from '../../reports/ReportPaper'
 
 const field = 'space-y-1.5'
 
@@ -33,10 +34,12 @@ export function ViewStudio({
   view,
   canCreate,
   canAdmin,
+  company,
 }: {
   view: ViewRow
   canCreate: boolean
   canAdmin: boolean
+  company: string
 }) {
   const t = useTranslations('knowledge.views.studio')
   const tb = useTranslations('reports.custom.builder')
@@ -283,11 +286,13 @@ export function ViewStudio({
                 {previewError}
               </div>
             ) : preview ? (
-              <ResultView result={preview} />
+              <ResultView company={company} title={name} description={description} result={preview} />
             ) : (
-              <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                {previewing ? tb('runningPreview') : tb('previewEmptyHint')}
-              </div>
+              <ReportPaper company={company} title={name} periodPhrase={description || undefined}>
+                <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                  {previewing ? tb('runningPreview') : tb('previewEmptyHint')}
+                </p>
+              </ReportPaper>
             )}
           </div>
         </div>

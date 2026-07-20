@@ -6,6 +6,7 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { statementPageHref } from '../../../../../../lib/report-run'
 import { ReportRunner } from './ReportRunner'
+import { orgBranding } from '../../../../../../lib/report-pdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
   if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
   if (!definition.query) notFound()
 
-  const [schedules, recentRuns] = await Promise.all([
+  const [schedules, recentRuns, branding] = await Promise.all([
     db.execute(sql`
       select id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
              timezone, recipient_emails, next_run_at, active
@@ -37,6 +38,7 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
        where org_id = ${authz.user.orgId} and definition_id = ${id}
        order by created_at desc limit 10
     `) as unknown as Promise<{ rows: any[] }>,
+    orgBranding(authz.user.orgId),
   ])
 
   return (
@@ -51,6 +53,7 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
       }}
       schedules={schedules.rows}
       recentRuns={recentRuns.rows}
+      company={branding.orgName}
       canCreate={canCreate}
       canSchedule={canSchedule}
     />

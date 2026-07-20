@@ -10,6 +10,8 @@ import { requirePermission } from '../../../../../lib/authz'
 import { loadView, runView } from '../../../../../lib/views'
 import type { ReportRunResult } from '@openbooks/reports'
 import { ResultView } from '../../../reports/custom/ResultView'
+import { orgBranding } from '../../../../../lib/report-pdf'
+import { ReportPaper } from '../../../reports/ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,7 +77,10 @@ export default async function ViewRunPage({
   }
 
   const canEdit = authz.permissions.has('*') || view.owner_id === authz.user.id
-  const result = await runView(authz.user.orgId, view.query)
+  const [result, branding] = await Promise.all([
+    runView(authz.user.orgId, view.query),
+    orgBranding(authz.user.orgId),
+  ])
   const paged = paginateResult(result, listParams.page, PER_PAGE)
   const from = result.rowCount === 0 ? 0 : (listParams.page - 1) * PER_PAGE + 1
   const to = Math.min(listParams.page * PER_PAGE, result.rowCount)
@@ -127,9 +132,11 @@ export default async function ViewRunPage({
       }
     >
       {result.rowCount === 0 ? (
-        <EmptyState title={t('run.emptyTitle')} description={t('run.emptyDescription')} />
+        <ReportPaper company={branding.orgName} title={view.name} periodPhrase={view.description || undefined}>
+          <EmptyState title={t('run.emptyTitle')} description={t('run.emptyDescription')} />
+        </ReportPaper>
       ) : (
-        <ResultView result={paged} />
+        <ResultView company={branding.orgName} title={view.name} description={view.description} result={paged} />
       )}
       <Pagination
         basePath={`/knowledge/views/${view.id}`}

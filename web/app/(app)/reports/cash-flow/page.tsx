@@ -10,6 +10,7 @@ import { money } from '../../../../lib/format'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,8 +63,9 @@ export default async function CashFlow({
         </>
       }
     >
-      <Table>
-        <TableBody>
+      <ReportPaper company={org?.name ?? ''} title={t('title')} periodPhrase={t('dateRange', { from, to })}>
+        <Table>
+          <TableBody>
           {!hasMovements ? (
             <TableRow>
               <TableCell colSpan={2} className="text-center text-slate-400 italic">
@@ -105,8 +107,9 @@ export default async function CashFlow({
               </TableRow>
             </>
           ) : null}
-        </TableBody>
-      </Table>
+          </TableBody>
+        </Table>
+      </ReportPaper>
     </ListPageLayout>
   )
 }

@@ -8,7 +8,7 @@ import { profitAndLossView } from '../../../../lib/statement-matrix'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { StatementMatrixTable } from '../StatementMatrixTable'
-import { StatementPaper } from '../StatementPaper'
+import { ReportPaper } from '../ReportPaper'
 import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
@@ -84,8 +84,8 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
         </>
       }
     >
-      <StatementPaper
-        company={org?.name ?? 'openbooks'}
+      <ReportPaper
+        company={org?.name ?? ''}
         title={t('pnl.title')}
         periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
         note={scale.note || undefined}
@@ -97,7 +97,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
           currency={subView.currency ?? org?.base_currency}
           drill={{ dims: q.dims, basis: q.basis, subsidiaryId: q.subsidiaryId, back: backHref, backLabel: t('pnl.title') }}
         />
-      </StatementPaper>
+      </ReportPaper>
     </ListPageLayout>
   )
 }
