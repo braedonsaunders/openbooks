@@ -5,13 +5,15 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.0.0';
+    const BRIDGE_VERSION = '1.1.0';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
     const EXPORT_DEPLOYMENT_ID = 'customdeploy_openbooks_export_mr';
     const MAX_PAGE_SIZE = 1000;
     const MAX_PARTITIONS = 250;
+    const MAX_ATTACHMENT_RECORDS = 50;
+    const MAX_ATTACHMENT_BYTES = 9 * 1024 * 1024;
 
     const text = (value) => value == null ? '' : String(value);
     const assert = (condition, message) => {
@@ -166,6 +168,82 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       return { schemaVersion: SCHEMA_VERSION, rows };
     };
 
+    const attachmentInventory = (input) => {
+      assert(Array.isArray(input.records) && input.records.length > 0, 'records are required');
+      assert(input.records.length <= MAX_ATTACHMENT_RECORDS,
+        `at most ${MAX_ATTACHMENT_RECORDS} transactions are supported per attachment request`);
+
+      const requested = input.records.map((item) => {
+        const recordType = text(item && item.recordType);
+        assert(recordType === 'vendorBill' || recordType === 'expenseReport',
+          'attachment recordType must be vendorBill or expenseReport');
+        const internalId = text(item && item.internalId);
+        assert(/^\d+$/.test(internalId), 'attachment internalId must be numeric');
+        return { recordType, internalId };
+      });
+      const records = {};
+      requested.forEach((item) => { records[item.internalId] = []; });
+      const add = (transactionId, fileId) => {
+        const txId = text(transactionId);
+        const id = text(fileId);
+        if (!records[txId] || !/^\d+$/.test(id) || records[txId].includes(id)) return;
+        records[txId].push(id);
+      };
+
+      ['vendorBill', 'expenseReport'].forEach((recordType) => {
+        const ids = requested.filter((item) => item.recordType === recordType).map((item) => item.internalId);
+        if (!ids.length) return;
+        const transactionId = search.createColumn({ name: 'internalid' });
+        const fileId = search.createColumn({ name: 'internalid', join: 'file' });
+        search.create({
+          type: recordType === 'vendorBill' ? search.Type.VENDOR_BILL : search.Type.EXPENSE_REPORT,
+          filters: [['internalid', 'anyof', ids], 'AND', ['mainline', 'is', 'T']],
+          columns: [transactionId, fileId],
+        }).run().each((result) => {
+          add(result.getValue(transactionId) || result.id, result.getValue(fileId));
+          return true;
+        });
+      });
+
+      // Expense receipts can be attached to individual expense lines instead
+      // of the transaction's Files subtab. Include both relationships.
+      requested.filter((item) => item.recordType === 'expenseReport').forEach((item) => {
+        const loaded = record.load({ type: record.Type.EXPENSE_REPORT, id: item.internalId, isDynamic: false });
+        const count = loaded.getLineCount({ sublistId: 'expense' });
+        for (let line = 0; line < count; line += 1) {
+          add(item.internalId, loaded.getSublistValue({
+            sublistId: 'expense',
+            fieldId: 'expmediaitem',
+            line,
+          }));
+        }
+      });
+
+      Object.keys(records).forEach((id) => { records[id].sort((a, b) => Number(a) - Number(b)); });
+      return { ok: true, schemaVersion: SCHEMA_VERSION, records };
+    };
+
+    const attachmentContent = (input) => {
+      const fileId = text(input.fileId);
+      assert(/^\d+$/.test(fileId), 'fileId must be numeric');
+      const loaded = file.load({ id: fileId });
+      assert(Number(loaded.size) > 0, 'attachment is empty');
+      assert(Number(loaded.size) <= MAX_ATTACHMENT_BYTES,
+        `attachment exceeds the ${MAX_ATTACHMENT_BYTES}-byte bridge response limit`);
+      return {
+        ok: true,
+        schemaVersion: SCHEMA_VERSION,
+        file: {
+          id: fileId,
+          name: loaded.name,
+          fileType: text(loaded.fileType),
+          size: Number(loaded.size),
+          encoding: 'base64',
+          contents: loaded.getContents(),
+        },
+      };
+    };
+
     const startExport = (input) => {
       const jobId = safeId(input.jobId, 'jobId');
       assert(Array.isArray(input.partitions) && input.partitions.length > 0, 'partitions are required');
@@ -270,6 +348,8 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         if (action === 'record') return recordSnapshot(input);
         if (action === 'paymentTerms') return paymentTerms();
         if (action === 'deleted') return deletedRecords(input);
+        if (action === 'attachmentInventory') return attachmentInventory(input);
+        if (action === 'attachmentContent') return attachmentContent(input);
         if (action === 'startExport') return startExport(input);
         if (action === 'exportStatus') return exportFiles(input);
         if (action === 'listExports') return listExports();

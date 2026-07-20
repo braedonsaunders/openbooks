@@ -4,12 +4,15 @@ import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { putS3Blob, s3Enabled } from "../file-storage.ts";
-import { netsuiteRecord, netsuiteRestlet, suiteql, type NetSuiteCreds } from "../netsuite.ts";
+import { netsuiteRestlet, type NetSuiteCreds } from "../netsuite.ts";
+import {
+  DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID,
+  DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
+} from "../netsuite-bridge.ts";
 import { unsealJson } from "../secrets.ts";
 
 const SOURCE_SYSTEM = "netsuite";
 const RESTLET_BATCH_SIZE = 50;
-const FILE_QUERY_BATCH_SIZE = 900;
 
 type SourceKind = "vendor_bill" | "expense_report";
 
@@ -22,10 +25,6 @@ interface SourceDocument {
 interface SourceFile {
   id: string;
   name: string;
-  filetype: string;
-  filesize: string;
-  url: string;
-  lastmodifieddate?: string;
 }
 
 export interface ImportOptions {
@@ -34,8 +33,6 @@ export interface ImportOptions {
   execute: boolean;
   concurrency: number;
   limit?: number;
-  resolverScript?: string;
-  resolverDeploy?: string;
 }
 
 interface ImportSummary {
@@ -119,8 +116,6 @@ function parseArgs(argv: string[]): ImportOptions {
     execute: argv.includes("--execute"),
     concurrency,
     limit,
-    resolverScript: read("--resolver-script")?.trim() || undefined,
-    resolverDeploy: read("--resolver-deploy")?.trim() || undefined,
   };
 }
 
@@ -140,37 +135,11 @@ export function expenseReportFileIds(record: unknown): string[] {
   return Array.from(new Set(ids.filter((id) => /^\d+$/.test(id))));
 }
 
-async function standardRestInventory(
-  documents: SourceDocument[],
-  creds: NetSuiteCreds,
-  concurrency: number,
-): Promise<Map<string, Set<string>>> {
-  const vendorBills = documents.filter((document) => document.kind === "vendor_bill");
-  if (vendorBills.length) {
-    throw new Error(
-      "NetSuite REST Record and Query APIs do not expose vendor-bill attachment relationships; " +
-      "provide --resolver-script and --resolver-deploy for this account's transaction-file resolver",
-    );
-  }
-  const result = new Map<string, Set<string>>();
-  await concurrentMap(documents, concurrency, async (document, index) => {
-    const record = await netsuiteRecord("expenseReport", document.nsId, creds);
-    for (const fileId of expenseReportFileIds(record)) {
-      const targets = result.get(fileId) ?? new Set<string>();
-      targets.add(document.id);
-      result.set(fileId, targets);
-    }
-    if ((index + 1) % 100 === 0 || index + 1 === documents.length) {
-      console.log(`[inventory] ${index + 1}/${documents.length} transactions`);
-    }
-  });
-  return result;
-}
-
 async function resolveContext(options: ImportOptions): Promise<{
   orgId: string;
   actorId: string;
   creds: NetSuiteCreds;
+  bridge: { script: string; deploy: string };
 }> {
   const orgResult = (await db.execute(sql`
     select id, name from orgs where id::text = ${options.org} or name = ${options.org}
@@ -211,6 +180,10 @@ async function resolveContext(options: ImportOptions): Promise<{
       tokenKey: secret.tokenKey,
       tokenSecret: secret.tokenSecret,
     },
+    bridge: {
+      script: String(connection.config.bridgeScriptId || DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID),
+      deploy: String(connection.config.bridgeDeploymentId || DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID),
+    },
   };
 }
 
@@ -235,22 +208,22 @@ async function attachmentInventory(
   documents: SourceDocument[],
   creds: NetSuiteCreds,
   concurrency: number,
-  resolver?: { script: string; deploy: string },
+  bridge: { script: string; deploy: string },
 ): Promise<Map<string, Set<string>>> {
-  if (!resolver) return standardRestInventory(documents, creds, concurrency);
   const batches = chunks(documents, RESTLET_BATCH_SIZE);
   const results = await concurrentMap(batches, concurrency, async (batch, index) => {
     const response = await netsuiteRestlet<{
-      isSuccess?: boolean;
-      message?: string;
+      ok?: boolean;
+      error?: string;
       records?: Record<string, string[]>;
-    }>(resolver.script, resolver.deploy, {
+    }>(bridge.script, bridge.deploy, {
+      action: "attachmentInventory",
       records: batch.map((doc) => ({
         recordType: doc.kind === "vendor_bill" ? "vendorBill" : "expenseReport",
-        internalid: doc.nsId,
+        internalId: doc.nsId,
       })),
     }, creds, "POST");
-    if (!response.isSuccess || !response.records) throw new Error(response.message || "attachment resolver failed");
+    if (!response.ok || !response.records) throw new Error(response.error || "attachment inventory failed");
     if ((index + 1) % 20 === 0 || index + 1 === batches.length) {
       console.log(`[inventory] ${Math.min((index + 1) * RESTLET_BATCH_SIZE, documents.length)}/${documents.length} transactions`);
     }
@@ -274,51 +247,39 @@ async function attachmentInventory(
   return fileToDocuments;
 }
 
-async function fileMetadata(fileIds: string[], creds: NetSuiteCreds): Promise<Map<string, SourceFile>> {
-  const result = new Map<string, SourceFile>();
-  for (const batch of chunks(fileIds, FILE_QUERY_BATCH_SIZE)) {
-    const ids = batch.join(",");
-    const rows = await suiteql<SourceFile>(
-      `select id, name, filetype, filesize, url, lastmodifieddate from file where id in (${ids})`,
-      creds,
-    );
-    for (const row of rows) result.set(String(row.id), row);
+export function decodeBridgeAttachment(response: unknown, expectedFileId: string): {
+  source: SourceFile;
+  bytes: Buffer;
+} {
+  if (!response || typeof response !== "object") throw new Error("attachment bridge returned an invalid response");
+  const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
+  if (body.ok !== true || !body.file) throw new Error(String(body.error || "attachment bridge download failed"));
+  const id = String(body.file.id ?? "");
+  const name = String(body.file.name ?? "");
+  const size = Number(body.file.size);
+  const encoding = String(body.file.encoding ?? "");
+  const contents = body.file.contents;
+  if (id !== expectedFileId || !/^\d+$/.test(id)) throw new Error("attachment bridge returned the wrong file");
+  if (!name || encoding !== "base64" || typeof contents !== "string") {
+    throw new Error(`attachment bridge returned malformed content for source file ${id}`);
   }
-  const missing = fileIds.filter((id) => !result.has(id));
-  if (missing.length) throw new Error(`File query omitted ${missing.length} attachment records`);
-  return result;
+  const bytes = Buffer.from(contents, "base64");
+  if (!bytes.length || !Number.isSafeInteger(size) || size <= 0 || bytes.length !== size) {
+    throw new Error(`attachment bridge size mismatch for source file ${id}`);
+  }
+  return { source: { id, name }, bytes };
 }
 
-function mediaUrl(creds: NetSuiteCreds, source: SourceFile): string {
-  if (!source.url.startsWith("/core/media/")) throw new Error(`unsafe media URL for source file ${source.id}`);
-  const accountHost = creds.account.replaceAll("_", "-").toLowerCase();
-  return `https://${accountHost}.app.netsuite.com${source.url}`;
-}
-
-async function downloadSourceFile(source: SourceFile, creds: NetSuiteCreds): Promise<Buffer> {
-  const url = mediaUrl(creds, source);
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120_000);
-    try {
-      const response = await fetch(url, { signal: controller.signal, redirect: "follow" });
-      if (!response.ok) throw new Error(`media download HTTP ${response.status}`);
-      const bytes = Buffer.from(await response.arrayBuffer());
-      if (!bytes.length) throw new Error("media download was empty");
-      const expectedSize = Number(source.filesize);
-      if (Number.isFinite(expectedSize) && expectedSize > 0 && bytes.length !== expectedSize) {
-        throw new Error(`media download size mismatch: expected ${expectedSize}, received ${bytes.length}`);
-      }
-      return bytes;
-    } catch (error) {
-      lastError = error;
-      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, attempt * 1_500));
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(`failed to download source file ${source.id}`);
+async function downloadSourceFile(
+  fileId: string,
+  creds: NetSuiteCreds,
+  bridge: { script: string; deploy: string },
+): Promise<{ source: SourceFile; bytes: Buffer }> {
+  const response = await netsuiteRestlet<unknown>(bridge.script, bridge.deploy, {
+    action: "attachmentContent",
+    fileId,
+  }, creds, "POST");
+  return decodeBridgeAttachment(response, fileId);
 }
 
 async function ensureRecordFolder(
@@ -450,10 +411,7 @@ async function verifyImport(orgId: string, fileToDocuments: Map<string, Set<stri
 }
 
 export async function importNetSuiteAttachments(options: ImportOptions): Promise<ImportSummary> {
-  if (Boolean(options.resolverScript) !== Boolean(options.resolverDeploy)) {
-    throw new Error("--resolver-script and --resolver-deploy must be provided together");
-  }
-  const { orgId, actorId, creds } = await resolveContext(options);
+  const { orgId, actorId, creds, bridge } = await resolveContext(options);
   if (options.execute && !s3Enabled) {
     throw new Error("S3/MinIO is not configured; refusing to fall back to database blobs");
   }
@@ -463,16 +421,13 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     documents,
     creds,
     options.concurrency,
-    options.resolverScript && options.resolverDeploy
-      ? { script: options.resolverScript, deploy: options.resolverDeploy }
-      : undefined,
+    bridge,
   );
   const sourceLinks = Array.from(fileToDocuments.values()).reduce((sum, ids) => sum + ids.size, 0);
-  const metadata = await fileMetadata(Array.from(fileToDocuments.keys()), creds);
   const summary: ImportSummary = {
     sourceDocuments: documents.length,
     sourceDocumentsWithoutId: withoutSourceId,
-    sourceFiles: metadata.size,
+    sourceFiles: fileToDocuments.size,
     sourceLinks,
     createdFiles: 0,
     newVersions: 0,
@@ -483,10 +438,10 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   console.log(`[inventory] found ${summary.sourceFiles} unique files across ${summary.sourceLinks} transaction links`);
   if (!options.execute) return summary;
 
-  const files = Array.from(metadata.values());
-  await concurrentMap(files, options.concurrency, async (source, index) => {
+  const fileIds = Array.from(fileToDocuments.keys());
+  await concurrentMap(fileIds, options.concurrency, async (fileId, index) => {
     try {
-      const bytes = await downloadSourceFile(source, creds);
+      const { source, bytes } = await downloadSourceFile(fileId, creds, bridge);
       const contentType = detectContentType(bytes, source.name);
       const persisted = await persistFile({
         orgId,
@@ -502,10 +457,10 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       summary.createdLinks += persisted.createdLinks;
     } catch (error) {
       summary.failures++;
-      console.error(`[import] source file ${source.id} failed: ${(error as Error).message}`);
+      console.error(`[import] source file ${fileId} failed: ${(error as Error).message}`);
     }
-    if ((index + 1) % 100 === 0 || index + 1 === files.length) {
-      console.log(`[import] ${index + 1}/${files.length} files (${summary.failures} failed)`);
+    if ((index + 1) % 100 === 0 || index + 1 === fileIds.length) {
+      console.log(`[import] ${index + 1}/${fileIds.length} files (${summary.failures} failed)`);
     }
   });
   if (summary.failures) throw new Error(`${summary.failures} source files failed to import`);

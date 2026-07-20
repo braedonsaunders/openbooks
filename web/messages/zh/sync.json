@@ -23,6 +23,7 @@
     "reconnect": "重新连接",
     "test": "测试",
     "mirrorNow": "立即镜像",
+    "syncAttachments": "同步附件",
     "runMigration": "运行迁移",
     "pauseMirror": "暂停镜像",
     "enableMirror": "启用镜像",
@@ -41,6 +42,7 @@
     "kind": {
       "full_migration": "完整迁移",
       "incremental": "增量",
+      "attachments": "附件",
       "mirror": "镜像"
     },
     "status": {
@@ -48,7 +50,11 @@
       "failed": "失败",
       "running": "运行中"
     },
+    "progress": {
+      "attachments": "正在清点并导入源附件"
+    },
     "stats": {
+      "attachments": "{files} 个源文件 · {links} 个交易链接 · {created} 个新文件",
       "docs": "+{new} 份单据 · {amended} 份修订 · {unchanged} 份未变",
       "applied": "已应用 {count}",
       "tb": "试算平衡 {matches}/{accounts}",
@@ -64,8 +70,17 @@
     "authFailed": "授权失败（{status}）",
     "queuingMigration": "正在排队完整迁移…",
     "queuingMirror": "正在排队镜像…",
+    "queuingAttachments": "正在排队附件同步…",
     "migrationQueued": "迁移已排队——我们将在后台运行",
     "mirrorQueued": "镜像已排队——正在后台运行",
+    "attachmentsQueued": "附件同步已排队——正在后台运行",
+    "runFailed": "无法将运行加入队列（HTTP {status}）",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "该连接已不存在。",
+      "CONNECTION_UNCONFIGURED": "请先添加凭据，再运行此连接。",
+      "INVALID_MODE": "请选择有效的迁移操作。",
+      "ATTACHMENTS_UNSUPPORTED": "此连接不支持附件迁移。"
+    },
     "testing": "正在测试连接…",
     "connected": "已连接",
     "connectedDetail": "已连接——{detail}",

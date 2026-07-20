@@ -23,6 +23,7 @@
     "reconnect": "Reconectar",
     "test": "Probar",
     "mirrorNow": "Reflejar ahora",
+    "syncAttachments": "Sincronizar archivos adjuntos",
     "runMigration": "Ejecutar migración",
     "pauseMirror": "Pausar espejo",
     "enableMirror": "Activar espejo",
@@ -41,6 +42,7 @@
     "kind": {
       "full_migration": "migración completa",
       "incremental": "incremental",
+      "attachments": "archivos adjuntos",
       "mirror": "espejo"
     },
     "status": {
@@ -48,7 +50,11 @@
       "failed": "fallida",
       "running": "en ejecución"
     },
+    "progress": {
+      "attachments": "Inventariando e importando archivos adjuntos de origen"
+    },
     "stats": {
+      "attachments": "{files} archivos de origen · {links} enlaces de transacción · {created} archivos nuevos",
       "docs": "+{new} docs · {amended} modificados · {unchanged} sin cambios",
       "applied": "{count} aplicados",
       "tb": "BC {matches}/{accounts}",
@@ -64,8 +70,17 @@
     "authFailed": "La autorización falló ({status})",
     "queuingMigration": "Poniendo en cola la migración completa…",
     "queuingMirror": "Poniendo en cola el espejo…",
+    "queuingAttachments": "Poniendo en cola la sincronización de archivos adjuntos…",
     "migrationQueued": "Migración en cola — se ejecuta en el worker",
     "mirrorQueued": "Espejo en cola — se ejecuta en el worker",
+    "attachmentsQueued": "Sincronización de archivos adjuntos en cola — se ejecuta en segundo plano",
+    "runFailed": "No se pudo poner la ejecución en cola (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "La conexión ya no existe.",
+      "CONNECTION_UNCONFIGURED": "Añada credenciales antes de ejecutar esta conexión.",
+      "INVALID_MODE": "Elija una acción de migración válida.",
+      "ATTACHMENTS_UNSUPPORTED": "Esta conexión no admite la migración de archivos adjuntos."
+    },
     "testing": "Probando la conexión…",
     "connected": "Conectado",
     "connectedDetail": "Conectado — {detail}",

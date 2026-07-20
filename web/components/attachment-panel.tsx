@@ -214,7 +214,12 @@ export function AttachmentPanel({
             </div>
 
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <SearchInput placeholder={t('searchPlaceholder')} paramKey="attq" pageParamKey="attpage" />
+              <SearchInput
+                className="min-w-0 sm:w-full"
+                placeholder={t('searchPlaceholder')}
+                paramKey="attq"
+                pageParamKey="attpage"
+              />
               <FilterChips
                 basePath={pathname}
                 currentParams={currentParams}

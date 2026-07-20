@@ -249,7 +249,7 @@ export const syncRuns = pgTable(
     /** The connection this run belongs to (nullable: pre-connections legacy runs). */
     connectionId: uuid("connection_id"),
     source: text("source").notNull(), // "netsuite"
-    kind: text("kind", { enum: ["incremental", "full_migration", "tb_check"] })
+    kind: text("kind", { enum: ["incremental", "full_migration", "attachments", "tb_check"] })
       .notNull()
       .default("incremental"),
     status: text("status", { enum: ["running", "ok", "failed"] }).notNull().default("running"),

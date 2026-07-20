@@ -7,7 +7,7 @@ export const migrationAndCutover: DocArticle = {
   order: 1,
   summary:
     'Plan source extraction, mapping, trial loads, reconciliation, parallel operation, final delta, and cutover.',
-  updated: '2026-07-19',
+  updated: '2026-07-20',
   keywords: [
     'migration',
     'implementation',
@@ -60,6 +60,20 @@ retry does not create duplicates.
 Test complete workflows on the migrated data: find a source transaction, inspect
 its OpenBooks record and ledger entry, apply cash, run aging, reconcile a bank
 account, and produce statements.
+
+## Migrate source attachments
+
+For a **NetSuite** connection, install or update the OpenBooks extraction bridge,
+then choose **Sync attachments** on the connection card. The background run
+inventories Files-subtab attachments on vendor bills and expense reports plus
+receipt images attached to individual expense lines. It imports supported PDF
+and image evidence into the tenant's configured object storage and links each
+file to the matching transaction without duplicating files or links on reruns.
+
+Review the **Attachments** run in **Recent runs**. A failed file prevents the run
+from reporting success; correct source permissions, unsupported content, or file
+size issues and rerun it. Open a migrated transaction and use its **Attachments**
+subtab to preview, download, or expand the evidence within the flyout.
 
 ## Parallel operation
 

@@ -20,6 +20,11 @@ migrated. Limit subsidiary access to the books intentionally placed in scope.
 The bridge only writes its temporary request and chunk files beneath
 `SuiteScripts/OpenBooks/Jobs`; it never writes a business transaction.
 
+The RESTlet also exposes a bounded, read-only attachment inventory for vendor
+bills and expense reports. It includes both Files-subtab relationships and
+expense-line receipt images, then returns authenticated file content to the
+tenant worker for idempotent import into object storage.
+
 ## Validate and deploy
 
 Set `defaultAuthId` in `project.json` to the administrator authentication ID,

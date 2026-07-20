@@ -4,6 +4,7 @@ import { MIGRATION_QUEUE, enqueueMigration, getBlockingConnection, type Migratio
 import { db } from "../db.ts";
 import { buildSource, getConnection } from "../sync/connection.ts";
 import { runFullMigration, runSync } from "../sync/sync.ts";
+import { importNetSuiteAttachments } from "../sync/netsuite-attachments.ts";
 import { purgeExpiredQbdBridgeData } from "../qbd/bridge.ts";
 
 /**
@@ -20,6 +21,44 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
       const { orgId, connectionId, mode, triggeredBy } = job.data;
       const conn = await getConnection(orgId, connectionId);
       if (!conn) throw new Error(`connection ${connectionId} not found for org ${orgId}`);
+
+      if (mode === "attachments") {
+        if (conn.source !== "netsuite") throw new Error("attachment migration is only supported by NetSuite connections");
+        const started = (await db.execute(sql`
+          insert into sync_runs (org_id, connection_id, source, kind, status, triggered_by, progress)
+          values (${orgId}, ${connectionId}, ${conn.source}, 'attachments', 'running', ${triggeredBy ?? "worker"},
+                  ${JSON.stringify({ phase: "attachments" })}::jsonb)
+          returning id
+        `)) as unknown as { rows: { id: string }[] };
+        const runId = started.rows[0].id;
+        try {
+          const summary = await importNetSuiteAttachments({
+            org: orgId,
+            connectionId,
+            execute: true,
+            concurrency: 4,
+          });
+          await db.execute(sql`
+            update sync_runs
+               set status = 'ok', finished_at = now(), stats = ${JSON.stringify(summary)}::jsonb,
+                   progress = ${JSON.stringify({ phase: "complete" })}::jsonb
+             where id = ${runId}
+          `);
+          await db.execute(sql`
+            update connections set status = 'active', last_error = null, last_run_at = now() where id = ${connectionId}
+          `);
+          return { runId, kind: "attachments", ...summary };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await db.execute(sql`
+            update sync_runs set status = 'failed', finished_at = now(), error_message = ${message} where id = ${runId}
+          `);
+          await db.execute(sql`
+            update connections set status = 'error', last_error = ${message}, last_run_at = now() where id = ${connectionId}
+          `);
+          throw error;
+        }
+      }
 
       const source = buildSource(conn);
       const ctx = { orgId, connectionId };

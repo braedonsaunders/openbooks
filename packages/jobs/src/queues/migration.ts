@@ -4,16 +4,17 @@ import { getConnection } from '../connection'
 export const MIGRATION_QUEUE = 'migration'
 
 /**
- * One external-system migration/mirror pass for a tenant connection.
+ * One external-system migration/mirror/attachment pass for a tenant connection.
  *   full_migration — master data + entire GL history, verified (the one click).
  *   mirror         — incremental catch-up from the connection's cursor.
+ *   attachments    — source-file inventory and idempotent object-storage import.
  * The heavy lifting runs on the worker so an 8-year backfill isn't hostage to
  * an HTTP request timeout.
  */
 export type MigrationJobData = {
   orgId: string
   connectionId: string
-  mode: 'full_migration' | 'mirror'
+  mode: 'full_migration' | 'mirror' | 'attachments'
   triggeredBy?: string
 }
 
