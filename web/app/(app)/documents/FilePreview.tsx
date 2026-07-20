@@ -88,7 +88,10 @@ export function FilePreview({ file, canManage }: { file: PreviewFile; canManage:
     setLoading(true)
     setLoadError(false)
     setEditing(false)
-    fetch(downloadUrl, { cache: 'no-store' })
+    // Default cache mode: the download route sends an ETag + `no-cache`, so the
+    // browser revalidates and gets a 304 on reopen instead of re-fetching bytes;
+    // a Replace bumps currentVersionId (effect dep) and the new ETag busts it.
+    fetch(downloadUrl)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((body) => {
         if (cancelled) return

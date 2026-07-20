@@ -891,7 +891,7 @@ export async function getFileBlob(
   id: string,
   viewer: FileViewer,
   versionId?: string,
-): Promise<{ filename: string; contentType: string; bytes: Buffer } | null> {
+): Promise<{ filename: string; contentType: string; bytes: Buffer; versionId: string } | null> {
   const hidden = await hiddenFolderIds(orgId, viewer)
   const r = (await db.execute(sql`
     select fi.name, fv.content_type as "contentType", fv.id as "versionId",
@@ -910,7 +910,9 @@ export async function getFileBlob(
   const row = r.rows[0]
   const bytes = row.storageKind === 's3' ? await getS3Blob(row.versionId) : row.bytes
   if (!bytes) return null
-  return { filename: row.name, contentType: row.contentType, bytes }
+  // The resolved version id is an immutable validator: a file_versions row's
+  // bytes never change (append-only versioning), so it doubles as a strong ETag.
+  return { filename: row.name, contentType: row.contentType, bytes, versionId: row.versionId }
 }
 
 // --- file attachments (links to records) ------------------------------------
