@@ -23,6 +23,7 @@
     "reconnect": "Reconnecter",
     "test": "Tester",
     "mirrorNow": "Miroir maintenant",
+    "syncAttachments": "Synchroniser les pièces jointes",
     "runMigration": "Lancer la migration",
     "pauseMirror": "Suspendre le miroir",
     "enableMirror": "Activer le miroir",
@@ -41,6 +42,7 @@
     "kind": {
       "full_migration": "migration complète",
       "incremental": "incrémentale",
+      "attachments": "pièces jointes",
       "mirror": "miroir"
     },
     "status": {
@@ -48,7 +50,11 @@
       "failed": "échec",
       "running": "en cours"
     },
+    "progress": {
+      "attachments": "Inventaire et importation des pièces jointes sources"
+    },
     "stats": {
+      "attachments": "{files} fichiers sources · {links} liens de transaction · {created} nouveaux fichiers",
       "docs": "+{new} docs · {amended} modifiés · {unchanged} inchangés",
       "applied": "{count} lettrés",
       "tb": "BV {matches}/{accounts}",
@@ -64,8 +70,17 @@
     "authFailed": "Échec de l’autorisation ({status})",
     "queuingMigration": "Mise en file de la migration complète…",
     "queuingMirror": "Mise en file du miroir…",
+    "queuingAttachments": "Mise en file de la synchronisation des pièces jointes…",
     "migrationQueued": "Migration en file d’attente — exécutée par le worker",
     "mirrorQueued": "Miroir en file d’attente — exécuté par le worker",
+    "attachmentsQueued": "Synchronisation des pièces jointes en file d’attente — exécutée en arrière-plan",
+    "runFailed": "Impossible de mettre l’exécution en file d’attente (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "La connexion n’existe plus.",
+      "CONNECTION_UNCONFIGURED": "Ajoutez les identifiants avant d’exécuter cette connexion.",
+      "INVALID_MODE": "Choisissez une action de migration valide.",
+      "ATTACHMENTS_UNSUPPORTED": "Cette connexion ne prend pas en charge la migration des pièces jointes."
+    },
     "testing": "Test de la connexion…",
     "connected": "Connecté",
     "connectedDetail": "Connecté — {detail}",

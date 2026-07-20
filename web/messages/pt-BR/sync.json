@@ -23,6 +23,7 @@
     "reconnect": "Reconectar",
     "test": "Testar",
     "mirrorNow": "Espelhar agora",
+    "syncAttachments": "Sincronizar anexos",
     "runMigration": "Executar migração",
     "pauseMirror": "Pausar espelhamento",
     "enableMirror": "Ativar espelhamento",
@@ -41,6 +42,7 @@
     "kind": {
       "full_migration": "Migração completa",
       "incremental": "Incremental",
+      "attachments": "Anexos",
       "mirror": "Espelhamento"
     },
     "status": {
@@ -48,7 +50,11 @@
       "failed": "Falhou",
       "running": "Em execução"
     },
+    "progress": {
+      "attachments": "Inventariando e importando anexos de origem"
+    },
     "stats": {
+      "attachments": "{files} arquivos de origem · {links} vínculos de transação · {created} arquivos novos",
       "docs": "+{new} docs · {amended} alterados · {unchanged} inalterados",
       "applied": "{count} aplicados",
       "tb": "BV {matches}/{accounts}",
@@ -64,8 +70,17 @@
     "authFailed": "Falha na autorização ({status})",
     "queuingMigration": "Enfileirando migração completa…",
     "queuingMirror": "Enfileirando espelhamento…",
+    "queuingAttachments": "Enfileirando sincronização de anexos…",
     "migrationQueued": "Migração enfileirada — vamos executá-la em segundo plano",
     "mirrorQueued": "Espelhamento enfileirado — executando em segundo plano",
+    "attachmentsQueued": "Sincronização de anexos enfileirada — executando em segundo plano",
+    "runFailed": "Não foi possível enfileirar a execução (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "A conexão não existe mais.",
+      "CONNECTION_UNCONFIGURED": "Adicione credenciais antes de executar esta conexão.",
+      "INVALID_MODE": "Escolha uma ação de migração válida.",
+      "ATTACHMENTS_UNSUPPORTED": "Esta conexão não oferece migração de anexos."
+    },
     "testing": "Testando conexão…",
     "connected": "Conectado",
     "connectedDetail": "Conectado — {detail}",

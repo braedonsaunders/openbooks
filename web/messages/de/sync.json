@@ -23,6 +23,7 @@
     "reconnect": "Erneut verbinden",
     "test": "Testen",
     "mirrorNow": "Jetzt spiegeln",
+    "syncAttachments": "Anhänge synchronisieren",
     "runMigration": "Migration ausführen",
     "pauseMirror": "Spiegelung pausieren",
     "enableMirror": "Spiegelung aktivieren",
@@ -41,6 +42,7 @@
     "kind": {
       "full_migration": "Vollständige Migration",
       "incremental": "Inkrementell",
+      "attachments": "Anhänge",
       "mirror": "Spiegelung"
     },
     "status": {
@@ -48,7 +50,11 @@
       "failed": "Fehlgeschlagen",
       "running": "Läuft"
     },
+    "progress": {
+      "attachments": "Quellanhänge werden inventarisiert und importiert"
+    },
     "stats": {
+      "attachments": "{files} Quelldateien · {links} Transaktionsverknüpfungen · {created} neue Dateien",
       "docs": "+{new} Dok. · {amended} geändert · {unchanged} unverändert",
       "applied": "{count} angewendet",
       "tb": "SB {matches}/{accounts}",
@@ -64,8 +70,17 @@
     "authFailed": "Autorisierung fehlgeschlagen ({status})",
     "queuingMigration": "Vollständige Migration wird eingereiht…",
     "queuingMirror": "Spiegelung wird eingereiht…",
+    "queuingAttachments": "Anhangssynchronisierung wird eingereiht…",
     "migrationQueued": "Migration eingereiht — wir führen sie im Hintergrund aus",
     "mirrorQueued": "Spiegelung eingereiht — läuft im Hintergrund",
+    "attachmentsQueued": "Anhangssynchronisierung eingereiht — läuft im Hintergrund",
+    "runFailed": "Der Lauf konnte nicht eingereiht werden (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "Die Verbindung ist nicht mehr vorhanden.",
+      "CONNECTION_UNCONFIGURED": "Fügen Sie Anmeldedaten hinzu, bevor Sie diese Verbindung ausführen.",
+      "INVALID_MODE": "Wählen Sie eine gültige Migrationsaktion.",
+      "ATTACHMENTS_UNSUPPORTED": "Diese Verbindung unterstützt keine Anhangsmigration."
+    },
     "testing": "Verbindung wird getestet…",
     "connected": "Verbunden",
     "connectedDetail": "Verbunden — {detail}",

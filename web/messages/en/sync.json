@@ -23,6 +23,7 @@
     "reconnect": "Reconnect",
     "test": "Test",
     "mirrorNow": "Mirror now",
+    "syncAttachments": "Sync attachments",
     "runMigration": "Run migration",
     "pauseMirror": "Pause mirror",
     "enableMirror": "Enable mirror",
@@ -41,6 +42,7 @@
     "kind": {
       "full_migration": "Full migration",
       "incremental": "Incremental",
+      "attachments": "Attachments",
       "mirror": "Mirror"
     },
     "status": {
@@ -48,7 +50,11 @@
       "failed": "Failed",
       "running": "Running"
     },
+    "progress": {
+      "attachments": "Inventorying and importing source attachments"
+    },
     "stats": {
+      "attachments": "{files} source files · {links} transaction links · {created} new files",
       "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
       "applied": "{count} applied",
       "tb": "TB {matches}/{accounts}",
@@ -64,8 +70,17 @@
     "authFailed": "Authorization failed ({status})",
     "queuingMigration": "Queuing full migration…",
     "queuingMirror": "Queuing mirror…",
+    "queuingAttachments": "Queuing attachment sync…",
     "migrationQueued": "Migration queued — we'll run it in the background",
     "mirrorQueued": "Mirror queued — running in the background",
+    "attachmentsQueued": "Attachment sync queued — running in the background",
+    "runFailed": "Could not queue the run (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "The connection no longer exists.",
+      "CONNECTION_UNCONFIGURED": "Add credentials before running this connection.",
+      "INVALID_MODE": "Choose a valid migration action.",
+      "ATTACHMENTS_UNSUPPORTED": "This connection does not support attachment migration."
+    },
     "testing": "Testing connection…",
     "connected": "Connected",
     "connectedDetail": "Connected — {detail}",

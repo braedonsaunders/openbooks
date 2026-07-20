@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectContentType, expenseReportFileIds, safeFilename } from "./netsuite-attachments.ts";
+import {
+  decodeBridgeAttachment,
+  detectContentType,
+  expenseReportFileIds,
+  safeFilename,
+} from "./netsuite-attachments.ts";
 
 test("detectContentType recognizes source receipt signatures", () => {
   assert.equal(detectContentType(Buffer.from("%PDF-1.7"), "wrong.jpg"), "application/pdf");
@@ -35,4 +40,30 @@ test("expenseReportFileIds reads and deduplicates standard REST receipt referenc
     },
   }), ["33057", "33058"]);
   assert.deepEqual(expenseReportFileIds({ expense: { items: [] } }), []);
+});
+
+test("decodeBridgeAttachment validates identity, encoding, and decoded size", () => {
+  const bytes = Buffer.from("%PDF-1.7");
+  const decoded = decodeBridgeAttachment({
+    ok: true,
+    file: {
+      id: "406564",
+      name: "invoice.pdf",
+      size: bytes.length,
+      encoding: "base64",
+      contents: bytes.toString("base64"),
+    },
+  }, "406564");
+  assert.equal(decoded.source.name, "invoice.pdf");
+  assert.deepEqual(decoded.bytes, bytes);
+
+  assert.throws(() => decodeBridgeAttachment({ ok: false, error: "denied" }, "406564"), /denied/);
+  assert.throws(() => decodeBridgeAttachment({
+    ok: true,
+    file: { id: "999", name: "invoice.pdf", size: bytes.length, encoding: "base64", contents: bytes.toString("base64") },
+  }, "406564"), /wrong file/);
+  assert.throws(() => decodeBridgeAttachment({
+    ok: true,
+    file: { id: "406564", name: "invoice.pdf", size: bytes.length + 1, encoding: "base64", contents: bytes.toString("base64") },
+  }, "406564"), /size mismatch/);
 });

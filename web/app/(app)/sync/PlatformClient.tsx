@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plug, RefreshCw, Play, FlaskConical, Trash2, Plus, Pencil, Copy, ExternalLink, Download, BookOpen } from 'lucide-react'
+import { Plug, RefreshCw, Play, FlaskConical, Trash2, Plus, Pencil, Copy, ExternalLink, Download, BookOpen, Paperclip } from 'lucide-react'
 import Link from 'next/link'
 import { PagedTable, type PagedColumn } from '../../../components/paged-table'
 import {
@@ -76,6 +76,11 @@ interface Run {
     tb?: { matches?: number; accounts?: number; mismatches?: unknown[] }
     openItems?: { checked?: number; matches?: number; mismatches?: unknown[] } | null
     periods?: { checked?: number; matches?: number } | null
+    sourceFiles?: number
+    sourceLinks?: number
+    createdFiles?: number
+    createdLinks?: number
+    failures?: number
   }
   progress?: {
     phase?: string
@@ -156,6 +161,13 @@ export function PlatformClient() {
   function runResult(r: Run): string {
     if (r.status !== 'ok' || !r.stats) return r.errorMessage ?? ''
     const s = r.stats
+    if (r.kind === 'attachments') {
+      return t('runs.stats.attachments', {
+        files: s.sourceFiles ?? 0,
+        links: s.sourceLinks ?? 0,
+        created: s.createdFiles ?? 0,
+      })
+    }
     const parts = [t('runs.stats.docs', { new: s.docsNew ?? 0, amended: s.docsAmended ?? 0, unchanged: s.docsUnchanged ?? 0 })]
     if ((s.applications?.inserted ?? 0) > 0) parts.push(t('runs.stats.applied', { count: s.applications?.inserted ?? 0 }))
     let tb = t('runs.stats.tb', { matches: s.tb?.matches ?? 0, accounts: s.tb?.accounts ?? 0 })
@@ -173,7 +185,9 @@ export function PlatformClient() {
       return (
         <div className="min-w-[240px] space-y-1">
           <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-slate-600 dark:text-slate-300">{p.message ?? runStatusLabel('running')}</span>
+            <span className="text-slate-600 dark:text-slate-300">
+              {p.message ?? (t.has(`runs.progress.${p.phase}`) ? t(`runs.progress.${p.phase}`) : runStatusLabel('running'))}
+            </span>
             {p.total ? <span className="tabular-nums text-slate-500">{(p.current ?? 0).toLocaleString()}/{p.total.toLocaleString()}</span> : null}
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
@@ -213,10 +227,16 @@ export function PlatformClient() {
     { key: 'result', header: colHeader('result', 'Result'), cell: (r) => runResultNode(r), search: (r) => runResult(r) },
   ]
 
-  async function run(conn: Connection, mode: 'full_migration' | 'mirror') {
+  async function run(conn: Connection, mode: 'full_migration' | 'mirror' | 'attachments') {
     const key = `${conn.id}:${mode}`
     setBusy(key)
-    const tid = toast.loading(mode === 'full_migration' ? t('toast.queuingMigration') : t('toast.queuingMirror'))
+    const tid = toast.loading(
+      mode === 'full_migration'
+        ? t('toast.queuingMigration')
+        : mode === 'attachments'
+          ? t('toast.queuingAttachments')
+          : t('toast.queuingMirror'),
+    )
     try {
       const res = await fetch(`/api/platform/connections/${conn.id}/run`, {
         method: 'POST',
@@ -224,8 +244,18 @@ export function PlatformClient() {
         body: JSON.stringify({ mode }),
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-      toast.success(mode === 'full_migration' ? t('toast.migrationQueued') : t('toast.mirrorQueued'), { id: tid })
+      if (!res.ok) {
+        const key = typeof body.errorCode === 'string' ? `toast.runErrors.${body.errorCode}` : ''
+        throw new Error(key && t.has(key) ? t(key) : t('toast.runFailed', { status: res.status }))
+      }
+      toast.success(
+        mode === 'full_migration'
+          ? t('toast.migrationQueued')
+          : mode === 'attachments'
+            ? t('toast.attachmentsQueued')
+            : t('toast.mirrorQueued'),
+        { id: tid },
+      )
       setTimeout(() => void load(), 800)
     } catch (e) {
       toast.error((e as Error).message, { id: tid })
@@ -334,6 +364,11 @@ export function PlatformClient() {
                   <Button variant="outline" size="sm" disabled={busy === `${c.id}:mirror`} onClick={() => run(c, 'mirror')}>
                     <RefreshCw size={14} /> {t('actions.mirrorNow')}
                   </Button>
+                  {c.source === 'netsuite' ? (
+                    <Button variant="outline" size="sm" disabled={busy === `${c.id}:attachments`} onClick={() => run(c, 'attachments')}>
+                      <Paperclip size={14} /> {t('actions.syncAttachments')}
+                    </Button>
+                  ) : null}
                   <Button size="sm" disabled={busy === `${c.id}:full_migration`} onClick={() => run(c, 'full_migration')}>
                     <Play size={14} /> {t('actions.runMigration')}
                   </Button>

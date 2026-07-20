@@ -23,6 +23,7 @@
     "reconnect": "再接続",
     "test": "テスト",
     "mirrorNow": "今すぐミラー",
+    "syncAttachments": "添付ファイルを同期",
     "runMigration": "移行を実行",
     "pauseMirror": "ミラーを一時停止",
     "enableMirror": "ミラーを有効化",
@@ -41,6 +42,7 @@
     "kind": {
       "full_migration": "完全移行",
       "incremental": "差分",
+      "attachments": "添付ファイル",
       "mirror": "ミラー"
     },
     "status": {
@@ -48,7 +50,11 @@
       "failed": "失敗",
       "running": "実行中"
     },
+    "progress": {
+      "attachments": "ソースの添付ファイルを確認してインポートしています"
+    },
     "stats": {
+      "attachments": "ソースファイル {files} 件 · 取引リンク {links} 件 · 新規ファイル {created} 件",
       "docs": "+{new} 件のドキュメント · {amended} 件修正 · {unchanged} 件変更なし",
       "applied": "{count} 件適用",
       "tb": "試算表 {matches}/{accounts}",
@@ -64,8 +70,17 @@
     "authFailed": "承認に失敗しました ({status})",
     "queuingMigration": "完全移行をキューに追加中…",
     "queuingMirror": "ミラーをキューに追加中…",
+    "queuingAttachments": "添付ファイル同期をキューに追加中…",
     "migrationQueued": "移行をキューに追加しました — バックグラウンドで実行します",
     "mirrorQueued": "ミラーをキューに追加しました — バックグラウンドで実行中です",
+    "attachmentsQueued": "添付ファイル同期をキューに追加しました — バックグラウンドで実行中です",
+    "runFailed": "実行をキューに追加できませんでした (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "接続は既に存在しません。",
+      "CONNECTION_UNCONFIGURED": "この接続を実行する前に認証情報を追加してください。",
+      "INVALID_MODE": "有効な移行操作を選択してください。",
+      "ATTACHMENTS_UNSUPPORTED": "この接続は添付ファイル移行に対応していません。"
+    },
     "testing": "接続をテスト中…",
     "connected": "接続しました",
     "connectedDetail": "接続しました — {detail}",
