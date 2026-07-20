@@ -129,11 +129,11 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <KpiCard
             icon={GaugeIcon} accent="sky" label="Composite Rate" value={rate(k.compositeRate)}
-            sub={k.compositeRateChangePct == null ? 'burden ÷ billed hrs' : `${k.compositeRateChangePct > 0 ? '↑' : '↓'} ${Math.abs(k.compositeRateChangePct).toFixed(1)}% vs prior`}
+            sub={k.compositeRateChangePct == null ? 'overhead ÷ billed hrs' : `${k.compositeRateChangePct > 0 ? '↑' : '↓'} ${Math.abs(k.compositeRateChangePct).toFixed(1)}% vs prior`}
             tone={k.compositeRateChangePct != null && k.compositeRateChangePct > 0 ? 'negative' : 'neutral'}
           />
           <KpiCard icon={Package} accent="red" label="Total Overhead" value={money(k.totalOverhead)} sub={`${k.overheadAccounts} accounts`} />
-          <KpiCard icon={Coins} accent="emerald" label="Burden Applied" value={money(k.burdenApplied)} sub="recovered" tone="positive" />
+          <KpiCard icon={Coins} accent="emerald" label="Overhead Applied" value={money(k.burdenApplied)} sub="recovered" tone="positive" />
           <KpiCard icon={Scale} accent={under ? 'red' : 'emerald'} label="Absorption" value={`${k.gap < 0 ? '−' : '+'}${money(Math.abs(k.gap))}`} sub={under ? '▲ Under-absorbed' : 'Over-absorbed'} tone={under ? 'negative' : 'positive'} />
           <KpiCard icon={Clock} accent="amber" label="Billed Hours" value={hrs0(k.billedHours)} sub={`${Math.round(k.utilization * 100)}% utilization`} />
         </div>
@@ -208,7 +208,7 @@ function OverviewTab({ data, goTo, openCat, openDept }: { data: TrueCostData; go
         {/* Summary strip */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/30">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Composite Burden Rate</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Composite Overhead Rate</p>
             <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(k.compositeRate)}</p>
           </div>
           <div className="flex gap-6 text-right">
@@ -608,7 +608,7 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
   return (
     <div className="space-y-5">
       <Panel
-        title="Burden Categories"
+        title="Overhead Categories"
         icon={Layers}
         hint="Click a category to inspect it, edit its rule, and manage its accounts"
         actions={
@@ -706,7 +706,7 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
   }
   return (
     <Panel
-      title="Burden Rate Matrix"
+      title="Overhead Rate Matrix"
       icon={Grid3X3}
       actions={
         <span className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500">
@@ -842,7 +842,7 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
       </div>
 
       {!under ? (
-        <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"><CheckCircle2 size={15} />Burden is fully absorbed for this period — no gap to model.</p>
+        <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"><CheckCircle2 size={15} />Overhead is fully absorbed for this period — no gap to model.</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2.5 dark:bg-slate-800/40">
@@ -1015,7 +1015,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={Calculator} accent="sky" label="Selling Rate" value={rate(sellingRate)} sub={`${(totalCost > 0 ? sellingRate / totalCost : 0).toFixed(2)}× cost`} />
-        <KpiCard icon={Layers} accent="violet" label="Total Cost" value={rate(totalCost)} sub="Labor + Burden + Additional" />
+        <KpiCard icon={Layers} accent="violet" label="Total Cost" value={rate(totalCost)} sub="Labor + Overhead + Additional" />
         <KpiCard icon={DollarSign} accent="emerald" label="Profit / Hour" value={rate(profit)} sub={`${money(profit * 1000)} per 1K hours`} tone="positive" />
         <KpiCard icon={Percent} accent="amber" label="Gross Margin" value={`${grossMargin.toFixed(0)}%`} sub={`${markup.toFixed(0)}% markup`} />
       </div>
@@ -1086,7 +1086,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-11">
                 <FilterPill icon={Building2}>
-                  <Select value={burdenSource} onChange={(e) => setBurdenSource(e.target.value)} className="w-60" triggerClassName={PILL_TRIGGER} aria-label="Burden source">
+                  <Select value={burdenSource} onChange={(e) => setBurdenSource(e.target.value)} className="w-60" triggerClassName={PILL_TRIGGER} aria-label="Overhead source">
                     <option value="all">All Departments (${k.compositeRate.toFixed(2)})</option>
                     {data.departments.map((d) => (<option key={d.id} value={d.id}>{d.name} (${(data.totals.byDept[d.id] ?? 0).toFixed(2)})</option>))}
                     <option value="manual">Manual Entry</option>
@@ -1146,13 +1146,13 @@ function SellingTab({ data }: { data: TrueCostData }) {
             <div className="bg-slate-50/60 px-4 py-3 dark:bg-slate-800/30">
               <div className="flex h-6 overflow-hidden rounded-lg text-[9px] font-semibold text-white">
                 <div className="grid place-items-center bg-sky-500" style={{ width: seg(laborRate) }}>Labor</div>
-                <div className="grid place-items-center bg-violet-500" style={{ width: seg(burdenRate) }}>Burden</div>
+                <div className="grid place-items-center bg-violet-500" style={{ width: seg(burdenRate) }}>Overhead</div>
                 <div className="grid place-items-center bg-pink-500" style={{ width: seg(additional) }}>+Costs</div>
                 <div className="grid place-items-center bg-emerald-500" style={{ width: seg(profit) }}>Profit</div>
               </div>
               <div className="mt-1.5 flex justify-center gap-4 text-[10px] text-slate-400 dark:text-slate-500">
                 <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-sky-500" />Labor</span>
-                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-violet-500" />Burden</span>
+                <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-violet-500" />Overhead</span>
                 <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-pink-500" />Additional</span>
                 <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" />Profit</span>
               </div>
@@ -1161,7 +1161,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
             {/* Totals */}
             <div className="space-y-1 border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-800/30">
               {[
-                ['Labor Cost', rate(laborRate)], ['Burden Cost', rate(burdenRate)], ['Additional Costs', rate(additional)],
+                ['Labor Cost', rate(laborRate)], ['Overhead Cost', rate(burdenRate)], ['Additional Costs', rate(additional)],
               ].map(([l, v]) => (
                 <div key={l} className="flex justify-between"><span className="text-xs text-slate-500 dark:text-slate-400">{l}</span><span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">{v}</span></div>
               ))}
@@ -1425,12 +1425,12 @@ function CompositePanel({ data }: { data: TrueCostData }) {
 function ConfigTab({ data }: { data: TrueCostData }) {
   const items = [
     { label: 'Composite method', value: data.config.compositeMethod, note: 'How category rates blend into the headline rate (sum / weighted / cascading)' },
-    { label: 'Burden categories', value: String(data.categories.length), note: 'Account Groups (`burden` dimension) + the native Non-Billable Time category + any custom manual/derived/formula categories' },
-    { label: 'Burden centres', value: String(data.departments.length), note: 'Departments with billed hours; dept-tagged expense stays, untagged allocates by hours share' },
+    { label: 'Overhead categories', value: String(data.categories.length), note: 'Account Groups (`burden` dimension) + the native Non-Billable Time category + any custom manual/derived/formula categories' },
+    { label: 'Overhead centres', value: String(data.departments.length), note: 'Departments with billed hours; dept-tagged expense stays, untagged allocates by hours share' },
     { label: 'Allocation bases', value: '6 live', note: 'Billed/total hours, labour $, headcount, revenue, direct cost — per category, plus manual sqft/units/custom' },
     { label: 'Non-billable time', value: 'Included', note: 'Labour cost of non-billable hours (Σ hours × cost rate) is a native burden category, recovered on billed hours' },
     { label: 'Direct labour', value: 'Excluded', note: 'Billable wage/salary cost (cost_pool dimension) is direct, never burden; COGS is direct cost' },
-    { label: 'Absorption model', value: data.hasBurdenGL ? 'GL applied' : 'Utilization', note: data.hasBurdenGL ? 'From the Overhead Burden GL account postings' : 'GL account 5200 "Overhead Burden" exists but carries no postings — applied = burden × utilization until it is used' },
+    { label: 'Absorption model', value: data.hasBurdenGL ? 'GL applied' : 'Utilization', note: data.hasBurdenGL ? 'From the Overhead Burden GL account postings' : 'GL account 5200 "Overhead Burden" exists but carries no postings — applied = overhead × utilization until it is used' },
     { label: 'Labour rates', value: `${data.labor.count} employees`, note: `Per-entry cost rates, $${Math.round(data.labor.min)}–$${Math.round(data.labor.max)}, weighted ${rate(data.labor.weighted)}` },
   ]
   return (

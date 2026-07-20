@@ -35,6 +35,12 @@ const LABELS: Record<string, string> = {
   margin_pct: 'Margin %',
   in_actual_cost: 'From actual cost',
   time_and_materials: 'Time & materials',
+  rate_engine: 'Department rate card',
+  percent_of_labor: '% of labor cost',
+  per_labor_hour: '$ per labor hour',
+  account_group_actual: 'Posted GL (account group)',
+  billed_hours: 'Billable hours only',
+  total_hours: 'All hours',
   could_be_invoiced: 'Could be invoiced',
   percent_complete_cost: 'Percent complete (cost)',
 }

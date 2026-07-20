@@ -1460,7 +1460,8 @@
         "methodCard": "Tarjeta de tasas por departamento",
         "methodPct": "{rate}% de mano de obra",
         "methodHr": "{rate} $/hora",
-        "methodGl": "GL contabilizado (grupo de cuentas)"
+        "methodGl": "GL contabilizado (grupo de cuentas)",
+        "working": "Guardando…"
       }
     },
     "fields": {
