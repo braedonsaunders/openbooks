@@ -24,6 +24,13 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
 
       if (mode === "attachments") {
         if (conn.source !== "netsuite") throw new Error("attachment migration is only supported by NetSuite connections");
+        await db.execute(sql`
+          update sync_runs
+             set status = 'failed', finished_at = now(),
+                 error_message = 'Attachment sync was interrupted before the worker could finish it.'
+           where org_id = ${orgId} and connection_id = ${connectionId}
+             and kind = 'attachments' and status = 'running'
+        `);
         const started = (await db.execute(sql`
           insert into sync_runs (org_id, connection_id, source, kind, status, triggered_by, progress)
           values (${orgId}, ${connectionId}, ${conn.source}, 'attachments', 'running', ${triggeredBy ?? "worker"},
@@ -83,7 +90,16 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
           : null,
       };
     },
-    { connection: getBlockingConnection(), concurrency: 2 },
+    {
+      connection: getBlockingConnection(),
+      concurrency: 2,
+      // A compose rollout can terminate a worker before its long-running,
+      // idempotent migration has drained. Let the replacement worker resume
+      // instead of permanently failing after BullMQ's single-stall default.
+      lockDuration: 5 * 60_000,
+      maxStalledCount: 6,
+      stalledInterval: 30_000,
+    },
   );
 }
 
