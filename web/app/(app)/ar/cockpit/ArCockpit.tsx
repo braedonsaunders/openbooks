@@ -22,10 +22,7 @@ import {
   AgingBars,
   ScheduleBars,
 } from "../../../../components/cockpit/ui";
-import {
-  CashWeekFlyout,
-  type CategoryFlow,
-} from "../../analytics/_ui/CashWeekFlyout";
+import { CashWeekFlyout } from "../../analytics/_ui/CashWeekFlyout";
 import { ArCollectionsInfoDrawer } from "./ArCollectionsInfoDrawer";
 import { CollectionsWorklist } from "./CollectionsWorklist";
 import { SearchInput } from "../../../../components/search-input";
@@ -58,14 +55,6 @@ export function ArCockpit({
     data.outstanding > 0
       ? Math.round((data.overdue / data.outstanding) * 100)
       : 0;
-  const catFlowsFor = (wi: number): CategoryFlow[] =>
-    data.categories
-      .map((c) => ({
-        name: c.name,
-        direction: c.direction,
-        amount: c.weekly[wi] ?? 0,
-      }))
-      .filter((c) => c.amount > 0);
   const customerQuery = (search.get("customerQ") ?? "")
     .trim()
     .toLocaleLowerCase();
@@ -289,7 +278,8 @@ export function ArCockpit({
         <CashWeekFlyout
           week={data.timeline[drillWeek]!}
           initialSide="ar"
-          categoryFlows={catFlowsFor(drillWeek)}
+          categories={data.categories}
+          weekIndex={drillWeek}
           canCollectionRun={canCollect}
           onClose={() => setDrillWeek(null)}
         />

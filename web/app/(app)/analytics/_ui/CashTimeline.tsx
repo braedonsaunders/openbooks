@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { ListOrdered } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { CategoryWeekly, WeekRow } from '../../../../lib/cash/core'
-import { CashWeekFlyout, type CategoryFlow } from './CashWeekFlyout'
+import { CashWeekFlyout } from './CashWeekFlyout'
 import { fmtMoney } from './format'
 
 const money = (n: number) => fmtMoney(n, { compact: true })
@@ -37,12 +37,6 @@ export function CashTimeline({
   const [flyout, setFlyout] = useState<{ week: WeekRow; side: 'ar' | 'ap' } | null>(null)
   const hasCats = categories.length > 0
   const scheduling = weeklyCap > 0 || restrictToSafe
-  const catFlowsFor = (w: WeekRow): CategoryFlow[] => {
-    const wi = weeks.indexOf(w)
-    return categories
-      .map((c) => ({ name: c.name, direction: c.direction, amount: c.weekly[wi] ?? 0 }))
-      .filter((c) => c.amount > 0)
-  }
   const open = (w: WeekRow) => {
     const arTotal = w.arEntries.reduce((a, e) => a + e.amount, 0)
     const apTotal = w.apEntries.reduce((a, e) => a + e.amount, 0)
@@ -95,7 +89,7 @@ export function CashTimeline({
         </tbody>
       </table>
 
-      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categoryFlows={catFlowsFor(flyout.week)} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
+      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categories={categories} weekIndex={weeks.indexOf(flyout.week)} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
     </>
   )
 }

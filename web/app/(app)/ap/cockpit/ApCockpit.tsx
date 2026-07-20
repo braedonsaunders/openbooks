@@ -16,7 +16,7 @@ import {
 import { money, moneyCompact } from '../../../../lib/format'
 import type { ApPosition } from '../../../../lib/cash/ap-position'
 import { StatTile, CockpitPanel, AgingBars, ScheduleBars } from '../../../../components/cockpit/ui'
-import { CashWeekFlyout, type CategoryFlow } from '../../analytics/_ui/CashWeekFlyout'
+import { CashWeekFlyout } from '../../analytics/_ui/CashWeekFlyout'
 import { ApSelectionConfigDrawer } from './ApSelectionConfigDrawer'
 import { PayRunPlanner } from './PayRunPlanner'
 
@@ -31,11 +31,6 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
   const t = useTranslations('ap.cockpit')
   const [showConfig, setShowConfig] = useState(false)
   const [drillWeek, setDrillWeek] = useState<number | null>(null)
-
-  const catFlowsFor = (wi: number): CategoryFlow[] =>
-    data.categories
-      .map((c) => ({ name: c.name, direction: c.direction, amount: c.weekly[wi] ?? 0 }))
-      .filter((c) => c.amount > 0)
 
   const overduePct = data.outstanding > 0 ? Math.round((data.overdue / data.outstanding) * 100) : 0
   const gear = canConfigure ? (
@@ -130,7 +125,8 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
         <CashWeekFlyout
           week={data.timeline[drillWeek]!}
           initialSide="ap"
-          categoryFlows={catFlowsFor(drillWeek)}
+          categories={data.categories}
+          weekIndex={drillWeek}
           canPayRun={canPay}
           onClose={() => setDrillWeek(null)}
         />
