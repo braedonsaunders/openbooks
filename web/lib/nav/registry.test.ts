@@ -46,6 +46,7 @@ test('default workspaces follow the approved journey-oriented information archit
     'timesheets',
     'items',
     'inventory',
+    'equipment',
     'employees',
   ])
 })
