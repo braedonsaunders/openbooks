@@ -238,8 +238,10 @@ context.
 
 The project flyout organizes the record by purpose:
 
-- **Overview** holds the project's identity, dates, ownership, customer,
-  contract, and invoicing preferences.
+- **Overview** holds the project's identity, type, dates, ownership, customer,
+  contract, and invoicing preferences. Its fields use the same customizable
+  form layout engine as transaction headers, including visibility, ordering,
+  grouping, labels, and column spans.
 - **Work breakdown** is the single place to plan tasks, estimated hours, and
   estimated costs. Those task costs roll up into the project's cost budget.
 - **Financials & budget** compares that budget with actual and committed cost

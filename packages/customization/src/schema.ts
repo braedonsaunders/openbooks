@@ -81,6 +81,7 @@ const formActionPlacementSchema = z.object({
 export const formLayoutConfigSchema = z.object({
   schemaVersion: z.literal(1),
   defaultVisibilityVersion: z.literal(1).optional(),
+  defaultLayoutVersion: z.literal(1).optional(),
   recordType: recordTypeSchema,
   header: z.object({ groups: z.array(headerGroupSchema).min(1).max(20) }),
   lines: z.object({ columns: z.array(lineColumnPlacementSchema).max(200) }),
@@ -313,7 +314,17 @@ const VENDOR_BILL_HEADER_SPAN: Record<string, number> = {
 /** Per-record-type header col-span defaults so a fresh baseline reads well.
  *  Falls back to VENDOR_BILL_HEADER_SPAN for transaction kinds. */
 const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
-  project: { name: 2, customer_id: 2, notes: 4 },
+  project: {
+    name: 3,
+    project_type_id: 2,
+    customer_id: 2,
+    foreman_id: 2,
+    manager_id: 2,
+    starts_on: 2,
+    ends_on: 2,
+    subsidiary_id: 4,
+    notes: 4,
+  },
 }
 
 /**
@@ -330,6 +341,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
   return {
     schemaVersion: 1,
     defaultVisibilityVersion: 1,
+    defaultLayoutVersion: 1,
     recordType,
     header: {
       groups: [
@@ -356,6 +368,103 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
     },
     actions: FORM_ACTION_KEYS.map<FormActionPlacement>((key) => ({ key, visible: true })),
   }
+}
+
+/**
+ * Bring a persisted form layout forward when the registry gains built-in
+ * fields or actions. Existing placements (including hidden fields, custom
+ * order, labels, groups, and spans) remain untouched. New header fields are
+ * inserted beside their nearest registered predecessor and inherit the
+ * system-default placement, so adding a native field never strands saved
+ * forms on an obsolete shape.
+ */
+export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormLayoutConfig {
+  const meta = RECORD_TYPE_BY_KEY[layout.recordType]
+  if (!meta) return layout
+
+  const defaults = defaultFormLayout(layout.recordType)
+  const defaultHeader = new Map(defaults.header.groups.flatMap((group) => group.fields).map((field) => [field.key, field]))
+  const placedHeader = new Set(layout.header.groups.flatMap((group) => group.fields).map((field) => field.key))
+  if (layout.header.groups.length === 0) layout.header.groups.push({ id: "primary", label: null, fields: [] })
+
+  for (let registryIndex = 0; registryIndex < meta.headerFields.length; registryIndex++) {
+    const fieldMeta = meta.headerFields[registryIndex]!
+    if (placedHeader.has(fieldMeta.key)) continue
+
+    const placement = defaultHeader.get(fieldMeta.key) ?? {
+      key: fieldMeta.key,
+      visible: true,
+      required: fieldMeta.required ? true : null,
+      labelOverride: null,
+      colSpan: null,
+    }
+    let targetGroup = layout.header.groups[0]!
+    let insertAt = targetGroup.fields.length
+
+    for (let previousIndex = registryIndex - 1; previousIndex >= 0; previousIndex--) {
+      const previousKey = meta.headerFields[previousIndex]!.key
+      const group = layout.header.groups.find((candidate) => candidate.fields.some((field) => field.key === previousKey))
+      if (!group) continue
+      targetGroup = group
+      insertAt = group.fields.findIndex((field) => field.key === previousKey) + 1
+      break
+    }
+
+    targetGroup.fields.splice(insertAt, 0, { ...placement })
+    placedHeader.add(fieldMeta.key)
+  }
+
+  const placedLines = new Set(layout.lines.columns.map((column) => column.key))
+  const defaultLines = new Map(defaults.lines.columns.map((column) => [column.key, column]))
+  for (const fieldMeta of meta.lineFields) {
+    if (placedLines.has(fieldMeta.key)) continue
+    const placement = defaultLines.get(fieldMeta.key) ?? {
+      key: fieldMeta.key,
+      visible: true,
+      width: null,
+      labelOverride: null,
+    }
+    layout.lines.columns.push({ ...placement })
+    placedLines.add(fieldMeta.key)
+  }
+
+  const placedActions = new Set((layout.actions ?? []).map((action) => action.key))
+  layout.actions = [
+    ...(layout.actions ?? []),
+    ...defaults.actions.filter((action) => !placedActions.has(action.key)),
+  ]
+  return layout
+}
+
+/**
+ * Apply the current system placement to a tenant's baseline form exactly once.
+ * Built-in fields return to registry order and current spans, while visibility,
+ * label, and required overrides survive. Custom fields remain in their chosen
+ * groups. Named custom forms never pass through this baseline-only migration.
+ */
+export function refreshDefaultFormLayout(layout: FormLayoutConfig): FormLayoutConfig {
+  const defaults = defaultFormLayout(layout.recordType)
+  const defaultBuiltIns = defaults.header.groups.flatMap((group) => group.fields)
+  const existingByKey = new Map(
+    layout.header.groups.flatMap((group) => group.fields).map((field) => [field.key, field]),
+  )
+  const customOnlyGroups = layout.header.groups.map((group) => ({
+    ...group,
+    fields: group.fields.filter((field) => isCustomFieldKey(field.key)),
+  }))
+  if (customOnlyGroups.length === 0) customOnlyGroups.push({ id: "primary", label: null, fields: [] })
+
+  const builtIns = defaultBuiltIns.map((placement) => {
+    const existing = existingByKey.get(placement.key)
+    return existing
+      ? { ...existing, colSpan: placement.colSpan ?? null }
+      : { ...placement }
+  })
+  customOnlyGroups[0]!.fields = [...builtIns, ...customOnlyGroups[0]!.fields]
+
+  layout.header.groups = customOnlyGroups.filter((group, index) => index === 0 || group.fields.length > 0)
+  layout.defaultLayoutVersion = 1
+  return mergeRegisteredFieldsIntoLayout(layout)
 }
 
 /** The system-default list view: all columns (registry order), no filters. */

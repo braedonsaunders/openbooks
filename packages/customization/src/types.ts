@@ -94,6 +94,9 @@ export interface FormLayoutConfig {
   /** One-time marker for the baseline-form visibility defaults applied by the
    * tenant provisioner. It prevents later user choices from being reset. */
   defaultVisibilityVersion?: 1
+  /** One-time marker for the current built-in placement defaults applied to
+   * the tenant-owned baseline form. Named custom forms are never reset. */
+  defaultLayoutVersion?: 1
   recordType: RecordTypeKey
   header: { groups: HeaderGroup[] }
   lines: { columns: LineColumnPlacement[] }

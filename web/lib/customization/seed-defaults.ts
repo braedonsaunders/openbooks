@@ -6,6 +6,7 @@ import {
   RECORD_TYPES,
   defaultFormLayout,
   defaultListView,
+  refreshDefaultFormLayout,
   type FormLayoutConfig,
 } from '@openbooks/customization'
 
@@ -66,24 +67,30 @@ export async function ensureCustomizationDefaults(args: {
           const revealBaseline =
             form.name === DEFAULT_FORM_NAME && form.layout?.defaultVisibilityVersion !== 1
           const addActions = !Array.isArray(form.layout?.actions)
-          if (revealBaseline || addActions) {
-            const nextLayout = {
+          const refreshBaseline =
+            meta.key === 'project' &&
+            form.name === DEFAULT_FORM_NAME &&
+            form.layout?.defaultLayoutVersion !== 1
+          if (revealBaseline || addActions || refreshBaseline) {
+            let nextLayout = {
               ...form.layout,
-              ...(revealBaseline
-                ? {
-                    defaultVisibilityVersion: 1 as const,
-                    header: {
-                      groups: form.layout.header.groups.map((group) => ({
-                        ...group,
-                        fields: group.fields.map((field) => ({ ...field, visible: true })),
-                      })),
-                    },
-                    lines: {
-                      columns: form.layout.lines.columns.map((column) => ({ ...column, visible: true })),
-                    },
-                  }
-                : {}),
               actions: addActions ? layout.actions : form.layout.actions,
+            } as FormLayoutConfig
+            if (refreshBaseline) nextLayout = refreshDefaultFormLayout(nextLayout)
+            if (revealBaseline) {
+              nextLayout = {
+                ...nextLayout,
+                defaultVisibilityVersion: 1,
+                header: {
+                  groups: nextLayout.header.groups.map((group) => ({
+                    ...group,
+                    fields: group.fields.map((field) => ({ ...field, visible: true })),
+                  })),
+                },
+                lines: {
+                  columns: nextLayout.lines.columns.map((column) => ({ ...column, visible: true })),
+                },
+              }
             }
             await tx.execute(sql`
               update form_layouts

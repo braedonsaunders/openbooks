@@ -43,11 +43,15 @@ export function HeaderFields({
               </div>
             ) : null}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {visible.map((placement) => (
-                <div key={placement.key} className={`space-y-1.5 ${COL_SPAN_CLASS[placement.colSpan ?? 1] ?? ''}`}>
-                  {renderField(placement, editable)}
-                </div>
-              ))}
+              {visible.map((placement) => {
+                const content = renderField(placement, editable)
+                if (content == null) return null
+                return (
+                  <div key={placement.key} className={`space-y-1.5 ${COL_SPAN_CLASS[placement.colSpan ?? 1] ?? ''}`}>
+                    {content}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )
