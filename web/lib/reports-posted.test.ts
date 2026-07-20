@@ -12,7 +12,7 @@ test("financial statements exclude draft and other unposted journals", { skip: !
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/db.ts";
     import { toUnits } from "./engine/src/money.ts";
-    import { agingByParty, agingDetail, cashFlow, financialTrends, profitAndLoss } from "./web/lib/reports.ts";
+    import { agingByParty, agingDetail, cashFlow, financialTrends, journalReport, profitAndLoss } from "./web/lib/reports.ts";
 
     // Exercise persistent application tenants only. Other DB-backed test files
     // create and delete short-lived orgs in parallel; sampling one between its
@@ -43,6 +43,12 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           toUnits(report.netIncome.toFixed(4)),
           toUnits(row.revenue) - toUnits(row.cogs) - toUnits(row.expenses),
           org.id + " net income",
+        );
+        const journal = await journalReport("0001-01-01", "9999-12-31");
+        assert.equal(
+          new Set(journal.entries.map((entry) => entry.id)).size,
+          journal.entries.length,
+          org.id + " journal entries are grouped exactly once",
         );
         for (const side of ["ar", "ap"]) {
           const positiveKind = side === "ar" ? "customer_invoice" : "vendor_bill";
