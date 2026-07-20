@@ -84,6 +84,7 @@ jobs:
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
           REDIS_URL_SECRET: ${{ secrets.OPENBOOKS_REDIS_URL }}
+          DATA_KEY_SECRET: ${{ secrets.OPENBOOKS_DATA_KEY }}
           NEW_TAG: ${{ needs.build.outputs.tag }}
         run: |
           set -euo pipefail
@@ -96,12 +97,15 @@ jobs:
           else
             new_env="$(printf '%s\nOPENBOOKS_TAG=%s\n' "$env_text" "$NEW_TAG")"
           fi
-          if [ -z "$REDIS_URL_SECRET" ]; then
-            echo "::error::OPENBOOKS_REDIS_URL repository secret is required"
+          if [ -z "$REDIS_URL_SECRET" ] || [ -z "$DATA_KEY_SECRET" ]; then
+            echo "::error::OPENBOOKS_REDIS_URL and OPENBOOKS_DATA_KEY repository secrets are required"
             exit 1
           fi
-          new_env="$(jq -rn --arg env "$new_env" --arg redis "$REDIS_URL_SECRET" \
-            '$env | split("\n") | map(select(startswith("OPENBOOKS_REDIS_URL=") | not)) + ["OPENBOOKS_REDIS_URL=" + $redis] | join("\n")')"
+          new_env="$(jq -rn --arg env "$new_env" --arg redis "$REDIS_URL_SECRET" --arg dataKey "$DATA_KEY_SECRET" \
+            '$env | split("\n")
+              | map(select((startswith("OPENBOOKS_REDIS_URL=") or startswith("OPENBOOKS_DATA_KEY=")) | not))
+              + ["OPENBOOKS_REDIS_URL=" + $redis, "OPENBOOKS_DATA_KEY=" + $dataKey]
+              | join("\n")')"
           compose_file="$(cat deploy/dokploy.compose.yaml)"
           jq -n --arg id "$COMPOSE_ID" --arg env "$new_env" --arg composeFile "$compose_file" \
             '{composeId:$id, env:$env, composeFile:$composeFile}' \
