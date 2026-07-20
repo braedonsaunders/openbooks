@@ -61,3 +61,53 @@ test("NetSuite bridge deletion feed preserves tombstone identity", async () => {
     { internalId: "42", deletedAt: "7/19/2026", recordType: "Invoice", name: "INV42", externalId: "" },
   ]);
 });
+
+test("NetSuite bulk export assembles partition chunks and always cleans up", async () => {
+  const actions: string[] = [];
+  let jobId = "";
+  let cleanupCalls = 0;
+  const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
+    const action = String(params.action);
+    actions.push(action);
+    if (action === "startExport") {
+      jobId = String(params.jobId);
+      return { schemaVersion: 1, jobId, taskId: "task-1", partitions: 2 } as T;
+    }
+    if (action === "exportStatus") return {
+      schemaVersion: 1,
+      jobId,
+      status: "complete",
+      files: [
+        { id: "11", name: `ob-chunk-${jobId}-a-000000.json`, size: 1, createdAt: "", modifiedAt: "" },
+        { id: "12", name: `ob-chunk-${jobId}-b-000000.json`, size: 1, createdAt: "", modifiedAt: "" },
+        { id: "13", name: `ob-summary-${jobId}.json`, size: 1, createdAt: "", modifiedAt: "" },
+      ],
+    } as T;
+    if (action === "readChunk") {
+      const partId = String(params.fileId) === "11" ? "a" : "b";
+      return {
+        schemaVersion: 1,
+        fileId: params.fileId,
+        name: "chunk.json",
+        contents: JSON.stringify({ schemaVersion: 1, jobId, partId, rows: [{ id: partId }] }),
+      } as T;
+    }
+    if (action === "deleteExport") {
+      cleanupCalls += 1;
+      return {
+        schemaVersion: 1,
+        jobId,
+        deleted: cleanupCalls === 1 ? 25 : 3,
+        remaining: cleanupCalls === 1 ? 3 : 0,
+      } as T;
+    }
+    throw new Error(`unexpected action ${action}`);
+  });
+
+  const rows = await client.bulkQuery<{ id: string }>([
+    { id: "a", sql: "SELECT 1 AS id FROM DUAL" },
+    { id: "b", sql: "SELECT 2 AS id FROM DUAL" },
+  ]);
+  assert.deepEqual(rows, new Map([["a", [{ id: "a" }]], ["b", [{ id: "b" }]]]));
+  assert.deepEqual(actions, ["startExport", "exportStatus", "readChunk", "readChunk", "deleteExport", "deleteExport"]);
+});

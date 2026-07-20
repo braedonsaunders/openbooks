@@ -10,7 +10,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
     const EXPORT_DEPLOYMENT_ID = 'customdeploy_openbooks_export_mr';
-    const MAX_PAGE_SIZE = 500;
+    const MAX_PAGE_SIZE = 1000;
     const MAX_PARTITIONS = 250;
 
     const text = (value) => value == null ? '' : String(value);
@@ -216,8 +216,28 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       });
       rows.sort((a, b) => a.name.localeCompare(b.name));
       const failed = rows.some((row) => row.name.includes('-error'));
-      const pending = rows.some((row) => row.name.startsWith('ob-request-'));
-      return { schemaVersion: SCHEMA_VERSION, jobId, status: failed ? 'failed' : pending ? 'running' : 'complete', files: rows };
+      const summarized = rows.some((row) => row.name === `ob-summary-${jobId}.json`);
+      return { schemaVersion: SCHEMA_VERSION, jobId, status: failed ? 'failed' : summarized ? 'complete' : 'running', files: rows };
+    };
+
+    const listExports = () => {
+      const rows = [];
+      search.create({
+        type: 'file',
+        filters: [['folder', 'anyof', jobsFolder()], 'AND', ['name', 'startswith', 'ob-']],
+        columns: ['name', 'documentsize', 'created', 'modified'],
+      }).run().each((result) => {
+        rows.push({
+          id: text(result.id),
+          name: text(result.getValue({ name: 'name' })),
+          size: Number(result.getValue({ name: 'documentsize' }) || 0),
+          createdAt: text(result.getValue({ name: 'created' })),
+          modifiedAt: text(result.getValue({ name: 'modified' })),
+        });
+        return true;
+      });
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+      return { schemaVersion: SCHEMA_VERSION, files: rows };
     };
 
     const readChunk = (input) => {
@@ -230,8 +250,16 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
 
     const deleteExport = (input) => {
       const state = exportFiles(input);
-      state.files.forEach((item) => file.delete({ id: item.id }));
-      return { schemaVersion: SCHEMA_VERSION, jobId: state.jobId, deleted: state.files.length };
+      // File deletion consumes governance and can exceed the RESTlet transport
+      // timeout for six-figure exports. Keep cleanup restartable and bounded.
+      const batch = state.files.slice(0, 25);
+      batch.forEach((item) => file.delete({ id: item.id }));
+      return {
+        schemaVersion: SCHEMA_VERSION,
+        jobId: state.jobId,
+        deleted: batch.length,
+        remaining: state.files.length - batch.length,
+      };
     };
 
     const dispatch = (input) => {
@@ -244,6 +272,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         if (action === 'deleted') return deletedRecords(input);
         if (action === 'startExport') return startExport(input);
         if (action === 'exportStatus') return exportFiles(input);
+        if (action === 'listExports') return listExports();
         if (action === 'readChunk') return readChunk(input);
         if (action === 'deleteExport') return deleteExport(input);
         throw new Error(`unsupported action ${action}`);
