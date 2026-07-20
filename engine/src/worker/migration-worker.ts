@@ -4,7 +4,7 @@ import { MIGRATION_QUEUE, enqueueMigration, getBlockingConnection, type Migratio
 import { db } from "../db.ts";
 import { buildSource, getConnection } from "../sync/connection.ts";
 import { runFullMigration, runSync } from "../sync/sync.ts";
-import { importNetSuiteAttachments } from "../sync/netsuite-attachments.ts";
+import { AttachmentImportError, importNetSuiteAttachments } from "../sync/netsuite-attachments.ts";
 import { purgeExpiredQbdBridgeData } from "../qbd/bridge.ts";
 
 /**
@@ -57,8 +57,12 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
           return { runId, kind: "attachments", ...summary };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
+          const stats = error instanceof AttachmentImportError ? error.summary : null;
           await db.execute(sql`
-            update sync_runs set status = 'failed', finished_at = now(), error_message = ${message} where id = ${runId}
+            update sync_runs
+               set status = 'failed', finished_at = now(), error_message = ${message},
+                   stats = ${stats ? JSON.stringify(stats) : null}::jsonb
+             where id = ${runId}
           `);
           await db.execute(sql`
             update connections set status = 'error', last_error = ${message}, last_run_at = now() where id = ${connectionId}
