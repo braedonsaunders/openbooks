@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server'
 import Link from 'next/link'
 import { ScanLine } from 'lucide-react'
 import { Button, cn, PageHeader } from '@openbooks/ui'
-import { ListPageLayout, PageContainer } from '../../../components/page-layout'
+import { ListPageLayout } from '../../../components/page-layout'
 import { RecordListView } from '../../../components/record-list-view'
 import { DocumentDrawer } from '../../../components/document-drawer'
 import { DocumentRowActions } from '../../../components/document-row-actions'
@@ -83,16 +83,18 @@ export default async function AP({
     const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
     const data = await apPosition(authz.user.orgId, 4, apSettings)
     return (
-      <PageContainer>
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.title')}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('cockpit.description')}</p>
-          </div>
-          <div className="flex items-center gap-3">{tabs}{headerActions}</div>
-        </div>
+      <ListPageLayout
+        className="flex h-full min-h-0 flex-col"
+        header={
+          <PageHeader
+            title={t('cockpit.title')}
+            description={t('cockpit.description')}
+            actions={<div className="flex items-center gap-3">{tabs}{headerActions}</div>}
+          />
+        }
+      >
         <ApCockpit data={data} canConfigure={can(authz, 'admin.setup.manage')} />
-      </PageContainer>
+      </ListPageLayout>
     )
   }
 

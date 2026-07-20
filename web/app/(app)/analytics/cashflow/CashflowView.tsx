@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useMemo, useState } from 'react'
 import {
   University,
   Wallet,
@@ -19,13 +18,12 @@ import {
   ChevronDown,
   ListOrdered,
   SlidersHorizontal,
-  History,
-  Gauge as GaugeIcon,
 } from 'lucide-react'
-import { cn, Drawer, Badge, Select } from '@openbooks/ui'
-import type { CashflowData, WeekRow, SideSummary, ForecastCategory } from '../../../../lib/analytics/cashflow-data'
-import { TxnLink } from '../../reports/TxnLink'
+import { cn } from '@openbooks/ui'
+import type { CashflowData, WeekRow, SideSummary } from '../../../../lib/analytics/cashflow-data'
 import { ConfigEditor } from '../_ui/ConfigEditor'
+import { CategoryManager } from '../_ui/CategoryManager'
+import { CashWeekFlyout, type CategoryFlow } from '../_ui/CashWeekFlyout'
 import { Panel } from '../_ui/Panel'
 import { TrendChart, Chart } from '../_ui/charts'
 import { fmtMoney } from '../_ui/format'
@@ -137,6 +135,12 @@ function WeeklyTab({ data }: { data: CashflowData }) {
   const hasCats = data.categories.length > 0
   const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
   const cols = 6 + (hasCats ? 2 : 0) + (scheduling ? 1 : 0)
+  const catFlowsFor = (w: WeekRow): CategoryFlow[] => {
+    const wi = data.weeks.indexOf(w)
+    return data.categories
+      .map((c) => ({ name: c.name, direction: c.direction, amount: c.weekly[wi] ?? 0 }))
+      .filter((c) => c.amount > 0)
+  }
 
   return (
     <>
@@ -210,156 +214,8 @@ function WeeklyTab({ data }: { data: CashflowData }) {
         </table>
       </Panel>
 
-      {flyout ? <WeekFlyout week={flyout.week} side={flyout.side} onClose={() => setFlyout(null)} onSwitch={(side) => setFlyout({ week: flyout.week, side })} /> : null}
+      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categoryFlows={catFlowsFor(flyout.week)} onClose={() => setFlyout(null)} /> : null}
     </>
-  )
-}
-
-function WeekFlyout({ week, side, onClose, onSwitch }: { week: WeekRow; side: 'ar' | 'ap'; onClose: () => void; onSwitch: (s: 'ar' | 'ap') => void }) {
-  const entries = side === 'ar' ? week.arEntries : week.apEntries
-  const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
-  const total = entries.reduce((a, e) => a + e.amount, 0)
-  const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-  return (
-    <Drawer
-      open
-      onClose={onClose}
-      size="lg"
-      title={week.label}
-      description={`${side === 'ar' ? 'Predicted collections' : 'Predicted payments'} · ${money(total)}`}
-      bodyClassName="overflow-hidden flex flex-col p-0"
-    >
-      {/* AR / AP switch */}
-      <div className="flex gap-0.5 border-b border-slate-100 px-4 dark:border-slate-800">
-        {(['ar', 'ap'] as const).map((s) => (
-          <button key={s} type="button" onClick={() => onSwitch(s)} className={cn('-mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition-colors', side === s ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
-            {s === 'ar' ? `AR Inflows (${week.arEntries.length})` : `AP Outflows (${week.apEntries.length})`}
-          </button>
-        ))}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {entries.length === 0 ? (
-          <p className="px-6 py-8 text-center text-sm text-slate-400">No {side === 'ar' ? 'inflows' : 'outflows'} predicted this week.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-6 py-2 text-left font-medium">Party</th>
-                <th className="px-3 py-2 text-left font-medium">Prediction</th>
-                <th className="px-3 py-2 text-right font-medium">Due</th>
-                <th className="px-6 py-2 text-right font-medium">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e) => (
-                <tr key={e.id} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                  <td className="px-6 py-2.5">
-                    <span className="flex items-center gap-1.5">
-                      <TxnLink entryId={e.entryId} docKind={e.docKind} docId={e.docId} className="font-medium text-slate-700 group-hover:text-teal-700 dark:text-slate-200 dark:group-hover:text-teal-300">
-                        {e.partyName}
-                      </TxnLink>
-                      {e.partyId ? (
-                        <button type="button" onClick={() => setEntity({ id: e.partyId!, name: e.partyName })} title="Payment history & reliability" className="text-slate-300 hover:text-teal-600 dark:text-slate-600 dark:hover:text-teal-400">
-                          <History size={12} />
-                        </button>
-                      ) : null}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{e.method}</span>
-                    {e.daysOverdue > 0 ? <Badge variant="warning" className="ml-1.5 text-[10px]">{e.daysOverdue}d overdue</Badge> : null}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{e.dueDate ? fmtDate(e.dueDate) : '—'}</td>
-                  <td className={cn('px-6 py-2.5 text-right font-medium tabular-nums', side === 'ar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(e.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-      {entity ? <EntityDrawer party={entity.id} name={entity.name} side={side} onClose={() => setEntity(null)} /> : null}
-    </Drawer>
-  )
-}
-
-/** Entity payment-history + reliability drill (Gantry getEntityHistory). */
-function EntityDrawer({ party, name, side, onClose }: { party: string; name: string; side: 'ar' | 'ap'; onClose: () => void }) {
-  const [data, setData] = useState<any>(null)
-  const [error, setError] = useState(false)
-  useEffect(() => {
-    let live = true
-    fetch(`/api/analytics/cashflow/entity?party=${party}&side=${side}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((j) => { if (live) setData(j) })
-      .catch(() => { if (live) setError(true) })
-    return () => { live = false }
-  }, [party, side])
-  const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-  const relTone = (r: number) => (r >= 80 ? 'text-emerald-600 dark:text-emerald-400' : r >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')
-
-  return (
-    <Drawer open onClose={onClose} size="md" title={name} description={side === 'ar' ? 'Customer payment history' : 'Vendor payment history'} bodyClassName="overflow-hidden flex flex-col p-0">
-      {error ? (
-        <p className="p-6 text-center text-sm text-slate-400">Could not load history.</p>
-      ) : !data ? (
-        <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
-            <div className="px-5 py-3 text-center">
-              <p className={cn('text-2xl font-bold tabular-nums', relTone(data.reliability))}>{data.reliability}</p>
-              <p className="flex items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> Reliability</p>
-            </div>
-            <div className="px-5 py-3 text-center">
-              <p className="text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">{data.avgDays === null ? '—' : `${data.avgDays}d`}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">Avg {side === 'ar' ? 'to Collect' : 'to Pay'}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
-            <div className="px-5 py-3 text-center">
-              <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(data.totalPaid)}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{data.paymentCount} payments · 12mo</p>
-            </div>
-            <div className="px-5 py-3 text-center">
-              <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(data.openBalance)}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">Open · {data.overdueCount} overdue</p>
-            </div>
-          </div>
-          {data.openItems.length ? (
-            <div>
-              <p className="px-4 pt-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">Open items ({data.openItems.length})</p>
-              <table className="w-full text-sm">
-                <tbody>
-                  {data.openItems.map((i: any, k: number) => (
-                    <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-1.5"><TxnLink entryId={i.entryId ?? ''} docKind={i.docKind} docId={i.docId} className="text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400">{i.docNumber || i.docKind}</TxnLink></td>
-                      <td className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? fmtDate(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">overdue</span> : null}</td>
-                      <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(i.remaining)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-          {data.recentPayments.length ? (
-            <div>
-              <p className="px-4 pt-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">Recent payments</p>
-              <table className="w-full text-sm">
-                <tbody>
-                  {data.recentPayments.map((p: any, k: number) => (
-                    <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(p.date)}</td>
-                      <td className="px-3 py-1.5"><TxnLink entryId={p.entryId ?? ''} docKind={p.docKind} docId={p.docId} className="text-slate-600 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400">{p.docNumber || p.docKind}</TxnLink></td>
-                      <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(p.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </div>
-      )}
-    </Drawer>
   )
 }
 
@@ -465,7 +321,11 @@ function ConfigTab({ data }: { data: CashflowData }) {
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
-        <CategoryManager data={data} />
+        <CategoryManager
+          vendorOptions={data.vendorOptions}
+          accountOptions={data.accountOptions}
+          initialCategories={data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method }))}
+        />
         <ConfigEditor
           dashboard="cashflow"
           fields={[
@@ -508,158 +368,6 @@ function ConfigTab({ data }: { data: CashflowData }) {
       </Panel>
       </div>
     </div>
-  )
-}
-
-/**
- * Forecast-category manager — Gantry's category config CRUD, openbooks-style.
- * Edits the full list and PUTs it to /api/analytics/cashflow/categories, then
- * refreshes so the timeline recomputes.
- */
-function CategoryManager({ data }: { data: CashflowData }) {
-  const router = useRouter()
-  const [cats, setCats] = useState<ForecastCategory[]>(() => data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method })))
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-  // Draft for the add form.
-  const [name, setName] = useState('')
-  const [direction, setDirection] = useState<'inflow' | 'outflow'>('outflow')
-  const [method, setMethod] = useState<ForecastCategory['method']>('manual_recurring')
-  const [amount, setAmount] = useState('')
-  const [frequency, setFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('monthly')
-  const [partyId, setPartyId] = useState('')
-  const [accountIds, setAccountIds] = useState<string[]>([])
-  const [historyWeeks, setHistoryWeeks] = useState('12')
-  const [adjustmentPct, setAdjustmentPct] = useState('0')
-
-  // The server payload carries computed CategoryWeekly rows; the editor needs
-  // the raw configs — refetch them once on mount.
-  useEffect(() => {
-    fetch('/api/analytics/cashflow/categories')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (j && Array.isArray(j.categories)) setCats(j.categories) })
-      .catch(() => {})
-  }, [])
-
-  const save = async (next: ForecastCategory[]) => {
-    setBusy(true)
-    setMsg(null)
-    const r = await fetch('/api/analytics/cashflow/categories', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categories: next }),
-    })
-    if (r.ok) {
-      const j = await r.json()
-      setCats(j.categories)
-      setMsg('Saved — recomputing…')
-      router.refresh()
-    } else {
-      setMsg(r.status === 403 ? 'Saving requires the Setup permission.' : `Save failed (${r.status}).`)
-    }
-    setBusy(false)
-  }
-
-  const add = () => {
-    const draft: ForecastCategory = { id: '', name: name.trim(), direction, method }
-    if (method === 'manual_recurring') { draft.amount = Number(amount); draft.frequency = frequency }
-    else if (method === 'vendor_payment_history') { draft.partyId = partyId; draft.partyName = data.vendorOptions.find((v) => v.id === partyId)?.name }
-    else { draft.accountIds = accountIds; draft.historyWeeks = Number(historyWeeks) || 12; draft.adjustmentPct = Number(adjustmentPct) || 0 }
-    void save([...cats, draft])
-    setName(''); setAmount(''); setPartyId(''); setAccountIds([])
-  }
-  const addDisabled = busy || !name.trim() ||
-    (method === 'manual_recurring' && !(Number(amount) > 0)) ||
-    (method === 'vendor_payment_history' && !partyId) ||
-    (method === 'gl_history_average' && accountIds.length === 0)
-
-  return (
-    <Panel title="Forecast Categories" icon={SlidersHorizontal} hint="Non-AR/AP cash flows — rent, payroll, recurring subscriptions, GL-trend spend">
-      {cats.length ? (
-        <ul className="mb-4 divide-y divide-slate-50 dark:divide-slate-800/60">
-          {cats.map((c, i) => (
-            <li key={c.id || i} className="flex items-center justify-between gap-3 py-2 text-sm">
-              <span className="min-w-0">
-                <span className={cn('mr-2 inline-block h-2 w-2 rounded-full', c.direction === 'inflow' ? 'bg-emerald-500' : 'bg-red-500')} />
-                <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
-                <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">
-                  {c.method === 'manual_recurring' ? `$${Number(c.amount ?? 0).toLocaleString()} ${c.frequency ?? 'monthly'}` : c.method === 'vendor_payment_history' ? (c.partyName ?? 'vendor history') : `${c.accountIds?.length ?? 0} accounts · ${c.historyWeeks ?? 12}wk avg`}
-                </span>
-              </span>
-              <button type="button" disabled={busy} onClick={() => save(cats.filter((_, j) => j !== i))} className="shrink-0 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:text-rose-500 dark:border-slate-700">Remove</button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">No categories yet — AR/AP predictions are the only flows in the forecast.</p>
-      )}
-
-      <div className="space-y-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-        <div className="flex flex-wrap items-center gap-2">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-          <Select value={direction} onChange={(e) => setDirection(e.target.value as 'inflow' | 'outflow')} className="w-24" triggerClassName="h-7 text-xs">
-            <option value="outflow">Outflow</option>
-            <option value="inflow">Inflow</option>
-          </Select>
-          <Select value={method} onChange={(e) => setMethod(e.target.value as ForecastCategory['method'])} className="w-44" triggerClassName="h-7 text-xs">
-            <option value="manual_recurring">Manual recurring</option>
-            <option value="vendor_payment_history">Vendor payment history</option>
-            <option value="gl_history_average">GL history average</option>
-          </Select>
-        </div>
-        {method === 'manual_recurring' ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min={0} placeholder="Amount" className="h-7 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-            <Select value={frequency} onChange={(e) => setFrequency(e.target.value as typeof frequency)} className="w-28" triggerClassName="h-7 text-xs">
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Bi-weekly</option>
-              <option value="monthly">Monthly</option>
-            </Select>
-          </div>
-        ) : method === 'vendor_payment_history' ? (
-          <Select value={partyId} onChange={(e) => setPartyId(e.target.value)} className="w-64" triggerClassName="h-7 text-xs">
-            <option value="">Choose vendor…</option>
-            {data.vendorOptions.map((v) => (
-              <option key={v.id} value={v.id}>{v.name}</option>
-            ))}
-          </Select>
-        ) : (
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value="" onChange={(e) => { const v = e.target.value; if (v && !accountIds.includes(v)) setAccountIds((a) => [...a, v]) }} className="w-64" triggerClassName="h-7 text-xs">
-                <option value="">Add account…</option>
-                {data.accountOptions.map((a) => (
-                  <option key={a.id} value={a.id}>{a.number ? `${a.number} · ` : ''}{a.name}</option>
-                ))}
-              </Select>
-              <input value={historyWeeks} onChange={(e) => setHistoryWeeks(e.target.value)} type="number" min={1} max={52} title="History weeks" className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-              <span className="text-[11px] text-slate-400">wk history</span>
-              <input value={adjustmentPct} onChange={(e) => setAdjustmentPct(e.target.value)} type="number" min={-90} max={200} title="Adjustment %" className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
-              <span className="text-[11px] text-slate-400">% adj</span>
-            </div>
-            {accountIds.length ? (
-              <div className="flex flex-wrap gap-1">
-                {accountIds.map((id) => {
-                  const a = data.accountOptions.find((x) => x.id === id)
-                  return (
-                    <button key={id} type="button" onClick={() => setAccountIds((prev) => prev.filter((x) => x !== id))} title="Remove" className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:text-rose-500 dark:bg-slate-800 dark:text-slate-300">
-                      {a ? (a.number ? `${a.number}` : a.name.slice(0, 18)) : id.slice(0, 6)} ×
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          <button type="button" disabled={addDisabled} onClick={add} className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 hover:bg-teal-700">Add category</button>
-          {msg ? <span className="text-xs text-slate-400 dark:text-slate-500">{msg}</span> : null}
-        </div>
-        <p className="text-[11px] leading-snug text-slate-400 dark:text-slate-500">
-          Categories forecast recurring cash flows outside the AR/AP pipeline — from GL history, vendor payment cadence, or a fixed recurring schedule.
-        </p>
-      </div>
-    </Panel>
   )
 }
 
