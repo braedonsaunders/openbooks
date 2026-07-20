@@ -2,7 +2,7 @@ import type { DocArticle } from '../types'
 
 export const companySettings: DocArticle = {
   slug: 'company-settings',
-  title: 'Company Settings',
+  title: 'Company Setup',
   category: 'administration',
   order: 1,
   summary:
@@ -19,9 +19,9 @@ export const companySettings: DocArticle = {
     'number sequence',
   ],
   related: ['quick-start', 'chart-of-accounts-and-dimensions', 'roles-and-permissions'],
-  body: `# Company Settings
+  body: `# Company Setup
 
-**Administration → Company Settings** is the tenant-scoped configuration center.
+**Settings → Company Setup** is the tenant-scoped configuration center.
 Settings here shape posting, approvals, numbering, reporting, tax, close, and
 daily record behavior.
 
@@ -131,7 +131,7 @@ export const dataImports: DocArticle = {
   related: ['migration-and-cutover', 'reconciliation-before-cutover', 'audit-log'],
   body: `# Data Imports
 
-Use **Company Settings → Data Import** for supported file-based loads. Import
+Use **Company Setup → Data Import** for supported file-based loads. Import
 access is privileged because a single file can create or change many records.
 
 ## Prepare the file

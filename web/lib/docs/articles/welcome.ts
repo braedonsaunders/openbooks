@@ -32,7 +32,7 @@ Documentation is grouped into categories you can browse from the sidebar:
   saved views.
 - **Integrations & Migration** — migration planning, proof, and source connections.
 - **Apps & Extensions** — finding, installing, updating, and administering apps.
-- **Administration** — setup, roles, imports, files, and audit evidence.
+- **Settings** — company setup, administration, customization, automation, and extensions.
 
 Use the search box at the top of the sidebar to jump straight to a topic.
 

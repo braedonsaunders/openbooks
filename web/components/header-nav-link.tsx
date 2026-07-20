@@ -6,18 +6,25 @@ import { useTranslations } from 'next-intl'
 import { cn } from '@openbooks/ui'
 import { NavIcon, type SidebarNavItem } from './sidebar-nav'
 
-/** Utility-level launcher for installed apps. App authoring remains under
- * Administration → Build; this link is only for running installed apps. */
-export function AppLauncherLink({ item }: { item: SidebarNavItem }) {
-  const t = useTranslations('shell.apps')
+/** Compact utility navigation for destinations that should remain available
+ * without consuming a primary top-menu workspace. */
+export function HeaderNavLink({
+  item,
+  ariaLabel = item.label,
+  title = item.label,
+}: {
+  item: SidebarNavItem
+  ariaLabel?: string
+  title?: string
+}) {
   const pathname = usePathname() ?? ''
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   return (
     <Link
       href={item.href as never}
-      aria-label={t('ariaLabel')}
-      title={t('title')}
+      aria-label={ariaLabel}
+      title={title}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'grid h-9 w-9 shrink-0 place-items-center rounded-md transition-colors',
@@ -30,4 +37,9 @@ export function AppLauncherLink({ item }: { item: SidebarNavItem }) {
       <NavIcon iconKey={item.iconKey} size={18} />
     </Link>
   )
+}
+
+export function AppLauncherLink({ item }: { item: SidebarNavItem }) {
+  const t = useTranslations('shell.apps')
+  return <HeaderNavLink item={item} ariaLabel={t('ariaLabel')} title={t('title')} />
 }

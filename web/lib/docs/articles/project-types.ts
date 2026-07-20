@@ -37,7 +37,7 @@ and that type carries three profiles:
   revenue is recognized.
 - **Backup** — whether an invoice needs a backup package and what it contains.
 
-You manage project types under **Administration → Company Settings → Project
+You manage project types under **Settings → Company Setup → Project
 Types**. Four built-in types ship with world-class defaults you can use as-is or
 duplicate and tune: **Time & Materials**, **Fixed Price**, **Cost-Plus**, and
 **Not-to-Exceed**.
@@ -82,7 +82,7 @@ computed. Each measure has a configurable **source**.
   - **Account Types** — sum posted GL to a set of account types (expense, COGS…).
   - **Account Group** — sum posted GL to a named account-group dimension (for
     example a **cost_pool** classification). Account groups are configured under
-    **Company Settings → Account Groups**.
+    **Company Setup → Account Groups**.
 - **Labor cost source** — how labor cost is measured: **In Actual Cost** (already
   included in actual cost), **Time Rate** (hours times cost rate), **Payroll JE**
   (from posted payroll journals), or **Account Group**.

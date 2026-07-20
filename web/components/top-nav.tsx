@@ -6,9 +6,9 @@
 // header's overflow-hidden). Active matching reuses findActiveNavHref so the
 // two layouts always agree on "where am I".
 //
-// Items sharing a `subgroup` (e.g. Settings → Build) render as a second-level
-// flyout sub-menu — the same toBlocks fold the sidebar uses for its
-// collapsible sections, so both layouts always agree on nesting too.
+// Items sharing a `subgroup` render as labeled sections in a two-column panel,
+// avoiding precision-hover cascades. The same toBlocks fold drives the
+// sidebar's collapsible sections, so both layouts agree on organization.
 //
 // The bar is hidden below lg (the mobile drawer takes over there). Only one
 // dropdown is open at a time; hover-to-open with a small close delay so the
@@ -246,13 +246,21 @@ function GroupMenu({
   onLeave?: () => void
   onSelect?: () => void
 }) {
+  const blocks = toBlocks(items)
+  const sectioned = blocks.some((block) => block.kind === 'subgroup')
   return (
-    <div role="menu" onMouseEnter={onEnter} onMouseLeave={onLeave} onClick={onSelect}>
-      {toBlocks(items).map((block, bi) =>
+    <div
+      role="menu"
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      onClick={onSelect}
+      className={cn(sectioned && 'grid w-[32rem] grid-cols-2 gap-x-2 gap-y-1 p-1')}
+    >
+      {blocks.map((block, bi) =>
         block.kind === 'item' ? (
           <MenuItemLink key={block.item.href} item={block.item} active={activeHref === block.item.href} />
         ) : (
-          <SubmenuRow
+          <MenuSection
             key={`sub-${block.label}-${bi}`}
             label={block.label}
             href={block.href}
@@ -286,7 +294,8 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
       closeTimer.current = null
     }
     const rect = rowRef.current?.getBoundingClientRect()
-    setFlip(rect ? rect.right + 248 > window.innerWidth : false)
+    const panelWidth = group.items.some((item) => item.subgroup) ? 528 : 248
+    setFlip(rect ? rect.right + panelWidth > window.innerWidth : false)
     setOpen(true)
   }
 
@@ -372,16 +381,9 @@ function MenuItemLink({ item, active }: { item: SidebarNavItem; active: boolean 
   )
 }
 
-/**
- * Second-level flyout: a row that opens its children in a panel to the side.
- * Hover-to-open with the same 150ms close grace as the top-level menus. When
- * the subgroup has a landing hub (`href`) the row is a link — clicking
- * navigates there (bubbling to the group menu's onClick closes the dropdown);
- * otherwise clicking toggles the flyout (keyboard / touch). The flyout is
- * absolutely positioned inside the portal panel, so no overflow clipping —
- * it flips to the left edge when it would overrun the viewport.
- */
-function SubmenuRow({
+/** A labeled section inside a workspace panel. Sections replace cascading
+ * flyouts so the full workspace can be scanned without precision hovering. */
+function MenuSection({
   label,
   href,
   iconKey,
@@ -394,93 +396,33 @@ function SubmenuRow({
   items: SidebarNavItem[]
   activeHref: string | null
 }) {
-  const [open, setOpen] = useState(false)
-  const [flip, setFlip] = useState(false)
-  const rowRef = useRef<HTMLDivElement>(null)
-  const closeTimer = useRef<number | null>(null)
   const selfActive = href != null && activeHref === href
-  const childActive = items.some((i) => i.href === activeHref) || selfActive
-
-  function openMenu() {
-    if (closeTimer.current) {
-      window.clearTimeout(closeTimer.current)
-      closeTimer.current = null
-    }
-    const r = rowRef.current?.getBoundingClientRect()
-    // 15rem panel + a little breathing room before the viewport edge.
-    setFlip(r ? r.right + 248 > window.innerWidth : false)
-    setOpen(true)
-  }
-
-  function scheduleClose() {
-    if (closeTimer.current) window.clearTimeout(closeTimer.current)
-    closeTimer.current = window.setTimeout(() => setOpen(false), 150)
-  }
-
   return (
-    <div ref={rowRef} className="relative" onMouseEnter={openMenu} onMouseLeave={scheduleClose}>
-      {(() => {
-        const rowClass = cn(
-          'group flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
-          selfActive
-            ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
-            : childActive
-              ? 'text-teal-800 dark:text-teal-200'
-              : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
-        )
-        const rowContent = (
-          <>
-            {/* icon (or spacer) keeps the label column aligned with sibling items */}
-            {iconKey ? (
-              <NavIcon iconKey={iconKey} className="shrink-0 text-slate-500 dark:text-slate-400" />
-            ) : (
-              <span className="w-[15px] shrink-0" aria-hidden />
-            )}
-            <span className="flex-1 truncate text-left">{label}</span>
-            <ChevronRight size={12} className={cn('shrink-0 opacity-50', flip && open && 'rotate-180')} />
-          </>
-        )
-        return href ? (
-          <Link
-            href={href as never}
-            role="menuitem"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-current={selfActive ? 'page' : undefined}
-            data-walkthrough={`nav:${href}`}
-            className={rowClass}
-          >
-            {rowContent}
-          </Link>
-        ) : (
-          <button
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            onClick={(e) => {
-              // Keep the parent dropdown open — its menu div closes on click.
-              e.stopPropagation()
-              setOpen((o) => !o)
-            }}
-            className={rowClass}
-          >
-            {rowContent}
-          </button>
-        )
-      })()}
-      {open ? (
-        <div
-          role="menu"
+    <div role="group" aria-label={label} className="min-w-0 rounded-md py-1">
+      {href ? (
+        <Link
+          href={href as never}
+          role="menuitem"
+          aria-current={selfActive ? 'page' : undefined}
+          data-walkthrough={`nav:${href}`}
           className={cn(
-            'absolute top-0 z-10 min-w-[15rem] rounded-md border border-slate-200 bg-white py-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900',
-            flip ? 'right-full -mr-1' : 'left-full -ml-1',
+            'flex items-center gap-1.5 px-3 pb-1.5 text-[11px] font-semibold tracking-wide uppercase transition-colors',
+            selfActive
+              ? 'text-teal-700 dark:text-teal-300'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100',
           )}
         >
-          {items.map((item) => (
-            <MenuItemLink key={item.href} item={item} active={activeHref === item.href} />
-          ))}
+          {iconKey ? <NavIcon iconKey={iconKey} size={13} /> : null}
+          {label}
+        </Link>
+      ) : (
+        <div className="px-3 pb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+          {label}
         </div>
-      ) : null}
+      )}
+      {items.map((item) => (
+        <MenuItemLink key={item.href} item={item} active={activeHref === item.href} />
+      ))}
     </div>
   )
 }

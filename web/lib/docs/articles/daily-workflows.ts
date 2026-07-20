@@ -195,7 +195,7 @@ instead of editing statement evidence to fit the ledger.
 
 ## Match existing activity
 
-Use **Match & Categorize** to pair statement lines with existing ledger activity,
+Use **Banking → Match** to pair statement lines with existing ledger activity,
 such as customer receipts, vendor payments, transfers, or journals. Match on
 amount, date, reference, party, and business context—not amount alone.
 

@@ -30,20 +30,20 @@ record, then learn the shared list-and-drawer workflow.
 | NetSuite concept | OpenBooks destination |
 | --- | --- |
 | Centers, roles, and permissions | Configurable navigation plus **Users, Roles, and Permissions** |
-| OneWorld subsidiaries | **Company Settings → Subsidiaries** |
+| OneWorld subsidiaries | **Settings → Company Setup → Subsidiaries** |
 | Chart of Accounts | **Accounting → Chart of Accounts** |
-| Department, Class, Location | Organization dimensions in **Company Settings** |
+| Department, Class, Location | Organization dimensions in **Settings → Company Setup** |
 | Customers, vendors, employees | Role-specific views of shared parties |
-| Items | **Sales → Items & Services** and **Purchases → Inventory** |
+| Items | **Operations → Catalog → Items & Services** and **Inventory** |
 | Transactions | Sales, Purchases, Banking, and Accounting lists with record drawers |
 | Posting periods | **Accounting → Period Close** and accounting-period configuration |
-| Saved Searches | **Reporting → Saved Views** |
-| SuiteAnalytics | **Analytics**, **Dashboard Builder**, custom reports, and governed query |
-| SuiteFlow | **Administration → Build → Flows** |
-| SuiteScript | **Administration → Build → Scripts** in a QuickJS sandbox |
+| Saved Searches | **Insights → Saved Views** |
+| SuiteAnalytics | **Analytics**, **Dashboards**, custom reports, and governed query |
+| SuiteFlow | **Settings → Automate → Flows** |
+| SuiteScript | **Settings → Automate → Scripts** in a QuickJS sandbox |
 | SuiteApps | Organization-installed **Apps** and the **App Library** |
 | File Cabinet | **Home → File Cabinet** |
-| System Notes | **Administration → Audit Log** |
+| System Notes | **Settings → Administration → Audit Log** |
 
 ## The biggest workflow change
 
@@ -110,17 +110,17 @@ purchasing, and bank concepts remain familiar.
 
 | QuickBooks Online concept | OpenBooks destination |
 | --- | --- |
-| Customers and vendors | **Sales → Customers** and **Purchases → Vendors** |
-| Products and services | **Sales → Items & Services** |
-| Invoices and sales receipts | **Sales → Invoices** and **Customer Payments** |
-| Bills and bill payments | **Purchases → Bills** and **Vendor Payments** |
-| Expenses | **Purchases → Expenses** |
+| Customers and vendors | **Customers → Relationships → Customers** and **Purchasing → Vendor Records → Vendors** |
+| Products and services | **Operations → Catalog → Items & Services** |
+| Invoices and sales receipts | **Customers → Sell & Collect → Invoices** and **Customer Payments** |
+| Bills and bill payments | **Purchasing → Buy → Bills** and **Pay → Vendor Payments** |
+| Expenses | **Purchasing → Pay → Expenses** |
 | Chart of accounts | **Accounting → Chart of Accounts** |
-| Classes and locations | Configurable dimensions in **Company Settings** |
-| Bank transactions and rules | **Banking → Match & Categorize** and **Reconciliation Rules** |
+| Classes and locations | Configurable dimensions in **Settings → Company Setup** |
+| Bank transactions and rules | **Banking → Match** and **Rules** |
 | Reconcile | **Banking → Reconciliations** |
 | Closing date | Accounting-period locks and the governed **Period Close** workflow |
-| Custom reports | Financial Reports, Saved Views, Analytics, and Dashboard Builder |
+| Custom reports | Reports, Saved Views, Analytics, and Dashboards |
 
 ## Transactions and posting
 
@@ -194,7 +194,7 @@ a browser-based record workflow.
 | Invoices and Receive Payments | **Invoices** and **Customer Payments** |
 | Enter Bills and Pay Bills | **Bills** and **Vendor Payments** |
 | Make General Journal Entries | **Accounting → Journals** |
-| Bank Feeds and Reconcile | **Banking → Match & Categorize** and **Reconciliations** |
+| Bank Feeds and Reconcile | **Banking → Match** and **Reconciliations** |
 | Memorized or customized reports | Saved report parameters, custom reports, and Saved Views |
 | Closing Date | Accounting periods, locks, and **Period Close** |
 
@@ -258,8 +258,8 @@ model has a one-to-one destination.
 | Companies | Subsidiaries within the organization, when they are legal entities |
 | Contacts with customer/vendor use | Shared parties with customer and vendor roles |
 | Products and product categories | Items & Services, inventory profiles, and item categories |
-| Customer invoices | **Sales → Invoices** |
-| Vendor bills | **Purchases → Bills** |
+| Customer invoices | **Customers → Sell & Collect → Invoices** |
+| Vendor bills | **Purchasing → Buy → Bills** |
 | Payments and reconciliation | Customer/Vendor Payments plus **Banking** |
 | Accounts and journal items | Chart of Accounts and posted journal-entry lines |
 | Analytic accounts and plans | Projects and configurable dimensions, depending on purpose |
@@ -326,13 +326,13 @@ granular administration, and deeper workflow controls.
 | --- | --- |
 | Contacts | Shared parties with customer and vendor roles |
 | Products and services | **Items & Services** |
-| Sales invoices and credit notes | **Sales → Invoices** and customer credits |
-| Bills and credit notes | **Purchases → Bills** and vendor credits |
-| Bank statements and reconciliation | **Banking → Match & Categorize** and **Reconciliations** |
+| Sales invoices and credit notes | **Customers → Sell & Collect → Invoices** and customer credits |
+| Bills and credit notes | **Purchasing → Bills** and vendor credits |
+| Bank statements and reconciliation | **Banking → Match** and **Reconciliations** |
 | Tracking categories | Configurable dimensions such as department, location, or class |
 | Manual journals | **Accounting → Journals** |
 | Fixed assets | **Accounting → Fixed Assets** and tax depreciation |
-| Reports | Financial Reports, Analytics, Dashboard Builder, and Saved Views |
+| Reports | Reports, Analytics, Dashboards, and Saved Views |
 | Lock dates | Accounting periods, module locks, and governed Period Close |
 
 ## Tracking and parties
@@ -389,13 +389,13 @@ and the way configuration, reports, automation, and extensions are organized.
 | Sage Intacct concept | OpenBooks destination |
 | --- | --- |
 | Entities and entity hierarchy | Subsidiaries and consolidation configuration |
-| General Ledger | Chart of Accounts, Journals, books, periods, and Financial Reports |
+| General Ledger | Chart of Accounts, Journals, books, periods, and Reports |
 | Dimensions | Departments, locations, classes, projects, parties, and other configured dimensions |
 | Accounts Payable and Receivable | Purchases and Sales workflows |
 | Cash Management | Banking, matching, rules, and reconciliations |
 | Purchasing and Order Entry | Purchase Orders, Sales Orders, bills, and invoices |
-| Time and project accounting | Projects, Weekly Timesheets, project types, and profitability |
-| Dashboards and reports | Analytics, Dashboard Builder, custom reports, and Saved Views |
+| Time and project accounting | Projects, Timesheets, project types, and profitability |
+| Dashboards and reports | Analytics, Dashboards, custom reports, and Saved Views |
 | Platform Services customization | Custom fields, forms, custom records, flows, scripts, APIs, and apps |
 
 ## Dimensions and entities

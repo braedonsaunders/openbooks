@@ -15,8 +15,8 @@ business records and administrative configuration. It identifies when an event
 occurred, who or what initiated it, the action, the record type, and the affected
 record.
 
-Users need **View the audit log** permission to open it from **Administration →
-Audit Log**.
+Users need **View the audit log** permission to open it from **Settings →
+Administration → Audit Log**.
 
 ## Find an event
 
