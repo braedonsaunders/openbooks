@@ -35,7 +35,10 @@ function secret(): string {
 // be replayed against another feature that also uses SESSION_SECRET.
 const TOKEN_DOMAIN = "flows-email-action:v1";
 
-export const EMAIL_TOKEN_TTL_MS = 7 * 24 * 3_600_000; // 7 days
+// A bearer link sitting in an inbox is exposure; keep the window tight. The
+// token is inert once the gate is decided, so 72h comfortably covers a normal
+// approval turnaround without leaving week-long live links around.
+export const EMAIL_TOKEN_TTL_MS = 72 * 3_600_000; // 72 hours
 
 export interface EmailActionClaims {
   gateId: string;

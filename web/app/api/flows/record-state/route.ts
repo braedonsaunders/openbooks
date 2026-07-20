@@ -75,14 +75,6 @@ const iso = (v: unknown): string =>
   v instanceof Date ? v.toISOString() : v ? new Date(String(v)).toISOString() : ''
 
 /** `[delegated YYYY-MM-DD by <userId> → <name>]` markers written by delegateGate. */
-const DELEGATION_NOTE = /\[delegated (\d{4}-\d{2}-\d{2}) by \S+ → ([^\]]+)\]/g
-
-function stripDelegationNotes(comment: string | null): string | null {
-  if (!comment) return null
-  const cleaned = comment.replace(DELEGATION_NOTE, '').trim()
-  return cleaned || null
-}
-
 export async function GET(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -106,10 +98,15 @@ export async function GET(req: Request) {
              g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
              g.decided_by as "decidedBy", g.decided_at as "decidedAt",
              g.created_at as "createdAt", g.updated_at as "updatedAt",
-             au.name as "assigneeName", du.name as "deciderName"
+             g.delegated_from_user_id as "delegatedFromUserId",
+             g.on_behalf_of_user_id as "onBehalfOfUserId",
+             au.name as "assigneeName", du.name as "deciderName",
+             fu.name as "delegatedFromName", ou.name as "onBehalfOfName"
         from flow_gates g
         left join users au on au.id = g.assignee_user_id
         left join users du on du.id = g.decided_by
+        left join users fu on fu.id = g.delegated_from_user_id
+        left join users ou on ou.id = g.on_behalf_of_user_id
        where g.org_id = ${orgId} and g.subject_kind = ${subjectKind} and g.subject_id = ${subjectId}
        order by g.created_at
     `) as unknown as Promise<Rows<Record<string, unknown>>>,
@@ -177,14 +174,15 @@ export async function GET(req: Request) {
         title: String(g.title ?? ''),
       })
     }
-    // Delegation hand-offs survive on pending rows as comment markers.
-    for (const m of String(g.comment ?? '').matchAll(DELEGATION_NOTE)) {
+    // Delegation hand-off — structured provenance (delegated_from_user_id),
+    // recorded when the gate was reassigned; the current assignee holds it now.
+    if (g.delegatedFromUserId) {
       history.push({
-        id: `gate:${g.id}:delegated:${m[1]}`,
+        id: `gate:${g.id}:delegated`,
         type: 'delegated',
-        actor: m[2]!.trim(),
+        actor: (g.assigneeName as string | null) ?? assignee,
         comment: null,
-        at: new Date(`${m[1]}T00:00:00Z`).toISOString(),
+        at: iso(g.updatedAt),
         title: String(g.title ?? ''),
       })
     }
@@ -193,9 +191,11 @@ export async function GET(req: Request) {
         id: `gate:${g.id}:decided`,
         type: g.status,
         actor: (g.deciderName as string | null) ?? assignee,
-        comment: stripDelegationNotes(g.comment as string | null),
+        comment: g.comment as string | null,
         at: iso(g.decidedAt ?? g.updatedAt),
         title: String(g.title ?? ''),
+        // A delegate decided on behalf of the original assignee.
+        delegated: !!g.onBehalfOfUserId,
       })
     } else if (g.status === 'escalated') {
       history.push({

@@ -52,9 +52,7 @@ export async function POST(req: Request) {
       if (!gate) throw new Error('approval not found')
       if (gate.status !== 'pending') throw new Error('this approval was already resolved')
       const screened =
-        can(authz, 'flows.approve') ||
-        gate.assignee_user_id === authz.user.id ||
-        gate.assignee_role !== null // role membership is verified by decideGate
+        can(authz, 'flows.approve') || gate.assignee_user_id === authz.user.id
       if (!screened) throw new Error('you are not an approver for this gate')
       await decideGate({ gateId: item.gateId, decision, userId: authz.user.id, comment })
       results.push({ ok: true })

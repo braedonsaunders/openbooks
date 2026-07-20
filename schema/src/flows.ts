@@ -155,6 +155,17 @@ export const flowGates = pgTable(
     comment: text("comment"),
     decidedBy: uuid("decided_by"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
+    /**
+     * Structured delegation provenance (a financial audit can't rely on parsed
+     * free text). Set when delegateGate reassigns this row: the original
+     * assignee it was handed off FROM (preserved even after the row is decided).
+     */
+    delegatedFromUserId: uuid("delegated_from_user_id"),
+    /**
+     * The principal a delegate decided ON BEHALF OF (out-of-office coverage).
+     * decidedBy stays the actual decider; this records whose gate it was.
+     */
+    onBehalfOfUserId: uuid("on_behalf_of_user_id"),
     /** Reminder / escalation cursors, scanned by the 60s scheduler tick. */
     remindAt: timestamp("remind_at", { withTimezone: true }),
     escalateAt: timestamp("escalate_at", { withTimezone: true }),

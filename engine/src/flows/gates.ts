@@ -144,15 +144,18 @@ export async function decideGate(args: {
       throw new GateError("this approval was already resolved");
     }
 
-    let comment = args.comment?.trim() || null;
-    if (onBehalfOf) {
-      const note = `[on behalf of ${onBehalfOf.name}]`;
-      comment = comment ? `${note} ${comment}` : note;
-    }
-
+    const comment = args.comment?.trim() || null;
     const decided = await db
       .update(schema.flowGates)
-      .set({ status: decision, decidedBy: userId, decidedAt: new Date(), comment, updatedAt: new Date() })
+      .set({
+        status: decision,
+        decidedBy: userId,
+        decidedAt: new Date(),
+        comment,
+        // Structured provenance: whose gate this was, when a delegate decided it.
+        onBehalfOfUserId: onBehalfOf?.id ?? null,
+        updatedAt: new Date(),
+      })
       .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.status, "pending")))
       .returning({ id: schema.flowGates.id });
     if (decided.length === 0) throw new GateError("this approval was already resolved");
@@ -513,8 +516,9 @@ export async function worklistGates(
 
 /**
  * Reassign a pending gate to another in-org user. Authorization: the current
- * assignee or an org admin. The hand-off is recorded on the row's comment so
- * the audit trail survives without a schema change.
+ * assignee or an org admin. The hand-off is recorded in a STRUCTURED column
+ * (delegated_from_user_id) — not a free-text comment marker — so the audit
+ * survives the decision and can't be forged by typing into a comment.
  */
 export async function delegateGate(gateId: string, fromUserId: string, toUserId: string): Promise<void> {
   const gate = await loadGate(gateId);
@@ -527,13 +531,14 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
   const to = await verifyUser(gate.orgId, toUserId);
   if (!to) throw new GateError("delegate target is not an active user in this org");
 
-  const note = `[delegated ${new Date().toISOString().slice(0, 10)} by ${fromUserId} → ${to.name}]`;
   try {
     await db
       .update(schema.flowGates)
       .set({
         assigneeUserId: toUserId,
-        comment: gate.comment ? `${gate.comment}\n${note}` : note,
+        // Preserve the ORIGINAL assignee (the first hand-off wins — a chain of
+        // delegations still points back to who the gate was authored to).
+        delegatedFromUserId: gate.delegatedFromUserId ?? gate.assigneeUserId ?? fromUserId,
         updatedBy: fromUserId,
         updatedAt: new Date(),
       })
