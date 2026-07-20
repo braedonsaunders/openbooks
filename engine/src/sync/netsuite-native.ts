@@ -120,7 +120,11 @@ export function buildNativeFromNetSuite(
     const key = String(Math.round(Number(tr) * 100));
     const code = ctx.taxByRate.get(key);
     if (!code) return null;
-    return { codeId: code.id, rateUnits: toUnits(code.rate) };
+    const rateUnits = toUnits(code.rate);
+    // A percentage does not uniquely identify a NetSuite tax code. Tenants
+    // commonly have several 0% codes, so selecting one by rate would invent a
+    // business-data change even though there is no tax or GL impact.
+    return rateUnits === 0n ? null : { codeId: code.id, rateUnits };
   };
 
   const partyId = h.entity ? ctx.partyByRef.get(h.entity) ?? null : null;

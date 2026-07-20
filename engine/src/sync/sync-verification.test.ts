@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { effectiveLineSubsidiary, sourceDeletionCandidates, syncVerificationFailures, type SyncResult } from "./sync.ts";
+import {
+  effectiveLineSubsidiary,
+  effectiveTaxCodeId,
+  sourceDeletionCandidates,
+  syncVerificationFailures,
+  type SyncResult,
+} from "./sync.ts";
 
 function result(overrides: Partial<SyncResult> = {}): SyncResult {
   return {
@@ -58,4 +64,10 @@ test("change detection treats an inherited line subsidiary as its header subsidi
   assert.equal(effectiveLineSubsidiary(null, "root"), "root");
   assert.equal(effectiveLineSubsidiary("child", "root"), "child");
   assert.equal(effectiveLineSubsidiary(undefined, null), null);
+});
+
+test("zero tax ignores arbitrary rate-matched code identity during change detection", () => {
+  assert.equal(effectiveTaxCodeId("0", "legacy-zero-code"), null);
+  assert.equal(effectiveTaxCodeId("0.0000", null), null);
+  assert.equal(effectiveTaxCodeId("13.00", "hst-code"), "hst-code");
 });

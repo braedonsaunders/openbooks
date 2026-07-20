@@ -52,6 +52,31 @@ test("NetSuite transactions fail closed when a subsidiary was not loaded", () =>
   assert.deepEqual(built, { skip: "unmapped subsidiary 99" });
 });
 
+test("NetSuite zero-rate lines do not invent an ambiguous tax-code identity", () => {
+  const taxContext = {
+    ...context,
+    control: { ar: "account-a", ap: "account-a", bank: "account-a" },
+    accountRefById: new Map([["account-a", "10"]]),
+    taxByRate: new Map([["0", { id: "arbitrary-zero-rate-code", rate: "0" }]]),
+  } as unknown as NativeContext;
+  const built = buildNativeFromNetSuite(taxContext, {
+    ...header,
+    ttype: "VendBill",
+  }, [
+    {
+      transaction: "123", id: "1", mainline: "T", taxline: "F",
+      account: "10", netamount: "-100", subsidiary: "1",
+    },
+    {
+      transaction: "123", id: "2", mainline: "F", taxline: "F",
+      account: "20", netamount: "100", taxrate1: "0", subsidiary: "1",
+    },
+  ]);
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.lines[0]?.taxAmount, "0");
+  assert.equal(built.doc.lines[0]?.taxCodeId, null);
+});
+
 test("NetSuite account mappings accept explicit custom IDs without connector constants", () => {
   assert.deepEqual(parseNetSuiteMappings(JSON.stringify({
     projectForemanField: "custentity_foreman",
