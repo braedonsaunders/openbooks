@@ -43,5 +43,25 @@
     "loading": "Cargando…",
     "failedTitle": "No se pudo abrir esta aplicación.",
     "failedHint": "Pruebe a actualizar la página. Si el problema continúa, contacte con su administrador."
+  },
+  "admin": {
+    "title": "Aplicaciones",
+    "description": "Cree e instale paquetes de aplicaciones: una interfaz en zona aislada y un backend controlado, separados para cada aplicación.",
+    "searchPlaceholder": "Buscar aplicaciones…",
+    "status": "Estado",
+    "statuses": {
+      "installed": "Instalada",
+      "disabled": "Desactivada"
+    },
+    "columns": {
+      "name": "Nombre",
+      "key": "Clave",
+      "version": "Versión",
+      "endpoints": "Endpoints",
+      "runs": "Ejecuciones",
+      "status": "Estado",
+      "updated": "Actualizada"
+    },
+    "empty": "Aún no hay aplicaciones. Cree una para obtener una base lista para abrir o importe un paquete .zip."
   }
 }

@@ -43,5 +43,22 @@
     "loading": "Wird geladen…",
     "failedTitle": "Diese App konnte nicht geöffnet werden.",
     "failedHint": "Versuchen Sie es erneut. Wenn das Problem weiterhin auftritt, wenden Sie sich an Ihren Administrator."
+  },
+  "admin": {
+    "title": "Apps",
+    "description": "Erstellen und installieren Sie App-Pakete mit einer isolierten Oberfläche und einem kontrollierten Backend.",
+    "searchPlaceholder": "Apps durchsuchen…",
+    "status": "Status",
+    "statuses": { "installed": "Installiert", "disabled": "Deaktiviert" },
+    "columns": {
+      "name": "Name",
+      "key": "Schlüssel",
+      "version": "Version",
+      "endpoints": "Endpunkte",
+      "runs": "Ausführungen",
+      "status": "Status",
+      "updated": "Aktualisiert"
+    },
+    "empty": "Noch keine Apps. Erstellen Sie eine startbereite App oder importieren Sie ein ZIP-Paket."
   }
 }

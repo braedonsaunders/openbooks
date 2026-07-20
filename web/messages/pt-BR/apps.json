@@ -43,5 +43,22 @@
     "loading": "Carregando…",
     "failedTitle": "Não foi possível abrir este app.",
     "failedHint": "Tente atualizar. Se continuar acontecendo, entre em contato com seu administrador."
+  },
+  "admin": {
+    "title": "Apps",
+    "description": "Crie e instale pacotes de apps com uma interface isolada e um backend controlado, separados por app.",
+    "searchPlaceholder": "Pesquisar apps…",
+    "status": "Status",
+    "statuses": { "installed": "Instalado", "disabled": "Desativado" },
+    "columns": {
+      "name": "Nome",
+      "key": "Chave",
+      "version": "Versão",
+      "endpoints": "Endpoints",
+      "runs": "Execuções",
+      "status": "Status",
+      "updated": "Atualizado"
+    },
+    "empty": "Ainda não há apps. Crie um app inicial pronto para abrir ou importe um pacote .zip."
   }
 }

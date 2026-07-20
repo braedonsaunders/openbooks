@@ -26,9 +26,14 @@ export default async function AppsAdminPage({
   const authz = await requirePermission('apps.manage')
   const tHub = await getTranslations('admin.hub')
   const tApps = await getTranslations('apps')
+  const tAdminApps = await getTranslations('apps.admin')
   const orgId = authz.user.orgId
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 50 })
+  const params = parseListParams(sp, {
+    sort: 'name',
+    allowedSorts: ['name'] as const,
+    perPage: 50,
+  })
   const status = pickString(sp.status)
   const appKey = pickString(sp.app)
 
@@ -85,7 +90,7 @@ export default async function AppsAdminPage({
   }
 
   const total = Number(totalRow.rows[0]?.n ?? 0)
-  const endpointCount = (m: unknown) => ((m as AppManifest | null)?.endpoints?.length ?? 0)
+  const endpointCount = (m: unknown) => (m as AppManifest | null)?.endpoints?.length ?? 0
 
   return (
     <ListPageLayout
@@ -93,8 +98,8 @@ export default async function AppsAdminPage({
         <>
           <PageHeader
             back={{ href: '/admin', label: tHub('title') }}
-            title="Apps"
-            description="Build and install app packages — a sandboxed frontend plus a governed backend, isolated per app."
+            title={tAdminApps('title')}
+            description={tAdminApps('description')}
             actions={
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -107,15 +112,15 @@ export default async function AppsAdminPage({
             }
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search apps…" />
+            <SearchInput placeholder={tAdminApps('searchPlaceholder')} />
             <FilterChips
               basePath="/admin/apps"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tAdminApps('status')}
               options={statuses.rows.map((r: any) => ({
                 value: r.status,
-                label: r.status,
+                label: tAdminApps(`statuses.${r.status}`),
                 count: Number(r.n),
               }))}
             />
@@ -126,20 +131,20 @@ export default async function AppsAdminPage({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Key</TableHead>
-            <TableHead>Version</TableHead>
-            <TableHead>Endpoints</TableHead>
-            <TableHead>Runs</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Updated</TableHead>
+            <TableHead>{tAdminApps('columns.name')}</TableHead>
+            <TableHead>{tAdminApps('columns.key')}</TableHead>
+            <TableHead>{tAdminApps('columns.version')}</TableHead>
+            <TableHead>{tAdminApps('columns.endpoints')}</TableHead>
+            <TableHead>{tAdminApps('columns.runs')}</TableHead>
+            <TableHead>{tAdminApps('columns.status')}</TableHead>
+            <TableHead>{tAdminApps('columns.updated')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {apps.rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
-                No apps yet. Create one to get a ready-to-open starter, or import a .zip package.
+                {tAdminApps('empty')}
               </TableCell>
             </TableRow>
           ) : (
@@ -160,7 +165,9 @@ export default async function AppsAdminPage({
                 <TableCell className="tabular-nums">{endpointCount(a.manifest)}</TableCell>
                 <TableCell className="tabular-nums">{Number(a.run_count)}</TableCell>
                 <TableCell>
-                  <Badge variant={a.status === 'installed' ? 'success' : 'outline'}>{a.status}</Badge>
+                  <Badge variant={a.status === 'installed' ? 'success' : 'outline'}>
+                    {tAdminApps(`statuses.${a.status}`)}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-xs text-slate-500">{dateTime(a.updatedAt)}</TableCell>
               </TableRow>
