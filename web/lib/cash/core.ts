@@ -100,6 +100,14 @@ export interface ForecastCategory {
   frequency?: "weekly" | "biweekly" | "monthly";
 }
 
+/** A source item behind a category estimate (Gantry's breakdown rows). */
+export interface CategoryBreakdownRow {
+  name: string;
+  date?: string;
+  amount: number;
+  type: string;
+}
+
 export interface CategoryWeekly {
   id: string;
   name: string;
@@ -109,6 +117,10 @@ export interface CategoryWeekly {
   total: number;
   /** Human explanation of the computation (Gantry's Forecast Logic card). */
   logic: string;
+  /** Gantry meta: display method label + the numbers behind the estimate. */
+  meta: { method: string } & Record<string, string | number>;
+  /** The source items the estimate was derived from (Gantry breakdown). */
+  breakdown: CategoryBreakdownRow[];
 }
 
 export interface SideSummary {
@@ -274,6 +286,8 @@ export async function categoryWeekly(
   const n = weekStarts.length;
   const weekly = new Array<number>(n).fill(0);
   let logic = "";
+  let meta: CategoryWeekly["meta"] = { method: "Unknown" };
+  let breakdown: CategoryBreakdownRow[] = [];
 
   if (cat.method === "manual_recurring") {
     const amount = Math.abs(cat.amount ?? 0);
@@ -288,21 +302,45 @@ export async function categoryWeekly(
       });
     }
     logic = `$${Math.round(amount).toLocaleString()} ${freq}`;
+    meta = { method: "Manual Recurring", amount: Math.round(amount), frequency: freq };
+    // Gantry shows the configured schedule; we also list each projected occurrence.
+    breakdown = weekStarts
+      .map((w, i) => ({ name: `Manual (${freq})`, date: w, amount: Math.round(weekly[i] ?? 0), type: "Scheduled" }))
+      .filter((row) => row.amount > 0);
   } else if (cat.method === "gl_history_average" && cat.accountIds?.length) {
     const historyWeeks = Math.max(1, Math.min(52, cat.historyWeeks ?? 12));
     const adj = (cat.adjustmentPct ?? 0) / 100;
     const ids = sql.join(cat.accountIds.map((a) => sql`${a}`), sql`, `);
+    // Grouped per account (Gantry accountBreakdown); the grand total is the
+    // same sum the ungrouped query produced, so the estimate is unchanged.
     const r = (await db.execute(sql`
-      select coalesce(sum(l.amount), 0) as total
+      select a.number, a.name, coalesce(sum(l.amount), 0) as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
+      join accounts a on a.id = l.account_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date > ${asOfIso}::date - (${historyWeeks} * 7)::int
         and e.posting_date <= ${asOfIso}::date
+      group by a.number, a.name
+      order by a.number nulls last, a.name
     `)) as any;
-    const perWeek = (Math.abs(Number(r.rows[0]?.total ?? 0)) / historyWeeks) * (1 + adj);
+    const grand = (r.rows as any[]).reduce((a, x) => a + Number(x.total), 0);
+    const perWeek = (Math.abs(grand) / historyWeeks) * (1 + adj);
     weekly.fill(perWeek);
     logic = `${historyWeeks}-week GL average${adj ? ` ${adj > 0 ? "+" : ""}${Math.round(adj * 100)}%` : ""} across ${cat.accountIds.length} account${cat.accountIds.length === 1 ? "" : "s"}`;
+    meta = {
+      method: "GL Average",
+      sourceTotal: Math.round(Math.abs(grand)),
+      weeksUsed: historyWeeks,
+      rawAverage: Math.round(Math.abs(grand) / historyWeeks),
+      adjustmentPct: Math.round(adj * 100),
+      finalAverage: Math.round(perWeek),
+    };
+    breakdown = (r.rows as any[]).map((x) => ({
+      name: [x.number, x.name].filter(Boolean).join(" · "),
+      amount: Math.round(Math.abs(Number(x.total))),
+      type: "Source Data",
+    }));
   } else if (cat.method === "vendor_payment_history" && cat.partyId) {
     const r = (await db.execute(sql`
       select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sum(abs(d.total)) as paid
@@ -318,6 +356,15 @@ export async function categoryWeekly(
     const perWeek = median / 4.345;
     weekly.fill(perWeek);
     logic = `median of ${months.length} monthly payments ÷ 4.345`;
+    meta = {
+      method: "Vendor History (Median)",
+      monthlyMedian: Math.round(median),
+      finalWeekly: Math.round(perWeek),
+      ...(cat.partyName ? { vendor: cat.partyName } : {}),
+    };
+    breakdown = (r.rows as any[])
+      .map((x) => ({ name: String(x.month), amount: Math.round(Number(x.paid)), type: "Source Month" }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   return {
@@ -328,6 +375,8 @@ export async function categoryWeekly(
     weekly: weekly.map((v) => Math.round(v)),
     total: Math.round(weekly.reduce((a, v) => a + v, 0)),
     logic,
+    meta,
+    breakdown,
   };
 }
 
