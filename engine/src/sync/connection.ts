@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { unsealJson } from "../secrets.ts";
-import { netsuiteCredsFromEnvFile, type NetSuiteCreds } from "../netsuite.ts";
-import { NetSuiteSource } from "./netsuite-source.ts";
+import type { NetSuiteCreds } from "../netsuite.ts";
+import { NetSuiteSource, parseNetSuiteMappings } from "./netsuite-source.ts";
 import { OdooSource } from "./odoo-source.ts";
 import type { OdooCreds } from "../odoo.ts";
 import { ErpNextSource } from "./erpnext-source.ts";
@@ -34,7 +34,7 @@ export interface SourceFieldSpec {
   required?: boolean;
   help?: string;
   /** Render as a dropdown instead of a text input. */
-  kind?: "text" | "select";
+  kind?: "text" | "select" | "textarea";
   /** Static options for a `select` field. */
   options?: { value: string; label: string }[];
   /** Populate a `select` from a live app list (resolved by the API layer). */
@@ -74,6 +74,25 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
       { key: "account", label: "Account ID", placeholder: "1234567", required: true, help: "Your NetSuite account id (the realm)." },
       { key: "host", label: "SuiteTalk host", placeholder: "https://<acct>.suitetalk.api.netsuite.com", required: true },
       { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
+      {
+        key: "bridgeScriptId",
+        label: "Bridge script ID",
+        placeholder: "customscript_openbooks_bridge_rl",
+        help: "The script ID of the installed OpenBooks extraction RESTlet. Leave blank to use the standard ID.",
+      },
+      {
+        key: "bridgeDeploymentId",
+        label: "Bridge deployment ID",
+        placeholder: "customdeploy_openbooks_bridge_rl",
+        help: "The deployment ID of the installed OpenBooks extraction RESTlet. Leave blank to use the standard ID.",
+      },
+      {
+        key: "mappingJson",
+        label: "Account field mappings",
+        kind: "textarea",
+        placeholder: "{}",
+        help: "Optional JSON mapping account-specific custom field and record IDs to OpenBooks concepts.",
+      },
     ],
     secretFields: [
       { key: "consumerKey", label: "Consumer key", required: true },
@@ -242,6 +261,13 @@ export function validateSourceConfig(manifest: SourceTypeManifest, config: Recor
       return "Company file path must be a full Windows path ending in .QBW";
     }
   }
+  if (manifest.source === "netsuite") {
+    try {
+      parseNetSuiteMappings(config.mappingJson);
+    } catch (error) {
+      return error instanceof Error ? error.message : "NetSuite field mappings are invalid";
+    }
+  }
   return null;
 }
 
@@ -322,7 +348,14 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
   }
   if (conn.source === "netsuite") {
     const secret = unsealJson<Partial<NetSuiteCreds>>(conn.secrets);
-    const cfg = conn.config as { account?: string; host?: string; baseCurrency?: string };
+    const cfg = conn.config as {
+      account?: string;
+      host?: string;
+      baseCurrency?: string;
+      bridgeScriptId?: string;
+      bridgeDeploymentId?: string;
+      mappingJson?: string;
+    };
     let creds: NetSuiteCreds | null = null;
     if (secret?.consumerKey && cfg.account && cfg.host) {
       creds = {
@@ -333,12 +366,16 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
         tokenKey: String(secret.tokenKey ?? ""),
         tokenSecret: String(secret.tokenSecret ?? ""),
       };
-    } else {
-      // Dev bootstrap: the original .env.netsuite connection.
-      creds = netsuiteCredsFromEnvFile();
     }
     if (!creds) throw new Error("NetSuite connection is missing credentials");
-    return new NetSuiteSource(creds, { baseCurrency: cfg.baseCurrency });
+    return new NetSuiteSource(creds, {
+      baseCurrency: cfg.baseCurrency,
+      bridge: {
+        scriptId: cfg.bridgeScriptId || undefined,
+        deploymentId: cfg.bridgeDeploymentId || undefined,
+      },
+      mappings: cfg.mappingJson,
+    });
   }
 
   if (conn.source === "odoo") {
