@@ -56,6 +56,9 @@ export interface NativeChanges {
   syncedThrough: Date;
   /** Diagnostics: transactions the adapter could not build (ref → reason). */
   unbuildable: { ref: string; reason: string }[];
+  /** Source transactions proven to have no business-ledger projection. Kept
+   * in the full-sweep universe so they are not mistaken for deletions. */
+  nonLedgerRefs?: string[];
 }
 
 // --- Verification ---------------------------------------------------------------

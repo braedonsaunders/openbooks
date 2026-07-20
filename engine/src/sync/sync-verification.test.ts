@@ -5,6 +5,7 @@ import {
   effectiveTaxCodeId,
   sourceDeletionCandidates,
   syncVerificationFailures,
+  verifyOpenItems,
   type SyncResult,
 } from "./sync.ts";
 
@@ -70,4 +71,15 @@ test("zero tax ignores arbitrary rate-matched code identity during change detect
   assert.equal(effectiveTaxCodeId("0", "legacy-zero-code"), null);
   assert.equal(effectiveTaxCodeId("0.0000", null), null);
   assert.equal(effectiveTaxCodeId("13.00", "hst-code"), "hst-code");
+});
+
+test("open-item verification distinguishes a closed zero balance from a missing document", () => {
+  assert.deepEqual(verifyOpenItems(
+    [{ ref: "closed", unpaid: "0" }, { ref: "open", unpaid: "-12.3400" }],
+    [{ ref: "closed", unpaid: "0.0000" }, { ref: "open", unpaid: "12.3400" }],
+  ), { checked: 2, matches: 2, mismatches: [] });
+  assert.deepEqual(verifyOpenItems(
+    [{ ref: "missing", unpaid: "0" }],
+    [],
+  ), { checked: 1, matches: 0, mismatches: [{ ref: "missing", ours: "missing", theirs: "0.0000" }] });
 });
