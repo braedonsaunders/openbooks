@@ -18,13 +18,45 @@ import { activeStorageKind, deleteS3Blobs, getS3Blob, putS3Blob } from './file-s
 // --- types ------------------------------------------------------------------
 
 /**
- * The authenticated caller, for private-folder visibility. Private folders
- * (is_private) — and everything inside them, descendants included — are
- * visible only to their owner and admins (the schema's is_private contract).
+ * The authenticated caller, for access control. Beyond private-folder
+ * visibility (is_private → owner + admins only), access is layered:
+ *   - isAdmin (holds '*') → Manager everywhere.
+ *   - baseline: the org-role tier — 'manager' for documents.manage, 'viewer'
+ *     for documents.read — applied to every folder outside a private subtree
+ *     the caller doesn't own. Defaults to 'viewer' when unset (back-compat:
+ *     every caller that reaches these functions already passed documents.read).
+ *   - resource_grants add Viewer/Editor/Manager to specific users/roles on a
+ *     folder (inherited by descendants + contained files) or a single file.
  */
 export interface FileViewer {
   userId: string
   isAdmin: boolean
+  baseline?: AccessLevel
+}
+
+/** Access tiers, low → high. 'none' means no access. */
+export type AccessLevel = 'none' | 'viewer' | 'editor' | 'manager'
+
+const ACCESS_RANK: Record<AccessLevel, number> = { none: 0, viewer: 1, editor: 2, manager: 3 }
+const ACCESS_BY_RANK: AccessLevel[] = ['none', 'viewer', 'editor', 'manager']
+
+export function accessAtLeast(level: AccessLevel, min: AccessLevel): boolean {
+  return ACCESS_RANK[level] >= ACCESS_RANK[min]
+}
+
+function maxAccess(...levels: AccessLevel[]): AccessLevel {
+  return ACCESS_BY_RANK[Math.max(0, ...levels.map((l) => ACCESS_RANK[l]))]
+}
+
+/** SQL predicate: a grant row applies to this viewer (direct user grant, or a
+ *  grant to a role the viewer holds via role_assignments). */
+function grantAppliesTo(orgId: string, viewer: FileViewer): SQL {
+  return sql`(
+    (g.principal_type = 'user' and g.principal_id = ${viewer.userId})
+    or (g.principal_type = 'role' and g.principal_id in (
+      select role_id from role_assignments where org_id = ${orgId} and user_id = ${viewer.userId}
+    ))
+  )`
 }
 
 export interface FolderNode {
@@ -97,9 +129,26 @@ function deriveExtension(filename: string): string | null {
  * row. Admins hide nothing (empty set); orgs with no private folders (the
  * common case) also resolve to an empty set, making the predicate a no-op.
  */
-async function hiddenFolderIds(orgId: string, viewer: FileViewer): Promise<string[]> {
-  if (viewer.isAdmin) return []
-  const r = (await db.execute(sql`
+/**
+ * The caller's read scope for list/tree queries, resolved once per request:
+ *   - hiddenFolderIds: folders the caller cannot see — private subtrees owned
+ *     by someone else, MINUS any such subtree re-opened to the caller by a
+ *     folder grant.
+ *   - grantedFileIds: individual files shared directly with the caller (visible
+ *     even when their folder is hidden).
+ * Admins (and, effectively, orgs with no private folders or grants) resolve to
+ * empty sets — the predicates become no-ops.
+ */
+export interface ReadScope {
+  hiddenFolderIds: string[]
+  grantedFileIds: string[]
+}
+
+async function resolveReadScope(orgId: string, viewer: FileViewer): Promise<ReadScope> {
+  if (viewer.isAdmin) return { hiddenFolderIds: [], grantedFileIds: [] }
+
+  // Private subtrees owned by others (hidden from the org-role baseline).
+  const hiddenRes = (await db.execute(sql`
     with recursive hidden_folders as (
       select id from folders
        where org_id = ${orgId} and is_private and owner_id is distinct from ${viewer.userId}
@@ -110,21 +159,190 @@ async function hiddenFolderIds(orgId: string, viewer: FileViewer): Promise<strin
     )
     select id from hidden_folders
   `)) as unknown as { rows: { id: string }[] }
-  return r.rows.map((x) => x.id)
+  const hidden = new Set(hiddenRes.rows.map((x) => x.id))
+
+  // Folders granted to the caller (or a role they hold) re-open their whole
+  // subtree; subtract them from the hidden set.
+  if (hidden.size > 0) {
+    const grantedRes = (await db.execute(sql`
+      with recursive granted as (
+        select g.resource_id as id
+          from resource_grants g
+         where g.org_id = ${orgId} and g.resource_type = 'folder' and ${grantAppliesTo(orgId, viewer)}
+        union
+        select f.id from folders f
+          join granted gr on f.parent_folder_id = gr.id
+         where f.org_id = ${orgId}
+      )
+      select id from granted
+    `)) as unknown as { rows: { id: string }[] }
+    for (const row of grantedRes.rows) hidden.delete(row.id)
+  }
+
+  // Files shared directly with the caller.
+  const fileGrants = (await db.execute(sql`
+    select g.resource_id as id from resource_grants g
+     where g.org_id = ${orgId} and g.resource_type = 'file' and ${grantAppliesTo(orgId, viewer)}
+  `)) as unknown as { rows: { id: string }[] }
+
+  return { hiddenFolderIds: [...hidden], grantedFileIds: fileGrants.rows.map((x) => x.id) }
 }
 
 /**
- * Visibility predicate built from a pre-resolved hidden-folder set (see
- * hiddenFolderIds). TRUE when `folderIdCol` is not hidden. An empty set — admins
- * or orgs with no private folders — short-circuits to `true` with zero overhead.
- * The hidden set is bound as a single jsonb param (never raw-interpolated) so an
- * empty or large list is always valid SQL.
+ * Visibility predicate for folders, built from a pre-resolved hidden set. TRUE
+ * when `folderIdCol` is not hidden. An empty set short-circuits to `true`. The
+ * set is bound as one jsonb param (never raw-interpolated) so any size is valid.
  */
 function visibleFolderPredicate(hidden: string[], folderIdCol: SQL): SQL {
   if (hidden.length === 0) return sql`true`
   return sql`${folderIdCol} not in (
     select value::uuid from jsonb_array_elements_text(${JSON.stringify(hidden)}::jsonb) as _h(value)
   )`
+}
+
+/**
+ * Visibility predicate for files: visible when the file's folder is not hidden,
+ * OR the file itself was shared with the caller.
+ */
+function visibleFilePredicate(scope: ReadScope, folderIdCol: SQL, fileIdCol: SQL): SQL {
+  const folderOk = visibleFolderPredicate(scope.hiddenFolderIds, folderIdCol)
+  if (scope.grantedFileIds.length === 0) return folderOk
+  return sql`(${folderOk} or ${fileIdCol} in (
+    select value::uuid from jsonb_array_elements_text(${JSON.stringify(scope.grantedFileIds)}::jsonb) as _g(value)
+  ))`
+}
+
+/** SQL scalar (0–3) for the caller's max grant tier over a set of folder ids. */
+function grantRankOverFolders(orgId: string, viewer: FileViewer, folderIdsCte: SQL): SQL {
+  return sql`(
+    select coalesce(max(case g.access when 'manager' then 3 when 'editor' then 2 when 'viewer' then 1 else 0 end), 0)
+      from resource_grants g
+     where g.org_id = ${orgId} and g.resource_type = 'folder'
+       and g.resource_id in (${folderIdsCte}) and ${grantAppliesTo(orgId, viewer)}
+  )`
+}
+
+/**
+ * The caller's effective access tier on a folder — the highest of admin,
+ * private-owner (Manager), org-role baseline (suppressed inside a private
+ * subtree the caller doesn't own), and any grant on the folder or an ancestor.
+ */
+export async function folderAccessLevel(
+  orgId: string,
+  viewer: FileViewer,
+  folderId: string,
+): Promise<AccessLevel> {
+  if (viewer.isAdmin) return 'manager'
+  const r = (await db.execute(sql`
+    with recursive ancestors as (
+      select id, parent_folder_id, is_private, owner_id
+        from folders where id = ${folderId} and org_id = ${orgId}
+      union all
+      select f.id, f.parent_folder_id, f.is_private, f.owner_id
+        from folders f join ancestors a on f.id = a.parent_folder_id and f.org_id = ${orgId}
+    )
+    select
+      bool_or(a.is_private and a.owner_id = ${viewer.userId}) as "ownsPrivate",
+      bool_or(a.is_private and a.owner_id is distinct from ${viewer.userId}) as "hiddenByPrivate",
+      ${grantRankOverFolders(orgId, viewer, sql`select id from ancestors`)} as "grantRank"
+      from ancestors a
+  `)) as unknown as {
+    rows: { ownsPrivate: boolean | null; hiddenByPrivate: boolean | null; grantRank: number }[]
+  }
+  const row = r.rows[0]
+  if (!row) return 'none' // folder not found / not in org
+  const grantLevel = ACCESS_BY_RANK[row.grantRank] ?? 'none'
+  const ownerLevel: AccessLevel = row.ownsPrivate ? 'manager' : 'none'
+  const baselineSuppressed = !!row.hiddenByPrivate && !row.ownsPrivate
+  const baselineLevel: AccessLevel = baselineSuppressed ? 'none' : viewer.baseline ?? 'viewer'
+  return maxAccess(grantLevel, ownerLevel, baselineLevel)
+}
+
+/** The caller's effective access tier on a file: the max of its folder's tier
+ *  and any grant on the file itself. */
+export async function fileAccessLevel(
+  orgId: string,
+  viewer: FileViewer,
+  fileId: string,
+): Promise<AccessLevel> {
+  if (viewer.isAdmin) return 'manager'
+  const r = (await db.execute(sql`
+    select fi.folder_id as "folderId",
+      (select coalesce(max(case g.access when 'manager' then 3 when 'editor' then 2 when 'viewer' then 1 else 0 end), 0)
+         from resource_grants g
+        where g.org_id = ${orgId} and g.resource_type = 'file' and g.resource_id = fi.id
+          and ${grantAppliesTo(orgId, viewer)}) as "grantRank"
+      from files fi where fi.id = ${fileId} and fi.org_id = ${orgId}
+  `)) as unknown as { rows: { folderId: string; grantRank: number }[] }
+  const row = r.rows[0]
+  if (!row) return 'none'
+  const fileGrant = ACCESS_BY_RANK[row.grantRank] ?? 'none'
+  const folderLevel = await folderAccessLevel(orgId, viewer, row.folderId)
+  return maxAccess(fileGrant, folderLevel)
+}
+
+// --- sharing / grants -------------------------------------------------------
+
+export type ResourceType = 'folder' | 'file'
+export type PrincipalType = 'user' | 'role'
+
+export interface GrantRow {
+  id: string
+  principalType: PrincipalType
+  principalId: string
+  principalName: string
+  access: AccessLevel
+}
+
+const ACCESS_VALUES: AccessLevel[] = ['viewer', 'editor', 'manager']
+export function isAccessLevel(v: unknown): v is AccessLevel {
+  return typeof v === 'string' && (ACCESS_VALUES as string[]).includes(v)
+}
+
+/** The grants on a resource, with resolved principal display names. */
+export async function listGrants(
+  orgId: string,
+  resourceType: ResourceType,
+  resourceId: string,
+): Promise<GrantRow[]> {
+  const r = (await db.execute(sql`
+    select g.id, g.principal_type as "principalType", g.principal_id as "principalId", g.access,
+           coalesce(u.name, u.email, ar.name, 'Unknown') as "principalName"
+      from resource_grants g
+      left join users u on g.principal_type = 'user' and u.id = g.principal_id and u.org_id = ${orgId}
+      left join app_roles ar on g.principal_type = 'role' and ar.id = g.principal_id and ar.org_id = ${orgId}
+     where g.org_id = ${orgId} and g.resource_type = ${resourceType} and g.resource_id = ${resourceId}
+     order by g.principal_type, "principalName"
+  `)) as unknown as { rows: GrantRow[] }
+  return r.rows
+}
+
+/** Create or update a grant (idempotent on principal). */
+export async function setGrant(input: {
+  orgId: string
+  resourceType: ResourceType
+  resourceId: string
+  principalType: PrincipalType
+  principalId: string
+  access: AccessLevel
+  actorId: string
+}): Promise<void> {
+  await db.execute(sql`
+    insert into resource_grants
+      (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by, updated_by, created_at, updated_at)
+    values (${input.orgId}, ${input.resourceType}, ${input.resourceId}, ${input.principalType},
+            ${input.principalId}, ${input.access}, ${input.actorId}, ${input.actorId}, now(), now())
+    on conflict (org_id, resource_type, resource_id, principal_type, principal_id)
+    do update set access = ${input.access}, updated_by = ${input.actorId}, updated_at = now()
+  `)
+}
+
+/** Remove a grant by id. Returns false if it did not exist in this org. */
+export async function removeGrant(orgId: string, grantId: string): Promise<boolean> {
+  const r = (await db.execute(sql`
+    delete from resource_grants where id = ${grantId} and org_id = ${orgId} returning id
+  `)) as unknown as { rows: { id: string }[] }
+  return r.rows.length > 0
 }
 
 /** Title-case a snake_case identifier: "vendor_bill" -> "Vendor Bill". Must
@@ -275,7 +493,7 @@ export async function ensureRecordFolder(
  * correlated subqueries per folder.
  */
 export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<FolderNode[]> {
-  const hidden = await hiddenFolderIds(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer)
   const r = (await db.execute(sql`
     select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
            f.system_kind as "systemKind", f.is_private as "isPrivate",
@@ -298,7 +516,7 @@ export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<
       ) fc on fc.folder_id = f.id
      where f.org_id = ${orgId} and not f.is_inactive
        and f.record_id is null
-       and ${visibleFolderPredicate(hidden, sql`f.id`)}
+       and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
      order by f.is_system desc, f.name asc
   `)) as unknown as { rows: FolderNode[] }
   return r.rows
@@ -529,11 +747,11 @@ export async function listFiles(
         : sql`fi.name`
   const dir = opts.dir === 'asc' ? sql`asc` : sql`desc`
 
-  const hidden = await hiddenFolderIds(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer)
   const whereParts = [
     sql`fi.org_id = ${orgId}`,
     sql`not fi.is_inactive`,
-    visibleFolderPredicate(hidden, sql`fi.folder_id`),
+    visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`),
   ]
   if (opts.folderId) whereParts.push(sql`fi.folder_id = ${opts.folderId}`)
   if (opts.q) whereParts.push(sql`fi.name ilike ${'%' + opts.q + '%'}`)
@@ -611,7 +829,7 @@ export async function listFolderContents(
     return { folders: [], files, folderTotal: 0, fileTotal: total, total }
   }
 
-  const hidden = await hiddenFolderIds(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer)
   const parentPred = opts.parentId
     ? sql`f.parent_folder_id = ${opts.parentId}`
     : sql`f.parent_folder_id is null`
@@ -621,7 +839,7 @@ export async function listFolderContents(
     select count(*)::int as n
       from folders f
      where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
-       and ${visibleFolderPredicate(hidden, sql`f.id`)}
+       and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
   `)) as unknown as { rows: { n: number }[] }
   const folderTotal = folderCount.rows[0]?.n ?? 0
 
@@ -638,7 +856,7 @@ export async function listFolderContents(
                    where fi.folder_id = f.id and not fi.is_inactive) as "fileCount"
             from folders f
            where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
-             and ${visibleFolderPredicate(hidden, sql`f.id`)}
+             and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
            order by f.is_system desc, f.name asc
            limit ${limit} offset ${offset}
         `)) as unknown as { rows: FolderNode[] }).rows
@@ -665,7 +883,7 @@ export async function listFolderContents(
 }
 
 export async function getFile(orgId: string, id: string, viewer: FileViewer): Promise<FileDetail | null> {
-  const hidden = await hiddenFolderIds(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer)
   const meta = (await db.execute(sql`
     select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
            fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
@@ -676,7 +894,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
       from files fi
       left join folders fo on fo.id = fi.folder_id
      where fi.id = ${id} and fi.org_id = ${orgId}
-       and ${visibleFolderPredicate(hidden, sql`fi.folder_id`)}
+       and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
   `)) as unknown as { rows: any[] }
   if (meta.rows.length === 0) return null
   const f = meta.rows[0]
@@ -892,7 +1110,7 @@ export async function getFileBlob(
   viewer: FileViewer,
   versionId?: string,
 ): Promise<{ filename: string; contentType: string; bytes: Buffer; versionId: string } | null> {
-  const hidden = await hiddenFolderIds(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer)
   const r = (await db.execute(sql`
     select fi.name, fv.content_type as "contentType", fv.id as "versionId",
            fv.storage_kind as "storageKind", fb.bytes
@@ -902,7 +1120,7 @@ export async function getFileBlob(
        and fv.id = coalesce(${versionId ?? null}, fi.current_version_id)
       left join file_blobs fb on fb.version_id = fv.id
      where fi.id = ${id} and fi.org_id = ${orgId}
-       and ${visibleFolderPredicate(hidden, sql`fi.folder_id`)}
+       and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
   `)) as unknown as {
     rows: { name: string; contentType: string; versionId: string; storageKind: string; bytes: Buffer | null }[]
   }

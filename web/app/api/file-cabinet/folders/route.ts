@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getFolder, getFolderTree, createFolder } from '../../../../lib/file-cabinet'
 import { isUuid } from '../../../../lib/list-params'
-import { guardPermission } from '../../../../lib/authz'
-import { canMutateFiles, fileViewer, requireSession } from '../lib'
+import { can, guardPermission } from '../../../../lib/authz'
+import { fileViewer, requireFolderAccess, requireSession } from '../lib'
 
 export const runtime = 'nodejs'
 
@@ -18,9 +18,6 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
-  if (!canMutateFiles(gate)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
   const body = await req.json().catch(() => null)
   if (!body || typeof body.name !== 'string' || !body.name.trim()) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -31,6 +28,12 @@ export async function POST(req: Request) {
     if (!isUuid(parentId) || !(await getFolder(gate.user.orgId, parentId))) {
       return NextResponse.json({ error: 'parent folder not found' }, { status: 400 })
     }
+    // Creating a sub-folder needs Editor+ on the parent.
+    const access = await requireFolderAccess(gate, parentId, 'editor')
+    if (access) return access
+  } else if (!can(gate, 'documents.manage') && !can(gate, '*')) {
+    // Creating a top-level folder needs the org-wide manage permission.
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
   const id = await createFolder({
     orgId: gate.user.orgId,

@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { can, getAuthz, type Authz } from '../../../lib/authz'
-import type { FileViewer } from '../../../lib/file-cabinet'
+import {
+  accessAtLeast,
+  fileAccessLevel,
+  folderAccessLevel,
+  type AccessLevel,
+  type FileViewer,
+} from '../../../lib/file-cabinet'
 
 export const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
 
@@ -60,9 +66,38 @@ export async function requireSession(): Promise<Authz | NextResponse> {
 }
 
 /**
- * The caller as a FileViewer for private-folder visibility: only global
- * admins (`*`) bypass is_private — matching the schema's "owner + admins".
+ * The caller as a FileViewer for access control. `*` admins get Manager
+ * everywhere; otherwise the org-role baseline is Manager for documents.manage,
+ * Viewer for documents.read (the gate every cabinet route already passed).
+ * resource_grants layer on top per folder/file.
  */
 export function fileViewer(authz: Authz): FileViewer {
-  return { userId: authz.user.id, isAdmin: can(authz, '*') }
+  const baseline: AccessLevel = can(authz, 'documents.manage')
+    ? 'manager'
+    : can(authz, 'documents.read')
+      ? 'viewer'
+      : 'none'
+  return { userId: authz.user.id, isAdmin: can(authz, '*'), baseline }
+}
+
+/** Gate: the caller must have at least `min` access on a folder. */
+export async function requireFolderAccess(
+  authz: Authz,
+  folderId: string,
+  min: AccessLevel,
+): Promise<NextResponse | null> {
+  const level = await folderAccessLevel(authz.user.orgId, fileViewer(authz), folderId)
+  if (!accessAtLeast(level, min)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  return null
+}
+
+/** Gate: the caller must have at least `min` access on a file. */
+export async function requireFileAccess(
+  authz: Authz,
+  fileId: string,
+  min: AccessLevel,
+): Promise<NextResponse | null> {
+  const level = await fileAccessLevel(authz.user.orgId, fileViewer(authz), fileId)
+  if (!accessAtLeast(level, min)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  return null
 }

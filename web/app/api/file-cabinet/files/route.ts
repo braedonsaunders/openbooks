@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server'
 import { getFolder, listFiles } from '../../../../lib/file-cabinet'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { guardPermission } from '../../../../lib/authz'
-import { canMutateFiles, fileViewer, isAllowedContentType, MAX_BYTES, requireSession } from '../lib'
+import {
+  fileViewer,
+  isAllowedContentType,
+  MAX_BYTES,
+  requireFolderAccess,
+  requireSession,
+} from '../lib'
 
 export const runtime = 'nodejs'
 
@@ -38,9 +44,6 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
-  if (!canMutateFiles(gate)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
 
   const form = await req.formData().catch(() => null)
   if (!form) return NextResponse.json({ error: 'expected multipart/form-data' }, { status: 400 })
@@ -52,6 +55,9 @@ export async function POST(req: Request) {
   if (!(await getFolder(gate.user.orgId, folderId))) {
     return NextResponse.json({ error: 'folder not found' }, { status: 404 })
   }
+  // Uploading needs Editor+ on the destination folder.
+  const access = await requireFolderAccess(gate, folderId, 'editor')
+  if (access) return access
   if (!isAllowedContentType(file.type)) {
     return NextResponse.json({ error: `unsupported file type: ${file.type || 'unknown'}` }, { status: 415 })
   }

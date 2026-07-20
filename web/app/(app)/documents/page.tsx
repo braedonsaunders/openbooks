@@ -7,7 +7,16 @@ import { Pagination } from '../../../components/pagination'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
-import { getFile, getFolderPath, getFolderTree, listFolderContents } from '../../../lib/file-cabinet'
+import {
+  accessAtLeast,
+  fileAccessLevel,
+  folderAccessLevel,
+  getFile,
+  getFolderPath,
+  getFolderTree,
+  listFolderContents,
+  type AccessLevel,
+} from '../../../lib/file-cabinet'
 import { FolderTree } from './FolderTree'
 import { UploadButton } from './UploadButton'
 import { NewFolderButton } from './NewFolderButton'
@@ -51,8 +60,10 @@ export default async function Documents({
   const authz = await requirePermission('documents.read')
   const canManage = can(authz, 'documents.manage')
   const orgId = authz.user.orgId
-  // Private-folder visibility: only global admins bypass is_private.
-  const viewer = { userId: authz.user.id, isAdmin: can(authz, '*') }
+  // Access control: '*' admins get Manager everywhere; otherwise the org-role
+  // baseline (Manager for documents.manage, else Viewer) plus resource_grants.
+  const baseline: AccessLevel = canManage ? 'manager' : 'viewer'
+  const viewer = { userId: authz.user.id, isAdmin: can(authz, '*'), baseline }
   const t = await getTranslations('documents')
 
   const sp = await searchParams
@@ -96,6 +107,15 @@ export default async function Documents({
     folderParam && folderParam !== 'new' && isUuid(folderParam)
       ? localizedTree.find((f) => f.id === folderParam) ?? null
       : null,
+  ])
+
+  // Effective access tiers for UI affordances (the server re-checks every
+  // mutation). The current folder's tier is inherited by the items it contains;
+  // at the virtual root / in search, fall back to the org-role baseline.
+  const [currentAccess, openFileAccess, openFolderAccess] = await Promise.all([
+    activeFolderId ? folderAccessLevel(orgId, viewer, activeFolderId) : Promise.resolve(baseline),
+    openFile ? fileAccessLevel(orgId, viewer, openFile.id) : Promise.resolve<AccessLevel>('none'),
+    openFolder ? folderAccessLevel(orgId, viewer, openFolder.id) : Promise.resolve<AccessLevel>('none'),
   ])
 
   // Sub-folders of the current location, shown as rows above the files — a real
@@ -187,7 +207,8 @@ export default async function Documents({
                   }))}
                   activeFolderId={activeFolderId}
                   showLocation={!activeFolderId}
-                  canManage={canManage}
+                  canEdit={accessAtLeast(currentAccess, 'editor')}
+                  canDelete={accessAtLeast(currentAccess, 'manager')}
                   currentParams={sp}
                   sort={params.sort}
                   dir={params.dir}
@@ -207,12 +228,23 @@ export default async function Documents({
         </div>
       </div>
 
-      {openFile ? <FileDrawer file={openFile as any} canManage={canManage} /> : null}
+      {openFile ? (
+        <FileDrawer
+          file={openFile as any}
+          canEdit={accessAtLeast(openFileAccess, 'editor')}
+          canManage={accessAtLeast(openFileAccess, 'manager')}
+        />
+      ) : null}
       {folderParam === 'new' && canManage ? (
         <FolderDrawer mode="create" folders={localizedTree} parentId={newFolderParent} />
       ) : null}
       {openFolder ? (
-        <FolderDrawer mode="edit" folder={openFolder as any} folders={localizedTree} canManage={canManage} />
+        <FolderDrawer
+          mode="edit"
+          folder={openFolder as any}
+          folders={localizedTree}
+          canManage={accessAtLeast(openFolderAccess, 'manager')}
+        />
       ) : null}
     </div>
   )
