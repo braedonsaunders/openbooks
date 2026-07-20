@@ -31,6 +31,49 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
+/**
+ * Adopt two historical migrations that were applied manually before migration
+ * tracking was introduced. Only mark them after every non-idempotent object is
+ * present; a partial installation must still fail loudly and be repaired.
+ */
+async function adoptCompleteLegacyMigration(filename: string, content: string): Promise<void> {
+  let complete = false;
+  if (filename === "generated/0019_qbd_web_connector.sql") {
+    const check = (await db.execute(sql`
+      select
+        to_regclass('public.qbd_captures') is not null
+        and to_regclass('public.qbd_requests') is not null
+        and to_regclass('public.qbd_sessions') is not null
+        and (select count(*) from pg_indexes where schemaname = 'public' and indexname in (
+          'qbd_captures_connection', 'qbd_captures_expiry', 'qbd_requests_next',
+          'qbd_requests_capture', 'qbd_requests_capture_sequence',
+          'qbd_sessions_connection', 'qbd_sessions_expiry'
+        )) = 7
+        and (select count(*) from pg_policies where schemaname = 'public'
+             and tablename in ('qbd_captures', 'qbd_requests', 'qbd_sessions')
+             and policyname = 'org_isolation') = 3 as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0024_file_source_identity.sql") {
+    const check = (await db.execute(sql`
+      select
+        (select count(*) from information_schema.columns
+          where table_schema = 'public' and table_name = 'files'
+            and column_name in ('source_system', 'source_id')) = 2
+        and to_regclass('public.files_source_identity') is not null as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  }
+  if (!complete) return;
+  const inserted = (await db.execute(sql`
+    insert into _applied_migrations (filename, sha256)
+    values (${filename}, ${sha256(content)})
+    on conflict do nothing
+    returning filename
+  `)) as unknown as { rows: { filename: string }[] };
+  if (inserted.rows.length) console.log(`[bootstrap] adopted complete legacy migration: ${filename}`);
+}
+
 async function applyTracked(
   label: string,
   filename: string,
@@ -127,10 +170,13 @@ async function migrate(): Promise<void> {
     }
   }
   for (const f of generated) {
+    const filename = `generated/${f}`;
+    const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
+    await adoptCompleteLegacyMigration(filename, content);
     await applyTracked(
       "migration",
-      `generated/${f}`,
-      readFileSync(join(migrationsDir, "generated", f), "utf8"),
+      filename,
+      content,
     );
   }
   for (const f of ["referential-integrity.sql", "kernel-constraints.sql"]) {
