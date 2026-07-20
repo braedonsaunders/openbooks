@@ -1070,7 +1070,8 @@
       "assets": "Assets",
       "currency": "Currency",
       "revenue": "Revenus",
-      "inventory": "Stocks"
+      "inventory": "Stocks",
+      "projects": "Projets"
     },
     "fxProvider": {
       "title": "Fournisseur de taux de change",
@@ -1456,6 +1457,12 @@
       "overhead-rates": {
         "title": "Taux de frais généraux",
         "description": "Taux de frais généraux datés appliqués au coût de la main-d'œuvre."
+      },
+      "overhead-model": {
+        "title": "Modèle de frais généraux",
+        "description": "Le moteur de taux derrière les frais généraux de projet — pools de coûts, bases de répartition, matrice de taux par département et profils. Les projets utilisant la méthode « moteur de taux » appliquent ces taux à leurs heures de main-d’œuvre.",
+        "docs": "Documentation",
+        "viewAnalytics": "Voir l’analytique"
       }
     },
     "fields": {

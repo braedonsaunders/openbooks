@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
 import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
 import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'
@@ -38,15 +39,44 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
          and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
        order by unit_number limit 2000`),
     db.execute(sql`
-      select coalesce(-sum(l.amount) filter (where l.amount < 0), 0)::numeric(19,4) as recognized
-        from journal_lines l join journal_entries e on e.id = l.entry_id
-       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted' and e.origin = 'revenue_recognition'`),
+      select c.id as contract_id, o.percent_complete, o.allocated_price,
+             coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
+             coalesce((select sum(l.recognized_amount)
+                         from recognition_schedules s
+                         join accounting_books bk on bk.id = s.book_id and bk.is_primary
+                         join recognition_schedule_lines l on l.schedule_id = s.id
+                        where s.obligation_id = o.id and l.journal_entry_id is not null), 0)::numeric(19,4) as recognized
+        from projects p
+        left join revenue_contracts c on c.org_id = p.org_id and c.project_id = p.id
+        left join performance_obligations o on o.contract_id = c.id
+       where p.id = ${projectId} and p.org_id = ${orgId}`),
   ])
 
   const charges = (chargeRes as unknown as { rows: any[] }).rows
   const items = (itemRes as unknown as { rows: any[] }).rows
   const equipment = (equipmentRes as unknown as { rows: any[] }).rows
-  const recognizedToDate = String((recognizedRes as unknown as { rows: any[] }).rows[0]?.recognized ?? '0')
+
+  // Recognition status for the Financials tab card — shown for fixed-price /
+  // percent-complete project types; posting stays with the central run.
+  const recRow = (recognizedRes as unknown as { rows: any[] }).rows[0]
+  const recognitionPolicy = projectType.invoicingProfile.recognition
+  let recognition = null
+  if (recognitionPolicy === 'percent_complete_cost') {
+    const accts = await recognitionAccounts(orgId)
+    const contractValue = String(recRow?.allocated_price ?? financialsContractValue(financials.measures))
+    const pct = Number(recRow?.percent_complete ?? 0)
+    const overrideValue = recRow?.override_raw !== '' && recRow?.override_raw != null ? Number(recRow.override_raw) : null
+    recognition = {
+      contractId: (recRow?.contract_id as string | null) ?? null,
+      contractValue,
+      percentComplete: pct,
+      overridden: overrideValue != null,
+      overrideValue,
+      earned: ((Number(contractValue) * pct) / 100).toFixed(4),
+      recognized: String(recRow?.recognized ?? '0'),
+      accountsMapped: Boolean(accts.unbilledReceivable && accts.projectRevenue),
+    }
+  }
 
   return {
     financials: {
@@ -75,7 +105,12 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       recovered: charges.filter((c) => c.status === 'posted').reduce((a, c) => a + Number(c.cost), 0).toFixed(2),
       billValue: charges.reduce((a, c) => a + Number(c.billValue), 0).toFixed(2),
     },
-    recognizedToDate,
+    recognition,
     transactions: financials.documents as ProjectCockpitData['transactions'],
   }
+}
+
+/** Contract value fallback for projects not yet synced into a contract. */
+function financialsContractValue(measures: Record<string, number>): string {
+  return String(measures.total_price ?? 0)
 }

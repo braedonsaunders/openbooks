@@ -21,6 +21,10 @@ export const revenueRecognition: DocArticle = {
     "allocation",
     "fair value range",
     "deferred revenue",
+    "percent complete",
+    "project revenue",
+    "unbilled receivable",
+    "contract asset",
   ],
   body: `# Revenue Recognition
 
@@ -80,11 +84,39 @@ Company & Accounting**, in the **Revenue recognition** card:
 - **Warn** (default) — flag out-of-range allocations for review.
 - **Off** — no range checking.
 
+## Fixed-price project revenue (percent complete)
+
+A fixed-price project — any project whose project type's recognition policy is
+**percent_complete_cost** and that carries a contract value and customer —
+gets its own revenue contract with a single **percent-complete** obligation,
+visible on the Revenue page like every other contract. The project record
+carries progress data only:
+
+- **Percent complete** defaults to cost-to-cost: posted project cost divided by
+  the task budget.
+- A **percent complete override** on the project's Financials tab lets a
+  manager enter the estimate directly (blank returns to automatic). Saving the
+  override updates the plan — it never posts.
+
+A change in percent complete is a change in estimate: the cumulative catch-up
+(up **or down** — a falling estimate reverses revenue) is planned into the
+current period and posted by the next central recognition run, never restated
+into past periods.
+
+**Account treatment.** Project recognition follows the percentage-of-completion
+contract-asset model: the run posts **debit Unbilled receivable / credit
+Project revenue** (both mapped in Company & Accounting control accounts), and
+the project invoice relieves Unbilled receivable — revenue is earned over time,
+billed later, and never double-counted. The feature is inert until both control
+accounts are mapped.
+
 ## Running recognition
 
 **Run recognition** posts every due, unposted schedule line up to the as-of
-date: one journal per line, debit deferred revenue, credit recognized revenue.
-Closed periods are skipped and reported, never forced. Re-running is safe — a
-posted line is never posted twice.
+date: one journal per line, debit deferred revenue (or Unbilled receivable for
+project contracts), credit recognized revenue. The run first refreshes every
+project contract's percent complete, so project catch-ups post in the same
+pass. Closed periods are skipped and reported, never forced. Re-running is
+safe — a posted line is never posted twice.
 `,
 };

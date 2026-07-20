@@ -6,7 +6,7 @@ import { Card, CardContent, cn } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
 import { money } from '../../../../lib/format'
-import { RecognizeRevenue } from './RecognizeButton'
+import { RecognitionCard, type RecognitionStatus } from './RecognitionCard'
 
 interface CategoryRow { category: string; amount: number }
 interface AccountRow { accountId: string; number: string | null; name: string; amount: number }
@@ -46,11 +46,11 @@ function Line({ label, hint, value, variant, tone }: {
   )
 }
 
-export function FinancialsTab({ data, projectId, billingMethod, recognizedToDate, canManage }: {
+export function FinancialsTab({ data, projectId, billingMethod, recognition, canManage }: {
   data: FinancialsData
   projectId: string
   billingMethod: string | null
-  recognizedToDate: string
+  recognition: RecognitionStatus | null
   canManage: boolean
 }) {
   const t = useTranslations('projects')
@@ -140,8 +140,8 @@ export function FinancialsTab({ data, projectId, billingMethod, recognizedToDate
         </Card>
       </div>
 
-      {billingMethod === 'fixed_price' && canManage ? (
-        <RecognizeRevenue projectId={projectId} recognizedToDate={recognizedToDate} />
+      {recognition ? (
+        <RecognitionCard projectId={projectId} status={recognition} canManage={canManage} />
       ) : null}
 
       {/* Cost breakdown — subtabs, never side-by-side (AGENTS.md). */}

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, mulRate, neg, sum, isZero, cmp } from "./money.ts";
+import { add, mulRate, neg, sum, isZero } from "./money.ts";
 
 /**
  * Project GL recognition — the accounting-correct layer on top of the billing
@@ -220,94 +220,6 @@ export async function reverseProjectLaborCost(orgId: string, actorId: string, ti
   await db.execute(sql`update time_entries set cost_journal_entry_id = null where org_id = ${orgId} and id = any(${idArr}::uuid[])`);
 }
 
-/* ------------------------------------------------------------------ */
-/* Fixed-price revenue recognition (percent-complete)                  */
-/* ------------------------------------------------------------------ */
-
-export interface RecognitionResult {
-  contractValue: string;
-  percentComplete: number;
-  earned: string;
-  recognizedToDate: string;
-  delta: string;
-  entryId: string | null;
-}
-
-/**
- * Recognize fixed-price project revenue to the earned-to-date point (ASC 606
- * over-time): earned = contractValue × %complete (cost-to-cost by default),
- * posting only the delta over already-recognized: DR unbilled receivable /
- * CR project revenue (origin revenue_recognition). The invoice later relieves
- * unbilled receivable, so revenue is recognized once. Requires the accounts
- * mapped; pass an explicit percentComplete (0..1) to override cost-to-cost.
- */
-export async function recognizeProjectRevenue(
-  orgId: string,
-  actorId: string,
-  projectId: string,
-  percentCompleteOverride?: number,
-): Promise<RecognitionResult> {
-  const accts = await recognitionAccounts(orgId);
-  if (!accts.unbilledReceivable || !accts.projectRevenue) {
-    throw new Error("Map the Unbilled receivable and Project revenue accounts in Settings first");
-  }
-  const proj = (await db.execute(sql`
-    select subsidiary_id, customer_id, billing_method,
-           coalesce((custom->>'contractValue')::numeric, 0) as contract_value
-      from projects where id = ${projectId} and org_id = ${orgId}`)) as unknown as {
-    rows: { subsidiary_id: string | null; customer_id: string | null; billing_method: string | null; contract_value: string }[];
-  };
-  const p = proj.rows[0];
-  if (!p) throw new Error("Project not found");
-  const contractValue = String(p.contract_value ?? "0");
-
-  let percent = percentCompleteOverride;
-  if (percent == null) {
-    const cc = (await db.execute(sql`
-      select
-        coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = ${projectId} and t.org_id = ${orgId}), 0) as budget,
-        coalesce((select sum(l.amount) from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
-                   where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'
-                     and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`)) as unknown as {
-      rows: { budget: string; actual: string }[];
-    };
-    const budget = Number(cc.rows[0]?.budget ?? 0);
-    const actual = Number(cc.rows[0]?.actual ?? 0);
-    percent = budget > 0 ? Math.min(1, actual / budget) : 0;
-  }
-  percent = Math.max(0, Math.min(1, percent));
-
-  const earned = mulRate(contractValue, percent.toFixed(6));
-  // recognized to date = credits already posted to project revenue for this project.
-  const rec = (await db.execute(sql`
-    select coalesce(-sum(l.amount), 0)::numeric(19,4) as recognized
-      from journal_lines l join journal_entries e on e.id = l.entry_id
-     where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'
-       and e.origin = 'revenue_recognition' and l.account_id = ${accts.projectRevenue}`)) as unknown as {
-    rows: { recognized: string }[];
-  };
-  const recognizedToDate = String(rec.rows[0]?.recognized ?? "0");
-  const delta = add(earned, neg(recognizedToDate));
-
-  let entryId: string | null = null;
-  if (cmp(delta, "0") !== 0) {
-    const postingDate = new Date().toISOString().slice(0, 10);
-    entryId = await postProjectGlEntry({
-      orgId,
-      actorId,
-      origin: "revenue_recognition",
-      entryNumber: `REV-${postingDate}-${projectId.slice(0, 8)}`,
-      postingDate,
-      memo: "Percent-complete revenue recognition",
-      subsidiaryId: p.subsidiary_id,
-      lines: [
-        // DR unbilled receivable (contract asset), CR project revenue — signed
-        // so a positive delta debits the asset / credits revenue; a negative
-        // delta (percent dropped) reverses.
-        { accountId: accts.unbilledReceivable, amount: delta, projectId, partyId: p.customer_id, memo: "Unbilled receivable" },
-        { accountId: accts.projectRevenue, amount: neg(delta), projectId, memo: "Project revenue" },
-      ],
-    });
-  }
-  return { contractValue, percentComplete: percent, earned, recognizedToDate, delta, entryId };
-}
+// Fixed-price percent-complete revenue recognition moved to the ARM pipeline:
+// see project-revenue.ts (syncProjectRevenueContracts) — the central
+// recognition run posts it; there is no per-project posting entry point.
