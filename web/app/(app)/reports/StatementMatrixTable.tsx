@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
@@ -9,6 +10,7 @@ import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-
 import { buildDrillTarget, type ReportScale } from '../../../lib/report-filters'
 import { currencySymbol, formatCell, isNegative } from '../../../lib/statement-format'
 import { ReportDrillLink } from './ReportDrillLink'
+import { REPORT_SECTION_VISIBILITY_EVENT, type ReportSectionVisibility } from './report-section-events'
 
 /**
  * Renders a multi-column statement view (P&L, Balance Sheet, …) as a clean,
@@ -47,6 +49,7 @@ export function StatementMatrixTable({
   currency?: string
   drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; budgetScenarioId?: string }
 }) {
+  const t = useTranslations('reports.filterBar')
   const cols = view.columns
   const sym = currencySymbol(currency)
   const lines = view.lines
@@ -83,6 +86,15 @@ export function StatementMatrixTable({
   }, [lines])
 
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+
+  useEffect(() => {
+    const handleVisibility = (event: Event) => {
+      const visibility = (event as CustomEvent<ReportSectionVisibility>).detail
+      setCollapsed(visibility === 'collapse' ? new Set(ranges.keys()) : new Set())
+    }
+    window.addEventListener(REPORT_SECTION_VISIBILITY_EVENT, handleVisibility)
+    return () => window.removeEventListener(REPORT_SECTION_VISIBILITY_EVENT, handleVisibility)
+  }, [ranges])
 
   const hidden = useMemo(() => {
     const h = new Set<number>()
@@ -144,7 +156,7 @@ export function StatementMatrixTable({
               <button
                 type="button"
                 onClick={() => toggle(i)}
-                aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                aria-label={isCollapsed ? t('expandSection', { section: l.label }) : t('collapseSection', { section: l.label })}
                 className="mr-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               >
                 {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}

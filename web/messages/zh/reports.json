@@ -106,7 +106,11 @@
     "scaleMillions": "百万",
     "showZeros": "显示零值",
     "truncated": "为保持报表可读性，部分分列已隐藏。",
-    "options": "选项"
+    "options": "选项",
+    "expandAll": "全部展开",
+    "collapseAll": "全部折叠",
+    "expandSection": "展开{section}",
+    "collapseSection": "折叠{section}"
   },
   "balanceSheet": {
     "title": "资产负债表",

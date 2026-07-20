@@ -106,7 +106,11 @@
     "scaleMillions": "Milhões",
     "showZeros": "Mostrar zeros",
     "truncated": "Algumas colunas de detalhamento foram ocultadas para manter o relatório legível.",
-    "options": "Opções"
+    "options": "Opções",
+    "expandAll": "Expandir tudo",
+    "collapseAll": "Recolher tudo",
+    "expandSection": "Expandir {section}",
+    "collapseSection": "Recolher {section}"
   },
   "balanceSheet": {
     "title": "Balanço Patrimonial",

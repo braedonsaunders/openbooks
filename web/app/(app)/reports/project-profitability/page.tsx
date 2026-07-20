@@ -110,7 +110,7 @@ export default async function ProjectProfitabilityPage({
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
-            controls={{ search: true, dateRange: true, customer: true, dimensions: true }}
+            controls={{ search: true, dateRange: true, customer: true, dimensions: true, sections: groups.some((group) => group.projects.length > 0) }}
             dateRange={{ from: period.from, to: period.to }}
             searchPlaceholder={t('projectProfitability.searchPlaceholder')}
             customers={customers}

@@ -106,7 +106,11 @@
     "scaleMillions": "Millions",
     "showZeros": "Afficher les zéros",
     "truncated": "Certaines colonnes de ventilation ont été masquées pour garder le rapport lisible.",
-    "options": "Options"
+    "options": "Options",
+    "expandAll": "Tout développer",
+    "collapseAll": "Tout réduire",
+    "expandSection": "Développer {section}",
+    "collapseSection": "Réduire {section}"
   },
   "balanceSheet": {
     "title": "Bilan",

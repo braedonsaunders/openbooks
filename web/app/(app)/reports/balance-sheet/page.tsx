@@ -81,6 +81,7 @@ export default async function BalanceSheet({
               subsidiary: true,
               showZero: true,
               scale: true,
+              sections: true,
             }}
             dimensions={opts}
             subsidiaries={subView.picker}

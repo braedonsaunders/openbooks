@@ -106,7 +106,11 @@
     "scaleMillions": "Millions",
     "showZeros": "Show zeros",
     "truncated": "Some breakout columns were hidden to keep the report readable.",
-    "options": "Options"
+    "options": "Options",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "expandSection": "Expand {section}",
+    "collapseSection": "Collapse {section}"
   },
   "balanceSheet": {
     "title": "Balance Sheet",

@@ -83,6 +83,31 @@ test('every report result uses the P&L filter bar as one non-wrapping row', () =
   assert.match(source('app/(app)/reports/custom/page.tsx'), /if \(!query\) return/)
 })
 
+test('every collapsible report exposes shared expand-all and collapse-all controls', () => {
+  const filterBar = source('app/(app)/reports/ReportFilterBar.tsx')
+  assert.match(filterBar, /controls\.sections/)
+  assert.match(filterBar, /setAllReportSections\('expand'\)/)
+  assert.match(filterBar, /setAllReportSections\('collapse'\)/)
+
+  const statement = source('app/(app)/reports/StatementMatrixTable.tsx')
+  assert.match(statement, /REPORT_SECTION_VISIBILITY_EVENT/)
+  assert.match(statement, /new Set\(ranges\.keys\(\)\)/)
+  assert.doesNotMatch(statement, /aria-label=\{isCollapsed \? 'Expand' : 'Collapse'\}/)
+
+  const projects = source('app/(app)/reports/project-profitability/ProjectProfitabilityTable.tsx')
+  assert.match(projects, /REPORT_SECTION_VISIBILITY_EVENT/)
+  assert.match(projects, /new Set\(groups\.map/)
+
+  for (const page of [
+    'app/(app)/reports/pnl/page.tsx',
+    'app/(app)/reports/balance-sheet/page.tsx',
+    'app/(app)/reports/budget/page.tsx',
+    'app/(app)/reports/project-profitability/page.tsx',
+  ]) {
+    assert.match(source(page), /sections:/, `${page} must enable the shared section control`)
+  }
+})
+
 test('every direct report with numeric output exposes a drill target or native transaction link', () => {
   const numericReports = [
     'app/(app)/reports/aging/page.tsx',
