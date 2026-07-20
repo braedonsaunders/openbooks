@@ -34,7 +34,12 @@ export interface ImportOptions {
   limit?: number;
 }
 
-interface ImportSummary {
+export interface AttachmentImportFailure {
+  fileId: string;
+  message: string;
+}
+
+export interface ImportSummary {
   sourceDocuments: number;
   sourceDocumentsWithoutId: number;
   sourceFiles: number;
@@ -44,6 +49,14 @@ interface ImportSummary {
   unchangedFiles: number;
   createdLinks: number;
   failures: number;
+  failureDetails: AttachmentImportFailure[];
+}
+
+export class AttachmentImportError extends Error {
+  constructor(public readonly summary: ImportSummary) {
+    super(`${summary.failures} source files failed to import`);
+    this.name = "AttachmentImportError";
+  }
 }
 
 function chunks<T>(values: T[], size: number): T[][] {
@@ -386,6 +399,16 @@ async function verifyImport(orgId: string, fileToDocuments: Map<string, Set<stri
   }
 }
 
+async function prioritizeMissingFiles(orgId: string, fileIds: string[]): Promise<string[]> {
+  const imported = (await db.execute(sql`
+    select source_id as "sourceId"
+      from files
+     where org_id = ${orgId} and source_system = ${SOURCE_SYSTEM} and source_id is not null
+  `)) as unknown as { rows: { sourceId: string }[] };
+  const existing = new Set(imported.rows.map((row) => row.sourceId));
+  return [...fileIds].sort((left, right) => Number(existing.has(left)) - Number(existing.has(right)));
+}
+
 export async function importNetSuiteAttachments(options: ImportOptions): Promise<ImportSummary> {
   const { orgId, actorId, creds, bridge } = await resolveContext(options);
   if (options.execute && !s3Enabled) {
@@ -410,11 +433,12 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     unchangedFiles: 0,
     createdLinks: 0,
     failures: 0,
+    failureDetails: [],
   };
   console.log(`[inventory] found ${summary.sourceFiles} unique files across ${summary.sourceLinks} transaction links`);
   if (!options.execute) return summary;
 
-  const fileIds = Array.from(fileToDocuments.keys());
+  const fileIds = await prioritizeMissingFiles(orgId, Array.from(fileToDocuments.keys()));
   await concurrentMap(fileIds, options.concurrency, async (fileId, index) => {
     try {
       const { source, bytes } = await downloadSourceFile(fileId, creds, bridge);
@@ -433,13 +457,15 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       summary.createdLinks += persisted.createdLinks;
     } catch (error) {
       summary.failures++;
-      console.error(`[import] source file ${fileId} failed: ${(error as Error).message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      summary.failureDetails.push({ fileId, message });
+      console.error(`[import] source file ${fileId} failed: ${message}`);
     }
     if ((index + 1) % 100 === 0 || index + 1 === fileIds.length) {
       console.log(`[import] ${index + 1}/${fileIds.length} files (${summary.failures} failed)`);
     }
   });
-  if (summary.failures) throw new Error(`${summary.failures} source files failed to import`);
+  if (summary.failures) throw new AttachmentImportError(summary);
   await verifyImport(orgId, fileToDocuments);
   return summary;
 }
