@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import { ItemRatesEditor } from './ItemRatesEditor'
 
 interface AccountOpt {
   id: string
@@ -39,6 +40,7 @@ const KIND_VALUES = [
   'assembly',
   'kit',
   'other_charge',
+  'equipment_charge',
   'labor',
   'absence',
   'discount',
@@ -79,14 +81,19 @@ export function ItemDrawer({
 
   const [kind, setKind] = useState<string>(it.kind ?? 'service')
   const [name, setName] = useState<string>(isPlaceholderName ? '' : (it.name ?? ''))
+  const [description, setDescription] = useState<string>(it.description ?? '')
   const [code, setCode] = useState<string>(it.code ?? '')
   const [category, setCategory] = useState<string>(it.category ?? '')
   const [unit, setUnit] = useState<string>(it.unit ?? '')
   const [defaultRate, setDefaultRate] = useState<string>(
     it.default_rate != null ? Number(it.default_rate).toFixed(2) : '',
   )
+  const [defaultCost, setDefaultCost] = useState<string>(
+    it.default_cost != null ? Number(it.default_cost).toFixed(2) : '',
+  )
   const [incomeAccountId, setIncomeAccountId] = useState<string>(it.income_account_id ?? '')
   const [expenseAccountId, setExpenseAccountId] = useState<string>(it.expense_account_id ?? '')
+  const [costRecoveryAccountId, setCostRecoveryAccountId] = useState<string>(it.cost_recovery_account_id ?? '')
   const [taxCodeId, setTaxCodeId] = useState<string>(it.tax_code_id ?? '')
   const [showOnTimesheet, setShowOnTimesheet] = useState<boolean>(it.show_on_timesheet === true)
   const [recognitionRuleId, setRecognitionRuleId] = useState<string>(it.recognition_rule_id ?? '')
@@ -124,12 +131,15 @@ export function ItemDrawer({
     () => ({
       kind,
       name: name.trim() || (isActive ? name : 'New item'),
+      description,
       code,
       category,
       unit,
       defaultRate: defaultRate || null,
+      defaultCost: defaultCost || null,
       incomeAccountId: incomeAccountId || null,
       expenseAccountId: expenseAccountId || null,
+      costRecoveryAccountId: costRecoveryAccountId || null,
       taxCodeId: taxCodeId || null,
       showOnTimesheet,
       recognitionRuleId: recognitionRuleId || null,
@@ -139,7 +149,7 @@ export function ItemDrawer({
       standaloneSellingPrice: standaloneSellingPrice || null,
       custom: customValues,
     }),
-    [kind, name, code, category, unit, defaultRate, incomeAccountId, expenseAccountId, taxCodeId, showOnTimesheet, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
+    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -157,12 +167,15 @@ export function ItemDrawer({
   function resetForm() {
     setKind(it.kind ?? 'service')
     setName(isPlaceholderName ? '' : (it.name ?? ''))
+    setDescription(it.description ?? '')
     setCode(it.code ?? '')
     setCategory(it.category ?? '')
     setUnit(it.unit ?? '')
     setDefaultRate(it.default_rate != null ? Number(it.default_rate).toFixed(2) : '')
+    setDefaultCost(it.default_cost != null ? Number(it.default_cost).toFixed(2) : '')
     setIncomeAccountId(it.income_account_id ?? '')
     setExpenseAccountId(it.expense_account_id ?? '')
+    setCostRecoveryAccountId(it.cost_recovery_account_id ?? '')
     setTaxCodeId(it.tax_code_id ?? '')
     setShowOnTimesheet(it.show_on_timesheet === true)
     setRecognitionRuleId(it.recognition_rule_id ?? '')
@@ -344,6 +357,14 @@ export function ItemDrawer({
               <p className="text-sm">{unit || '—'}</p>
             )}
           </div>
+          <div className={`${field} sm:col-span-2 lg:col-span-4`}>
+            <Label>{tCommon('labels.description')}</Label>
+            {editable ? (
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+            ) : (
+              <p className="text-sm">{description || '—'}</p>
+            )}
+          </div>
           <div className={field}>
             <Label>{t('labels.defaultRate')}</Label>
             {editable ? (
@@ -357,7 +378,17 @@ export function ItemDrawer({
               <p className="text-right text-sm tabular-nums">{defaultRate || '—'}</p>
             )}
           </div>
+          <div className={field}>
+            <Label>{t('labels.defaultCost')}</Label>
+            {editable ? (
+              <Input inputMode="decimal" className="text-right tabular-nums" value={defaultCost} onChange={(e) => setDefaultCost(e.target.value)} />
+            ) : (
+              <p className="text-right text-sm tabular-nums">{defaultCost || '—'}</p>
+            )}
+          </div>
         </section>
+
+        <ItemRatesEditor itemId={String(it.id)} canManage={canManage} />
 
         {/* -- accounting ---------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -393,6 +424,16 @@ export function ItemDrawer({
               />
             ) : (
               <p className="text-sm">{payload.expenseAccountName ?? '—'}</p>
+            )}
+          </div>
+          <div className={field}>
+            <Label>{t('labels.recoveryAccount')}</Label>
+            {editable ? (
+              <SearchSelect value={costRecoveryAccountId} onChange={setCostRecoveryAccountId} options={accountOptions} clearable
+                emptyLabel={t('drawer.noRecoveryAccount')} placeholder={t('drawer.selectAccount')}
+                sheetTitle={t('labels.recoveryAccount')} ariaLabel={t('labels.recoveryAccount')} />
+            ) : (
+              <p className="text-sm">{accounts.find((x) => x.id === costRecoveryAccountId)?.name ?? '—'}</p>
             )}
           </div>
           <div className={field}>

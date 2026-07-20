@@ -153,6 +153,9 @@ export default async function Assets({
             }
           />
           <div className="flex flex-wrap items-center gap-2">
+            <Link href="/assets/equipment" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
+              {t('equipment.title')}
+            </Link>
             <SearchInput placeholder={t('list.searchPlaceholder')} />
             <FilterChips basePath="/assets" currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
           </div>

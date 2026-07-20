@@ -1455,6 +1455,14 @@
         "title": "Consolidated Exchange Rates",
         "description": "Period current, average, and historical rates used for subsidiary consolidation."
       },
+      "item-rate-books": {
+        "title": "Item Rate Books",
+        "description": "Customer, project, and organization rate books used for equipment and other item charges."
+      },
+      "item-rate-book-assignments": {
+        "title": "Rate Book Assignments",
+        "description": "Choose which effective-dated rate book applies to a customer or project."
+      },
       "recognition-rules": {
         "title": "Recognition Rules",
         "description": "How revenue is recognized over time — method, timing, and accounts (ASC 606)."
@@ -1598,7 +1606,11 @@
       "assemblyItemId": "Assembly item",
       "componentItemId": "Component item",
       "quantityPer": "Quantity per",
-      "rateKind": "Rate type"
+      "rateKind": "Rate type",
+      "rateBookId": "Rate book",
+      "customerId": "Customer",
+      "projectId": "Project",
+      "isDefault": "Default"
     },
     "options": {
       "appliesTo": {

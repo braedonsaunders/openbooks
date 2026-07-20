@@ -18,7 +18,8 @@ alter table journal_lines
   add foreign key (location_id) references locations(id),
   add foreign key (class_id) references classes(id),
   add foreign key (payment_card_id) references payment_cards(id),
-  add foreign key (tax_code_id) references tax_codes(id);
+  add foreign key (tax_code_id) references tax_codes(id),
+  add foreign key (equipment_unit_id) references equipment_units(id);
 alter table applications
   add foreign key (from_line_id) references journal_lines(id),
   add foreign key (to_line_id) references journal_lines(id),
@@ -173,7 +174,10 @@ alter table document_lines
   add foreign key (time_entry_id) references time_entries(id),
   add foreign key (time_type_id) references time_types(id),
   add foreign key (billed_by_line_id) references document_lines(id),
-  add foreign key (stock_location_id) references stock_locations(id);
+  add foreign key (stock_location_id) references stock_locations(id),
+  add foreign key (equipment_unit_id) references equipment_units(id),
+  add foreign key (rate_version_id) references item_rate_versions(id),
+  add foreign key (recovery_account_id) references accounts(id);
 alter table document_links
   add foreign key (from_document_id) references documents(id),
   add foreign key (to_document_id) references documents(id);
@@ -283,6 +287,32 @@ alter table depreciation_schedule_lines
 alter table asset_events
   add foreign key (asset_id) references fixed_assets(id),
   add foreign key (journal_entry_id) references journal_entries(id);
+alter table equipment_units
+  add foreign key (org_id) references orgs(id),
+  add foreign key (subsidiary_id) references subsidiaries(id),
+  add foreign key (charge_item_id) references items(id),
+  add foreign key (fixed_asset_id) references fixed_assets(id),
+  add foreign key (rate_book_id) references item_rate_books(id);
+alter table item_rate_books add foreign key (org_id) references orgs(id);
+alter table item_rate_versions
+  add foreign key (org_id) references orgs(id),
+  add foreign key (rate_book_id) references item_rate_books(id);
+alter table item_rate_profiles
+  add foreign key (org_id) references orgs(id),
+  add foreign key (item_id) references items(id);
+alter table item_rate_lines
+  add foreign key (org_id) references orgs(id),
+  add foreign key (version_id) references item_rate_versions(id),
+  add foreign key (item_id) references items(id);
+alter table item_rate_book_assignments
+  add foreign key (org_id) references orgs(id),
+  add foreign key (rate_book_id) references item_rate_books(id),
+  add foreign key (customer_id) references parties(id),
+  add foreign key (project_id) references projects(id);
+alter table charge_rate_components
+  add foreign key (org_id) references orgs(id),
+  add foreign key (document_line_id) references document_lines(id),
+  add foreign key (rate_line_id) references item_rate_lines(id);
 
 -- banking
 alter table bank_statements add foreign key (account_id) references accounts(id);

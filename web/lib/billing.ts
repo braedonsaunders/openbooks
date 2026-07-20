@@ -95,6 +95,9 @@ export async function generateInvoiceFromBillingRequest(
       timeTypeId: string | null
       /** Source cost line to stamp billed_by_line_id on (materials billing). */
       sourceCostLineId: string | null
+      unit?: string | null
+      equipmentUnitId?: string | null
+      rateVersionId?: string | null
     }
     const built: BuiltLine[] = []
 
@@ -194,32 +197,69 @@ export async function generateInvoiceFromBillingRequest(
 
       // Billable cost lines (materials/subs) on posted cost documents.
       const costRows = (await tx.execute(sql`
-        select dl.id, dl.amount, dl.cost_multiplier, dl.description, dl.item_id,
-               i.income_account_id, i.tax_code_id, i.name as item_name
+        select dl.id, dl.amount, dl.cost_multiplier, dl.description, dl.item_id, dl.quantity, dl.unit,
+               dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
+               dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
+               coalesce(rc.components, '[]'::jsonb) as bill_components
           from document_lines dl
           join documents d on d.id = dl.document_id
           left join items i on i.id = dl.item_id
+          left join lateral (
+            select jsonb_agg(jsonb_build_object(
+              'unitCode', c.unit_code, 'unitName', c.unit_name, 'quantity', c.quantity,
+              'rate', c.rate, 'amount', c.amount
+            ) order by c.sequence) as components
+              from charge_rate_components c
+             where c.document_line_id = dl.id and c.role = 'bill'
+          ) rc on true
          where dl.org_id = ${orgId} and dl.project_id = ${req.project_id}
            and dl.is_billable and dl.billed_by_line_id is null
-           and d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check', 'project_charge')
+           and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
+             or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))
       `)) as unknown as { rows: any[] }
 
       for (const cl of costRows.rows) {
+        const isProjectCharge = cl.kind === 'project_charge'
         const mult = cl.cost_multiplier && Number(cl.cost_multiplier) > 0 ? String(cl.cost_multiplier) : markup
-        const amount = mulRate(String(cl.amount ?? '0'), mult)
-        built.push({
-          itemId: cl.item_id,
-          accountId: cl.income_account_id ?? defaultIncomeId,
-          description: cl.description || cl.item_name || null,
-          quantity: '1',
-          unitPrice: amount,
-          amount,
-          taxCodeId: cl.tax_code_id,
-          employeeId: null,
-          timeEntryId: null,
-          timeTypeId: null,
-          sourceCostLineId: cl.id,
-        })
+        const amount = isProjectCharge ? String(cl.bill_amount ?? '0') : mulRate(String(cl.amount ?? '0'), mult)
+        const components = isProjectCharge && cl.rate_presentation === 'rate_components' && Array.isArray(cl.bill_components)
+          ? cl.bill_components
+          : []
+        if (components.length) {
+          components.forEach((component: any, index: number) => built.push({
+            itemId: cl.item_id,
+            accountId: cl.income_account_id ?? defaultIncomeId,
+            description: `${cl.description || cl.item_name || ''}${component.unitName ? ` — ${component.unitName}` : ''}` || null,
+            quantity: String(component.quantity),
+            unitPrice: String(component.rate),
+            amount: String(component.amount),
+            taxCodeId: cl.tax_code_id,
+            employeeId: null,
+            timeEntryId: null,
+            timeTypeId: null,
+            sourceCostLineId: index === 0 ? cl.id : null,
+            unit: component.unitName ?? component.unitCode ?? cl.unit,
+            equipmentUnitId: cl.equipment_unit_id,
+            rateVersionId: cl.rate_version_id,
+          }))
+        } else {
+          built.push({
+            itemId: cl.item_id,
+            accountId: cl.income_account_id ?? defaultIncomeId,
+            description: cl.description || cl.item_name || null,
+            quantity: isProjectCharge ? String(cl.quantity ?? '1') : '1',
+            unitPrice: isProjectCharge ? String(cl.bill_rate ?? amount) : amount,
+            amount,
+            taxCodeId: cl.tax_code_id,
+            employeeId: null,
+            timeEntryId: null,
+            timeTypeId: null,
+            sourceCostLineId: cl.id,
+            unit: cl.unit,
+            equipmentUnitId: cl.equipment_unit_id,
+            rateVersionId: cl.rate_version_id,
+          })
+        }
       }
     }
 
@@ -248,11 +288,12 @@ export async function generateInvoiceFromBillingRequest(
     for (const l of built) {
       const [line] = (await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-              quantity, unit_price, amount, tax_code_id, employee_id, time_entry_id, time_type_id,
-              is_billable, created_by)
+              quantity, unit, unit_price, amount, tax_code_id, employee_id, time_entry_id, time_type_id,
+              is_billable, equipment_unit_id, rate_version_id, bill_rate, bill_amount, created_by)
         values (${orgId}, ${invoiceId}, ${lineNo}, ${l.itemId}, ${l.accountId}, ${l.description},
-              ${l.quantity}, ${l.unitPrice}, ${l.amount}, ${l.taxCodeId}, ${l.employeeId},
-              ${l.timeEntryId}, ${l.timeTypeId}, true, ${userId})
+              ${l.quantity}, ${l.unit ?? null}, ${l.unitPrice}, ${l.amount}, ${l.taxCodeId}, ${l.employeeId},
+              ${l.timeEntryId}, ${l.timeTypeId}, true, ${l.equipmentUnitId ?? null}, ${l.rateVersionId ?? null},
+              ${l.unitPrice}, ${l.amount}, ${userId})
         returning id
       `)).rows as any[]
       const newLineId = line.id

@@ -1381,6 +1381,14 @@
         "title": "Tipos de cambio consolidados",
         "description": "Tasas actuales, promedio e históricas por período para consolidar subsidiarias."
       },
+      "item-rate-books": {
+        "title": "Libros de tarifas de artículos",
+        "description": "Libros por cliente, proyecto y organización para equipos y otros cargos de artículos."
+      },
+      "item-rate-book-assignments": {
+        "title": "Asignaciones de libros de tarifas",
+        "description": "Elija el libro con vigencia aplicable a un cliente o proyecto."
+      },
       "recognition-rules": {
         "title": "Reglas de reconocimiento",
         "description": "Cómo se reconocen los ingresos a lo largo del tiempo: método, calendario y cuentas (ASC 606)."
@@ -1520,7 +1528,11 @@
       "assemblyItemId": "Artículo ensamblado",
       "componentItemId": "Componente",
       "quantityPer": "Cantidad por",
-      "rateKind": "Tipo de tasa"
+      "rateKind": "Tipo de tasa",
+      "rateBookId": "Libro de tarifas",
+      "customerId": "Cliente",
+      "projectId": "Proyecto",
+      "isDefault": "Predeterminado"
     },
     "options": {
       "appliesTo": {

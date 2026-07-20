@@ -70,6 +70,19 @@ async function loadEntityOptions(source: string, orgId: string): Promise<RefOpti
         from items where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
     return items.rows as RefOption[]
   }
+  if (source === 'customers') {
+    const customers = (await db.execute(sql`
+      select p.id as value, p.display_name as label from parties p
+       join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+    return customers.rows as RefOption[]
+  }
+  if (source === 'projects') {
+    const projects = (await db.execute(sql`
+      select id as value, case when coalesce(code,'') <> '' then code || ' · ' || name else name end as label
+        from projects where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
+    return projects.rows as RefOption[]
+  }
   const target = SETUP_ENTITY_BY_KEY.get(source)
   if (!target) return []
   const orgFilter = target.orgScoped ? sql` where org_id = ${orgId}` : sql``

@@ -147,6 +147,19 @@ export const documentLines = pgTable(
     isBillable: boolean("is_billable").notNull().default(false),
     billedByLineId: uuid("billed_by_line_id"), // invoice line that billed this cost
 
+    // Explicit rate/usage snapshots. Native columns keep financial behavior out
+    // of custom JSON and allow cost=0 with a positive customer bill amount.
+    equipmentUnitId: uuid("equipment_unit_id"),
+    rateVersionId: uuid("rate_version_id"),
+    ratePresentation: text("rate_presentation", { enum: ["summary", "rate_components"] }),
+    baseQuantity: money("base_quantity"),
+    baseUnit: text("base_unit"),
+    costRate: money("cost_rate"),
+    billRate: money("bill_rate"),
+    costAmount: money("cost_amount"),
+    billAmount: money("bill_amount"),
+    recoveryAccountId: uuid("recovery_account_id"),
+
     // Order-state denormalization (orders → fulfillment → billing chain):
     quantityFulfilled: money("quantity_fulfilled").notNull().default("0"),
     quantityBilled: money("quantity_billed").notNull().default("0"),
@@ -197,10 +210,11 @@ export const items = pgTable(
     id: id(),
     orgId: orgRef(),
     kind: text("kind", {
-      enum: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "labor", "absence", "discount"],
+      enum: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount"],
     }).notNull(),
     code: text("code"),
     name: text("name").notNull(),
+    description: text("description"),
     category: text("category"), // Absence / Consumables / Equipment / Labor / Services
     incomeAccountId: uuid("income_account_id"),
     expenseAccountId: uuid("expense_account_id"),
@@ -210,10 +224,8 @@ export const items = pgTable(
      *  default_rate (the billable price). */
     defaultCost: money("default_cost"),
     /** When this item is charged to a project, the account CREDITED (the cost
-     *  pool relieved / recovery account). Null → the item's expense account,
-     *  making the charge a pure dimensional reclass (relieve the untagged pool,
-     *  charge the project). A dedicated recovery account gives absorption
-     *  tracking (e.g. owned-equipment recovery vs depreciation). */
+     *  pool relieved / recovery account). Required for every nonzero-cost
+     *  project charge and distinct from the debit account. */
     costRecoveryAccountId: uuid("cost_recovery_account_id"),
     unit: text("unit"),
     taxCodeId: uuid("tax_code_id"),

@@ -15,6 +15,8 @@
     "category": "Category",
     "unit": "Unit",
     "defaultRate": "Default rate",
+    "defaultCost": "Default cost",
+    "recoveryAccount": "Cost recovery account",
     "incomeAccount": "Income account",
     "expenseAccount": "Expense account",
     "taxCode": "Tax code"
@@ -28,7 +30,8 @@
     "other_charge": "Other charge",
     "labor": "Labor",
     "absence": "Absence",
-    "discount": "Discount"
+    "discount": "Discount",
+    "equipment_charge": "Equipment charge"
   },
   "drawer": {
     "newItem": "New item",
@@ -49,8 +52,35 @@
     "unitPlaceholder": "hr",
     "noIncomeAccount": "No income account",
     "noExpenseAccount": "No expense account",
+    "noRecoveryAccount": "No recovery account",
     "selectAccount": "Select account…",
     "showOnTimesheet": "Show on timesheet"
+  },
+  "rates": {
+    "title": "Item rates",
+    "description": "Effective-dated cost and bill rates shared by every unit that uses this item.",
+    "documentation": "Documentation",
+    "newVersion": "New rate version",
+    "rateBook": "Rate book",
+    "standardBook": "Standard rate book",
+    "effectiveFrom": "Effective from",
+    "effectiveTo": "Effective to",
+    "baseUnit": "Base unit",
+    "policy": "Pricing policy",
+    "presentation": "Invoice presentation",
+    "defaults": { "day": "Day", "week": "Week", "month": "Month" },
+    "policies": { "capped_ladder": "Capped ladder", "lowest_cost": "Lowest-cost combination" },
+    "presentations": { "rate_components": "Show rate components", "summary": "Single summary line" },
+    "unitCode": "Unit code",
+    "unitName": "Unit name",
+    "baseQuantity": "Base quantity",
+    "costRate": "Cost rate",
+    "billRate": "Bill rate",
+    "addUnit": "Add rate unit",
+    "saveFailed": "Could not save rates",
+    "saved": "Rate version saved",
+    "empty": "No rate versions yet.",
+    "rates": "Rates"
   },
   "revrec": {
     "title": "Revenue recognition",

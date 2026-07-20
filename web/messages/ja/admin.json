@@ -1418,6 +1418,14 @@
         "title": "連結為替レート",
         "description": "子会社連結に使用される、期末時点、平均、および歴史的レート。"
       },
+      "item-rate-books": {
+        "title": "品目レート表",
+        "description": "設備およびその他の品目料金に使用する顧客別、プロジェクト別、組織別のレート表です。"
+      },
+      "item-rate-book-assignments": {
+        "title": "レート表の割り当て",
+        "description": "顧客またはプロジェクトに適用する発効日付きレート表を選択します。"
+      },
       "recognition-rules": {
         "title": "認識ルール",
         "description": "収益が期間にわたってどのように認識されるか — 方法、タイミング、および勘定（ASC 606）。"
@@ -1556,7 +1564,11 @@
       "receivedNotBilledAccountId": "受領未請求勘定",
       "assemblyItemId": "組立品目",
       "componentItemId": "部品品目",
-      "quantityPer": "1単位あたり数量"
+      "quantityPer": "1単位あたり数量",
+      "rateBookId": "レート表",
+      "customerId": "顧客",
+      "projectId": "プロジェクト",
+      "isDefault": "既定"
     },
     "options": {
       "appliesTo": {

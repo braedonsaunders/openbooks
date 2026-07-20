@@ -1418,6 +1418,14 @@
         "title": "Taxas de Câmbio Consolidadas",
         "description": "Taxas atual, média e histórica do período usadas para a consolidação de subsidiárias."
       },
+      "item-rate-books": {
+        "title": "Tabelas de tarifas de itens",
+        "description": "Tabelas por cliente, projeto e organização para equipamentos e outras cobranças de itens."
+      },
+      "item-rate-book-assignments": {
+        "title": "Atribuições de tabelas de tarifas",
+        "description": "Escolha a tabela com vigência aplicável a um cliente ou projeto."
+      },
       "recognition-rules": {
         "title": "Regras de Reconhecimento",
         "description": "Como a receita é reconhecida ao longo do tempo — método, momento e contas (ASC 606)."
@@ -1556,7 +1564,11 @@
       "receivedNotBilledAccountId": "Conta de recebido-não-faturado",
       "assemblyItemId": "Item de montagem",
       "componentItemId": "Item componente",
-      "quantityPer": "Quantidade por"
+      "quantityPer": "Quantidade por",
+      "rateBookId": "Tabela de tarifas",
+      "customerId": "Cliente",
+      "projectId": "Projeto",
+      "isDefault": "Padrão"
     },
     "options": {
       "appliesTo": {

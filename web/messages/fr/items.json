@@ -15,6 +15,8 @@
     "category": "Catégorie",
     "unit": "Unité",
     "defaultRate": "Taux par défaut",
+    "defaultCost": "Coût par défaut",
+    "recoveryAccount": "Compte de récupération des coûts",
     "incomeAccount": "Compte de produits",
     "expenseAccount": "Compte de charges",
     "taxCode": "Code de taxe"
@@ -28,7 +30,8 @@
     "other_charge": "Autres frais",
     "labor": "Main-d’œuvre",
     "absence": "Absence",
-    "discount": "Remise"
+    "discount": "Remise",
+    "equipment_charge": "Frais d’équipement"
   },
   "drawer": {
     "newItem": "Nouvel article",
@@ -49,8 +52,35 @@
     "unitPlaceholder": "h",
     "noIncomeAccount": "Aucun compte de produits",
     "noExpenseAccount": "Aucun compte de charges",
+    "noRecoveryAccount": "Aucun compte de récupération",
     "selectAccount": "Sélectionner un compte…",
     "showOnTimesheet": "Afficher sur la feuille de temps"
+  },
+  "rates": {
+    "title": "Tarifs de l’article",
+    "description": "Tarifs de coût et de facturation datés, partagés par toutes les unités utilisant cet article.",
+    "documentation": "Documentation",
+    "newVersion": "Nouvelle version tarifaire",
+    "rateBook": "Grille tarifaire",
+    "standardBook": "Grille tarifaire standard",
+    "effectiveFrom": "En vigueur à partir du",
+    "effectiveTo": "En vigueur jusqu’au",
+    "baseUnit": "Unité de base",
+    "policy": "Politique tarifaire",
+    "presentation": "Présentation sur la facture",
+    "defaults": { "day": "Jour", "week": "Semaine", "month": "Mois" },
+    "policies": { "capped_ladder": "Paliers plafonnés", "lowest_cost": "Combinaison au coût minimal" },
+    "presentations": { "rate_components": "Afficher les composantes tarifaires", "summary": "Ligne récapitulative unique" },
+    "unitCode": "Code d’unité",
+    "unitName": "Nom de l’unité",
+    "baseQuantity": "Quantité de base",
+    "costRate": "Tarif de coût",
+    "billRate": "Tarif de facturation",
+    "addUnit": "Ajouter une unité tarifaire",
+    "saveFailed": "Impossible d’enregistrer les tarifs",
+    "saved": "Version tarifaire enregistrée",
+    "empty": "Aucune version tarifaire.",
+    "rates": "Tarifs"
   },
   "revrec": {
     "title": "Comptabilisation des produits",

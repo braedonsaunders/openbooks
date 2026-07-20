@@ -15,6 +15,7 @@ export interface ChargeItemOption {
   defaultCost: string | null
   defaultRate: string | null
 }
+export interface ChargeEquipmentOption { id: string; name: string; unitNumber: string; itemId: string }
 export interface ChargeRow {
   id: string
   documentNumber: string
@@ -32,6 +33,7 @@ export function ChargesSection({
   projectId,
   charges,
   items,
+  equipment,
   absorption,
   formOpen,
   onFormOpenChange,
@@ -39,6 +41,7 @@ export function ChargesSection({
   projectId: string
   charges: ChargeRow[]
   items: ChargeItemOption[]
+  equipment: ChargeEquipmentOption[]
   absorption: { recovered: string; billValue: string }
   /** The add-charge form is driven by the flyout Actions menu (AGENTS.md:
    *  secondary creates live behind the Actions menu, not a bolted-on section). */
@@ -50,12 +53,14 @@ export function ChargesSection({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [itemId, setItemId] = useState('')
+  const [equipmentUnitId, setEquipmentUnitId] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [costRate, setCostRate] = useState('')
   const [billRate, setBillRate] = useState('')
 
   const itemOptions = useMemo(() => items.map((i) => ({ value: i.id, label: i.name })), [items])
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
+  const equipmentOptions = useMemo(() => equipment.map((e) => ({ value: e.id, label: `${e.unitNumber} · ${e.name}` })), [equipment])
 
   function pickItem(id: string) {
     setItemId(id)
@@ -66,6 +71,12 @@ export function ChargesSection({
     }
   }
 
+  function pickEquipment(id: string) {
+    setEquipmentUnitId(id)
+    const unit = equipment.find((e) => e.id === id)
+    if (unit) { setItemId(unit.itemId); setCostRate(''); setBillRate('') }
+  }
+
   async function submit() {
     if (!itemId) return toast.error(t('pickItem'))
     setBusy(true)
@@ -74,12 +85,13 @@ export function ChargesSection({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectId,
-        lines: [{ itemId, quantity, costRate: costRate || null, billRate: billRate || null, isBillable: true }],
+        lines: [{ itemId, equipmentUnitId: equipmentUnitId || null, quantity,
+          costRate: equipmentUnitId ? null : (costRate || null), billRate: equipmentUnitId ? null : (billRate || null), isBillable: true }],
       }),
     })
     if (res.ok) {
       toast.success(t('created'))
-      setItemId(''); setQuantity('1'); setCostRate(''); setBillRate('')
+      setItemId(''); setEquipmentUnitId(''); setQuantity('1'); setCostRate(''); setBillRate('')
       onFormOpenChange(false)
       router.refresh()
     } else {
@@ -109,10 +121,14 @@ export function ChargesSection({
               <Button variant="ghost" size="sm" onClick={() => onFormOpenChange(false)}>{tCommon('actions.cancel')}</Button>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('addHint')}</p>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+              <div className={`${field} lg:col-span-2`}>
+                <Label>{t('equipmentUnit')}</Label>
+                <SearchSelect value={equipmentUnitId} onChange={(v) => pickEquipment(v ?? '')} options={equipmentOptions} clearable placeholder={t('selectEquipment')} sheetTitle={t('equipmentUnit')} ariaLabel={t('equipmentUnit')} />
+              </div>
               <div className={`${field} lg:col-span-2`}>
                 <Label>{t('item')}</Label>
-                <SearchSelect value={itemId} onChange={(v) => pickItem(v ?? '')} options={itemOptions} placeholder={t('selectItem')} sheetTitle={t('item')} ariaLabel={t('item')} />
+                <SearchSelect value={itemId} onChange={(v) => pickItem(v ?? '')} options={itemOptions} disabled={!!equipmentUnitId} placeholder={t('selectItem')} sheetTitle={t('item')} ariaLabel={t('item')} />
               </div>
               <div className={field}>
                 <Label>{t('quantity')}</Label>
@@ -120,11 +136,11 @@ export function ChargesSection({
               </div>
               <div className={field}>
                 <Label>{t('costRate')}</Label>
-                <Input inputMode="decimal" className="text-right tabular-nums" value={costRate} onChange={(e) => setCostRate(e.target.value)} placeholder="0.00" />
+                <Input disabled={!!equipmentUnitId} inputMode="decimal" className="text-right tabular-nums" value={costRate} onChange={(e) => setCostRate(e.target.value)} placeholder={equipmentUnitId ? t('automaticRate') : '0.00'} />
               </div>
               <div className={field}>
                 <Label>{t('billRate')}</Label>
-                <Input inputMode="decimal" className="text-right tabular-nums" value={billRate} onChange={(e) => setBillRate(e.target.value)} placeholder="0.00" />
+                <Input disabled={!!equipmentUnitId} inputMode="decimal" className="text-right tabular-nums" value={billRate} onChange={(e) => setBillRate(e.target.value)} placeholder={equipmentUnitId ? t('automaticRate') : '0.00'} />
               </div>
             </div>
             <Button onClick={submit} disabled={busy || !itemId}>{busy ? tCommon('actions.saving') : t('post')}</Button>

@@ -285,14 +285,16 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
          and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null${dateFilter}
     `) as any,
     db.execute(sql`
-      select coalesce(sum(dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1)), 0) as revenue,
+      select coalesce(sum(case when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
+                               else dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) end), 0) as revenue,
              coalesce(sum(dl.amount), 0) as cost,
              count(*) as cnt
         from document_lines dl
         join documents d on d.id = dl.document_id
        where dl.org_id = ${orgId} and dl.project_id = ${projectId}
          and dl.is_billable and dl.billed_by_line_id is null
-         and d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check', 'project_charge')
+         and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
+           or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))
     `) as any,
   ])
   const tr = timeRow.rows[0] ?? {}
