@@ -9,6 +9,7 @@ import { itemRates } from './articles/item-rates'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
+import { netSuiteBridge } from './articles/netsuite-bridge'
 import { auditLog } from './articles/audit-log'
 import { quickStart, navigationAndRecords, glossary } from './articles/getting-started'
 import {
@@ -149,6 +150,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'migration-and-cutover': 'integrations-migration',
   'reconciliation-before-cutover': 'integrations-migration',
   'quickbooks-desktop-connector': 'integrations-connections',
+  'netsuite-extraction-bridge': 'integrations-connections',
   'company-settings': 'administration-organization',
   'roles-and-permissions': 'administration-organization',
   'data-imports': 'administration-data',
@@ -179,6 +181,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   migrationAndCutover,
   reconciliationBeforeCutover,
   quickBooksDesktopConnector,
+  netSuiteBridge,
   apps,
   companySettings,
   rolesAndPermissions,

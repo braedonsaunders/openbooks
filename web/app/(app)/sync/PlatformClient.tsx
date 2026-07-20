@@ -594,6 +594,18 @@ function ConnectionDrawer({
                 <p className="mt-1">{t('qbd.setupHint')}</p>
               </div>
             ) : null}
+            {def.source === 'netsuite' ? (
+              <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 text-xs text-slate-600 dark:border-sky-900/40 dark:bg-sky-900/10 dark:text-slate-300">
+                <p className="font-medium text-sky-800 dark:text-sky-300">{t('netsuite.setupTitle')}</p>
+                <p className="mt-1">{t('netsuite.setupHint')}</p>
+                <Link
+                  href="/docs/netsuite-extraction-bridge"
+                  className="mt-2 inline-flex items-center gap-1 font-medium text-sky-700 hover:underline dark:text-sky-300"
+                >
+                  <BookOpen size={13} /> {t('netsuite.documentation')}
+                </Link>
+              </div>
+            ) : null}
             <div>
               <Label>{t('drawer.name')}</Label>
               <Input value={displayName} placeholder={def.displayName} onChange={(e) => setDisplayName(e.target.value)} />

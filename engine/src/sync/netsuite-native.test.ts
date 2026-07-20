@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
+import { parseNetSuiteMappings } from "./netsuite-source.ts";
 import type { NativeContext } from "./native.ts";
 
 const context = {
@@ -49,4 +50,24 @@ test("NetSuite transactions fail closed when a subsidiary was not loaded", () =>
   }];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.deepEqual(built, { skip: "unmapped subsidiary 99" });
+});
+
+test("NetSuite account mappings accept explicit custom IDs without connector constants", () => {
+  assert.deepEqual(parseNetSuiteMappings(JSON.stringify({
+    projectForemanField: "custentity_foreman",
+    timeTypeRecord: "customrecord_time_type",
+    projectStatuses: { "Substantially Complete": "substantially_complete" },
+  })), {
+    projectForemanField: "custentity_foreman",
+    projectPurchaseOrderField: undefined,
+    itemCategoryField: undefined,
+    customerShortCodeField: undefined,
+    employeeBenefitsField: undefined,
+    timeTypeRecord: "customrecord_time_type",
+    timeTypeMultiplierField: undefined,
+    timeEntryTypeField: undefined,
+    projectStatuses: { "substantially complete": "substantially_complete" },
+  });
+  assert.throws(() => parseNetSuiteMappings('{"itemCategoryField":"x; DROP"}'), /invalid script ID/);
+  assert.throws(() => parseNetSuiteMappings('{"projectStatuses":{"Won":"won"}}'), /invalid target/);
 });

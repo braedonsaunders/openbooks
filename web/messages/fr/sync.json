@@ -98,6 +98,11 @@
     "redirectLabel": "URI de redirection à enregistrer :",
     "copy": "Copier"
   },
+  "netsuite": {
+    "setupTitle": "Passerelle d’extraction NetSuite",
+    "setupHint": "Installez le lot RESTlet et Map/Reduce en lecture seule, puis testez la connexion. Aucun script n’est associé aux transactions.",
+    "documentation": "Documentation"
+  },
   "qbd": {
     "setupTitle": "Configuration de QuickBooks Desktop",
     "setupHint": "Après l’enregistrement, téléchargez le fichier Web Connector depuis la fiche de connexion. Importez-le sur l’ordinateur Windows exécutant QuickBooks, approuvez l’accès en lecture seule en tant qu’administrateur QuickBooks et saisissez ce mot de passe dans Web Connector.",
@@ -110,7 +115,17 @@
   },
   "sources": {
     "netsuite": {
-      "blurb": "Accès par jeton (TBA) à SuiteQL. Créez une intégration et un jeton d’accès dans NetSuite, puis collez les quatre valeurs. Les transactions natives, les lettrages et les commandes migrent et se synchronisent en miroir via le véritable moteur de comptabilisation."
+      "blurb": "Installez la passerelle en lecture seule, puis connectez un rôle dédié par jeton. Transactions, lettrages, contrôles comptables et suppressions sont importés avec validation.",
+      "fields": {
+        "account": { "label": "Identifiant du compte", "help": "Le domaine du compte NetSuite." },
+        "host": { "label": "Hôte SuiteTalk" },
+        "baseCurrency": { "label": "Devise de base" },
+        "bridgeScriptId": { "label": "Identifiant du script de passerelle", "help": "Laissez vide pour utiliser customscript_openbooks_bridge_rl." },
+        "bridgeDeploymentId": { "label": "Identifiant du déploiement", "help": "Laissez vide pour utiliser customdeploy_openbooks_bridge_rl." },
+        "mappingJson": { "label": "Mappages des champs du compte", "help": "JSON facultatif reliant les champs et enregistrements personnalisés aux concepts OpenBooks." },
+        "consumerKey": { "label": "Clé consommateur" }, "consumerSecret": { "label": "Secret consommateur" },
+        "tokenKey": { "label": "Identifiant du jeton" }, "tokenSecret": { "label": "Secret du jeton" }
+      }
     },
     "odoo": {
       "blurb": "Connectez-vous avec votre URL Odoo, la base de données, l’utilisateur et une clé API (Paramètres → Mon profil → Sécurité du compte → Clés API). Les factures clients et fournisseurs, les paiements et les écritures migrent et se synchronisent en miroir nativement via le véritable moteur de comptabilisation."
