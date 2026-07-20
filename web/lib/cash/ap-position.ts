@@ -123,11 +123,14 @@ export async function apPosition(
     bankBalances(asOfIso),
     loadCategories(orgId),
   ]);
-  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts)));
 
   const startingCash = banks.reduce((a, b) => a + b.balance, 0);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
+  const weekTotals = (byWeek: Map<string, { amount: number }[]>): Record<string, number> =>
+    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, es.reduce((a, e) => a + e.amount, 0)]));
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash };
+  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,
