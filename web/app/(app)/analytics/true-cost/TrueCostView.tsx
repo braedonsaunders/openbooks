@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import {
   AlertTriangle, Building2, Calculator, ChartArea, CheckCircle2, Clock, Coins, DollarSign,
   Grid3X3, Info, Layers, Package, Percent, Pin, PlusCircle, RotateCcw, Scale, SlidersHorizontal,
@@ -23,6 +24,18 @@ type Tab = (typeof TABS)[number]
 const TAB_LABEL: Record<Tab, string> = {
   overview: 'Overview', categories: 'Categories', matrix: 'Matrix', absorption: 'Absorption',
   selling: 'Selling Rate', trends: 'Trends', config: 'Configuration',
+}
+
+/**
+ * Which tabs each surface owns. The BUILDER (categories/matrix/config) lives in
+ * the Setup "Overhead Model" workspace — the single source of truth for the
+ * rate-engine config; the analytics dashboard is a read-only consumer
+ * (overview/absorption/selling/trends) that links to Setup to configure.
+ */
+export type TrueCostMode = 'analytics' | 'setup'
+const MODE_TABS: Record<TrueCostMode, readonly Tab[]> = {
+  analytics: ['overview', 'absorption', 'selling', 'trends'],
+  setup: ['categories', 'matrix', 'config'],
 }
 
 const money = (n: number) => fmtMoney(n, { compact: true })
@@ -91,14 +104,23 @@ async function switchProfile(activeProfileId: string): Promise<boolean> {
 
 type CellRef = { catId: string; deptId: string }
 
-export function TrueCostView({ data }: { data: TrueCostData }) {
-  const [tab, setTab] = useState<Tab>('overview')
+export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData; mode?: TrueCostMode }) {
+  const t = useTranslations('analytics.trueCost')
+  const router = useRouter()
+  const tabs = MODE_TABS[mode]
+  const [tab, setTab] = useState<Tab>(tabs[0]!)
   const [openCatId, setOpenCatId] = useState<string | null>(null)
   const [openDeptId, setOpenDeptId] = useState<string | null>(null)
   const [cell, setCell] = useState<CellRef | null>(null)
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
   const under = k.gap < 0
+  // Cross-surface navigation: a builder tab requested from the read-only
+  // analytics surface routes to the Setup workspace (and vice versa).
+  const goTo = (t: Tab) => {
+    if (tabs.includes(t)) setTab(t)
+    else router.push(mode === 'analytics' ? '/admin/setup/overhead' : '/analytics/true-cost')
+  }
 
   return (
     <div className="space-y-5">
@@ -116,17 +138,22 @@ export function TrueCostView({ data }: { data: TrueCostData }) {
       </div>
 
       <div className="-mx-1 overflow-x-auto">
-        <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {TABS.map((t) => (
+        <div className="flex min-w-max items-center gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
+          {tabs.map((t) => (
             <button key={t} type="button" onClick={() => setTab(t)} className={cn('-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors', tab === t ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
               {TAB_LABEL[t]}
             </button>
           ))}
+          {mode === 'analytics' ? (
+            <button type="button" onClick={() => router.push('/admin/setup/overhead')} className="-mb-px ml-auto flex shrink-0 items-center gap-1 px-3.5 py-2 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400">
+              <SlidersHorizontal size={12} aria-hidden /> {t('configureInSetup')}
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div key={tab}>
-        {tab === 'overview' ? <OverviewTab data={data} goTo={setTab} openCat={setOpenCatId} openDept={setOpenDeptId} /> : null}
+        {tab === 'overview' ? <OverviewTab data={data} goTo={goTo} openCat={setOpenCatId} openDept={setOpenDeptId} /> : null}
         {tab === 'categories' ? <CategoriesTab data={data} openCat={setOpenCatId} /> : null}
         {tab === 'matrix' ? <MatrixTab data={data} onDrill={setCell} /> : null}
         {tab === 'absorption' ? <AbsorptionTab data={data} /> : null}
