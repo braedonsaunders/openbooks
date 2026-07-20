@@ -7,7 +7,7 @@ import { docNavIndex } from '../../../lib/docs'
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const { categories, articles } = docNavIndex()
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
       <DocsSidebar categories={categories} articles={articles} />
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>

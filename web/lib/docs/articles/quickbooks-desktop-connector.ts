@@ -4,8 +4,9 @@ export const quickBooksDesktopConnector: DocArticle = {
   slug: 'quickbooks-desktop-connector',
   title: 'QuickBooks Desktop Connector',
   category: 'integrations',
-  order: 1,
-  summary: 'Install and operate the read-only QuickBooks Web Connector bridge for migrations, historical mirrors, and ledger reconciliation.',
+  order: 3,
+  summary:
+    'Install and operate the read-only QuickBooks Web Connector bridge for migrations, historical mirrors, and ledger reconciliation.',
   updated: '2026-07-19',
   keywords: ['QuickBooks Desktop', 'Web Connector', 'QWC', 'qbXML', 'migration', 'mirror', 'trial balance', 'Windows'],
   body: `# QuickBooks Desktop Connector
