@@ -1,0 +1,17 @@
+<mapreducescript scriptid="customscript_openbooks_export_mr">
+  <description>Processes partitioned, read-only OpenBooks export requests.</description>
+  <isinactive>F</isinactive>
+  <name>OpenBooks Bulk Export</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <scriptfile>[/SuiteScripts/OpenBooks/openbooks_export_map_reduce.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_openbooks_export_mr">
+      <isdeployed>T</isdeployed>
+      <loglevel>ERROR</loglevel>
+      <status>NOTSCHEDULED</status>
+      <title>OpenBooks Bulk Export</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</mapreducescript>

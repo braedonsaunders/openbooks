@@ -1,0 +1,11 @@
+<deploy>
+  <files>
+    <path>~/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js</path>
+    <path>~/FileCabinet/SuiteScripts/OpenBooks/openbooks_export_map_reduce.js</path>
+    <path>~/FileCabinet/SuiteScripts/OpenBooks/Jobs/bridge-marker.json</path>
+  </files>
+  <objects>
+    <path>~/Objects/customscript_openbooks_bridge_rl.xml</path>
+    <path>~/Objects/customscript_openbooks_export_mr.xml</path>
+  </objects>
+</deploy>

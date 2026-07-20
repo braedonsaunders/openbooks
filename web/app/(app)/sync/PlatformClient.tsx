@@ -14,6 +14,7 @@ import {
   Label,
   PageHeader,
   Select,
+  Textarea,
 } from '@openbooks/ui'
 
 // --- shapes (mirror the API responses) ---------------------------------------
@@ -24,7 +25,7 @@ interface FieldSpec {
   placeholder?: string
   required?: boolean
   help?: string
-  kind?: 'text' | 'select'
+  kind?: 'text' | 'select' | 'textarea'
   options?: { value: string; label: string }[]
   optionsSource?: 'currencies'
 }
@@ -613,6 +614,14 @@ function ConnectionDrawer({
                       </option>
                     ))}
                   </Select>
+                ) : f.kind === 'textarea' ? (
+                  <Textarea
+                    value={config[f.key] ?? ''}
+                    placeholder={f.placeholder}
+                    rows={10}
+                    className="font-mono text-xs"
+                    onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}
+                  />
                 ) : (
                   <Input
                     value={config[f.key] ?? ''}

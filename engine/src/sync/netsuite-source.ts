@@ -1,4 +1,5 @@
-import { suiteql, type NetSuiteCreds } from "../netsuite.ts";
+import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../netsuite-bridge.ts";
+import type { NetSuiteCreds } from "../netsuite.ts";
 import { fromUnits, toUnits } from "../money.ts";
 import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
@@ -56,27 +57,58 @@ const NS_ITEM_KIND: Record<string, string> = {
   Kit: "kit",
 };
 
-// NetSuite job entitystatus → openbooks projects.status enum.
-const NS_PROJECT_STATUS: Record<string, string> = {
-  "1": "closed", "2": "active", "3": "cancelled", "18": "substantially_complete",
-  "19": "closed", "21": "substantially_complete", "22": "active", "23": "awarded",
-};
 // NetSuite jobbillingtype → openbooks projects.billing_method enum.
 const NS_BILLING: Record<string, string> = {
   TM: "time_and_materials", FBI: "fixed_price", FBM: "fixed_price",
 };
-// NetSuite standard contact-role internal ids → label.
-const NS_CONTACT_ROLE: Record<string, string> = { "-10": "Primary" };
-// The payment terms actually used here (SuiteQL can't read the `term` record).
-const NS_TERM_LABELS: Record<string, string> = {
-  "2": "Net 30", "3": "Net 60", "4": "Due on receipt", "7": "Net 15",
-  "8": "2%/10, Net 30", "9": "1%/10, Net 30", "10": "Net 7", "11": "Net 45",
-  "12": "Net 30th Following", "13": "Net 90", "14": "Net 25", "15": "1.5%/10, Net 30",
-  "16": "1%/15, Net 30", "17": "Net 10th Following", "18": "Net 15th Following",
-  "19": "Net 20th Following", "20": "Net 5", "21": "Net 10", "22": "0.5%/10, Net 30",
-  "23": "2%/15, Net 30", "24": "Net 30th Following", "25": "Net 1st Following",
-  "26": "Net 30, 1st Following", "27": "Net 5th Following",
+
+export interface NetSuiteAccountMappings {
+  projectForemanField?: string;
+  projectPurchaseOrderField?: string;
+  itemCategoryField?: string;
+  customerShortCodeField?: string;
+  employeeBenefitsField?: string;
+  timeTypeRecord?: string;
+  timeTypeMultiplierField?: string;
+  timeEntryTypeField?: string;
+  projectStatuses?: Record<string, "active" | "awarded" | "substantially_complete" | "closed" | "cancelled">;
+}
+
+const safeSuiteScriptId = (value: unknown, label: string): string | null => {
+  const field = s(value);
+  if (!field) return null;
+  if (!/^[a-z][a-z0-9_]{0,119}$/i.test(field)) throw new Error(`${label} has an invalid script ID`);
+  return field;
 };
+
+export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
+  if (value == null || value === "") return {};
+  const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("NetSuite field mappings must be a JSON object");
+  }
+  const raw = parsed as Record<string, unknown>;
+  const projectStatuses = raw.projectStatuses == null
+    ? undefined
+    : Object.fromEntries(Object.entries(raw.projectStatuses as Record<string, unknown>).map(([key, status]) => {
+        const normalized = String(status);
+        if (!["active", "awarded", "substantially_complete", "closed", "cancelled"].includes(normalized)) {
+          throw new Error(`NetSuite project status mapping ${key} has invalid target ${normalized}`);
+        }
+        return [key.toLowerCase(), normalized];
+      })) as NetSuiteAccountMappings["projectStatuses"];
+  return {
+    projectForemanField: safeSuiteScriptId(raw.projectForemanField, "projectForemanField") ?? undefined,
+    projectPurchaseOrderField: safeSuiteScriptId(raw.projectPurchaseOrderField, "projectPurchaseOrderField") ?? undefined,
+    itemCategoryField: safeSuiteScriptId(raw.itemCategoryField, "itemCategoryField") ?? undefined,
+    customerShortCodeField: safeSuiteScriptId(raw.customerShortCodeField, "customerShortCodeField") ?? undefined,
+    employeeBenefitsField: safeSuiteScriptId(raw.employeeBenefitsField, "employeeBenefitsField") ?? undefined,
+    timeTypeRecord: safeSuiteScriptId(raw.timeTypeRecord, "timeTypeRecord") ?? undefined,
+    timeTypeMultiplierField: safeSuiteScriptId(raw.timeTypeMultiplierField, "timeTypeMultiplierField") ?? undefined,
+    timeEntryTypeField: safeSuiteScriptId(raw.timeEntryTypeField, "timeEntryTypeField") ?? undefined,
+    projectStatuses,
+  };
+}
 
 const isT = (v: unknown) => v === "T" || v === true;
 const s = (v: unknown): string | null => {
@@ -96,15 +128,6 @@ const isoDate = (v: unknown): string | null => {
   if (!t) return null;
   const [m, d, y] = t.split("/");
   return m && d && y ? `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}` : t;
-};
-const parseTerm = (label: string) => {
-  const netM = label.match(/Net\s+(\d+)/i);
-  const disc = label.match(/([\d.]+)%\/(\d+)/);
-  return {
-    netDays: /due on receipt/i.test(label) ? 0 : netM ? Number(netM[1]) : 30,
-    discountPercent: disc ? disc[1] : null,
-    discountDays: disc ? Number(disc[2]) : null,
-  };
 };
 const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD/YYYY') AS trandate,
   TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, t.memo, t.status,
@@ -159,20 +182,37 @@ export class NetSuiteSource implements MigrationSource {
   readonly name = "netsuite";
   readonly refKey = "nsId";
   readonly baseCurrency: string;
-  private readonly creds: NetSuiteCreds;
+  private readonly bridge: NetSuiteBridgeClient;
+  private readonly expectedAccount: string;
+  private readonly mappings: NetSuiteAccountMappings;
 
-  constructor(creds: NetSuiteCreds, opts: { baseCurrency?: string } = {}) {
-    this.creds = creds;
+  constructor(
+    creds: NetSuiteCreds,
+    opts: { baseCurrency?: string; bridge?: NetSuiteBridgeConfig; mappings?: unknown } = {},
+  ) {
+    this.bridge = new NetSuiteBridgeClient(creds, opts.bridge);
+    this.expectedAccount = creds.account;
+    this.mappings = parseNetSuiteMappings(opts.mappings);
     this.baseCurrency = opts.baseCurrency ?? "CAD";
   }
 
   private q<T = Record<string, unknown>>(query: string): Promise<T[]> {
-    return suiteql<T>(query, this.creds);
+    return this.bridge.query<T>(query);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {
+    const health = await this.bridge.health();
+    if (String(health.accountId).replaceAll("_", "-").toLowerCase()
+      !== this.expectedAccount.replaceAll("_", "-").toLowerCase()) {
+      throw new Error(
+        `NetSuite bridge account ${health.accountId} does not match configured account ${this.expectedAccount}`,
+      );
+    }
     const rows = await this.q<{ n: string }>("SELECT COUNT(*) AS n FROM account");
-    return { ok: true, detail: `${rows[0]?.n ?? 0} accounts visible` };
+    return {
+      ok: true,
+      detail: `bridge ${health.bridgeVersion} · account ${health.accountId} · ${rows[0]?.n ?? 0} accounts visible`,
+    };
   }
 
   /** SuiteQL timestamp literal for a watermark. */
@@ -215,7 +255,7 @@ export class NetSuiteSource implements MigrationSource {
       { resource: "subsidiaries", records: await this.subsidiaries() },
       { resource: "accounts", records: await this.accounts() },
       { resource: "departments", records: await this.departments() },
-      { resource: "payment_terms", records: this.paymentTerms() },
+      { resource: "payment_terms", records: await this.paymentTerms() },
       { resource: "time_types", records: await this.timeTypes() },
       { resource: "items", records: await this.items(since) },
       { resource: "parties", records: await this.parties(since) },
@@ -328,10 +368,16 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async projects(since?: Date | null): Promise<SourceEntity[]> {
+    const foreman = this.mappings.projectForemanField
+      ? `${this.mappings.projectForemanField} AS foreman`
+      : "NULL AS foreman";
+    const purchaseOrder = this.mappings.projectPurchaseOrderField
+      ? `${this.mappings.projectPurchaseOrderField} AS ponumber`
+      : "NULL AS ponumber";
     const rows = await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype,
-             customer, projectmanager, custentityproject_foreman AS foreman,
-             custentityproject_po_number AS ponumber,
+             BUILTIN.DF(entitystatus) AS statuslabel,
+             customer, projectmanager, ${foreman}, ${purchaseOrder},
              TO_CHAR(startdate, 'MM/DD/YYYY') AS startdate,
              TO_CHAR(scheduledenddate, 'MM/DD/YYYY') AS enddate
         FROM job`, since);
@@ -357,7 +403,7 @@ export class NetSuiteSource implements MigrationSource {
         code: s(j.entityid),
         name: String(j.companyname ?? j.entityid ?? `Job ${j.id}`).slice(0, 500),
         isActive: !isT(j.isinactive),
-        status: NS_PROJECT_STATUS[String(j.entitystatus)] ?? "active",
+        status: this.projectStatus(j),
         billingMethod: NS_BILLING[String(j.jobbillingtype)] ?? null,
         // NetSuite `jobprice` — the fixed-bid contract price. T&M/cost-billed
         // jobs price from billable work, so 0/blank stays unset.
@@ -373,8 +419,11 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async items(since?: Date | null): Promise<SourceEntity[]> {
+    const category = this.mappings.itemCategoryField
+      ? `BUILTIN.DF(${this.mappings.itemCategoryField}) AS category`
+      : "NULL AS category";
     const rows = await this.qSince<{ id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string; category?: string }>(
-      "SELECT id, itemid, displayname, itemtype, isinactive, BUILTIN.DF(custitem_category) AS category FROM item",
+      `SELECT id, itemid, displayname, itemtype, isinactive, ${category} FROM item`,
       since,
     );
     const out: SourceEntity[] = [];
@@ -396,20 +445,26 @@ export class NetSuiteSource implements MigrationSource {
     return out;
   }
 
-  private paymentTerms(): SourceEntity[] {
-    return Object.entries(NS_TERM_LABELS).map(([id, label]) => {
-      const p = parseTerm(label);
-      return {
-        sourceRef: id,
-        naturalKey: label,
-        fields: { name: label, netDays: p.netDays, discountDays: p.discountDays, discountPercent: p.discountPercent },
-      };
-    });
+  private async paymentTerms(): Promise<SourceEntity[]> {
+    return (await this.bridge.paymentTerms()).map((term) => ({
+      sourceRef: term.id,
+      naturalKey: term.name,
+      fields: {
+        name: term.name,
+        netDays: term.netDays,
+        discountDays: term.discountDays,
+        discountPercent: term.discountPercent,
+      },
+    }));
   }
 
   private async timeTypes(): Promise<SourceEntity[]> {
+    if (!this.mappings.timeTypeRecord) return [];
+    const multiplier = this.mappings.timeTypeMultiplierField
+      ? `${this.mappings.timeTypeMultiplierField} AS multiplier`
+      : "NULL AS multiplier";
     const rows = await this.q<{ id: string; name?: string; multiplier?: string; isinactive?: string }>(
-      "SELECT id, name, custrecord_bit_cost_multiplier AS multiplier, isinactive FROM customrecord_bit_time_type",
+      `SELECT id, name, ${multiplier}, isinactive FROM ${this.mappings.timeTypeRecord}`,
     );
     return rows.map((t) => ({
       sourceRef: String(t.id),
@@ -418,10 +473,16 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    const shortCode = this.mappings.customerShortCodeField
+      ? `${this.mappings.customerShortCodeField} AS shortform`
+      : "NULL AS shortform";
+    const benefits = this.mappings.employeeBenefitsField
+      ? `${this.mappings.employeeBenefitsField} AS benefits`
+      : "NULL AS benefits";
     const customers = await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
              url, terms, creditlimit, salesrep, taxitem, receivablesaccount, subsidiary,
-             custentitycustomer_shortform AS shortform
+             ${shortCode}
         FROM customer`, since);
     const vendors = await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
@@ -433,7 +494,7 @@ export class NetSuiteSource implements MigrationSource {
              subsidiary,
              TO_CHAR(hiredate, 'MM/DD/YYYY') AS hiredate,
              TO_CHAR(releasedate, 'MM/DD/YYYY') AS releasedate,
-             custentityemployee_has_benefits AS benefits, initials
+             ${benefits}, initials
         FROM employee`, since);
 
     const out: SourceEntity[] = [];
@@ -524,7 +585,8 @@ export class NetSuiteSource implements MigrationSource {
 
   private async contacts(since?: Date | null): Promise<SourceEntity[]> {
     const rows = await this.qSince<Record<string, string>>(`
-      SELECT id, company, contactrole, email, phone, officephone, mobilephone,
+      SELECT id, company, contactrole, BUILTIN.DF(contactrole) AS contactrolelabel,
+             email, phone, officephone, mobilephone,
              title, entityid, firstname, lastname, fax, isinactive
         FROM contact`, since);
     return rows.map((c) => ({
@@ -533,9 +595,9 @@ export class NetSuiteSource implements MigrationSource {
         companyRef: s(c.company),
         name: s(c.entityid) ?? ([s(c.firstname), s(c.lastname)].filter(Boolean).join(" ") || "Contact"),
         firstName: s(c.firstname), lastName: s(c.lastname), title: s(c.title),
-        role: c.contactrole ? NS_CONTACT_ROLE[String(c.contactrole)] ?? null : null,
+        role: s(c.contactrolelabel),
         email: s(c.email), phone: s(c.phone) ?? s(c.officephone), mobilePhone: s(c.mobilephone),
-        fax: s(c.fax), isPrimary: String(c.contactrole) === "-10", isActive: !isT(c.isinactive),
+        fax: s(c.fax), isPrimary: /primary/i.test(s(c.contactrolelabel) ?? ""), isActive: !isT(c.isinactive),
       },
     }));
   }
@@ -544,10 +606,13 @@ export class NetSuiteSource implements MigrationSource {
     const where = since
       ? `WHERE tb.lastmodifieddate >= TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`
       : "";
+    const timeType = this.mappings.timeEntryTypeField
+      ? `tb.${this.mappings.timeEntryTypeField} AS timetype`
+      : "NULL AS timetype";
     const rows = await this.q<Record<string, string>>(`
       SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
              tb.rate, tb.laborcost, tb.isbillable,
-             tb.custcol_bit_cost_multiplier AS timetype,
+             ${timeType},
              TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
         FROM timebill tb ${where}`);
     return rows.map((tb) => ({
@@ -561,6 +626,18 @@ export class NetSuiteSource implements MigrationSource {
     }));
   }
 
+  private projectStatus(row: Record<string, string>): string {
+    const id = String(row.entitystatus ?? "").toLowerCase();
+    const label = String(row.statuslabel ?? "").trim().toLowerCase();
+    const configured = this.mappings.projectStatuses?.[id] ?? this.mappings.projectStatuses?.[label];
+    if (configured) return configured;
+    if (/cancel/.test(label)) return "cancelled";
+    if (/substantial/.test(label)) return "substantially_complete";
+    if (/award|won/.test(label)) return "awarded";
+    if (/close|complete|finish/.test(label)) return "closed";
+    return "active";
+  }
+
   // --- native transactions -------------------------------------------------------
 
   async nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges> {
@@ -569,18 +646,19 @@ export class NetSuiteSource implements MigrationSource {
       "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS') AS now FROM DUAL",
     );
     const syncedThrough = new Date(nowRows[0]!.now.replace(" ", "T") + "Z");
+    const effectiveSince = since ? new Date(since.getTime() - 15 * 60 * 1000) : null;
 
     // Headers: changed-since (incremental) or full id-window sweep. A COUNT
     // first gives a real total so the UI shows "pulling X of Y transactions".
     const [{ n: totalStr }] = await this.q<{ n: string }>(
-      since
-        ? `SELECT COUNT(*) AS n FROM transaction t WHERE t.lastmodifieddate >= TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`
+      effectiveSince
+        ? `SELECT COUNT(*) AS n FROM transaction t WHERE t.lastmodifieddate >= ${this.ts(effectiveSince)} AND t.lastmodifieddate <= ${this.ts(syncedThrough)}`
         : "SELECT COUNT(*) AS n FROM transaction t",
     );
     const totalTxns = Number(totalStr ?? 0);
     const headers: NsHeader[] = [];
-    if (since) {
-      const clause = `t.lastmodifieddate >= TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`;
+    if (effectiveSince) {
+      const clause = `t.lastmodifieddate >= ${this.ts(effectiveSince)} AND t.lastmodifieddate <= ${this.ts(syncedThrough)}`;
       headers.push(...(await this.q<NsHeader>(`SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause}`)));
       ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
     } else {
@@ -642,7 +720,7 @@ export class NetSuiteSource implements MigrationSource {
     // applications.
     type Link = { previousdoc: string; nextdoc: string; foreignamount: string };
     const links: Link[] = [];
-    if (since) {
+    if (effectiveSince) {
       for (let i = 0; i < tids.length; i += 150) {
         const chunk = tids.slice(i, i + 150);
         if (chunk.length === 0) continue;
@@ -663,11 +741,18 @@ export class NetSuiteSource implements MigrationSource {
         amount: String(l.foreignamount),
       }));
 
-    // The deletedrecord feed is now role-visible; on a FULL sweep the reconciler
-    // already derives deletions from refs that vanished from the pulled universe
-    // (see runSync step 5), so we leave deletedRefs empty here rather than
-    // mapping the account-wide deletedrecord table (all record types) per pull.
-    return { documents, applications, deletedRefs: [], syncedThrough, unbuildable };
+    // Pull deletion tombstones without attaching code to transaction saves.
+    // The feed is account-wide, so retain only financially meaningful record
+    // labels; a full sweep remains the authoritative fallback for custom types.
+    const deletedRefs: string[] = [];
+    if (effectiveSince) {
+      const deleted = await this.bridge.deletedRecords(effectiveSince);
+      const transactionLabel = /invoice|bill|payment|credit|journal|check|deposit|transfer|expense report|sales order|purchase order/i;
+      for (const row of deleted) {
+        if (transactionLabel.test(row.recordType)) deletedRefs.push(row.internalId);
+      }
+    }
+    return { documents, applications, deletedRefs: [...new Set(deletedRefs)], syncedThrough, unbuildable };
   }
 
   // --- verification -----------------------------------------------------------------
