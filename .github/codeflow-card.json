@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-07-16T19:24:53.692Z",
-      "sha": "f3153b1baeac385425e9611e33373257cf1284f3",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 1068,
-      "functions": 2683,
-      "loc": 424866,
-      "languages": 13,
-      "topLanguages": [
-        {
-          "ext": "json",
-          "pct": 67,
-          "lines": 284480
-        },
-        {
-          "ext": "ts",
-          "pct": 16,
-          "lines": 67952
-        },
-        {
-          "ext": "tsx",
-          "pct": 15,
-          "lines": 61668
-        },
-        {
-          "ext": "txt",
-          "pct": 1,
-          "lines": 4237
-        },
-        {
-          "ext": "sql",
-          "pct": 1,
-          "lines": 3658
-        }
-      ],
-      "dead": 56,
-      "deadPct": 2.1,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 4,
-      "securityIssues": 75,
-      "patterns": 9,
-      "duplicates": 33,
-      "layerViolations": 868,
-      "connections": 4309,
-      "avgFnLines": 15.4,
-      "longestFn": 16,
-      "testFiles": 13,
-      "testRatio": 1.2,
-      "topFolders": [
-        {
-          "name": "web",
-          "count": 754
-        },
-        {
-          "name": "packages",
-          "count": 103
-        },
-        {
-          "name": "schema",
-          "count": 94
-        },
-        {
-          "name": "engine",
-          "count": 76
-        },
-        {
-          "name": "extraction",
-          "count": 23
-        }
-      ],
-      "folders": 5,
-      "grade": "D",
-      "score": 68,
-      "topBlast": {
-        "path": "web/lib/customization/resolve.ts",
-        "direct": 237,
-        "transitive": 699,
-        "total": 936
-      },
-      "fragility": [
-        {
-          "path": "web/lib/customization/resolve.ts",
-          "direct": 237,
-          "transitive": 699,
-          "total": 936
-        },
-        {
-          "path": "web/lib/authz.ts",
-          "direct": 244,
-          "transitive": 617,
-          "total": 861
-        },
-        {
-          "path": "web/lib/search.ts",
-          "direct": 37,
-          "transitive": 675,
-          "total": 712
-        }
-      ]
-    },
-    {
       "at": "2026-07-17T13:47:33.470Z",
       "sha": "3184c308ffef9abe34feaca401554670fa22681f",
       "pr": null,
@@ -3052,6 +2950,108 @@
           "direct": 310,
           "transitive": 1149,
           "total": 1459
+        },
+        {
+          "path": "web/app/api/qbd/web-connector/[id]/route.ts",
+          "direct": 227,
+          "transitive": 1232,
+          "total": 1459
+        }
+      ]
+    },
+    {
+      "at": "2026-07-20T19:38:31.960Z",
+      "sha": "680b153f84550025a55149bc6deaaaf83b16f41f",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1683,
+      "functions": 4045,
+      "loc": 596392,
+      "languages": 14,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 60,
+          "lines": 359928
+        },
+        {
+          "ext": "ts",
+          "pct": 21,
+          "lines": 122854
+        },
+        {
+          "ext": "tsx",
+          "pct": 14,
+          "lines": 83833
+        },
+        {
+          "ext": "sql",
+          "pct": 4,
+          "lines": 21215
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 67,
+      "deadPct": 1.7,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 5,
+      "securityIssues": 156,
+      "patterns": 8,
+      "duplicates": 53,
+      "layerViolations": 1579,
+      "connections": 8344,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 74,
+      "testRatio": 4.4,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 1252
+        },
+        {
+          "name": "engine",
+          "count": 185
+        },
+        {
+          "name": "packages",
+          "count": 107
+        },
+        {
+          "name": "schema",
+          "count": 88
+        },
+        {
+          "name": "extraction",
+          "count": 20
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 66,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 403,
+        "transitive": 1268,
+        "total": 1671
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 403,
+          "transitive": 1268,
+          "total": 1671
+        },
+        {
+          "path": "engine/src/sandbox/verify-rls.ts",
+          "direct": 310,
+          "transitive": 1150,
+          "total": 1460
         },
         {
           "path": "web/app/api/qbd/web-connector/[id]/route.ts",
