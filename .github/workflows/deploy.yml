@@ -76,6 +76,8 @@ jobs:
     timeout-minutes: 20
     environment: dev
     steps:
+      - uses: actions/checkout@v4
+
       - name: Point Dokploy at the new image tag
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
@@ -93,11 +95,13 @@ jobs:
           else
             new_env="$(printf '%s\nOPENBOOKS_TAG=%s\n' "$env_text" "$NEW_TAG")"
           fi
-          jq -n --arg id "$COMPOSE_ID" --arg env "$new_env" '{composeId:$id, env:$env}' \
+          compose_file="$(cat deploy/dokploy.compose.yaml)"
+          jq -n --arg id "$COMPOSE_ID" --arg env "$new_env" --arg composeFile "$compose_file" \
+            '{composeId:$id, env:$env, composeFile:$composeFile}' \
             | curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
                 -H 'content-type: application/json' \
                 -X POST "$base/api/compose.update" --data @- > /dev/null
-          echo "Dokploy env now pins OPENBOOKS_TAG=${NEW_TAG}"
+          echo "Dokploy compose source is current and OPENBOOKS_TAG=${NEW_TAG}"
 
       - name: Trigger deployment
         env:
@@ -135,6 +139,10 @@ jobs:
           exit 1
 
       - name: Verify the app is healthy
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
@@ -147,5 +155,35 @@ jobs:
             fi
             sleep 10
           done
+
+          base="${DOKPLOY_URL%/}"
+          compose="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+            -G "$base/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
+          app_name="$(jq -r '.appName // empty' <<<"$compose")"
+          app_type="$(jq -r '.composeType // empty' <<<"$compose")"
+          if [ -n "$app_name" ]; then
+            containers="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+              -G "$base/api/docker.getContainersByAppNameMatch" \
+              --data-urlencode "appName=$app_name" \
+              --data-urlencode "appType=$app_type")"
+            echo "::group::Dokploy container state"
+            jq -r '.[] | "\(.name): \(.state) — \(.status)"' <<<"$containers"
+            echo "::endgroup::"
+            while IFS=$'\t' read -r container_id container_name; do
+              [ -n "$container_id" ] || continue
+              echo "::group::Startup logs — $container_name"
+              curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+                -G "$base/api/compose.readLogs" \
+                --data-urlencode "composeId=$COMPOSE_ID" \
+                --data-urlencode "containerId=$container_id" \
+                --data-urlencode "tail=200" \
+                --data-urlencode "since=30m" \
+                | jq -r 'if type == "string" then . else tostring end' \
+                | sed -E 's#([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@[:space:]]+@#\1[redacted]@#g'
+              echo "::endgroup::"
+            done < <(jq -r '.[] | [.containerId, .name] | @tsv' <<<"$containers")
+          else
+            echo "::warning::Dokploy compose metadata did not include an appName; container logs unavailable"
+          fi
           echo "::error::App never became healthy at openbooks.cloud.rassaun.com"
           exit 1
