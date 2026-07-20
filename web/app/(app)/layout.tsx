@@ -18,8 +18,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!authz) redirect('/login')
   const [localePreference, navMode, navModePreference, environments] = await Promise.all([
     userLocalePreference(),
-    resolveNavMode(),
-    userNavModePreference(),
+    resolveNavMode(authz.user.id, authz.user.orgId),
+    userNavModePreference(authz.user.id, authz.user.orgId),
     shellEnvironments(authz),
   ])
   const jar = await cookies()
