@@ -249,6 +249,8 @@ export interface DocNavArticle {
   section?: string
   summary: string
   keywords: string[]
+  /** Lowercased article body for full-text sidebar search. */
+  text: string
 }
 
 export function docNavIndex(): {
@@ -268,6 +270,7 @@ export function docNavIndex(): {
         ...(a.section ? { section: a.section } : {}),
         summary: a.summary,
         keywords: a.keywords ?? [],
+        text: a.body.toLowerCase(),
       })),
     ),
   }
