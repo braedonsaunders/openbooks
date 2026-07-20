@@ -71,6 +71,9 @@
     "overdueCol": "Overdue",
     "openCol": "Open",
     "noReceivables": "No open receivables. Everything is collected.",
+    "customerSearch": "Search customers…",
+    "customerStatus": "Customer status",
+    "customerOverdueOnly": "Has overdue balance",
     "configure": "How it works",
     "configTitle": "Collections model",
     "configDescription": "How the worklist is ordered and collection dates are predicted. Read-only — collections have no cap; the engine predicts when customers pay.",
@@ -80,7 +83,7 @@
       "overdueSub": "{count} invoices · {pct}% of open",
       "expectedThisWeek": "Expected this week",
       "next30": "Next 30 days",
-      "dso": "Days sales out (DSO)",
+      "dso": "Days sales outstanding (DSO)",
       "dsoSub": "Avg days to collect",
       "days": "{n}d"
     },
@@ -100,7 +103,49 @@
       "amount": "Amount",
       "selected": "{count} selected · {amount}",
       "build": "Build collection run",
-      "empty": "No collections predicted in the horizon."
+      "empty": "No collections predicted in the horizon.",
+      "search": "Search collections…",
+      "status": "Collection status",
+      "overdueOnly": "Overdue",
+      "upcoming": "Upcoming",
+      "selectInvoice": "Select invoice for {customer}",
+      "daysOverdue": "{count}d overdue",
+      "methods": {
+        "statistical": "Statistical",
+        "dueDate": "Due date",
+        "overduePush": "Overdue push",
+        "globalAverage": "Global average"
+      }
+    },
+    "model": {
+      "title": "How collections are predicted",
+      "worklistOrder": {
+        "label": "Worklist order",
+        "value": "Most overdue first",
+        "note": "The chase list sorts by days overdue, then largest amount — overdue invoices come pre-selected"
+      },
+      "prediction": {
+        "label": "Collection-date prediction",
+        "value": "Statistical → Due date → Global average",
+        "note": "Per-customer average collection days (+½σ buffer), floored at the due date"
+      },
+      "overduePush": {
+        "label": "Overdue push",
+        "value": "+7 / +14 / +28 days",
+        "note": "Overdue invoices move forward based on how overdue they are (≤30 / ≤60 / >60 days)"
+      },
+      "businessDay": {
+        "label": "Business-day adjustment",
+        "value": "On",
+        "note": "Predicted weekend dates move to the next business day"
+      },
+      "dso": {
+        "label": "Average days to collect (DSO)",
+        "value": "{dso}d",
+        "note": "Fallback used when a customer has no payment history"
+      },
+      "recurring": "Recurring inflows (grants, rent received, subscriptions) join the forecast as categories — configure them in the <cashCockpit>Cash cockpit</cashCockpit>.",
+      "documentation": "Read the accounts-receivable guide"
     }
   }
 }

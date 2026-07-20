@@ -6,8 +6,8 @@ export const salesWorkflow: DocArticle = {
   category: 'transactions',
   order: 1,
   summary: 'A practical tour of estimates, sales orders, invoices, credits, receipts, and customer balances.',
-  updated: '2026-07-19',
-  keywords: ['sales', 'estimate', 'quote', 'sales order', 'invoice', 'credit memo', 'receipt', 'accounts receivable'],
+  updated: '2026-07-20',
+  keywords: ['sales', 'estimate', 'quote', 'sales order', 'invoice', 'credit memo', 'receipt', 'accounts receivable', 'collections worklist', 'dso'],
   related: ['payments-and-applications', 'transaction-lifecycle', 'financial-reports'],
   body: `# Sales: Estimate to Cash
 
@@ -57,6 +57,22 @@ visible until assigned or refunded.
 
 Review receivables aging, customer statements, the AR register, and the
 receivables control-account reconciliation as part of the close.
+
+## Accounts Receivable cockpit
+
+Open **Accounts Receivable** for the daily collections cockpit. Its single-row
+vitals show open and overdue receivables, near-term expected cash, and days
+sales outstanding. The collections worklist prioritizes the longest-overdue
+invoices and preselects them for follow-up; review the selection before using
+**Build collection run** to continue into the governed receipt workflow.
+
+The cash-in schedule predicts collection dates from customer payment history,
+the invoice due date, and the organization-wide average. Overdue predictions
+move forward by a bounded interval and weekend dates move to the next business
+day. Select a week to inspect its underlying transactions. The model is
+read-only because it predicts customer behaviour rather than imposing an
+internal payment-capacity rule. Use **How it works** in the cockpit to review
+the current method and open this guide.
 `,
 }
 

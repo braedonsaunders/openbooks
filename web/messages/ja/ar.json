@@ -58,5 +58,91 @@
     "createDraftFailed": "下書きを作成できませんでした",
     "deleted": "書類を削除しました",
     "deleteFailed": "削除に失敗しました"
+  },
+  "cockpit": {
+    "title": "売掛金管理",
+    "description": "売掛金の管理センター — 未回収額、延滞額、今週回収すべき金額を確認できます。",
+    "tabs": { "overview": "概要", "invoices": "請求書" },
+    "current": "期日内",
+    "customer": "顧客",
+    "overdueCol": "延滞",
+    "openCol": "未回収",
+    "noReceivables": "未回収の売掛金はありません。すべて回収済みです。",
+    "customerSearch": "顧客を検索…",
+    "customerStatus": "顧客の状態",
+    "customerOverdueOnly": "延滞残高あり",
+    "configure": "仕組み",
+    "configTitle": "回収予測モデル",
+    "configDescription": "作業リストの順序と回収日の予測方法です。読み取り専用 — 回収には上限がなく、顧客の支払時期をエンジンが予測します。",
+    "stats": {
+      "openReceivables": "未回収売掛金",
+      "overdue": "延滞",
+      "overdueSub": "請求書 {count} 件 · 未回収額の {pct}%",
+      "expectedThisWeek": "今週の回収見込",
+      "next30": "今後30日",
+      "dso": "売掛金回転日数（DSO）",
+      "dsoSub": "平均回収日数",
+      "days": "{n}日"
+    },
+    "panels": {
+      "worklist": "回収作業リスト",
+      "aging": "売掛金年齢表",
+      "schedule": "入金予定",
+      "scheduleHint": "今後{weeks}週間の回収予測 — 週を選択",
+      "byCustomer": "顧客別売掛金"
+    },
+    "worklist": {
+      "overdueToChase": "督促対象の延滞額",
+      "expectedThisWeek": "今週の回収見込",
+      "customer": "顧客",
+      "prediction": "予測",
+      "due": "期日",
+      "amount": "金額",
+      "selected": "{count}件選択 · {amount}",
+      "build": "回収バッチを作成",
+      "empty": "予測期間内に回収予定はありません。",
+      "search": "回収予定を検索…",
+      "status": "回収状態",
+      "overdueOnly": "延滞",
+      "upcoming": "今後",
+      "selectInvoice": "{customer}の請求書を選択",
+      "daysOverdue": "{count}日延滞",
+      "methods": {
+        "statistical": "統計予測",
+        "dueDate": "支払期日",
+        "overduePush": "延滞繰延",
+        "globalAverage": "全体平均"
+      }
+    },
+    "model": {
+      "title": "回収日の予測方法",
+      "worklistOrder": {
+        "label": "作業リストの順序",
+        "value": "延滞日数の長い順",
+        "note": "延滞日数、次に金額の大きい順で並び、延滞請求書はあらかじめ選択されます"
+      },
+      "prediction": {
+        "label": "回収日の予測",
+        "value": "統計予測 → 支払期日 → 全体平均",
+        "note": "顧客別の平均回収日数（+½σの余裕）を使用し、支払期日より前には設定しません"
+      },
+      "overduePush": {
+        "label": "延滞繰延",
+        "value": "+7 / +14 / +28日",
+        "note": "延滞日数に応じて予測日を先送りします（≤30 / ≤60 / >60日）"
+      },
+      "businessDay": {
+        "label": "営業日調整",
+        "value": "オン",
+        "note": "予測日が週末の場合は次の営業日に移動します"
+      },
+      "dso": {
+        "label": "平均回収日数（DSO）",
+        "value": "{dso}日",
+        "note": "支払履歴のない顧客に使用する既定値です"
+      },
+      "recurring": "補助金、受取家賃、サブスクリプションなどの定期入金はカテゴリとして予測に加わります。<cashCockpit>資金繰りコックピット</cashCockpit>で設定してください。",
+      "documentation": "売掛金ガイドを読む"
+    }
   }
 }
