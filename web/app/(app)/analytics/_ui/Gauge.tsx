@@ -16,6 +16,7 @@ export function Gauge({
   size = 200,
   thickness = 16,
   showTicks = true,
+  showValue = true,
   className,
 }: {
   value: number
@@ -23,6 +24,8 @@ export function Gauge({
   size?: number
   thickness?: number
   showTicks?: boolean
+  /** Hide the centred score text — for small gauges whose value renders beside them. */
+  showValue?: boolean
   className?: string
 }) {
   const v = Math.min(100, Math.max(0, value))
@@ -93,10 +96,12 @@ export function Gauge({
             )
           })}
       </svg>
-      <div className="-mt-6 flex flex-col items-center">
-        <span className={cn('text-4xl font-bold tabular-nums', tone.text)}>{Math.round(v)}</span>
-        {label && <span className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</span>}
-      </div>
+      {showValue ? (
+        <div className="-mt-6 flex flex-col items-center">
+          <span className={cn('text-4xl font-bold tabular-nums', tone.text)}>{Math.round(v)}</span>
+          {label && <span className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</span>}
+        </div>
+      ) : null}
     </div>
   )
 }

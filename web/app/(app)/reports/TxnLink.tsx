@@ -5,15 +5,18 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { moduleDrawerHref } from '../../../lib/txn-links'
 
 /**
- * Opens a report transaction in its REAL native flyout — never a reports-only
- * read-only overlay:
+ * Opens a transaction in its REAL native flyout — never a read-only overlay,
+ * and never by navigating away from the page you're on:
  *
  * - Source-document transactions (bill, invoice, payment, manual journal, …)
- *   open that record's native module drawer with the org's custom form applied
- *   (`/ap?doc=`, `/ar?doc=`, `/banking?doc=`, `/payments?payment=`,
- *   `/expenses?expense=`, `/journal?entry=`).
+ *   stay on the CURRENT page and open the record's native drawer over it via
+ *   the shell-level GlobalReportDrawerHost (?reportRecord= / ?reportRecordKind=
+ *   with the org's custom form applied). This works everywhere — reports,
+ *   analytics drills, the cash/AP/AR cockpit flyouts.
  * - System-generated GL entries with no document (depreciation, closing, fx)
- *   open in the Journal module's own ledger view (`/journal?txn=<entryId>`).
+ *   open the read-only EntryFlyout in place on report surfaces (where it is
+ *   mounted); elsewhere they fall back to the Journal module's ledger view
+ *   (`/journal?txn=<entryId>`).
  */
 export function TxnLink({
   entryId,
@@ -31,8 +34,9 @@ export function TxnLink({
   const pathname = usePathname() ?? '/'
   const current = useSearchParams()
   const inReport = pathname.startsWith('/reports') || pathname.startsWith('/knowledge/views')
+  const hasDoc = !!(docKind && docId)
   let href = moduleDrawerHref(docKind, docId) ?? `/journal?txn=${entryId}`
-  if (inReport) {
+  if (hasDoc || inReport) {
     const params = new URLSearchParams(current.toString())
     params.delete('reportRecord')
     params.delete('reportRecordKind')
@@ -42,9 +46,9 @@ export function TxnLink({
     params.delete('transactionTab')
     const baseQuery = params.toString()
     const returnHref = baseQuery ? `${pathname}?${baseQuery}` : pathname
-    if (docKind && docId) {
-      params.set('reportRecord', docId)
-      params.set('reportRecordKind', docKind)
+    if (hasDoc) {
+      params.set('reportRecord', docId!)
+      params.set('reportRecordKind', docKind!)
       params.set('drawerReturn', returnHref)
     } else {
       params.set('txn', entryId)

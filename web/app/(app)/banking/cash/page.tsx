@@ -40,7 +40,12 @@ export default async function BankingCashPage({
       className="flex h-full min-h-0 flex-col"
       header={<PageHeader title={t('title')} description={t('description')} />}
     >
-      <CashCockpit data={data} canConfigure={can(authz, 'admin.setup.manage')} />
+      <CashCockpit
+        data={data}
+        canConfigure={can(authz, 'admin.setup.manage')}
+        canPayRun={can(authz, 'ap.pay')}
+        canCollectionRun={can(authz, 'ar.pay')}
+      />
     </ListPageLayout>
   )
 }

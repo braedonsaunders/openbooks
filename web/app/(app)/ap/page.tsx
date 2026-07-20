@@ -88,7 +88,7 @@ export default async function AP({
         />
       }
     >
-      <ApCockpit data={data} canConfigure={can(authz, 'admin.setup.manage')} />
+      <ApCockpit data={data} canConfigure={can(authz, 'admin.setup.manage')} canPay={can(authz, 'ap.pay')} />
     </ListPageLayout>
   )
 }

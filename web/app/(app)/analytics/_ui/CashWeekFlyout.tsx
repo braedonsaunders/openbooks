@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Badge, Drawer, cn } from '@openbooks/ui'
+import { useRouter } from 'next/navigation'
+import { Button, Drawer, cn } from '@openbooks/ui'
 import {
   History,
   Gauge as GaugeIcon,
@@ -9,6 +10,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowLeftRight,
+  ArrowRight,
   Wallet,
   ShieldCheck,
   Clock,
@@ -46,13 +48,20 @@ export function CashWeekFlyout({
   week,
   categoryFlows = [],
   initialSide = 'ap',
+  canPayRun = false,
+  canCollectionRun = false,
   onClose,
 }: {
   week: WeekRow
   categoryFlows?: CategoryFlow[]
   initialSide?: 'ar' | 'ap'
+  /** ap.pay — shows "Build pay run" on the AP tab (filtered set → /payments). */
+  canPayRun?: boolean
+  /** ar.pay — shows "Build collection run" on the AR tab (filtered set → /receipts). */
+  canCollectionRun?: boolean
   onClose: () => void
 }) {
+  const router = useRouter()
   const [side, setSide] = useState<'ar' | 'ap'>(initialSide)
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
   const [search, setSearch] = useState('')
@@ -151,7 +160,7 @@ export function CashWeekFlyout({
             </div>
           </div>
           <div className="flex flex-1 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-            <Gauge value={Math.min(100, coverage * 100)} size={72} thickness={8} showTicks={false} />
+            <Gauge value={Math.min(100, coverage * 100)} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" />
             <div>
               <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> Coverage Ratio</p>
               <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{(coverage * 100).toFixed(0)}%</p>
@@ -272,8 +281,47 @@ export function CashWeekFlyout({
         </div>
       ) : null}
 
+      {/* action bar — hand the filtered set to the run builders */}
+      {(side === 'ap' && canPayRun) || (side === 'ar' && canCollectionRun) ? (
+        <ActionBar side={side} entries={filtered} onBuild={(ids) => {
+          const base = side === 'ap' ? '/payments' : '/receipts'
+          router.push(`${base}?view=runs&newRun=1&preselect=${ids.join(',')}` as any)
+        }} />
+      ) : null}
+
       {entity ? <EntityDrawer party={entity.id} name={entity.name} side={side} onClose={() => setEntity(null)} /> : null}
     </Drawer>
+  )
+}
+
+/**
+ * Run-builder handoff for the week's flow: AP tab → payment run, AR tab →
+ * collection run. Acts on the FILTERED set (search narrows the run), routed
+ * through the shared ?preselect= wiring so the run builder opens with these
+ * documents pre-checked.
+ */
+function ActionBar({
+  side,
+  entries,
+  onBuild,
+}: {
+  side: 'ar' | 'ap'
+  entries: ForecastEntry[]
+  onBuild: (docIds: string[]) => void
+}) {
+  const runnable = entries.filter((e) => e.docId)
+  const total = runnable.reduce((a, e) => a + e.amount, 0)
+  if (runnable.length === 0) return null
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/30">
+      <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+        {runnable.length} {side === 'ap' ? 'bills' : 'invoices'} · {money(total)}
+      </span>
+      <Button size="sm" onClick={() => onBuild(runnable.map((e) => e.docId!))}>
+        {side === 'ap' ? 'Build pay run' : 'Build collection run'}
+        <ArrowRight size={15} />
+      </Button>
+    </div>
   )
 }
 
