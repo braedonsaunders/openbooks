@@ -40,6 +40,7 @@ export interface SyncResult {
   docsUnchanged: number;
   ordersNew: number;
   docsFailed: number;
+  sourceUnbuildable: number;
   skipped: string[];
   deletedAtSource: string[];
   applications: ApplyStats | null;
@@ -61,13 +62,24 @@ export interface SyncOptions {
   loadEntitiesFirst?: boolean;
 }
 
-class AccountMonthVerificationError extends Error {
+export function syncVerificationFailures(result: SyncResult): string[] {
+  const failures: string[] = [];
+  if (result.docsFailed > 0) failures.push(`${result.docsFailed} transaction writes failed`);
+  if (result.sourceUnbuildable > 0) failures.push(`${result.sourceUnbuildable} source transactions were unbuildable`);
+  if (result.deletedAtSource.length > 0) failures.push(`${result.deletedAtSource.length} source deletions need resolution`);
+  const tbOff = result.tb.accounts - result.tb.matches;
+  if (tbOff > 0) failures.push(`${tbOff} trial-balance accounts differ`);
+  const openOff = result.openItems ? result.openItems.checked - result.openItems.matches : 0;
+  if (openOff > 0) failures.push(`${openOff} open items differ`);
+  const periodOff = result.periods.checked - result.periods.matches;
+  if (periodOff > 0) failures.push(`${periodOff} account-month buckets differ`);
+  return failures;
+}
+
+class SyncVerificationError extends Error {
   constructor(readonly result: SyncResult) {
-    const mismatchCount = result.periods.checked - result.periods.matches;
-    super(
-      `account-month verification failed: ${mismatchCount} of ${result.periods.checked} buckets differ from the source`,
-    );
-    this.name = "AccountMonthVerificationError";
+    super(`financial verification failed: ${syncVerificationFailures(result).join("; ")}`);
+    this.name = "SyncVerificationError";
   }
 }
 
@@ -479,12 +491,15 @@ export async function runSync(
       rows: { ref: string; bal: string }[];
     };
     const oursByRef = new Map(ours.rows.map((r) => [r.ref, toUnits(r.bal)]));
+    const theirsByRef = new Map(theirs.map((r) => [r.accountRef, toUnits(r.balance)]));
     const tbMismatches: SyncResult["tb"]["mismatches"] = [];
     let tbMatches = 0;
-    for (const t of theirs) {
-      const mine = oursByRef.get(t.accountRef) ?? 0n;
-      if (mine === toUnits(t.balance)) tbMatches++;
-      else tbMismatches.push({ accountRef: t.accountRef, ours: fromUnits(mine), theirs: t.balance });
+    const trialBalanceRefs = new Set([...oursByRef.keys(), ...theirsByRef.keys()]);
+    for (const accountRef of trialBalanceRefs) {
+      const mine = oursByRef.get(accountRef) ?? 0n;
+      const sourceBalance = theirsByRef.get(accountRef) ?? 0n;
+      if (mine === sourceBalance) tbMatches++;
+      else tbMismatches.push({ accountRef, ours: fromUnits(mine), theirs: fromUnits(sourceBalance) });
     }
 
     // -- 8. verify: open items (AR/AP aging vs the live source) --------------------
@@ -503,7 +518,10 @@ export async function runSync(
       for (const t of truth) {
         const want = toUnits(t.unpaid);
         const got = mineByRef.get(t.ref);
-        if (got === undefined) continue; // not imported (e.g. hidden types) — TB covers it
+        if (got === undefined) {
+          mismatches.push({ ref: t.ref, ours: "missing", theirs: fromUnits(want < 0n ? -want : want) });
+          continue;
+        }
         const wantAbs = want < 0n ? -want : want;
         if (got === wantAbs) matches++;
         else mismatches.push({ ref: t.ref, ours: fromUnits(got), theirs: fromUnits(wantAbs) });
@@ -535,19 +553,20 @@ export async function runSync(
       kind,
       entities: entityStats,
       docsNew, docsAmended, docsUnchanged, ordersNew, docsFailed,
+      sourceUnbuildable: changes.unbuildable.length,
       skipped: skipped.slice(0, 200),
       deletedAtSource,
       applications,
       trueUp,
-      tb: { accounts: theirs.length, matches: tbMatches, mismatches: tbMismatches.slice(0, 50) },
+      tb: { accounts: trialBalanceRefs.size, matches: tbMatches, mismatches: tbMismatches.slice(0, 50) },
       openItems,
       periods,
       syncedThrough: changes.syncedThrough.toISOString(),
       durationMs: Date.now() - started,
     };
 
-    if (periods.matches !== periods.checked) {
-      throw new AccountMonthVerificationError(result);
+    if (syncVerificationFailures(result).length > 0) {
+      throw new SyncVerificationError(result);
     }
 
     await db.update(schema.syncRuns).set({
@@ -566,7 +585,7 @@ export async function runSync(
     }
     return result;
   } catch (e) {
-    const verificationResult = e instanceof AccountMonthVerificationError ? e.result : null;
+    const verificationResult = e instanceof SyncVerificationError ? e.result : null;
     if (connectionId) {
       await db.execute(sql`
         update connections set status = 'error', last_error = ${(e as Error).message}, last_run_at = now()
