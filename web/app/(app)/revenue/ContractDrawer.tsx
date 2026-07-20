@@ -66,6 +66,14 @@ export function ContractDrawer({ payload, canRun }: { payload: ContractPayload; 
                 <span className="text-xs text-slate-500 dark:text-slate-400">
                   {t(`method.${o.method}`)} · {money(o.allocated_price)}
                 </span>
+                {o.fair_value_flag ? (
+                  <Badge variant="warning">
+                    {t('drawer.fairValueOutOfRange', {
+                      low: o.fair_value_low != null ? money(o.fair_value_low) : '—',
+                      high: o.fair_value_high != null ? money(o.fair_value_high) : '—',
+                    })}
+                  </Badge>
+                ) : null}
               </div>
               {canRun ? <RunRecognitionButton obligationId={o.id} /> : null}
             </div>

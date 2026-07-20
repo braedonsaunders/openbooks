@@ -590,6 +590,17 @@
         }
       }
     },
+    "revenue": {
+      "title": "Reconocimiento de ingresos",
+      "description": "Políticas de asignación de ingresos según ASC 606 / NIIF 15.",
+      "fairValueRangePolicy": {
+        "label": "Comprobación del rango de valor razonable",
+        "warn": "Avisar: marcar asignaciones fuera de rango para revisión",
+        "off": "Desactivado: sin comprobación de rango",
+        "hint": "Cuando el precio unitario asignado de una línea de factura queda fuera del rango bajo/alto del valor razonable del artículo, la obligación de desempeño se marca para revisión en su contrato de ingresos. Nunca bloquea la contabilización."
+      },
+      "learnMore": "Más información."
+    },
     "documentKinds": {
       "vendorBill": "Factura de proveedor",
       "customerInvoice": "Factura de cliente",
@@ -979,6 +990,7 @@
       "none": "No hay PDF oficial cargado"
     },
     "new": "New",
+    "learnMore": "Más información.",
     "empty": "Nothing here yet.",
     "statusActive": "Active",
     "statusArchived": "Archived",

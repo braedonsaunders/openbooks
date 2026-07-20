@@ -611,6 +611,17 @@
         }
       }
     },
+    "revenue": {
+      "title": "收入确认",
+      "description": "ASC 606 / IFRS 15 收入分摊政策。",
+      "fairValueRangePolicy": {
+        "label": "公允价值区间检查",
+        "warn": "警告 — 将超出区间的分摊标记为待复核",
+        "off": "关闭 — 不进行区间检查",
+        "hint": "当发票行的分摊单价超出物料公允价值的下限/上限区间时，该履约义务将在其收入合同中标记为待复核。绝不会阻止过账。"
+      },
+      "learnMore": "了解更多。"
+    },
     "documentKinds": {
       "vendorBill": "应付账单",
       "customerInvoice": "客户发票",
@@ -1001,6 +1012,7 @@
       "none": "未上传官方 PDF"
     },
     "new": "新建",
+    "learnMore": "了解更多。",
     "empty": "此处暂无内容。",
     "statusActive": "启用",
     "statusArchived": "已归档",

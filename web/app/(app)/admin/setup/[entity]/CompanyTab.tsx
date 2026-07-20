@@ -52,6 +52,10 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
           defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
           reportPdfStyle: settings.reportPdfStyle === 'formal' ? 'formal' : 'modern',
+          fairValueRangePolicy:
+            (settings.revenue as Record<string, unknown> | undefined)?.fairValueRangePolicy === 'off'
+              ? 'off'
+              : 'warn',
           controlAccounts: {
             ar: control.ar ?? '',
             ap: control.ap ?? '',

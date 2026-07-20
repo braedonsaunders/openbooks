@@ -611,6 +611,17 @@
         }
       }
     },
+    "revenue": {
+      "title": "収益認識",
+      "description": "ASC 606 / IFRS 15 の収益配分ポリシー。",
+      "fairValueRangePolicy": {
+        "label": "公正価値レンジチェック",
+        "warn": "警告 — レンジ外の配分をレビュー対象としてフラグ",
+        "off": "オフ — レンジチェックなし",
+        "hint": "請求書明細の配分単価が品目の公正価値の下限/上限レンジを外れた場合、履行義務が収益契約上でレビュー対象としてフラグされます。転記がブロックされることはありません。"
+      },
+      "learnMore": "詳細はこちら。"
+    },
     "documentKinds": {
       "vendorBill": "仕入請求書",
       "customerInvoice": "請求書",
@@ -1001,6 +1012,7 @@
       "none": "公式PDFがアップロードされていません"
     },
     "new": "新規",
+    "learnMore": "詳細はこちら。",
     "empty": "ここにはまだ何もありません。",
     "statusActive": "有効",
     "statusArchived": "アーカイブ済み",

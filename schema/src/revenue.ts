@@ -143,6 +143,12 @@ export const performanceObligations = pgTable(
     /** Amount to recognize after relative-SSP allocation of the bundle. */
     allocatedPrice: money("allocated_price").notNull(),
     percentComplete: money("percent_complete"), // for percent_complete method
+    /** Fair-value range review (orgs.settings.revenue.fairValueRangePolicy):
+     *  set when the allocated per-unit price falls outside the matched fair
+     *  value price's [low, high]; the matched bounds are kept for display. */
+    fairValueFlag: text("fair_value_flag", { enum: ["below_range", "above_range"] }),
+    fairValueLow: money("fair_value_low"),
+    fairValueHigh: money("fair_value_high"),
     recognitionStartsOn: date("recognition_starts_on"),
     recognitionEndsOn: date("recognition_ends_on"),
     /** Deferred/recognized account resolution: obligation → item → rule. */

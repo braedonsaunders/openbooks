@@ -95,6 +95,8 @@ export interface SetupEntity {
   orderBy?: string
   /** Whether the table has `is_active` (→ archive on delete instead of hard delete). */
   hasActive: boolean
+  /** Documentation-center article slug — renders a "Learn more" link on the tab. */
+  docSlug?: string
   columns: SetupColumn[]
   fields: SetupField[]
 }
@@ -689,6 +691,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     naturalKey: 'code',
     hasActive: true,
+    docSlug: 'revenue-recognition',
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
@@ -723,6 +726,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'item_id, effective_from desc',
     hasActive: true,
+    docSlug: 'revenue-recognition',
     columns: [
       { key: 'itemId', kind: 'ref', ref: 'items' },
       { key: 'currency', kind: 'code' },

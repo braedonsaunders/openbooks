@@ -47,6 +47,7 @@
     "planned": "Planned",
     "recognized": "Recognized",
     "postedStatus": "Posted",
-    "plannedStatus": "Planned"
+    "plannedStatus": "Planned",
+    "fairValueOutOfRange": "Outside fair value range ({low} – {high})"
   }
 }

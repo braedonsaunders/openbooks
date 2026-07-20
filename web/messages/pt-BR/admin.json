@@ -611,6 +611,17 @@
         }
       }
     },
+    "revenue": {
+      "title": "Reconhecimento de receita",
+      "description": "Políticas de alocação de receita ASC 606 / IFRS 15.",
+      "fairValueRangePolicy": {
+        "label": "Verificação de faixa de valor justo",
+        "warn": "Avisar — sinalizar alocações fora da faixa para revisão",
+        "off": "Desativado — sem verificação de faixa",
+        "hint": "Quando o preço unitário alocado de uma linha de fatura fica fora da faixa mínima/máxima de valor justo do item, a obrigação de desempenho é sinalizada para revisão no contrato de receita. Nunca bloqueia o lançamento."
+      },
+      "learnMore": "Saiba mais."
+    },
     "documentKinds": {
       "vendorBill": "Conta a pagar",
       "customerInvoice": "Fatura",
@@ -1001,6 +1012,7 @@
       "none": "Nenhum PDF oficial enviado"
     },
     "new": "Novo",
+    "learnMore": "Saiba mais.",
     "empty": "Nada aqui ainda.",
     "statusActive": "Ativo",
     "statusArchived": "Arquivado",

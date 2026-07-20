@@ -145,6 +145,30 @@ export function allocateByRelativeSSP(
   return apportion(toUnits(total), weights).map(fromUnits);
 }
 
+/**
+ * Fair-value range review (NetSuite fair-value range policy): compare an
+ * obligation's allocated PER-UNIT price against the matched fair value price's
+ * [low, high] bounds. Either bound may be absent (open-ended range). Returns
+ * null when in range or when no bound is configured. Comparison only — never
+ * used in posting math, so float precision is fine (with an epsilon so exact
+ * boundary values never flag).
+ */
+export function fairValueRangeFlag(
+  allocated: string,
+  quantity: string | null | undefined,
+  low: string | null,
+  high: string | null,
+): "below_range" | "above_range" | null {
+  if (low == null && high == null) return null;
+  const qty = Number(quantity ?? "1");
+  const perUnit = qty > 0 ? Number(allocated) / qty : Number(allocated);
+  if (!Number.isFinite(perUnit)) return null;
+  const EPS = 1e-9;
+  if (low != null && perUnit < Number(low) - EPS) return "below_range";
+  if (high != null && perUnit > Number(high) + EPS) return "above_range";
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Schedule computation (pure)
 // ---------------------------------------------------------------------------
@@ -478,19 +502,26 @@ export async function createObligationsFromInvoice(
   const doc = docRes.rows[0];
   if (!doc || !doc.party_id) return { created: 0, contractId: null, obligationIds: [] };
 
+  // Fair-value range policy: 'warn' (default) flags out-of-range allocations
+  // for review; 'off' disables the check. Configured in Company & Accounting.
+  const policyRes = (await db.execute(sql`
+    select coalesce(settings->'revenue'->>'fairValueRangePolicy', 'warn') as policy
+      from orgs where id = ${orgId}`)) as unknown as { rows: { policy: string }[] };
+  const rangePolicy = policyRes.rows[0]?.policy === "off" ? "off" : "warn";
+
   const currency = doc.currency ?? "";
   const lineRes = (await db.execute(sql`
-    select dl.id as line_id, dl.description, dl.amount, dl.item_id, dl.custom as line_custom,
+    select dl.id as line_id, dl.description, dl.amount, dl.quantity, dl.item_id, dl.custom as line_custom,
            it.income_account_id, it.deferred_account_id as item_deferred, it.standalone_selling_price as item_ssp,
            it.revenue_allocation,
            r.id as rule_id, r.deferred_account_id as rule_deferred, r.recognized_account_id as rule_recognized,
            r.end_date_source,
-           fv.unit_price as fair_value
+           fv.unit_price as fair_value, fv.low_value as fair_value_low, fv.high_value as fair_value_high
       from document_lines dl
       join items it on it.id = dl.item_id and it.recognition_rule_id is not null
       join recognition_rules r on r.id = it.recognition_rule_id
       left join lateral (
-        select unit_price from fair_value_prices f
+        select unit_price, low_value, high_value from fair_value_prices f
          where f.org_id = ${orgId} and f.item_id = dl.item_id and f.is_active
            and (f.currency = ${currency} or ${currency} = '')
            and (f.effective_from is null or f.effective_from <= ${doc.document_date})
@@ -500,10 +531,11 @@ export async function createObligationsFromInvoice(
      where dl.document_id = ${documentId}
      order by dl.line_number`)) as unknown as {
     rows: {
-      line_id: string; description: string | null; amount: string; item_id: string;
+      line_id: string; description: string | null; amount: string; quantity: string | null; item_id: string;
       line_custom: Record<string, any> | null; income_account_id: string | null; item_deferred: string | null;
       item_ssp: string | null; revenue_allocation: string; rule_id: string; rule_deferred: string | null;
       rule_recognized: string | null; end_date_source: string; fair_value: string | null;
+      fair_value_low: string | null; fair_value_high: string | null;
     }[];
   };
   if (lineRes.rows.length === 0) return { created: 0, contractId: null, obligationIds: [] };
@@ -553,13 +585,20 @@ export async function createObligationsFromInvoice(
       const endsOn = (l.line_custom?.recognitionEndsOn as string) ?? null;
       const deferred = l.item_deferred ?? l.rule_deferred;
       const recognized = l.rule_recognized ?? l.income_account_id;
+      const allocated = allocByLine.get(l.line_id) ?? l.amount;
+      const fvFlag = rangePolicy === "warn"
+        ? fairValueRangeFlag(allocated, l.quantity, l.fair_value_low, l.fair_value_high)
+        : null;
       const insObl = (await tx.execute(sql`
         insert into performance_obligations
           (org_id, contract_id, document_line_id, item_id, description, recognition_rule_id,
-           booked_amount, standalone_selling_price, allocated_price, recognition_starts_on, recognition_ends_on,
+           booked_amount, standalone_selling_price, allocated_price,
+           fair_value_flag, fair_value_low, fair_value_high,
+           recognition_starts_on, recognition_ends_on,
            deferred_account_id, recognized_account_id, status, created_by, updated_by)
         values (${orgId}, ${cId}, ${l.line_id}, ${l.item_id}, ${l.description ?? "Revenue"}, ${l.rule_id},
-                ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocByLine.get(l.line_id) ?? l.amount},
+                ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocated},
+                ${fvFlag}, ${fvFlag ? l.fair_value_low : null}, ${fvFlag ? l.fair_value_high : null},
                 ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, 'open', ${actorId}, ${actorId})
         returning id`)) as unknown as { rows: { id: string }[] };
       obligationIds.push(insObl.rows[0].id);
