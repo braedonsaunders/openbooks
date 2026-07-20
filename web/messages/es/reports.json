@@ -106,7 +106,11 @@
     "scaleMillions": "Millones",
     "showZeros": "Mostrar ceros",
     "truncated": "Se ocultaron algunas columnas de desglose para mantener el informe legible.",
-    "options": "Opciones"
+    "options": "Opciones",
+    "expandAll": "Expandir todo",
+    "collapseAll": "Contraer todo",
+    "expandSection": "Expandir {section}",
+    "collapseSection": "Contraer {section}"
   },
   "balanceSheet": {
     "title": "Balance general",

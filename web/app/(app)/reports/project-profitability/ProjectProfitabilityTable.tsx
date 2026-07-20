@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
@@ -9,6 +9,7 @@ import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { ReportDrillLink } from '../ReportDrillLink'
 import { ReportPaper } from '../ReportPaper'
 import { Pagination } from '../../../../components/pagination'
+import { REPORT_SECTION_VISIBILITY_EVENT, type ReportSectionVisibility } from '../report-section-events'
 import {
   Table,
   TableBody,
@@ -105,6 +106,15 @@ export function ProjectProfitabilityTable({
   }
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const handleVisibility = (event: Event) => {
+      const visibility = (event as CustomEvent<ReportSectionVisibility>).detail
+      setCollapsed(visibility === 'collapse' ? new Set(groups.map((group) => group.key)) : new Set())
+    }
+    window.addEventListener(REPORT_SECTION_VISIBILITY_EVENT, handleVisibility)
+    return () => window.removeEventListener(REPORT_SECTION_VISIBILITY_EVENT, handleVisibility)
+  }, [groups])
+
   const toggle = (key: string) => setCollapsed((current) => {
     const next = new Set(current)
     if (next.has(key)) next.delete(key)

@@ -64,6 +64,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
               subsidiary: true,
               showZero: true,
               scale: true,
+              sections: true,
             }}
             dimensions={opts}
             subsidiaries={subView.picker}

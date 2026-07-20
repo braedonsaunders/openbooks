@@ -106,7 +106,11 @@
     "scaleMillions": "百万単位",
     "showZeros": "ゼロを表示",
     "truncated": "レポートを読みやすく保つため、一部の内訳列を非表示にしました。",
-    "options": "オプション"
+    "options": "オプション",
+    "expandAll": "すべて展開",
+    "collapseAll": "すべて折りたたむ",
+    "expandSection": "{section}を展開",
+    "collapseSection": "{section}を折りたたむ"
   },
   "balanceSheet": {
     "title": "貸借対照表",

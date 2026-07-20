@@ -106,7 +106,11 @@
     "scaleMillions": "Millionen",
     "showZeros": "Nullwerte anzeigen",
     "truncated": "Einige Aufgliederungsspalten wurden ausgeblendet, um den Bericht lesbar zu halten.",
-    "options": "Optionen"
+    "options": "Optionen",
+    "expandAll": "Alle erweitern",
+    "collapseAll": "Alle reduzieren",
+    "expandSection": "{section} erweitern",
+    "collapseSection": "{section} reduzieren"
   },
   "balanceSheet": {
     "title": "Bilanz",

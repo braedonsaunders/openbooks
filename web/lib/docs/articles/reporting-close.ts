@@ -47,6 +47,10 @@ Loss**. Search, report modes, dates, dimensions, saved views, and export actions
 stay inside that single non-wrapping row. On a narrow screen, scroll the toolbar
 horizontally; controls never move into a separate second row.
 
+Reports with collapsible account or customer sections add **Expand all** and
+**Collapse all** to the toolbar's **Options** menu. These actions affect every
+collapsible section currently displayed without changing the report filters.
+
 ## Drill into report values
 
 Select any amount, count, quantity, percentage, or other numeric result to open

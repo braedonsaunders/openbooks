@@ -72,7 +72,7 @@ export default async function BudgetPage({
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
-            controls={{ period: false, dimensions: true }}
+            controls={{ period: false, dimensions: true, sections: Boolean(view) }}
             primaryFilter={{
               paramKey: 'scenario',
               label: t('budget.scenario'),

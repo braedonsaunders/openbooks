@@ -3,10 +3,11 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { SlidersHorizontal } from 'lucide-react'
+import { ChevronsDown, ChevronsUp, SlidersHorizontal } from 'lucide-react'
 import { Popover, Select, cn } from '@openbooks/ui'
 import { PERIOD_PRESETS, PERIOD_PRESET_GROUP_LABELS, type PeriodPresetGroup } from '@openbooks/reports'
 import { SearchInput } from '../../../components/search-input'
+import { setAllReportSections } from './report-section-events'
 
 type DimOption = { id: string; name: string }
 type SegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean; values: DimOption[] }
@@ -32,6 +33,7 @@ export type ReportControls = {
   subsidiary?: boolean
   showZero?: boolean
   scale?: boolean
+  sections?: boolean
 }
 
 type ReportFilterOption = { value: string; label: string }
@@ -286,7 +288,7 @@ export function ReportFilterBar({
 
       {/* Display controls (basis / scale / show-zeros) tuck into one popover so
           the toolbar stays a single row. */}
-      {(controls.basis || controls.scale || controls.showZero) && (
+      {(controls.basis || controls.scale || controls.showZero || controls.sections) && (
         <Popover
           open={optionsOpen}
           onOpenChange={setOptionsOpen}
@@ -302,6 +304,30 @@ export function ReportFilterBar({
           }
         >
           <div className="w-56 space-y-3 p-3">
+            {controls.sections ? (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAllReportSections('expand')
+                    setOptionsOpen(false)
+                  }}
+                  className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <ChevronsDown size={15} /> {t('expandAll')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAllReportSections('collapse')
+                    setOptionsOpen(false)
+                  }}
+                  className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <ChevronsUp size={15} /> {t('collapseAll')}
+                </button>
+              </div>
+            ) : null}
             {controls.basis && (
               <label className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-slate-500 dark:text-slate-400">{t('basis')}</span>
