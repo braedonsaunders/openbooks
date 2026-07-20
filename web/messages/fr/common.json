@@ -186,7 +186,7 @@
     "description": "Aucun enregistrement ne correspond aux filtres actuels."
   },
   "auditTrail": {
-    "tabs": { "details": "Détails", "audit": "Piste d’audit" },
+    "tabs": { "details": "Détails", "attachments": "Pièces jointes", "audit": "Piste d’audit" },
     "ariaLabel": "Sections de l’enregistrement",
     "searchPlaceholder": "Rechercher dans la piste d’audit",
     "actionFilter": "Filtrer par action",

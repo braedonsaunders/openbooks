@@ -11,7 +11,6 @@ import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
-import { AttachmentPanel } from '../../../components/attachment-panel'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
@@ -421,6 +420,7 @@ export function JournalDrawer({
     <TransactionDrawer
       closeHref="/journal"
       recordId={String(doc.id)}
+      canEditAttachments
       panelClassName={docTypeMeta('journal').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
@@ -607,7 +607,6 @@ export function JournalDrawer({
           />
         </div>
 
-        <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
     </TransactionDrawer>
   )

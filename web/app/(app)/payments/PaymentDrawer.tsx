@@ -7,7 +7,6 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Wand2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
-import { AttachmentPanel } from '../../../components/attachment-panel'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
@@ -352,6 +351,7 @@ export function PaymentDrawer({
     <TransactionDrawer
       closeHref={basePath}
       recordId={String(doc.id)}
+      canEditAttachments={canEditStatus}
       panelClassName={docTypeMeta(String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
@@ -667,7 +667,6 @@ export function PaymentDrawer({
           </div>
         )}
 
-        <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
     </TransactionDrawer>
   )

@@ -261,10 +261,18 @@ for a properly designed role and retention policy.
 
 ## Link evidence to work
 
-Where a transaction or close task accepts attachments or evidence, attach or
-link the supporting file from that workflow. A well-organized cabinet is useful,
-but evidence is strongest when a reviewer can move directly from the accounting
-event to its source.
+Every transaction flyout has an **Attachments** subtab alongside **Details** and
+**Audit**. Open that subtab to search and filter the transaction's evidence,
+upload or drop files when permitted, download originals, or remove an incorrect
+link. PDF and image evidence opens in the built-in preview so a reviewer can
+compare it with the transaction without leaving the workflow.
+
+Use the preview's expand control to let the evidence occupy the full flyout, and
+use it again to restore the file list. **Open original** launches the governed
+download in a separate browser tab when a larger browser view is preferable.
+
+A well-organized cabinet is useful, but evidence is strongest when a reviewer
+can move directly from the accounting event to its source.
 
 Keep original bank statements, vendor invoices, customer support, approvals,
 imports, reconciliation packages, and issued financial reports according to the

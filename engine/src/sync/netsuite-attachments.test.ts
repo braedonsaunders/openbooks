@@ -1,0 +1,38 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { detectContentType, expenseReportFileIds, safeFilename } from "./netsuite-attachments.ts";
+
+test("detectContentType recognizes source receipt signatures", () => {
+  assert.equal(detectContentType(Buffer.from("%PDF-1.7"), "wrong.jpg"), "application/pdf");
+  assert.equal(
+    detectContentType(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "receipt"),
+    "image/png",
+  );
+  assert.equal(detectContentType(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), "receipt"), "image/jpeg");
+  assert.equal(detectContentType(Buffer.from("GIF89a"), "receipt"), "image/gif");
+});
+
+test("detectContentType rejects unsupported content instead of mis-serving it", () => {
+  assert.throws(() => detectContentType(Buffer.from("not an image"), "payload.exe"), /unsupported attachment/);
+  assert.throws(() => detectContentType(Buffer.from("not an image"), "spoofed.pdf"), /unsupported attachment/);
+});
+
+test("safeFilename strips paths and control characters", () => {
+  assert.equal(safeFilename("../receipts/invoice\u0000.pdf", "42"), "invoice.pdf");
+  assert.equal(safeFilename("..\\receipts\\invoice.pdf", "42"), "invoice.pdf");
+  assert.equal(safeFilename("\u0000", "42"), "attachment-42");
+});
+
+test("expenseReportFileIds reads and deduplicates standard REST receipt references", () => {
+  assert.deepEqual(expenseReportFileIds({
+    expense: {
+      items: [
+        { expmediaitem: { id: "33057" } },
+        { expmediaitem: { id: "33057" } },
+        { expmediaitem: { id: 33058 } },
+        { expmediaitem: null },
+      ],
+    },
+  }), ["33057", "33058"]);
+  assert.deepEqual(expenseReportFileIds({ expense: { items: [] } }), []);
+});

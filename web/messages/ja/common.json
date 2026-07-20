@@ -186,7 +186,7 @@
     "description": "現在のフィルターに一致するレコードはありません。"
   },
   "auditTrail": {
-    "tabs": { "details": "詳細", "audit": "監査証跡" },
+    "tabs": { "details": "詳細", "attachments": "添付ファイル", "audit": "監査証跡" },
     "ariaLabel": "レコードのセクション",
     "searchPlaceholder": "監査証跡を検索",
     "actionFilter": "アクションで絞り込み",
