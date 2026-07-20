@@ -58,5 +58,49 @@
     "createDraftFailed": "Could not create a draft",
     "deleted": "Document deleted",
     "deleteFailed": "Delete failed"
+  },
+  "cockpit": {
+    "title": "Accounts Receivable",
+    "description": "Your receivables control center — what you're owed, what's overdue, and what to collect this week.",
+    "tabs": {
+      "overview": "Overview",
+      "invoices": "Invoices"
+    },
+    "current": "current",
+    "customer": "Customer",
+    "overdueCol": "Overdue",
+    "openCol": "Open",
+    "noReceivables": "No open receivables. Everything is collected.",
+    "configure": "How it works",
+    "configTitle": "Collections model",
+    "configDescription": "How the worklist is ordered and collection dates are predicted. Read-only — collections have no cap; the engine predicts when customers pay.",
+    "stats": {
+      "openReceivables": "Open receivables",
+      "overdue": "Overdue",
+      "overdueSub": "{count} invoices · {pct}% of open",
+      "expectedThisWeek": "Expected this week",
+      "next30": "Next 30 days",
+      "dso": "Days sales out (DSO)",
+      "dsoSub": "Avg days to collect",
+      "days": "{n}d"
+    },
+    "panels": {
+      "worklist": "Collections worklist",
+      "aging": "Receivables aging",
+      "schedule": "Cash-in schedule",
+      "scheduleHint": "Predicted collections over {weeks} weeks — click a week",
+      "byCustomer": "Receivables by customer"
+    },
+    "worklist": {
+      "overdueToChase": "Overdue to chase",
+      "expectedThisWeek": "Expected this week",
+      "customer": "Customer",
+      "prediction": "Prediction",
+      "due": "Due",
+      "amount": "Amount",
+      "selected": "{count} selected · {amount}",
+      "build": "Build collection run",
+      "empty": "No collections predicted in the horizon."
+    }
   }
 }
