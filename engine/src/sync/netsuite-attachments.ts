@@ -108,6 +108,14 @@ export function detectContentType(bytes: Buffer, filename: string): string {
   throw new Error(`unsupported attachment content for source file ${filename || "(unnamed)"}`);
 }
 
+export function normalizeAttachmentBytes(bytes: Buffer): Buffer {
+  if (!bytes.subarray(0, 13).toString("ascii").startsWith("%PDFfileName=")) return bytes;
+  const boundedPrefix = bytes.subarray(0, Math.min(bytes.length, 1_024)).toString("ascii");
+  const pdfHeader = boundedPrefix.indexOf("%PDF-", 5);
+  if (pdfHeader < 0) return bytes;
+  return bytes.subarray(pdfHeader);
+}
+
 export function expenseReportFileIds(record: unknown): string[] {
   if (!record || typeof record !== "object") return [];
   const expense = (record as { expense?: unknown }).expense;
@@ -259,6 +267,34 @@ export function decodeBridgeAttachment(response: unknown, expectedFileId: string
   return { source: { id, name }, bytes };
 }
 
+function decodeBridgeAttachmentChunk(
+  response: unknown,
+  expectedFileId: string,
+  expectedSize: number,
+  expectedOffset: number,
+): { contents: string; nextOffset: number; done: boolean } {
+  if (!response || typeof response !== "object") throw new Error("attachment bridge returned an invalid chunk response");
+  const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
+  if (body.ok !== true || !body.file) throw new Error(String(body.error || "attachment bridge chunk download failed"));
+  const id = String(body.file.id ?? "");
+  const size = Number(body.file.size);
+  const encoding = String(body.file.encoding ?? "");
+  const offset = Number(body.file.offset);
+  const contents = body.file.contents;
+  const nextOffset = Number(body.file.nextOffset);
+  const done = body.file.done === true;
+  if (id !== expectedFileId || size !== expectedSize || encoding !== "base64-chunk") {
+    throw new Error(`attachment bridge returned the wrong chunk for source file ${expectedFileId}`);
+  }
+  if (offset !== expectedOffset || typeof contents !== "string" || !contents.length || contents.length % 4 !== 0) {
+    throw new Error(`attachment bridge returned malformed chunk content for source file ${expectedFileId}`);
+  }
+  if (!Number.isSafeInteger(nextOffset) || nextOffset !== offset + contents.length) {
+    throw new Error(`attachment bridge returned a discontinuous chunk for source file ${expectedFileId}`);
+  }
+  return { contents, nextOffset, done };
+}
+
 async function downloadSourceFile(
   fileId: string,
   creds: NetSuiteCreds,
@@ -268,7 +304,50 @@ async function downloadSourceFile(
     action: "attachmentContent",
     fileId,
   }, creds, "POST");
-  return decodeBridgeAttachment(response, fileId);
+  const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
+  if (body?.file?.encoding !== "base64-chunks") return decodeBridgeAttachment(response, fileId);
+  if (body.ok !== true) throw new Error(String(body.error || "attachment bridge download failed"));
+
+  const id = String(body.file.id ?? "");
+  const name = String(body.file.name ?? "");
+  const size = Number(body.file.size);
+  const encodedSize = Number(body.file.encodedSize);
+  const chunkSize = Number(body.file.chunkSize);
+  if (id !== fileId || !name || !Number.isSafeInteger(size) || size <= 0
+      || !Number.isSafeInteger(encodedSize) || encodedSize !== Math.ceil(size / 3) * 4
+      || !Number.isSafeInteger(chunkSize) || chunkSize <= 0 || chunkSize % 4 !== 0) {
+    throw new Error(`attachment bridge returned malformed chunk metadata for source file ${fileId}`);
+  }
+
+  const chunks: string[] = [];
+  let offset = 0;
+  while (offset < encodedSize) {
+    const chunkResponse = await netsuiteRestlet<unknown>(bridge.script, bridge.deploy, {
+      action: "attachmentContentChunk",
+      fileId,
+      offset,
+    }, creds, "POST");
+    const chunk = decodeBridgeAttachmentChunk(chunkResponse, fileId, size, offset);
+    chunks.push(chunk.contents);
+    offset = chunk.nextOffset;
+    if (chunk.done !== (offset === encodedSize)) {
+      throw new Error(`attachment bridge ended chunks at the wrong position for source file ${fileId}`);
+    }
+  }
+  const bytes = Buffer.from(chunks.join(""), "base64");
+  if (bytes.length !== size) throw new Error(`attachment bridge size mismatch for source file ${fileId}`);
+  return { source: { id, name }, bytes };
+}
+
+/** Title-case a snake_case kind ("vendor_bill" -> "Vendor Bill"). Must match
+ *  web/lib/file-cabinet.ts titleizeKind and the SQL backfill so the sync and the
+ *  cabinet UI resolve attachments to the same kind group folder. */
+function titleizeKind(s: string): string {
+  return s
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 async function ensureRecordFolder(
@@ -279,6 +358,7 @@ async function ensureRecordFolder(
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments:${orgId}:${documentId}`}))`);
   const existing = (await tx.execute(sql`
     select id from folders where org_id = ${orgId} and record_table = 'documents' and record_id = ${documentId}
+      and record_id is not null
   `)) as unknown as { rows: { id: string }[] };
   if (existing.rows[0]) return existing.rows[0].id;
 
@@ -292,9 +372,29 @@ async function ensureRecordFolder(
       values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id
     `)) as unknown as { rows: { id: string }[] };
   }
+  const rootId = root.rows[0].id;
+
+  // Nest the per-record leaf under a kind group folder so the cabinet never
+  // enumerates tens of thousands of flat attachment folders.
+  const kindRow = (await tx.execute(sql`
+    select kind from documents where id = ${documentId} and org_id = ${orgId}
+  `)) as unknown as { rows: { kind: string | null }[] };
+  const label = kindRow.rows[0]?.kind ? titleizeKind(kindRow.rows[0].kind) : "Documents";
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-group:${orgId}:${label}`}))`);
+  let group = (await tx.execute(sql`
+    select id from folders
+     where org_id = ${orgId} and parent_folder_id = ${rootId} and record_id is null and name = ${label}
+  `)) as unknown as { rows: { id: string }[] };
+  if (!group.rows[0]) {
+    group = (await tx.execute(sql`
+      insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
+      values (${orgId}, ${rootId}, ${label}, true, 'documents', now(), now()) returning id
+    `)) as unknown as { rows: { id: string }[] };
+  }
+
   const inserted = (await tx.execute(sql`
     insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
-    values (${orgId}, ${root.rows[0].id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
+    values (${orgId}, ${group.rows[0].id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
     returning id
   `)) as unknown as { rows: { id: string }[] };
   return inserted.rows[0].id;
@@ -441,7 +541,8 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   const fileIds = await prioritizeMissingFiles(orgId, Array.from(fileToDocuments.keys()));
   await concurrentMap(fileIds, options.concurrency, async (fileId, index) => {
     try {
-      const { source, bytes } = await downloadSourceFile(fileId, creds, bridge);
+      const { source, bytes: sourceBytes } = await downloadSourceFile(fileId, creds, bridge);
+      const bytes = normalizeAttachmentBytes(sourceBytes);
       const contentType = detectContentType(bytes, source.name);
       const persisted = await persistFile({
         orgId,

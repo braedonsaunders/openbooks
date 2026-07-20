@@ -90,13 +90,16 @@ function deriveExtension(filename: string): string | null {
 }
 
 /**
- * Visibility predicate for private folders: TRUE when the folder identified
- * by `folderIdCol` is not a private folder owned by someone else, nor a
- * descendant of one. Admins bypass (see FileViewer).
+ * Resolve the set of folder ids hidden from this viewer — private folders owned
+ * by someone else, plus everything beneath them. Computed ONCE per request (a
+ * single recursive walk) so read queries can filter with a cheap membership
+ * test instead of re-evaluating a correlated recursive CTE for every candidate
+ * row. Admins hide nothing (empty set); orgs with no private folders (the
+ * common case) also resolve to an empty set, making the predicate a no-op.
  */
-function visibleFolderPredicate(orgId: string, viewer: FileViewer, folderIdCol: SQL): SQL {
-  if (viewer.isAdmin) return sql`true`
-  return sql`not exists (
+async function hiddenFolderIds(orgId: string, viewer: FileViewer): Promise<string[]> {
+  if (viewer.isAdmin) return []
+  const r = (await db.execute(sql`
     with recursive hidden_folders as (
       select id from folders
        where org_id = ${orgId} and is_private and owner_id is distinct from ${viewer.userId}
@@ -105,8 +108,34 @@ function visibleFolderPredicate(orgId: string, viewer: FileViewer, folderIdCol: 
         join hidden_folders h on f.parent_folder_id = h.id
        where f.org_id = ${orgId}
     )
-    select 1 from hidden_folders h where h.id = ${folderIdCol}
+    select id from hidden_folders
+  `)) as unknown as { rows: { id: string }[] }
+  return r.rows.map((x) => x.id)
+}
+
+/**
+ * Visibility predicate built from a pre-resolved hidden-folder set (see
+ * hiddenFolderIds). TRUE when `folderIdCol` is not hidden. An empty set — admins
+ * or orgs with no private folders — short-circuits to `true` with zero overhead.
+ * The hidden set is bound as a single jsonb param (never raw-interpolated) so an
+ * empty or large list is always valid SQL.
+ */
+function visibleFolderPredicate(hidden: string[], folderIdCol: SQL): SQL {
+  if (hidden.length === 0) return sql`true`
+  return sql`${folderIdCol} not in (
+    select value::uuid from jsonb_array_elements_text(${JSON.stringify(hidden)}::jsonb) as _h(value)
   )`
+}
+
+/** Title-case a snake_case identifier: "vendor_bill" -> "Vendor Bill". Must
+ *  match the SQL backfill (initcap(replace(kind,'_',' '))) so grouping folders
+ *  created here and by the migration resolve to the same name. */
+export function titleizeKind(s: string): string {
+  return s
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 function deriveFileType(contentType: string): string {
@@ -159,9 +188,52 @@ export async function ensureApCaptureRoot(orgId: string, createdBy: string): Pro
 }
 
 /**
- * Ensure a per-record attachment folder exists (auto-created under the
- * "Attachments" system root). One folder per (org, recordTable, recordId).
- * Returns the folder id.
+ * Ensure the kind group folder for a record type exists under the Attachments
+ * root, and return its id. Group folders (record_id null, record_table set)
+ * tuck the per-record leaf folders one level deeper so the cabinet home screen
+ * and sidebar never enumerate tens of thousands of attachment folders. For
+ * `documents` the group is the document kind ("Vendor Bill", "Expense Report");
+ * for any other table it is the titleized table name. Matched by name so it
+ * stays in lock-step with the SQL backfill.
+ */
+async function ensureGroupFolder(
+  orgId: string,
+  rootId: string,
+  recordTable: string,
+  label: string,
+): Promise<string> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-group:${orgId}:${label}`}))`)
+    const existing = (await tx.execute(sql`
+      select id from folders
+       where org_id = ${orgId} and parent_folder_id = ${rootId}
+         and record_id is null and name = ${label}
+    `)) as unknown as { rows: { id: string }[] }
+    if (existing.rows[0]) return existing.rows[0].id
+    const ins = (await tx.execute(sql`
+      insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
+      values (${orgId}, ${rootId}, ${label}, true, ${recordTable}, now(), now())
+      returning id
+    `)) as unknown as { rows: { id: string }[] }
+    return ins.rows[0].id
+  })
+}
+
+/** Resolve the kind group label for a record: document kind for `documents`,
+ *  else the titleized table name. Falls back to "Documents" for orphaned rows. */
+async function groupLabelFor(orgId: string, recordTable: string, recordId: string): Promise<string> {
+  if (recordTable !== 'documents') return titleizeKind(recordTable)
+  const r = (await db.execute(sql`
+    select kind from documents where id = ${recordId} and org_id = ${orgId}
+  `)) as unknown as { rows: { kind: string | null }[] }
+  const kind = r.rows[0]?.kind
+  return kind ? titleizeKind(kind) : 'Documents'
+}
+
+/**
+ * Ensure a per-record attachment folder exists, nested under its kind group
+ * folder (Attachments / <Group> / <record>). One leaf per (org, recordTable,
+ * recordId). Returns the folder id.
  */
 export async function ensureRecordFolder(
   orgId: string,
@@ -171,13 +243,16 @@ export async function ensureRecordFolder(
   const existing = (await db.execute(sql`
     select id from folders
      where org_id = ${orgId} and record_table = ${recordTable} and record_id = ${recordId}
+       and record_id is not null
   `)) as unknown as { rows: { id: string }[] }
   if (existing.rows.length > 0) return existing.rows[0].id
   const rootId = await ensureAttachmentsRoot(orgId)
+  const label = await groupLabelFor(orgId, recordTable, recordId)
+  const groupId = await ensureGroupFolder(orgId, rootId, recordTable, label)
   const name = `${recordTable} / ${recordId.slice(0, 8)}`
   const ins = (await db.execute(sql`
     insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
-    values (${orgId}, ${rootId}, ${name}, true, ${recordTable}, ${recordId}, now(), now())
+    values (${orgId}, ${groupId}, ${name}, true, ${recordTable}, ${recordId}, now(), now())
     returning id
   `)) as unknown as { rows: { id: string }[] }
   return ins.rows[0].id
@@ -185,20 +260,69 @@ export async function ensureRecordFolder(
 
 // --- folder CRUD ------------------------------------------------------------
 
-/** Fetch the full folder tree for an org (flat list with counts). */
+/**
+ * Fetch the navigable folder tree for the sidebar (flat list with counts).
+ *
+ * Excludes per-record leaf folders (record_id is not null) — the auto-created
+ * attachment containers, one per attached record, which can number in the tens
+ * of thousands. Those are an internal linkage layer ("a link, not a container"),
+ * not navigation: they are reached by drilling into their kind group folder in
+ * the main pane (see listFolderContents), never enumerated in the sidebar. The
+ * tree therefore holds only system roots, kind group folders, and user folders —
+ * a small, bounded set regardless of attachment volume.
+ *
+ * Counts are computed with GROUP BY aggregates (two single passes) rather than
+ * correlated subqueries per folder.
+ */
 export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<FolderNode[]> {
+  const hidden = await hiddenFolderIds(orgId, viewer)
   const r = (await db.execute(sql`
     select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
            f.system_kind as "systemKind", f.is_private as "isPrivate",
            f.is_inactive as "isInactive", f.record_table as "recordTable",
            f.record_id as "recordId",
-           (select count(*) from folders c where c.parent_folder_id = f.id) as "childCount",
-           (select count(*) from files fi where fi.folder_id = f.id and not fi.is_inactive) as "fileCount"
+           coalesce(cc.n, 0) as "childCount",
+           coalesce(fc.n, 0) as "fileCount"
       from folders f
+      left join (
+        select parent_folder_id, count(*)::int as n
+          from folders
+         where org_id = ${orgId} and not is_inactive
+         group by parent_folder_id
+      ) cc on cc.parent_folder_id = f.id
+      left join (
+        select folder_id, count(*)::int as n
+          from files
+         where org_id = ${orgId} and not is_inactive
+         group by folder_id
+      ) fc on fc.folder_id = f.id
      where f.org_id = ${orgId} and not f.is_inactive
-       and ${visibleFolderPredicate(orgId, viewer, sql`f.id`)}
+       and f.record_id is null
+       and ${visibleFolderPredicate(hidden, sql`f.id`)}
      order by f.is_system desc, f.name asc
   `)) as unknown as { rows: FolderNode[] }
+  return r.rows
+}
+
+/**
+ * Ancestor chain (root → … → the folder itself) for a breadcrumb. Works for any
+ * folder, including the per-record leaf folders the sidebar tree excludes, so a
+ * deep link into an attachment folder still shows its full path.
+ */
+export async function getFolderPath(
+  orgId: string,
+  folderId: string,
+): Promise<{ id: string; name: string; systemKind: string | null }[]> {
+  const r = (await db.execute(sql`
+    with recursive chain as (
+      select id, name, system_kind, parent_folder_id, 0 as depth
+        from folders where id = ${folderId} and org_id = ${orgId}
+      union all
+      select f.id, f.name, f.system_kind, f.parent_folder_id, c.depth + 1
+        from folders f join chain c on f.id = c.parent_folder_id and f.org_id = ${orgId}
+    )
+    select id, name, system_kind as "systemKind" from chain order by depth desc
+  `)) as unknown as { rows: { id: string; name: string; systemKind: string | null }[] }
   return r.rows
 }
 
@@ -405,10 +529,11 @@ export async function listFiles(
         : sql`fi.name`
   const dir = opts.dir === 'asc' ? sql`asc` : sql`desc`
 
+  const hidden = await hiddenFolderIds(orgId, viewer)
   const whereParts = [
     sql`fi.org_id = ${orgId}`,
     sql`not fi.is_inactive`,
-    visibleFolderPredicate(orgId, viewer, sql`fi.folder_id`),
+    visibleFolderPredicate(hidden, sql`fi.folder_id`),
   ]
   if (opts.folderId) whereParts.push(sql`fi.folder_id = ${opts.folderId}`)
   if (opts.q) whereParts.push(sql`fi.name ilike ${'%' + opts.q + '%'}`)
@@ -419,12 +544,15 @@ export async function listFiles(
       select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
              fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
              fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
-             (select count(*) from file_versions fv where fv.file_id = fi.id) as "versionCount",
+             coalesce(vc.n, 0) as "versionCount",
              fi.created_at as "createdAt", fi.created_by as "createdBy",
              fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
              fo.name as "folderName"
         from files fi
         left join folders fo on fo.id = fi.folder_id
+        left join lateral (
+          select count(*)::int as n from file_versions fv where fv.file_id = fi.id
+        ) vc on true
        where ${where}
        order by ${sortColumn} ${dir} nulls last
        limit ${opts.limit ?? 50} offset ${opts.offset ?? 0}
@@ -436,7 +564,108 @@ export async function listFiles(
   return { files, total }
 }
 
+/**
+ * The contents of one folder for the main pane — a real file browser: the
+ * folder's immediate sub-folders followed by its files, in a single paginated
+ * window (folders first, then files). At the virtual root (parentId null) only
+ * root folders are shown; files never live at the virtual root. Searching (q)
+ * bypasses the folder level entirely and returns matching files from the whole
+ * cabinet (recursive), matching the old "search spans everything" behaviour.
+ *
+ * Combined pagination: the page window [offset, offset+limit) walks a virtual
+ * list [ ...folders, ...files ]. This keeps one Pagination control for a mixed
+ * folder/file listing without loading either side in full.
+ */
+export interface FolderContents {
+  folders: FolderNode[]
+  files: FileMeta[]
+  folderTotal: number
+  fileTotal: number
+  total: number
+}
+
+export async function listFolderContents(
+  orgId: string,
+  viewer: FileViewer,
+  opts: {
+    parentId?: string
+    q?: string
+    sort?: string
+    dir?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  } = {},
+): Promise<FolderContents> {
+  const limit = opts.limit ?? 50
+  const offset = opts.offset ?? 0
+
+  // Search spans the whole cabinet — no folder rows, just matching files.
+  if (opts.q) {
+    const { files, total } = await listFiles(orgId, viewer, {
+      q: opts.q,
+      sort: opts.sort,
+      dir: opts.dir,
+      limit,
+      offset,
+    })
+    return { folders: [], files, folderTotal: 0, fileTotal: total, total }
+  }
+
+  const hidden = await hiddenFolderIds(orgId, viewer)
+  const parentPred = opts.parentId
+    ? sql`f.parent_folder_id = ${opts.parentId}`
+    : sql`f.parent_folder_id is null`
+
+  // Folder count first — it anchors the combined pagination math.
+  const folderCount = (await db.execute(sql`
+    select count(*)::int as n
+      from folders f
+     where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
+       and ${visibleFolderPredicate(hidden, sql`f.id`)}
+  `)) as unknown as { rows: { n: number }[] }
+  const folderTotal = folderCount.rows[0]?.n ?? 0
+
+  const folders =
+    offset < folderTotal
+      ? ((await db.execute(sql`
+          select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
+                 f.system_kind as "systemKind", f.is_private as "isPrivate",
+                 f.is_inactive as "isInactive", f.record_table as "recordTable",
+                 f.record_id as "recordId",
+                 (select count(*)::int from folders c
+                   where c.parent_folder_id = f.id and not c.is_inactive) as "childCount",
+                 (select count(*)::int from files fi
+                   where fi.folder_id = f.id and not fi.is_inactive) as "fileCount"
+            from folders f
+           where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
+             and ${visibleFolderPredicate(hidden, sql`f.id`)}
+           order by f.is_system desc, f.name asc
+           limit ${limit} offset ${offset}
+        `)) as unknown as { rows: FolderNode[] }).rows
+      : []
+
+  // Files live in a real folder only; the virtual root shows folders alone.
+  let files: FileMeta[] = []
+  let fileTotal = 0
+  if (opts.parentId) {
+    const filesReturnable = limit - folders.length
+    const filesOffset = Math.max(0, offset - folderTotal)
+    const { files: rows, total } = await listFiles(orgId, viewer, {
+      folderId: opts.parentId,
+      sort: opts.sort,
+      dir: opts.dir,
+      limit: Math.max(filesReturnable, 0),
+      offset: filesOffset,
+    })
+    fileTotal = total
+    files = filesReturnable > 0 ? rows : []
+  }
+
+  return { folders, files, folderTotal, fileTotal, total: folderTotal + fileTotal }
+}
+
 export async function getFile(orgId: string, id: string, viewer: FileViewer): Promise<FileDetail | null> {
+  const hidden = await hiddenFolderIds(orgId, viewer)
   const meta = (await db.execute(sql`
     select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
            fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
@@ -447,7 +676,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
       from files fi
       left join folders fo on fo.id = fi.folder_id
      where fi.id = ${id} and fi.org_id = ${orgId}
-       and ${visibleFolderPredicate(orgId, viewer, sql`fi.folder_id`)}
+       and ${visibleFolderPredicate(hidden, sql`fi.folder_id`)}
   `)) as unknown as { rows: any[] }
   if (meta.rows.length === 0) return null
   const f = meta.rows[0]
@@ -663,6 +892,7 @@ export async function getFileBlob(
   viewer: FileViewer,
   versionId?: string,
 ): Promise<{ filename: string; contentType: string; bytes: Buffer } | null> {
+  const hidden = await hiddenFolderIds(orgId, viewer)
   const r = (await db.execute(sql`
     select fi.name, fv.content_type as "contentType", fv.id as "versionId",
            fv.storage_kind as "storageKind", fb.bytes
@@ -672,7 +902,7 @@ export async function getFileBlob(
        and fv.id = coalesce(${versionId ?? null}, fi.current_version_id)
       left join file_blobs fb on fb.version_id = fv.id
      where fi.id = ${id} and fi.org_id = ${orgId}
-       and ${visibleFolderPredicate(orgId, viewer, sql`fi.folder_id`)}
+       and ${visibleFolderPredicate(hidden, sql`fi.folder_id`)}
   `)) as unknown as {
     rows: { name: string; contentType: string; versionId: string; storageKind: string; bytes: Buffer | null }[]
   }
