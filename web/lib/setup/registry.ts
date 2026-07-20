@@ -178,10 +178,6 @@ const OVERHEAD_RATE_KINDS = [
   { value: 'per_hour', labelKey: 'options.overheadRateKind.per_hour' },
   { value: 'percent', labelKey: 'options.overheadRateKind.percent' },
 ]
-const OVERHEAD_METHODS = [
-  { value: 'live', labelKey: 'options.overheadMethod.live' },
-  { value: 'standard', labelKey: 'options.overheadMethod.standard' },
-]
 
 const FX_RATE_TYPES = [
   { value: 'spot', labelKey: 'options.fxRateType.spot' },
@@ -938,7 +934,6 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     columns: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
       { key: 'category', kind: 'text' },
-      { key: 'rateKind', kind: 'text' },
       { key: 'ratePercent', kind: 'number' },
       { key: 'effectiveFrom', kind: 'date' },
       { key: 'effectiveTo', kind: 'date' },
@@ -948,7 +943,6 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'category', kind: 'text' },
       { key: 'rateKind', kind: 'select', options: OVERHEAD_RATE_KINDS },
       { key: 'ratePercent', kind: 'decimal', required: true },
-      { key: 'method', kind: 'select', options: OVERHEAD_METHODS },
       { key: 'effectiveFrom', kind: 'date', required: true },
       { key: 'effectiveTo', kind: 'date' },
     ],

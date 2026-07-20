@@ -143,7 +143,7 @@ export function OverheadActions({ departments, projectTypes }: { departments: De
           {rateTable}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setOpen(null)}>{t('cancel')}</Button>
-            <Button size="sm" disabled={busy} onClick={publish}>{busy ? '…' : t('publishConfirm')}</Button>
+            <Button size="sm" disabled={busy} onClick={publish}>{busy ? t('working') : t('publishConfirm')}</Button>
           </div>
         </Modal>
       ) : null}
@@ -192,7 +192,7 @@ export function OverheadActions({ departments, projectTypes }: { departments: De
               {step < 2 ? (
                 <Button size="sm" onClick={() => setStep(step + 1)}>{t('next')} <ArrowRight size={13} /></Button>
               ) : (
-                <Button size="sm" disabled={busy || typeIds.size === 0} onClick={finishWizard}>{busy ? '…' : t('finish')}</Button>
+                <Button size="sm" disabled={busy || typeIds.size === 0} onClick={finishWizard}>{busy ? t('working') : t('finish')}</Button>
               )}
             </div>
           </div>

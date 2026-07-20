@@ -1534,7 +1534,8 @@
         "methodCard": "Department rate card",
         "methodPct": "{rate}% of labor cost",
         "methodHr": "${rate}/labor hour",
-        "methodGl": "Posted GL (account group)"
+        "methodGl": "Posted GL (account group)",
+        "working": "Saving…"
       }
     },
     "fields": {

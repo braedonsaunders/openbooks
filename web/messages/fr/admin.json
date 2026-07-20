@@ -1504,7 +1504,8 @@
         "methodCard": "Grille de taux par département",
         "methodPct": "{rate}% du coût de main-d’œuvre",
         "methodHr": "{rate} $/heure",
-        "methodGl": "GL comptabilisé (groupe de comptes)"
+        "methodGl": "GL comptabilisé (groupe de comptes)",
+        "working": "Enregistrement…"
       }
     },
     "fields": {

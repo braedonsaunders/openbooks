@@ -56,7 +56,7 @@ export async function POST(req: Request) {
            and effective_from >= ${effectiveFrom}::date`)
       await db.execute(sql`
         insert into overhead_rates (org_id, department_id, category, method, rate_kind, rate_percent, effective_from, created_by, updated_by)
-        values (${orgId}, ${r.departmentId}, 'published', 'standard', 'per_hour', ${r.ratePerHour}, ${effectiveFrom}, ${gate.user.id}, ${gate.user.id})`)
+        values (${orgId}, ${r.departmentId}, 'Published', 'standard', 'per_hour', ${r.ratePerHour}, ${effectiveFrom}, ${gate.user.id}, ${gate.user.id})`)
     }
     return NextResponse.json({ ok: true, published: rates.length })
   }

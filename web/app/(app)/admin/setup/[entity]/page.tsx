@@ -137,8 +137,14 @@ function renderCell(
       return raw ? t('yes') : '—'
     case 'percent':
       return raw == null || raw === '' ? '—' : `${Number(raw)}%`
-    case 'number':
-      return raw == null || raw === '' ? '—' : String(raw)
+    case 'number': {
+      if (raw == null || raw === '') return '—'
+      const num = Number(raw)
+      // Locale-formatted, trailing zeros trimmed (1.7500 → 1.75, 40.0000 → 40).
+      return Number.isFinite(num)
+        ? num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+        : String(raw)
+    }
     case 'date':
       return raw ? String(raw) : '—'
     case 'ref': {
