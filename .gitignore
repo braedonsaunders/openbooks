@@ -26,6 +26,7 @@ engine/*.log
 # local runtime artifacts
 dump.rdb
 .sftp-data/
+.backups/
 
 # regenerable 41MB NetSuite time-entry dump (dump_timebill.py recreates it)
 extraction/account-data/timebill.ndjson
