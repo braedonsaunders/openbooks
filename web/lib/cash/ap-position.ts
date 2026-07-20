@@ -1,4 +1,6 @@
 import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
 import {
   addDays,
   bankBalances,
@@ -12,6 +14,7 @@ import {
   scheduleForecast,
   summariseSide,
   toISO,
+  type CategoryWeekly,
   type ForecastEntry,
   type OpenItem,
   type SideSummary,
@@ -72,6 +75,10 @@ export interface ApPosition {
   /** Pay-priority worklist (oldest due first), for the quick pay list. */
   worklist: ForecastEntry[];
   payPlan: PayRunPlan;
+  /** Forecast config surface (shared with analytics + cash). */
+  categories: CategoryWeekly[];
+  vendorOptions: { id: string; name: string }[];
+  accountOptions: { id: string; number: string | null; name: string }[];
 }
 
 function groupByVendor(items: OpenItem[], asOf: Date): VendorPayable[] {
@@ -109,13 +116,18 @@ export async function apPosition(
   const asOfIso = resolveAsOf(asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [apItems, arItems, apStats, arStats, banks, catConfigs] = await Promise.all([
+  const [apItems, arItems, apStats, arStats, banks, catConfigs, accountRows] = await Promise.all([
     openItems("ap", asOfIso),
     openItems("ar", asOfIso),
     paymentStats("ap", asOfIso),
     paymentStats("ar", asOfIso),
     bankBalances(asOfIso),
     loadCategories(orgId),
+    db.execute(sql`
+      select id, number, name from accounts
+      where org_id = ${orgId} and is_summary = false
+      order by number nulls last, name
+    `) as Promise<any>,
   ]);
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts)));
 
@@ -193,5 +205,8 @@ export async function apPosition(
     byVendor: groupByVendor(apItems, grid.asOf),
     worklist,
     payPlan,
+    categories,
+    vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
+    accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
   };
 }

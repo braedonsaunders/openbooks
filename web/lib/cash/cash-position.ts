@@ -1,4 +1,6 @@
 import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
 import {
   addDays,
   bankBalances,
@@ -140,6 +142,12 @@ export interface CashPosition {
   runwayWeeks: number | null;
   runwayStatus: "healthy" | "caution" | "critical";
   deferredBeyondHorizon: number;
+  /** Configured recurring forecast flows, per-week — powers the drill + config. */
+  categories: CategoryWeekly[];
+  apSettings: ApSettings;
+  /** Distinct vendors on open AP — the category editor's vendor picker. */
+  vendorOptions: { id: string; name: string }[];
+  accountOptions: { id: string; number: string | null; name: string }[];
 }
 
 /**
@@ -157,13 +165,18 @@ export async function cashPosition(
   const asOfIso = resolveAsOf(asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows] = await Promise.all([
     openItems("ar", asOfIso),
     openItems("ap", asOfIso),
     paymentStats("ar", asOfIso),
     paymentStats("ap", asOfIso),
     bankBalances(asOfIso),
     loadCategories(orgId),
+    db.execute(sql`
+      select id, number, name from accounts
+      where org_id = ${orgId} and is_summary = false
+      order by number nulls last, name
+    `) as Promise<any>,
   ]);
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts)));
 
@@ -211,5 +224,9 @@ export async function cashPosition(
     runwayWeeks,
     runwayStatus,
     deferredBeyondHorizon: timeline.deferredBeyondHorizon,
+    categories,
+    apSettings,
+    vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
+    accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
   };
 }

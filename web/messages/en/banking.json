@@ -489,7 +489,7 @@
     },
     "panels": {
       "timeline": "Cash position forecast",
-      "timelineHint": "Rolled forward {weeks} weeks",
+      "timelineHint": "Click a week to see what flows in and out · {weeks} weeks",
       "accounts": "Bank accounts"
     },
     "cols": {
@@ -502,6 +502,9 @@
     "totalCash": "Total cash",
     "noAccounts": "No bank accounts found.",
     "negativeAlert": "Projected to go cash-negative — low of {amount} the week of {date}. Slow payables or accelerate collections.",
-    "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week."
+    "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week.",
+    "configure": "Configure forecast",
+    "configTitle": "Cash forecast configuration",
+    "configDescription": "Tune how AP-to-pay is selected and add recurring flows (payroll, rent, loans) the AR/AP pipeline doesn’t capture."
   }
 }

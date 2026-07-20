@@ -227,6 +227,9 @@
     "forecastLink": {
       "pre": "Looking to model the weeks ahead?",
       "link": "Open the cash-flow forecast"
-    }
+    },
+    "configure": "Configure",
+    "configTitle": "AP pay-run configuration",
+    "configDescription": "Tune how AP-to-pay is selected (weekly cap + restrict-to-safe) and model recurring flows (payroll, rent, loans) that shape safe capacity."
   }
 }
