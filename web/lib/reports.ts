@@ -952,6 +952,7 @@ export async function partnerStatement(
 // ---------------------------------------------------------------------------
 
 export interface TxnDetailLine {
+  lineId: string
   entryId: string
   entryNumber: string | null
   date: string
@@ -1045,7 +1046,7 @@ export async function transactionDetail(opts: {
   const totals = agg.rows[0] ?? { n: 0, debit: '0', credit: '0', net: '0' }
 
   const r = (await db.execute(sql`
-    select e.id as entry_id, e.entry_number, e.posting_date::text as date,
+    select l.id as line_id, e.id as entry_id, e.entry_number, e.posting_date::text as date,
            a.number as acct_number, a.name as acct_name, a.type as acct_type,
            p.display_name as party, l.memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
@@ -1059,13 +1060,14 @@ export async function transactionDetail(opts: {
      limit ${limit} offset ${offset}
   `)) as unknown as {
     rows: {
-      entry_id: string; entry_number: string | null; date: string
+      line_id: string; entry_id: string; entry_number: string | null; date: string
       acct_number: string | null; acct_name: string; acct_type: string
       party: string | null; memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
     }[]
   }
   const lines: TxnDetailLine[] = r.rows.map((x) => ({
+    lineId: x.line_id,
     entryId: x.entry_id,
     entryNumber: x.entry_number,
     date: x.date,
