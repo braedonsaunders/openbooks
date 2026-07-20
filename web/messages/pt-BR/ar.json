@@ -58,5 +58,91 @@
     "createDraftFailed": "Não foi possível criar um rascunho",
     "deleted": "Documento excluído",
     "deleteFailed": "Falha ao excluir"
+  },
+  "cockpit": {
+    "title": "Contas a receber",
+    "description": "Sua central de controle de recebíveis — quanto devem, o que está vencido e o que cobrar nesta semana.",
+    "tabs": { "overview": "Visão geral", "invoices": "Faturas" },
+    "current": "a vencer",
+    "customer": "Cliente",
+    "overdueCol": "Vencido",
+    "openCol": "Em aberto",
+    "noReceivables": "Não há recebíveis em aberto. Tudo foi recebido.",
+    "customerSearch": "Buscar clientes…",
+    "customerStatus": "Status do cliente",
+    "customerOverdueOnly": "Com saldo vencido",
+    "configure": "Como funciona",
+    "configTitle": "Modelo de cobrança",
+    "configDescription": "Como a lista de trabalho é ordenada e as datas de recebimento são previstas. Somente leitura — cobranças não têm limite; o mecanismo prevê quando os clientes pagarão.",
+    "stats": {
+      "openReceivables": "Recebíveis em aberto",
+      "overdue": "Vencido",
+      "overdueSub": "{count, plural, one {# fatura} other {# faturas}} · {pct}% do saldo em aberto",
+      "expectedThisWeek": "Previsto nesta semana",
+      "next30": "Próximos 30 dias",
+      "dso": "Prazo médio de recebimento (DSO)",
+      "dsoSub": "Média de dias para receber",
+      "days": "{n} d"
+    },
+    "panels": {
+      "worklist": "Lista de trabalho de cobranças",
+      "aging": "Aging de recebíveis",
+      "schedule": "Programação de recebimentos",
+      "scheduleHint": "Recebimentos previstos em {weeks} semanas — selecione uma semana",
+      "byCustomer": "Recebíveis por cliente"
+    },
+    "worklist": {
+      "overdueToChase": "Vencido para cobrar",
+      "expectedThisWeek": "Previsto nesta semana",
+      "customer": "Cliente",
+      "prediction": "Previsão",
+      "due": "Vencimento",
+      "amount": "Valor",
+      "selected": "{count} selecionadas · {amount}",
+      "build": "Criar lote de cobrança",
+      "empty": "Não há recebimentos previstos no horizonte.",
+      "search": "Buscar cobranças…",
+      "status": "Status da cobrança",
+      "overdueOnly": "Vencido",
+      "upcoming": "Próximo",
+      "selectInvoice": "Selecionar a fatura de {customer}",
+      "daysOverdue": "{count} d em atraso",
+      "methods": {
+        "statistical": "Estatístico",
+        "dueDate": "Data de vencimento",
+        "overduePush": "Adiamento por atraso",
+        "globalAverage": "Média global"
+      }
+    },
+    "model": {
+      "title": "Como os recebimentos são previstos",
+      "worklistOrder": {
+        "label": "Ordem da lista",
+        "value": "Mais vencidas primeiro",
+        "note": "A lista é ordenada por dias em atraso e depois pelo maior valor; faturas vencidas vêm pré-selecionadas"
+      },
+      "prediction": {
+        "label": "Previsão da data de recebimento",
+        "value": "Estatístico → Vencimento → Média global",
+        "note": "Média de dias de recebimento por cliente (+½σ de margem), nunca antes do vencimento"
+      },
+      "overduePush": {
+        "label": "Adiamento por atraso",
+        "value": "+7 / +14 / +28 dias",
+        "note": "Faturas vencidas são deslocadas conforme o atraso (≤30 / ≤60 / >60 dias)"
+      },
+      "businessDay": {
+        "label": "Ajuste para dia útil",
+        "value": "Ativado",
+        "note": "Datas previstas no fim de semana passam para o próximo dia útil"
+      },
+      "dso": {
+        "label": "Média de dias para receber (DSO)",
+        "value": "{dso} d",
+        "note": "Valor alternativo quando o cliente não tem histórico de pagamentos"
+      },
+      "recurring": "Entradas recorrentes (subsídios, aluguéis recebidos e assinaturas) entram na previsão como categorias — configure-as no <cashCockpit>painel de caixa</cashCockpit>.",
+      "documentation": "Ler o guia de contas a receber"
+    }
   }
 }

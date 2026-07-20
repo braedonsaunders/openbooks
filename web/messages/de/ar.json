@@ -58,5 +58,91 @@
     "createDraftFailed": "Entwurf konnte nicht erstellt werden",
     "deleted": "Dokument gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen"
+  },
+  "cockpit": {
+    "title": "Debitorenbuchhaltung",
+    "description": "Ihre Steuerzentrale für Forderungen — offene Beträge, Überfälliges und diese Woche einzuziehende Zahlungen.",
+    "tabs": { "overview": "Übersicht", "invoices": "Ausgangsrechnungen" },
+    "current": "aktuell",
+    "customer": "Kunde",
+    "overdueCol": "Überfällig",
+    "openCol": "Offen",
+    "noReceivables": "Keine offenen Forderungen. Alles ist eingezogen.",
+    "customerSearch": "Kunden suchen…",
+    "customerStatus": "Kundenstatus",
+    "customerOverdueOnly": "Mit überfälligem Saldo",
+    "configure": "Funktionsweise",
+    "configTitle": "Inkassomodell",
+    "configDescription": "So werden die Arbeitsliste sortiert und Zahlungstermine prognostiziert. Schreibgeschützt — für Kundenzahlungen gibt es keine Kapazitätsgrenze; das System prognostiziert den Eingang.",
+    "stats": {
+      "openReceivables": "Offene Forderungen",
+      "overdue": "Überfällig",
+      "overdueSub": "{count, plural, one {# Rechnung} other {# Rechnungen}} · {pct}% der offenen Beträge",
+      "expectedThisWeek": "Diese Woche erwartet",
+      "next30": "Nächste 30 Tage",
+      "dso": "Forderungslaufzeit (DSO)",
+      "dsoSub": "Ø Tage bis Zahlung",
+      "days": "{n} T."
+    },
+    "panels": {
+      "worklist": "Inkasso-Arbeitsliste",
+      "aging": "Fälligkeitsanalyse",
+      "schedule": "Einzahlungsplan",
+      "scheduleHint": "Prognostizierte Zahlungen über {weeks} Wochen — Woche auswählen",
+      "byCustomer": "Forderungen nach Kunde"
+    },
+    "worklist": {
+      "overdueToChase": "Überfällig zur Nachverfolgung",
+      "expectedThisWeek": "Diese Woche erwartet",
+      "customer": "Kunde",
+      "prediction": "Prognose",
+      "due": "Fällig",
+      "amount": "Betrag",
+      "selected": "{count} ausgewählt · {amount}",
+      "build": "Inkassolauf erstellen",
+      "empty": "Im Prognosezeitraum werden keine Zahlungen erwartet.",
+      "search": "Zahlungen suchen…",
+      "status": "Inkassostatus",
+      "overdueOnly": "Überfällig",
+      "upcoming": "Bevorstehend",
+      "selectInvoice": "Rechnung für {customer} auswählen",
+      "daysOverdue": "{count} T. überfällig",
+      "methods": {
+        "statistical": "Statistisch",
+        "dueDate": "Fälligkeitsdatum",
+        "overduePush": "Überfälligkeitsaufschub",
+        "globalAverage": "Globaler Durchschnitt"
+      }
+    },
+    "model": {
+      "title": "So werden Zahlungen prognostiziert",
+      "worklistOrder": {
+        "label": "Reihenfolge der Arbeitsliste",
+        "value": "Am längsten überfällig zuerst",
+        "note": "Die Nachverfolgungsliste sortiert nach Überfälligkeitstagen und dann nach Betrag; überfällige Rechnungen sind vorausgewählt"
+      },
+      "prediction": {
+        "label": "Prognose des Zahlungstermins",
+        "value": "Statistisch → Fälligkeit → Globaler Durchschnitt",
+        "note": "Durchschnittliche Zahlungsdauer je Kunde (+½σ-Puffer), frühestens am Fälligkeitstag"
+      },
+      "overduePush": {
+        "label": "Überfälligkeitsaufschub",
+        "value": "+7 / +14 / +28 Tage",
+        "note": "Überfällige Rechnungen werden abhängig von ihrer Überfälligkeit verschoben (≤30 / ≤60 / >60 Tage)"
+      },
+      "businessDay": {
+        "label": "Werktagsanpassung",
+        "value": "Ein",
+        "note": "Prognosen am Wochenende werden auf den nächsten Werktag verschoben"
+      },
+      "dso": {
+        "label": "Durchschnittliche Zahlungsdauer (DSO)",
+        "value": "{dso} T.",
+        "note": "Rückfallwert für Kunden ohne Zahlungshistorie"
+      },
+      "recurring": "Wiederkehrende Einzahlungen (Zuschüsse, Mieteinnahmen, Abonnements) fließen als Kategorien in die Prognose ein — konfigurieren Sie sie im <cashCockpit>Liquiditätscockpit</cashCockpit>.",
+      "documentation": "Leitfaden zur Debitorenbuchhaltung lesen"
+    }
   }
 }
