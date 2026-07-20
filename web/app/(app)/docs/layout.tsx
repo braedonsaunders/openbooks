@@ -5,10 +5,10 @@ import { docNavIndex } from '../../../lib/docs'
 // every signed-in user (linked from Administration). The left pane is the
 // searchable category/article tree; the right pane is the scrolling content.
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
-  const { categories, articles } = docNavIndex()
+  const { categories, sections, articles } = docNavIndex()
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-      <DocsSidebar categories={categories} articles={articles} />
+      <DocsSidebar categories={categories} sections={sections} articles={articles} />
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   )

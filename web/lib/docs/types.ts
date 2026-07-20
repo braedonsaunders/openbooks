@@ -17,7 +17,9 @@ export interface DocArticle {
   title: string
   /** Category key (see DocCategory.key). */
   category: string
-  /** Sort order within the category. */
+  /** Optional topic-group key (see DocSection.key). */
+  section?: string
+  /** Sort order within the containing section or category root. */
   order: number
   /** One-line summary shown on cards and in search results. */
   summary: string
@@ -40,5 +42,17 @@ export interface DocCategory {
   /** nav-icon key (see components/sidebar-nav ICONS). */
   icon: string
   /** Sort order across the docs home + sidebar. */
+  order: number
+}
+
+export interface DocSection {
+  /** Stable key, unique across the documentation registry. */
+  key: string
+  title: string
+  /** Category this topic group belongs to. */
+  category: string
+  /** Optional parent section for arbitrarily deep navigation trees. */
+  parentKey?: string
+  /** Sort order beside sibling sections. */
   order: number
 }
