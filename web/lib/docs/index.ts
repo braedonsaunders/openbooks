@@ -5,6 +5,7 @@
 import type { DocArticle, DocCategory, DocSection } from './types'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
+import { overheadCosting } from './articles/overhead-costing'
 import { itemRates } from './articles/item-rates'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
@@ -174,7 +175,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   paymentsAndApplications,
   bankingAndReconciliation,
   periodClose,
-  projectTypes,
+  projectTypes, overheadCosting,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

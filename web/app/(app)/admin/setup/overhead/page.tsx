@@ -67,7 +67,7 @@ export default async function OverheadModelSetup() {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/docs/project-types"
+            href="/docs/overhead-costing"
             className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
           >
             <BookOpen size={13} aria-hidden /> {t('setup.entities.overhead-model.docs')}
@@ -85,35 +85,63 @@ export default async function OverheadModelSetup() {
         </div>
       </div>
 
-      {/* Current configuration — one compact card: rate-card state + composite
-          context on a single line, then a chip per project type. */}
-      <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {t('setup.entities.overhead-model.current')}
-          </h3>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {card.n > 0 && card.from_date
-              ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
-              : t('setup.entities.overhead-model.noRates')}
+      {/* Guided flow — the three steps of overhead setup, each showing its
+          live state so it is always clear where you are and what is next. */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          {
+            n: 1,
+            title: t('setup.entities.overhead-model.step1t'),
+            desc: t('setup.entities.overhead-model.step1d', { count: data.categories.length, unassigned: data.unassigned.length }),
+            done: data.categories.length > 0 && data.unassigned.length === 0,
+          },
+          {
+            n: 2,
+            title: t('setup.entities.overhead-model.step2t'),
+            desc: t('setup.entities.overhead-model.step2d', { rate: data.kpis.compositeRate.toFixed(2) }),
+            done: data.kpis.compositeRate > 0,
+          },
+          {
+            n: 3,
+            title: t('setup.entities.overhead-model.step3t'),
+            desc:
+              card.n > 0 && card.from_date
+                ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
+                : t('setup.entities.overhead-model.noRates'),
+            done: card.n > 0 && typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
+          },
+        ].map((s) => (
+          <div key={s.n} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-1 flex items-center gap-2">
+              <span
+                className={
+                  'grid h-5 w-5 place-items-center rounded-full text-[11px] font-semibold ' +
+                  (s.done
+                    ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950'
+                    : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200')
+                }
+              >
+                {s.done ? '✓' : s.n}
+              </span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{s.title}</span>
+            </div>
+            <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{s.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Active policy per project type. */}
+      <div className="flex flex-wrap gap-1.5">
+        {typesRes.rows.map((r) => (
+          <span
+            key={r.id}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950"
+          >
+            <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span>
+            <span className="text-slate-400">·</span>
+            <span className="text-slate-600 dark:text-slate-300">{methodLabel(r.overhead)}</span>
           </span>
-          <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-semibold text-slate-700 dark:text-slate-200">${data.kpis.compositeRate.toFixed(2)}/hr</span>
-            {' · '}{Math.round(data.kpis.billedHours).toLocaleString('en-US')} hrs
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {typesRes.rows.map((r) => (
-            <span
-              key={r.id}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-950"
-            >
-              <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span>
-              <span className="text-slate-400">·</span>
-              <span className="text-slate-600 dark:text-slate-300">{methodLabel(r.overhead)}</span>
-            </span>
-          ))}
-        </div>
+        ))}
       </div>
       <TrueCostView data={data} mode="setup" />
     </div>
