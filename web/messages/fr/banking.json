@@ -51,43 +51,65 @@
       "upToDate": "à jour"
     }
   },
-  "overview": {
+  "home": {
     "title": "Banque",
-    "description": "Vue d’ensemble des comptes de trésorerie et de carte — rapprochez l’activité bancaire, réconciliez et enregistrez les transactions bancaires.",
-    "tiles": {
-      "cash": "Trésorerie disponible",
-      "cards": "Soldes de carte",
+    "description": "Comptes, mouvements de trésorerie et état des rapprochements de tout l'espace de travail.",
+    "tabs": {
+      "overview": "Vue d'ensemble"
+    },
+    "actions": {
+      "match": "Rapprocher les données bancaires",
+      "matchCount": "{count, plural, one {Rapprocher # ligne} other {Rapprocher # lignes}}"
+    },
+    "vitals": {
+      "cash": "Trésorerie totale",
+      "cards": "Soldes des cartes",
       "unmatched": "Lignes non rapprochées",
-      "openRecons": "Rapprochements ouverts"
+      "unmatchedSub": "en attente de rapprochement",
+      "allMatched": "toutes les lignes rapprochées",
+      "openRecons": "Rapprochements ouverts",
+      "openReconsSub": "en cours",
+      "noneOpen": "aucun ouvert",
+      "netFlow": "Flux net (7 j)",
+      "accountCount": "{count, plural, one {# compte} other {# comptes}}"
     },
-    "links": {
-      "match": {
-        "title": "Rapprochement bancaire",
-        "description": "Rapprochez les lignes bancaires importées au grand livre"
-      },
-      "transactions": {
-        "title": "Transactions",
-        "description": "Chèques, dépôts, virements et activité de carte"
-      },
-      "reconciliations": {
-        "title": "Réconciliations",
-        "description": "Réconciliations ouvertes et signées"
-      },
-      "imports": {
-        "title": "Historique des imports",
-        "description": "Tous les relevés bancaires importés"
-      },
-      "rules": {
-        "title": "Règles de rapprochement",
-        "description": "Catégorisez automatiquement les lignes récurrentes"
-      }
+    "roster": {
+      "title": "Comptes",
+      "hint": "Soldes du grand livre comptabilisé",
+      "empty": "Aucun compte rapprochable pour l'instant. Marquez vos comptes bancaires et cartes comme rapprochables dans le plan comptable.",
+      "bankSection": "Comptes bancaires",
+      "cardSection": "Cartes de crédit",
+      "reconciledThrough": "Rapproché jusqu'au {date}",
+      "neverReconciled": "Jamais rapproché",
+      "lastStatement": "Relevé {date}",
+      "staleStatement": "Dernier relevé {date}",
+      "noStatements": "Aucun relevé importé",
+      "unmatchedChip": "{count} non rapprochées",
+      "reconciling": "Rapprochement en cours"
     },
-    "recentTransactions": "Transactions récentes",
-    "recentImports": "Imports récents",
-    "viewAll": "Tout afficher",
-    "noRecentTransactions": "Aucune transaction bancaire pour l’instant.",
-    "noRecentImports": "Aucun relevé importé pour l’instant.",
-    "unmatchedBadge": "{count, plural, one {# non rapprochée} other {# non rapprochées}}"
+    "trend": {
+      "title": "Tendance de trésorerie",
+      "hint": "13 semaines",
+      "series": "Trésorerie"
+    },
+    "directory": {
+      "title": "Files de travail",
+      "matchHint": "lignes bancaires en attente de rapprochement",
+      "matchClear": "toutes les lignes bancaires rapprochées",
+      "reconsHint": "rapprochements ouverts",
+      "rulesHint": "{total, plural, =0 {aucune règle configurée} one {sur # règle configurée} other {sur # règles configurées}}",
+      "importsHint": "relevés · dernier import {days, plural, =0 {aujourd'hui} one {il y a # jour} other {il y a # jours}}",
+      "importsNever": "aucun relevé importé pour l'instant",
+      "transactionsHint": "comptabilisées ces 7 derniers jours"
+    },
+    "attention": {
+      "title": "À traiter",
+      "allClear": "Tout est en ordre — rien à signaler.",
+      "negativeBalance": "{account} a un solde négatif",
+      "noStatement": "{account} n'a jamais importé de relevé",
+      "staleStatement": "{account} n'a aucun relevé depuis {days} jours",
+      "openRecon": "{account} a un rapprochement en cours"
+    }
   },
   "transactionsPage": {
     "title": "Transactions bancaires",

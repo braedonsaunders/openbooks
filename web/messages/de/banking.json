@@ -51,43 +51,65 @@
       "upToDate": "aktuell"
     }
   },
-  "overview": {
+  "home": {
     "title": "Banking",
-    "description": "Kassen- und Kartenkonten auf einen Blick — Bankbewegungen abgleichen, abstimmen und Banktransaktionen erfassen.",
-    "tiles": {
-      "cash": "Verfügbare Mittel",
+    "description": "Konten, Geldbewegungen und Abstimmungsstatus des gesamten Arbeitsbereichs.",
+    "tabs": {
+      "overview": "Übersicht"
+    },
+    "actions": {
+      "match": "Bankdaten abgleichen",
+      "matchCount": "{count, plural, one {# Position abgleichen} other {# Positionen abgleichen}}"
+    },
+    "vitals": {
+      "cash": "Gesamtguthaben",
       "cards": "Kartensalden",
-      "unmatched": "Nicht zugeordnete Zeilen",
-      "openRecons": "Offene Abstimmungen"
+      "unmatched": "Offene Positionen",
+      "unmatchedSub": "warten im Abgleich",
+      "allMatched": "alle Positionen abgeglichen",
+      "openRecons": "Offene Abstimmungen",
+      "openReconsSub": "in Bearbeitung",
+      "noneOpen": "keine offen",
+      "netFlow": "Nettofluss (7 T.)",
+      "accountCount": "{count, plural, one {# Konto} other {# Konten}}"
     },
-    "links": {
-      "match": {
-        "title": "Bankdaten abgleichen",
-        "description": "Importierte Bankzeilen dem Hauptbuch zuordnen"
-      },
-      "transactions": {
-        "title": "Transaktionen",
-        "description": "Schecks, Einzahlungen, Überträge und Kartenbewegungen"
-      },
-      "reconciliations": {
-        "title": "Abstimmungen",
-        "description": "Offene und abgezeichnete Abstimmungen"
-      },
-      "imports": {
-        "title": "Importhistorie",
-        "description": "Jeder importierte Kontoauszug"
-      },
-      "rules": {
-        "title": "Abstimmungsregeln",
-        "description": "Wiederkehrende Bankzeilen automatisch kategorisieren"
-      }
+    "roster": {
+      "title": "Konten",
+      "hint": "Salden aus dem gebuchten Hauptbuch",
+      "empty": "Noch keine abstimmbaren Konten. Markieren Sie Bank- und Kartenkonten im Kontenplan als abstimmbar.",
+      "bankSection": "Bankkonten",
+      "cardSection": "Kreditkarten",
+      "reconciledThrough": "Abgestimmt bis {date}",
+      "neverReconciled": "Nie abgestimmt",
+      "lastStatement": "Auszug {date}",
+      "staleStatement": "Letzter Auszug {date}",
+      "noStatements": "Keine Auszüge importiert",
+      "unmatchedChip": "{count} offen",
+      "reconciling": "Wird abgestimmt"
     },
-    "recentTransactions": "Letzte Transaktionen",
-    "recentImports": "Letzte Importe",
-    "viewAll": "Alle anzeigen",
-    "noRecentTransactions": "Noch keine Banktransaktionen.",
-    "noRecentImports": "Noch keine Auszüge importiert.",
-    "unmatchedBadge": "{count, plural, one {# nicht zugeordnet} other {# nicht zugeordnet}}"
+    "trend": {
+      "title": "Liquiditätstrend",
+      "hint": "13 Wochen",
+      "series": "Guthaben"
+    },
+    "directory": {
+      "title": "Arbeitsvorräte",
+      "matchHint": "Bankpositionen warten auf Abgleich",
+      "matchClear": "alle Bankpositionen abgeglichen",
+      "reconsHint": "offene Abstimmungen",
+      "rulesHint": "{total, plural, =0 {noch keine Regeln konfiguriert} one {von # konfigurierten Regel} other {von # konfigurierten Regeln}}",
+      "importsHint": "Auszüge · letzter Import {days, plural, =0 {heute} one {vor # Tag} other {vor # Tagen}}",
+      "importsNever": "noch keine Auszüge importiert",
+      "transactionsHint": "gebucht in den letzten 7 Tagen"
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "allClear": "Alles erledigt — nichts erfordert Aufmerksamkeit.",
+      "negativeBalance": "{account} hat einen negativen Saldo",
+      "noStatement": "{account} hat noch nie einen Auszug importiert",
+      "staleStatement": "{account} hat seit {days} Tagen keinen Auszug",
+      "openRecon": "{account} hat eine laufende Abstimmung"
+    }
   },
   "transactionsPage": {
     "title": "Banktransaktionen",

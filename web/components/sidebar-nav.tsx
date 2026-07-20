@@ -146,6 +146,9 @@ export type SidebarNavGroup = {
   id: string
   label: string
   iconKey: string
+  /** When set, the group header itself navigates to the workspace's module
+   * home (exact-match active state) while the chevron keeps toggling. */
+  groupHref?: string
   items: SidebarNavItem[]
 }
 
@@ -215,6 +218,17 @@ export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGr
     })
   }
 
+  // Navigating to a workspace home from its header should also reveal the
+  // section (mirror of SubgroupSection's linked-header behaviour).
+  function openGroup(id: string) {
+    setOpenGroupIds((current) => {
+      if (current.has(id)) return current
+      const next = new Set(current).add(id)
+      persistExpandedGroups(next)
+      return next
+    })
+  }
+
   return (
     <nav ref={navRef} className={cn('app-scroll flex-1 overflow-y-auto px-2 py-3', collapsed && 'space-y-1')}>
       {collapsed
@@ -230,28 +244,59 @@ export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGr
             const open = openGroupIds.has(group.id)
             const active = group.id === activeGroupId
             const panelId = `nav-workspace-${group.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+            const headerCls = cn(
+              'group flex w-full items-center text-xs font-semibold tracking-wide transition-colors',
+              active
+                ? 'bg-teal-50/80 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+              'rounded-md focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+            )
             return (
               <section key={group.id} className="mb-1">
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  aria-controls={panelId}
-                  onClick={() => toggleGroup(group.id)}
-                  className={cn(
-                    'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold tracking-wide transition-colors',
-                    active
-                      ? 'bg-teal-50/80 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200'
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
-                    'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-                  )}
-                >
-                  <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
-                  <ChevronRight
-                    size={13}
-                    className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
-                  />
-                </button>
+                {group.groupHref ? (
+                  // Linked header: the label navigates to the workspace's
+                  // module home; the chevron stays a separate toggle target.
+                  <div className={headerCls}>
+                    <Link
+                      href={group.groupHref as never}
+                      aria-current={activeHref === group.groupHref ? 'page' : undefined}
+                      data-walkthrough={`nav:${group.groupHref}`}
+                      onClick={() => openGroup(group.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-l-md px-2 py-1.5"
+                    >
+                      <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
+                    </Link>
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-controls={panelId}
+                      aria-label={group.label}
+                      onClick={() => toggleGroup(group.id)}
+                      className="grid shrink-0 place-items-center self-stretch rounded-r-md pr-2 pl-1.5 hover:bg-slate-200/60 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none dark:hover:bg-slate-700/60"
+                    >
+                      <ChevronRight
+                        size={13}
+                        className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
+                      />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={panelId}
+                    onClick={() => toggleGroup(group.id)}
+                    className={cn(headerCls, 'gap-2 px-2 py-1.5')}
+                  >
+                    <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
+                    <ChevronRight
+                      size={13}
+                      className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
+                    />
+                  </button>
+                )}
                 {open ? (
                   <div id={panelId} className="mt-0.5 space-y-0.5">
                     <WorkspaceItems items={group.items} activeHref={activeHref} />
@@ -265,7 +310,10 @@ export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGr
 }
 
 function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | null) {
-  return group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
+  return (
+    group.groupHref === activeHref ||
+    group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
+  )
 }
 
 function persistExpandedGroups(ids: Set<string>) {
@@ -335,9 +383,20 @@ function CollapsedWorkspace({
           if ((event.target as HTMLElement).closest('a')) setOpen(false)
         }}
       >
-        <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-          {group.label}
-        </div>
+        {group.groupHref ? (
+          <Link
+            href={group.groupHref as never}
+            aria-current={activeHref === group.groupHref ? 'page' : undefined}
+            data-walkthrough={`nav:${group.groupHref}`}
+            className="block border-b border-slate-100 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-slate-400 dark:hover:text-teal-300"
+          >
+            {group.label}
+          </Link>
+        ) : (
+          <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+            {group.label}
+          </div>
+        )}
         <div className="py-1">
           <WorkspaceItems items={group.items} activeHref={activeHref} />
         </div>

@@ -7,6 +7,7 @@ import {
   ADMIN_MODULE_KEY,
   MODULE_BY_KEY,
   NAV_GROUP_BY_KEY,
+  NAV_GROUP_HOMES,
   NAV_MODULES,
   NAV_SUBGROUPS,
   defaultNavConfig,
@@ -92,10 +93,14 @@ export async function resolveNav(
     }
     if (items.length > 0) {
       const defaultGroup = NAV_GROUP_BY_KEY.get(g.id as NavGroupKey)
+      // Group header navigation: registry groups with a module home get a
+      // groupHref (custom org groups never match and stay plain toggles).
+      const groupHref = NAV_GROUP_HOMES[g.id as NavGroupKey]
       groups.push({
         id: g.id,
         label: defaultGroup && g.label === defaultGroup.label ? t(`groups.${g.id}`) : g.label,
         iconKey: defaultGroup?.iconKey ?? 'grid',
+        ...(groupHref ? { groupHref } : {}),
         items,
       })
     }
