@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { NAV_GROUPS, NAV_MODULES, defaultNavConfig } from './registry'
+import { DEFAULT_NAV_ORDER, NAV_GROUPS, NAV_MODULES, defaultNavConfig } from './registry'
 
 test('default navigation is a complete version-two workspace configuration', () => {
   const config = defaultNavConfig()
@@ -11,8 +11,43 @@ test('default navigation is a complete version-two workspace configuration', () 
   )
   assert.deepEqual(
     config.groups.flatMap((group) => group.items).map((item) => (item.kind === 'module' ? item.moduleKey : '')),
-    NAV_MODULES.map((module) => module.key),
+    NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key]),
   )
+})
+
+test('default workspaces follow the approved journey-oriented information architecture', () => {
+  assert.deepEqual(
+    NAV_GROUPS.map((group) => [group.key, group.label]),
+    [
+      ['my-work', 'My Work'],
+      ['customers', 'Customers'],
+      ['purchasing', 'Purchasing'],
+      ['operations', 'Operations'],
+      ['banking', 'Banking'],
+      ['accounting', 'Accounting'],
+      ['insights', 'Insights'],
+      ['settings', 'Settings'],
+    ],
+  )
+  assert.deepEqual(DEFAULT_NAV_ORDER.customers, [
+    'customers',
+    'crm-leads',
+    'crm-prospects',
+    'crm-activities',
+    'crm-opportunities',
+    'crm-forecasts',
+    'estimates',
+    'sales-orders',
+    'ar',
+    'receipts',
+  ])
+  assert.deepEqual(DEFAULT_NAV_ORDER.operations, [
+    'projects',
+    'timesheets',
+    'items',
+    'inventory',
+    'employees',
+  ])
 })
 
 test('default mobile navigation pins exactly four high-frequency destinations', () => {
@@ -25,6 +60,14 @@ test('default mobile navigation pins exactly four high-frequency destinations', 
 
 test('every module belongs to a declared workspace and has a unique stable key', () => {
   const groupKeys = new Set(NAV_GROUPS.map((group) => group.key))
-  assert.equal(new Set(NAV_MODULES.map((module) => module.key)).size, NAV_MODULES.length)
+  const moduleKeys = NAV_MODULES.map((module) => module.key)
+  const orderedKeys = NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key])
+  assert.equal(new Set(moduleKeys).size, NAV_MODULES.length)
+  assert.deepEqual([...orderedKeys].sort(), [...moduleKeys].sort())
   for (const module of NAV_MODULES) assert.ok(groupKeys.has(module.group), module.key)
+  for (const group of NAV_GROUPS) {
+    for (const moduleKey of DEFAULT_NAV_ORDER[group.key]) {
+      assert.equal(NAV_MODULES.find((module) => module.key === moduleKey)?.group, group.key, moduleKey)
+    }
+  }
 })

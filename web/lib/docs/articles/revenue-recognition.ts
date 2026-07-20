@@ -31,7 +31,7 @@ line's revenue in the item's deferred account; the recognition run then drains
 deferred revenue into earned revenue period by period, one balanced journal per
 schedule line.
 
-You monitor contracts, obligations, and schedules under **Sales → Revenue**, and
+You monitor contracts, obligations, and schedules under **Accounting → Revenue**, and
 post due periods with **Run recognition**.
 
 ---
@@ -42,7 +42,7 @@ A recognition rule defines how an obligation's amount spreads over its term:
 the method (**point in time**, **straight-line** variants, **percent complete**,
 **milestone**, **usage**), the start and end date sources, offsets, an optional
 up-front percentage, and the deferred/recognized accounts. Rules are configured
-under **Administration → Company Settings → Setup → Recognition Rules** and
+under **Settings → Company Setup → Recognition Rules** and
 attached to items.
 
 ## Fair value prices and allocation
@@ -54,7 +54,7 @@ order:
 
 1. The item's own standalone selling price, when set.
 2. A dated **fair value price** for the item — the list you maintain under
-   **Administration → Company Settings → Setup → Fair Value Prices**. Entries
+   **Settings → Company Setup → Fair Value Prices**. Entries
    are scoped by currency and effective dates, so the price in force on the
    invoice date wins.
 3. The booked line amount, as the fallback weight.
@@ -74,7 +74,7 @@ the line quantity) against the matched range:
 The check is a review aid, never a posting block — the invoice and the
 recognition schedules post normally either way.
 
-The policy is configurable under **Administration → Company Settings → Setup →
+The policy is configurable under **Settings → Company Setup →
 Company & Accounting**, in the **Revenue recognition** card:
 
 - **Warn** (default) — flag out-of-range allocations for review.

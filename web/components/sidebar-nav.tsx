@@ -356,16 +356,21 @@ export type NavBlock =
       items: SidebarNavItem[]
     }
 
-/** Fold a flat item list into blocks, coalescing runs that share a subgroup. */
+/** Fold a flat item list into blocks, coalescing every item that shares a
+ * subgroup. A workspace's explicit module order can interleave declarations
+ * without fragmenting one logical section into repeated headings. */
 export function toBlocks(items: SidebarNavItem[]): NavBlock[] {
   const blocks: NavBlock[] = []
   for (const item of items) {
     if (item.subgroup) {
-      const last = blocks[blocks.length - 1]
-      if (last && last.kind === 'subgroup' && last.label === item.subgroup) {
-        last.items.push(item)
-        if (!last.href) last.href = item.subgroupHref
-        if (!last.iconKey) last.iconKey = item.subgroupIconKey
+      const existing = blocks.find(
+        (block): block is Extract<NavBlock, { kind: 'subgroup' }> =>
+          block.kind === 'subgroup' && block.label === item.subgroup,
+      )
+      if (existing) {
+        existing.items.push(item)
+        if (!existing.href) existing.href = item.subgroupHref
+        if (!existing.iconKey) existing.iconKey = item.subgroupIconKey
       } else {
         blocks.push({
           kind: 'subgroup',

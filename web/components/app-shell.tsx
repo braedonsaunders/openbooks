@@ -21,7 +21,7 @@ import { MobileNavToggle } from './mobile-nav-toggle'
 import { MobileTabBar } from './mobile-tab-bar'
 import { GlobalCreateMenu, type GlobalCreatePermissions } from './global-create-menu'
 import { GlobalPartyDrawerHost } from './global-party-drawer-host'
-import { AppLauncherLink } from './app-launcher-link'
+import { AppLauncherLink, HeaderNavLink } from './header-nav-link'
 
 export function AppShell({
   account,
@@ -56,10 +56,11 @@ export function AppShell({
 }) {
   const topbar = navMode === 'topbar'
   const appItem = groups.flatMap((group) => group.items).find((item) => item.href === '/apps')
+  const docsItem = groups.flatMap((group) => group.items).find((item) => item.href === '/docs')
   const navigationGroups = groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => item.href !== '/apps'),
+      items: group.items.filter((item) => item.href !== '/apps' && item.href !== '/docs'),
     }))
     .filter((group) => group.items.length > 0)
   return (
@@ -83,6 +84,7 @@ export function AppShell({
               <GlobalSearch className="mx-auto w-full max-w-lg flex-1" />
             )}
             <div className="flex shrink-0 items-center gap-1">
+              {docsItem ? <HeaderNavLink item={docsItem} /> : null}
               {appItem ? <AppLauncherLink item={appItem} /> : null}
               <GlobalCreateMenu permissions={createPermissions} />
               <NotificationsBell />

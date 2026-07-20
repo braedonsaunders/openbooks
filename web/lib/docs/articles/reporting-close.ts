@@ -2,7 +2,7 @@ import type { DocArticle } from '../types'
 
 export const financialReports: DocArticle = {
   slug: 'financial-reports',
-  title: 'Financial Reports and Ledger Detail',
+  title: 'Reports and Ledger Detail',
   category: 'reporting',
   order: 1,
   summary: 'Run financial statements, aging, registers, ledger detail, budget, order, and project reports.',
@@ -18,9 +18,9 @@ export const financialReports: DocArticle = {
     'register',
   ],
   related: ['accounting-model', 'analytics-and-saved-views', 'period-close'],
-  body: `# Financial Reports and Ledger Detail
+  body: `# Reports and Ledger Detail
 
-The **Financial Reports** hub groups statutory statements, ledger reports,
+The **Reports** hub groups statutory statements, ledger reports,
 subledger reports, budgets, orders, projects, and custom reports.
 
 ## Core statements
@@ -80,9 +80,9 @@ export const analyticsAndSavedViews: DocArticle = {
 OpenBooks offers several reporting surfaces because financial statements,
 operational monitoring, and reusable record searches solve different problems.
 
-## Financial Reports
+## Reports
 
-Use **Financial Reports** for governed statements, ledger detail, aging,
+Use **Reports** for governed statements, ledger detail, aging,
 registers, budgets, orders, project profitability, and custom financial reports.
 These reports should be the basis of formal close and external reporting.
 
@@ -93,9 +93,9 @@ financial health, customer intelligence, spend velocity, utilization, vendor
 performance, true cost, and anomaly monitoring. Each view should be read in the
 context of its filters and configured thresholds.
 
-## Dashboard Builder
+## Dashboards
 
-Use **Dashboard Builder** to assemble organization-relevant cards and dashboards.
+Use **Dashboards** to assemble organization-relevant cards and dashboards.
 Keep the number of headline metrics small enough to scan. A dashboard calls
 attention to a condition; it does not replace the supporting report or ledger.
 
@@ -147,7 +147,7 @@ accounting lock. It is not only a date switch.
 
 Before starting, confirm the accounting book and period. Review the configured
 close blueprint, task owners, dependencies, target date, reporting package, and
-approval requirements. **Continuous Close** can help surface readiness issues
+approval requirements. **Close Monitor** can help surface readiness issues
 before the formal run begins.
 
 Typical preparation includes bank reconciliation, AR and AP reconciliation,

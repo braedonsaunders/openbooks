@@ -18,7 +18,7 @@ controls that will still be correct at month end.
 
 ## 1. Establish the organization
 
-In **Administration → Company Settings**, confirm the legal name, functional
+In **Settings → Company Setup**, confirm the legal name, functional
 currency, fiscal calendar, time zone, and default language. If the organization
 has multiple legal entities, create the subsidiary hierarchy before importing
 accounts or transactions.
@@ -105,15 +105,24 @@ the system predictable.
 
 ## Navigation
 
-The main navigation is grouped by job: **Home**, **CRM**, **Sales**,
-**Purchases**, **Banking**, **Accounting**, **Projects & Time**, **Reporting**,
-and **Administration**. Your organization can reorder or hide modules, and your
-permissions determine which destinations you can see.
+The main navigation is grouped by complete business journey: **My Work**,
+**Customers**, **Purchasing**, **Operations**, **Banking**, **Accounting**,
+**Insights**, and **Settings**. Your organization can reorder or hide modules,
+and your permissions determine which destinations you can see.
+
+Larger workspace menus use labeled sections. For example, **Customers** keeps
+relationship records, pipeline work, and the sell-to-collect flow together;
+**Accounting** separates ledger, revenue, assets, planning, compliance, and
+close work without scattering them across unrelated menus.
 
 The top menu is the default layout. Each workspace opens as a menu, keeping the
 full page width available for lists, reports, and record drawers. If you prefer
 a persistent left rail, choose **Menu layout → Sidebar** from your account menu;
 your personal choice overrides the organization default.
+
+**Documentation** and **Apps** are persistent utilities in the header rather
+than workspaces. Use the book icon for help and the grid icon to launch installed
+apps. The global create button and global search remain available beside them.
 
 If a guide names a page that is missing from your navigation, first check your
 role with an administrator. A hidden module does not imply that its records were

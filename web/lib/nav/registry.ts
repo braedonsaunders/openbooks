@@ -20,41 +20,39 @@ export interface NavModule {
 }
 
 export const NAV_GROUPS = [
-  { key: 'home', label: 'Home', iconKey: 'gauge' },
-  { key: 'crm', label: 'CRM', iconKey: 'users' },
-  { key: 'sales', label: 'Sales', iconKey: 'activity' },
-  { key: 'purchases', label: 'Purchases', iconKey: 'clipboard' },
+  { key: 'my-work', label: 'My Work', iconKey: 'gauge' },
+  { key: 'customers', label: 'Customers', iconKey: 'users' },
+  { key: 'purchasing', label: 'Purchasing', iconKey: 'clipboard' },
+  { key: 'operations', label: 'Operations', iconKey: 'package' },
   { key: 'banking', label: 'Banking', iconKey: 'building' },
   { key: 'accounting', label: 'Accounting', iconKey: 'journal' },
-  { key: 'projects-time', label: 'Projects & Time', iconKey: 'timer' },
-  { key: 'reporting', label: 'Reporting', iconKey: 'file' },
-  { key: 'administration', label: 'Administration', iconKey: 'settings' },
+  { key: 'insights', label: 'Insights', iconKey: 'activity' },
+  { key: 'settings', label: 'Settings', iconKey: 'settings' },
 ] as const
 
 export type NavGroupKey = (typeof NAV_GROUPS)[number]['key']
 export const NAV_GROUP_BY_KEY = new Map(NAV_GROUPS.map((group) => [group.key, group]))
 
-// Nav taxonomy: NetSuite-style "workflow workspaces" (Option B). Each top-level
-// group is a job-to-be-done that holds BOTH its transactions and its records
-// (e.g. Sales = invoices + customers). The same groups drive the left sidebar
-// headers and the top-nav dropdown categories. Module keys are STABLE — only
-// the `group` assignment changed when the taxonomy was reorganized.
+// Nav taxonomy: eight stable job-to-be-done workspaces. Customer work follows
+// the complete relationship-to-cash journey; purchasing follows buy-to-pay;
+// operations owns delivery/catalog/people; accounting owns financial control.
+// Module keys remain stable because tenant configurations reference them.
 export const NAV_MODULES: NavModule[] = [
-  // Home — the daily landing surfaces.
+  // My Work — the signed-in user's daily landing surfaces.
   {
     key: 'dashboard',
     href: '/dashboard',
     label: 'Dashboard',
     iconKey: 'gauge',
-    group: 'home',
+    group: 'my-work',
     exact: true,
   },
   {
     key: 'assistant',
     href: '/assistant',
-    label: 'AI Assistant',
+    label: 'Assistant',
     iconKey: 'sparkles',
-    group: 'home',
+    group: 'my-work',
     requiredPermission: 'assistant.use',
   },
   {
@@ -62,7 +60,7 @@ export const NAV_MODULES: NavModule[] = [
     href: '/approvals',
     label: 'Approvals',
     iconKey: 'check',
-    group: 'home',
+    group: 'my-work',
     requiredPermission: 'ap.approve',
   },
   {
@@ -70,7 +68,7 @@ export const NAV_MODULES: NavModule[] = [
     href: '/documents',
     label: 'File Cabinet',
     iconKey: 'folder',
-    group: 'home',
+    group: 'my-work',
     requiredPermission: 'documents.read',
   },
   {
@@ -78,17 +76,18 @@ export const NAV_MODULES: NavModule[] = [
     href: '/apps',
     label: 'Apps',
     iconKey: 'grid',
-    group: 'home',
+    group: 'my-work',
     requiredPermission: 'apps.use',
   },
 
-  // CRM — relationship lifecycle, daily activities, pipeline, and forecasts.
+  // Customers — relationship lifecycle, pipeline, sales, and collection.
   {
     key: 'crm-leads',
     href: '/crm/leads',
     label: 'Leads',
     iconKey: 'users',
-    group: 'crm',
+    group: 'customers',
+    subgroup: 'relationships',
     requiredPermission: 'crm.accounts.read',
   },
   {
@@ -96,7 +95,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/crm/prospects',
     label: 'Prospects',
     iconKey: 'target',
-    group: 'crm',
+    group: 'customers',
+    subgroup: 'relationships',
     requiredPermission: 'crm.accounts.read',
   },
   {
@@ -104,7 +104,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/crm/opportunities',
     label: 'Opportunities',
     iconKey: 'activity',
-    group: 'crm',
+    group: 'customers',
+    subgroup: 'pipeline',
     requiredPermission: 'crm.opportunities.read',
   },
   {
@@ -112,7 +113,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/crm/activities',
     label: 'Activities',
     iconKey: 'timer',
-    group: 'crm',
+    group: 'customers',
+    subgroup: 'relationships',
     requiredPermission: 'crm.activities.read',
   },
   {
@@ -120,17 +122,19 @@ export const NAV_MODULES: NavModule[] = [
     href: '/crm/forecasts',
     label: 'Forecasts & Quotas',
     iconKey: 'target',
-    group: 'crm',
+    group: 'customers',
+    subgroup: 'pipeline',
     requiredPermission: 'crm.forecasts.read',
   },
 
-  // Sales — customer lifecycle, money in, and the shared catalog.
+  // Customer records and the sell-to-collect workflow.
   {
     key: 'customers',
     href: '/entities/customers',
     label: 'Customers',
     iconKey: 'users',
-    group: 'sales',
+    group: 'customers',
+    subgroup: 'relationships',
     requiredPermission: 'parties.read',
   },
   {
@@ -138,7 +142,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/estimates',
     label: 'Estimates',
     iconKey: 'file',
-    group: 'sales',
+    group: 'customers',
+    subgroup: 'sell-collect',
     requiredPermission: 'ar.read',
   },
   {
@@ -146,7 +151,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/sales-orders',
     label: 'Sales Orders',
     iconKey: 'clipboard-check',
-    group: 'sales',
+    group: 'customers',
+    subgroup: 'sell-collect',
     requiredPermission: 'ar.read',
   },
   {
@@ -154,7 +160,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/ar',
     label: 'Invoices',
     iconKey: 'clipboard-check',
-    group: 'sales',
+    group: 'customers',
+    subgroup: 'sell-collect',
     requiredPermission: 'ar.read',
   },
   {
@@ -162,7 +169,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/receipts',
     label: 'Customer Payments',
     iconKey: 'check',
-    group: 'sales',
+    group: 'customers',
+    subgroup: 'sell-collect',
     requiredPermission: 'ar.pay',
   },
   {
@@ -170,7 +178,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/items',
     label: 'Items & Services',
     iconKey: 'grid',
-    group: 'sales',
+    group: 'operations',
+    subgroup: 'catalog',
     requiredPermission: 'items.read',
   },
   {
@@ -178,17 +187,19 @@ export const NAV_MODULES: NavModule[] = [
     href: '/revenue',
     label: 'Revenue Recognition',
     iconKey: 'trending-up',
-    group: 'sales',
+    group: 'accounting',
+    subgroup: 'revenue-accounting',
     requiredPermission: 'ar.read',
   },
 
-  // Purchases — money out plus the vendors it flows to.
+  // Purchasing — vendor records and the buy-to-pay workflow.
   {
     key: 'vendors',
     href: '/entities/vendors',
     label: 'Vendors',
     iconKey: 'users',
-    group: 'purchases',
+    group: 'purchasing',
+    subgroup: 'vendor-records',
     requiredPermission: 'parties.read',
   },
   {
@@ -196,7 +207,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/inventory',
     label: 'Inventory',
     iconKey: 'package',
-    group: 'purchases',
+    group: 'operations',
+    subgroup: 'catalog',
     requiredPermission: 'items.read',
   },
   {
@@ -204,7 +216,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/purchase-orders',
     label: 'Purchase Orders',
     iconKey: 'clipboard',
-    group: 'purchases',
+    group: 'purchasing',
+    subgroup: 'buy',
     requiredPermission: 'ap.read',
   },
   {
@@ -212,7 +225,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/ap',
     label: 'Bills',
     iconKey: 'clipboard',
-    group: 'purchases',
+    group: 'purchasing',
+    subgroup: 'buy',
     requiredPermission: 'ap.read',
   },
   {
@@ -220,7 +234,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/payments',
     label: 'Vendor Payments',
     iconKey: 'check',
-    group: 'purchases',
+    group: 'purchasing',
+    subgroup: 'pay',
     requiredPermission: 'ap.pay',
   },
   {
@@ -228,7 +243,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/expenses',
     label: 'Expenses',
     iconKey: 'scroll',
-    group: 'purchases',
+    group: 'purchasing',
+    subgroup: 'pay',
     requiredPermission: 'expenses.read',
   },
 
@@ -236,34 +252,38 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'banking',
     href: '/banking',
-    label: 'Overview',
+    label: 'Bank Accounts',
     iconKey: 'building',
     group: 'banking',
+    subgroup: 'accounts-cash',
     requiredPermission: 'banking.read',
     exact: true,
   },
   {
     key: 'banking-cash',
     href: '/banking/cash',
-    label: 'Cash',
+    label: 'Cash Position',
     iconKey: 'wallet',
     group: 'banking',
+    subgroup: 'accounts-cash',
     requiredPermission: 'banking.read',
   },
   {
     key: 'banking-transactions',
     href: '/banking/transactions',
-    label: 'Bank Transactions',
+    label: 'Transactions',
     iconKey: 'journal',
     group: 'banking',
+    subgroup: 'processing',
     requiredPermission: 'banking.read',
   },
   {
     key: 'banking-match',
     href: '/banking/match',
-    label: 'Match & Categorize',
+    label: 'Match',
     iconKey: 'list-checks',
     group: 'banking',
+    subgroup: 'processing',
     requiredPermission: 'banking.reconcile',
   },
   {
@@ -272,14 +292,16 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Reconciliations',
     iconKey: 'check',
     group: 'banking',
+    subgroup: 'processing',
     requiredPermission: 'banking.reconcile',
   },
   {
     key: 'banking-rules',
     href: '/banking/rules',
-    label: 'Reconciliation Rules',
+    label: 'Rules',
     iconKey: 'workflow',
     group: 'banking',
+    subgroup: 'controls',
     requiredPermission: 'banking.reconcile',
   },
   {
@@ -288,16 +310,18 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Import History',
     iconKey: 'database',
     group: 'banking',
+    subgroup: 'controls',
     requiredPermission: 'banking.read',
   },
 
-  // Accounting — the ledger core: journals, chart, assets, tax, close, and budgets.
+  // Accounting — ledger, recognition, assets, planning, compliance, and close.
   {
     key: 'journal',
     href: '/journal',
     label: 'Journals',
     iconKey: 'journal',
     group: 'accounting',
+    subgroup: 'ledger',
     requiredPermission: 'gl.read',
   },
   {
@@ -306,6 +330,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Chart of Accounts',
     iconKey: 'layers',
     group: 'accounting',
+    subgroup: 'ledger',
     requiredPermission: 'gl.read',
   },
   {
@@ -314,6 +339,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Fixed Assets',
     iconKey: 'building',
     group: 'accounting',
+    subgroup: 'assets',
     requiredPermission: 'assets.read',
   },
   {
@@ -322,6 +348,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Tax Depreciation',
     iconKey: 'receipt',
     group: 'accounting',
+    subgroup: 'assets',
     requiredPermission: 'assets.read',
   },
   {
@@ -330,6 +357,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Budgets',
     iconKey: 'target',
     group: 'accounting',
+    subgroup: 'planning-compliance',
     requiredPermission: 'budgets.read',
   },
   {
@@ -338,14 +366,16 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Tax Filings',
     iconKey: 'receipt',
     group: 'accounting',
+    subgroup: 'planning-compliance',
     requiredPermission: 'reports.read',
   },
   {
     key: 'continuous-close',
     href: '/continuous-close',
-    label: 'Continuous Close',
+    label: 'Close Monitor',
     iconKey: 'activity',
     group: 'accounting',
+    subgroup: 'close',
     requiredPermission: 'assistant.use',
   },
   {
@@ -354,10 +384,11 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Period Close',
     iconKey: 'timer',
     group: 'accounting',
+    subgroup: 'close',
     requiredPermission: 'close.read',
   },
 
-  // Projects & Time — projects, employees, and timesheets. The unified party directory
+  // Operations — delivery, catalog, and people. The unified party directory
   // (/parties) is intentionally NOT in the nav: parties are an internal
   // abstraction; end users only see role-scoped views (Customers, Vendors,
   // Employees).
@@ -366,7 +397,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/projects',
     label: 'Projects',
     iconKey: 'timer',
-    group: 'projects-time',
+    group: 'operations',
+    subgroup: 'delivery',
     requiredPermission: 'projects.read',
   },
   {
@@ -374,25 +406,27 @@ export const NAV_MODULES: NavModule[] = [
     href: '/entities/employees',
     label: 'Employees',
     iconKey: 'clipboard-check',
-    group: 'projects-time',
+    group: 'operations',
+    subgroup: 'people',
     requiredPermission: 'parties.read',
   },
   {
     key: 'timesheets',
     href: '/timesheets',
-    label: 'Weekly Timesheets',
+    label: 'Timesheets',
     iconKey: 'timer',
-    group: 'projects-time',
+    group: 'operations',
+    subgroup: 'delivery',
     requiredPermission: 'time.read',
   },
 
-  // Reporting — financial statements, native analytics, custom dashboards, and saved views.
+  // Insights — reports, native analytics, custom dashboards, and saved views.
   {
     key: 'reports',
     href: '/reports',
-    label: 'Financial Reports',
+    label: 'Reports',
     iconKey: 'file',
-    group: 'reporting',
+    group: 'insights',
     requiredPermission: 'reports.read',
   },
   // Analytics is ONE nav entry — the /analytics hub. The individual dashboards
@@ -404,15 +438,15 @@ export const NAV_MODULES: NavModule[] = [
     href: '/analytics',
     label: 'Analytics',
     iconKey: 'activity',
-    group: 'reporting',
+    group: 'insights',
     requiredPermission: 'reports.read',
   },
   {
     key: 'insights',
     href: '/insights',
-    label: 'Dashboard Builder',
+    label: 'Dashboards',
     iconKey: 'sparkles',
-    group: 'reporting',
+    group: 'insights',
     requiredPermission: 'insights.read',
   },
   {
@@ -420,16 +454,14 @@ export const NAV_MODULES: NavModule[] = [
     href: '/knowledge/views',
     label: 'Saved Views',
     iconKey: 'search',
-    group: 'reporting',
+    group: 'insights',
     requiredPermission: 'reports.read',
   },
 
-  // Administration — the admin surfaces. Three entries: "Admin Center" is the
-  // /admin landing hub (users, roles, navigation, audit, sync as cards); "Company Settings" is
-  // the configuration workspace (tax, dimensions, terms, company &
-  // accounting); "Build" is a nested sub-menu holding every authoring tool —
-  // Custom Records, custom fields, forms & views, PDF templates, scripts,
-  // apps, and the API surfaces.
+  // Settings — organization setup, administration, customization, automation,
+  // and extension tools. Documentation and installed apps are lifted into the
+  // shell utility bar by AppShell, while their stable modules remain here for
+  // permissions, mobile resolution, and tenant customization.
   //
   // The Admin Center entry's gating is intentionally left unset here and handled
   // specially in the nav resolver (see ADMIN_MODULE_KEY): it appears for anyone
@@ -438,9 +470,10 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'admin',
     href: '/admin',
-    label: 'Admin Center',
+    label: 'Administration',
     iconKey: 'settings',
-    group: 'administration',
+    group: 'settings',
+    subgroup: 'organization',
     exact: true,
   },
   // Documentation — the in-app help center. No permission gate: available to
@@ -450,28 +483,27 @@ export const NAV_MODULES: NavModule[] = [
     href: '/docs',
     label: 'Documentation',
     iconKey: 'book',
-    group: 'administration',
+    group: 'settings',
   },
   {
     key: 'admin-setup',
     href: '/admin/setup',
-    label: 'Company Settings',
+    label: 'Company Setup',
     iconKey: 'wrench',
-    group: 'administration',
+    group: 'settings',
+    subgroup: 'organization',
     requiredPermission: 'admin.setup.manage',
   },
 
-  // Build — the developer/authoring tools, nested under Administration. The desktop
-  // sidebar renders the subgroup as a collapsible section; the top nav renders
-  // it as a flyout sub-menu. The subgroup header itself links to the
-  // /admin/build landing hub (see NAV_SUBGROUPS).
+  // Customization, automation, and extension tools remain distinct so users do
+  // not need to understand the implementation boundary between them.
   {
     key: 'records',
     href: '/records/types',
     label: 'Custom Records',
     iconKey: 'grid',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'customize',
     requiredPermission: 'records.manage_types',
   },
   {
@@ -479,8 +511,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin/custom-fields',
     label: 'Custom Fields',
     iconKey: 'tag',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'customize',
     requiredPermission: 'admin.custom_fields.manage',
   },
   {
@@ -488,8 +520,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin/customization',
     label: 'Forms & Views',
     iconKey: 'panel-left',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'customize',
     requiredPermission: 'admin.customization.manage',
   },
   {
@@ -497,8 +529,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin/pdf-templates',
     label: 'PDF Templates',
     iconKey: 'scroll',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'customize',
     requiredPermission: 'admin.customization.manage',
   },
   {
@@ -506,8 +538,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin/scripts',
     label: 'Scripts',
     iconKey: 'code',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'automate',
     requiredPermission: 'scripts.manage',
   },
   {
@@ -515,8 +547,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin/flows',
     label: 'Flows',
     iconKey: 'workflow',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'automate',
     requiredPermission: 'flows.manage',
   },
   {
@@ -524,8 +556,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin/apps',
     label: 'App Builder',
     iconKey: 'library',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'extend',
     requiredPermission: 'apps.manage',
   },
   {
@@ -533,8 +565,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/query',
     label: 'Query Console',
     iconKey: 'database',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'extend',
     requiredPermission: 'sql.execute',
   },
   {
@@ -542,8 +574,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin/api-keys',
     label: 'API Keys',
     iconKey: 'key',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'extend',
     requiredPermission: 'api.keys.manage',
   },
   {
@@ -551,8 +583,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/api-docs',
     label: 'API Docs',
     iconKey: 'code',
-    group: 'administration',
-    subgroup: 'Build',
+    group: 'settings',
+    subgroup: 'extend',
     requiredPermission: 'api.keys.manage',
   },
 ]
@@ -582,10 +614,66 @@ export const ADMIN_MODULE_KEY = 'admin'
  * cards), on top of expanding/flying out its children.
  */
 export const NAV_SUBGROUPS: Record<string, { href: string; iconKey?: string }> = {
-  Build: { href: '/admin/build', iconKey: 'construction' },
+  customize: { href: '/admin/build', iconKey: 'construction' },
 }
 
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))
+
+/** Canonical scan order inside each workspace. Kept separate from the module
+ * declarations so the information architecture is reviewable in one place. */
+export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
+  'my-work': ['dashboard', 'approvals', 'assistant', 'documents', 'apps'],
+  customers: [
+    'customers',
+    'crm-leads',
+    'crm-prospects',
+    'crm-activities',
+    'crm-opportunities',
+    'crm-forecasts',
+    'estimates',
+    'sales-orders',
+    'ar',
+    'receipts',
+  ],
+  purchasing: ['purchase-orders', 'ap', 'payments', 'expenses', 'vendors'],
+  operations: ['projects', 'timesheets', 'items', 'inventory', 'employees'],
+  banking: [
+    'banking',
+    'banking-cash',
+    'banking-transactions',
+    'banking-match',
+    'banking-recons',
+    'banking-rules',
+    'banking-imports',
+  ],
+  accounting: [
+    'accounts',
+    'journal',
+    'revenue',
+    'assets',
+    'tax-depreciation',
+    'budgets',
+    'tax-filings',
+    'continuous-close',
+    'close',
+  ],
+  insights: ['reports', 'analytics', 'insights', 'saved-searches'],
+  settings: [
+    'admin-setup',
+    'admin',
+    'docs',
+    'records',
+    'admin-custom-fields',
+    'admin-customization',
+    'admin-pdf-templates',
+    'flows',
+    'admin-scripts',
+    'admin-apps',
+    'sql',
+    'admin-api-keys',
+    'api-docs',
+  ],
+}
 
 // --- org config shape (stored in org_nav_configs.config) -------------------
 
@@ -624,16 +712,11 @@ export function defaultNavConfig(): OrgNavConfig {
   const groups: NavGroupConfig[] = NAV_GROUPS.map((group) => ({
     id: group.key,
     label: group.label,
-    items: [],
+    items: DEFAULT_NAV_ORDER[group.key].map((moduleKey) => ({
+      kind: 'module' as const,
+      moduleKey,
+      ...(mobileModules.has(moduleKey) ? { mobile: true } : {}),
+    })),
   }))
-  for (const m of NAV_MODULES) {
-    const group = groups.find((candidate) => candidate.id === m.group)
-    if (!group) throw new Error(`Unknown navigation group: ${m.group}`)
-    group.items.push({
-      kind: 'module',
-      moduleKey: m.key,
-      ...(mobileModules.has(m.key) ? { mobile: true } : {}),
-    })
-  }
   return { version: 2, groups }
 }

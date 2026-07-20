@@ -2,9 +2,9 @@ import { jsonb, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * Org-level sidebar customization (beaconhs tenant_nav_config, org-scoped).
+ * Org-level menu customization, shared by the top menu and optional sidebar.
  * One row per org; no row = computed defaults from the code registry.
- * config: { version: 1, groups: [{ id, label, items: [
+ * config: { version: 2, groups: [{ id, label, items: [
  *   { kind:'module', moduleKey, label?, iconKey?, hidden? } |
  *   { kind:'link', href, label, iconKey?, hidden? } ] }] }
  */

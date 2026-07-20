@@ -43,7 +43,7 @@ different from the connection setting.
 
 ## Create and authorize the connection
 
-1. Open **Administration → Migrations & Mirror** and choose **Add connection**.
+1. Open **Settings → Administration → Migrations & Mirror** and choose **Add connection**.
 2. Select **QuickBooks Desktop**.
 3. Enter the **History start date**, **QuickBooks region**, **Base currency**,
    and a strong **Web Connector password**. Leave **Company file path** blank to

@@ -38,7 +38,7 @@ scoped to your organization.
 
 ## Build and administer apps
 
-Go to **Administration → App Builder** to create an app, import a package, edit
+Go to **Settings → Extend → App Builder** to create an app, import a package, edit
 its files, review execution logs, control permissions, enable or disable it, and
 publish an active version to the App Library. Authoring access is separate from
 ordinary app use.
