@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { add, isZero, mulRate, neg, sum, toUnits } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -836,10 +836,25 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
       .set({ status: "posted", postedAt: new Date() })
       .where(eq(schema.journalEntries.id, entry.id));
 
-    await tx
+    // Exactly-once posting, serialized at the aggregate root: the flip only
+    // lands while the document is still unposted. Postgres row-locks the
+    // document during this UPDATE, so a concurrent post blocks here, then
+    // re-evaluates the predicate against the now-'posted' row and matches 0
+    // rows. Zero rows → throw → THIS transaction rolls back, discarding the
+    // entry + lines just inserted. A document can never produce two entries.
+    const flipped = await tx
       .update(schema.documents)
       .set({ status: "posted", postedEntryId: entry.id, postingDate })
-      .where(eq(schema.documents.id, doc.id));
+      .where(
+        and(
+          eq(schema.documents.id, doc.id),
+          sql`${schema.documents.status} not in ('posted', 'voided')`,
+        ),
+      )
+      .returning({ id: schema.documents.id });
+    if (flipped.length === 0) {
+      throw new PostingError(`document ${doc.documentNumber} was already posted or voided`);
+    }
 
     return entry.id;
   });

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz, can } from '../../../../../lib/authz'
+import { getAuthz } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadGateHeader } from '../../_lib'
 
@@ -12,11 +12,10 @@ export const runtime = 'nodejs'
  *   POST { items: [{ gateId }], decision, comment? }
  *   →    { results: [{ ok, error? }] }   // same order as items
  *
- * Each item is decided independently (per-item try/catch) with the SAME
- * authorization the single-item endpoint applies — the decide-route screen +
- * decideGate (the engine is the source of truth). One failure never aborts the
- * rest, and there is deliberately no batch cap (NetSuite's 50-row bulk-approve
- * limit is a gap this hub closes).
+ * Each item is decided independently (per-item try/catch); decideGate is the
+ * single authority for who may decide (assignee / admin / delegate, submitter
+ * refused). One failure never aborts the rest, and there is deliberately no
+ * batch cap (NetSuite's 50-row bulk-approve limit is a gap this hub closes).
  */
 
 type BulkItem = { gateId?: string }
@@ -51,9 +50,7 @@ export async function POST(req: Request) {
       const gate = await loadGateHeader(item.gateId, authz.user.orgId)
       if (!gate) throw new Error('approval not found')
       if (gate.status !== 'pending') throw new Error('this approval was already resolved')
-      const screened =
-        can(authz, 'flows.approve') || gate.assignee_user_id === authz.user.id
-      if (!screened) throw new Error('you are not an approver for this gate')
+      // decideGate is the single authority (assignee / admin / delegate).
       await decideGate({ gateId: item.gateId, decision, userId: authz.user.id, comment })
       results.push({ ok: true })
     } catch (e) {
