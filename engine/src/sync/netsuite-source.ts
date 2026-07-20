@@ -114,6 +114,31 @@ export function uniqueNetSuiteTransactionLines(rows: NsLine[]): NsLine[] {
   return [...unique.values()].map(({ row }) => row);
 }
 
+export interface NsApplicationLink {
+  previousdoc: string;
+  previousline: string;
+  nextdoc: string;
+  nextline: string;
+  foreignamount: string;
+}
+
+/** Enforce a stable application-link identity across governed export retries. */
+export function uniqueNetSuiteApplicationLinks(rows: NsApplicationLink[]): NsApplicationLink[] {
+  const unique = new Map<string, { amount: string; row: NsApplicationLink }>();
+  for (const row of rows) {
+    const key = `${row.previousdoc}:${row.previousline}:${row.nextdoc}:${row.nextline}`;
+    const prior = unique.get(key);
+    if (prior) {
+      if (prior.amount !== String(row.foreignamount)) {
+        throw new Error(`NetSuite returned conflicting application link ${key}`);
+      }
+      continue;
+    }
+    unique.set(key, { amount: String(row.foreignamount), row });
+  }
+  return [...unique.values()].map(({ row }) => row);
+}
+
 export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
   if (value == null || value === "") return {};
   const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
@@ -660,7 +685,8 @@ export class NetSuiteSource implements MigrationSource {
                ${timeType},
                TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
           FROM timebill tb
-         WHERE ${conditions.join(" AND ")}`,
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY tb.id`,
       };
     });
     if (since) {
@@ -714,7 +740,7 @@ export class NetSuiteSource implements MigrationSource {
     let fullWindows: Array<[number, number]> = [];
     if (effectiveSince) {
       const clause = `t.lastmodifieddate >= ${this.ts(effectiveSince)} AND t.lastmodifieddate <= ${this.ts(syncedThrough)}`;
-      headers.push(...(await this.q<NsHeader>(`SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause}`)));
+      headers.push(...(await this.q<NsHeader>(`SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause} ORDER BY t.id`)));
       ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
     } else {
       const [{ m }] = await this.q<{ m: string }>("SELECT MAX(t.id) AS m FROM transaction t");
@@ -722,7 +748,7 @@ export class NetSuiteSource implements MigrationSource {
       fullWindows = numericIdWindows(maxId);
       const partitions = fullWindows.map(([lo, hi], index) => ({
         id: `header-${String(index).padStart(4, "0")}`,
-        sql: `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id > ${lo} AND t.id <= ${hi}`,
+        sql: `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id > ${lo} AND t.id <= ${hi} ORDER BY t.id`,
       }));
       const exported = await this.bridge.bulkQuery<NsHeader>(partitions);
       for (const partition of partitions) {
@@ -748,7 +774,7 @@ export class NetSuiteSource implements MigrationSource {
         if (chunk.length === 0) continue;
         ctx.onProgress?.({ phase: "pull", message: "Pulling transaction lines…", current: Math.min(i + 150, tids.length), total: tids.length });
         collectLines(await this.q<NsLine>(
-          `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")})`,
+          `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
         ));
       }
     } else {
@@ -756,7 +782,7 @@ export class NetSuiteSource implements MigrationSource {
       const windowsWithHeaders = fullWindows.filter((_, index) => occupiedWindows.has(index));
       const partitions = windowsWithHeaders.map(([lo, hi], index) => ({
         id: `line-${String(index).padStart(4, "0")}`,
-        sql: `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction > ${lo} AND tl.transaction <= ${hi}`,
+        sql: `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction > ${lo} AND tl.transaction <= ${hi} ORDER BY tl.transaction, tl.id`,
       }));
       const exported = await this.bridge.bulkQuery<NsLine>(partitions);
       let windowsRead = 0;
@@ -802,25 +828,24 @@ export class NetSuiteSource implements MigrationSource {
     // chunks disjoint (no duplicate rows to double-count), and the reconciler
     // is delta-safe/insert-only so a narrower pull never disturbs existing
     // applications.
-    type Link = { previousdoc: string; nextdoc: string; foreignamount: string };
-    const links: Link[] = [];
+    const links: NsApplicationLink[] = [];
     if (effectiveSince) {
       for (let i = 0; i < tids.length; i += 150) {
         const chunk = tids.slice(i, i + 150);
         if (chunk.length === 0) continue;
-        links.push(...(await this.q<Link>(
-          `SELECT previousdoc, nextdoc, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND nextdoc IN (${chunk.join(",")})`,
+        links.push(...(await this.q<NsApplicationLink>(
+          `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND nextdoc IN (${chunk.join(",")}) ORDER BY previousdoc, previousline, nextdoc, nextline`,
         )));
       }
     } else {
       const partition = {
         id: "applications",
-        sql: "SELECT previousdoc, nextdoc, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment'",
+        sql: "SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' ORDER BY previousdoc, previousline, nextdoc, nextline",
       };
-      const exported = await this.bridge.bulkQuery<Link>([partition]);
+      const exported = await this.bridge.bulkQuery<NsApplicationLink>([partition]);
       links.push(...(exported.get(partition.id) ?? []));
     }
-    const applications = links
+    const applications = uniqueNetSuiteApplicationLinks(links)
       .filter((l) => l.foreignamount != null && Number(l.foreignamount) > 0)
       .map((l) => ({
         paymentRef: String(l.nextdoc),
