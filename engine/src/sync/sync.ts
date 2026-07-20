@@ -200,7 +200,9 @@ export async function runSync(
     let entityStats: EntityLoadStats | undefined;
     if ((opts.loadEntitiesFirst ?? true) && source.entities) {
       await setProgress(run!.id, { phase: "entities", message: "Loading accounts, parties, items…" }, true);
-      entityStats = await loadEntities(source, org.id, since);
+      entityStats = await loadEntities(source, org.id, since, (message, current, total) => {
+        void setProgress(run!.id, { phase: "entities", message, current, total });
+      });
     }
 
     // Fresh org: derive control accounts from the source so posting rules

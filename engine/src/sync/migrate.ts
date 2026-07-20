@@ -111,6 +111,7 @@ export async function loadEntities(
   source: MigrationSource,
   orgId: string,
   since: Date | null = null,
+  onProgress?: (message: string, current: number, total: number) => void,
 ): Promise<EntityLoadStats> {
   if (!source.entities) return {};
   await ensureSchema();
@@ -137,13 +138,21 @@ export async function loadEntities(
   // from the org's own currency/country. Idempotent — a no-op once one exists.
   await ensureRootSubsidiary(orgId, source.baseCurrency);
 
+  onProgress?.("Pulling master data from the source…", 0, 1);
   const streams = [
     { resource: "accounting_periods", records: await source.accountingPeriods() },
     ...(await source.entities(since)),
   ];
   const stats: EntityLoadStats = {};
 
+  let streamIndex = 0;
   for (const stream of streams) {
+    streamIndex++;
+    onProgress?.(
+      `Loading ${stream.resource.replace(/_/g, " ")} (${stream.records.length.toLocaleString()} records)…`,
+      streamIndex,
+      streams.length,
+    );
     if (!KNOWN.has(stream.resource)) {
       stats[stream.resource] = { created: 0, updated: 0, skipped: stream.records.length };
       continue;
