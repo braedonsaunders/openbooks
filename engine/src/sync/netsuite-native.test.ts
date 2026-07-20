@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
 import {
+  NETSUITE_TRANSACTION_WATERMARK_QUERY,
+  netSuiteCreditOpenBalance,
   numericIdWindows,
   parseNetSuiteMappings,
   uniqueNetSuiteApplicationLinks,
@@ -45,8 +47,41 @@ test("NetSuite journals retain header and line subsidiary identity", () => {
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.ok(!("skip" in built));
+  assert.equal(built.doc.posting, true);
   assert.equal(built.doc.subsidiaryId, "sub-root");
   assert.deepEqual(built.doc.lines.map((line) => line.subsidiaryId), ["sub-root", "sub-child"]);
+});
+
+test("zero-value NetSuite journals remain source documents without an invented GL entry", () => {
+  const lines: NsLine[] = [
+    {
+      transaction: "123", id: "1", mainline: "T", taxline: "F",
+      account: "10", netamount: "0", subsidiary: "1",
+    },
+    {
+      transaction: "123", id: "2", mainline: "T", taxline: "F",
+      account: "20", netamount: "0", subsidiary: "1",
+    },
+  ];
+  const built = buildNativeFromNetSuite(context, header, lines);
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.posting, false);
+  assert.equal(built.doc.lines.length, 2);
+  assert.ok(built.doc.lines.every((line) => line.amount === "0.0000"));
+});
+
+test("posting-flagged source transactions with no accounting impact are classified explicitly", () => {
+  const zero = buildNativeFromNetSuite(context, { ...header, ttype: "ItemShip", posting: "T" }, [{
+    transaction: "123", id: "1", mainline: "T", taxline: "F",
+    account: null, expenseaccount: null, netamount: null, foreignamount: null,
+  }]);
+  assert.deepEqual(zero, { skip: "non-ledger source transaction ItemShip" });
+
+  const financial = buildNativeFromNetSuite(context, { ...header, ttype: "ItemShip", posting: "T" }, [{
+    transaction: "123", id: "1", mainline: "T", taxline: "F",
+    account: "10", netamount: "1", foreignamount: "1",
+  }]);
+  assert.deepEqual(financial, { skip: "unsupported posting type ItemShip has ledger impact" });
 });
 
 test("NetSuite transactions fail closed when a subsidiary was not loaded", () => {
@@ -153,6 +188,17 @@ test("NetSuite high-volume streams partition every numeric ID exactly once", () 
   ]);
   assert.throws(() => numericIdWindows(-1), /non-negative safe integer/);
   assert.throws(() => numericIdWindows(1, 0), /positive safe integer/);
+});
+
+test("NetSuite incremental watermarks use the transaction modification clock", () => {
+  assert.match(NETSUITE_TRANSACTION_WATERMARK_QUERY, /MAX\(lastmodifieddate\)/i);
+  assert.doesNotMatch(NETSUITE_TRANSACTION_WATERMARK_QUERY, /SYSDATE/i);
+});
+
+test("NetSuite credit balances use exact mainline less Payment-link arithmetic", () => {
+  assert.equal(netSuiteCreditOpenBalance("1129.55", "1129.5500"), "0.0000");
+  assert.equal(netSuiteCreditOpenBalance("-479.07", "0"), "479.0700");
+  assert.equal(netSuiteCreditOpenBalance("10", "10.01"), "0.0000");
 });
 
 test("NetSuite transaction lines are ingested exactly once and conflicts fail closed", () => {

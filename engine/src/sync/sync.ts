@@ -6,7 +6,7 @@ import { buildNativeContext, type NativeContext, type NativeDocument, type SyncP
 import { loadEntities, type EntityLoadStats } from "./migrate.ts";
 import { reconcileApplications, recomputeOpenBalances, type ApplyStats } from "./applications.ts";
 import { trueUpResidualGl, type TrueUpStats } from "./trueup.ts";
-import type { MigrationSource } from "./source.ts";
+import type { MigrationSource, SourceOpenItem } from "./source.ts";
 import { verifyAccountMonths, type AccountMonthVerification } from "./verification.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -89,6 +89,32 @@ export function sourceDeletionCandidates(
     for (const ref of existing) if (!current.has(ref)) deleted.add(ref);
   }
   return [...deleted].sort();
+}
+
+/** Compare every source AR/AP balance exactly, including closed zero-balance
+ * documents. The target query must return a row for every imported source
+ * document; a genuinely absent document remains a mismatch even when the
+ * source balance is zero. */
+export function verifyOpenItems(
+  truth: readonly SourceOpenItem[],
+  target: readonly SourceOpenItem[],
+): NonNullable<SyncResult["openItems"]> {
+  const mineByRef = new Map(target.map((row) => [row.ref, toUnits(row.unpaid)]));
+  const mismatches: NonNullable<SyncResult["openItems"]>["mismatches"] = [];
+  let matches = 0;
+  for (const item of truth) {
+    const want = toUnits(item.unpaid);
+    const wantAbs = want < 0n ? -want : want;
+    const got = mineByRef.get(item.ref);
+    if (got === undefined) {
+      mismatches.push({ ref: item.ref, ours: "missing", theirs: fromUnits(wantAbs) });
+    } else if (got === wantAbs) {
+      matches++;
+    } else {
+      mismatches.push({ ref: item.ref, ours: fromUnits(got), theirs: fromUnits(wantAbs) });
+    }
+  }
+  return { checked: matches + mismatches.length, matches, mismatches: mismatches.slice(0, 50) };
 }
 
 class SyncVerificationError extends Error {
@@ -530,7 +556,11 @@ export async function runSync(
     const deletedAtSource = new Set(sourceDeletionCandidates(
       since === null,
       existing.keys(),
-      [...changes.documents.map((doc) => doc.sourceRef), ...changes.unbuildable.map((row) => row.ref)],
+      [
+        ...changes.documents.map((doc) => doc.sourceRef),
+        ...changes.unbuildable.map((row) => row.ref),
+        ...(changes.nonLedgerRefs ?? []),
+      ],
       changes.deletedRefs,
     ));
     // A source-CANCELLED transaction that we imported while it was posted is a
@@ -595,26 +625,12 @@ export async function runSync(
     if (source.openItems) {
       const truth = await source.openItems();
       const mine = (await db.execute(sql`
-        select custom->>${refKey} as ref, coalesce(open_balance, 0) as ob
+        select custom->>${refKey} as ref, coalesce(open_balance, 0) as unpaid
           from documents where org_id = ${org.id} and custom->>${refKey} is not null
-            and status = 'posted' and open_balance is not null`)) as unknown as {
-        rows: { ref: string; ob: string }[];
+      `)) as unknown as {
+        rows: SourceOpenItem[];
       };
-      const mineByRef = new Map(mine.rows.map((r) => [r.ref, toUnits(r.ob)]));
-      const mismatches: NonNullable<SyncResult["openItems"]>["mismatches"] = [];
-      let matches = 0;
-      for (const t of truth) {
-        const want = toUnits(t.unpaid);
-        const got = mineByRef.get(t.ref);
-        if (got === undefined) {
-          mismatches.push({ ref: t.ref, ours: "missing", theirs: fromUnits(want < 0n ? -want : want) });
-          continue;
-        }
-        const wantAbs = want < 0n ? -want : want;
-        if (got === wantAbs) matches++;
-        else mismatches.push({ ref: t.ref, ours: fromUnits(got), theirs: fromUnits(wantAbs) });
-      }
-      openItems = { checked: matches + mismatches.length, matches, mismatches: mismatches.slice(0, 50) };
+      openItems = verifyOpenItems(truth, mine.rows);
     }
 
     // -- 8b. verify: month-bucketed activity (period-allocation exactness) --------

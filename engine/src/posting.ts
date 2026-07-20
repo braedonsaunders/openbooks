@@ -94,6 +94,20 @@ export interface PostingDeps {
   inventoryAssetByLine?: Map<string, string>;
 }
 
+/**
+ * An AR/AP journal line participates in the subledger only when it identifies
+ * the customer/vendor whose balance it changes. NetSuite permits direct GL
+ * journals to control accounts without an entity; those remain legitimate
+ * control-account GL activity, but must not become anonymous aging items.
+ */
+export function controlLineIsOpenItem(
+  accountId: string,
+  partyId: string | null | undefined,
+  openItemAccountIds?: ReadonlySet<string>,
+): boolean {
+  return partyId != null && openItemAccountIds?.has(accountId) === true;
+}
+
 /** document_line id → deferred-revenue account for rev-rec invoice lines. */
 async function resolveDeferralAccounts(
   runner: Pick<typeof db, "execute">,
@@ -402,21 +416,24 @@ export const RULES: Record<string, RuleFn> = {
    *  may name its own subsidiary (intercompany journal); the engine injects
    *  the due-to/due-from legs that keep every subsidiary balanced. */
   journal: (doc, lines, deps) =>
-    lines.map((l) => ({
-      accountId: l.accountId!,
-      amount: l.amount,
-      subsidiaryId: l.subsidiaryId,
-      memo: l.description,
+    lines.map((l) => {
       // Line-level entity: a journal line names its own customer/vendor (source
-      // systems put the entity on the LINE, e.g. NetSuite opening-balance /
-      // month-end journals — AR to a customer, AP to a vendor — with no header
-      // party). Falls back to the header party when the line has none.
-      partyId: l.partyId ?? doc.partyId,
-      // An AR/AP leg on a journal is an OPEN ITEM: a credit can settle
-      // invoices, a debit can be settled — any crediting document applies.
-      isOpenItem: deps.openItemAccountIds?.has(l.accountId!) ?? false,
-      ...dims(doc, l),
-    })),
+      // systems put the entity on the LINE, e.g. opening-balance journals).
+      // Falls back to the header party when the line has none.
+      const partyId = l.partyId ?? doc.partyId;
+      return {
+        accountId: l.accountId!,
+        amount: l.amount,
+        subsidiaryId: l.subsidiaryId,
+        memo: l.description,
+        partyId,
+        // Entity-bearing AR/AP journal legs are open items. A party-less leg is
+        // a direct GL control-account posting and intentionally stays outside
+        // aging; manufacturing an anonymous subledger balance would be false.
+        isOpenItem: controlLineIsOpenItem(l.accountId!, partyId, deps.openItemAccountIds),
+        ...dims(doc, l),
+      };
+    }),
 
   /**
    * Check: a direct bank disbursement. DR the line accounts (expense or the
@@ -450,13 +467,20 @@ export const RULES: Record<string, RuleFn> = {
    * each source account. The mirror of `check`.
    */
   deposit: (doc, lines, deps) => {
-    const sources: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
-      amount: neg(l.amount), // credit each source
-      memo: l.description,
-      partyId: l.partyId ?? doc.partyId,
-      ...dims(doc, l),
-    }));
+    const sources: KernelLine[] = lines.map((l) => {
+      const partyId = l.partyId ?? doc.partyId;
+      return {
+        accountId: l.accountId!,
+        amount: neg(l.amount), // credit each source
+        memo: l.description,
+        partyId,
+        // A deposit can settle an AR/AP credit (for example cash received for
+        // a vendor credit). Preserve that entity-bearing control leg as an
+        // application source; ordinary income/clearing sources stay non-open.
+        isOpenItem: controlLineIsOpenItem(l.accountId!, partyId, deps.openItemAccountIds),
+        ...dims(doc, l),
+      };
+    });
     const total = sum(lines.map((l) => l.amount)); // positive = money in
     return [
       { accountId: controlOverride(doc) ?? deps.control.bank, amount: total, ...dims(doc) }, // debit bank
@@ -659,7 +683,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   if (doc.status === "posted") throw new PostingError(`document ${doc.documentNumber} already posted`);
   if (doc.status === "voided") throw new PostingError(`document ${doc.documentNumber} is voided`);
-  if (doc.kind === "journal" && !deps.openItemAccountIds) {
+  if ((doc.kind === "journal" || doc.kind === "deposit") && !deps.openItemAccountIds) {
     deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(db, doc.orgId) };
   }
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
@@ -980,7 +1004,7 @@ export async function regenerateGlImpactTx(
       .where(eq(schema.paymentCards.id, doc.paymentCardId));
     if (card) deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
-  if (doc.kind === "journal" && !deps.openItemAccountIds) {
+  if ((doc.kind === "journal" || doc.kind === "deposit") && !deps.openItemAccountIds) {
     deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(tx, doc.orgId) };
   }
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {

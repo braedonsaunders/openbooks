@@ -108,7 +108,16 @@ export function buildNativeFromNetSuite(
   // Non-posting orders → order documents (no GL). ItemShip and unknowns skip.
   if (NONPOSTING.has(tt)) {
     const orderKind = ORDER_KIND[tt];
-    if (!orderKind) return { skip: `non-posting type ${tt}` };
+    if (!orderKind) {
+      const hasLineLedgerImpact = rawLines.some((line) =>
+        Boolean(line.account ?? line.expenseaccount) && glUnits(line) !== 0n,
+      );
+      return {
+        skip: hasLineLedgerImpact
+          ? `unsupported posting type ${tt} has ledger impact`
+          : `non-ledger source transaction ${tt}`,
+      };
+    }
     return buildOrder(ctx, h, rawLines, orderKind);
   }
   if (h.posting !== "T") return { skip: `posting='${h.posting}'` };
@@ -200,7 +209,18 @@ export function buildNativeFromNetSuite(
   };
   const finish = (taxComputedMatch: boolean): BuiltNative => {
     const controlAccountId = CONTROL_KINDS.has(effKind) ? controlAccountFor(ctx, rawLines) : null;
-    return { doc: { ...base, kind: effKind, controlAccountId, lines }, taxComputedMatch };
+    // NetSuite can retain a transaction marked posting='T' after every GL line
+    // has been reduced to exactly zero (for example a regenerated labour-burden
+    // journal). It has no ledger projection in either system. Preserve the
+    // source transaction and all of its dimensions as an approved document,
+    // but do not ask the posting kernel to manufacture a zero-value journal.
+    const hasLedgerImpact = lines.some(
+      (line) => toUnits(line.amount) !== 0n || toUnits(line.taxAmount) !== 0n,
+    );
+    return {
+      doc: { ...base, posting: hasLedgerImpact, kind: effKind, controlAccountId, lines },
+      taxComputedMatch,
+    };
   };
 
   if (kind === "journal") {

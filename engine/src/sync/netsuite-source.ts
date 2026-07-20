@@ -63,6 +63,15 @@ const NS_BILLING: Record<string, string> = {
 };
 const NETSUITE_ID_WINDOW = 5_000;
 
+/**
+ * Use the clock of the column being bounded. Some accounts render SYSDATE in
+ * the data-center timezone while transaction.lastmodifieddate is rendered in
+ * the account timezone; mixing them can make fresh changes appear to be in the
+ * future and silently exclude them from an incremental pull.
+ */
+export const NETSUITE_TRANSACTION_WATERMARK_QUERY =
+  "SELECT TO_CHAR(MAX(lastmodifieddate), 'YYYY-MM-DD HH24:MI:SS') AS now FROM transaction";
+
 export interface NetSuiteAccountMappings {
   projectForemanField?: string;
   projectPurchaseOrderField?: string;
@@ -88,6 +97,17 @@ export function numericIdWindows(maxId: number, width = NETSUITE_ID_WINDOW): Arr
   const windows: Array<[number, number]> = [];
   for (let lo = 0; lo < maxId; lo += width) windows.push([lo, Math.min(lo + width, maxId)]);
   return windows;
+}
+
+/** NetSuite exposes foreignamountunpaid for invoices/bills but returns NULL for
+ * credit memos. Credits are therefore proven from their mainline amount less
+ * exact Payment links, in the same 4-decimal integer arithmetic as the ledger. */
+export function netSuiteCreditOpenBalance(total: string, applied: string): string {
+  const totalUnits = toUnits(total);
+  const appliedUnits = toUnits(applied);
+  const remaining = (totalUnits < 0n ? -totalUnits : totalUnits)
+    - (appliedUnits < 0n ? -appliedUnits : appliedUnits);
+  return fromUnits(remaining > 0n ? remaining : 0n);
 }
 
 /** Enforce NetSuite's transaction-line identity across governed export retries. */
@@ -722,9 +742,8 @@ export class NetSuiteSource implements MigrationSource {
 
   async nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges> {
     // High-water mark from NetSuite's clock, not ours.
-    const nowRows = await this.q<{ now: string }>(
-      "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS') AS now FROM DUAL",
-    );
+    const nowRows = await this.q<{ now: string }>(NETSUITE_TRANSACTION_WATERMARK_QUERY);
+    if (!nowRows[0]?.now) throw new Error("NetSuite has no transaction watermark");
     const syncedThrough = new Date(nowRows[0]!.now.replace(" ", "T") + "Z");
     const effectiveSince = since ? new Date(since.getTime() - 15 * 60 * 1000) : null;
 
@@ -807,11 +826,16 @@ export class NetSuiteSource implements MigrationSource {
     // Build native documents.
     const documents: NativeDocument[] = [];
     const unbuildable: { ref: string; reason: string }[] = [];
+    const nonLedgerRefs: string[] = [];
     for (const h of headers) {
       const raw = linesByTxn.get(String(h.id));
       if (!raw || raw.length === 0) continue;
       const built = buildNativeFromNetSuite(ctx, { ...h, id: String(h.id) }, raw);
       if ("skip" in built) {
+        if (built.skip.startsWith("non-ledger source transaction")) {
+          nonLedgerRefs.push(String(h.id));
+          continue;
+        }
         // Silent for genuinely non-posting rows; everything else is diagnostic.
         if (h.posting === "T") unbuildable.push({ ref: String(h.id), reason: built.skip });
         else if (built.skip.startsWith("order")) unbuildable.push({ ref: String(h.id), reason: built.skip });
@@ -864,7 +888,14 @@ export class NetSuiteSource implements MigrationSource {
         if (row.internalId && transactionLabel.test(row.recordType)) deletedRefs.push(row.internalId);
       }
     }
-    return { documents, applications, deletedRefs: [...new Set(deletedRefs)], syncedThrough, unbuildable };
+    return {
+      documents,
+      applications,
+      deletedRefs: [...new Set(deletedRefs)],
+      syncedThrough,
+      unbuildable,
+      nonLedgerRefs,
+    };
   }
 
   // --- verification -----------------------------------------------------------------
@@ -900,7 +931,23 @@ export class NetSuiteSource implements MigrationSource {
   async openItems(): Promise<SourceOpenItem[]> {
     const rows = await this.q<{ id: string; unpaid: string | null }>(`
       SELECT id, foreignamountunpaid AS unpaid FROM transaction
-       WHERE type IN ('CustInvc', 'VendBill', 'VendCred', 'ExpRept') AND posting = 'T'`);
-    return rows.map((r) => ({ ref: String(r.id), unpaid: String(r.unpaid ?? "0") }));
+       WHERE type IN ('CustInvc', 'VendBill', 'ExpRept') AND posting = 'T'`);
+    const credits = await this.q<{ id: string; total: string; applied: string }>(`
+      SELECT t.id,
+             MAX(ABS(COALESCE(tl.foreignamount, tl.netamount, 0))) AS total,
+             COALESCE(SUM(ABS(COALESCE(n.foreignamount, 0))), 0) AS applied
+        FROM transaction t
+        JOIN transactionline tl ON tl.transaction = t.id AND tl.mainline = 'T'
+        LEFT JOIN nexttransactionlinelink n
+          ON n.nextdoc = t.id AND n.linktype = 'Payment'
+       WHERE t.type IN ('VendCred', 'CustCred') AND t.posting = 'T'
+       GROUP BY t.id`);
+    return [
+      ...rows.map((r) => ({ ref: String(r.id), unpaid: String(r.unpaid ?? "0") })),
+      ...credits.map((r) => ({
+        ref: String(r.id),
+        unpaid: netSuiteCreditOpenBalance(String(r.total ?? "0"), String(r.applied ?? "0")),
+      })),
+    ];
   }
 }
