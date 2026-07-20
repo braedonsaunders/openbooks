@@ -6,13 +6,13 @@ import type { ComponentProps } from 'react'
 import { encodeReportDrillTarget, type ReportDrillTarget } from '../../../lib/report-drill'
 
 export function ReportDrillLink({
-  drillTarget,
+  target,
   ...props
-}: Omit<ComponentProps<typeof Link>, 'href'> & { drillTarget: ReportDrillTarget }) {
+}: Omit<ComponentProps<typeof Link>, 'href' | 'target'> & { target: ReportDrillTarget }) {
   const pathname = usePathname() ?? '/reports'
   const current = useSearchParams()
   const params = new URLSearchParams(current.toString())
-  params.set('reportDrill', encodeReportDrillTarget(drillTarget))
+  params.set('reportDrill', encodeReportDrillTarget(target))
   params.delete('reportDrillPage')
   params.delete('txn')
   params.delete('reportRecord')

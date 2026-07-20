@@ -234,7 +234,7 @@ export function StatementMatrixTable({
                       )}
                     >
                       {target ? (
-                        <ReportDrillLink drillTarget={target} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                        <ReportDrillLink target={target} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
                           {text}
                         </ReportDrillLink>
                       ) : (
