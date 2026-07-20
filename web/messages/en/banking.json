@@ -489,8 +489,9 @@
     },
     "panels": {
       "timeline": "Cash position forecast",
-      "timelineHint": "Click a week to see what flows in and out · {weeks} weeks",
-      "accounts": "Bank accounts"
+      "timelineHint": "Click a week for what flows in and out · {weeks} weeks",
+      "accounts": "Bank accounts",
+      "timelineHintScheduled": "Click a week for its transactions · AP scheduled oldest-due-first within capacity"
     },
     "cols": {
       "week": "Week",
@@ -505,6 +506,6 @@
     "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week.",
     "configure": "Configure forecast",
     "configTitle": "Cash forecast configuration",
-    "configDescription": "Tune how AP-to-pay is selected and add recurring flows (payroll, rent, loans) the AR/AP pipeline doesn’t capture."
+    "configDescription": "The model behind the liquidity timeline — recurring flows (payroll, rent, loans) and how collection/payment dates are predicted. The AP pay rule is configured on the AP cockpit."
   }
 }
