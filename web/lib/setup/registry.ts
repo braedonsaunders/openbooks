@@ -729,7 +729,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
     fields: [
       { key: 'itemId', kind: 'ref', ref: 'items', required: true },
-      { key: 'currency', kind: 'text', required: true },
+      { key: 'currency', kind: 'ref', ref: 'currencies', required: true },
       { key: 'unitPrice', kind: 'decimal', required: true },
       { key: 'lowValue', kind: 'decimal' },
       { key: 'highValue', kind: 'decimal' },

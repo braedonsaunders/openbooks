@@ -8,7 +8,7 @@
  * parameter values. This is the same whitelist that keeps the generic API safe.
  */
 
-import { toSnake, type SetupEntity, type SetupField } from './registry'
+import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupField } from './registry'
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -71,7 +71,11 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
     case 'ref': {
       if (!present) return { column, value: null }
       const s = String(raw)
-      if (!UUID_RE.test(s)) return { error: `${field.key} must reference a valid record` }
+      // Refs to natural-key entities (e.g. currencies, keyed by code) carry the
+      // key itself, not a uuid.
+      const target = field.ref ? SETUP_ENTITY_BY_KEY.get(field.ref) : undefined
+      const naturalKeyed = target != null && (target.idColumn ?? 'id') !== 'id'
+      if (!naturalKeyed && !UUID_RE.test(s)) return { error: `${field.key} must reference a valid record` }
       return { column, value: s }
     }
     case 'text':
