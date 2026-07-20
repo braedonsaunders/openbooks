@@ -146,6 +146,64 @@ export async function suiteql<T = Record<string, unknown>>(
   }
 }
 
+/** Invoke a tenant-authenticated RESTlet with the same TBA credentials as SuiteQL. */
+export async function netsuiteRestlet<T = unknown>(
+  script: string | number,
+  deploy: string | number,
+  params: Record<string, unknown>,
+  creds: NetSuiteCreds,
+  method: "GET" | "POST" = "GET",
+): Promise<T> {
+  const accountHost = creds.account.replaceAll("_", "-").toLowerCase();
+  const endpoint = `https://${accountHost}.restlets.api.netsuite.com/app/site/hosting/restlet.nl`;
+  const query: Record<string, string | number> = { script, deploy };
+  if (method === "GET") {
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value !== "string" && typeof value !== "number") {
+        throw new Error(`RESTlet GET parameter ${key} must be a string or number`);
+      }
+      query[key] = value;
+    }
+  }
+
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) search.set(key, String(value));
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 120_000);
+    try {
+      const response = await fetch(`${endpoint}?${search.toString()}`, {
+        method,
+        headers: {
+          Authorization: oauthHeader(creds, method, endpoint, query),
+          Accept: "application/json",
+          ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(method === "POST" ? { body: JSON.stringify(params) } : {}),
+        signal: ctl.signal,
+      });
+      if ((response.status === 429 || response.status >= 500) && attempt < 4) {
+        lastError = new Error(`RESTlet HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+        const retryAfter = Number(response.headers.get("retry-after") ?? 0);
+        await sleep(retryAfter > 0 ? retryAfter * 1_000 : attempt * 2_000);
+        continue;
+      }
+      if (!response.ok) {
+        throw new Error(`RESTlet HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+      }
+      return await response.json() as T;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 4) await sleep(attempt * 2_000);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("RESTlet failed after retries");
+}
+
 /** Read a paginated native-record collection through SuiteTalk REST. */
 export async function netsuiteRecords<T = Record<string, unknown>>(
   recordType: string,

@@ -11,7 +11,6 @@ import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
-import { AttachmentPanel } from '../../../components/attachment-panel'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
@@ -386,6 +385,7 @@ export function ExpenseDrawer({
     <TransactionDrawer
       closeHref="/expenses"
       recordId={String(doc.id)}
+      canEditAttachments={canSubmit}
       panelClassName={docTypeMeta('expense_report').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
@@ -537,7 +537,6 @@ export function ExpenseDrawer({
           />
         </div>
 
-        <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
     </TransactionDrawer>
   )

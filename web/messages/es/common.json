@@ -186,7 +186,7 @@
     "description": "Ningún registro coincide con los filtros actuales."
   },
   "auditTrail": {
-    "tabs": { "details": "Detalles", "audit": "Registro de auditoría" },
+    "tabs": { "details": "Detalles", "attachments": "Adjuntos", "audit": "Registro de auditoría" },
     "ariaLabel": "Secciones del registro",
     "searchPlaceholder": "Buscar en el registro de auditoría",
     "actionFilter": "Filtrar por acción",

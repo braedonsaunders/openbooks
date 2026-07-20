@@ -532,6 +532,7 @@ export function OrderDrawer({
     <TransactionDrawer
       closeHref={meta.base}
       recordId={String(doc.id)}
+      canEditAttachments={canManage}
       panelClassName={docTypeMeta(kind).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
