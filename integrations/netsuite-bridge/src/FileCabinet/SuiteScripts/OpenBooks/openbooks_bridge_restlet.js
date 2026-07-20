@@ -121,7 +121,9 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
     const deletedRecords = (input) => {
       const since = text(input.since);
       assert(/^\d{4}-\d{2}-\d{2}/.test(since), 'since must be an ISO date or timestamp');
-      const sinceDate = new Date(`${since.slice(0, 10)}T00:00:00Z`);
+      // Noon UTC preserves the requested calendar date across every NetSuite
+      // account time zone when N/format renders the role-local search value.
+      const sinceDate = new Date(`${since.slice(0, 10)}T12:00:00Z`);
       const localDate = format.format({ value: sinceDate, type: format.Type.DATE });
       const filters = [['deleteddate', 'onorafter', localDate]];
       if (input.recordType) filters.push('AND', ['recordtype', 'is', text(input.recordType)]);
