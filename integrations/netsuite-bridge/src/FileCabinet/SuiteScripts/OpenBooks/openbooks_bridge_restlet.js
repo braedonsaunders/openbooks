@@ -128,13 +128,13 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       const deleted = search.create({
         type: 'deletedrecord',
         filters,
-        columns: ['deleteddate', 'recordtype', 'name'],
+        columns: ['recordid', 'deleteddate', 'recordtype', 'name'],
       });
       const rows = [];
       deleted.runPaged({ pageSize: 1000 }).pageRanges.forEach((range) => {
         deleted.runPaged({ pageSize: 1000 }).fetch({ index: range.index }).data.forEach((result) => {
           rows.push({
-            internalId: text(result.id),
+            internalId: text(result.getValue({ name: 'recordid' }) || result.id),
             deletedAt: text(result.getValue({ name: 'deleteddate' })),
             recordType: text(result.getValue({ name: 'recordtype' })),
             name: text(result.getValue({ name: 'name' })),

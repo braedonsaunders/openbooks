@@ -749,7 +749,7 @@ export class NetSuiteSource implements MigrationSource {
       const deleted = await this.bridge.deletedRecords(effectiveSince);
       const transactionLabel = /invoice|bill|payment|credit|journal|check|deposit|transfer|expense report|sales order|purchase order/i;
       for (const row of deleted) {
-        if (transactionLabel.test(row.recordType)) deletedRefs.push(row.internalId);
+        if (row.internalId && transactionLabel.test(row.recordType)) deletedRefs.push(row.internalId);
       }
     }
     return { documents, applications, deletedRefs: [...new Set(deletedRefs)], syncedThrough, unbuildable };
