@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import { basename, extname } from "node:path";
-import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { putS3Blob, s3Enabled } from "../file-storage.ts";
@@ -94,29 +93,6 @@ export function detectContentType(bytes: Buffer, filename: string): string {
   if (bytes.length >= 12 && head.slice(4, 8) === "ftyp" && /hei[cf]|mif1/.test(head.slice(8, 12))) return "image/heic";
 
   throw new Error(`unsupported attachment content for source file ${filename || "(unnamed)"}`);
-}
-
-function parseArgs(argv: string[]): ImportOptions {
-  const read = (name: string): string | undefined => {
-    const index = argv.indexOf(name);
-    return index >= 0 ? argv[index + 1] : undefined;
-  };
-  const org = read("--org")?.trim();
-  if (!org) throw new Error("--org <tenant UUID or exact tenant name> is required");
-  const concurrency = Number(read("--concurrency") ?? 6);
-  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 12) {
-    throw new Error("--concurrency must be an integer from 1 to 12");
-  }
-  const limitValue = read("--limit");
-  const limit = limitValue === undefined ? undefined : Number(limitValue);
-  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) throw new Error("--limit must be a positive integer");
-  return {
-    org,
-    connectionId: read("--connection"),
-    execute: argv.includes("--execute"),
-    concurrency,
-    limit,
-  };
 }
 
 export function expenseReportFileIds(record: unknown): string[] {
@@ -466,16 +442,4 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   if (summary.failures) throw new Error(`${summary.failures} source files failed to import`);
   await verifyImport(orgId, fileToDocuments);
   return summary;
-}
-
-async function main(): Promise<void> {
-  const summary = await importNetSuiteAttachments(parseArgs(process.argv.slice(2)));
-  console.log(JSON.stringify(summary, null, 2));
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
 }
