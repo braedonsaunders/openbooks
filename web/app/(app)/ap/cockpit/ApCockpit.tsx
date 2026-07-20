@@ -24,7 +24,7 @@ import { PayRunPlanner } from './PayRunPlanner'
  * aging + cash-out schedule beside it, and the vendor breakdown below. All off
  * the shared cash engine, so every number agrees with the analytics forecast.
  */
-export function ApCockpit({ data }: { data: ApPosition }) {
+export function ApCockpit({ data, canConfigure }: { data: ApPosition; canConfigure: boolean }) {
   const t = useTranslations('ap.cockpit')
 
   const overduePct = data.outstanding > 0 ? Math.round((data.overdue / data.outstanding) * 100) : 0
@@ -74,6 +74,7 @@ export function ApCockpit({ data }: { data: ApPosition }) {
             scheduling={data.payPlan.scheduling}
             deferredThisWeek={data.payPlan.deferredThisWeek}
             deferredBeyondHorizon={data.payPlan.deferredBeyondHorizon}
+            canConfigure={canConfigure}
           />
         </CockpitPanel>
 

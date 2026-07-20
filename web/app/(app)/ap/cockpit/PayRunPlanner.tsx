@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ArrowRight, ShieldCheck, Gauge, TriangleAlert } from 'lucide-react'
+import { ArrowRight, ShieldCheck, Gauge, TriangleAlert, SlidersHorizontal } from 'lucide-react'
 import { Badge, Button, cn } from '@openbooks/ui'
 import { money } from '../../../../lib/format'
 import { compactMoney } from '../../../../components/cockpit/ui'
@@ -28,6 +28,8 @@ export interface PayRunPlannerProps {
   scheduling: boolean
   deferredThisWeek: number
   deferredBeyondHorizon: number
+  /** admin.setup.manage — gates editing the AP-to-pay selection settings. */
+  canConfigure: boolean
 }
 
 const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -37,6 +39,10 @@ const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en
  * Bills are pre-selected; the user can trim the set, watch the total against
  * the week's capacity, then hand the selection to the /payments run builder
  * (which owns bank account, discount capture and credit application).
+ *
+ * The selection rule itself (weekly cap + restrict-to-safe) is configurable
+ * inline — it persists to the shared cashflow config so the forecast and the
+ * planner always agree.
  */
 export function PayRunPlanner(props: PayRunPlannerProps) {
   const t = useTranslations('ap.cockpit.payRun')
@@ -44,6 +50,7 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
   // Only bills with a source document can be routed into a payment run.
   const payable = useMemo(() => props.recommended.filter((e) => e.docId), [props.recommended])
   const [selected, setSelected] = useState<Set<string>>(() => new Set(payable.map((e) => e.id)))
+  const [showSettings, setShowSettings] = useState(false)
 
   const selectedEntries = payable.filter((e) => selected.has(e.id))
   const total = selectedEntries.reduce((a, e) => a + e.amount, 0)
@@ -73,9 +80,21 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
             {props.restrictToSafe ? <ShieldCheck size={13} /> : <Gauge size={13} />}
             {cap === null ? t('noCap') : props.restrictToSafe ? t('safeCapacity') : t('weeklyCap')}
           </span>
-          <span className="tabular-nums text-slate-600 dark:text-slate-300">
-            {money(total)}
-            {cap !== null ? <span className="text-slate-400"> / {money(cap)}</span> : null}
+          <span className="flex items-center gap-2">
+            <span className="tabular-nums text-slate-600 dark:text-slate-300">
+              {money(total)}
+              {cap !== null ? <span className="text-slate-400"> / {money(cap)}</span> : null}
+            </span>
+            {props.canConfigure ? (
+              <button
+                type="button"
+                onClick={() => setShowSettings((s) => !s)}
+                title={t('settings.title')}
+                className={cn('rounded p-0.5 transition-colors', showSettings ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200')}
+              >
+                <SlidersHorizontal size={13} />
+              </button>
+            ) : null}
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
@@ -94,8 +113,18 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
         </div>
       </div>
 
+      {/* selection settings (admin.setup.manage) */}
+      {showSettings ? (
+        <SelectionSettings
+          weeklyCap={props.weeklyCap}
+          restrictToSafe={props.restrictToSafe}
+          onClose={() => setShowSettings(false)}
+          onSaved={() => { setShowSettings(false); router.refresh() }}
+        />
+      ) : null}
+
       {/* recommended bills */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="max-h-[22rem] min-h-0 flex-1 overflow-y-auto">
         {payable.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('empty')}</p>
         ) : (
@@ -133,6 +162,72 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
           {t('build')}
           <ArrowRight size={15} />
         </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Inline editor for the AP-to-pay selection rule. Persists to the shared
+ * cashflow config (orgs.settings.analytics.cashflow) via the same endpoint the
+ * analytics Configuration tab uses, so the forecast and planner stay in sync.
+ */
+function SelectionSettings({
+  weeklyCap,
+  restrictToSafe,
+  onClose,
+  onSaved,
+}: {
+  weeklyCap: number
+  restrictToSafe: boolean
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const t = useTranslations('ap.cockpit.payRun.settings')
+  const [cap, setCap] = useState(String(weeklyCap))
+  const [safe, setSafe] = useState(restrictToSafe)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const save = async () => {
+    setBusy(true)
+    setErr(null)
+    const r = await fetch('/api/analytics/config/cashflow', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weeklyApCap: Number(cap) || 0, restrictToSafe: safe ? 1 : 0 }),
+    })
+    setBusy(false)
+    if (r.ok) onSaved()
+    else setErr(r.status === 403 ? t('needPermission') : t('saveFailed'))
+  }
+
+  return (
+    <div className="space-y-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/20">
+      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{t('title')}</p>
+      <label className="block">
+        <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">{t('weeklyCapLabel')}</span>
+        <input
+          type="number"
+          min={0}
+          step={1000}
+          value={cap}
+          onChange={(e) => setCap(e.target.value)}
+          className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+        />
+        <span className="mt-0.5 block text-[11px] leading-snug text-slate-400 dark:text-slate-500">{t('weeklyCapHelp')}</span>
+      </label>
+      <label className="flex items-start gap-2">
+        <input type="checkbox" checked={safe} onChange={(e) => setSafe(e.target.checked)} className="mt-0.5 h-4 w-4 accent-teal-600" />
+        <span>
+          <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">{t('safeLabel')}</span>
+          <span className="block text-[11px] leading-snug text-slate-400 dark:text-slate-500">{t('safeHelp')}</span>
+        </span>
+      </label>
+      <div className="flex items-center gap-2">
+        <Button size="sm" disabled={busy} onClick={save}>{busy ? t('saving') : t('save')}</Button>
+        <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">{t('cancel')}</button>
+        {err ? <span className="text-xs text-red-500">{err}</span> : null}
       </div>
     </div>
   )

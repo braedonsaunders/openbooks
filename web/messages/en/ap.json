@@ -209,7 +209,19 @@
       "deferred": "{amount} defers to later weeks",
       "selected": "{count} selected",
       "build": "Build pay run",
-      "empty": "No bills predicted due this week."
+      "empty": "No bills predicted due this week.",
+      "settings": {
+        "title": "How AP-to-pay is selected",
+        "weeklyCapLabel": "Weekly pay cap ($)",
+        "weeklyCapHelp": "Most to pay per week — 0 = unlimited. Bills are chosen oldest-due first up to this cap; the rest defers.",
+        "safeLabel": "Restrict to safe capacity",
+        "safeHelp": "Never recommend paying beyond the cash available that week (projected inflows − outflows). Overflow defers forward.",
+        "save": "Save selection rule",
+        "saving": "Saving…",
+        "cancel": "Cancel",
+        "needPermission": "Saving requires the Setup permission.",
+        "saveFailed": "Save failed — try again."
+      }
     },
     "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week. Adjust the cap in the cash-flow forecast configuration.",
     "forecastLink": {

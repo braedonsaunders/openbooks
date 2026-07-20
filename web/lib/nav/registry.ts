@@ -243,6 +243,14 @@ export const NAV_MODULES: NavModule[] = [
     exact: true,
   },
   {
+    key: 'banking-cash',
+    href: '/banking/cash',
+    label: 'Cash',
+    iconKey: 'wallet',
+    group: 'banking',
+    requiredPermission: 'banking.read',
+  },
+  {
     key: 'banking-transactions',
     href: '/banking/transactions',
     label: 'Bank Transactions',

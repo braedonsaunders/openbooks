@@ -468,5 +468,40 @@
     "authorizedKeys": "Authorized SSH keys (optional)",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
     "authorizedKeysHint": "One OpenSSH public key per line. Clients with a matching private key can log in without a password."
+  },
+  "cash": {
+    "title": "Cash",
+    "description": "Your liquidity control center — cash on hand, runway, and the weeks ahead.",
+    "weeks": "{n}w",
+    "status": {
+      "healthy": "Healthy",
+      "caution": "Caution",
+      "critical": "Critical"
+    },
+    "stats": {
+      "currentCash": "Cash on hand",
+      "projectedEnd": "Projected end",
+      "netSub": "{amount} net",
+      "runway": "Cash runway",
+      "lowest": "Lowest point",
+      "lowestSub": "week of {date}",
+      "netFlow": "Net period flow"
+    },
+    "panels": {
+      "timeline": "Cash position forecast",
+      "timelineHint": "Rolled forward {weeks} weeks",
+      "accounts": "Bank accounts"
+    },
+    "cols": {
+      "week": "Week",
+      "in": "Inflows",
+      "out": "Outflows",
+      "net": "Net",
+      "ending": "Ending cash"
+    },
+    "totalCash": "Total cash",
+    "noAccounts": "No bank accounts found.",
+    "negativeAlert": "Projected to go cash-negative — low of {amount} the week of {date}. Slow payables or accelerate collections.",
+    "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week."
   }
 }
