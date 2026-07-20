@@ -62,7 +62,7 @@ export default async function Partners({
           </div>
           <SearchInput placeholder={t('searchPlaceholder')} />
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t('totalOutstanding')}: <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200"><ReportDrillLink drillTarget={{ kind: 'ledger', label: t('totalOutstanding'), accountTypes, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(flip * total)}</ReportDrillLink></span>
+            {t('totalOutstanding')}: <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200"><ReportDrillLink target={{ kind: 'ledger', label: t('totalOutstanding'), accountTypes, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(flip * total)}</ReportDrillLink></span>
           </p>
         </>
       }
@@ -89,9 +89,9 @@ export default async function Partners({
               <TableCell
                 className={cn('text-right tabular-nums', flip * Number(r.balance) < 0 && 'text-red-600 dark:text-red-400')}
               >
-                <ReportDrillLink drillTarget={{ kind: 'ledger', label: r.display_name ?? t('noPartyOnLines'), accountTypes, partyIds: r.id ? [r.id] : undefined, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(flip * Number(r.balance))}</ReportDrillLink>
+                <ReportDrillLink target={{ kind: 'ledger', label: r.display_name ?? t('noPartyOnLines'), accountTypes, partyIds: r.id ? [r.id] : undefined, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(flip * Number(r.balance))}</ReportDrillLink>
               </TableCell>
-              <TableCell className="text-right tabular-nums"><ReportDrillLink drillTarget={{ kind: 'ledger', label: r.display_name ?? t('noPartyOnLines'), accountTypes, partyIds: r.id ? [r.id] : undefined, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{r.line_count}</ReportDrillLink></TableCell>
+              <TableCell className="text-right tabular-nums"><ReportDrillLink target={{ kind: 'ledger', label: r.display_name ?? t('noPartyOnLines'), accountTypes, partyIds: r.id ? [r.id] : undefined, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{r.line_count}</ReportDrillLink></TableCell>
             </TableRow>
           ))}
           </TableBody>

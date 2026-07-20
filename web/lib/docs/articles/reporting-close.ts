@@ -42,6 +42,20 @@ The custom report builder uses this surface for its live preview, and **Run
 now** displays the finished custom report on it. Filters and actions remain in
 the page toolbar; printable report content remains on the paper.
 
+## Drill into report values
+
+Select any amount, count, quantity, percentage, or other numeric result to open
+its supporting records in a drawer. The report remains visible underneath with
+its filters, comparison columns, pagination, and scroll position intact. This
+works consistently for standard financial statements, aging and register
+reports, operational reports, custom reports, and saved views.
+
+Select a transaction in the supporting-record drawer to open the transaction's
+normal record flyout as a second layer. Close the record to return to supporting
+records, then close supporting records to return to the unchanged report. The
+record flyout applies the same role, organization, subsidiary, and form-layout
+rules as opening the record from its owning module.
+
 ## Core statements
 
 - **Profit & Loss** explains income and expense over a period.
@@ -60,7 +74,8 @@ behind account balances. Receivables and payables aging, registers, and partner
 reports explain control-account balances by transaction and party.
 
 Drill from a report to the source transaction where available. Investigate the
-business record and its ledger entry together.
+business record and its ledger entry together without navigating away from the
+report.
 
 ## Other reporting areas
 

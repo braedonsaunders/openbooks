@@ -88,12 +88,12 @@ export default async function PartnerStatementPage({
           {BUCKETS.map((b) => (
             <div key={b} className="min-w-0 px-2 text-center">
               <div className="truncate text-xs text-slate-500 dark:text-slate-400">{bucketLabels[b]}</div>
-              <div className="truncate tabular-nums"><ReportDrillLink drillTarget={{ kind: 'aging', label: `${st.party.name ?? t('statements.title')} · ${bucketLabels[b]}`, side, asOf: period.to, partyId, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.aging[b])}</ReportDrillLink></div>
+              <div className="truncate tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: `${st.party.name ?? t('statements.title')} · ${bucketLabels[b]}`, side, asOf: period.to, partyId, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.aging[b])}</ReportDrillLink></div>
             </div>
           ))}
           <div className="min-w-0 px-2 text-center font-semibold">
             <div className="truncate text-xs text-slate-500 dark:text-slate-400">{t('aging.columns.total')}</div>
-            <div className="truncate tabular-nums"><ReportDrillLink drillTarget={{ kind: 'aging', label: st.party.name ?? t('statements.title'), side, asOf: period.to, partyId }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.aging.total)}</ReportDrillLink></div>
+            <div className="truncate tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: st.party.name ?? t('statements.title'), side, asOf: period.to, partyId }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.aging.total)}</ReportDrillLink></div>
           </div>
         </div>
         <Table>
@@ -112,7 +112,7 @@ export default async function PartnerStatementPage({
             <TableCell colSpan={5} className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {t('statements.opening')}
             </TableCell>
-            <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink drillTarget={{ kind: 'ledger', label: t('statements.opening'), accountTypes, partyIds: [partyId], to: openingDate, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.opening)}</ReportDrillLink></TableCell>
+            <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink target={{ kind: 'ledger', label: t('statements.opening'), accountTypes, partyIds: [partyId], to: openingDate, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.opening)}</ReportDrillLink></TableCell>
           </TableRow>
           {st.lines.map((l, i) => (
             <TableRow key={`${l.entryId}-${i}`}>
@@ -138,7 +138,7 @@ export default async function PartnerStatementPage({
               {t('statements.closing')}
             </TableCell>
             <TableCell className={cn('text-right font-semibold tabular-nums', st.closing < 0 && 'text-red-600 dark:text-red-400')}>
-              <ReportDrillLink drillTarget={{ kind: 'ledger', label: t('statements.closing'), accountTypes, partyIds: [partyId], to: period.to, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.closing)}</ReportDrillLink>
+              <ReportDrillLink target={{ kind: 'ledger', label: t('statements.closing'), accountTypes, partyIds: [partyId], to: period.to, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.closing)}</ReportDrillLink>
             </TableCell>
           </TableRow>
           </TableBody>

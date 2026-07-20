@@ -64,10 +64,6 @@ export default async function BudgetPage({
     totalOf: (section: string) => t('statement.sectionTotal', { section }),
   }
   const view = await budgetVsActualView(scenarioId, authz.user.orgId, labels, q.dims)
-  const backParams = new URLSearchParams()
-  for (const [key, value] of Object.entries(sp)) if (value) backParams.set(key, value)
-  const backHref = `/reports/budget?${backParams.toString()}`
-
   return (
     <ListPageLayout
       header={
@@ -98,7 +94,7 @@ export default async function BudgetPage({
           <StatementMatrixTable
             view={view}
             currency={org?.base_currency}
-            drill={{ dims: q.dims, basis: 'accrual', back: backHref, backLabel: t('budget.title'), budgetScenarioId: scenarioId }}
+            drill={{ dims: q.dims, basis: 'accrual', budgetScenarioId: scenarioId }}
           />
         ) : (
           <p className="py-8 text-center text-slate-400 italic">{t('budget.noScenarios')}</p>
