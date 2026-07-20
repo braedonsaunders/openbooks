@@ -7,7 +7,7 @@ import { Pagination } from '../../../components/pagination'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
-import { getFile, getFolderTree, listFiles, type FolderNode } from '../../../lib/file-cabinet'
+import { getFile, getFolderPath, getFolderTree, listFolderContents } from '../../../lib/file-cabinet'
 import { FolderTree } from './FolderTree'
 import { UploadButton } from './UploadButton'
 import { NewFolderButton } from './NewFolderButton'
@@ -26,20 +26,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-/** Ancestor chain (root → … → active) for the breadcrumb. */
-function folderPath(tree: FolderNode[], folderId: string | undefined): FolderNode[] {
-  if (!folderId) return []
-  const byId = new Map(tree.map((f) => [f.id, f]))
-  const path: FolderNode[] = []
-  let cur = byId.get(folderId)
-  let guard = 0
-  while (cur && guard++ < 64) {
-    path.unshift(cur)
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined
-  }
-  return path
 }
 
 /** Build a /documents href that navigates to a folder, preserving sort/search. */
@@ -81,20 +67,28 @@ export default async function Documents({
     allowedSorts: ['name', 'size', 'created'] as const,
   })
 
-  const [tree, { files, total }] = await Promise.all([
+  const localizeName = (name: string, systemKind: string | null) =>
+    systemKind === 'ap_capture' ? t('systemFolders.apCapture') : name
+
+  // Sidebar tree (navigable folders only — the leaf per-record attachment
+  // folders are excluded) and the current folder's contents (its immediate
+  // sub-folders + files, one paginated window) are fetched in parallel.
+  const [tree, contents, pathNodes] = await Promise.all([
     getFolderTree(orgId, viewer),
-    listFiles(orgId, viewer, {
-      folderId: activeFolderId,
+    listFolderContents(orgId, viewer, {
+      parentId: activeFolderId,
       q: params.q,
       sort: params.sort,
       dir: params.dir,
       limit: params.perPage,
       offset: (params.page - 1) * params.perPage,
     }),
+    activeFolderId ? getFolderPath(orgId, activeFolderId) : Promise.resolve([]),
   ])
+  const { folders: childFolderNodes, files, total } = contents
   const localizedTree = tree.map((folder) => ({
     ...folder,
-    name: folder.systemKind === 'ap_capture' ? t('systemFolders.apCapture') : folder.name,
+    name: localizeName(folder.name, folder.systemKind),
   }))
 
   const [openFile, openFolder] = await Promise.all([
@@ -105,14 +99,15 @@ export default async function Documents({
   ])
 
   // Sub-folders of the current location, shown as rows above the files — a real
-  // file browser. Hidden while searching (search spans the whole cabinet).
-  const childFolders = params.q
-    ? []
-    : localizedTree
-        .filter((f) => f.parentId === (activeFolderId ?? null))
-        .sort((a, b) => a.name.localeCompare(b.name))
+  // file browser. Empty while searching (search spans the whole cabinet).
+  const childFolders = childFolderNodes.map((f) => ({
+    ...f,
+    name: localizeName(f.name, f.systemKind),
+  }))
 
-  const crumbs = folderPath(localizedTree, activeFolderId)
+  // Breadcrumb path — resolved from the folder itself (works for leaf record
+  // folders that never appear in the sidebar tree).
+  const crumbs = pathNodes.map((c) => ({ id: c.id, name: localizeName(c.name, c.systemKind) }))
   const isEmpty = files.length === 0 && childFolders.length === 0
   const newFolderParent = activeFolderId
 

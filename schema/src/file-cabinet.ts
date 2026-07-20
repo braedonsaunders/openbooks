@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   customType,
@@ -83,6 +84,8 @@ export const folders = pgTable(
     index("folders_parent").on(t.orgId, t.parentFolderId),
     index("folders_org").on(t.orgId),
     index("folders_record").on(t.orgId, t.recordTable, t.recordId),
+    // Main-pane child-folder listing ordered by name.
+    index("folders_parent_name").on(t.orgId, t.parentFolderId, t.name),
   ],
 );
 
@@ -122,6 +125,11 @@ export const files = pgTable(
     index("files_folder").on(t.orgId, t.folderId),
     index("files_org").on(t.orgId),
     uniqueIndex("files_source_identity").on(t.orgId, t.sourceSystem, t.sourceId),
+    // Folder-scoped listing ordered by the cabinet's default sorts.
+    index("files_folder_name").on(t.orgId, t.folderId, t.name),
+    index("files_folder_created").on(t.orgId, t.folderId, t.createdAt),
+    // Leading-wildcard ILIKE name search (files.name ilike '%q%').
+    index("files_name_trgm").using("gin", sql`${t.name} gin_trgm_ops`),
   ],
 );
 
