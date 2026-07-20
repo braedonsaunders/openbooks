@@ -56,14 +56,14 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
     ],
     columns: [
       { label: tc('labels.date') },
-      { label: tr('export.columns.entryNumber') },
+      { label: tc('transactionTypes.journalEntry') },
       { label: tc('labels.account') },
       { label: tc('labels.description') },
       { label: tr('trialBalance.columns.debits'), align: 'right' },
       { label: tr('trialBalance.columns.credits'), align: 'right' },
     ],
     rows: result.lines.map((line) => ({
-      key: `${line.entryId}:${line.accountNumber ?? ''}:${line.amount}:${line.memo ?? ''}`,
+      key: line.lineId,
       cells: [
         line.date,
         line.entryNumber,
@@ -334,7 +334,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
       ],
       columns: [
         { label: tc('labels.type') }, { label: tc('labels.period') },
-        { label: tr('export.columns.entryNumber') }, { label: tc('labels.account') },
+        { label: tc('transactionTypes.journalEntry') }, { label: tc('labels.account') },
         { label: tc('labels.description') }, { label: tc('labels.amount'), align: 'right' },
       ],
       rows: rows.rows.map((item: any) => ({

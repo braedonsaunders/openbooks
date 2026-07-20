@@ -1,6 +1,7 @@
 import "server-only";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
 import { registerRequestOrgResolver } from "@openbooks/engine/src/db.ts";
+import { requestOrgByWorkStore } from "./request-org-state";
 
 /**
  * Request-scoped RLS org context for the Next.js server.
@@ -15,12 +16,10 @@ import { registerRequestOrgResolver } from "@openbooks/engine/src/db.ts";
  * query via the registered resolver.
  */
 
-const requestOrg = new WeakMap<object, { orgId: string | null; bypass: boolean }>();
-
 /** Scope every subsequent db query in this request to `orgId` (RLS enforced). */
 export function setRequestOrg(orgId: string): void {
   const store = workAsyncStorage.getStore();
-  if (store) requestOrg.set(store, { orgId, bypass: false });
+  if (store) requestOrgByWorkStore.set(store, { orgId, bypass: false });
 }
 
 registerRequestOrgResolver(() => {
@@ -30,5 +29,5 @@ registerRequestOrgResolver(() => {
   // Returning a denied tenant scope for that empty window is safer than silently
   // falling back to trusted bypass.
   if (!store) return undefined;
-  return requestOrg.get(store) ?? { orgId: "", bypass: false };
+  return requestOrgByWorkStore.get(store) ?? { orgId: "", bypass: false };
 });
