@@ -2142,6 +2142,108 @@
           "total": 1438
         }
       ]
+    },
+    {
+      "at": "2026-07-20T13:21:06.964Z",
+      "sha": "d9a5d502a718751b2613c63be30636d9133a77de",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1673,
+      "functions": 4020,
+      "loc": 594100,
+      "languages": 14,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 61,
+          "lines": 359653
+        },
+        {
+          "ext": "ts",
+          "pct": 20,
+          "lines": 121313
+        },
+        {
+          "ext": "tsx",
+          "pct": 14,
+          "lines": 83520
+        },
+        {
+          "ext": "sql",
+          "pct": 4,
+          "lines": 21193
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 67,
+      "deadPct": 1.7,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 4.9,
+      "securityIssues": 155,
+      "patterns": 8,
+      "duplicates": 54,
+      "layerViolations": 1571,
+      "connections": 8276,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 67,
+      "testRatio": 4,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 1249
+        },
+        {
+          "name": "engine",
+          "count": 180
+        },
+        {
+          "name": "packages",
+          "count": 106
+        },
+        {
+          "name": "schema",
+          "count": 87
+        },
+        {
+          "name": "extraction",
+          "count": 20
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 66,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 400,
+        "transitive": 1261,
+        "total": 1661
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 400,
+          "transitive": 1261,
+          "total": 1661
+        },
+        {
+          "path": "engine/src/sandbox/verify-rls.ts",
+          "direct": 309,
+          "transitive": 1143,
+          "total": 1452
+        },
+        {
+          "path": "web/app/api/qbd/web-connector/[id]/route.ts",
+          "direct": 228,
+          "transitive": 1222,
+          "total": 1450
+        }
+      ]
     }
   ]
 }
