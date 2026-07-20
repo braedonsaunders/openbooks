@@ -14,6 +14,11 @@ export type ReportDrillTarget =
       subsidiaryId?: string
       basis?: StatementBasis
       partyIds?: string[]
+      projectCustomerId?: string
+      unassignedProjectCustomer?: boolean
+      projectSearch?: string
+      /** Revenue less debit-normal costs, used by profit subtotals. */
+      profitSigned?: boolean
       /** Only journal entries that touch a bank account; used by Cash Flow. */
       cashOnly?: boolean
     }
@@ -47,6 +52,9 @@ export type ReportDrillTarget =
       from: string
       to: string
       projectId?: string
+      projectCustomerId?: string
+      unassignedProjectCustomer?: boolean
+      projectSearch?: string
     }
   | {
       kind: 'custom'
@@ -139,6 +147,8 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     const from = input.from === undefined ? undefined : stringValue(input.from, 10) ?? undefined
     const accountIds = uuidList(input.accountIds)
     const partyIds = uuidList(input.partyIds)
+    const projectCustomerId = uuidValue(input.projectCustomerId)
+    const projectSearch = input.projectSearch === undefined ? undefined : stringValue(input.projectSearch) ?? undefined
     const rawAccountTypes = Array.isArray(input.accountTypes) ? input.accountTypes : undefined
     const accountTypes = rawAccountTypes && rawAccountTypes.length <= 50
       ? rawAccountTypes.filter((type): type is string => typeof type === 'string' && ACCOUNT_TYPE.test(type))
@@ -146,6 +156,9 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     if (!to || !ISO_DATE.test(to) || (from && !ISO_DATE.test(from))) return null
     if (input.accountIds !== undefined && !accountIds) return null
     if (input.partyIds !== undefined && !partyIds) return null
+    if (input.projectCustomerId !== undefined && !projectCustomerId) return null
+    if (input.projectSearch !== undefined && !projectSearch) return null
+    if (projectCustomerId && input.unassignedProjectCustomer === true) return null
     if (input.accountTypes !== undefined && (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)) return null
     return {
       kind: 'ledger',
@@ -159,6 +172,10 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       subsidiaryId: uuidValue(input.subsidiaryId),
       basis: input.basis === 'cash' ? 'cash' : 'accrual',
       partyIds,
+      projectCustomerId,
+      unassignedProjectCustomer: input.unassignedProjectCustomer === true,
+      projectSearch,
+      profitSigned: input.profitSigned === true,
       cashOnly: input.cashOnly === true,
     }
   }
@@ -207,8 +224,19 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
   if (input.kind === 'time') {
     const from = stringValue(input.from, 10)
     const to = stringValue(input.to, 10)
+    const projectId = uuidValue(input.projectId)
+    const projectCustomerId = uuidValue(input.projectCustomerId)
+    const projectSearch = input.projectSearch === undefined ? undefined : stringValue(input.projectSearch) ?? undefined
     if (!from || !to || !ISO_DATE.test(from) || !ISO_DATE.test(to)) return null
-    return { kind: 'time', label, from, to, projectId: uuidValue(input.projectId) }
+    if (input.projectId !== undefined && !projectId) return null
+    if (input.projectCustomerId !== undefined && !projectCustomerId) return null
+    if (input.projectSearch !== undefined && !projectSearch) return null
+    if ((projectId || projectCustomerId) && input.unassignedProjectCustomer === true) return null
+    return {
+      kind: 'time', label, from, to, projectId, projectCustomerId,
+      unassignedProjectCustomer: input.unassignedProjectCustomer === true,
+      projectSearch,
+    }
   }
 
   if (input.kind === 'custom') {

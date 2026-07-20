@@ -40,6 +40,10 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
       dims: target.dims,
       basis: target.basis,
       partyIds: target.partyIds,
+      projectCustomerId: target.projectCustomerId,
+      unassignedProjectCustomer: target.unassignedProjectCustomer,
+      projectSearch: target.projectSearch,
+      profitSigned: target.profitSigned,
       cashOnly: target.cashOnly,
       limit: REPORT_DRILL_PAGE_SIZE,
       offset: (page - 1) * REPORT_DRILL_PAGE_SIZE,
@@ -157,16 +161,36 @@ async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>,
 async function timeData(target: Extract<ReportDrillTarget, { kind: 'time' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
   const [tc, tr] = await Promise.all([getTranslations('common'), getTranslations('reports')])
   const project = target.projectId ? sql`and te.project_id = ${target.projectId}` : sql``
+  const customer = target.projectCustomerId
+    ? sql`and te.project_id in (
+        select p.id from projects p
+         where p.org_id = ${authz.user.orgId} and p.customer_id = ${target.projectCustomerId}
+      )`
+    : target.unassignedProjectCustomer
+      ? sql`and te.project_id in (
+          select p.id from projects p
+           where p.org_id = ${authz.user.orgId} and p.customer_id is null
+        )`
+      : sql``
+  const search = target.projectSearch?.trim()
+    ? sql`and te.project_id in (
+        select p.id
+          from projects p
+          left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
+         where p.org_id = ${authz.user.orgId}
+           and (p.name ilike ${`%${target.projectSearch.trim()}%`} or cu.display_name ilike ${`%${target.projectSearch.trim()}%`})
+      )`
+    : sql``
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
   const [count, result] = await Promise.all([
-    db.execute(sql`select count(*)::int as n, coalesce(sum(hours), 0) as hours from time_entries te where te.org_id = ${authz.user.orgId} and te.status = 'approved' and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project}`) as any,
+    db.execute(sql`select count(*)::int as n, coalesce(sum(hours), 0) as hours from time_entries te where te.org_id = ${authz.user.orgId} and te.status = 'approved' and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search}`) as any,
     db.execute(sql`
       select te.id, te.worked_on::text as date, e.display_name as employee, p.name as project, te.memo, te.hours
         from time_entries te
         join parties e on e.id = te.employee_party_id and e.org_id = te.org_id
         left join projects p on p.id = te.project_id and p.org_id = te.org_id
        where te.org_id = ${authz.user.orgId} and te.status = 'approved'
-         and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project}
+         and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search}
        order by te.worked_on desc, e.display_name
        limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`) as any,
   ])

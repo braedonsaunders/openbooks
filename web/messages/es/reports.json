@@ -72,6 +72,8 @@
     "asOf": "A fecha de",
     "from": "Desde",
     "to": "Hasta",
+    "customer": "Cliente",
+    "allCustomers": "Todos los clientes",
     "breakout": "Desglose",
     "breakoutNone": "Total",
     "breakoutOpts": {
@@ -333,6 +335,8 @@
     },
     "runner": {
       "downloadCsv": "Descargar CSV",
+      "downloadPdf": "Descargar PDF",
+      "downloadXlsx": "Descargar Excel",
       "runNow": "Ejecutar ahora",
       "runFailed": "La ejecución del informe falló",
       "runComplete": "Ejecución del informe completada",
@@ -841,6 +845,15 @@
     "pdf": "PDF",
     "xlsx": "Excel",
     "csv": "CSV",
+    "columns": {
+      "accountNumber": "N.º de cuenta",
+      "accountName": "Cuenta",
+      "amount": "Importe",
+      "balance": "Saldo",
+      "type": "Tipo",
+      "party": "Tercero",
+      "latestDue": "Último vencimiento"
+    },
     "print": "Imprimir",
     "printFailed": "No se pudo abrir el cuadro de impresión",
     "export": "Exportar"
@@ -848,7 +861,12 @@
   "projectProfitability": {
     "title": "Rentabilidad por proyecto",
     "empty": "Sin actividad de proyectos en este período.",
+    "searchPlaceholder": "Buscar clientes o proyectos…",
+    "noCustomer": "Cliente sin asignar",
+    "expandCustomer": "Expandir {customer}",
+    "collapseCustomer": "Contraer {customer}",
     "columns": {
+      "customerJob": "Cliente / Proyecto",
       "project": "Proyecto",
       "customer": "Cliente",
       "revenue": "Ingresos",

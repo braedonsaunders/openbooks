@@ -29,7 +29,7 @@ test('every in-app report result uses the shared paper surface', () => {
 
   for (const page of directReportPages) {
     const pageSource = source(page)
-    assert.match(pageSource, /<(?:ReportPaper|PaperView)\b/, `${page} must render the shared report paper`)
+    assert.match(pageSource, /<(?:ReportPaper|PaperView|ProjectProfitabilityTable)\b/, `${page} must render the shared report paper`)
     assert.doesNotMatch(
       pageSource,
       /import\s*\{[^}]*\bTable\b[^}]*\}\s*from '@openbooks\/ui'/s,
@@ -47,6 +47,7 @@ test('every in-app report result uses the shared paper surface', () => {
   assert.match(source('components/app-shell.tsx'), /<GlobalReportDrawerHost\b/)
   assert.match(source('app/(app)/reports/PaperView.tsx'), /<ReportDrillLink\b/)
   assert.match(source('app/(app)/reports/StatementMatrixTable.tsx'), /<ReportDrillLink\b/)
+  assert.match(source('app/(app)/reports/project-profitability/ProjectProfitabilityTable.tsx'), /<ReportPaper\b/)
   assert.doesNotMatch(source('lib/report-filters.ts'), /\/reports\/detail/)
 })
 

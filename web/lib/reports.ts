@@ -998,6 +998,12 @@ export async function transactionDetail(opts: {
   dims?: DimFilter
   basis?: "accrual" | "cash"
   partyIds?: string[]
+  /** Project-customer scope used by customer subtotal drill-downs. */
+  projectCustomerId?: string
+  /** Project rows without a customer, kept separate from an unfiltered total. */
+  unassignedProjectCustomer?: boolean
+  projectSearch?: string
+  profitSigned?: boolean
   cashOnly?: boolean
   limit?: number
   offset?: number
@@ -1027,19 +1033,41 @@ export async function transactionDetail(opts: {
       ? sql` and e.id in (select l2.entry_id from journal_lines l2 join accounts a2 on a2.id = l2.account_id and a2.org_id = l2.org_id where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
       : sql``
   const partyFilter = opts.partyIds?.length ? sql` and l.party_id in ${opts.partyIds}` : sql``
+  const projectCustomerFilter = opts.projectCustomerId
+    ? sql` and l.project_id in (
+        select p.id from projects p
+         where p.org_id = ${orgId} and p.customer_id = ${opts.projectCustomerId}
+      )`
+    : opts.unassignedProjectCustomer
+      ? sql` and l.project_id in (
+          select p.id from projects p
+           where p.org_id = ${orgId} and p.customer_id is null
+        )`
+      : sql``
+  const projectSearchFilter = opts.projectSearch?.trim()
+    ? sql` and l.project_id in (
+        select p.id
+          from projects p
+          left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
+         where p.org_id = ${orgId}
+           and (p.name ilike ${`%${opts.projectSearch.trim()}%`} or cu.display_name ilike ${`%${opts.projectSearch.trim()}%`})
+      )`
+    : sql``
 
-  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}`
+  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}`
+  const readerNet = opts.profitSigned
+    ? sql`-l.amount`
+    : sql`case when a.type in ${[...CREDIT_NORMAL]} then -l.amount else l.amount end`
 
   // Totals over the FULL set (independent of the display limit), so `net` ties
   // out to the clicked cell even when the line list is truncated. `net` is
-  // reader-signed (credit-normal types flipped) — matches the matrix account/
-  // section value.
-  const creditNormal = [...CREDIT_NORMAL]
+  // reader-signed by default; profit subtotals instead negate every included
+  // line so debit-normal costs subtract from credit-normal revenue.
   const agg = (await db.execute(sql`
     select count(*)::int as n,
            coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as debit,
            coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as credit,
-           coalesce(sum(case when a.type in ${creditNormal} then -l.amount else l.amount end), 0) as net
+           coalesce(sum(${readerNet}), 0) as net
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -1099,6 +1127,7 @@ export async function transactionDetail(opts: {
 export interface ProjectProfitRow {
   projectId: string
   projectName: string
+  customerId: string | null
   customerName: string | null
   status: string | null
   billingMethod: string | null
@@ -1110,11 +1139,61 @@ export interface ProjectProfitRow {
   margin: number | null // net ÷ revenue; null when there's no revenue
   hours: number
 }
+export type ProjectProfitTotals = {
+  revenue: number
+  cogs: number
+  grossProfit: number
+  expenses: number
+  net: number
+  margin: number | null
+  hours: number
+}
+export interface ProjectProfitCustomerGroup {
+  customerId: string | null
+  customerName: string | null
+  rows: ProjectProfitRow[]
+  totals: ProjectProfitTotals
+}
 export interface ProjectProfitResult {
   rows: ProjectProfitRow[]
-  totals: { revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number }
+  customers: ProjectProfitCustomerGroup[]
+  totals: ProjectProfitTotals
   from: string
   to: string
+}
+
+function projectProfitTotals(rows: ProjectProfitRow[]): ProjectProfitTotals {
+  const t = rows.reduce(
+    (a, row) => ({
+      revenue: a.revenue + row.revenue,
+      cogs: a.cogs + row.cogs,
+      grossProfit: a.grossProfit + row.grossProfit,
+      expenses: a.expenses + row.expenses,
+      net: a.net + row.net,
+      hours: a.hours + row.hours,
+    }),
+    { revenue: 0, cogs: 0, grossProfit: 0, expenses: 0, net: 0, hours: 0 },
+  )
+  return { ...t, margin: Math.abs(t.revenue) >= 0.005 ? t.net / t.revenue : null }
+}
+
+/** Customer subtotal hierarchy shared by the in-app report and every export. */
+export function groupProjectProfitabilityRows(rows: ProjectProfitRow[]): ProjectProfitCustomerGroup[] {
+  const grouped = new Map<string, ProjectProfitRow[]>()
+  for (const row of rows) {
+    const key = row.customerId ?? '__unassigned__'
+    const group = grouped.get(key)
+    if (group) group.push(row)
+    else grouped.set(key, [row])
+  }
+  return [...grouped.values()]
+    .map((customerRows) => ({
+      customerId: customerRows[0]?.customerId ?? null,
+      customerName: customerRows[0]?.customerName ?? null,
+      rows: customerRows,
+      totals: projectProfitTotals(customerRows),
+    }))
+    .sort((a, b) => b.totals.net - a.totals.net || (a.customerName ?? '').localeCompare(b.customerName ?? ''))
 }
 
 /**
@@ -1128,7 +1207,7 @@ export interface ProjectProfitResult {
 export async function projectProfitability(
   from: string,
   to: string,
-  opts: { dims?: DimFilter; orgId?: string } = {},
+  opts: { dims?: DimFilter; customerId?: string; search?: string; orgId?: string } = {},
 ): Promise<ProjectProfitResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const r = (await db.execute(sql`
@@ -1154,18 +1233,21 @@ export async function projectProfitability(
          and worked_on >= ${from} and worked_on <= ${to}
        group by project_id
     )
-    select p.id, p.name, cu.display_name as customer, p.status, p.billing_method,
+    select p.id, p.name, p.customer_id, cu.display_name as customer, p.status, p.billing_method,
            coalesce(pl.revenue, 0) as revenue, coalesce(pl.cogs, 0) as cogs,
            coalesce(pl.expenses, 0) as expenses, coalesce(hrs.hours, 0) as hours
       from projects p
       left join pl on pl.project_id = p.id
       left join hrs on hrs.project_id = p.id
       left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
-     where p.org_id = ${orgId} and (pl.project_id is not null or hrs.project_id is not null)
+     where p.org_id = ${orgId}
+       and (pl.project_id is not null or hrs.project_id is not null)
+       ${opts.customerId ? sql`and p.customer_id = ${opts.customerId}` : sql``}
+       ${opts.search?.trim() ? sql`and (p.name ilike ${`%${opts.search.trim()}%`} or cu.display_name ilike ${`%${opts.search.trim()}%`})` : sql``}
      order by (coalesce(pl.revenue, 0) - coalesce(pl.cogs, 0) - coalesce(pl.expenses, 0)) desc, p.name
   `)) as unknown as {
     rows: {
-      id: string; name: string; customer: string | null; status: string | null; billing_method: string | null
+      id: string; name: string; customer_id: string | null; customer: string | null; status: string | null; billing_method: string | null
       revenue: string; cogs: string; expenses: string; hours: string
     }[]
   }
@@ -1178,6 +1260,7 @@ export async function projectProfitability(
     return {
       projectId: x.id,
       projectName: x.name,
+      customerId: x.customer_id,
       customerName: x.customer,
       status: x.status,
       billingMethod: x.billing_method,
@@ -1186,19 +1269,20 @@ export async function projectProfitability(
       hours: Number(x.hours),
     }
   })
-  const t = rows.reduce(
-    (a, r) => ({
-      revenue: a.revenue + r.revenue,
-      cogs: a.cogs + r.cogs,
-      grossProfit: a.grossProfit + r.grossProfit,
-      expenses: a.expenses + r.expenses,
-      net: a.net + r.net,
-      hours: a.hours + r.hours,
-    }),
-    { revenue: 0, cogs: 0, grossProfit: 0, expenses: 0, net: 0, hours: 0 },
-  )
-  const totals = { ...t, margin: Math.abs(t.revenue) >= 0.005 ? t.net / t.revenue : null }
-  return { rows, totals, from, to }
+  return { rows, customers: groupProjectProfitabilityRows(rows), totals: projectProfitTotals(rows), from, to }
+}
+
+/** Customers that own at least one project, including historical/inactive rows. */
+export async function projectProfitabilityCustomerOptions(orgId?: string): Promise<{ id: string; name: string }[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
+  const result = (await db.execute(sql`
+    select distinct cu.id, cu.display_name as name
+      from projects p
+      join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
+     where p.org_id = ${resolvedOrgId}
+     order by cu.display_name, cu.id
+  `)) as unknown as { rows: { id: string; name: string }[] }
+  return result.rows
 }
 
 export async function dimensionOptions(orgId?: string) {

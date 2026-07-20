@@ -72,6 +72,8 @@
     "asOf": "As of",
     "from": "From",
     "to": "To",
+    "customer": "Customer",
+    "allCustomers": "All customers",
     "breakout": "Breakout",
     "breakoutNone": "Total",
     "breakoutOpts": {
@@ -859,7 +861,12 @@
   "projectProfitability": {
     "title": "Project Profitability",
     "empty": "No project activity in this period.",
+    "searchPlaceholder": "Search customers or jobs…",
+    "noCustomer": "Unassigned customer",
+    "expandCustomer": "Expand {customer}",
+    "collapseCustomer": "Collapse {customer}",
     "columns": {
+      "customerJob": "Customer / Job",
       "project": "Project",
       "customer": "Customer",
       "revenue": "Revenue",

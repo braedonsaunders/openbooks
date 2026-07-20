@@ -27,6 +27,8 @@ export type ReportQuery = {
   compare: StatementCompare
   basis: StatementBasis
   dims: StatementDimFilter
+  /** Customer scope used by customer/job profitability reporting. */
+  customerId?: string
   /** Subsidiary context node; unset = the root (consolidated). */
   subsidiaryId?: string
   showZero: boolean
@@ -37,6 +39,7 @@ const BREAKOUTS: StatementBreakout[] = ['none', 'department', 'project', 'locati
 const COMPARES: StatementCompare[] = ['none', 'prior_period', 'prior_year']
 const BASES: StatementBasis[] = ['accrual', 'cash']
 const SCALES: ReportScale[] = ['actual', 'thousands', 'millions']
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 /** URL param keys — stable; persisted in saved views. */
 export const REPORT_PARAM_KEYS = {
@@ -48,6 +51,7 @@ export const REPORT_PARAM_KEYS = {
   basis: 'basis',
   dept: 'dept',
   project: 'project',
+  customer: 'customer',
   location: 'location',
   class: 'class',
   sub: 'sub',
@@ -97,6 +101,10 @@ export function parseReportQuery(sp: ParamSource): ReportQuery {
       classId: read(sp, REPORT_PARAM_KEYS.class) || undefined,
       segments: segmentFilters(sp),
     },
+    customerId: (() => {
+      const value = read(sp, REPORT_PARAM_KEYS.customer)
+      return value && UUID.test(value) ? value : undefined
+    })(),
     subsidiaryId: read(sp, REPORT_PARAM_KEYS.sub) || undefined,
     showZero: read(sp, REPORT_PARAM_KEYS.zero) === '1',
     scale: oneOf(read(sp, REPORT_PARAM_KEYS.scale), SCALES, 'actual'),
@@ -119,6 +127,7 @@ export function toSearchParams(q: ReportQuery): URLSearchParams {
   if (q.dims.projectId) p.set(k.project, q.dims.projectId)
   if (q.dims.locationId) p.set(k.location, q.dims.locationId)
   if (q.dims.classId) p.set(k.class, q.dims.classId)
+  if (q.customerId) p.set(k.customer, q.customerId)
   for (const [key, value] of Object.entries(q.dims.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
     p.set(`seg_${key}`, value)
   }
