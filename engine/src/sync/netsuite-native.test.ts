@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
-import { numericIdWindows, parseNetSuiteMappings, uniqueNetSuiteTransactionLines } from "./netsuite-source.ts";
+import {
+  numericIdWindows,
+  parseNetSuiteMappings,
+  uniqueNetSuiteApplicationLinks,
+  uniqueNetSuiteTransactionLines,
+} from "./netsuite-source.ts";
 import type { NativeContext } from "./native.ts";
 
 const context = {
@@ -159,5 +164,16 @@ test("NetSuite transaction lines are ingested exactly once and conflicts fail cl
   assert.throws(
     () => uniqueNetSuiteTransactionLines([row, { ...row, netamount: "2473.88" }]),
     /conflicting transaction line 4803:1/,
+  );
+});
+
+test("NetSuite application links are ingested exactly once and conflicts fail closed", () => {
+  const row = {
+    previousdoc: "bill", previousline: "0", nextdoc: "payment", nextline: "1", foreignamount: "50.00",
+  };
+  assert.deepEqual(uniqueNetSuiteApplicationLinks([row, { ...row }]), [row]);
+  assert.throws(
+    () => uniqueNetSuiteApplicationLinks([row, { ...row, foreignamount: "49.99" }]),
+    /conflicting application link bill:0:payment:1/,
   );
 });
