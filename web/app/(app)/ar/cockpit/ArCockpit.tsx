@@ -290,6 +290,7 @@ export function ArCockpit({
           week={data.timeline[drillWeek]!}
           initialSide="ar"
           categoryFlows={catFlowsFor(drillWeek)}
+          canCollectionRun={canCollect}
           onClose={() => setDrillWeek(null)}
         />
       ) : null}

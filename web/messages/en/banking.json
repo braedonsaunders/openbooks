@@ -507,7 +507,7 @@
     },
     "totalCash": "Total cash",
     "noAccounts": "No bank accounts found.",
-    "negativeAlert": "Projected to go cash-negative — low of {amount} the week of {date}. Slow payables or accelerate collections.",
+    "negativeAlert": "Projected to go cash-negative — low of {amount} the week of {date}. <ap>Slow payables</ap> or <ar>accelerate collections</ar>.",
     "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week.",
     "configure": "Configure forecast",
     "configTitle": "Cash forecast configuration",

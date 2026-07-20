@@ -27,7 +27,7 @@ import { PayRunPlanner } from './PayRunPlanner'
  * it. The selection rule and recurring forecast flows are configured in a
  * flyout. All off the shared cash engine, so numbers agree with the forecast.
  */
-export function ApCockpit({ data, canConfigure }: { data: ApPosition; canConfigure: boolean }) {
+export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; canConfigure: boolean; canPay: boolean }) {
   const t = useTranslations('ap.cockpit')
   const [showConfig, setShowConfig] = useState(false)
   const [drillWeek, setDrillWeek] = useState<number | null>(null)
@@ -131,6 +131,7 @@ export function ApCockpit({ data, canConfigure }: { data: ApPosition; canConfigu
           week={data.timeline[drillWeek]!}
           initialSide="ap"
           categoryFlows={catFlowsFor(drillWeek)}
+          canPayRun={canPay}
           onClose={() => setDrillWeek(null)}
         />
       ) : null}

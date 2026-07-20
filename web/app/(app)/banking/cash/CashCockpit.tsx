@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -38,7 +39,17 @@ const HORIZONS = [4, 8, 12] as const
  * configured here; the AP pay rule on the AP cockpit. One shared engine
  * everywhere.
  */
-export function CashCockpit({ data, canConfigure }: { data: CashPosition; canConfigure: boolean }) {
+export function CashCockpit({
+  data,
+  canConfigure,
+  canPayRun,
+  canCollectionRun,
+}: {
+  data: CashPosition
+  canConfigure: boolean
+  canPayRun: boolean
+  canCollectionRun: boolean
+}) {
   const t = useTranslations('banking.cash')
   const router = useRouter()
   const [showConfig, setShowConfig] = useState(false)
@@ -88,7 +99,14 @@ export function CashCockpit({ data, canConfigure }: { data: CashPosition; canCon
       {data.lowestCash < 0 ? (
         <p className="flex shrink-0 items-start gap-2 rounded-lg bg-red-50 p-3 text-xs leading-relaxed text-red-800 dark:bg-red-950/30 dark:text-red-300">
           <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-          <span>{t('negativeAlert', { amount: money(data.lowestCash), date: lowestDate })}</span>
+          <span>
+            {t.rich('negativeAlert', {
+              amount: money(data.lowestCash),
+              date: lowestDate,
+              ap: (chunks) => <Link href={'/ap' as any} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
+              ar: (chunks) => <Link href={'/ar' as any} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
+            })}
+          </span>
         </p>
       ) : null}
 
@@ -108,6 +126,8 @@ export function CashCockpit({ data, canConfigure }: { data: CashPosition; canCon
               weeklyCap={data.apSettings.weeklyCap}
               restrictToSafe={data.apSettings.restrictToSafe}
               deferredBeyondHorizon={data.deferredBeyondHorizon}
+              canPayRun={canPayRun}
+              canCollectionRun={canCollectionRun}
             />
           </div>
         </CockpitPanel>
@@ -136,8 +156,10 @@ export function CashCockpit({ data, canConfigure }: { data: CashPosition; canCon
                 <tbody>
                   {data.bankAccounts.map((b) => (
                     <tr key={b.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
-                        {b.name}
+                      <td className="px-4 py-2.5">
+                        <Link href={`/banking/${b.id}` as any} className="font-medium text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300">
+                          {b.name}
+                        </Link>
                         {b.number ? <span className="ml-2 text-xs text-slate-400">{b.number}</span> : null}
                       </td>
                       <td className={cn('px-4 py-2.5 text-right font-medium tabular-nums', b.balance < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(b.balance)}</td>

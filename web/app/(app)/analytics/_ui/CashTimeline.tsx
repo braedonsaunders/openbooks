@@ -22,12 +22,17 @@ export function CashTimeline({
   weeklyCap,
   restrictToSafe,
   deferredBeyondHorizon,
+  canPayRun = false,
+  canCollectionRun = false,
 }: {
   weeks: WeekRow[]
   categories: CategoryWeekly[]
   weeklyCap: number
   restrictToSafe: boolean
   deferredBeyondHorizon: number
+  /** Forwarded to the week flyout's run-builder action bar. */
+  canPayRun?: boolean
+  canCollectionRun?: boolean
 }) {
   const [flyout, setFlyout] = useState<{ week: WeekRow; side: 'ar' | 'ap' } | null>(null)
   const hasCats = categories.length > 0
@@ -90,7 +95,7 @@ export function CashTimeline({
         </tbody>
       </table>
 
-      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categoryFlows={catFlowsFor(flyout.week)} onClose={() => setFlyout(null)} /> : null}
+      {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categoryFlows={catFlowsFor(flyout.week)} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
     </>
   )
 }
