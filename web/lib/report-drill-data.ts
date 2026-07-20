@@ -277,6 +277,86 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
     ? sql`and bl.account_id in (with recursive sub as (select id from accounts where org_id = ${authz.user.orgId} and id in ${target.accountIds} union all select a.id from accounts a join sub on a.parent_id = sub.id where a.org_id = ${authz.user.orgId}) select id from sub)`
     : target.accountTypes?.length ? sql`and a.type in ${target.accountTypes}` : sql``
   const dims = dimSql(target.dims, 'bl')
+  if (target.scope === 'variance') {
+    const actualAccount = target.accountIds?.length
+      ? sql`and l.account_id in (with recursive sub as (select id from accounts where org_id = ${authz.user.orgId} and id in ${target.accountIds} union all select child.id from accounts child join sub on child.parent_id = sub.id where child.org_id = ${authz.user.orgId}) select id from sub)`
+      : target.accountTypes?.length ? sql`and a.type in ${target.accountTypes}` : sql``
+    const actualDims = dimSql(target.dims, 'l')
+    const support = sql`
+      with support as (
+        select 'actual'::text as source, e.id::text as key, e.posting_date as sort_date,
+               e.posting_date::text as period, e.entry_number,
+               a.number, a.name as account, coalesce(l.memo, e.memo) as detail,
+               case when a.type in ('income', 'income_other') then -l.amount else l.amount end as amount,
+               e.id as entry_id, d.kind as doc_kind, d.id as doc_id
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id
+          left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+         where l.org_id = ${authz.user.orgId} and e.book_id = ${row.book_id}
+           and e.posting_date >= ${row.from_date} and e.posting_date <= ${row.to_date}
+           ${actualAccount} ${actualDims}
+        union all
+        select 'budget'::text as source, bl.id::text as key, ap.starts_on as sort_date,
+               ap.name as period, null::text as entry_number,
+               a.number, a.name as account, bl.note as detail,
+               case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end as amount,
+               null::uuid as entry_id, null::text as doc_kind, null::uuid as doc_id
+          from budget_lines bl
+          join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+          join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
+         where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId}
+           ${account} ${dims}
+      )`
+    const [totals, rows] = await Promise.all([
+      db.execute(sql`${support}
+        select count(*)::int as n,
+               coalesce(sum(amount) filter (where source = 'actual'), 0) as actual,
+               coalesce(sum(amount) filter (where source = 'budget'), 0) as budget
+          from support`) as any,
+      db.execute(sql`${support}
+        select source, key, period, entry_number, number, account, detail, amount,
+               entry_id, doc_kind, doc_id
+          from support
+         order by sort_date, source, number nulls last, key
+         limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`) as any,
+    ])
+    const totalRow = totals.rows[0] ?? { n: 0, actual: 0, budget: 0 }
+    const actual = Number(totalRow.actual)
+    const budget = Number(totalRow.budget)
+    return {
+      title: target.label,
+      description: tr('drillDrawer.supporting'),
+      summary: [
+        { label: tr('budget.actual'), value: money(actual) },
+        { label: tr('budget.budget'), value: money(budget) },
+        { label: tr('budget.variance'), value: money(actual - budget) },
+      ],
+      columns: [
+        { label: tc('labels.type') }, { label: tc('labels.period') },
+        { label: tr('export.columns.entryNumber') }, { label: tc('labels.account') },
+        { label: tc('labels.description') }, { label: tc('labels.amount'), align: 'right' },
+      ],
+      rows: rows.rows.map((item: any) => ({
+        key: `${item.source}:${item.key}`,
+        cells: [
+          item.source === 'actual' ? tr('budget.actual') : tr('budget.budget'),
+          item.period,
+          item.entry_number,
+          [item.number, item.account].filter(Boolean).join(' · '),
+          item.detail,
+          money(Number(item.amount)),
+        ],
+        transaction: item.entry_id
+          ? { entryId: item.entry_id, docKind: item.doc_kind, docId: item.doc_id }
+          : undefined,
+      })),
+      linkColumn: 2,
+      page,
+      perPage: REPORT_DRILL_PAGE_SIZE,
+      total: Number(totalRow.n),
+    }
+  }
   const [count, rows] = await Promise.all([
     db.execute(sql`select count(*)::int as n, coalesce(sum(bl.amount), 0) as amount from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims}`) as any,
     db.execute(sql`
