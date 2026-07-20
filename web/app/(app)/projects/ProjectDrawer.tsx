@@ -15,6 +15,7 @@ import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import type { RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
+import { WorkBreakdownTab, type WorkBreakdownTask } from './tabs/WorkBreakdownTab'
 import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquipmentOption } from './tabs/ChargesSection'
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
 
@@ -27,14 +28,7 @@ interface SubsidiaryOpt {
   name: string
   depth: number
 }
-interface TaskRow {
-  id: string | null
-  code: string
-  name: string
-  status: string
-  estimatedHours: string
-  estimatedCost: string
-}
+type TaskRow = WorkBreakdownTask
 interface ProjectPayload {
   project: Record<string, any>
   contractValue: string | null
@@ -77,8 +71,7 @@ export interface ProjectCockpitData {
   }[]
 }
 
-const field = 'space-y-1.5'
-const TAB_KEYS = ['overview', 'financials', 'cost_time', 'charges', 'billing', 'transactions'] as const
+const TAB_KEYS = ['overview', 'work_breakdown', 'financials', 'cost_time', 'charges', 'billing', 'transactions'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
 const emptyTask = (): TaskRow => ({
@@ -137,15 +130,6 @@ export function ProjectDrawer({
     ],
     [t],
   )
-  const taskStatusOptions = useMemo(
-    () => [
-      { value: 'open', label: tCommon('status.open') },
-      { value: 'complete', label: t('taskStatus.complete') },
-      { value: 'cancelled', label: tCommon('status.cancelled') },
-    ],
-    [t, tCommon],
-  )
-
   const [name, setName] = useState<string>(isPlaceholderName ? '' : (pr.name ?? ''))
   const [code, setCode] = useState<string>(pr.code ?? '')
   const [customerId, setCustomerId] = useState<string>(pr.customer_id ?? '')
@@ -202,8 +186,8 @@ export function ProjectDrawer({
     [parties],
   )
 
-  function setTask(i: number, patch: Partial<TaskRow>) {
-    setTasks((rows) => rows.map((row, j) => (j === i ? { ...row, ...patch } : row)))
+  function setTask(task: TaskRow, patch: Partial<TaskRow>) {
+    setTasks((rows) => rows.map((row) => (row === task ? { ...row, ...patch } : row)))
   }
 
   const savePayload = useMemo(
@@ -520,7 +504,7 @@ export function ProjectDrawer({
           </div>
         ) : canManage ? (
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { setTab('overview'); setMode('edit') }}>
+            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { if (tab !== 'work_breakdown') setTab('overview'); setMode('edit') }}>
               {tCommon('actions.edit')}
             </Button>
             <Popover
@@ -559,7 +543,7 @@ export function ProjectDrawer({
         ) : undefined
       }
       footer={
-        tab === 'overview' && mode === 'edit' ? (
+        (tab === 'overview' || tab === 'work_breakdown') && mode === 'edit' ? (
           <div className="flex w-full items-center gap-3">
             <span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>
               {saveState === 'saving'
@@ -596,60 +580,17 @@ export function ProjectDrawer({
             <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
           </section>
 
-          {/* WBS tasks (cost budget) */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('drawer.wbsTitle')}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.wbsDescription')}</p>
-              </div>
-              {!ro ? (
-                <Button variant="outline" size="sm" onClick={() => setTasks([...tasks, emptyTask()])}>
-                  <Plus size={14} /> {t('drawer.addTask')}
-                </Button>
-              ) : null}
-            </div>
-            {tasks.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">{t('drawer.noTasks')}</p>
-            ) : (
-              <div className="space-y-2">
-                {tasks.map((task, i) => (
-                  <div key={task.id ?? `new-${i}`} className="grid items-end gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-12 dark:border-slate-800">
-                    <div className={`${field} sm:col-span-2`}>
-                      <Label>{t('labels.code')}</Label>
-                      <Input value={task.code} onChange={(e) => setTask(i, { code: e.target.value })} className="font-mono" disabled={ro} />
-                    </div>
-                    <div className={`${field} sm:col-span-4`}>
-                      <Label>{t('labels.task')}</Label>
-                      <Input value={task.name} onChange={(e) => setTask(i, { name: e.target.value })} placeholder={t('drawer.taskNamePlaceholder')} disabled={ro} />
-                    </div>
-                    <div className={`${field} sm:col-span-2`}>
-                      <Label>{t('labels.estHours')}</Label>
-                      <Input inputMode="decimal" className="text-right tabular-nums" value={task.estimatedHours} onChange={(e) => setTask(i, { estimatedHours: e.target.value })} disabled={ro} />
-                    </div>
-                    <div className={`${field} sm:col-span-2`}>
-                      <Label>{t('labels.estCost')}</Label>
-                      <Input inputMode="decimal" className="text-right tabular-nums" value={task.estimatedCost} onChange={(e) => setTask(i, { estimatedCost: e.target.value })} disabled={ro} />
-                    </div>
-                    <div className={`${field} sm:col-span-2`}>
-                      <Label>{tCommon('labels.status')}</Label>
-                      <Select value={task.status} onChange={(e) => setTask(i, { status: e.target.value })} disabled={ro}>
-                        {taskStatusOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                      </Select>
-                    </div>
-                    {!ro ? (
-                      <div className="sm:col-span-12 flex justify-end">
-                        <Button variant="ghost" size="sm" onClick={() => setTasks(tasks.filter((_, j) => j !== i))} aria-label={t('drawer.removeTaskAria')}>
-                          <Trash2 size={14} /> {tCommon('actions.remove')}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
         </div>
+      ) : null}
+
+      {tab === 'work_breakdown' ? (
+        <WorkBreakdownTab
+          tasks={tasks}
+          editable={editable}
+          onAdd={() => setTasks((rows) => [...rows, emptyTask()])}
+          onChange={setTask}
+          onRemove={(task) => setTasks((rows) => rows.filter((row) => row !== task))}
+        />
       ) : null}
 
       {tab === 'financials' ? (
@@ -689,7 +630,7 @@ export function ProjectDrawer({
       ) : null}
 
       {tab === 'transactions' ? (
-        <TransactionsTab tasks={payload.tasks} transactions={cockpit.transactions} />
+        <TransactionsTab transactions={cockpit.transactions} />
       ) : null}
     </UrlDrawer>
   )

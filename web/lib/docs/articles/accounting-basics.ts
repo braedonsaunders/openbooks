@@ -201,7 +201,7 @@ export const partiesItemsAndProjects: DocArticle = {
   category: 'accounting',
   order: 4,
   summary: 'Understand the shared master records used by sales, purchases, projects, inventory, and reporting.',
-  updated: '2026-07-19',
+  updated: '2026-07-20',
   keywords: ['customer', 'vendor', 'employee', 'party', 'item', 'service', 'project', 'master data'],
   related: ['sales-workflow', 'purchasing-workflow', 'project-types'],
   body: `# Customers, Vendors, Items, and Projects
@@ -235,6 +235,18 @@ the allowed subset.
 Use dimensions for broad reporting and projects for job-level operational
 control. A project can itself carry department, location, class, or subsidiary
 context.
+
+The project flyout organizes the record by purpose:
+
+- **Overview** holds the project's identity, dates, ownership, customer,
+  contract, and invoicing preferences.
+- **Work breakdown** is the single place to plan tasks, estimated hours, and
+  estimated costs. Those task costs roll up into the project's cost budget.
+- **Financials & budget** compares that budget with actual and committed cost
+  alongside project profitability and revenue recognition.
+- **Cost & time**, **Charges**, and **Billing** cover operational activity.
+- **Transactions** lists only the accounting and order records tagged to the
+  project.
 
 ## Master-data hygiene
 
