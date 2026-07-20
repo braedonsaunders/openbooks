@@ -9,6 +9,7 @@ import { Badge, Button, Input, Label, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { dateTime } from '../../../lib/format'
 import { FilePreview } from './FilePreview'
+import { SharePanel } from './SharePanel'
 
 interface FileVersion {
   id: string
@@ -53,7 +54,15 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: boolean }) {
+export function FileDrawer({
+  file,
+  canEdit,
+  canManage,
+}: {
+  file: FileDetail
+  canEdit: boolean
+  canManage: boolean
+}) {
   const t = useTranslations('documents.file.drawer')
   const tt = useTranslations('documents.toasts')
   const tc = useTranslations('common')
@@ -159,11 +168,13 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
               {tc('actions.cancel')}
             </Button>
           </div>
-        ) : canManage ? (
+        ) : (
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setMode('edit')}>
-              {tc('actions.edit')}
-            </Button>
+            {canEdit ? (
+              <Button variant="outline" onClick={() => setMode('edit')}>
+                {tc('actions.edit')}
+              </Button>
+            ) : null}
             <Button variant="ghost" size="icon" asChild>
               <a
                 href={`/api/file-cabinet/files/${file.id}/download`}
@@ -174,21 +185,12 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
                 <Download className="h-4 w-4" />
               </a>
             </Button>
-            <Button variant="ghost" size="icon" disabled={deleting} onClick={handleDelete}>
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </Button>
+            {canManage ? (
+              <Button variant="ghost" size="icon" disabled={deleting} onClick={handleDelete}>
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              </Button>
+            ) : null}
           </div>
-        ) : (
-          <Button variant="ghost" size="icon" asChild>
-            <a
-              href={`/api/file-cabinet/files/${file.id}/download`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={tc('actions.download')}
-            >
-              <Download className="h-4 w-4" />
-            </a>
-          </Button>
         )
       }
     >
@@ -212,7 +214,7 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
             sizeBytes: file.sizeBytes,
             currentVersionId: file.currentVersionId,
           }}
-          canManage={canManage}
+          canManage={canEdit}
         />
 
         {/* Metadata grid */}
@@ -240,7 +242,7 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
         </section>
 
         {/* Replace action */}
-        {canManage ? (
+        {canEdit ? (
           <section className="flex flex-wrap items-center gap-3">
             <Button
               variant="outline"
@@ -322,6 +324,9 @@ export function FileDrawer({ file, canManage }: { file: FileDetail; canManage: b
             </div>
           )}
         </section>
+
+        {/* Sharing — Manager access only */}
+        {canManage ? <SharePanel resourceType="file" resourceId={file.id} /> : null}
       </div>
     </UrlDrawer>
   )

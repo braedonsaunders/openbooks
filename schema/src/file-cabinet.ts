@@ -194,6 +194,53 @@ export const fileAttachments = pgTable(
   ],
 );
 
+/**
+ * Access grants — per-folder / per-file sharing beyond the org-role baseline.
+ *
+ * A grant gives a principal (a specific user, or a role) an access tier on a
+ * resource. Folder grants inherit to descendant folders and the files they
+ * contain; file grants apply to that one file. Effective access is the highest
+ * of: the `*` admin (Manager everywhere), the org-role baseline
+ * (documents.manage → Manager, documents.read → Viewer), the private-folder
+ * owner (Manager), and any applicable grant on the resource or its ancestors.
+ *
+ * Tiers (text, ordered): 'viewer' < 'editor' < 'manager'.
+ *   - viewer:  read + download
+ *   - editor:  + upload / rename / move / replace
+ *   - manager: + delete + edit sharing
+ *
+ * Enforced in the query layer (like saved_views), never in RLS; RLS stays
+ * org-isolation only.
+ */
+export const resourceGrants = pgTable(
+  "resource_grants",
+  {
+    id: id(),
+    orgId: orgRef(),
+    /** 'folder' | 'file'. */
+    resourceType: text("resource_type").notNull(),
+    resourceId: uuid("resource_id").notNull(),
+    /** 'user' | 'role'. */
+    principalType: text("principal_type").notNull(),
+    /** users.id when principalType='user', app_roles.id when 'role'. */
+    principalId: uuid("principal_id").notNull(),
+    /** 'viewer' | 'editor' | 'manager'. */
+    access: text("access").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("resource_grants_unique").on(
+      t.orgId,
+      t.resourceType,
+      t.resourceId,
+      t.principalType,
+      t.principalId,
+    ),
+    index("resource_grants_resource").on(t.orgId, t.resourceType, t.resourceId),
+    index("resource_grants_principal").on(t.orgId, t.principalType, t.principalId),
+  ],
+);
+
 /*
  * Foreign keys (add to schema/migrations/referential-integrity.sql):
  *

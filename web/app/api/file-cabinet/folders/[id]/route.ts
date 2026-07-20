@@ -8,7 +8,7 @@ import {
 } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
-import { canMutateFiles, requireSession } from '../../lib'
+import { requireFolderAccess, requireSession } from '../../lib'
 
 export const runtime = 'nodejs'
 
@@ -27,15 +27,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
-  if (!canMutateFiles(gate)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Editing a folder (rename/move/flags) needs Manager on it.
+  const access = await requireFolderAccess(gate, id, 'manager')
+  if (access) return access
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'invalid body' }, { status: 400 })
 
   if (typeof body.parentId === 'string' || body.parentId === null) {
+    // Moving also needs Editor+ on the destination parent.
+    if (typeof body.parentId === 'string') {
+      const destGate = await requireFolderAccess(gate, body.parentId, 'editor')
+      if (destGate) return destGate
+    }
     const ok = await moveFolder(gate.user.orgId, id, body.parentId, gate.user.id)
     if (!ok) return NextResponse.json({ error: 'cannot move folder' }, { status: 400 })
   }
@@ -56,11 +61,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
-  if (!canMutateFiles(gate)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Deleting a folder needs Manager on it.
+  const access = await requireFolderAccess(gate, id, 'manager')
+  if (access) return access
   const result = await deleteFolder(gate.user.orgId, id)
   if (!result.ok) {
     const status =

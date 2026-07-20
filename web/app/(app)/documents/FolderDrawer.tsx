@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Loader2, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
+import { SharePanel } from './SharePanel'
 
 interface TreeFolder {
   id: string
@@ -273,6 +274,13 @@ export function FolderDrawer({
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('edit.privateHint')}</p>
             </div>
           </label>
+        ) : null}
+
+        {/* Sharing — Manager access only */}
+        {mode === 'edit' && folder && canManage ? (
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
+            <SharePanel resourceType="folder" resourceId={folder.id} />
+          </div>
         ) : null}
       </div>
     </UrlDrawer>

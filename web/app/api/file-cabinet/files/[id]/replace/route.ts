@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { replaceFile } from '../../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../../lib/list-params'
-import { canMutateFiles, isAllowedContentType, MAX_BYTES, requireSession } from '../../../lib'
+import { isAllowedContentType, MAX_BYTES, requireFileAccess, requireSession } from '../../../lib'
 
 export const runtime = 'nodejs'
 
@@ -9,11 +9,11 @@ export const runtime = 'nodejs'
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
-  if (!canMutateFiles(gate)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Replacing (new version) needs Editor+ on the file.
+  const access = await requireFileAccess(gate, id, 'editor')
+  if (access) return access
 
   const form = await req.formData().catch(() => null)
   if (!form) return NextResponse.json({ error: 'expected multipart/form-data' }, { status: 400 })

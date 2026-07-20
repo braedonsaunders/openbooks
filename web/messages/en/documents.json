@@ -115,7 +115,48 @@
     "attachExisting": "Attach Existing File",
     "uploadNew": "Upload New File"
   },
+  "share": {
+    "title": "Sharing",
+    "subtitle": "Grant people or roles access to this {kind}.",
+    "kindFolder": "folder",
+    "kindFile": "file",
+    "noGrants": "Not shared with anyone yet. Access follows your organization roles.",
+    "addPrincipal": "Add person or role",
+    "selectPrincipal": "Choose a person or role…",
+    "usersGroup": "People",
+    "rolesGroup": "Roles",
+    "add": "Add",
+    "remove": "Remove",
+    "you": "you",
+    "inheritedHint": "Folder access is inherited by the files and sub-folders inside it.",
+    "tiers": {
+      "viewer": "Viewer",
+      "editor": "Editor",
+      "manager": "Manager",
+      "viewerHint": "View and download",
+      "editorHint": "Upload, rename, move, replace",
+      "managerHint": "Full control, including delete and sharing"
+    }
+  },
+  "activity": {
+    "title": "Activity",
+    "empty": "No activity recorded yet.",
+    "events": {
+      "create": "created",
+      "upload": "uploaded",
+      "rename": "renamed",
+      "move": "moved",
+      "replace": "uploaded a new version",
+      "delete": "deleted",
+      "restore": "restored",
+      "share": "shared",
+      "unshare": "removed sharing"
+    }
+  },
   "toasts": {
+    "shareUpdated": "Sharing updated",
+    "shareFailed": "Could not update sharing",
+    "shareRemoved": "Access removed",
     "folderCreated": "Folder created",
     "folderCreateFailed": "Could not create folder",
     "folderRenamed": "Folder renamed",

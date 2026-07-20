@@ -82,7 +82,8 @@ export function FileList({
   files,
   activeFolderId,
   showLocation,
-  canManage,
+  canEdit,
+  canDelete,
   currentParams,
   sort,
   dir,
@@ -91,7 +92,8 @@ export function FileList({
   files: FileRow[]
   activeFolderId?: string
   showLocation: boolean
-  canManage: boolean
+  canEdit: boolean
+  canDelete: boolean
   currentParams: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
@@ -236,7 +238,7 @@ export function FileList({
   function menuItems(tgt: Target): ContextMenuEntry[] {
     if (tgt.kind === 'folder') {
       const row = tgt.row
-      const manageable = canManage && !row.isSystem
+      const manageable = canDelete && !row.isSystem
       const items: ContextMenuEntry[] = [
         { key: 'open', label: t('rowMenu.openFolder'), icon: FolderOpen, onSelect: () => router.push(folderHref(row.id)) },
         { key: 'copy', label: t('rowMenu.copyLink'), icon: Link2, onSelect: () => void copyLink(folderHref(row.id)) },
@@ -262,11 +264,15 @@ export function FileList({
       },
       { key: 'copy', label: t('rowMenu.copyLink'), icon: Link2, onSelect: () => void copyLink(fileHref(row.id)) },
     ]
-    if (canManage) {
+    if (canEdit) {
       items.push(
         { key: 'sep1', separator: true },
         { key: 'rename', label: tc('actions.rename'), icon: Pencil, onSelect: () => void renameFile(row) },
         { key: 'replace', label: tc('actions.replace'), icon: UploadCloud, onSelect: () => startReplace(row.id) },
+      )
+    }
+    if (canDelete) {
+      items.push(
         { key: 'sep2', separator: true },
         { key: 'delete', label: tc('actions.delete'), icon: Trash2, danger: true, onSelect: () => void deleteFile(row) },
       )
