@@ -2,10 +2,23 @@
   "title": "Documentation",
   "searchPlaceholder": "Rechercher dans la documentation…",
   "noResults": "Aucun article correspondant.",
+  "browseMenu": "Parcourir la documentation",
   "lastUpdated": "Dernière mise à jour le {date}",
   "related": "Articles connexes",
+  "breadcrumb": "Fil d’Ariane de la documentation",
+  "articleNavigation": "Navigation entre les articles",
+  "previous": "Précédent",
+  "next": "Suivant",
   "home": {
     "title": "Documentation",
-    "subtitle": "Guides et référence de configuration pour OpenBooks. Parcourez une catégorie ci-dessous ou effectuez une recherche depuis la barre latérale."
+    "subtitle": "Découvrez le modèle comptable, configurez votre organisation, exécutez les processus quotidiens et migrez en toute sécurité depuis un autre système.",
+    "eyebrow": "Centre d’aide OpenBooks",
+    "startHere": "Commencer ici",
+    "step": "Étape {number}",
+    "switchingTitle": "Vous migrez depuis un autre système?",
+    "switchingSubtitle": "Commencez par un guide de familiarisation qui établit les correspondances avec les concepts et processus que vous connaissez.",
+    "browseTitle": "Parcourir toute la documentation",
+    "browseSubtitle": "Explorez le guide complet par sujet ou utilisez la recherche dans la barre latérale.",
+    "articleCount": "{count, plural, one {# article} other {# articles}}"
   }
 }

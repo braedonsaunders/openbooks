@@ -4,7 +4,7 @@ export const auditLog: DocArticle = {
   slug: 'audit-log',
   title: 'Audit Log',
   category: 'administration',
-  order: 1,
+  order: 4,
   summary: 'Search immutable business events and inspect readable field changes, record snapshots, and ledger impact.',
   updated: '2026-07-19',
   keywords: ['audit', 'history', 'changes', 'before', 'after', 'ledger impact', 'evidence'],
