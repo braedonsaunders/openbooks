@@ -827,6 +827,12 @@
     "empty": "No hay transacciones detrás de este valor.",
     "backTo": "Volver a {report}"
   },
+  "drillDrawer": {
+    "title": "Registros de respaldo",
+    "supporting": "Los registros que componen el valor seleccionado del informe.",
+    "loadFailed": "No se pudieron cargar los registros de respaldo.",
+    "recordLoadFailed": "No se pudo abrir la transacción."
+  },
   "flyout": {
     "title": "Asiento contable",
     "openTransaction": "Abrir transacción completa"

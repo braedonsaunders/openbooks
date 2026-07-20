@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { currentFiscalYear, fiscalStartMonth, fiscalYearRangeFor } from "./fiscal";
 import { segmentRegistry } from "./segments";
+import { resolveOrgId } from "./org-scope";
 
 /**
  * Financial statement queries. Sign convention: journal amounts are
@@ -55,13 +56,15 @@ function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
   return w;
 }
 
-async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter) {
+async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, orgId?: string) {
+  const resolvedOrgId = await resolveOrgId(orgId);
   const r = (await db.execute(sql`
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
       from accounts a
       left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.status = 'posted')
-        on l.account_id = a.id and ${where} and ${dimWhere(dims)}
+        on l.account_id = a.id and l.org_id = ${resolvedOrgId} and e.org_id = ${resolvedOrgId} and ${where} and ${dimWhere(dims)}
+     where a.org_id = ${resolvedOrgId}
      group by a.id
      order by a.number nulls last, a.name
   `)) as any;
@@ -111,8 +114,13 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
   });
 }
 
-export async function profitAndLoss(from: string, to: string, dims?: DimFilter) {
-  const rows = await accountBalances(sql`e.posting_date >= ${from} and e.posting_date <= ${to}`, dims);
+export async function profitAndLoss(from: string, to: string, dims?: DimFilter, orgId?: string) {
+  const resolvedOrgId = await resolveOrgId(orgId);
+  const rows = await accountBalances(
+    sql`e.posting_date >= ${from} and e.posting_date <= ${to} and e.org_id = ${resolvedOrgId}`,
+    dims,
+    resolvedOrgId,
+  );
   const items = treeify(rows, PNL_TYPES);
   const total = (types: string[]) =>
     items.filter((r) => types.includes(r.type) && r.depth === 0).reduce((a, r) => a + r.balance, 0);
@@ -122,8 +130,9 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter) 
   return { items, revenue, cogs, grossProfit: revenue - cogs, expenses, netIncome: revenue - cogs - expenses };
 }
 
-export async function balanceSheet(asOf: string) {
-  const rows = await accountBalances(sql`e.posting_date <= ${asOf}`);
+export async function balanceSheet(asOf: string, orgId?: string) {
+  const resolvedOrgId = orgId ?? (await resolveOrgId());
+  const rows = await accountBalances(sql`e.posting_date <= ${asOf} and e.org_id = ${resolvedOrgId}`, undefined, resolvedOrgId);
   const assets = treeify(rows, ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"]);
   const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
   const equity = treeify(rows, ["equity"]);
@@ -137,9 +146,10 @@ export async function balanceSheet(asOf: string) {
   const pl = (await db.execute(sql`
     select coalesce(sum(l.amount), 0) as s
       from journal_lines l
-      join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-     where a.type in ${PNL_TYPES} and e.posting_date <= ${asOf}
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+     where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId} and e.org_id = ${resolvedOrgId}
+       and a.type in ${PNL_TYPES} and e.posting_date <= ${asOf}
   `)) as any;
   const accumulatedEarnings = -Number(pl.rows[0].s);
   equity.push({
@@ -151,31 +161,35 @@ export async function balanceSheet(asOf: string) {
   return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity };
 }
 
-export async function trialBalance(asOf: string, dims?: DimFilter) {
+export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string) {
+  const resolvedOrgId = orgId ?? (await resolveOrgId());
   const r = (await db.execute(sql`
     select a.id, a.number, a.name, a.type,
            sum(case when l.amount > 0 then l.amount else 0 end) as debits,
            sum(case when l.amount < 0 then -l.amount else 0 end) as credits,
            sum(l.amount) as balance
       from journal_lines l
-      join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-     where e.posting_date <= ${asOf} and ${dimWhere(dims)}
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+     where e.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
+       and a.org_id = ${resolvedOrgId} and e.posting_date <= ${asOf} and ${dimWhere(dims)}
      group by a.id having abs(sum(l.amount)) >= 0.005
      order by a.number nulls last, a.name
   `)) as any;
   return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
 }
 
-export async function partnerBalances(kind: "receivable" | "payable") {
+export async function partnerBalances(kind: "receivable" | "payable", orgId?: string) {
+  const resolvedOrgId = orgId ?? (await resolveOrgId());
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
   const r = (await db.execute(sql`
     select p.id, p.display_name, sum(l.amount) as balance, count(*) as line_count,
            max(l.due_date) as latest_due
       from journal_lines l
-      join accounts a on a.id = l.account_id
-      left join parties p on p.id = l.party_id
-     where a.type = ${type}
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join parties p on p.id = l.party_id and p.org_id = ${resolvedOrgId}
+     where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
+       and a.type = ${type}
      group by p.id, p.display_name
     having abs(sum(l.amount)) >= 0.005
      order by abs(sum(l.amount)) desc
@@ -271,7 +285,8 @@ export async function financialTrends(orgId: string, limit = 15): Promise<Financ
  * so it is the only source that is correct for both paths. Credits reduce the
  * party balance and all values are translated to base currency at document FX.
  */
-export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilter): Promise<AgingResult> {
+export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilter, orgId?: string): Promise<AgingResult> {
+  const resolvedOrgId = await resolveOrgId(orgId);
   const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
   const r = (await db.execute(sql`
@@ -281,7 +296,8 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
                * d.open_balance * d.fx_rate as open,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date)) as age_days
         from documents d
-       where d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+       where d.org_id = ${resolvedOrgId}
+         and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
          and d.open_balance > 0.005
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
@@ -294,7 +310,7 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
            coalesce(sum(oi.open) filter (where oi.age_days > 90), 0) as b4,
            coalesce(sum(oi.open), 0) as total
       from open_items oi
-      left join parties p on p.id = oi.party_id
+      left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
      group by oi.party_id, p.display_name
     having abs(sum(oi.open)) > 0.005
      order by abs(sum(oi.open)) desc
@@ -407,7 +423,8 @@ const CASH_FLOW_TYPE_LABEL: Record<string, string> = {
  * The three sections therefore sum to the net change in cash, which is proven
  * against the bank accounts' opening/closing balances.
  */
-export async function cashFlow(from: string, to: string, dims?: DimFilter): Promise<CashFlowResult> {
+export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId?: string): Promise<CashFlowResult> {
+  const resolvedOrgId = await resolveOrgId(orgId);
   // Contra movements: non-bank lines on entries that also hit a bank account,
   // grouped by account type. `-sum(amount)` converts debit-signed line amounts
   // into their effect on cash (credit a contra → cash in → positive).
@@ -415,17 +432,17 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter): Prom
     with cash_entries as (
       select distinct e.id
         from journal_entries e
-        join journal_lines l on l.entry_id = e.id
-        join accounts a on a.id = l.account_id
-       where a.type = 'asset_bank' and e.status = 'posted'
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+       where e.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and e.status = 'posted'
          and e.posting_date >= ${from} and e.posting_date <= ${to}
     )
     select a.type, -sum(l.amount) as cash_effect
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
-      join accounts a on a.id = l.account_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.id in (select id from cash_entries)
-       and a.type <> 'asset_bank' and ${dimWhere(dims)}
+       and l.org_id = ${resolvedOrgId} and a.type <> 'asset_bank' and ${dimWhere(dims)}
      group by a.type
   `)) as unknown as { rows: { type: string; cash_effect: string }[] };
 
@@ -453,9 +470,9 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter): Prom
     select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
            coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-      join accounts a on a.id = l.account_id
-     where a.type = 'asset_bank' and ${dimWhere(dims)}
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}
   `)) as unknown as { rows: { opening: string; closing: string }[] };
   const openingCash = Number(cash.rows[0]?.opening ?? 0);
   const closingCash = Number(cash.rows[0]?.closing ?? 0);
@@ -489,15 +506,15 @@ export async function accountRegister(
     select e.id as entry_id, e.entry_number, e.posting_date, e.memo as entry_memo,
            l.line_number, l.amount, l.memo, p.display_name as party
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
-      left join parties p on p.id = l.party_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      left join parties p on p.id = l.party_id and p.org_id = l.org_id
      where l.account_id = ${accountId} and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
   `)) as any;
   const c = (await db.execute(sql`
     select count(*) as n, coalesce(sum(amount),0) as bal
-      from journal_lines l join journal_entries e on e.id = l.entry_id
+      from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.account_id = ${accountId} and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter}
   `)) as any;
   return { account: acct.rows[0], lines: r.rows, total: Number(c.rows[0].n), balance: c.rows[0].bal };
@@ -547,8 +564,9 @@ export interface GeneralLedgerResult {
 export async function generalLedger(
   from: string,
   to: string,
-  opts: { accountId?: string; dims?: DimFilter; maxLines?: number } = {},
+  opts: { accountId?: string; dims?: DimFilter; maxLines?: number; orgId?: string } = {},
 ): Promise<GeneralLedgerResult> {
+  const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 5000
   const acctFilter = opts.accountId ? sql` and l.account_id = ${opts.accountId}` : sql``
 
@@ -556,8 +574,9 @@ export async function generalLedger(
   const opening = (await db.execute(sql`
     select l.account_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-     where e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
      group by l.account_id
   `)) as unknown as { rows: { account_id: string; bal: string }[] }
   const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, Number(r.bal)]))
@@ -568,11 +587,11 @@ export async function generalLedger(
            l.memo, p.display_name as party, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-      join accounts a on a.id = l.account_id
-      left join parties p on p.id = l.party_id
-      left join documents d on d.id = e.source_document_id
-     where e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join parties p on p.id = l.party_id and p.org_id = l.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+     where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}
      order by a.number nulls last, a.name, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
   `)) as unknown as {
@@ -650,8 +669,9 @@ export interface JournalReportResult {
 export async function journalReport(
   from: string,
   to: string,
-  opts: { dims?: DimFilter; maxLines?: number } = {},
+  opts: { dims?: DimFilter; maxLines?: number; orgId?: string } = {},
 ): Promise<JournalReportResult> {
+  const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 4000
   const r = (await db.execute(sql`
     select e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
@@ -659,11 +679,11 @@ export async function journalReport(
            l.memo as line_memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_entries e
-      join journal_lines l on l.entry_id = e.id
-      join accounts a on a.id = l.account_id
-      left join parties p on p.id = l.party_id
-      left join documents d on d.id = e.source_document_id
-     where e.status = 'posted' and e.posting_date >= ${from} and e.posting_date <= ${to}
+      join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join parties p on p.id = l.party_id and p.org_id = l.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+     where e.org_id = ${orgId} and e.status = 'posted' and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimWhere(opts.dims)}
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${maxLines + 1}
@@ -705,6 +725,8 @@ export async function journalReport(
 export type AgingBucket = "current" | "b1" | "b2" | "b3" | "b4"
 
 export interface AgingDetailRow {
+  docId: string
+  docKind: string
   partyId: string | null
   partyName: string | null
   reference: string | null
@@ -732,30 +754,33 @@ function bucketOf(age: number): AgingBucket {
  * `agingByParty`, but one row per document rather than aggregated per party.
  * Credits are negative open items so the detail and summary always tie.
  */
-export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilter): Promise<AgingDetailResult> {
+export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilter, orgId?: string): Promise<AgingDetailResult> {
+  const resolvedOrgId = await resolveOrgId(orgId);
   const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice"
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit"
   const r = (await db.execute(sql`
     with open_items as (
-      select d.party_id, d.document_number,
+      select d.id, d.kind, d.party_id, d.document_number,
              coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
              (case when d.kind = ${creditKind} then -1 else 1 end)
                * d.open_balance * d.fx_rate as open,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days
         from documents d
-       where d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+       where d.org_id = ${resolvedOrgId}
+         and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
          and d.open_balance > 0.005
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     )
-    select oi.party_id, p.display_name as party_name, oi.document_number as reference,
+    select oi.id, oi.kind, oi.party_id, p.display_name as party_name, oi.document_number as reference,
            oi.due as due_date, oi.age_days, oi.open
       from open_items oi
-      left join parties p on p.id = oi.party_id
+      left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
      where abs(oi.open) > 0.005
      order by p.display_name nulls last, oi.age_days desc
   `)) as unknown as {
     rows: {
+      id: string; kind: string
       party_id: string | null; party_name: string | null; reference: string | null
       due_date: string | null; age_days: number; open: string
     }[]
@@ -766,7 +791,7 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
     const bucket = bucketOf(x.age_days)
     totals[bucket] += open
     totals.total += open
-    return { partyId: x.party_id, partyName: x.party_name, reference: x.reference, dueDate: x.due_date, ageDays: x.age_days, bucket, open }
+    return { docId: x.id, docKind: x.kind, partyId: x.party_id, partyName: x.party_name, reference: x.reference, dueDate: x.due_date, ageDays: x.age_days, bucket, open }
   })
   return { rows, totals, asOf }
 }
@@ -809,8 +834,9 @@ export interface RegisterResult {
  */
 export async function partyRegister(
   side: AgingSide,
-  opts: { from: string; to: string; partyId?: string; dims?: DimFilter; maxLines?: number },
+  opts: { from: string; to: string; partyId?: string; orgId?: string; dims?: DimFilter; maxLines?: number },
 ): Promise<RegisterResult> {
+  const resolvedOrgId = await resolveOrgId(opts.orgId)
   const acctType = side === "ap" ? "liability_payable" : "asset_receivable"
   const maxLines = opts.maxLines ?? 4000
   const partyFilter = opts.partyId ? sql` and l.party_id = ${opts.partyId}` : sql``
@@ -818,10 +844,10 @@ export async function partyRegister(
   const opening = (await db.execute(sql`
     select l.party_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-      join accounts a on a.id = l.account_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where a.type = ${acctType} and e.posting_date < ${opts.from}
-       and ${dimWhere(opts.dims)}${partyFilter}
+       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
      group by l.party_id
   `)) as unknown as { rows: { party_id: string | null; bal: string }[] }
   const openingByParty = new Map(opening.rows.map((r) => [r.party_id, Number(r.bal)]))
@@ -831,12 +857,12 @@ export async function partyRegister(
            e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-      join accounts a on a.id = l.account_id
-      left join parties pt on pt.id = l.party_id
-      left join documents d on d.id = e.source_document_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join parties pt on pt.id = l.party_id and pt.org_id = l.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
-       and ${dimWhere(opts.dims)}${partyFilter}
+       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
      order by pt.display_name nulls last, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
   `)) as unknown as {
@@ -894,14 +920,15 @@ export interface PartnerStatementResult {
  *  aged-summary footer as of `to` (reusing the open-item aging logic). */
 export async function partnerStatement(
   partyId: string,
+  orgId: string,
   opts: { from: string; to: string; side: AgingSide },
 ): Promise<PartnerStatementResult> {
-  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId })
+  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId, orgId })
   const p = reg.parties[0]
-  const nameRow = (await db.execute(sql`select display_name from parties where id = ${partyId}`)) as unknown as {
+  const nameRow = (await db.execute(sql`select display_name from parties where id = ${partyId} and org_id = ${orgId}`)) as unknown as {
     rows: { display_name: string | null }[]
   }
-  const aging = await agingDetail(opts.side, opts.to)
+  const aging = await agingDetail(opts.side, opts.to, undefined, orgId)
   const agingTotals: Record<AgingBucket, number> & { total: number } = { current: 0, b1: 0, b2: 0, b3: 0, b4: 0, total: 0 }
   for (const row of aging.rows) {
     if (row.partyId !== partyId) continue
@@ -967,18 +994,22 @@ export async function transactionDetail(opts: {
   mode: "flow" | "balance"
   dims?: DimFilter
   basis?: "accrual" | "cash"
+  partyIds?: string[]
+  cashOnly?: boolean
   limit?: number
   offset?: number
+  orgId?: string
 }): Promise<TxnDetailResult> {
+  const orgId = await resolveOrgId(opts.orgId)
   const limit = opts.limit ?? 2000
   const offset = opts.offset ?? 0
   const acctFilter =
     opts.accountIds && opts.accountIds.length
       ? sql`a.id in (
           with recursive sub as (
-            select id from accounts where id in ${opts.accountIds}
+            select id from accounts where org_id = ${orgId} and id in ${opts.accountIds}
             union all
-            select c.id from accounts c join sub on c.parent_id = sub.id
+            select c.id from accounts c join sub on c.parent_id = sub.id where c.org_id = ${orgId}
           ) select id from sub
         )`
       : opts.accountTypes && opts.accountTypes.length
@@ -989,11 +1020,12 @@ export async function transactionDetail(opts: {
       ? sql`e.posting_date <= ${opts.to}`
       : sql`e.posting_date >= ${opts.from ?? "0001-01-01"} and e.posting_date <= ${opts.to}`
   const cashFilter =
-    opts.basis === "cash"
-      ? sql` and e.id in (select l2.entry_id from journal_lines l2 join accounts a2 on a2.id = l2.account_id where a2.type = 'asset_bank')`
+    opts.basis === "cash" || opts.cashOnly
+      ? sql` and e.id in (select l2.entry_id from journal_lines l2 join accounts a2 on a2.id = l2.account_id and a2.org_id = l2.org_id where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
       : sql``
+  const partyFilter = opts.partyIds?.length ? sql` and l.party_id in ${opts.partyIds}` : sql``
 
-  const where = sql`${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}`
+  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}`
 
   // Totals over the FULL set (independent of the display limit), so `net` ties
   // out to the clicked cell even when the line list is truncated. `net` is
@@ -1006,8 +1038,8 @@ export async function transactionDetail(opts: {
            coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as credit,
            coalesce(sum(case when a.type in ${creditNormal} then -l.amount else l.amount end), 0) as net
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-      join accounts a on a.id = l.account_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where ${where}
   `)) as unknown as { rows: { n: number; debit: string; credit: string; net: string }[] }
   const totals = agg.rows[0] ?? { n: 0, debit: '0', credit: '0', net: '0' }
@@ -1018,10 +1050,10 @@ export async function transactionDetail(opts: {
            p.display_name as party, l.memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-      join accounts a on a.id = l.account_id
-      left join parties p on p.id = l.party_id
-      left join documents d on d.id = e.source_document_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join parties p on p.id = l.party_id and p.org_id = l.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where ${where}
      order by e.posting_date, e.entry_number, l.line_number
      limit ${limit} offset ${offset}
@@ -1092,8 +1124,9 @@ export interface ProjectProfitResult {
 export async function projectProfitability(
   from: string,
   to: string,
-  opts: { dims?: DimFilter } = {},
+  opts: { dims?: DimFilter; orgId?: string } = {},
 ): Promise<ProjectProfitResult> {
+  const orgId = await resolveOrgId(opts.orgId)
   const r = (await db.execute(sql`
     with pl as (
       select l.project_id,
@@ -1101,9 +1134,10 @@ export async function projectProfitability(
              coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
              coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
         from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-        join accounts a on a.id = l.account_id
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.project_id is not null
+         and l.org_id = ${orgId}
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
          and ${dimWhere(opts.dims)}
@@ -1112,7 +1146,7 @@ export async function projectProfitability(
     hrs as (
       select project_id, coalesce(sum(hours), 0) as hours
         from time_entries
-       where project_id is not null and status = 'approved'
+       where org_id = ${orgId} and project_id is not null and status = 'approved'
          and worked_on >= ${from} and worked_on <= ${to}
        group by project_id
     )
@@ -1122,8 +1156,8 @@ export async function projectProfitability(
       from projects p
       left join pl on pl.project_id = p.id
       left join hrs on hrs.project_id = p.id
-      left join parties cu on cu.id = p.customer_id
-     where pl.project_id is not null or hrs.project_id is not null
+      left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
+     where p.org_id = ${orgId} and (pl.project_id is not null or hrs.project_id is not null)
      order by (coalesce(pl.revenue, 0) - coalesce(pl.cogs, 0) - coalesce(pl.expenses, 0)) desc, p.name
   `)) as unknown as {
     rows: {
@@ -1163,16 +1197,18 @@ export async function projectProfitability(
   return { rows, totals, from, to }
 }
 
-export async function dimensionOptions() {
+export async function dimensionOptions(orgId?: string) {
+  const resolvedOrgId = await resolveOrgId(orgId);
   const [depts, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where is_active order by name`) as any,
+    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active order by name`) as any,
     db.execute(sql`
     select p.id, p.name from projects p
-     where exists (select 1 from journal_lines l where l.project_id = p.id)
+     where p.org_id = ${resolvedOrgId}
+       and exists (select 1 from journal_lines l where l.org_id = ${resolvedOrgId} and l.project_id = p.id)
      order by p.name limit 500`) as any,
-    db.execute(sql`select id, name from locations where is_active order by name`) as any,
-    db.execute(sql`select id, name from classes where is_active order by name`) as any,
-    segmentRegistry(),
+    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active order by name`) as any,
+    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active order by name`) as any,
+    segmentRegistry(resolvedOrgId),
   ]);
   return {
     departments: depts.rows as { id: string; name: string }[],

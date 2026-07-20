@@ -846,6 +846,12 @@
     "empty": "Nenhuma transação por trás deste valor.",
     "backTo": "Voltar para {report}"
   },
+  "drillDrawer": {
+    "title": "Registros de suporte",
+    "supporting": "Os registros que compõem o valor selecionado do relatório.",
+    "loadFailed": "Não foi possível carregar os registros de suporte.",
+    "recordLoadFailed": "Não foi possível abrir a transação."
+  },
   "flyout": {
     "title": "Lançamento contábil",
     "openTransaction": "Abrir transação completa"

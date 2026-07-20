@@ -144,6 +144,7 @@ export function ReportBuilder({
     ? {
         title: name || t('namePlaceholder'),
         periodPhrase: description || undefined,
+        defaultDrillTarget: { kind: 'custom', source: 'definition', id: definition.id, label: name || t('namePlaceholder') },
         summary: preview.summary,
         groups: preview.groups.map((g) => ({
           title: g.title,

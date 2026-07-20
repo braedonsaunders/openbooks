@@ -98,7 +98,7 @@ export default async function BudgetPage({
           <StatementMatrixTable
             view={view}
             currency={org?.base_currency}
-            drill={{ dims: q.dims, basis: 'accrual', back: backHref, backLabel: t('budget.title') }}
+            drill={{ dims: q.dims, basis: 'accrual', back: backHref, backLabel: t('budget.title'), budgetScenarioId: scenarioId }}
           />
         ) : (
           <p className="py-8 text-center text-slate-400 italic">{t('budget.noScenarios')}</p>

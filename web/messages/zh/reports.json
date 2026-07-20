@@ -846,6 +846,12 @@
     "empty": "此数值背后无交易。",
     "backTo": "返回{report}"
   },
+  "drillDrawer": {
+    "title": "支持记录",
+    "supporting": "构成所选报表数值的记录。",
+    "loadFailed": "无法加载支持记录。",
+    "recordLoadFailed": "无法打开交易。"
+  },
   "flyout": {
     "title": "日记账分录",
     "openTransaction": "打开完整交易"

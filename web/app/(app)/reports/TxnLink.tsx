@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { moduleDrawerHref } from '../../../lib/txn-links'
 
 /**
@@ -27,9 +28,31 @@ export function TxnLink({
   className?: string
   children: React.ReactNode
 }) {
-  const href = moduleDrawerHref(docKind, docId) ?? `/journal?txn=${entryId}`
+  const pathname = usePathname() ?? '/'
+  const current = useSearchParams()
+  const inReport = pathname.startsWith('/reports') || pathname.startsWith('/knowledge/views')
+  let href = moduleDrawerHref(docKind, docId) ?? `/journal?txn=${entryId}`
+  if (inReport) {
+    const params = new URLSearchParams(current.toString())
+    params.delete('reportRecord')
+    params.delete('reportRecordKind')
+    params.delete('txn')
+    params.delete('drawerReturn')
+    params.delete('form')
+    params.delete('transactionTab')
+    const baseQuery = params.toString()
+    const returnHref = baseQuery ? `${pathname}?${baseQuery}` : pathname
+    if (docKind && docId) {
+      params.set('reportRecord', docId)
+      params.set('reportRecordKind', docKind)
+      params.set('drawerReturn', returnHref)
+    } else {
+      params.set('txn', entryId)
+    }
+    href = `${pathname}?${params}`
+  }
   return (
-    <Link href={href as never} className={className}>
+    <Link href={href as never} className={className} scroll={false}>
       {children}
     </Link>
   )

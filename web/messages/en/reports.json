@@ -846,6 +846,12 @@
     "empty": "No transactions behind this value.",
     "backTo": "Back to {report}"
   },
+  "drillDrawer": {
+    "title": "Supporting records",
+    "supporting": "The records behind the selected report value.",
+    "loadFailed": "Could not load the supporting records.",
+    "recordLoadFailed": "Could not open the transaction."
+  },
   "flyout": {
     "title": "Journal entry",
     "openTransaction": "Open full transaction"

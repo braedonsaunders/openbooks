@@ -286,7 +286,13 @@ export function ViewStudio({
                 {previewError}
               </div>
             ) : preview ? (
-              <ResultView company={company} title={name} description={description} result={preview} />
+              <ResultView
+                company={company}
+                title={name}
+                description={description}
+                result={preview}
+                drillTarget={{ kind: 'custom', source: 'view', id: view.id, label: name }}
+              />
             ) : (
               <ReportPaper company={company} title={name} periodPhrase={description || undefined}>
                 <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">

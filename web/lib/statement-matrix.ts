@@ -2,6 +2,7 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { addDays, addMonthsIso, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
+import { resolveOrgId } from './org-scope'
 
 /**
  * Multi-column statement engine. Where the legacy `accountBalances` returned a
@@ -197,6 +198,7 @@ function columnPredicate(col: AmountColumn, mode: StatementMode): SQL {
  * column plus a comparative amount.
  */
 async function buildAmountColumns(opts: {
+  orgId: string
   mode: StatementMode
   period: { from: string; to: string }
   breakout: StatementBreakout
@@ -205,7 +207,7 @@ async function buildAmountColumns(opts: {
   subsidiary: StatementSubsidiaryContext | undefined
   periodLabel: string
 }): Promise<{ cols: AmountColumn[]; truncated: boolean }> {
-  const { mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts
+  const { orgId, mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts
 
   if (breakout === 'month' || breakout === 'quarter') {
     const ranges =
@@ -223,7 +225,7 @@ async function buildAmountColumns(opts: {
     const segmentKey = breakout.slice('segment:'.length)
     const definition = (await db.execute(sql`
       select id from segment_definitions
-       where key = ${segmentKey} and source_kind = 'custom' and is_active and show_in_reports
+       where org_id = ${orgId} and key = ${segmentKey} and source_kind = 'custom' and is_active and show_in_reports
        limit 1
     `)) as unknown as { rows: { id: string }[] }
     if (!definition.rows[0]) {
@@ -234,17 +236,19 @@ async function buildAmountColumns(opts: {
       : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`
     const values = (await db.execute(sql`
       select sv.id, sv.name from segment_values sv
-       where sv.segment_id = ${definition.rows[0].id} and sv.is_active
+       where sv.org_id = ${orgId} and sv.segment_id = ${definition.rows[0].id} and sv.is_active
          and exists (
-           select 1 from journal_lines l join journal_entries e on e.id = l.entry_id
+           select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
             where l.extra_dims ->> ${segmentKey} = sv.id::text
+              and l.org_id = ${orgId}
               and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
          )
        order by sv.name
     `)) as unknown as { rows: { id: string; name: string }[] }
     const unassigned = (await db.execute(sql`
-      select 1 from journal_lines l join journal_entries e on e.id = l.entry_id
-       where not (l.extra_dims ? ${segmentKey}) and ${periodWhere}
+      select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where l.org_id = ${orgId}
+         and not (l.extra_dims ? ${segmentKey}) and ${periodWhere}
          and ${dimFilterSql(dims, subsidiary)} limit 1
     `)) as unknown as { rows: unknown[] }
     const groups = values.rows.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
@@ -280,17 +284,18 @@ async function buildAmountColumns(opts: {
     const rows = (await db.execute(sql`
       select d.id, d.name
         from ${sql.raw(table)} d
-       where exists (
+       where d.org_id = ${orgId}
+         and exists (
          select 1 from journal_lines l
-           join journal_entries e on e.id = l.entry_id
-          where ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
+           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
        )
        order by d.name
     `)) as unknown as { rows: { id: string; name: string }[] }
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l
-        join journal_entries e on e.id = l.entry_id
-       where ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
        limit 1
     `)) as unknown as { rows: unknown[] }
     const dimField = breakout as 'department' | 'project' | 'location' | 'class'
@@ -411,6 +416,7 @@ function treeifyMatrix(
  * Appends variance columns when `compare` yields a current+prior pair.
  */
 export async function statementMatrix(opts: {
+  orgId?: string
   types: string[]
   mode: StatementMode
   /** Translation-rate class when it differs from the date-window mode. */
@@ -426,12 +432,14 @@ export async function statementMatrix(opts: {
   /** Emit variance columns for a compare pair (default true when comparing). */
   variance?: boolean
 }): Promise<StatementMatrix> {
+  const orgId = await resolveOrgId(opts.orgId)
   const breakout = opts.breakout ?? 'none'
   const compare = opts.compare ?? 'none'
   const basis = opts.basis ?? 'accrual'
   const showZero = opts.showZero ?? false
 
   const { cols, truncated } = await buildAmountColumns({
+    orgId,
     mode: opts.mode,
     period: opts.period,
     breakout,
@@ -453,8 +461,8 @@ export async function statementMatrix(opts: {
     basis === 'cash'
       ? sql` and e.id in (
           select l2.entry_id from journal_lines l2
-            join accounts a2 on a2.id = l2.account_id
-           where a2.type = 'asset_bank')`
+            join accounts a2 on a2.id = l2.account_id and a2.org_id = l2.org_id
+           where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
       : sql``
 
   const amount = amountExpr(opts.translationMode ?? opts.mode, opts.subsidiary)
@@ -468,9 +476,10 @@ export async function statementMatrix(opts: {
   const res = (await db.execute(sql`
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
       from accounts a
-      left join (journal_lines l join journal_entries e on e.id = l.entry_id)
-        on l.account_id = a.id and e.status = 'posted' and ${baseDate}
+      left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id)
+        on l.account_id = a.id and l.org_id = ${orgId} and e.org_id = ${orgId} and e.status = 'posted' and ${baseDate}
        and ${dimFilterSql(opts.dims, opts.subsidiary)}${cashFilter}
+     where a.org_id = ${orgId}
      group by a.id
      order by a.number nulls last, a.name
   `)) as unknown as {
@@ -593,6 +602,7 @@ export type StatementView = {
 }
 
 type MatrixOpts = {
+  orgId?: string
   breakout?: StatementBreakout
   compare?: StatementCompare
   basis?: StatementBasis
@@ -649,11 +659,9 @@ export async function profitAndLossView(
   }
   section(labels.revenue, revenueTypes, revenue)
   section(labels.costOfGoodsSold, cogsTypes, cogs)
-  // Gross profit / net income are signed formulas (revenue − cogs − expenses),
-  // not a single transaction set — so they don't drill (their component rows do).
-  lines.push({ kind: 'subtotal', label: labels.grossProfit, depth: 0, emphasis: true, values: grossProfit })
+  lines.push({ kind: 'subtotal', label: labels.grossProfit, depth: 0, emphasis: true, values: grossProfit, drillTypes: [...revenueTypes, ...cogsTypes] })
   section(labels.expenses, expenseTypes, expenses)
-  lines.push({ kind: 'total', label: labels.netIncome, depth: 0, emphasis: true, values: netIncome })
+  lines.push({ kind: 'total', label: labels.netIncome, depth: 0, emphasis: true, values: netIncome, drillTypes: PNL_TYPES })
 
   return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount'), mode: 'flow' }
 }
@@ -739,20 +747,19 @@ export async function balanceSheetView(
 
   lines.push({ kind: 'section', label: labels.equity, depth: 0 })
   lines.push(...accountLines(matrix, EQUITY_TYPES))
-  // Accumulated earnings (= lifetime net income) and the totals that include it
-  // are signed formulas, so they don't drill to a single transaction set.
-  lines.push({ kind: 'account', label: labels.accumulatedEarnings, depth: 1, values: accumulated })
+  lines.push({ kind: 'account', label: labels.accumulatedEarnings, depth: 1, values: accumulated, drillTypes: PNL_TYPES })
   if (cta) {
     lines.push({
       kind: 'account',
       label: labels.translationAdjustment,
       depth: 1,
       values: cta,
+      drillTypes: [...ASSET_TYPES, ...LIABILITY_TYPES, ...EQUITY_TYPES, ...PNL_TYPES],
     })
   }
-  lines.push({ kind: 'subtotal', label: labels.totalEquity, depth: 0, values: equityTotal })
+  lines.push({ kind: 'subtotal', label: labels.totalEquity, depth: 0, values: equityTotal, drillTypes: [...EQUITY_TYPES, ...PNL_TYPES] })
 
-  lines.push({ kind: 'total', label: labels.liabilitiesAndEquity, depth: 0, emphasis: true, values: liabAndEquity })
+  lines.push({ kind: 'total', label: labels.liabilitiesAndEquity, depth: 0, emphasis: true, values: liabAndEquity, drillTypes: [...LIABILITY_TYPES, ...EQUITY_TYPES, ...PNL_TYPES] })
 
   return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount'), mode: 'balance' }
 }

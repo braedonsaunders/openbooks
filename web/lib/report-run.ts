@@ -148,7 +148,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     let view: StatementView | null = null
     let title = ''
     let periodPhrase = ''
-    const matrixOpts = { breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero }
+    const matrixOpts = { orgId, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero }
     if (kind === 'pnl') {
       title = t('pnl.title')
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
@@ -215,18 +215,18 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return {
         render: 'data',
         data: generalLedgerExportData(
-          await generalLedger(period.from, period.to, { accountId: p.get('account') ?? undefined, dims }),
+          await generalLedger(period.from, period.to, { accountId: p.get('account') ?? undefined, dims, orgId }),
           t('generalLedger.title'),
           t,
         ),
       }
     case 'journal':
-      return { render: 'data', data: journalExportData(await journalReport(period.from, period.to, { dims }), t('journal.title'), t) }
+      return { render: 'data', data: journalExportData(await journalReport(period.from, period.to, { dims, orgId }), t('journal.title'), t) }
     case 'registers':
       return {
         render: 'data',
         data: registerExportData(
-          await partyRegister(side, { from: period.from, to: period.to, dims }),
+          await partyRegister(side, { from: period.from, to: period.to, dims, orgId }),
           side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
           t,
         ),
@@ -234,10 +234,10 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     case 'partner-statement': {
       const partyId = p.get('party')
       if (!partyId) throw new Error('party required')
-      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, { from: period.from, to: period.to, side }), t) }
+      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side }), t) }
     }
     case 'project-profitability':
-      return { render: 'data', data: projectProfitabilityExportData(await projectProfitability(period.from, period.to, { dims }), t) }
+      return { render: 'data', data: projectProfitabilityExportData(await projectProfitability(period.from, period.to, { dims, orgId }), t) }
   }
 
   // --- Legacy single-column statements --------------------------------------
@@ -246,15 +246,15 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const to = p.get('to') ?? period.to
   switch (kind) {
     case 'trial-balance':
-      return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims), asOf, t) }
+      return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId), asOf, t) }
     case 'partners': {
       const s = (p.get('side') === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
-      return { render: 'data', data: partnersExportData(s, await partnerBalances(s), t) }
+      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId), t) }
     }
     case 'aging':
-      return { render: 'data', data: agingExportData(side, await agingByParty(side, asOf, dims), t) }
+      return { render: 'data', data: agingExportData(side, await agingByParty(side, asOf, dims, orgId), t) }
     case 'cash-flow':
-      return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims), from, to, t) }
+      return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId), from, to, t) }
   }
 
   throw new Error('unknown statement')

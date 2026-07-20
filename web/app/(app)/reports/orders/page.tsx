@@ -8,6 +8,7 @@ import { money } from '../../../../lib/format'
 import { orgInfo } from '../../../../lib/data'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
+import { ReportDrillLink } from '../ReportDrillLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,11 +73,22 @@ export default async function OrdersReport() {
           {rows.map((r) => (
             <TableRow key={r.kind}>
               <TableCell className="font-medium">{t(`kinds.${r.kind}`)}</TableCell>
-              <TableCell className="text-right tabular-nums">{r.open.toLocaleString('en-CA')}</TableCell>
-              <TableCell className="text-right tabular-nums">{money(r.openValue)}</TableCell>
-              <TableCell className="text-right tabular-nums">{r.conv.toLocaleString('en-CA')}</TableCell>
-              <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{r.rate}%</TableCell>
-              <TableCell className="text-right tabular-nums text-slate-400">{r.voided.toLocaleString('en-CA')}</TableCell>
+              {([
+                ['open', r.open.toLocaleString('en-CA')],
+                ['open', money(r.openValue)],
+                ['converted', r.conv.toLocaleString('en-CA')],
+                ['conversion', `${r.rate}%`],
+                ['voided', r.voided.toLocaleString('en-CA')],
+              ] as const).map(([scope, value], index) => (
+                <TableCell key={index} className="text-right tabular-nums">
+                  <ReportDrillLink
+                    target={{ kind: 'orders', orderKind: r.kind, scope, label: `${t(`kinds.${r.kind}`)} · ${t(`columns.${index === 0 ? 'open' : index === 1 ? 'openValue' : index === 2 ? 'converted' : index === 3 ? 'convRate' : 'voided'}`)}` }}
+                    className="hover:text-teal-700 hover:underline dark:hover:text-teal-300"
+                  >
+                    {value}
+                  </ReportDrillLink>
+                </TableCell>
+              ))}
             </TableRow>
           ))}
           </TableBody>

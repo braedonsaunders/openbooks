@@ -217,9 +217,9 @@ export async function budgetVsActualView(
   }
   section(labels.revenue, revenueTypes, revenue)
   section(labels.costOfGoodsSold, cogsTypes, cogs)
-  lines.push({ kind: 'subtotal', label: labels.grossProfit, depth: 0, emphasis: true, values: grossProfit })
+  lines.push({ kind: 'subtotal', label: labels.grossProfit, depth: 0, emphasis: true, values: grossProfit, drillTypes: [...revenueTypes, ...cogsTypes] })
   section(labels.expenses, expenseTypes, expenses)
-  lines.push({ kind: 'total', label: labels.netIncome, depth: 0, emphasis: true, values: netIncome })
+  lines.push({ kind: 'total', label: labels.netIncome, depth: 0, emphasis: true, values: netIncome, drillTypes: PNL_TYPES })
 
   return { columns, lines, truncated: false, hasVariance: true, mode: 'flow' }
 }
