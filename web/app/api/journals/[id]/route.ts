@@ -37,6 +37,7 @@ async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise
       coalesce(d.extra_dims::text,'{}') || '~' ||
       coalesce((select string_agg(
         coalesce(account_id::text,'') || ':' || amount::text || ':' ||
+        coalesce(party_id::text,'') || ':' ||
         coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
         coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
         '|' order by line_number)
@@ -60,6 +61,8 @@ interface JournalLineInput {
   description?: string | null
   /** Signed base amount: + debit / − credit. */
   amount: string
+  /** Line entity: the customer/vendor/employee this leg belongs to. */
+  partyId?: string | null
   departmentId?: string | null
   projectId?: string | null
   /** Intercompany line override (null = the header's subsidiary). */
@@ -137,7 +140,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // line returns 422 without a partial write.
   // journal totals = sum of debits (positive line amounts); tax never applies
   let totalDebits: string | null = null
-  let preparedLines: { accountId: string; description: string | null; amount: string; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
+  let preparedLines: { accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid = body.lines.filter(
       (l) => l.accountId && !Number.isNaN(Number(l.amount)) && Number(l.amount) !== 0,
@@ -159,6 +162,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         accountId: l.accountId,
         description: l.description ?? null,
         amount: l.amount,
+        partyId: l.partyId ?? null,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
         subsidiaryId: l.subsidiaryId ?? null,
@@ -183,10 +187,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const l = preparedLines[i]!
           await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                        quantity, unit_price, amount, department_id, project_id,
+                                        quantity, unit_price, amount, party_id, department_id, project_id,
                                         subsidiary_id, extra_dims, custom)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
-                    '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId},
+                    '1', ${l.amount}, ${l.amount}, ${l.partyId}, ${l.departmentId}, ${l.projectId},
                     ${l.subsidiaryId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
           `)
         }

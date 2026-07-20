@@ -45,6 +45,7 @@ interface SegmentOpt {
 interface LineRow extends Record<string, unknown> {
   accountId: string
   description: string
+  partyId: string
   departmentId: string
   projectId: string
   subsidiaryId: string
@@ -73,6 +74,7 @@ const STATUS_KEYS: Record<string, string> = {
 const emptyLine = (): LineRow => ({
   accountId: '',
   description: '',
+  partyId: '',
   departmentId: '',
   projectId: '',
   subsidiaryId: '',
@@ -92,6 +94,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
   const row: LineRow = {
     accountId: l.account_id ?? '',
     description: l.description ?? '',
+    partyId: l.party_id ?? '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
     subsidiaryId: l.subsidiary_id ?? '',
@@ -209,6 +212,7 @@ export function JournalDrawer({
           accountId: r.accountId,
           description: r.description,
           amount: ((cents(r.debit) - cents(r.credit)) / 100).toFixed(2), // signed: + debit / − credit
+          partyId: r.partyId || null,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
           // Intercompany line override (multi-subsidiary orgs only).
@@ -326,6 +330,18 @@ export function JournalDrawer({
         placeholder: t('accountPlaceholder'),
       },
       description: { key: 'description', label: tc('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
+      // Line-level entity: the customer/vendor/employee this leg belongs to
+      // (NetSuite line "Name" / QBO line Entity). Required on AR/AP legs — the
+      // kernel refuses a party-less open-item line; projects stay a sibling
+      // column, exactly like the party/project kernel dimensions.
+      party_id: {
+        key: 'partyId',
+        label: tc('labels.party'),
+        width: 'minmax(150px,1.2fr)',
+        type: 'search-select',
+        options: parties.map((p) => ({ value: p.id, label: p.display_name ?? p.name ?? '' })),
+        placeholder: '—',
+      },
       department_id: {
         key: 'departmentId',
         label: tc('labels.department'),

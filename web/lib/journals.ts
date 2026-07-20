@@ -45,7 +45,7 @@ export async function loadJournalDoc(id: string) {
   if (!doc.rows[0]) return null
   const lines = (await db.execute(sql`
     select l.id, l.line_number, l.account_id, l.description, l.amount,
-           l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom
+           l.party_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom
       from document_lines l
      where l.document_id = ${id}
      order by l.line_number
