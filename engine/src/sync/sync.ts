@@ -141,13 +141,35 @@ function nativeKey(d: NativeDocument): string {
 }
 
 /** The same canonical key computed from the stored document. */
+type StoredDocumentKeyRow = {
+  id: string; kind: string; party_id: string | null; subsidiary_id: string | null;
+  ddate: string; due: string | null; memo: string | null; reference_number: string | null;
+  ctrl: string | null; extra_dims: Record<string, string>;
+};
+type StoredLineKeyRow = {
+  document_id: string; account_id: string | null; item_id: string | null; amount: string; tax_amount: string;
+  tax_overridden: boolean; tax_code_id: string | null; party_id: string | null; department_id: string | null;
+  project_id: string | null; subsidiary_id: string | null; extra_dims: Record<string, string>; description: string | null;
+};
+
+function storedCanonicalKey(d: StoredDocumentKeyRow, lines: StoredLineKeyRow[]): string {
+  return JSON.stringify([
+    d.kind, d.party_id, d.subsidiary_id, d.ddate, d.due, d.memo, d.reference_number, d.ctrl, d.extra_dims ?? {},
+    lines.map((l) => [
+      l.account_id, l.item_id, toUnits(l.amount).toString(), toUnits(l.tax_amount).toString(),
+      l.tax_overridden, effectiveTaxCodeId(l.tax_amount, l.tax_code_id), l.party_id ?? null, l.department_id, l.project_id,
+      effectiveLineSubsidiary(l.subsidiary_id, d.subsidiary_id), l.extra_dims ?? {}, l.description,
+    ]),
+  ]);
+}
+
 async function storedKey(docId: string): Promise<string> {
   const [d] = (
     (await db.execute(sql`
       select kind, party_id, subsidiary_id, posting_date::text as ddate, due_date::text as due,
-             memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims
+             memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id
         from documents where id = ${docId}`)) as unknown as {
-      rows: { kind: string; party_id: string | null; subsidiary_id: string | null; ddate: string; due: string | null; memo: string | null; reference_number: string | null; ctrl: string | null; extra_dims: Record<string, string> }[];
+      rows: StoredDocumentKeyRow[];
     }
   ).rows;
   const lines = (
@@ -155,21 +177,39 @@ async function storedKey(docId: string): Promise<string> {
       select account_id, item_id, amount, tax_amount, tax_overridden, tax_code_id,
              party_id, department_id, project_id, subsidiary_id, extra_dims, description
         from document_lines where document_id = ${docId} order by line_number`)) as unknown as {
-      rows: {
-        account_id: string | null; item_id: string | null; amount: string; tax_amount: string;
-        tax_overridden: boolean; tax_code_id: string | null; party_id: string | null; department_id: string | null;
-        project_id: string | null; subsidiary_id: string | null; extra_dims: Record<string, string>; description: string | null;
-      }[];
+      rows: StoredLineKeyRow[];
     }
   ).rows;
-  return JSON.stringify([
-    d!.kind, d!.party_id, d!.subsidiary_id, d!.ddate, d!.due, d!.memo, d!.reference_number, d!.ctrl, d!.extra_dims ?? {},
-    lines.map((l) => [
-      l.account_id, l.item_id, toUnits(l.amount).toString(), toUnits(l.tax_amount).toString(),
-      l.tax_overridden, effectiveTaxCodeId(l.tax_amount, l.tax_code_id), l.party_id ?? null, l.department_id, l.project_id,
-      effectiveLineSubsidiary(l.subsidiary_id, d!.subsidiary_id), l.extra_dims ?? {}, l.description,
-    ]),
-  ]);
+  return storedCanonicalKey(d!, lines);
+}
+
+/** Full migrations compare tens of thousands of documents; load their keys in
+ * two set queries instead of issuing two round trips per transaction. */
+async function loadStoredKeys(orgId: string, refKey: string): Promise<Map<string, string>> {
+  const documents = (await db.execute(sql`
+    select id, kind, party_id, subsidiary_id, posting_date::text as ddate, due_date::text as due,
+           memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims
+      from documents
+     where org_id = ${orgId} and custom->>${refKey} is not null
+     order by id`)) as unknown as { rows: StoredDocumentKeyRow[] };
+  const lineResult = (await db.execute(sql`
+    select dl.document_id, dl.account_id, dl.item_id, dl.amount, dl.tax_amount, dl.tax_overridden,
+           dl.tax_code_id, dl.party_id, dl.department_id, dl.project_id, dl.subsidiary_id,
+           dl.extra_dims, dl.description
+      from document_lines dl
+      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+     where d.org_id = ${orgId} and d.custom->>${refKey} is not null
+     order by dl.document_id, dl.line_number`)) as unknown as { rows: StoredLineKeyRow[] };
+  const linesByDocument = new Map<string, StoredLineKeyRow[]>();
+  for (const line of lineResult.rows) {
+    const lines = linesByDocument.get(line.document_id);
+    if (lines) lines.push(line);
+    else linesByDocument.set(line.document_id, [line]);
+  }
+  return new Map(documents.rows.map((document) => [
+    document.id,
+    storedCanonicalKey(document, linesByDocument.get(document.id) ?? []),
+  ]));
 }
 
 /** Best-effort live progress write (throttled) so the platform page can show a
@@ -308,6 +348,7 @@ export async function runSync(
     ).rows) {
       existing.set(r.ref, { id: r.id, status: r.status, posted: r.posted });
     }
+    const fullStoredKeys = since === null ? await loadStoredKeys(org.id, refKey) : null;
 
     let docsNew = 0, docsAmended = 0, docsUnchanged = 0, ordersNew = 0, docsFailed = 0;
     const skipped: string[] = [];
@@ -399,7 +440,7 @@ export async function runSync(
           docsNew++;
           continue;
         }
-        if (nativeKey(doc) === (await storedKey(have.id))) {
+        if (nativeKey(doc) === (fullStoredKeys?.get(have.id) ?? await storedKey(have.id))) {
           docsUnchanged++;
           continue;
         }
