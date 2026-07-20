@@ -485,13 +485,18 @@
       "runway": "Cash runway",
       "lowest": "Lowest point",
       "lowestSub": "week of {date}",
-      "netFlow": "Net period flow"
+      "netFlow": "Net period flow",
+      "inflows": "Inflows",
+      "outflows": "Outflows"
     },
     "panels": {
       "timeline": "Cash position forecast",
       "timelineHint": "Click a week for what flows in and out · {weeks} weeks",
       "accounts": "Bank accounts",
-      "timelineHintScheduled": "Click a week for its transactions · AP scheduled oldest-due-first within capacity"
+      "timelineHintScheduled": "Click a week for its transactions · AP scheduled oldest-due-first within capacity",
+      "bridge": "Cash flow bridge",
+      "forecast": "Cash position forecast",
+      "forecastHint": "Ending cash by week · lowest point flagged"
     },
     "cols": {
       "week": "Week",
@@ -506,6 +511,18 @@
     "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week.",
     "configure": "Configure forecast",
     "configTitle": "Cash forecast configuration",
-    "configDescription": "The model behind the liquidity timeline — recurring flows (payroll, rent, loans) and how collection/payment dates are predicted. The AP pay rule is configured on the AP cockpit."
+    "configDescription": "The model behind the liquidity timeline — recurring flows (payroll, rent, loans) and how collection/payment dates are predicted. The AP pay rule is configured on the AP cockpit.",
+    "vitals": {
+      "burnRate": "Cash burn rate",
+      "burnRateHint": "Avg weekly outflow",
+      "weekly": "Weekly",
+      "arCoverage": "AR coverage",
+      "arCoverageHint": "(Cash + AR) / AP",
+      "cashCycle": "Cash cycle",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Net period flow",
+      "netFlowHint": "Inflows − Outflows",
+      "runway": "Cash runway"
+    }
   }
 }

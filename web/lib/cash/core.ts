@@ -45,6 +45,7 @@ export interface ForecastEntry {
   id: string;
   entryId: string;
   docKind: string | null;
+  docNumber: string | null;
   docId: string | null;
   partyId: string | null;
   partyName: string;
@@ -122,6 +123,7 @@ export interface OpenItem {
   id: string;
   entryId: string;
   docKind: string | null;
+  docNumber: string | null;
   docId: string | null;
   partyId: string | null;
   partyName: string;
@@ -184,7 +186,7 @@ export async function openItems(side: Side, asOf: string): Promise<OpenItem[]> {
        where jl.is_open_item and a.type = ${acctType} and ${signFilter}
          and je.posting_date <= ${asOf}
     )
-    select oi.id, oi.entry_id, oi.doc_id, d.kind as doc_kind, oi.party_id,
+    select oi.id, oi.entry_id, oi.doc_id, d.kind as doc_kind, d.document_number as doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
            oi.tran_date, oi.due_date, oi.remaining
       from oi
@@ -196,6 +198,7 @@ export async function openItems(side: Side, asOf: string): Promise<OpenItem[]> {
     id: x.id,
     entryId: x.entry_id,
     docKind: x.doc_kind ?? null,
+    docNumber: x.doc_number ?? null,
     docId: x.doc_id ?? null,
     partyId: x.party_id,
     partyName: x.party_name,
@@ -426,6 +429,7 @@ export function scheduleForecast(
       id: it.id,
       entryId: it.entryId,
       docKind: it.docKind,
+      docNumber: it.docNumber,
       docId: it.docId,
       partyId: it.partyId,
       partyName: it.partyName,
