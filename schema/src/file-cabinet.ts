@@ -106,8 +106,11 @@ export const files = pgTable(
     fileType: text("file_type").notNull().default("other"),
     contentType: text("content_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
-    /** Where the bytes live. 'db' = file_blobs; future: 's3'. */
+    /** Where the bytes live. 'db' = file_blobs; 's3' = S3-compatible object storage. */
     storageKind: text("storage_kind").notNull().default("db"),
+    /** Stable upstream identity for idempotent source-system migrations. */
+    sourceSystem: text("source_system"),
+    sourceId: text("source_id"),
     /** SHA-256 hash of the bytes — change-tracking for text files. */
     contentHash: text("content_hash"),
     isInactive: boolean("is_inactive").notNull().default(false),
@@ -118,6 +121,7 @@ export const files = pgTable(
   (t) => [
     index("files_folder").on(t.orgId, t.folderId),
     index("files_org").on(t.orgId),
+    uniqueIndex("files_source_identity").on(t.orgId, t.sourceSystem, t.sourceId),
   ],
 );
 

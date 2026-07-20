@@ -1,0 +1,526 @@
+import { createHash, randomUUID } from "node:crypto";
+import { basename, extname } from "node:path";
+import { pathToFileURL } from "node:url";
+import { sql } from "drizzle-orm";
+import { db } from "../db.ts";
+import { putS3Blob, s3Enabled } from "../file-storage.ts";
+import { netsuiteRecord, netsuiteRestlet, suiteql, type NetSuiteCreds } from "../netsuite.ts";
+import { unsealJson } from "../secrets.ts";
+
+const SOURCE_SYSTEM = "netsuite";
+const RESTLET_BATCH_SIZE = 50;
+const FILE_QUERY_BATCH_SIZE = 900;
+
+type SourceKind = "vendor_bill" | "expense_report";
+
+interface SourceDocument {
+  id: string;
+  nsId: string;
+  kind: SourceKind;
+}
+
+interface SourceFile {
+  id: string;
+  name: string;
+  filetype: string;
+  filesize: string;
+  url: string;
+  lastmodifieddate?: string;
+}
+
+export interface ImportOptions {
+  org: string;
+  connectionId?: string;
+  execute: boolean;
+  concurrency: number;
+  limit?: number;
+  resolverScript?: string;
+  resolverDeploy?: string;
+}
+
+interface ImportSummary {
+  sourceDocuments: number;
+  sourceDocumentsWithoutId: number;
+  sourceFiles: number;
+  sourceLinks: number;
+  createdFiles: number;
+  newVersions: number;
+  unchangedFiles: number;
+  createdLinks: number;
+  failures: number;
+}
+
+function chunks<T>(values: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+  return result;
+}
+
+async function concurrentMap<T, R>(
+  values: T[],
+  concurrency: number,
+  task: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const result = new Array<R>(values.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    for (;;) {
+      const index = next++;
+      if (index >= values.length) return;
+      result[index] = await task(values[index], index);
+    }
+  }));
+  return result;
+}
+
+function extension(filename: string): string | null {
+  const value = extname(filename).slice(1).toLowerCase();
+  return value || null;
+}
+
+export function safeFilename(input: string, sourceId: string): string {
+  const cleaned = basename((input || "").replaceAll("\\", "/"))
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim();
+  return cleaned || `attachment-${sourceId}`;
+}
+
+export function detectContentType(bytes: Buffer, filename: string): string {
+  if (bytes.subarray(0, 5).toString("ascii") === "%PDF-") return "application/pdf";
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  const head = bytes.subarray(0, 12).toString("ascii");
+  if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) return "image/gif";
+  if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") return "image/webp";
+  if (bytes.length >= 4 && (head.startsWith("II*\u0000") || head.startsWith("MM\u0000*"))) return "image/tiff";
+  if (head.startsWith("BM")) return "image/bmp";
+  if (bytes.length >= 12 && head.slice(4, 8) === "ftyp" && /hei[cf]|mif1/.test(head.slice(8, 12))) return "image/heic";
+
+  throw new Error(`unsupported attachment content for source file ${filename || "(unnamed)"}`);
+}
+
+function parseArgs(argv: string[]): ImportOptions {
+  const read = (name: string): string | undefined => {
+    const index = argv.indexOf(name);
+    return index >= 0 ? argv[index + 1] : undefined;
+  };
+  const org = read("--org")?.trim();
+  if (!org) throw new Error("--org <tenant UUID or exact tenant name> is required");
+  const concurrency = Number(read("--concurrency") ?? 6);
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 12) {
+    throw new Error("--concurrency must be an integer from 1 to 12");
+  }
+  const limitValue = read("--limit");
+  const limit = limitValue === undefined ? undefined : Number(limitValue);
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) throw new Error("--limit must be a positive integer");
+  return {
+    org,
+    connectionId: read("--connection"),
+    execute: argv.includes("--execute"),
+    concurrency,
+    limit,
+    resolverScript: read("--resolver-script")?.trim() || undefined,
+    resolverDeploy: read("--resolver-deploy")?.trim() || undefined,
+  };
+}
+
+export function expenseReportFileIds(record: unknown): string[] {
+  if (!record || typeof record !== "object") return [];
+  const expense = (record as { expense?: unknown }).expense;
+  if (!expense || typeof expense !== "object") return [];
+  const items = (expense as { items?: unknown }).items;
+  if (!Array.isArray(items)) return [];
+  const ids = items.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const media = (item as { expmediaitem?: unknown }).expmediaitem;
+    if (!media || typeof media !== "object") return [];
+    const id = (media as { id?: unknown }).id;
+    return typeof id === "string" || typeof id === "number" ? [String(id)] : [];
+  });
+  return Array.from(new Set(ids.filter((id) => /^\d+$/.test(id))));
+}
+
+async function standardRestInventory(
+  documents: SourceDocument[],
+  creds: NetSuiteCreds,
+  concurrency: number,
+): Promise<Map<string, Set<string>>> {
+  const vendorBills = documents.filter((document) => document.kind === "vendor_bill");
+  if (vendorBills.length) {
+    throw new Error(
+      "NetSuite REST Record and Query APIs do not expose vendor-bill attachment relationships; " +
+      "provide --resolver-script and --resolver-deploy for this account's transaction-file resolver",
+    );
+  }
+  const result = new Map<string, Set<string>>();
+  await concurrentMap(documents, concurrency, async (document, index) => {
+    const record = await netsuiteRecord("expenseReport", document.nsId, creds);
+    for (const fileId of expenseReportFileIds(record)) {
+      const targets = result.get(fileId) ?? new Set<string>();
+      targets.add(document.id);
+      result.set(fileId, targets);
+    }
+    if ((index + 1) % 100 === 0 || index + 1 === documents.length) {
+      console.log(`[inventory] ${index + 1}/${documents.length} transactions`);
+    }
+  });
+  return result;
+}
+
+async function resolveContext(options: ImportOptions): Promise<{
+  orgId: string;
+  actorId: string;
+  creds: NetSuiteCreds;
+}> {
+  const orgResult = (await db.execute(sql`
+    select id, name from orgs where id::text = ${options.org} or name = ${options.org}
+  `)) as unknown as { rows: { id: string; name: string }[] };
+  if (orgResult.rows.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
+  const orgId = orgResult.rows[0].id;
+
+  const connectionResult = (await db.execute(sql`
+    select id, config, secrets
+      from connections
+     where org_id = ${orgId} and source = 'netsuite'
+       ${options.connectionId ? sql`and id = ${options.connectionId}` : sql``}
+     order by (status = 'active') desc, created_at desc
+     limit 1
+  `)) as unknown as { rows: { id: string; config: Record<string, unknown>; secrets: string | null }[] };
+  const connection = connectionResult.rows[0];
+  if (!connection) throw new Error("tenant does not have a NetSuite connection");
+  const secret = unsealJson<Partial<NetSuiteCreds>>(connection.secrets);
+  if (!secret?.consumerKey || !secret.consumerSecret || !secret.tokenKey || !secret.tokenSecret) {
+    throw new Error("tenant NetSuite connection is missing sealed credentials");
+  }
+  const account = String(connection.config.account ?? "");
+  const host = String(connection.config.host ?? "");
+  if (!account || !host) throw new Error("tenant NetSuite connection is missing account or host configuration");
+
+  const actorResult = (await db.execute(sql`
+    select id from users where org_id = ${orgId} and role = 'admin' and is_active order by created_at limit 1
+  `)) as unknown as { rows: { id: string }[] };
+  if (!actorResult.rows[0]) throw new Error("tenant needs an active admin user to own imported file audit rows");
+  return {
+    orgId,
+    actorId: actorResult.rows[0].id,
+    creds: {
+      account,
+      host,
+      consumerKey: secret.consumerKey,
+      consumerSecret: secret.consumerSecret,
+      tokenKey: secret.tokenKey,
+      tokenSecret: secret.tokenSecret,
+    },
+  };
+}
+
+async function sourceDocuments(orgId: string, limit?: number): Promise<{
+  documents: SourceDocument[];
+  withoutSourceId: number;
+}> {
+  const result = (await db.execute(sql`
+    select id, kind, custom->>'nsId' as "nsId"
+      from documents
+     where org_id = ${orgId} and kind in ('vendor_bill', 'expense_report')
+     order by kind, id
+     ${limit ? sql`limit ${limit}` : sql``}
+  `)) as unknown as { rows: { id: string; kind: SourceKind; nsId: string | null }[] };
+  return {
+    documents: result.rows.filter((row): row is SourceDocument => Boolean(row.nsId)),
+    withoutSourceId: result.rows.filter((row) => !row.nsId).length,
+  };
+}
+
+async function attachmentInventory(
+  documents: SourceDocument[],
+  creds: NetSuiteCreds,
+  concurrency: number,
+  resolver?: { script: string; deploy: string },
+): Promise<Map<string, Set<string>>> {
+  if (!resolver) return standardRestInventory(documents, creds, concurrency);
+  const batches = chunks(documents, RESTLET_BATCH_SIZE);
+  const results = await concurrentMap(batches, concurrency, async (batch, index) => {
+    const response = await netsuiteRestlet<{
+      isSuccess?: boolean;
+      message?: string;
+      records?: Record<string, string[]>;
+    }>(resolver.script, resolver.deploy, {
+      records: batch.map((doc) => ({
+        recordType: doc.kind === "vendor_bill" ? "vendorBill" : "expenseReport",
+        internalid: doc.nsId,
+      })),
+    }, creds, "POST");
+    if (!response.isSuccess || !response.records) throw new Error(response.message || "attachment resolver failed");
+    if ((index + 1) % 20 === 0 || index + 1 === batches.length) {
+      console.log(`[inventory] ${Math.min((index + 1) * RESTLET_BATCH_SIZE, documents.length)}/${documents.length} transactions`);
+    }
+    return { batch, records: response.records };
+  });
+
+  const sourceIdToDocumentIds = new Map(documents.map((doc) => [doc.nsId, doc.id]));
+  const fileToDocuments = new Map<string, Set<string>>();
+  for (const result of results) {
+    for (const [sourceTransactionId, fileIds] of Object.entries(result.records)) {
+      const documentId = sourceIdToDocumentIds.get(sourceTransactionId);
+      if (!documentId) throw new Error(`resolver returned unknown source transaction ${sourceTransactionId}`);
+      for (const fileId of fileIds) {
+        if (!/^\d+$/.test(fileId)) throw new Error(`resolver returned malformed file id for transaction ${sourceTransactionId}`);
+        const targets = fileToDocuments.get(fileId) ?? new Set<string>();
+        targets.add(documentId);
+        fileToDocuments.set(fileId, targets);
+      }
+    }
+  }
+  return fileToDocuments;
+}
+
+async function fileMetadata(fileIds: string[], creds: NetSuiteCreds): Promise<Map<string, SourceFile>> {
+  const result = new Map<string, SourceFile>();
+  for (const batch of chunks(fileIds, FILE_QUERY_BATCH_SIZE)) {
+    const ids = batch.join(",");
+    const rows = await suiteql<SourceFile>(
+      `select id, name, filetype, filesize, url, lastmodifieddate from file where id in (${ids})`,
+      creds,
+    );
+    for (const row of rows) result.set(String(row.id), row);
+  }
+  const missing = fileIds.filter((id) => !result.has(id));
+  if (missing.length) throw new Error(`File query omitted ${missing.length} attachment records`);
+  return result;
+}
+
+function mediaUrl(creds: NetSuiteCreds, source: SourceFile): string {
+  if (!source.url.startsWith("/core/media/")) throw new Error(`unsafe media URL for source file ${source.id}`);
+  const accountHost = creds.account.replaceAll("_", "-").toLowerCase();
+  return `https://${accountHost}.app.netsuite.com${source.url}`;
+}
+
+async function downloadSourceFile(source: SourceFile, creds: NetSuiteCreds): Promise<Buffer> {
+  const url = mediaUrl(creds, source);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+    try {
+      const response = await fetch(url, { signal: controller.signal, redirect: "follow" });
+      if (!response.ok) throw new Error(`media download HTTP ${response.status}`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (!bytes.length) throw new Error("media download was empty");
+      const expectedSize = Number(source.filesize);
+      if (Number.isFinite(expectedSize) && expectedSize > 0 && bytes.length !== expectedSize) {
+        throw new Error(`media download size mismatch: expected ${expectedSize}, received ${bytes.length}`);
+      }
+      return bytes;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, attempt * 1_500));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`failed to download source file ${source.id}`);
+}
+
+async function ensureRecordFolder(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  orgId: string,
+  documentId: string,
+): Promise<string> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments:${orgId}:${documentId}`}))`);
+  const existing = (await tx.execute(sql`
+    select id from folders where org_id = ${orgId} and record_table = 'documents' and record_id = ${documentId}
+  `)) as unknown as { rows: { id: string }[] };
+  if (existing.rows[0]) return existing.rows[0].id;
+
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments-root:${orgId}`}))`);
+  let root = (await tx.execute(sql`
+    select id from folders where org_id = ${orgId} and system_kind = 'attachments' limit 1
+  `)) as unknown as { rows: { id: string }[] };
+  if (!root.rows[0]) {
+    root = (await tx.execute(sql`
+      insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
+      values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id
+    `)) as unknown as { rows: { id: string }[] };
+  }
+  const inserted = (await tx.execute(sql`
+    insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
+    values (${orgId}, ${root.rows[0].id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
+    returning id
+  `)) as unknown as { rows: { id: string }[] };
+  return inserted.rows[0].id;
+}
+
+function derivedFileType(contentType: string): "pdf" | "image" {
+  return contentType === "application/pdf" ? "pdf" : "image";
+}
+
+async function persistFile(input: {
+  orgId: string;
+  actorId: string;
+  source: SourceFile;
+  targetDocumentIds: string[];
+  bytes: Buffer;
+  contentType: string;
+}): Promise<{ created: boolean; versioned: boolean; unchanged: boolean; createdLinks: number }> {
+  const hash = createHash("sha256").update(input.bytes).digest("hex");
+  const filename = safeFilename(input.source.name, input.source.id);
+  return db.transaction(async (tx) => {
+    const existing = (await tx.execute(sql`
+      select id, content_hash as "contentHash",
+             (select coalesce(max(version_number), 0) from file_versions where file_id = files.id) as "maxVersion"
+        from files
+       where org_id = ${input.orgId} and source_system = ${SOURCE_SYSTEM} and source_id = ${input.source.id}
+       for update
+    `)) as unknown as { rows: { id: string; contentHash: string | null; maxVersion: number }[] };
+
+    let fileId = existing.rows[0]?.id;
+    let created = false;
+    let versioned = false;
+    const unchanged = existing.rows[0]?.contentHash === hash;
+    if (!fileId) {
+      fileId = randomUUID();
+      const folderId = await ensureRecordFolder(tx, input.orgId, input.targetDocumentIds[0]);
+      await tx.execute(sql`
+        insert into files (id, org_id, folder_id, name, extension, file_type, content_type,
+                           size_bytes, storage_kind, source_system, source_id, content_hash,
+                           created_by, updated_by, created_at, updated_at)
+        values (${fileId}, ${input.orgId}, ${folderId}, ${filename}, ${extension(filename)},
+                ${derivedFileType(input.contentType)}, ${input.contentType}, ${input.bytes.length}, 's3',
+                ${SOURCE_SYSTEM}, ${input.source.id}, ${hash}, ${input.actorId}, ${input.actorId}, now(), now())
+      `);
+      created = true;
+    }
+
+    if (created || !unchanged) {
+      const versionId = randomUUID();
+      const versionNumber = created ? 1 : Number(existing.rows[0].maxVersion) + 1;
+      await tx.execute(sql`
+        insert into file_versions (id, file_id, version_number, size_bytes, content_type, storage_kind,
+                                   content_hash, created_by, created_at)
+        values (${versionId}, ${fileId}, ${versionNumber}, ${input.bytes.length}, ${input.contentType}, 's3',
+                ${hash}, ${input.actorId}, now())
+      `);
+      await putS3Blob(versionId, input.bytes, input.contentType);
+      await tx.execute(sql`
+        update files set current_version_id = ${versionId}, name = ${filename}, extension = ${extension(filename)},
+                         file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
+                         size_bytes = ${input.bytes.length}, storage_kind = 's3', content_hash = ${hash},
+                         updated_by = ${input.actorId}, updated_at = now()
+         where id = ${fileId} and org_id = ${input.orgId}
+      `);
+      versioned = !created;
+    } else {
+      await tx.execute(sql`
+        update files set name = ${filename}, extension = ${extension(filename)},
+                         file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
+                         size_bytes = ${input.bytes.length}, updated_by = ${input.actorId}, updated_at = now()
+         where id = ${fileId} and org_id = ${input.orgId}
+      `);
+    }
+
+    let createdLinks = 0;
+    for (const documentId of input.targetDocumentIds) {
+      const linked = (await tx.execute(sql`
+        insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
+        values (${input.orgId}, ${fileId}, 'documents', ${documentId}, ${input.actorId}, now())
+        on conflict (org_id, file_id, target_table, target_id) do nothing
+        returning id
+      `)) as unknown as { rows: { id: string }[] };
+      createdLinks += linked.rows.length;
+    }
+    return { created, versioned, unchanged: !created && unchanged, createdLinks };
+  });
+}
+
+async function verifyImport(orgId: string, fileToDocuments: Map<string, Set<string>>): Promise<void> {
+  const expectedFiles = fileToDocuments.size;
+  const expectedLinks = Array.from(fileToDocuments.values()).reduce((sum, ids) => sum + ids.size, 0);
+  const counts = (await db.execute(sql`
+    select count(distinct f.id) as files, count(fa.id) as links,
+           count(*) filter (where fv.id is null) as "missingVersions"
+      from files f
+      left join file_versions fv on fv.id = f.current_version_id and fv.storage_kind = 's3'
+      left join file_attachments fa on fa.file_id = f.id and fa.org_id = f.org_id and fa.target_table = 'documents'
+     where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
+  `)) as unknown as { rows: { files: string; links: string; missingVersions: string }[] };
+  const row = counts.rows[0];
+  if (Number(row.files) < expectedFiles || Number(row.links) < expectedLinks || Number(row.missingVersions) > 0) {
+    throw new Error(`verification failed: expected ${expectedFiles} files/${expectedLinks} links, found ${row.files}/${row.links}`);
+  }
+}
+
+export async function importNetSuiteAttachments(options: ImportOptions): Promise<ImportSummary> {
+  if (Boolean(options.resolverScript) !== Boolean(options.resolverDeploy)) {
+    throw new Error("--resolver-script and --resolver-deploy must be provided together");
+  }
+  const { orgId, actorId, creds } = await resolveContext(options);
+  if (options.execute && !s3Enabled) {
+    throw new Error("S3/MinIO is not configured; refusing to fall back to database blobs");
+  }
+  const { documents, withoutSourceId } = await sourceDocuments(orgId, options.limit);
+  console.log(`[inventory] resolving attachments for ${documents.length} source transactions`);
+  const fileToDocuments = await attachmentInventory(
+    documents,
+    creds,
+    options.concurrency,
+    options.resolverScript && options.resolverDeploy
+      ? { script: options.resolverScript, deploy: options.resolverDeploy }
+      : undefined,
+  );
+  const sourceLinks = Array.from(fileToDocuments.values()).reduce((sum, ids) => sum + ids.size, 0);
+  const metadata = await fileMetadata(Array.from(fileToDocuments.keys()), creds);
+  const summary: ImportSummary = {
+    sourceDocuments: documents.length,
+    sourceDocumentsWithoutId: withoutSourceId,
+    sourceFiles: metadata.size,
+    sourceLinks,
+    createdFiles: 0,
+    newVersions: 0,
+    unchangedFiles: 0,
+    createdLinks: 0,
+    failures: 0,
+  };
+  console.log(`[inventory] found ${summary.sourceFiles} unique files across ${summary.sourceLinks} transaction links`);
+  if (!options.execute) return summary;
+
+  const files = Array.from(metadata.values());
+  await concurrentMap(files, options.concurrency, async (source, index) => {
+    try {
+      const bytes = await downloadSourceFile(source, creds);
+      const contentType = detectContentType(bytes, source.name);
+      const persisted = await persistFile({
+        orgId,
+        actorId,
+        source,
+        targetDocumentIds: Array.from(fileToDocuments.get(source.id) ?? []),
+        bytes,
+        contentType,
+      });
+      if (persisted.created) summary.createdFiles++;
+      if (persisted.versioned) summary.newVersions++;
+      if (persisted.unchanged) summary.unchangedFiles++;
+      summary.createdLinks += persisted.createdLinks;
+    } catch (error) {
+      summary.failures++;
+      console.error(`[import] source file ${source.id} failed: ${(error as Error).message}`);
+    }
+    if ((index + 1) % 100 === 0 || index + 1 === files.length) {
+      console.log(`[import] ${index + 1}/${files.length} files (${summary.failures} failed)`);
+    }
+  });
+  if (summary.failures) throw new Error(`${summary.failures} source files failed to import`);
+  await verifyImport(orgId, fileToDocuments);
+  return summary;
+}
+
+async function main(): Promise<void> {
+  const summary = await importNetSuiteAttachments(parseArgs(process.argv.slice(2)));
+  console.log(JSON.stringify(summary, null, 2));
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

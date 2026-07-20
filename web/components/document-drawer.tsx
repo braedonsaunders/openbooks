@@ -11,7 +11,6 @@ import { LineGrid, type LineGridColumn } from './line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
 import { CustomFieldInput } from './custom-field-input'
 import { HeaderFields } from './transaction-form/header-fields'
-import { AttachmentPanel } from './attachment-panel'
 import { DocTypeBadge, docTypeMeta } from './doc-type-badge'
 import { PdfButton } from './pdf-button'
 import { FlowManualButtons } from './flow-manual-buttons'
@@ -991,6 +990,7 @@ export function DocumentDrawer({
     <TransactionDrawer
       closeHref={basePath}
       recordId={String(doc.id)}
+      canEditAttachments={canCreate}
       panelClassName={docTypeMeta(config.kind).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
@@ -1259,7 +1259,6 @@ export function DocumentDrawer({
           <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
         ) : null}
 
-        <AttachmentPanel targetTable="documents" targetId={doc.id} canEdit />
       </div>
     </TransactionDrawer>
   )

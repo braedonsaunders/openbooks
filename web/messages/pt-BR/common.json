@@ -186,7 +186,7 @@
     "description": "Nenhum registro corresponde aos filtros atuais."
   },
   "auditTrail": {
-    "tabs": { "details": "Detalhes", "audit": "Trilha de auditoria" },
+    "tabs": { "details": "Detalhes", "attachments": "Anexos", "audit": "Trilha de auditoria" },
     "ariaLabel": "Seções do registro",
     "searchPlaceholder": "Buscar na trilha de auditoria",
     "actionFilter": "Filtrar por ação",
