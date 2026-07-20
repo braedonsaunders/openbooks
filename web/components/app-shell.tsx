@@ -27,7 +27,7 @@ export function AppShell({
   account,
   environments,
   groups,
-  navMode = 'sidebar',
+  navMode = 'topbar',
   defaultCollapsed = false,
   createPermissions,
   canReadParties,
@@ -45,7 +45,7 @@ export function AppShell({
   /** Production org + its sandboxes, for the environment switcher. */
   environments: WorkspaceEnvironments
   groups: SidebarNavGroup[]
-  /** Resolved app-menu layout (user preference, else org default, else sidebar). */
+  /** Resolved app-menu layout (user preference, else org default, else topbar). */
   navMode?: NavMode
   defaultCollapsed?: boolean
   createPermissions: GlobalCreatePermissions

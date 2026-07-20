@@ -95,7 +95,7 @@ export const navigationAndRecords: DocArticle = {
   order: 3,
   summary: 'Learn the shared interaction patterns used throughout the application.',
   updated: '2026-07-19',
-  keywords: ['navigation', 'sidebar', 'search', 'filter', 'pagination', 'drawer', 'draft', 'autosave', 'actions'],
+  keywords: ['navigation', 'top navigation', 'sidebar', 'search', 'filter', 'pagination', 'drawer', 'draft', 'autosave', 'actions'],
   related: ['quick-start', 'transaction-lifecycle'],
   body: `# Navigation, Lists, and Record Drawers
 
@@ -109,6 +109,11 @@ The main navigation is grouped by job: **Home**, **CRM**, **Sales**,
 **Purchases**, **Banking**, **Accounting**, **Projects & Time**, **Reporting**,
 and **Administration**. Your organization can reorder or hide modules, and your
 permissions determine which destinations you can see.
+
+The top menu is the default layout. Each workspace opens as a menu, keeping the
+full page width available for lists, reports, and record drawers. If you prefer
+a persistent left rail, choose **Menu layout → Sidebar** from your account menu;
+your personal choice overrides the organization default.
 
 If a guide names a page that is missing from your navigation, first check your
 role with an administrator. A hidden module does not imply that its records were

@@ -13,7 +13,7 @@ import { DEFAULT_NAV_MODE, isNavMode, type NavMode } from "./nav-mode";
  *
  * The active nav mode for this request: the user's personal choice
  * (users.nav_mode) when set, else the tenant default
- * (orgs.settings.defaultNavMode), else "sidebar". Cached per request so the
+ * (orgs.settings.defaultNavMode), else "topbar". Cached per request so the
  * layout and the account menu can both ask without double-querying.
  */
 export const resolveNavMode = cache(async (): Promise<NavMode> => {

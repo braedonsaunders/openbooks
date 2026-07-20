@@ -30,7 +30,7 @@ export const orgs = pgTable("orgs", {
   baseCurrency: currencyCode("base_currency").notNull(),
   country: text("country").notNull(), // ISO 3166-1 alpha-2
   taxIds: jsonb("tax_ids").$type<Record<string, string>>().default({}), // e.g. { "CA_BN": "..." }
-  settings: jsonb("settings").notNull().default({}),
+  settings: jsonb("settings").notNull().default({ defaultNavMode: "topbar" }),
   /**
    * Environment kind. `production` is the live book. `sandbox` is a clone of a
    * production org (created by the rebase clone engine) — isolated, with all
