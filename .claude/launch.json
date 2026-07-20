@@ -12,6 +12,18 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "web"],
       "port": 4780
+    },
+    {
+      "name": "openbooks-web-4790",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-w", "web", "next", "start", "-p", "4790"],
+      "port": 4790
+    },
+    {
+      "name": "openbooks-web-dev-4791",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-w", "web", "next", "dev", "-p", "4791"],
+      "port": 4791
     }
   ]
 }
