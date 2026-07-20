@@ -100,6 +100,7 @@ export function uniqueNetSuiteTransactionLines(rows: NsLine[]): NsLine[] {
       row.account ?? null, row.expenseaccount ?? null, row.netamount ?? null,
       row.foreignamount ?? null, row.department ?? null, row.entity ?? null,
       row.subsidiary ?? null, row.memo ?? null, row.taxrate1 ?? null,
+      row.taxcode ?? null,
     ]);
     const prior = unique.get(key);
     if (prior) {
@@ -166,7 +167,7 @@ const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD
   t.otherrefnum, t.posting`;
 const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.account,
   tl.expenseaccount, tl.netamount, tl.foreignamount, tl.department, tl.entity, tl.subsidiary,
-  tl.memo, tl.taxrate1`;
+  tl.memo, tl.taxrate1, tl.taxcode`;
 
 export function normalizeNetSuiteAccountingPeriods(
   rows: Record<string, string>[],

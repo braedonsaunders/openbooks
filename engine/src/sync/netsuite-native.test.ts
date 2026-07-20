@@ -17,6 +17,7 @@ const context = {
   deptByRef: new Map(),
   projectByRef: new Map(),
   taxByRate: new Map(),
+  taxCodeByRef: new Map(),
 } as unknown as NativeContext;
 
 const header: NsHeader = {
@@ -75,6 +76,47 @@ test("NetSuite zero-rate lines do not invent an ambiguous tax-code identity", ()
   assert.ok(!("skip" in built));
   assert.equal(built.doc.lines[0]?.taxAmount, "0");
   assert.equal(built.doc.lines[0]?.taxCodeId, null);
+});
+
+test("NetSuite non-zero tax uses the exact source tax code before rate fallback", () => {
+  const taxContext = {
+    ...context,
+    control: { ar: "account-a", ap: "account-a", bank: "account-a" },
+    accountRefById: new Map([["account-a", "10"]]),
+    taxByRate: new Map([["13", { id: "rate-fallback", rate: "13" }]]),
+    taxCodeByRef: new Map([["2529", "source-hst-code"]]),
+  } as unknown as NativeContext;
+  const built = buildNativeFromNetSuite(taxContext, {
+    ...header,
+    ttype: "CustInvc",
+  }, [
+    {
+      transaction: "123", id: "0", mainline: "T", taxline: "F",
+      account: "10", netamount: "113", subsidiary: "1",
+    },
+    {
+      transaction: "123", id: "1", mainline: "F", taxline: "F",
+      account: "20", netamount: "-100", taxrate1: "0.13", taxcode: "2529", subsidiary: "1",
+    },
+    {
+      transaction: "123", id: "2", mainline: "F", taxline: "T",
+      account: "10", netamount: "-13", subsidiary: "1",
+    },
+  ]);
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.lines[0]?.taxCodeId, "source-hst-code");
+  assert.equal(built.doc.lines[0]?.taxAmount, "13.0000");
+});
+
+test("NetSuite non-zero source tax codes fail closed when they were not loaded", () => {
+  const built = buildNativeFromNetSuite(context, {
+    ...header,
+    ttype: "CustInvc",
+  }, [{
+    transaction: "123", id: "1", mainline: "F", taxline: "F",
+    account: "20", netamount: "-100", taxrate1: "0.13", taxcode: "missing", subsidiary: "1",
+  }]);
+  assert.deepEqual(built, { skip: "unmapped tax code missing" });
 });
 
 test("NetSuite account mappings accept explicit custom IDs without connector constants", () => {

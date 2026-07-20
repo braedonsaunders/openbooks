@@ -39,6 +39,7 @@ export interface NsLine {
   netamount?: string | null;
   foreignamount?: string | null;
   taxrate1?: string | null;
+  taxcode?: string | null;
   department?: string | null;
   entity?: string | null;
   subsidiary?: string | null;
@@ -117,6 +118,10 @@ export function buildNativeFromNetSuite(
   const lineTaxCode = (l: NsLine): { codeId: string; rateUnits: bigint } | null => {
     const tr = l.taxrate1;
     if (tr == null || tr === "") return null;
+    const sourceRateUnits = toUnits(String(Number(tr) * 100));
+    if (sourceRateUnits === 0n) return null;
+    const sourceCodeId = l.taxcode ? ctx.taxCodeByRef.get(String(l.taxcode)) : null;
+    if (sourceCodeId) return { codeId: sourceCodeId, rateUnits: sourceRateUnits };
     const key = String(Math.round(Number(tr) * 100));
     const code = ctx.taxByRate.get(key);
     if (!code) return null;
@@ -139,6 +144,14 @@ export function buildNativeFromNetSuite(
     (line) => line.subsidiary && !ctx.subsidiaryByRef.has(line.subsidiary),
   )?.subsidiary;
   if (unmappedLineSubsidiary) return { skip: `unmapped subsidiary ${unmappedLineSubsidiary}` };
+  const unmappedTaxCode = rawLines.find((line) =>
+    line.mainline === "F"
+    && line.taxline === "F"
+    && line.taxcode
+    && Number(line.taxrate1 ?? 0) !== 0
+    && !ctx.taxCodeByRef.has(String(line.taxcode)),
+  )?.taxcode;
+  if (unmappedTaxCode) return { skip: `unmapped tax code ${unmappedTaxCode}` };
   const base: Omit<NativeDocument, "kind" | "lines"> = {
     sourceRef: h.id,
     posting: true,
