@@ -130,7 +130,7 @@ export const users = pgTable(
      *  (orgs.settings.defaultLocale). Shipped locales: web/i18n/config.ts. */
     locale: text("locale"),
     /** Navigation layout: 'sidebar' | 'topbar'. Null = org default
-     *  (orgs.settings.navMode). See web/lib/nav-mode.ts. */
+     *  (orgs.settings.defaultNavMode). See web/lib/nav-mode.ts. */
     navMode: text("nav_mode"),
     /**
      * The user's personal home dashboard (insight_dashboards.id). Null = fall
