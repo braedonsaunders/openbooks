@@ -61,6 +61,7 @@ const NS_ITEM_KIND: Record<string, string> = {
 const NS_BILLING: Record<string, string> = {
   TM: "time_and_materials", FBI: "fixed_price", FBM: "fixed_price",
 };
+const NETSUITE_ID_WINDOW = 5_000;
 
 export interface NetSuiteAccountMappings {
   projectForemanField?: string;
@@ -81,7 +82,7 @@ const safeSuiteScriptId = (value: unknown, label: string): string | null => {
   return field;
 };
 
-export function numericIdWindows(maxId: number, width = 5_000): Array<[number, number]> {
+export function numericIdWindows(maxId: number, width = NETSUITE_ID_WINDOW): Array<[number, number]> {
   if (!Number.isSafeInteger(maxId) || maxId < 0) throw new Error("maxId must be a non-negative safe integer");
   if (!Number.isSafeInteger(width) || width < 1) throw new Error("window width must be a positive safe integer");
   const windows: Array<[number, number]> = [];
@@ -624,16 +625,25 @@ export class NetSuiteSource implements MigrationSource {
     // SuiteQL paged queries are capped account-wide. Time is commonly the
     // largest master-data stream, so keep every request bounded independently
     // of account size while preserving the incremental watermark.
-    for (const [lo, hi] of numericIdWindows(maxId)) {
+    const partitions = numericIdWindows(maxId).map(([lo, hi], index) => {
       const conditions = [`tb.id > ${lo}`, `tb.id <= ${hi}`];
       if (changed) conditions.push(changed);
-      rows.push(...(await this.q<Record<string, string>>(`
+      return {
+        id: `time-${String(index).padStart(4, "0")}`,
+        sql: `
         SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
                tb.rate, tb.laborcost, tb.isbillable,
                ${timeType},
                TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
           FROM timebill tb
-         WHERE ${conditions.join(" AND ")}`)));
+         WHERE ${conditions.join(" AND ")}`,
+      };
+    });
+    if (since) {
+      for (const partition of partitions) rows.push(...(await this.q<Record<string, string>>(partition.sql)));
+    } else {
+      const exported = await this.bridge.bulkQuery<Record<string, string>>(partitions);
+      for (const partition of partitions) rows.push(...(exported.get(partition.id) ?? []));
     }
     return rows.map((tb) => ({
       sourceRef: String(tb.id),
@@ -677,6 +687,7 @@ export class NetSuiteSource implements MigrationSource {
     );
     const totalTxns = Number(totalStr ?? 0);
     const headers: NsHeader[] = [];
+    let fullWindows: Array<[number, number]> = [];
     if (effectiveSince) {
       const clause = `t.lastmodifieddate >= ${this.ts(effectiveSince)} AND t.lastmodifieddate <= ${this.ts(syncedThrough)}`;
       headers.push(...(await this.q<NsHeader>(`SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause}`)));
@@ -684,13 +695,14 @@ export class NetSuiteSource implements MigrationSource {
     } else {
       const [{ m }] = await this.q<{ m: string }>("SELECT MAX(t.id) AS m FROM transaction t");
       const maxId = Number(m ?? 0);
-      const W = 5000;
-      for (let lo = 0; lo <= maxId; lo += W) {
-        headers.push(
-          ...(await this.q<NsHeader>(
-            `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id > ${lo} AND t.id <= ${lo + W}`,
-          )),
-        );
+      fullWindows = numericIdWindows(maxId);
+      const partitions = fullWindows.map(([lo, hi], index) => ({
+        id: `header-${String(index).padStart(4, "0")}`,
+        sql: `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id > ${lo} AND t.id <= ${hi}`,
+      }));
+      const exported = await this.bridge.bulkQuery<NsHeader>(partitions);
+      for (const partition of partitions) {
+        headers.push(...(exported.get(partition.id) ?? []));
         ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
       }
     }
@@ -698,18 +710,41 @@ export class NetSuiteSource implements MigrationSource {
     // Lines for exactly those transactions (chunked IN lists).
     const linesByTxn = new Map<string, NsLine[]>();
     const tids = headers.map((h) => String(h.id));
-    for (let i = 0; i < tids.length; i += 150) {
-      const chunk = tids.slice(i, i + 150);
-      if (chunk.length === 0) continue;
-      ctx.onProgress?.({ phase: "pull", message: "Pulling transaction lines…", current: Math.min(i + 150, tids.length), total: tids.length });
-      const rows = await this.q<NsLine>(
-        `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")})`,
-      );
+    const collectLines = (rows: NsLine[]) => {
       for (const l of rows) {
         const key = String(l.transaction);
         const arr = linesByTxn.get(key);
         if (arr) arr.push(l);
         else linesByTxn.set(key, [l]);
+      }
+    };
+    if (effectiveSince) {
+      for (let i = 0; i < tids.length; i += 150) {
+        const chunk = tids.slice(i, i + 150);
+        if (chunk.length === 0) continue;
+        ctx.onProgress?.({ phase: "pull", message: "Pulling transaction lines…", current: Math.min(i + 150, tids.length), total: tids.length });
+        collectLines(await this.q<NsLine>(
+          `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")})`,
+        ));
+      }
+    } else {
+      const occupiedWindows = new Set(headers.map((header) => Math.floor((Number(header.id) - 1) / NETSUITE_ID_WINDOW)));
+      const windowsWithHeaders = fullWindows.filter((_, index) => occupiedWindows.has(index));
+      const partitions = windowsWithHeaders.map(([lo, hi], index) => ({
+        id: `line-${String(index).padStart(4, "0")}`,
+        sql: `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction > ${lo} AND tl.transaction <= ${hi}`,
+      }));
+      const exported = await this.bridge.bulkQuery<NsLine>(partitions);
+      let windowsRead = 0;
+      for (const partition of partitions) {
+        collectLines(exported.get(partition.id) ?? []);
+        windowsRead += 1;
+        ctx.onProgress?.({
+          phase: "pull",
+          message: "Pulling transaction lines…",
+          current: Math.round((windowsRead / Math.max(1, partitions.length)) * tids.length),
+          total: tids.length,
+        });
       }
     }
     for (const arr of linesByTxn.values()) arr.sort((a, b) => Number(a.id) - Number(b.id));
@@ -749,9 +784,12 @@ export class NetSuiteSource implements MigrationSource {
         )));
       }
     } else {
-      links.push(...(await this.q<Link>(
-        "SELECT previousdoc, nextdoc, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment'",
-      )));
+      const partition = {
+        id: "applications",
+        sql: "SELECT previousdoc, nextdoc, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment'",
+      };
+      const exported = await this.bridge.bulkQuery<Link>([partition]);
+      links.push(...(exported.get(partition.id) ?? []));
     }
     const applications = links
       .filter((l) => l.foreignamount != null && Number(l.foreignamount) > 0)
