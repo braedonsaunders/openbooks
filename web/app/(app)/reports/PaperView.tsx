@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { cn } from '@openbooks/ui'
+import { ReportPaper } from './ReportPaper'
 
 /**
  * The ONE on-screen renderer for the unified report shape — the common
@@ -36,6 +37,7 @@ export type PaperData = {
   title: string
   periodPhrase?: string
   note?: string
+  summary?: { label: string; value: PaperCell }[]
   groups: PaperGroup[]
 }
 
@@ -75,15 +77,19 @@ export function PaperView({
   emptyLabel: string
   currency?: string
 }) {
+  const wide = data.groups.some((group) => group.columns.length > 5)
   return (
-    <div className="mx-auto w-full max-w-4xl rounded-lg border border-slate-200 bg-white px-6 py-8 text-slate-900 shadow-sm sm:px-10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
-      <header className="mb-6 space-y-0.5 text-center">
-        <div className="text-base font-semibold">{company}</div>
-        <div className="text-xl font-bold tracking-tight">{data.title}</div>
-        {data.periodPhrase ? <div className="text-sm text-slate-500 dark:text-slate-400">{data.periodPhrase}</div> : null}
-        {data.note ? <div className="text-xs text-slate-400 italic dark:text-slate-500">{data.note}</div> : null}
-      </header>
-
+    <ReportPaper company={company} title={data.title} periodPhrase={data.periodPhrase} note={data.note} wide={wide}>
+      {data.summary?.length ? (
+        <div className="mb-6 grid grid-flow-col auto-cols-fr divide-x divide-slate-200 border-y border-slate-200 py-3 dark:divide-slate-700 dark:border-slate-700">
+          {data.summary.map((item, index) => (
+            <div key={index} className="min-w-0 px-3 text-center">
+              <div className="truncate text-xs text-slate-500 dark:text-slate-400">{item.label}</div>
+              <div className="truncate font-semibold tabular-nums">{fmt(item.value, false, currency)}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div className="space-y-7">
         {data.groups.map((group, gi) => {
           const showTitle = group.title && (data.groups.length > 1 || !!group.subtitle)
@@ -165,6 +171,6 @@ export function PaperView({
           )
         })}
       </div>
-    </div>
+    </ReportPaper>
   )
 }

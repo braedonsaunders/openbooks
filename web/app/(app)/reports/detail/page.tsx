@@ -10,6 +10,7 @@ import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { currencySymbol } from '../../../../lib/statement-format'
 import { money } from '../../../../lib/format'
 import { TxnLink } from '../TxnLink'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,10 +72,16 @@ export default async function DrillDetail({
         </>
       }
     >
-      {result.count === 0 ? (
-        <p className="py-8 text-center text-slate-400 italic">{t('detail.empty')}</p>
-      ) : (
-        <>
+      <ReportPaper
+        company={org?.name ?? ''}
+        title={q.label || t('detail.title')}
+        periodPhrase={q.from && q.to ? t('pnl.dateRange', { from: q.from, to: q.to }) : undefined}
+        wide
+      >
+        {result.count === 0 ? (
+          <p className="py-8 text-center text-slate-400 italic">{t('detail.empty')}</p>
+        ) : (
+          <>
           <Table>
             <TableHeader>
               <TableRow>
@@ -122,8 +129,9 @@ export default async function DrillDetail({
             </TableBody>
           </Table>
           <Pagination basePath="/reports/detail" currentParams={sp} total={result.count} page={page} perPage={PAGE_SIZE} />
-        </>
-      )}
+          </>
+        )}
+      </ReportPaper>
     </ListPageLayout>
   )
 }

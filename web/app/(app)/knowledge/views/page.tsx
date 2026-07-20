@@ -11,6 +11,7 @@ import { requirePermission } from '../../../../lib/authz'
 import { loadViews } from '../../../../lib/views'
 import { NewViewButton } from './NewViewButton'
 import { ViewStudio } from './ViewStudio'
+import { orgBranding } from '../../../../lib/report-pdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,10 @@ export default async function ViewsPage({
   const params = parseListParams(sp, { sort: 'updated', dir: 'desc', perPage: PER_PAGE, allowedSorts: ['updated', 'name'] as const })
   const scopeFilter = pickString(sp.scope) ?? 'all'
 
-  const all = await loadViews(authz.user.orgId, authz.user.id, authz.permissions)
+  const [all, branding] = await Promise.all([
+    loadViews(authz.user.orgId, authz.user.id, authz.permissions),
+    orgBranding(authz.user.orgId),
+  ])
   const q = params.q?.toLowerCase()
   const filtered = all.filter((s) => {
     if (scopeFilter !== 'all' && s.scope !== scopeFilter) return false
@@ -142,7 +146,14 @@ export default async function ViewsPage({
       )}
       <Pagination basePath="/knowledge/views" currentParams={currentParams} page={params.page} perPage={PER_PAGE} total={total} />
 
-      {openView ? <ViewStudio view={openView} canCreate={canCreate} canAdmin={authz.permissions.has('*') || openView.owner_id === authz.user.id} /> : null}
+      {openView ? (
+        <ViewStudio
+          view={openView}
+          canCreate={canCreate}
+          canAdmin={authz.permissions.has('*') || openView.owner_id === authz.user.id}
+          company={branding.orgName}
+        />
+      ) : null}
     </ListPageLayout>
   )
 }

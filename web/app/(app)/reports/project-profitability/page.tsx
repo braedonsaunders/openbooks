@@ -11,6 +11,7 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
 import { ExportMenu } from '../ExportMenu'
 import { PaperView, type PaperCell } from '../PaperView'
+import { requirePermission } from '../../../../lib/authz'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,15 +23,16 @@ export default async function ProjectProfitabilityPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('reports')
+  const authz = await requirePermission('reports.read')
   const sp = await searchParams
   const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
   const dims = q.dims
   const [result, opts, org, branding] = await Promise.all([
     projectProfitability(period.from, period.to, { dims }),
     dimensionOptions(),
-    orgInfo(),
-    orgBranding(),
+    orgInfo(authz.user.orgId),
+    orgBranding(authz.user.orgId),
   ])
   const sym = currencySymbol(org?.base_currency)
 

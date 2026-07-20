@@ -12,6 +12,7 @@ import { TxnLink } from '../TxnLink'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,10 +52,11 @@ export default async function JournalPage({
         </>
       }
     >
-      {journal.entries.length === 0 ? (
-        <p className="py-8 text-center text-slate-400 italic">{t('journal.empty')}</p>
-      ) : (
-        <div className="space-y-6">
+      <ReportPaper company={org?.name ?? ''} title={t('journal.title')} periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })} wide>
+        {journal.entries.length === 0 ? (
+          <p className="py-8 text-center text-slate-400 italic">{t('journal.empty')}</p>
+        ) : (
+          <div className="space-y-6">
           {journal.entries.map((e) => (
             <div key={e.id}>
               <div className="mb-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm">
@@ -97,8 +99,9 @@ export default async function JournalPage({
               </Table>
             </div>
           ))}
-        </div>
-      )}
+          </div>
+        )}
+      </ReportPaper>
     </ListPageLayout>
   )
 }

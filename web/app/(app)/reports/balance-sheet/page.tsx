@@ -9,7 +9,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { money } from '../../../../lib/format'
 import { StatementMatrixTable } from '../StatementMatrixTable'
-import { StatementPaper } from '../StatementPaper'
+import { ReportPaper } from '../ReportPaper'
 import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
@@ -102,8 +102,8 @@ export default async function BalanceSheet({
         </>
       }
     >
-      <StatementPaper
-        company={org?.name ?? 'openbooks'}
+      <ReportPaper
+        company={org?.name ?? ''}
         title={t('balanceSheet.title')}
         periodPhrase={t('balanceSheet.asOf', { date: period.to })}
         note={scaleFactor(q.scale).note || undefined}
@@ -125,7 +125,7 @@ export default async function BalanceSheet({
             backLabel: t('balanceSheet.title'),
           }}
         />
-      </StatementPaper>
+      </ReportPaper>
     </ListPageLayout>
   )
 }

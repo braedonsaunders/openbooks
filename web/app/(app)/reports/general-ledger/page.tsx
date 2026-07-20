@@ -13,6 +13,7 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { TxnLink } from '../TxnLink'
 import { SaveViewButton } from '../SaveViewButton'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,10 +53,11 @@ export default async function GeneralLedgerPage({
         </>
       }
     >
-      {gl.accounts.length === 0 ? (
-        <p className="py-8 text-center text-slate-400 italic">{t('generalLedger.empty')}</p>
-      ) : (
-        <div className="space-y-8">
+      <ReportPaper company={org?.name ?? ''} title={t('generalLedger.title')} periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })} wide>
+        {gl.accounts.length === 0 ? (
+          <p className="py-8 text-center text-slate-400 italic">{t('generalLedger.empty')}</p>
+        ) : (
+          <div className="space-y-8">
           {gl.accounts.map((a) => (
             <div key={a.id}>
               <h3 className="mb-1 flex items-baseline gap-2 text-sm font-semibold">
@@ -115,8 +117,9 @@ export default async function GeneralLedgerPage({
               </Table>
             </div>
           ))}
-        </div>
-      )}
+          </div>
+        )}
+      </ReportPaper>
     </ListPageLayout>
   )
 }

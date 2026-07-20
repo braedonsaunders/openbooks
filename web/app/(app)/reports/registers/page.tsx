@@ -13,6 +13,7 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { TxnLink } from '../TxnLink'
 import { SaveViewButton } from '../SaveViewButton'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,10 +64,16 @@ export default async function RegistersPage({
         </>
       }
     >
-      {reg.parties.length === 0 ? (
-        <p className="py-8 text-center text-slate-400 italic">{t('registers.empty')}</p>
-      ) : (
-        <div className="space-y-8">
+      <ReportPaper
+        company={org?.name ?? ''}
+        title={side === 'ap' ? t('registers.apTitle') : t('registers.arTitle')}
+        periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
+        wide
+      >
+        {reg.parties.length === 0 ? (
+          <p className="py-8 text-center text-slate-400 italic">{t('registers.empty')}</p>
+        ) : (
+          <div className="space-y-8">
           {reg.parties.map((pt) => (
             <div key={pt.partyId ?? 'none'}>
               <h3 className="mb-1 flex items-baseline gap-3 text-sm font-semibold">
@@ -122,8 +129,9 @@ export default async function RegistersPage({
               </Table>
             </div>
           ))}
-        </div>
-      )}
+          </div>
+        )}
+      </ReportPaper>
     </ListPageLayout>
   )
 }

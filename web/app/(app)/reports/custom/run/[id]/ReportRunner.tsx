@@ -11,6 +11,7 @@ import type { ReportCustomQuery, ReportRunResult } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { ResultView } from '../../ResultView'
 import { ScheduleEditor, type ScheduleRow } from './ScheduleEditor'
+import { ReportPaper } from '../../../ReportPaper'
 
 type RunRow = {
   id: string
@@ -45,6 +46,7 @@ export function ReportRunner({
   definition,
   schedules,
   recentRuns,
+  company,
   canCreate,
   canSchedule,
 }: {
@@ -58,6 +60,7 @@ export function ReportRunner({
   }
   schedules: ScheduleRow[]
   recentRuns: RunRow[]
+  company: string
   canCreate: boolean
   canSchedule: boolean
 }) {
@@ -143,11 +146,11 @@ export function ReportRunner({
         {/* --- result --- */}
         <section>
           {result ? (
-            <ResultView result={result} />
+            <ResultView company={company} title={displayName} description={displayDescription} result={result} />
           ) : (
-            <div className="rounded-lg border border-dashed border-slate-300 px-4 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {t('emptyHint')}
-            </div>
+            <ReportPaper company={company} title={displayName} periodPhrase={displayDescription || undefined}>
+              <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{t('emptyHint')}</p>
+            </ReportPaper>
           )}
         </section>
 

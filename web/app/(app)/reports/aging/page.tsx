@@ -11,6 +11,7 @@ import { money } from '../../../../lib/format'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,8 +66,9 @@ export default async function Aging({
         </>
       }
     >
-      {detailResult ? (
-        <Table>
+      <ReportPaper company={org?.name ?? ''} title={title} periodPhrase={t('asOf', { date: asOf })} wide>
+        {detailResult ? (
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{tc('labels.party')}</TableHead>
@@ -103,9 +105,9 @@ export default async function Aging({
               ))
             )}
           </TableBody>
-        </Table>
-      ) : (
-        <Table>
+          </Table>
+        ) : (
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{tc('labels.party')}</TableHead>
@@ -151,8 +153,9 @@ export default async function Aging({
               </TableRow>
             ) : null}
           </TableBody>
-        </Table>
-      )}
+          </Table>
+        )}
+      </ReportPaper>
     </ListPageLayout>
   )
 }

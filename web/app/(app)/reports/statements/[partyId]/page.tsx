@@ -13,6 +13,7 @@ import { ReportFilterBar } from '../../ReportFilterBar'
 import { ExportMenu } from '../../ExportMenu'
 import { TxnLink } from '../../TxnLink'
 import { SaveViewButton } from '../../SaveViewButton'
+import { ReportPaper } from '../../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,23 +67,29 @@ export default async function PartnerStatementPage({
             <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
             <ReportFilterBar controls={{ period: true }} actions={<><SaveViewButton /><ExportMenu kind="partner-statement" params={{ ...sp, party: partyId, side }} /></>} />
           </div>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-slate-200 px-4 py-2 text-sm dark:border-slate-800">
-            {BUCKETS.map((b) => (
-              <span key={b} className="flex items-baseline gap-1.5">
-                <span className="text-xs text-slate-500 dark:text-slate-400">{bucketLabels[b]}</span>
-                <span className="tabular-nums">{m(st.aging[b])}</span>
-              </span>
-            ))}
-            <span className="flex items-baseline gap-1.5 font-semibold">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{t('aging.columns.total')}</span>
-              <span className="tabular-nums">{m(st.aging.total)}</span>
-            </span>
-          </div>
         </>
       }
     >
-      <Table>
-        <TableHeader>
+      <ReportPaper
+        company={org?.name ?? ''}
+        title={st.party.name ?? t('statements.title')}
+        periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
+        wide
+      >
+        <div className="mb-6 grid grid-flow-col auto-cols-fr divide-x divide-slate-200 border-y border-slate-200 py-3 dark:divide-slate-700 dark:border-slate-700">
+          {BUCKETS.map((b) => (
+            <div key={b} className="min-w-0 px-2 text-center">
+              <div className="truncate text-xs text-slate-500 dark:text-slate-400">{bucketLabels[b]}</div>
+              <div className="truncate tabular-nums">{m(st.aging[b])}</div>
+            </div>
+          ))}
+          <div className="min-w-0 px-2 text-center font-semibold">
+            <div className="truncate text-xs text-slate-500 dark:text-slate-400">{t('aging.columns.total')}</div>
+            <div className="truncate tabular-nums">{m(st.aging.total)}</div>
+          </div>
+        </div>
+        <Table>
+          <TableHeader>
           <TableRow>
             <TableHead className="w-28">{t('generalLedger.columns.date')}</TableHead>
             <TableHead className="w-24">{t('generalLedger.columns.entry')}</TableHead>
@@ -126,8 +133,9 @@ export default async function PartnerStatementPage({
               {m(st.closing)}
             </TableCell>
           </TableRow>
-        </TableBody>
-      </Table>
+          </TableBody>
+        </Table>
+      </ReportPaper>
     </ListPageLayout>
   )
 }

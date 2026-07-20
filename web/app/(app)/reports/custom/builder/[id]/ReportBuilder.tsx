@@ -144,6 +144,7 @@ export function ReportBuilder({
     ? {
         title: name || t('namePlaceholder'),
         periodPhrase: description || undefined,
+        summary: preview.summary,
         groups: preview.groups.map((g) => ({
           title: g.title,
           subtitle: g.subtitle,

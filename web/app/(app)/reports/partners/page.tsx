@@ -11,6 +11,7 @@ import { currencySymbol } from '../../../../lib/statement-format'
 import { money } from '../../../../lib/format'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ReportPaper } from '../ReportPaper'
 
 export const dynamic = 'force-dynamic'
 const PER_PAGE = 50
@@ -62,8 +63,13 @@ export default async function Partners({
         </>
       }
     >
-      <Table>
-        <TableHeader>
+      <ReportPaper
+        company={org?.name ?? ''}
+        title={k === 'payable' ? t('payablesTitle') : t('receivablesTitle')}
+        periodPhrase={t('description')}
+      >
+        <Table>
+          <TableHeader>
           <TableRow>
             <TableHead>{tc('labels.party')}</TableHead>
             <TableHead className="text-right">{t('columns.outstanding')}</TableHead>
@@ -84,11 +90,12 @@ export default async function Partners({
               <TableCell className="text-right tabular-nums">{r.line_count}</TableCell>
             </TableRow>
           ))}
-        </TableBody>
-      </Table>
-      <div className="mt-3">
-        <Pagination basePath="/reports/partners" currentParams={sp} total={filtered.length} page={params.page} perPage={PER_PAGE} />
-      </div>
+          </TableBody>
+        </Table>
+        <div className="mt-3">
+          <Pagination basePath="/reports/partners" currentParams={sp} total={filtered.length} page={params.page} perPage={PER_PAGE} />
+        </div>
+      </ReportPaper>
     </ListPageLayout>
   )
 }
