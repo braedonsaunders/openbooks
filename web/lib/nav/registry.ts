@@ -158,7 +158,7 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'ar',
     href: '/ar',
-    label: 'Invoices',
+    label: 'Accounts Receivable',
     iconKey: 'clipboard-check',
     group: 'customers',
     subgroup: 'sell-collect',
@@ -223,7 +223,7 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'ap',
     href: '/ap',
-    label: 'Bills',
+    label: 'Accounts Payable',
     iconKey: 'clipboard',
     group: 'purchasing',
     subgroup: 'buy',
