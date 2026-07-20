@@ -72,7 +72,7 @@ export function DocsSidebar({
     return articles.filter((article) => {
       const section = article.section ? sectionByKey.get(article.section) : undefined
       const category = categoryByKey.get(article.category)
-      const haystack = [article.title, article.summary, article.keywords.join(' '), section?.title, category?.title]
+      const haystack = [article.title, article.summary, article.keywords.join(' '), article.text, section?.title, category?.title]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
