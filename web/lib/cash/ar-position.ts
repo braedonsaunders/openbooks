@@ -1,20 +1,24 @@
 import "server-only";
 import {
   addDays,
+  bankBalances,
   buildWeekGrid,
+  categoryWeekly,
   daysBetween,
+  loadCategories,
   openItems,
   paymentStats,
   resolveAsOf,
   scheduleForecast,
   summariseSide,
   toISO,
-  weekLabel,
-  parseISO,
+  type CategoryWeekly,
   type ForecastEntry,
   type OpenItem,
   type SideSummary,
+  type WeekRow,
 } from "./core";
+import { buildTimeline, type ApSettings } from "./cash-position";
 
 export interface ArWeek {
   weekStart: string;
@@ -48,8 +52,15 @@ export interface ArPosition {
   summary: SideSummary;
   weeks: ArWeek[];
   byCustomer: CustomerReceivable[];
-  /** Collections worklist — most overdue / largest first. */
+  /**
+   * Collections worklist — every scheduled receivable in the horizon, most
+   * overdue first then largest. The cockpit pre-checks the overdue ones.
+   */
   worklist: ForecastEntry[];
+  /** Recurring category flows per week — feeds the schedule drill's chips. */
+  categories: CategoryWeekly[];
+  /** Full shared-engine weekly rows — the per-week transaction drill. */
+  timeline: WeekRow[];
 }
 
 function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivable[] {
@@ -73,36 +84,54 @@ function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivable[] {
 
 /**
  * Accounts-Receivable operational position — the AR cockpit's data source.
- * Open receivables, aging, predicted collection schedule and a collections
- * worklist, all off the shared cash engine so it agrees with the analytics
- * forecast and the AP cockpit to the penny.
+ * Open receivables, aging, predicted collection schedule, the collections
+ * worklist, and the full shared weekly timeline (for the per-week drill), all
+ * off the shared cash engine so it agrees with the analytics forecast and the
+ * AP cockpit to the penny.
  */
 export async function arPosition(
   orgId: string,
   horizonWeeks: number,
+  apSettings: ApSettings,
   asOfDate?: string,
 ): Promise<ArPosition> {
   const asOfIso = resolveAsOf(asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, arStats] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs] = await Promise.all([
     openItems("ar", asOfIso),
+    openItems("ap", asOfIso),
     paymentStats("ar", asOfIso),
+    paymentStats("ap", asOfIso),
+    bankBalances(asOfIso),
+    loadCategories(orgId),
   ]);
+  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts)));
 
+  const startingCash = banks.reduce((a, b) => a + b.balance, 0);
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
+  const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
+  const timeline = buildTimeline({
+    weekStarts: grid.weekStarts,
+    startingCash,
+    arByWeek: ar.byWeek,
+    apByWeek: ap.byWeek,
+    categories,
+    apSettings,
+  });
+
   const summary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg);
   const current = summary.buckets.find((b) => b.label === "Current")?.amount ?? 0;
   const overdue = Math.max(0, summary.outstanding - current);
   const overdueCount = arItems.filter((it) => it.dueDate && daysBetween(it.dueDate, grid.asOf) > 0).length;
 
-  const weeks: ArWeek[] = grid.weekStarts.map((k) => {
+  const weeks: ArWeek[] = grid.weekStarts.map((k, i) => {
     const entries = (ar.byWeek.get(k) ?? []).slice().sort((a, b) => b.amount - a.amount);
-    const cur = parseISO(k);
+    const w = timeline.weeks[i]!;
     return {
       weekStart: k,
-      weekEnd: toISO(addDays(cur, 6)),
-      label: `${weekLabel(cur)} – ${weekLabel(addDays(cur, 6))}`,
+      weekEnd: w.weekEnd,
+      label: w.label,
       amount: entries.reduce((a, e) => a + e.amount, 0),
       count: entries.length,
       entries,
@@ -119,8 +148,7 @@ export async function arPosition(
     .sort((a, b) => {
       if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
       return b.amount - a.amount;
-    })
-    .slice(0, 12);
+    });
 
   return {
     asOf: asOfIso,
@@ -135,5 +163,7 @@ export async function arPosition(
     weeks,
     byCustomer: groupByCustomer(arItems, grid.asOf),
     worklist,
+    categories,
+    timeline: timeline.weeks,
   };
 }
