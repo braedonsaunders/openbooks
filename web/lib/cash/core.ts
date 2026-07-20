@@ -160,12 +160,23 @@ export function resolveAsOf(asOfDate?: string): string {
 export async function openItems(side: Side, asOf: string): Promise<OpenItem[]> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
+  // The CASH cockpit deals in payable/receivable DOCUMENTS — the things a
+  // pay run pays and a collections run collects. Journal legs on the control
+  // accounts (month-end accruals, opening balances, reversals) are real GL and
+  // belong to aging/reconciliation surfaces, but they are NOT payables: an
+  // accrual journal must never appear in "Open payables" or the pay-run
+  // planner. Settlements drain from BOTH application roles (a journal-netted
+  // bill is just as paid as a payment-settled one).
+  const kindFilter = side === "ap"
+    ? sql`d.kind in ('vendor_bill', 'expense_report')`
+    : sql`d.kind = 'customer_invoice'`;
   const r = (await db.execute(sql`
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              je.source_document_id as doc_id,
              abs(jl.amount) - coalesce((
-               select sum(x.amount) from applications x where x.to_line_id = jl.id and x.unapplied_at is null
+               select sum(x.amount) from applications x
+                where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
              ), 0) as remaining
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
@@ -177,8 +188,8 @@ export async function openItems(side: Side, asOf: string): Promise<OpenItem[]> {
            coalesce(p.display_name, 'Unspecified') as party_name,
            oi.tran_date, oi.due_date, oi.remaining
       from oi
+      join documents d on d.id = oi.doc_id and ${kindFilter}
       left join parties p on p.id = oi.party_id
-      left join documents d on d.id = oi.doc_id
      where oi.remaining > 0.005
   `)) as any;
   return (r.rows as any[]).map((x) => ({
