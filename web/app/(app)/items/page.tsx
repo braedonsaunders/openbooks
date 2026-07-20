@@ -33,6 +33,7 @@ const ITEM_KINDS = [
   'assembly',
   'kit',
   'other_charge',
+  'equipment_charge',
   'labor',
   'absence',
   'discount',

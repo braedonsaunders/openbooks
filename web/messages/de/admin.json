@@ -1418,6 +1418,14 @@
         "title": "Konsolidierte Wechselkurse",
         "description": "Periodenaktuelle, durchschnittliche und historische Kurse für die Konsolidierung von Tochtergesellschaften."
       },
+      "item-rate-books": {
+        "title": "Artikel-Satzbücher",
+        "description": "Satzbücher nach Kunde, Projekt und Organisation für Geräte und andere Artikelverrechnungen."
+      },
+      "item-rate-book-assignments": {
+        "title": "Satzbuchzuordnungen",
+        "description": "Legen Sie fest, welches zeitlich gültige Satzbuch für einen Kunden oder ein Projekt gilt."
+      },
       "recognition-rules": {
         "title": "Realisierungsregeln",
         "description": "Wie Umsatz über die Zeit realisiert wird — Methode, Zeitpunkt und Konten (ASC 606)."
@@ -1556,7 +1564,11 @@
       "receivedNotBilledAccountId": "Konto erhalten, nicht berechnet",
       "assemblyItemId": "Baugruppenartikel",
       "componentItemId": "Komponentenartikel",
-      "quantityPer": "Menge pro"
+      "quantityPer": "Menge pro",
+      "rateBookId": "Satzbuch",
+      "customerId": "Kunde",
+      "projectId": "Projekt",
+      "isDefault": "Standard"
     },
     "options": {
       "appliesTo": {

@@ -343,6 +343,15 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'assets.read',
   },
   {
+    key: 'equipment',
+    href: '/assets/equipment',
+    label: 'Equipment',
+    iconKey: 'truck',
+    group: 'operations',
+    subgroup: 'catalog',
+    requiredPermission: 'assets.read',
+  },
+  {
     key: 'tax-depreciation',
     href: '/assets/tax-pools',
     label: 'Tax Depreciation',
@@ -388,7 +397,7 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'close.read',
   },
 
-  // Operations — delivery, catalog, and people. The unified party directory
+  // Operations — delivery, catalog, equipment, and people. The unified party directory
   // (/parties) is intentionally NOT in the nav: parties are an internal
   // abstraction; end users only see role-scoped views (Customers, Vendors,
   // Employees).
@@ -636,7 +645,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'receipts',
   ],
   purchasing: ['purchase-orders', 'ap', 'payments', 'expenses', 'vendors'],
-  operations: ['projects', 'timesheets', 'items', 'inventory', 'employees'],
+  operations: ['projects', 'timesheets', 'items', 'inventory', 'equipment', 'employees'],
   banking: [
     'banking',
     'banking-cash',

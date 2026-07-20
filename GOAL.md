@@ -85,7 +85,9 @@ accounts match NetSuite exactly**.
 - [x] Bank reconciliation: OFX/CSV import → dedupe → auto-match → two-pane
       workspace → zero-difference sign-off *(2026-07-14)*
 - [x] GST/HST return (tax report lines → GST34 numbers, immutable filing history, and government-channel guidance)
-- [ ] Fixed assets + depreciation runs (replace the locked FAM bundle)
+- [x] Assets: fixed-asset books and depreciation runs, tax pools, plus a
+      financial equipment register with shared effective-dated item rates,
+      project cost recovery, T&M billing, utilization, and ROI *(2026-07-19)*
 - [ ] Payroll journal import + labor burden runs (Paymate bridge)
 - [x] Period close operating system: Setup owns fiscal calendars, generated
       periods, book/entity/module locks, versioned dependency blueprints,

@@ -61,6 +61,17 @@ export const cmp = (a: string, b: string) => {
   return d < 0n ? -1 : d > 0n ? 1 : 0;
 };
 
+/** Multiply two numeric(19,4) values with exact round-half-up semantics.
+ * Unlike mulRate, zero and negative operands are valid: this is quantity ×
+ * unit amount, not an FX conversion. */
+export function mul(a: string, b: string): string {
+  const product = toUnits(a) * toUnits(b);
+  const negative = product < 0n;
+  const absolute = negative ? -product : product;
+  const rounded = (absolute + SCALE / 2n) / SCALE;
+  return fromUnits(negative ? -rounded : rounded);
+}
+
 /**
  * Multiply a numeric(19,4) transaction amount by a numeric(19,10) FX rate,
  * returning the functional-currency amount rounded to 4 decimals. Keeping the

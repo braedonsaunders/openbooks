@@ -15,6 +15,8 @@
     "category": "Kategorie",
     "unit": "Einheit",
     "defaultRate": "Standardsatz",
+    "defaultCost": "Standardkosten",
+    "recoveryAccount": "Kostenverrechnungskonto",
     "incomeAccount": "Ertragskonto",
     "expenseAccount": "Aufwandskonto",
     "taxCode": "Steuerschlüssel"
@@ -28,7 +30,8 @@
     "other_charge": "Sonstige Gebühr",
     "labor": "Arbeit",
     "absence": "Abwesenheit",
-    "discount": "Rabatt"
+    "discount": "Rabatt",
+    "equipment_charge": "Geräteverrechnung"
   },
   "drawer": {
     "newItem": "Neuer Artikel",
@@ -49,8 +52,35 @@
     "unitPlaceholder": "Std",
     "noIncomeAccount": "Kein Ertragskonto",
     "noExpenseAccount": "Kein Aufwandskonto",
+    "noRecoveryAccount": "Kein Verrechnungskonto",
     "selectAccount": "Konto auswählen…",
     "showOnTimesheet": "Auf Stundenzettel anzeigen"
+  },
+  "rates": {
+    "title": "Artikelsätze",
+    "description": "Zeitlich gültige Kosten- und Abrechnungssätze für alle Geräte mit diesem Artikel.",
+    "documentation": "Dokumentation",
+    "newVersion": "Neue Satzversion",
+    "rateBook": "Satzbuch",
+    "standardBook": "Standard-Satzbuch",
+    "effectiveFrom": "Gültig ab",
+    "effectiveTo": "Gültig bis",
+    "baseUnit": "Basiseinheit",
+    "policy": "Preisregel",
+    "presentation": "Rechnungsdarstellung",
+    "defaults": { "day": "Tag", "week": "Woche", "month": "Monat" },
+    "policies": { "capped_ladder": "Gedeckelte Staffel", "lowest_cost": "Günstigste Kombination" },
+    "presentations": { "rate_components": "Satzbestandteile anzeigen", "summary": "Eine Sammelzeile" },
+    "unitCode": "Einheitscode",
+    "unitName": "Einheitsname",
+    "baseQuantity": "Basismenge",
+    "costRate": "Kostensatz",
+    "billRate": "Abrechnungssatz",
+    "addUnit": "Satzeinheit hinzufügen",
+    "saveFailed": "Sätze konnten nicht gespeichert werden",
+    "saved": "Satzversion gespeichert",
+    "empty": "Noch keine Satzversionen.",
+    "rates": "Sätze"
   },
   "revrec": {
     "title": "Umsatzrealisierung",

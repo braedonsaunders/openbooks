@@ -114,6 +114,7 @@ export const journalLines = pgTable(
     projectId: uuid("project_id"),
     locationId: uuid("location_id"),
     classId: uuid("class_id"),
+    equipmentUnitId: uuid("equipment_unit_id"),
     paymentCardId: uuid("payment_card_id"), // card subledger detail
     extraDims: jsonb("extra_dims").notNull().default({}), // registry-validated
 

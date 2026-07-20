@@ -37,8 +37,8 @@ async function audit(args: {
   action: 'insert' | 'update' | 'delete'
   changes: Record<string, unknown>
   actorId: string
-}) {
-  await db.execute(sql`
+}, runner: Pick<typeof db, 'execute'> = db) {
+  await runner.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
             ${JSON.stringify(args.changes)}, ${args.actorId})`)
@@ -215,6 +215,47 @@ async function validateEntityIntegrity(
       }
     }
   }
+  if (entity.key === 'item-rate-book-assignments') {
+    let values = body
+    if (rowId) {
+      const current = (await db.execute(sql`
+        select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
+               effective_from as "effectiveFrom", effective_to as "effectiveTo"
+          from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}
+      `)) as any
+      if (!current.rows[0]) return 'Rate book assignment not found'
+      values = { ...current.rows[0], ...body }
+    }
+    if (values.customerId && values.projectId) return 'Choose a customer or a project, not both'
+    if (values.effectiveFrom && values.effectiveTo && String(values.effectiveTo) < String(values.effectiveFrom)) {
+      return 'The end date cannot precede the start date'
+    }
+    const scope = values.projectId
+      ? sql`project_id = ${values.projectId}`
+      : values.customerId
+        ? sql`customer_id = ${values.customerId}`
+        : sql`project_id is null and customer_id is null`
+    const [refs, overlap] = await Promise.all([
+      db.execute(sql`
+        select
+          exists(select 1 from item_rate_books where id = ${values.rateBookId} and org_id = ${orgId}) as book_ok,
+          ${values.customerId ? sql`exists(select 1 from customer_roles where party_id = ${values.customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
+          ${values.projectId ? sql`exists(select 1 from projects where id = ${values.projectId} and org_id = ${orgId})` : sql`true`} as project_ok
+      `) as any,
+      db.execute(sql`
+        select 1 from item_rate_book_assignments
+         where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active
+           and ${scope}
+           and daterange(effective_from, effective_to, '[]') &&
+               daterange(${values.effectiveFrom ?? null}::date, ${values.effectiveTo ?? null}::date, '[]')
+         limit 1
+      `) as any,
+    ])
+    if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) {
+      return 'Choose records from this organization'
+    }
+    if (overlap.rows.length) return 'This scope already has an active rate book for part of that date range'
+  }
   return null
 }
 
@@ -268,6 +309,39 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
           values (${orgId}, 'accounting_books', ${id}, 'insert',
                   ${JSON.stringify({ code: body.code, name: body.name, is_primary: isPrimary, is_active: isActive })},
                   ${actorId})`)
+        return id
+      })
+      return NextResponse.json({ id })
+    } catch (e) {
+      return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
+    }
+  }
+
+  if (entity.key === 'item-rate-books') {
+    try {
+      const id = await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
+        const current = (await tx.execute(sql`
+          select exists(select 1 from item_rate_books where org_id = ${orgId} and is_default and is_active) as has_default
+        `)) as any
+        const isDefault = coerceBoolean(body.isDefault) || !current.rows[0]?.has_default
+        const isActive = isDefault || body.isActive === undefined || coerceBoolean(body.isActive)
+        if (isDefault) {
+          const demoted = (await tx.execute(sql`
+            update item_rate_books set is_default = false, updated_at = now(), updated_by = ${actorId}
+             where org_id = ${orgId} and is_default returning id
+          `)) as any
+          for (const book of demoted.rows) {
+            await audit({ orgId, table: 'item_rate_books', rowId: String(book.id), action: 'update', changes: { is_default: false, reason: 'default-rate-book-reassigned' }, actorId }, tx)
+          }
+        }
+        const inserted = (await tx.execute(sql`
+          insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
+          values (${orgId}, ${String(body.code)}, ${String(body.name)}, ${String(body.currency)},
+                  ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning id
+        `)) as any
+        const id = String(inserted.rows[0].id)
+        await audit({ orgId, table: 'item_rate_books', rowId: id, action: 'insert', changes: { ...body, isDefault, isActive }, actorId }, tx)
         return id
       })
       return NextResponse.json({ id })
@@ -394,6 +468,42 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     }
   }
 
+  if (entity.key === 'item-rate-books') {
+    try {
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
+        const existing = (await tx.execute(sql`
+          select id, is_default from item_rate_books where id = ${id} and org_id = ${orgId} for update
+        `)) as any
+        if (!existing.rows[0]) throw new Error('not found')
+        const isDefault = coerceBoolean(body.isDefault)
+        const isActive = coerceBoolean(body.isActive)
+        if (existing.rows[0].is_default && (!isDefault || !isActive)) throw new Error('default-required')
+        if (isDefault) {
+          const demoted = (await tx.execute(sql`
+            update item_rate_books set is_default = false, updated_at = now(), updated_by = ${actorId}
+             where org_id = ${orgId} and id <> ${id} and is_default returning id
+          `)) as any
+          for (const book of demoted.rows) {
+            await audit({ orgId, table: 'item_rate_books', rowId: String(book.id), action: 'update', changes: { is_default: false, reason: 'default-rate-book-reassigned' }, actorId }, tx)
+          }
+        }
+        const updated = (await tx.execute(sql`
+          update item_rate_books set name = ${String(body.name)}, currency = ${String(body.currency)},
+                 is_default = ${isDefault}, is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
+           where id = ${id} and org_id = ${orgId} returning id
+        `)) as any
+        if (!updated.rows.length) throw new Error('not found')
+        await audit({ orgId, table: 'item_rate_books', rowId: id, action: 'update', changes: body, actorId }, tx)
+      })
+      return NextResponse.json({ id })
+    } catch (e) {
+      const message = (e as Error).message
+      const error = ['not found', 'default-required'].includes(message) ? message : describeDbError(e)
+      return NextResponse.json({ error }, { status: error === 'not found' ? 404 : 400 })
+    }
+  }
+
   const updateCols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : built.cols
@@ -461,6 +571,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const url = new URL(req.url)
   const id = url.searchParams.get('id') ?? ''
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  if (entity.key === 'item-rate-books') {
+    const current = (await db.execute(sql`select is_default from item_rate_books where id = ${id} and org_id = ${orgId}`)) as any
+    if (current.rows[0]?.is_default) return NextResponse.json({ error: 'default-required' }, { status: 409 })
+  }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {

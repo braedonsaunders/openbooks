@@ -37,6 +37,7 @@ export interface KernelLine {
   projectId?: string | null;
   locationId?: string | null;
   classId?: string | null;
+  equipmentUnitId?: string | null;
   /** Custom segment assignments keyed by segment_definitions.key. */
   extraDims?: Record<string, string>;
   paymentCardId?: string | null;
@@ -169,11 +170,39 @@ const dims = (d: Doc, l?: DocLine) => ({
   projectId: l?.projectId ?? d.projectId,
   locationId: l?.locationId ?? d.locationId,
   classId: l?.classId ?? d.classId,
+  equipmentUnitId: l?.equipmentUnitId ?? null,
   extraDims: {
     ...((d.extraDims ?? {}) as Record<string, string>),
     ...((l?.extraDims ?? {}) as Record<string, string>),
   },
 });
+
+/** Pure GL projection for a financial equipment/resource charge. The debit is
+ * job cost; the credit relieves a distinct recovery pool. Keeping this helper
+ * exported makes the accounting invariant directly testable. */
+export function projectChargeKernelLines(doc: Doc, lines: DocLine[]): KernelLine[] {
+  const out: KernelLine[] = [];
+  for (const line of lines) {
+    if (!line.accountId) throw new PostingError("project charge requires a cost account");
+    if (!line.recoveryAccountId) throw new PostingError("project charge requires a cost recovery account");
+    if (line.recoveryAccountId === line.accountId) {
+      throw new PostingError("project charge cost and recovery accounts must be different");
+    }
+    out.push({ accountId: line.accountId, amount: line.amount, memo: line.description, ...dims(doc, line) });
+    out.push({
+      accountId: line.recoveryAccountId,
+      amount: neg(line.amount),
+      memo: line.description,
+      departmentId: doc.departmentId,
+      locationId: doc.locationId,
+      classId: doc.classId,
+      projectId: null,
+      equipmentUnitId: line.equipmentUnitId,
+      extraDims: (doc.extraDims ?? {}) as Record<string, string>,
+    });
+  }
+  return out;
+}
 
 async function validateRequiredDimensions(
   runner: Pick<typeof db, "execute">,
@@ -505,26 +534,7 @@ export const RULES: Record<string, RuleFn> = {
    * The line's billable rate/markup rides on is_billable for T&M billing; it is
    * NOT posted here (revenue posts at invoice time).
    */
-  project_charge: (doc, lines) => {
-    const out: KernelLine[] = [];
-    for (const l of lines) {
-      const recovery = ((l.custom as Record<string, unknown> | null)?.recoveryAccountId as string | undefined) || l.accountId!;
-      // DR target project COGS — carries the project dimension (job cost).
-      out.push({ accountId: l.accountId!, amount: l.amount, memo: l.description, ...dims(doc, l) });
-      // CR source cost pool — untagged (relieve the general pool / recovery acct).
-      out.push({
-        accountId: recovery,
-        amount: neg(l.amount),
-        memo: l.description,
-        departmentId: doc.departmentId,
-        locationId: doc.locationId,
-        classId: doc.classId,
-        projectId: null,
-        extraDims: (doc.extraDims ?? {}) as Record<string, string>,
-      });
-    }
-    return out;
-  },
+  project_charge: projectChargeKernelLines,
 };
 
 export class PostingError extends Error {}
@@ -807,6 +817,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
         projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
+        equipmentUnitId: l.equipmentUnitId ?? null,
         extraDims: l.extraDims ?? {},
         paymentCardId: l.paymentCardId ?? null,
         taxCodeId: l.taxCodeId ?? null,
@@ -886,6 +897,7 @@ function glKey(
     projectId?: string | null;
     locationId?: string | null;
     classId?: string | null;
+    equipmentUnitId?: string | null;
     extraDims?: Record<string, string> | null;
     taxCodeId?: string | null;
     paymentCardId?: string | null;
@@ -903,6 +915,7 @@ function glKey(
       l.projectId ?? null,
       l.locationId ?? null,
       l.classId ?? null,
+      l.equipmentUnitId ?? null,
       JSON.stringify(Object.fromEntries(Object.entries(l.extraDims ?? {}).sort(([a], [b]) => a.localeCompare(b)))),
       l.taxCodeId ?? null,
       l.paymentCardId ?? null,
@@ -1037,6 +1050,7 @@ export async function regenerateGlImpactTx(
     projectId: l.projectId ?? null,
     locationId: l.locationId ?? null,
     classId: l.classId ?? null,
+    equipmentUnitId: l.equipmentUnitId ?? null,
     extraDims: l.extraDims ?? {},
     paymentCardId: l.paymentCardId ?? null,
     taxCodeId: l.taxCodeId ?? null,

@@ -15,6 +15,8 @@
     "category": "Categoría",
     "unit": "Unidad",
     "defaultRate": "Tarifa predeterminada",
+    "defaultCost": "Costo predeterminado",
+    "recoveryAccount": "Cuenta de recuperación de costos",
     "incomeAccount": "Cuenta de ingresos",
     "expenseAccount": "Cuenta de gastos",
     "taxCode": "Código de impuesto"
@@ -28,7 +30,8 @@
     "other_charge": "Otro cargo",
     "labor": "Mano de obra",
     "absence": "Ausencia",
-    "discount": "Descuento"
+    "discount": "Descuento",
+    "equipment_charge": "Cargo de equipo"
   },
   "drawer": {
     "newItem": "Nuevo artículo",
@@ -49,8 +52,35 @@
     "unitPlaceholder": "h",
     "noIncomeAccount": "Sin cuenta de ingresos",
     "noExpenseAccount": "Sin cuenta de gastos",
+    "noRecoveryAccount": "Sin cuenta de recuperación",
     "selectAccount": "Seleccionar cuenta…",
     "showOnTimesheet": "Mostrar en la hoja de horas"
+  },
+  "rates": {
+    "title": "Tarifas del artículo",
+    "description": "Tarifas de costo y facturación con vigencia que comparten todas las unidades que usan este artículo.",
+    "documentation": "Documentación",
+    "newVersion": "Nueva versión de tarifas",
+    "rateBook": "Libro de tarifas",
+    "standardBook": "Libro de tarifas estándar",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente hasta",
+    "baseUnit": "Unidad base",
+    "policy": "Política de precios",
+    "presentation": "Presentación en factura",
+    "defaults": { "day": "Día", "week": "Semana", "month": "Mes" },
+    "policies": { "capped_ladder": "Escala con topes", "lowest_cost": "Combinación de menor costo" },
+    "presentations": { "rate_components": "Mostrar componentes de tarifa", "summary": "Una sola línea resumida" },
+    "unitCode": "Código de unidad",
+    "unitName": "Nombre de unidad",
+    "baseQuantity": "Cantidad base",
+    "costRate": "Tarifa de costo",
+    "billRate": "Tarifa de facturación",
+    "addUnit": "Agregar unidad tarifaria",
+    "saveFailed": "No se pudieron guardar las tarifas",
+    "saved": "Versión de tarifas guardada",
+    "empty": "Aún no hay versiones de tarifas.",
+    "rates": "Tarifas"
   },
   "revrec": {
     "title": "Reconocimiento de ingresos",

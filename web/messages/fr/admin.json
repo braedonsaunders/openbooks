@@ -1425,6 +1425,14 @@
         "title": "Taux de change consolidés",
         "description": "Taux courants, moyens et historiques par période utilisés pour la consolidation des filiales."
       },
+      "item-rate-books": {
+        "title": "Grilles tarifaires des articles",
+        "description": "Grilles par client, projet et organisation pour l’équipement et les autres frais d’article."
+      },
+      "item-rate-book-assignments": {
+        "title": "Affectations des grilles tarifaires",
+        "description": "Choisissez la grille datée applicable à un client ou à un projet."
+      },
       "recognition-rules": {
         "title": "Règles de comptabilisation",
         "description": "Comment les produits sont comptabilisés dans le temps — méthode, calendrier et comptes (ASC 606)."
@@ -1564,7 +1572,11 @@
       "assemblyItemId": "Article assemblé",
       "componentItemId": "Composant",
       "quantityPer": "Quantité par",
-      "rateKind": "Type de taux"
+      "rateKind": "Type de taux",
+      "rateBookId": "Grille tarifaire",
+      "customerId": "Client",
+      "projectId": "Projet",
+      "isDefault": "Par défaut"
     },
     "options": {
       "appliesTo": {

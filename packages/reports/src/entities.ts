@@ -34,6 +34,7 @@ export const TRANSACTION_KINDS = [
   'purchase_order',
   'sales_order',
   'quote',
+  'project_charge',
 ] as const
 
 export const TRANSACTION_STATUSES = ['draft', 'pending_approval', 'approved', 'posted', 'voided'] as const
@@ -93,6 +94,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN parties p ON p.id = jl.party_id
       LEFT JOIN departments dep ON dep.id = jl.department_id
       LEFT JOIN projects prj ON prj.id = jl.project_id
+      LEFT JOIN equipment_units eq ON eq.id = jl.equipment_unit_id
       LEFT JOIN locations loc ON loc.id = jl.location_id
       LEFT JOIN classes cls ON cls.id = jl.class_id`,
     orgColumn: 'jl.org_id',
@@ -107,6 +109,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'equipment', label: 'Equipment', kind: 'text', expr: 'eq.name' },
       { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
       { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'memo', label: 'Memo', kind: 'text', expr: 'coalesce(jl.memo, je.memo)' },
@@ -179,6 +182,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN parties emp ON emp.id = dl.employee_id
       LEFT JOIN departments dep ON dep.id = coalesce(dl.department_id, d.department_id)
       LEFT JOIN projects prj ON prj.id = coalesce(dl.project_id, d.project_id)
+      LEFT JOIN equipment_units eu ON eu.id = dl.equipment_unit_id
       LEFT JOIN locations loc ON loc.id = coalesce(dl.location_id, d.location_id)
       LEFT JOIN classes cls ON cls.id = coalesce(dl.class_id, d.class_id)`,
     orgColumn: 'dl.org_id',
@@ -204,6 +208,11 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'equipment', label: 'Equipment', kind: 'text', expr: 'eu.name' },
+      { key: 'cost_rate', label: 'Cost rate', kind: 'number', expr: 'dl.cost_rate' },
+      { key: 'bill_rate', label: 'Bill rate', kind: 'number', expr: 'dl.bill_rate' },
+      { key: 'cost_amount', label: 'Cost amount', kind: 'number', expr: 'dl.cost_amount' },
+      { key: 'bill_amount', label: 'Bill amount', kind: 'number', expr: 'dl.bill_amount' },
       { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
       { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'dl.created_at' },
@@ -238,17 +247,21 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description: 'The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts.',
     from: `items it
       LEFT JOIN accounts inc ON inc.id = it.income_account_id
-      LEFT JOIN accounts exp ON exp.id = it.expense_account_id`,
+      LEFT JOIN accounts exp ON exp.id = it.expense_account_id
+      LEFT JOIN accounts rec ON rec.id = it.cost_recovery_account_id`,
     orgColumn: 'it.org_id',
     columns: [
       { key: 'code', label: 'Code', kind: 'text', expr: 'it.code' },
       { key: 'name', label: 'Name', kind: 'text', expr: 'it.name' },
-      { key: 'kind', label: 'Type', kind: 'enum', expr: 'it.kind', options: ['service', 'non_inventory', 'inventory', 'assembly', 'kit', 'other_charge', 'labor', 'absence', 'discount'] },
+      { key: 'description', label: 'Description', kind: 'text', expr: 'it.description' },
+      { key: 'kind', label: 'Type', kind: 'enum', expr: 'it.kind', options: ['service', 'non_inventory', 'inventory', 'assembly', 'kit', 'other_charge', 'equipment_charge', 'labor', 'absence', 'discount'] },
       { key: 'category', label: 'Category', kind: 'text', expr: 'it.category' },
       { key: 'default_rate', label: 'Default rate', kind: 'number', expr: 'it.default_rate' },
+      { key: 'default_cost', label: 'Default cost', kind: 'number', expr: 'it.default_cost' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'it.unit' },
       { key: 'income_account', label: 'Income account', kind: 'text', expr: 'inc.name' },
       { key: 'expense_account', label: 'Expense account', kind: 'text', expr: 'exp.name' },
+      { key: 'recovery_account', label: 'Cost recovery account', kind: 'text', expr: 'rec.name' },
       { key: 'show_on_timesheet', label: 'On timesheets', kind: 'enum', expr: 'it.show_on_timesheet' },
       { key: 'is_active', label: 'Active', kind: 'enum', expr: 'it.is_active' },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'it.created_at' },
@@ -336,6 +349,42 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'id', label: 'Asset (id)', kind: 'uuid', expr: 'fa.id' },
     ],
     defaultSort: { column: 'asset_number', direction: 'asc' },
+  },
+  {
+    key: 'equipment',
+    label: 'Equipment',
+    category: 'catalog',
+    description: 'Financial equipment register with shared charge items, purchase basis, utilization, cost recovery, billing and return.',
+    from: `equipment_units eu
+      LEFT JOIN subsidiaries sub ON sub.id = eu.subsidiary_id
+      LEFT JOIN items it ON it.id = eu.charge_item_id
+      LEFT JOIN fixed_assets fa ON fa.id = eu.fixed_asset_id
+      LEFT JOIN item_rate_books rb ON rb.id = eu.rate_book_id`,
+    orgColumn: 'eu.org_id',
+    columns: [
+      { key: 'unit_number', label: 'Equipment #', kind: 'text', expr: 'eu.unit_number' },
+      { key: 'name', label: 'Name', kind: 'text', expr: 'eu.name' },
+      { key: 'description', label: 'Description', kind: 'text', expr: 'eu.description' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'eu.status', options: ['draft', 'active', 'inactive', 'retired'] },
+      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      { key: 'charge_item', label: 'Charge item', kind: 'text', expr: 'it.name' },
+      { key: 'fixed_asset_number', label: 'Fixed asset #', kind: 'text', expr: 'fa.asset_number' },
+      { key: 'rate_book', label: 'Rate book', kind: 'text', expr: 'rb.name' },
+      { key: 'purchase_price', label: 'Purchase price', kind: 'number', expr: 'eu.purchase_price' },
+      { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'eu.acquired_on' },
+      { key: 'in_service_on', label: 'In service on', kind: 'date', expr: 'eu.in_service_on' },
+      { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'eu.serial_number' },
+      { key: 'capacity_quantity', label: 'Capacity', kind: 'number', expr: 'eu.capacity_quantity' },
+      { key: 'capacity_unit', label: 'Capacity unit', kind: 'text', expr: 'eu.capacity_unit' },
+      { key: 'usage', label: 'Charged usage', kind: 'number', expr: `(select coalesce(sum(dl.base_quantity),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'cost_recovery', label: 'Cost recovery', kind: 'number', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'billable_value', label: 'Billable value', kind: 'number', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'billed_revenue', label: 'Billed revenue', kind: 'number', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='customer_invoice' and d.status='posted')` },
+      { key: 'depreciation', label: 'Posted depreciation', kind: 'number', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id where ds.asset_id=eu.fixed_asset_id and dsl.journal_entry_id is not null)` },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'eu.created_at' },
+      { key: 'id', label: 'Equipment (id)', kind: 'uuid', expr: 'eu.id' },
+    ],
+    defaultSort: { column: 'unit_number', direction: 'asc' },
   },
   {
     key: 'tax_codes',

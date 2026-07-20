@@ -15,6 +15,8 @@
     "category": "Categoria",
     "unit": "Unidade",
     "defaultRate": "Taxa padrão",
+    "defaultCost": "Custo padrão",
+    "recoveryAccount": "Conta de recuperação de custos",
     "incomeAccount": "Conta de receita",
     "expenseAccount": "Conta de despesa",
     "taxCode": "Código de imposto"
@@ -28,7 +30,8 @@
     "other_charge": "Outro encargo",
     "labor": "Mão de obra",
     "absence": "Ausência",
-    "discount": "Desconto"
+    "discount": "Desconto",
+    "equipment_charge": "Cobrança de equipamento"
   },
   "drawer": {
     "newItem": "Novo item",
@@ -49,8 +52,35 @@
     "unitPlaceholder": "h",
     "noIncomeAccount": "Sem conta de receita",
     "noExpenseAccount": "Sem conta de despesa",
+    "noRecoveryAccount": "Sem conta de recuperação",
     "selectAccount": "Selecionar conta…",
     "showOnTimesheet": "Mostrar no quadro de horas"
+  },
+  "rates": {
+    "title": "Tarifas do item",
+    "description": "Tarifas de custo e cobrança com vigência, compartilhadas por todas as unidades que usam este item.",
+    "documentation": "Documentação",
+    "newVersion": "Nova versão de tarifas",
+    "rateBook": "Tabela de tarifas",
+    "standardBook": "Tabela de tarifas padrão",
+    "effectiveFrom": "Vigente a partir de",
+    "effectiveTo": "Vigente até",
+    "baseUnit": "Unidade base",
+    "policy": "Política de preços",
+    "presentation": "Apresentação na fatura",
+    "defaults": { "day": "Dia", "week": "Semana", "month": "Mês" },
+    "policies": { "capped_ladder": "Faixas com limite", "lowest_cost": "Combinação de menor custo" },
+    "presentations": { "rate_components": "Exibir componentes da tarifa", "summary": "Uma linha resumida" },
+    "unitCode": "Código da unidade",
+    "unitName": "Nome da unidade",
+    "baseQuantity": "Quantidade base",
+    "costRate": "Tarifa de custo",
+    "billRate": "Tarifa de cobrança",
+    "addUnit": "Adicionar unidade tarifária",
+    "saveFailed": "Não foi possível salvar as tarifas",
+    "saved": "Versão de tarifas salva",
+    "empty": "Ainda não há versões de tarifas.",
+    "rates": "Tarifas"
   },
   "revrec": {
     "title": "Reconhecimento de receita",

@@ -15,6 +15,8 @@
     "category": "カテゴリ",
     "unit": "単位",
     "defaultRate": "既定単価",
+    "defaultCost": "既定原価",
+    "recoveryAccount": "原価回収勘定",
     "incomeAccount": "収益勘定",
     "expenseAccount": "費用勘定",
     "taxCode": "税コード"
@@ -28,7 +30,8 @@
     "other_charge": "その他の料金",
     "labor": "労務",
     "absence": "欠勤",
-    "discount": "値引き"
+    "discount": "値引き",
+    "equipment_charge": "設備使用料"
   },
   "drawer": {
     "newItem": "新規品目",
@@ -49,8 +52,35 @@
     "unitPlaceholder": "時間",
     "noIncomeAccount": "収益勘定なし",
     "noExpenseAccount": "費用勘定なし",
+    "noRecoveryAccount": "回収勘定なし",
     "selectAccount": "勘定を選択…",
     "showOnTimesheet": "タイムシートに表示"
+  },
+  "rates": {
+    "title": "品目レート",
+    "description": "この品目を使用するすべての設備で共有する、発効日付きの原価・請求レートです。",
+    "documentation": "ドキュメント",
+    "newVersion": "新しいレート版",
+    "rateBook": "レート表",
+    "standardBook": "標準レート表",
+    "effectiveFrom": "発効開始日",
+    "effectiveTo": "発効終了日",
+    "baseUnit": "基本単位",
+    "policy": "価格設定ポリシー",
+    "presentation": "請求書表示",
+    "defaults": { "day": "日", "week": "週", "month": "月" },
+    "policies": { "capped_ladder": "上限付き段階制", "lowest_cost": "最小コストの組み合わせ" },
+    "presentations": { "rate_components": "レート内訳を表示", "summary": "要約行を1行表示" },
+    "unitCode": "単位コード",
+    "unitName": "単位名",
+    "baseQuantity": "基本数量",
+    "costRate": "原価レート",
+    "billRate": "請求レート",
+    "addUnit": "レート単位を追加",
+    "saveFailed": "レートを保存できませんでした",
+    "saved": "レート版を保存しました",
+    "empty": "レート版はまだありません。",
+    "rates": "レート"
   },
   "revrec": {
     "title": "収益認識",

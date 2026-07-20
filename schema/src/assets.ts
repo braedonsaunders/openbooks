@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -91,6 +93,44 @@ export const fixedAssets = pgTable(
     ...auditColumns,
   },
   (t) => [index("assets_org_status").on(t.orgId, t.status)],
+);
+
+/**
+ * Chargeable equipment units. This is a financial/job-costing register, not an
+ * inspections, maintenance, dispatch or telematics system. Many serialized
+ * units may share one equipment-charge item and its rate books. A unit may
+ * optionally link to the fixed-asset register when it is capitalized.
+ */
+export const equipmentUnits = pgTable(
+  "equipment_units",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    unitNumber: text("unit_number").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    status: text("status", { enum: ["draft", "active", "inactive", "retired"] }).notNull().default("draft"),
+    chargeItemId: uuid("charge_item_id"),
+    fixedAssetId: uuid("fixed_asset_id"),
+    rateBookId: uuid("rate_book_id"),
+    purchasePrice: money("purchase_price").notNull().default("0"),
+    acquiredOn: date("acquired_on"),
+    inServiceOn: date("in_service_on"),
+    serialNumber: text("serial_number"),
+    capacityQuantity: money("capacity_quantity"),
+    capacityUnit: text("capacity_unit"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("equipment_units_org_number").on(t.orgId, t.unitNumber),
+    uniqueIndex("equipment_units_fixed_asset").on(t.fixedAssetId),
+    index("equipment_units_org_status").on(t.orgId, t.status),
+    index("equipment_units_charge_item").on(t.orgId, t.chargeItemId),
+    check("equipment_units_nonnegative_purchase", sql`${t.purchasePrice} >= 0`),
+    check("equipment_units_positive_capacity", sql`${t.capacityQuantity} is null or ${t.capacityQuantity} > 0`),
+    check("equipment_units_valid_dates", sql`${t.acquiredOn} is null or ${t.inServiceOn} is null or ${t.inServiceOn} >= ${t.acquiredOn}`),
+  ],
 );
 
 /** Per-book depreciation plan (primary book GAAP, tax book CCA, …). */

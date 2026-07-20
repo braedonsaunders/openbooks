@@ -15,6 +15,7 @@ const ITEM_KINDS = [
   'assembly',
   'kit',
   'other_charge',
+  'equipment_charge',
   'labor',
   'absence',
   'discount',
@@ -41,11 +42,14 @@ interface PatchBody {
   kind?: string
   code?: string | null
   name?: string
+  description?: string | null
   category?: string | null
   unit?: string | null
   defaultRate?: string | null
+  defaultCost?: string | null
   incomeAccountId?: string | null
   expenseAccountId?: string | null
+  costRecoveryAccountId?: string | null
   taxCodeId?: string | null
   showOnTimesheet?: boolean
   isActive?: boolean
@@ -117,6 +121,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  let defaultCost: string | null | undefined
+  if (body.defaultCost !== undefined) {
+    const raw = strOrNull(body.defaultCost)
+    if (raw === null) defaultCost = null
+    else {
+      const n = Number(raw)
+      if (Number.isNaN(n) || n < 0) return bad('Default cost must be a non-negative number')
+      defaultCost = n.toFixed(4)
+    }
+  }
+
   // -- account / tax references (must exist & belong to org) ---------------
   let incomeAccountId: string | null | undefined
   if (body.incomeAccountId !== undefined) {
@@ -142,6 +157,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!r.rows[0]) return bad('Expense account not found')
     }
     expenseAccountId = v
+  }
+
+  let costRecoveryAccountId: string | null | undefined
+  if (body.costRecoveryAccountId !== undefined) {
+    const v = uuidOrNull(body.costRecoveryAccountId)
+    if (v === 'invalid') return bad('Invalid recovery account')
+    if (v !== null) {
+      const r = (await db.execute(sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`)) as unknown as { rows: unknown[] }
+      if (!r.rows[0]) return bad('Recovery account not found')
+    }
+    costRecoveryAccountId = v
   }
 
   let taxCodeId: string | null | undefined
@@ -215,16 +241,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    await db.execute(sql`
+      await db.execute(sql`
       update items set
         kind = coalesce(${body.kind ?? null}, kind),
         name = ${name !== undefined ? name : sql`name`},
+        description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
         code = ${body.code !== undefined ? strOrNull(body.code) : sql`code`},
         category = ${body.category !== undefined ? strOrNull(body.category) : sql`category`},
         unit = ${body.unit !== undefined ? strOrNull(body.unit) : sql`unit`},
         default_rate = ${defaultRate !== undefined ? defaultRate : sql`default_rate`},
+        default_cost = ${defaultCost !== undefined ? defaultCost : sql`default_cost`},
         income_account_id = ${incomeAccountId !== undefined ? incomeAccountId : sql`income_account_id`},
         expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`expense_account_id`},
+        cost_recovery_account_id = ${costRecoveryAccountId !== undefined ? costRecoveryAccountId : sql`cost_recovery_account_id`},
         tax_code_id = ${taxCodeId !== undefined ? taxCodeId : sql`tax_code_id`},
         show_on_timesheet = ${body.showOnTimesheet !== undefined ? body.showOnTimesheet : sql`show_on_timesheet`},
         recognition_rule_id = ${recognitionRuleId !== undefined ? recognitionRuleId : sql`recognition_rule_id`},
@@ -235,7 +264,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
         custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
         updated_at = now(), updated_by = ${user.id}
-      where id = ${id}
+      where id = ${id} and org_id = ${user.orgId}
     `)
   } catch (e: unknown) {
     const msg = e instanceof Error ? `${e.message} ${String((e as { cause?: unknown }).cause ?? '')}` : String(e)

@@ -1418,6 +1418,14 @@
         "title": "合并汇率",
         "description": "用于子公司合并的期间当前汇率、平均汇率和历史汇率。"
       },
+      "item-rate-books": {
+        "title": "物料费率表",
+        "description": "用于设备及其他物料收费的客户、项目和组织费率表。"
+      },
+      "item-rate-book-assignments": {
+        "title": "费率表分配",
+        "description": "选择适用于客户或项目的生效日期费率表。"
+      },
       "recognition-rules": {
         "title": "确认规则",
         "description": "收入如何随时间确认——方法、时点和科目（ASC 606）。"
@@ -1556,7 +1564,11 @@
       "receivedNotBilledAccountId": "已收未开票科目",
       "assemblyItemId": "装配物料",
       "componentItemId": "组件物料",
-      "quantityPer": "单位用量"
+      "quantityPer": "单位用量",
+      "rateBookId": "费率表",
+      "customerId": "客户",
+      "projectId": "项目",
+      "isDefault": "默认"
     },
     "options": {
       "appliesTo": {

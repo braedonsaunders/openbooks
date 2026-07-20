@@ -14,7 +14,7 @@ import { InvoicingPreferenceFields, type InvoicingPref } from '../../../componen
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
-import { ChargesSection, type ChargeRow, type ChargeItemOption } from './tabs/ChargesSection'
+import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquipmentOption } from './tabs/ChargesSection'
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
 
 interface PartyOpt {
@@ -62,6 +62,7 @@ export interface ProjectCockpitData {
   invoicing: EffectiveInvoicingClient
   charges: ChargeRow[]
   items: ChargeItemOption[]
+  equipment: ChargeEquipmentOption[]
   absorption: { recovered: string; billValue: string }
   recognizedToDate: string
   transactions: {
@@ -667,6 +668,7 @@ export function ProjectDrawer({
           projectId={pr.id}
           charges={cockpit.charges}
           items={cockpit.items}
+          equipment={cockpit.equipment}
           absorption={cockpit.absorption}
           formOpen={chargeFormOpen}
           onFormOpenChange={setChargeFormOpen}

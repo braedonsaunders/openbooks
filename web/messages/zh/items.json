@@ -15,6 +15,8 @@
     "category": "类别",
     "unit": "单位",
     "defaultRate": "默认费率",
+    "defaultCost": "默认成本",
+    "recoveryAccount": "成本回收科目",
     "incomeAccount": "收入科目",
     "expenseAccount": "费用科目",
     "taxCode": "税码"
@@ -28,7 +30,8 @@
     "other_charge": "其他费用",
     "labor": "人工",
     "absence": "缺勤",
-    "discount": "折扣"
+    "discount": "折扣",
+    "equipment_charge": "设备收费"
   },
   "drawer": {
     "newItem": "新建物料",
@@ -49,8 +52,35 @@
     "unitPlaceholder": "小时",
     "noIncomeAccount": "无收入科目",
     "noExpenseAccount": "无费用科目",
+    "noRecoveryAccount": "无回收科目",
     "selectAccount": "选择科目…",
     "showOnTimesheet": "在工时表中显示"
+  },
+  "rates": {
+    "title": "物料费率",
+    "description": "供使用此物料的所有设备共享的生效日期成本和计费费率。",
+    "documentation": "文档",
+    "newVersion": "新建费率版本",
+    "rateBook": "费率表",
+    "standardBook": "标准费率表",
+    "effectiveFrom": "生效自",
+    "effectiveTo": "生效至",
+    "baseUnit": "基本单位",
+    "policy": "定价策略",
+    "presentation": "发票显示方式",
+    "defaults": { "day": "日", "week": "周", "month": "月" },
+    "policies": { "capped_ladder": "封顶阶梯", "lowest_cost": "最低成本组合" },
+    "presentations": { "rate_components": "显示费率组成", "summary": "单行汇总" },
+    "unitCode": "单位代码",
+    "unitName": "单位名称",
+    "baseQuantity": "基本数量",
+    "costRate": "成本费率",
+    "billRate": "计费费率",
+    "addUnit": "添加费率单位",
+    "saveFailed": "无法保存费率",
+    "saved": "费率版本已保存",
+    "empty": "尚无费率版本。",
+    "rates": "费率"
   },
   "revrec": {
     "title": "收入确认",

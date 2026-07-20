@@ -14,7 +14,7 @@ import type { ProjectCockpitData } from './ProjectDrawer'
  */
 export async function loadProjectCockpit(orgId: string, projectId: string): Promise<ProjectCockpitData> {
   const projectType = await loadProjectType(orgId, projectId)
-  const [financials, time, unbilled, billingRequests, invoicing, chargeRes, itemRes, recognizedRes] = await Promise.all([
+  const [financials, time, unbilled, billingRequests, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     projectUnbilled(orgId, projectId),
@@ -23,7 +23,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
     db.execute(sql`
       select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
              d.total::numeric(19,4) as cost,
-             coalesce(sum(dl.amount * coalesce(nullif(dl.cost_multiplier,0),1)) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
+             coalesce(sum(coalesce(dl.bill_amount, dl.amount * coalesce(nullif(dl.cost_multiplier,0),1))) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
              count(dl.*) as lines,
              bool_and(dl.billed_by_line_id is not null) filter (where dl.is_billable) as billed
         from documents d left join document_lines dl on dl.document_id = d.id
@@ -33,6 +33,11 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
         from items where org_id = ${orgId} and is_active order by name limit 2000`),
     db.execute(sql`
+      select id, name, unit_number as "unitNumber", charge_item_id as "itemId"
+        from equipment_units where org_id = ${orgId} and status = 'active'
+         and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
+       order by unit_number limit 2000`),
+    db.execute(sql`
       select coalesce(-sum(l.amount) filter (where l.amount < 0), 0)::numeric(19,4) as recognized
         from journal_lines l join journal_entries e on e.id = l.entry_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted' and e.origin = 'revenue_recognition'`),
@@ -40,6 +45,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
 
   const charges = (chargeRes as unknown as { rows: any[] }).rows
   const items = (itemRes as unknown as { rows: any[] }).rows
+  const equipment = (equipmentRes as unknown as { rows: any[] }).rows
   const recognizedToDate = String((recognizedRes as unknown as { rows: any[] }).rows[0]?.recognized ?? '0')
 
   return {
@@ -64,6 +70,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
     },
     charges: charges as ProjectCockpitData['charges'],
     items: items as ProjectCockpitData['items'],
+    equipment: equipment as ProjectCockpitData['equipment'],
     absorption: {
       recovered: charges.filter((c) => c.status === 'posted').reduce((a, c) => a + Number(c.cost), 0).toFixed(2),
       billValue: charges.reduce((a, c) => a + Number(c.billValue), 0).toFixed(2),

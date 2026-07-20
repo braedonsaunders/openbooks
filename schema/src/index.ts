@@ -13,6 +13,7 @@ export * from "./extension";
 export * from "./inventory";
 export * from "./revenue";
 export * from "./assets";
+export * from "./item-rates";
 export * from "./banking";
 export * from "./payment-operations";
 export * from "./planning";
