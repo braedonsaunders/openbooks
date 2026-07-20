@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, schema } from "../db.ts";
+import { db, schema, withOrg } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -104,116 +104,210 @@ export async function decideGate(args: {
   comment?: string | null;
 }): Promise<DecideGateResult> {
   const { gateId, decision, userId } = args;
-  const gate = await loadGate(gateId);
-  if (!gate) throw new GateError("approval not found");
-  if (gate.status !== "pending") throw new GateError("this approval was already resolved");
+
+  // -- Pre-flight (existence, authorization, separation of duties) -----------
+  const pre = await loadGate(gateId);
+  if (!pre) throw new GateError("approval not found");
+  if (pre.status !== "pending") throw new GateError("this approval was already resolved");
+
   let onBehalfOf: ResolvedUser | null = null;
-  if (!(await canActOnGate(gate, userId))) {
-    onBehalfOf = gate.assigneeUserId
-      ? await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId)
+  if (!(await canActOnGate(pre, userId))) {
+    onBehalfOf = pre.assigneeUserId
+      ? await activeDelegationPrincipal(pre.orgId, pre.assigneeUserId, userId)
       : null;
     if (!onBehalfOf) throw new GateError("you are not an approver for this gate");
   }
-  let comment = args.comment?.trim() || null;
-  if (onBehalfOf) {
-    const note = `[on behalf of ${onBehalfOf.name}]`;
-    comment = comment ? `${note} ${comment}` : note;
-  }
 
-  // Atomic transition: only a still-pending row flips, so two concurrent
-  // decisions can never both count (and 'any' can never double-resume).
-  const decided = await db
-    .update(schema.flowGates)
-    .set({ status: decision, decidedBy: userId, decidedAt: new Date(), comment, updatedAt: new Date() })
-    .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.status, "pending")))
-    .returning({ id: schema.flowGates.id });
-  if (decided.length === 0) throw new GateError("this approval was already resolved");
-
-  // Quorum over the sibling rows of this gate node instance.
-  const siblings = (await db
-    .select({ id: schema.flowGates.id, status: schema.flowGates.status })
-    .from(schema.flowGates)
-    .where(
-      and(eq(schema.flowGates.runId, gate.runId), eq(schema.flowGates.groupKey, gate.groupKey)),
-    )) as SiblingGate[];
-  const outcome = resolveQuorumOutcome(gate.quorum, decision, siblings);
-
-  if (outcome.cancelIds.length > 0) {
-    await db
-      .update(schema.flowGates)
-      .set({ status: "cancelled", updatedAt: new Date() })
-      .where(
-        and(
-          inArray(schema.flowGates.id, outcome.cancelIds),
-          inArray(schema.flowGates.status, ["pending", "escalated"]),
-        ),
-      );
-  }
-
-  if (!outcome.resume) {
-    // 'all' quorum still collecting approvals — the run keeps waiting.
-    return { ok: true, resumed: null, runStatus: "waiting" };
-  }
-
-  // --- Resume the decided branch on the SAME run ---------------------------
-  const [flow] = await db.select().from(schema.flows).where(eq(schema.flows.id, gate.flowId));
-  const adapter = getFlowAdapter(gate.subjectKind);
-  if (!flow || !adapter) {
-    await finalizeRunStatus(gate.runId, true, "flow definition or subject adapter is unavailable");
-    return { ok: true, resumed: outcome.resume, runStatus: "failed" };
-  }
-  const graph = parseFlowGraph(flow.id, flow.graph);
-  if (!graph) {
-    await finalizeRunStatus(gate.runId, true, "flow graph failed validation");
-    return { ok: true, resumed: outcome.resume, runStatus: "failed" };
-  }
-
-  const ctx: FlowExecCtx = { orgId: gate.orgId, userId };
-  const subject = await adapter.loadContext(gate.subjectId);
-
-  // The quorum is resolved — tell the requester what happened to their record
-  // (best-effort: a notification hiccup must never fail the decision).
-  try {
-    await notifySubmitterOfDecision({
-      gate,
-      adapter,
-      subject,
-      branch: outcome.resume,
-      deciderUserId: userId,
-      reason: args.comment?.trim() || null,
-    });
-  } catch (e) {
-    console.error(`[flows] gate ${gateId} submitter notification failed:`, e);
-  }
-
-  let hadFailure = false;
-  let error: string | null = null;
-  if (!subject) {
-    hadFailure = true;
-    error = "subject record no longer exists";
-  } else {
-    const evalCtx = { values: { ...subject.values }, rows: subject.rows ?? {} };
-    const plan = planFromGate(graph, gate.nodeId, outcome.resume, evalCtx);
-    if (plan.actionNodes.length > 0 || plan.gates.length > 0) {
-      const res = await executeFlowPlan(ctx, adapter, {
-        flow: { id: flow.id, name: flow.name, subjectKind: gate.subjectKind, graph: flow.graph },
-        runId: gate.runId,
-        subjectId: gate.subjectId,
-        plan,
-        evalCtx,
-        submitterUserId: subject.submitterUserId,
-      });
-      hadFailure = res.failed.length > 0;
-      error = hadFailure ? res.failed.join("; ") : null;
+  // Separation of duties, enforced at DECISION time (not just gate creation):
+  // the record's submitter may never decide their own approval — closing the
+  // admin / later-role-grant / delegated-actor bypasses. Secure by default;
+  // only an explicit preventSelfApproval:false on the gate node opts out.
+  const preAdapter = getFlowAdapter(pre.subjectKind);
+  const submitterUserId =
+    (await preAdapter?.loadContext(pre.subjectId))?.submitterUserId ?? null;
+  if (submitterUserId && submitterUserId === userId) {
+    const node = await gateNodeData(pre.flowId, pre.nodeId);
+    if (!node || node.preventSelfApproval !== false) {
+      throw new GateError("you cannot approve your own submission");
     }
   }
 
-  await finalizeRunStatus(gate.runId, hadFailure, error);
-  const runStatus = hadFailure
-    ? "failed"
-    : ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(eq(schema.flowRuns.id, gate.runId)))[0]
-        ?.status as "waiting" | "completed" | "failed") ?? "completed";
-  return { ok: true, resumed: outcome.resume, runStatus };
+  // -- Serialized decision: one xact lock per run holds through the flip →
+  // quorum → cancel → resume → release sequence, so concurrent deciders can
+  // never both resume (double-post) and the whole decision is atomic (a crash
+  // rolls back to a still-pending gate, safely re-decidable). ----------------
+  return withOrg(pre.orgId, async () => {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
+
+    const gate = await loadGate(gateId);
+    if (!gate || gate.status !== "pending") {
+      throw new GateError("this approval was already resolved");
+    }
+
+    let comment = args.comment?.trim() || null;
+    if (onBehalfOf) {
+      const note = `[on behalf of ${onBehalfOf.name}]`;
+      comment = comment ? `${note} ${comment}` : note;
+    }
+
+    const decided = await db
+      .update(schema.flowGates)
+      .set({ status: decision, decidedBy: userId, decidedAt: new Date(), comment, updatedAt: new Date() })
+      .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.status, "pending")))
+      .returning({ id: schema.flowGates.id });
+    if (decided.length === 0) throw new GateError("this approval was already resolved");
+
+    // Quorum over the sibling rows of this gate node instance.
+    const siblings = (await db
+      .select({ id: schema.flowGates.id, status: schema.flowGates.status })
+      .from(schema.flowGates)
+      .where(
+        and(eq(schema.flowGates.runId, gate.runId), eq(schema.flowGates.groupKey, gate.groupKey)),
+      )) as SiblingGate[];
+    const outcome = resolveQuorumOutcome(gate.quorum, decision, siblings);
+
+    if (outcome.cancelIds.length > 0) {
+      await db
+        .update(schema.flowGates)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(
+          and(
+            inArray(schema.flowGates.id, outcome.cancelIds),
+            inArray(schema.flowGates.status, ["pending", "escalated"]),
+          ),
+        );
+    }
+
+    if (!outcome.resume) {
+      // 'all' quorum still collecting approvals — the run keeps waiting.
+      return { ok: true, resumed: null, runStatus: "waiting" };
+    }
+
+    // --- Resume the decided branch on the SAME run -------------------------
+    const [flow] = await db.select().from(schema.flows).where(eq(schema.flows.id, gate.flowId));
+    const adapter = getFlowAdapter(gate.subjectKind);
+    if (!flow || !adapter) {
+      await finalizeRunStatus(gate.runId, true, "flow definition or subject adapter is unavailable");
+      return { ok: true, resumed: outcome.resume, runStatus: "failed" };
+    }
+    const graph = parseFlowGraph(flow.id, flow.graph);
+    if (!graph) {
+      await finalizeRunStatus(gate.runId, true, "flow graph failed validation");
+      return { ok: true, resumed: outcome.resume, runStatus: "failed" };
+    }
+
+    const ctx: FlowExecCtx = { orgId: gate.orgId, userId };
+    const subject = await adapter.loadContext(gate.subjectId);
+
+    // The quorum is resolved — tell the requester what happened to their record
+    // (best-effort: a notification hiccup must never fail the decision).
+    try {
+      await notifySubmitterOfDecision({
+        gate,
+        adapter,
+        subject,
+        branch: outcome.resume,
+        deciderUserId: userId,
+        reason: args.comment?.trim() || null,
+      });
+    } catch (e) {
+      console.error(`[flows] gate ${gateId} submitter notification failed:`, e);
+    }
+
+    let hadFailure = false;
+    let error: string | null = null;
+    if (!subject) {
+      hadFailure = true;
+      error = "subject record no longer exists";
+    } else {
+      const evalCtx = { values: { ...subject.values }, rows: subject.rows ?? {} };
+      const plan = planFromGate(graph, gate.nodeId, outcome.resume, evalCtx);
+      if (plan.actionNodes.length > 0 || plan.gates.length > 0) {
+        const res = await executeFlowPlan(ctx, adapter, {
+          flow: { id: flow.id, name: flow.name, subjectKind: gate.subjectKind, graph: flow.graph },
+          runId: gate.runId,
+          subjectId: gate.subjectId,
+          plan,
+          evalCtx,
+          submitterUserId: subject.submitterUserId,
+        });
+        hadFailure = res.failed.length > 0;
+        error = hadFailure ? res.failed.join("; ") : null;
+      }
+    }
+
+    // --- Engine-enforced release (deterministic, not author-dependent) -----
+    // The document leaves pending_approval because the ENGINE reconciles the
+    // subject's aggregate gate state — never because an author happened to wire
+    // a change_status node. Reject returns to draft and cancels every other
+    // open gate for the subject; approve releases only once no gate remains
+    // open across ALL runs (multi-step and multi-flow safe).
+    if (!hadFailure && adapter.releaseApproval) {
+      try {
+        if (outcome.resume === "reject") {
+          await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
+          await adapter.releaseApproval(gate.subjectId, "rejected", ctx);
+        } else if ((await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0) {
+          await adapter.releaseApproval(gate.subjectId, "approved", ctx);
+        }
+      } catch (e) {
+        hadFailure = true;
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+
+    await finalizeRunStatus(gate.runId, hadFailure, error);
+    const runStatus = hadFailure
+      ? "failed"
+      : ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(eq(schema.flowRuns.id, gate.runId)))[0]
+          ?.status as "waiting" | "completed" | "failed") ?? "completed";
+    return { ok: true, resumed: outcome.resume, runStatus };
+  });
+}
+
+/** Open (pending/escalated) gate rows for a subject across ALL its runs. */
+async function subjectOpenGateCount(
+  orgId: string,
+  subjectKind: string,
+  subjectId: string,
+): Promise<number> {
+  const r = (await db.execute(sql`
+    select count(*)::int as n from flow_gates
+     where org_id = ${orgId} and subject_kind = ${subjectKind} and subject_id = ${subjectId}
+       and status in ('pending', 'escalated')
+  `)) as unknown as { rows: { n: number }[] };
+  return r.rows[0]?.n ?? 0;
+}
+
+/**
+ * A rejection returns the record to draft, so every other still-open approval
+ * for the same subject (other steps, other flows) is moot — cancel those gates
+ * and terminate their runs so nothing dangling can later re-release the record.
+ */
+async function cancelSubjectApprovals(
+  orgId: string,
+  subjectKind: string,
+  subjectId: string,
+): Promise<void> {
+  const cancelled = await db
+    .update(schema.flowGates)
+    .set({ status: "cancelled", updatedAt: new Date() })
+    .where(
+      and(
+        eq(schema.flowGates.orgId, orgId),
+        eq(schema.flowGates.subjectKind, subjectKind),
+        eq(schema.flowGates.subjectId, subjectId),
+        inArray(schema.flowGates.status, ["pending", "escalated"]),
+      ),
+    )
+    .returning({ runId: schema.flowGates.runId });
+  const runIds = [...new Set(cancelled.map((r) => r.runId))];
+  for (const runId of runIds) {
+    await db
+      .update(schema.flowRuns)
+      .set({ status: "cancelled", finishedAt: new Date() })
+      .where(and(eq(schema.flowRuns.id, runId), inArray(schema.flowRuns.status, ["running", "waiting"])));
+  }
 }
 
 /**
@@ -585,11 +679,20 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
  * scan does not hammer) and the row stays pending.
  */
 async function escalateGate(gateId: string, now: Date): Promise<boolean> {
-  const gate = await loadGate(gateId);
-  if (!gate || gate.status !== "pending") return false;
+  const pre = await loadGate(gateId);
+  if (!pre || pre.status !== "pending") return false;
 
-  const adapter = getFlowAdapter(gate.subjectKind);
-  const subject = adapter ? await adapter.loadContext(gate.subjectId) : null;
+  // Serialize with decisions on the same run via the shared per-run xact lock:
+  // an escalation and a decision can never interleave, so replacement rows
+  // inserted here are always visible to a concurrent quorum resolution (and a
+  // decision that resolves the node first leaves nothing here to escalate).
+  return withOrg(pre.orgId, async () => {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
+    const gate = await loadGate(gateId);
+    if (!gate || gate.status !== "pending") return false;
+
+    const adapter = getFlowAdapter(gate.subjectKind);
+    const subject = adapter ? await adapter.loadContext(gate.subjectId) : null;
   const nodeGate = await gateNodeData(gate.flowId, gate.nodeId);
 
   const submitterUserId = subject?.submitterUserId ?? null;
@@ -677,8 +780,9 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
         inArray(schema.flowGates.assigneeUserId, replacements.map((u) => u.id)),
       ),
     );
-  for (const row of fresh) {
-    await notifyGateAssignee(row, "escalation");
-  }
-  return true;
+    for (const row of fresh) {
+      await notifyGateAssignee(row, "escalation");
+    }
+    return true;
+  });
 }

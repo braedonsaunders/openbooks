@@ -52,6 +52,19 @@ export interface FlowSubjectAdapter {
   getStatus(subjectId: string): Promise<string | null>;
   /** change_status action — guards illegal transitions, throws on violation. */
   changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void>;
+  /**
+   * ENGINE-ENFORCED approval release. Called by decideGate once a subject's
+   * approval fully resolves — `approved` when no gates remain open across all
+   * runs, `rejected` when any gate rejected — so release is a deterministic
+   * engine outcome, NOT an optional authored change_status side-effect. Must be
+   * idempotent (a no-op when the record is no longer awaiting approval).
+   * Optional: subjects without an approval lifecycle omit it.
+   */
+  releaseApproval?(
+    subjectId: string,
+    outcome: "approved" | "rejected",
+    ctx: FlowExecCtx,
+  ): Promise<void>;
   /** set_field action — writableFields only, throws on violation. */
   setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void>;
   /**

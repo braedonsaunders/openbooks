@@ -15,13 +15,25 @@ import { env } from "../db.ts";
  * Verification uses a constant-time compare.
  */
 
-// LOUD WARNING: the 'dev' fallback below exists ONLY so local development
-// works without configuration. Every real deployment MUST set
-// FLOWS_EMAIL_SECRET (a long random string) in the environment — with the
-// fallback, anyone who knows a gate id could forge approval links.
+// The one-click approval route (/api/flows/email-action) is PUBLIC and
+// sessionless — the HMAC token is the entire grant, so a weak/known key is an
+// unauthenticated, cross-tenant approval-forgery hole. We therefore FAIL CLOSED:
+// sign with the dedicated FLOWS_EMAIL_SECRET when set, else fall back to the
+// deployment's SESSION_SECRET (always present, sealed per-tenant deploy), and
+// throw if neither exists rather than degrade to a guessable constant.
 function secret(): string {
-  return env.FLOWS_EMAIL_SECRET || "dev";
+  const key = env.FLOWS_EMAIL_SECRET || env.SESSION_SECRET;
+  if (!key) {
+    throw new Error(
+      "FLOWS_EMAIL_SECRET or SESSION_SECRET must be set to sign one-click email approval links",
+    );
+  }
+  return key;
 }
+
+// Domain-separation tag: mixed into every HMAC so a token signed here can never
+// be replayed against another feature that also uses SESSION_SECRET.
+const TOKEN_DOMAIN = "flows-email-action:v1";
 
 export const EMAIL_TOKEN_TTL_MS = 7 * 24 * 3_600_000; // 7 days
 
@@ -34,7 +46,7 @@ export interface EmailActionClaims {
 }
 
 function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("hex");
+  return createHmac("sha256", secret()).update(`${TOKEN_DOMAIN}|${payload}`).digest("hex");
 }
 
 /** Mint a one-click decision token for a gate row's assignee. */

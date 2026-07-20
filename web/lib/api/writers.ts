@@ -346,8 +346,10 @@ async function runDocumentLifecycle(
   const cfg = DOC_KINDS[kind]!;
   try {
     if (action === "submit") {
-      const { gated } = await submitForApproval(kind, id);
+      const { gated, flowError } = await submitForApproval(kind, id);
       if (!gated) {
+        // An approval flow matched but errored — fail closed, never auto-approve.
+        if (flowError) return err(422, `approval could not be routed: ${flowError}`);
         // No flow gated this document: only direct-post kinds and credit memos
         // may proceed straight to approved (mirrors the documents/actions route);
         // other kinds require an approval flow to be configured.

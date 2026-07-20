@@ -22,6 +22,12 @@ export interface SubmitResult {
   gated: boolean;
   /** The gating flow run id (opaque handle for the caller), else null. */
   runId: string | null;
+  /**
+   * An on_submit flow matched but ERRORED (e.g. resolved to zero approvers).
+   * The caller MUST fail closed — never auto-approve — when this is set. The
+   * document is left in `draft`; the message names the failure.
+   */
+  flowError: string | null;
 }
 
 export async function submitForApproval(
@@ -76,8 +82,16 @@ export async function submitForApproval(
       .set({ status: "pending_approval" })
       .where(eq(schema.documents.id, targetId));
     const gatedRun = flowResult.runs.find((r) => r.gatesCreated > 0);
-    return { gated: true, runId: gatedRun?.runId ?? flowResult.runs[0]!.runId };
+    return { gated: true, runId: gatedRun?.runId ?? flowResult.runs[0]!.runId, flowError: null };
   }
 
-  return { gated: false, runId: null };
+  // A matched approval flow errored (or dispatch threw) without producing a
+  // gate. FAIL CLOSED: never let the caller treat this as "no approval needed"
+  // and auto-approve — the document stays draft and the caller surfaces it.
+  if (flowResult.failed) {
+    const reason = flowResult.runs.find((r) => r.status === "failed") ? "an approval flow errored" : "approval routing failed";
+    return { gated: false, runId: null, flowError: reason };
+  }
+
+  return { gated: false, runId: null, flowError: null };
 }

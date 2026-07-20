@@ -186,6 +186,23 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
     },
 
+    async releaseApproval(
+      subjectId: string,
+      outcome: "approved" | "rejected",
+      ctx: FlowExecCtx,
+    ): Promise<void> {
+      // Deterministic, engine-owned release — independent of any authored
+      // change_status node. Only acts while the record is awaiting approval, so
+      // it is idempotent and never fights a status a later action set.
+      const doc = await loadDoc(subjectId);
+      if (!doc || doc.status !== "pending_approval") return;
+      const to = outcome === "approved" ? "approved" : "draft";
+      await db
+        .update(schema.documents)
+        .set({ status: to as DocRow["status"], updatedBy: ctx.userId ?? null, updatedAt: new Date() })
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
+    },
+
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
       if (!WRITABLE_DOCUMENT_FIELDS.has(field)) {
         const customField = (await db.execute(sql`

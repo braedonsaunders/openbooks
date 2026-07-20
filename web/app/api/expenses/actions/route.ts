@@ -55,13 +55,17 @@ export async function POST(req: Request) {
         if (!body.documentId || !(await expenseReport(body.documentId, user.orgId))) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
-        const { gated, runId } = await submitForApproval('expense_report', body.documentId)
+        const { gated, runId, flowError } = await submitForApproval('expense_report', body.documentId)
         if (!gated) {
           // Expense reports always require approval — an approver, not the
-          // filer, releases them. With no flow configured there's nothing to
-          // approve them, so surface it instead of silently self-approving.
+          // filer, releases them. Whether no flow is configured or a matched
+          // flow errored, fail closed instead of silently self-approving.
           return NextResponse.json(
-            { error: 'no approval flow is configured for expense_report' },
+            {
+              error: flowError
+                ? `approval could not be routed: ${flowError}`
+                : 'no approval flow is configured for expense_report',
+            },
             { status: 422 },
           )
         }
