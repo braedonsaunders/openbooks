@@ -108,7 +108,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   await db.transaction(async (tx) => {
     if (lines && calculated) {
-      await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id}`)
+      await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
       for (let index = 0; index < lines.length; index++) {
         const input = lines[index]!
         const math = calculated.lines[index]!
@@ -122,7 +122,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
     if (team) {
-      await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id}`)
+      await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`)
       for (const member of team) await tx.execute(sql`
         insert into crm_opportunity_team_members
           (org_id, opportunity_id, user_id, contribution_percent, is_primary, created_by, updated_by)
@@ -132,7 +132,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const weighted = calculated?.weightedAmount ?? (probability !== Number(current.probability)
       ? computeOpportunityTotals([{ quantity: '1', unitPrice: String(current.projected_amount) }], probability).weightedAmount
       : current.weighted_amount)
-    await tx.execute(sql`
+        await tx.execute(sql`
       update crm_opportunities set
         title = ${title}, party_id = ${partyId}, primary_contact_id = ${contactId}, owner_user_id = ${ownerUserId},
         sales_team_id = ${salesTeamId}, status_id = ${statusId}, lead_source_id = ${leadSourceId},
@@ -148,7 +148,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         closed_at = case when ${nextStatus.is_closed} then coalesce(closed_at, now()) else null end,
         is_active = ${body.isActive !== undefined ? body.isActive === true : (title !== 'New opportunity' && !!partyId)},
         updated_at = now(), updated_by = ${user.id}
-      where id = ${id}`)
+      where id = ${id} and org_id = ${user.orgId}`)
     if (statusId !== current.status_id || probability !== Number(current.probability) || category !== current.forecast_category) {
       await tx.execute(sql`
         insert into crm_opportunity_stage_events

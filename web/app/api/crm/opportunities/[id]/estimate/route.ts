@@ -34,7 +34,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
               ${op.class_id}, ${JSON.stringify(op.extra_dims ?? {})}::jsonb, ${op.title}, ${op.projected_amount},
               0, ${op.projected_amount}, ${user.id}, ${user.id}) returning id`)) as unknown as { rows: { id: string }[] }
     const docId = document.rows[0]!.id
-    const lines = (await tx.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} order by line_number`)) as unknown as { rows: any[] }
+    const lines = (await tx.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId} order by line_number`)) as unknown as { rows: any[] }
     for (const line of lines.rows) await tx.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, item_id, account_id, description, quantity, unit, unit_price,

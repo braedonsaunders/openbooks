@@ -113,7 +113,7 @@ export default async function BankingTransactions({
   // -- open document drawer (?doc=<id>) -------------------------------------
   const docId = typeof sp.doc === 'string' ? sp.doc : undefined
   // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId) : null
+  const loadedDoc = docId ? await loadDocument(docId, authz.user.orgId) : null
   const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
     ? loadedDoc : null

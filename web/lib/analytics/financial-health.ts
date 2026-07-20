@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
+import { resolveOrgId } from "../org-scope";
 
 /**
  * Financial Health — the ratio + scorecard engine behind
@@ -243,13 +244,14 @@ function monthsBetween(from: string, to: string): number {
   return Math.max(1, days / 30.4375);
 }
 
-async function depreciationAmortization(from: string, to: string): Promise<number> {
+async function depreciationAmortization(orgId: string, from: string, to: string): Promise<number> {
   const r = (await db.execute(sql`
     select coalesce(sum(l.amount), 0) as s
       from journal_lines l
-      join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id
-     where a.type in ('expense', 'expense_other', 'expense_deferred')
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+     where l.org_id = ${orgId}
+       and a.type in ('expense', 'expense_other', 'expense_deferred')
        and (lower(a.name) like '%deprec%' or lower(a.name) like '%amort%')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
   `)) as any;
@@ -257,9 +259,9 @@ async function depreciationAmortization(from: string, to: string): Promise<numbe
   return Number(r.rows[0]?.s ?? 0);
 }
 
-async function activeHeadcount(): Promise<number> {
+async function activeHeadcount(orgId: string): Promise<number> {
   const r = (await db.execute(sql`
-    select count(*)::int as c from employee_roles where terminated_on is null
+    select count(*)::int as c from employee_roles where org_id = ${orgId} and terminated_on is null
   `)) as any;
   return Number(r.rows[0]?.c ?? 0);
 }
@@ -271,18 +273,20 @@ export async function financialHealth(
     label: string;
   },
   benchmarks: HealthBenchmarks = DEFAULT_BENCHMARKS,
+  orgId?: string,
 ): Promise<FinancialHealth> {
+  const resolvedOrgId = await resolveOrgId(orgId);
   const { from, to, label } = period;
   const b = benchmarks;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
 
   const [pl, priorPl, bs, da, headcount] = await Promise.all([
-    profitAndLoss(from, to),
-    profitAndLoss(pFrom, pTo),
-    balanceSheet(to),
-    depreciationAmortization(from, to),
-    activeHeadcount(),
+    profitAndLoss(from, to, undefined, resolvedOrgId),
+    profitAndLoss(pFrom, pTo, undefined, resolvedOrgId),
+    balanceSheet(to, resolvedOrgId),
+    depreciationAmortization(resolvedOrgId, from, to),
+    activeHeadcount(resolvedOrgId),
   ]);
 
   // Operating vs non-operating split, straight off account types.

@@ -37,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: `missing permission: ${readPermission(row.kind)}` }, { status: 403 })
   }
 
-  const doc = await loadDocument(id)
+  const doc = await loadDocument(id, authz.user.orgId)
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(doc)
 }
@@ -108,7 +108,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     throw e
   }
 
-  const doc = await loadDocument(id)
+  const doc = await loadDocument(id, user.orgId)
   return NextResponse.json(doc)
 }
 

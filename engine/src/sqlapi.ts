@@ -25,15 +25,27 @@ export interface UserSqlResult {
 }
 
 const FORBIDDEN_PREFIX = /^\s*(insert|update|delete|create|alter|drop|grant|revoke|truncate|copy|vacuum|set|call|do)\b/i;
+const FORBIDDEN_BODY = /\b(?:pg_catalog\.)?set_config\s*\(/i;
+const STRING_OR_DOLLAR_QUOTE = /'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|\$(?:[A-Za-z_][A-Za-z0-9_]*|)\$[\s\S]*?\$(?:[A-Za-z_][A-Za-z0-9_]*|)\$/g;
+
+function stripSqlNoise(input: string): string {
+  return input
+    .replace(/--[^\n]*/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(STRING_OR_DOLLAR_QUOTE, " ");
+}
 
 export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Promise<UserSqlResult> {
   const maxRows = Math.min(opts.maxRows ?? 1_000, 50_000);
   const timeoutMs = Math.min(opts.timeoutMs ?? 5_000, 60_000);
 
-  const stripped = sqlText.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+  const stripped = stripSqlNoise(sqlText).trim();
   if (!stripped) throw new Error("empty query");
   if (stripped.replace(/;\s*$/, "").includes(";")) throw new Error("one statement per query");
   if (FORBIDDEN_PREFIX.test(stripped)) throw new Error("read-only: queries must be SELECT (or WITH … SELECT)");
+  if (FORBIDDEN_BODY.test(stripped)) {
+    throw new Error("read-only: set_config() is not allowed in user SQL");
+  }
   if (!/^\s*(select|with)\b/i.test(stripped)) throw new Error("queries must start with SELECT or WITH");
 
   const body = stripped.replace(/;\s*$/, "");

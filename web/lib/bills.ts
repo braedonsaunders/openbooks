@@ -3,16 +3,19 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, sum } from '@openbooks/engine/src/money.ts'
 import { resolveLineTax } from '@openbooks/engine/src/tax.ts'
+import { resolveOrgId } from './org-scope'
 
 /** Latest effective rate per tax code, as of now. */
-export async function taxRateMap(): Promise<Map<string, number>> {
+export async function taxRateMap(orgId?: string): Promise<Map<string, number>> {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const rates = (await db.execute(sql`
     select tc.id, coalesce(tr.rate_percent, 0) as rate
       from tax_codes tc
       left join lateral (
         select rate_percent from tax_rates
-         where tax_code_id = tc.id and effective_from <= now()
+         where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= now()
          order by effective_from desc limit 1) tr on true
+     where tc.org_id = ${resolvedOrgId}
   `)) as unknown as { rows: { id: string; rate: string }[] }
   return new Map(rates.rows.map((r) => [r.id, Number(r.rate)]))
 }
@@ -61,20 +64,21 @@ export async function nextDocumentNumber(orgId: string, kind: string, prefix: st
 }
 
 /** Full bill payload for the drawer: header + lines. */
-export async function loadBill(id: string) {
+export async function loadBill(id: string, orgId?: string) {
+  const resolvedOrgId = await resolveOrgId(orgId)
   const doc = (await db.execute(sql`
     select d.*, p.display_name as vendor_name, e.id as entry_id
       from documents d
-      left join parties p on p.id = d.party_id
-      left join journal_entries e on e.id = d.posted_entry_id
-     where d.id = ${id} and d.kind = 'vendor_bill'
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
+     where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'vendor_bill'
   `)) as unknown as { rows: Record<string, unknown>[] }
   if (!doc.rows[0]) return null
   const lines = (await db.execute(sql`
     select l.id, l.line_number, l.account_id, l.description, l.amount, l.tax_code_id, l.tax_amount,
            l.tax_overridden, l.department_id, l.project_id, l.custom
       from document_lines l
-     where l.document_id = ${id}
+     where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
   `)) as unknown as { rows: Record<string, unknown>[] }
   return { doc: doc.rows[0], lines: lines.rows }

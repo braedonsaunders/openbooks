@@ -87,7 +87,7 @@ export async function convertOrder(
       select id, line_number, item_id, account_id, description, quantity, unit, unit_price,
              amount, tax_code_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
              is_billable, quantity_billed
-        from document_lines where document_id = ${sourceId} order by line_number
+        from document_lines where document_id = ${sourceId} and org_id = ${orgId} order by line_number
     `)) as unknown as { rows: any[] }
 
     // Remaining (un-pulled) quantity per line.

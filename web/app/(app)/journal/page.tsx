@@ -143,16 +143,16 @@ export default async function Journal({
        order by created_at desc
        limit 20
     `) as any,
-    entryParam ? loadJournalDoc(entryParam).then((journal) => {
+    entryParam ? loadJournalDoc(entryParam, authz.user.orgId).then((journal) => {
       if (!journal || !allowedSubsidiaries) return journal
       return allowedSubsidiaries.has(String(journal.doc.subsidiary_id)) ? journal : null
     }) : null,
     entryParam
       ? Promise.all([
-          db.execute(sql`select id, display_name from parties where is_active order by display_name limit 2000`) as any,
-          db.execute(sql`select id, number, name from accounts where is_active and not is_summary order by number nulls last`) as any,
-          db.execute(sql`select id, name from departments where is_active order by name`) as any,
-          db.execute(sql`select id, name from projects where is_active order by name limit 2000`) as any,
+          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`) as any,
+          db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
+          db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
+          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
           loadFieldDefs('documents', 'journal'),
           loadFieldDefs('document_lines', 'journal'),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.

@@ -101,7 +101,7 @@ export default async function AP({
   // ----------------------------------------------------------------- Bills
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId) : null
+  const loadedDoc = docId ? await loadDocument(docId, authz.user.orgId) : null
   const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
     ? loadedDoc : null

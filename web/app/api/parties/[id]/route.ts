@@ -268,7 +268,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (c.enabled === false) {
       await db.execute(sql`
         update customer_roles set is_active = false, updated_at = now(), updated_by = ${user.id}
-        where party_id = ${id}`)
+        where party_id = ${id} and org_id = ${user.orgId}`)
     } else if (c.enabled === true) {
       const paymentTermsId = uuidOrNull(c.paymentTermsId)
       if (paymentTermsId === 'invalid') return bad('Invalid customer payment terms')
@@ -312,7 +312,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v.enabled === false) {
       await db.execute(sql`
         update vendor_roles set is_active = false, updated_at = now(), updated_by = ${user.id}
-        where party_id = ${id}`)
+        where party_id = ${id} and org_id = ${user.orgId}`)
     } else if (v.enabled === true) {
       const paymentMethod = strOrNull(v.paymentMethod)
       if (paymentMethod && !PAYMENT_METHODS.includes(paymentMethod as (typeof PAYMENT_METHODS)[number])) {
@@ -359,7 +359,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (e.enabled === false) {
       await db.execute(sql`
         update employee_roles set is_active = false, updated_at = now(), updated_by = ${user.id}
-        where party_id = ${id}`)
+        where party_id = ${id} and org_id = ${user.orgId}`)
     } else if (e.enabled === true) {
       const departmentId = uuidOrNull(e.departmentId)
       if (departmentId === 'invalid') return bad('Invalid department')
