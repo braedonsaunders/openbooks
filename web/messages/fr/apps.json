@@ -43,5 +43,25 @@
     "loading": "Chargement…",
     "failedTitle": "Impossible d’ouvrir cette application.",
     "failedHint": "Essayez d’actualiser la page. Si le problème persiste, contactez votre administrateur."
+  },
+  "admin": {
+    "title": "Applications",
+    "description": "Créez et installez des paquets d’application — une interface en bac à sable et un service dorsal contrôlé, isolés pour chaque application.",
+    "searchPlaceholder": "Rechercher des applications…",
+    "status": "État",
+    "statuses": {
+      "installed": "Installée",
+      "disabled": "Désactivée"
+    },
+    "columns": {
+      "name": "Nom",
+      "key": "Clé",
+      "version": "Version",
+      "endpoints": "Points de terminaison",
+      "runs": "Exécutions",
+      "status": "État",
+      "updated": "Mise à jour"
+    },
+    "empty": "Aucune application. Créez-en une pour obtenir une base prête à ouvrir, ou importez un paquet .zip."
   }
 }

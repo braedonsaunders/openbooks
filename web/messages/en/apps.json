@@ -43,5 +43,25 @@
     "loading": "Loading…",
     "failedTitle": "This app couldn't be opened.",
     "failedHint": "Try refreshing. If it keeps happening, contact your administrator."
+  },
+  "admin": {
+    "title": "Apps",
+    "description": "Build and install app packages — a sandboxed frontend plus a governed backend, isolated per app.",
+    "searchPlaceholder": "Search apps…",
+    "status": "Status",
+    "statuses": {
+      "installed": "Installed",
+      "disabled": "Disabled"
+    },
+    "columns": {
+      "name": "Name",
+      "key": "Key",
+      "version": "Version",
+      "endpoints": "Endpoints",
+      "runs": "Runs",
+      "status": "Status",
+      "updated": "Updated"
+    },
+    "empty": "No apps yet. Create one to get a ready-to-open starter, or import a .zip package."
   }
 }

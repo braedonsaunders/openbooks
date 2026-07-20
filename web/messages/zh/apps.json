@@ -43,5 +43,22 @@
     "loading": "加载中…",
     "failedTitle": "无法打开此应用。",
     "failedHint": "请尝试刷新。如果问题持续出现，请联系您的管理员。"
+  },
+  "admin": {
+    "title": "应用",
+    "description": "构建和安装应用包；每个应用都拥有隔离的前端和受控的后端。",
+    "searchPlaceholder": "搜索应用…",
+    "status": "状态",
+    "statuses": { "installed": "已安装", "disabled": "已禁用" },
+    "columns": {
+      "name": "名称",
+      "key": "键",
+      "version": "版本",
+      "endpoints": "端点",
+      "runs": "运行次数",
+      "status": "状态",
+      "updated": "更新时间"
+    },
+    "empty": "还没有应用。您可以创建一个可直接打开的初始应用，或导入 .zip 包。"
   }
 }
