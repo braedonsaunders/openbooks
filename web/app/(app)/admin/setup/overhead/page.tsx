@@ -1,9 +1,12 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { BookOpen } from 'lucide-react'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 import { TrueCostView } from '../../../../(app)/analytics/true-cost/TrueCostView'
+import { OverheadActions } from './OverheadActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +30,9 @@ export default async function OverheadModelSetup() {
   from.setFullYear(from.getFullYear() - 1)
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   const data = await trueCostData(authz.user.orgId, { from: iso(from), to: iso(to), label: 'TTM' })
+  const typesRes = (await db.execute(sql`
+    select id, name from project_types where org_id = ${authz.user.orgId} and is_active
+     order by sort_order, name`)) as unknown as { rows: { id: string; name: string }[] }
 
   return (
     <div className="space-y-4">
@@ -52,6 +58,10 @@ export default async function OverheadModelSetup() {
           >
             {t('setup.entities.overhead-model.viewAnalytics')} →
           </Link>
+          <OverheadActions
+            departments={data.departments.map((d) => ({ id: d.id, name: d.name, composite: d.composite }))}
+            projectTypes={typesRes.rows}
+          />
         </div>
       </div>
       <TrueCostView data={data} mode="setup" />

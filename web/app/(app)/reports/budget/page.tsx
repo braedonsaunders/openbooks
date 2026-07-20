@@ -5,7 +5,6 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { budgetScenarioOptions, budgetVsActualView } from '../../../../lib/budget-report'
 import { orgInfo } from '../../../../lib/data'
 import { StatementMatrixTable } from '../StatementMatrixTable'
-import { ScenarioPicker } from './ScenarioPicker'
 import { SaveViewButton } from '../SaveViewButton'
 import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
@@ -22,6 +21,7 @@ export default async function BudgetPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('reports')
+  const tb = await getTranslations('budgets')
   const authz = await requirePermission('reports.read')
   const sp = await searchParams
   const q = parseReportQuery(sp)
@@ -36,11 +36,10 @@ export default async function BudgetPage({
     return (
       <ListPageLayout
         header={
-          <PageHeader
-            title={t('budget.title')}
-            back={{ href: '/reports', label: t('hub.title') }}
-            actions={manageAction}
-          />
+          <>
+            <PageHeader title={t('budget.title')} back={{ href: '/reports', label: t('hub.title') }} />
+            <ReportFilterBar controls={{ period: false }} actions={manageAction} />
+          </>
         }
       >
         <ReportPaper company={org?.name ?? ''} title={t('budget.title')} periodPhrase={t('budget.description')}>
@@ -71,16 +70,31 @@ export default async function BudgetPage({
           <PageHeader
             title={t('budget.title')}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={manageAction}
           />
-          <div className="flex flex-wrap items-end gap-2">
-            <ScenarioPicker scenarios={scenarios} value={scenarioId} />
-            <ReportFilterBar
-              controls={{ dimensions: true }}
-              dimensions={dimensions}
-              actions={<><SaveViewButton /><ExportMenu kind="budget" params={{ ...sp, scenario: scenarioId }} /></>}
-            />
-          </div>
+          <ReportFilterBar
+            controls={{ period: false, dimensions: true }}
+            primaryFilter={{
+              paramKey: 'scenario',
+              label: t('budget.scenario'),
+              value: scenarioId,
+              options: scenarios.map((scenario) => ({
+                value: scenario.id,
+                label: t('budget.scenarioOption', {
+                  name: scenario.name,
+                  year: scenario.fiscalYear,
+                  status: tb(`status.${scenario.status}`),
+                }),
+              })),
+            }}
+            dimensions={dimensions}
+            actions={
+              <>
+                {manageAction}
+                <SaveViewButton />
+                <ExportMenu kind="budget" params={{ ...sp, scenario: scenarioId }} />
+              </>
+            }
+          />
         </>
       }
     >

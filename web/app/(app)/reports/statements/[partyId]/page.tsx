@@ -65,16 +65,21 @@ export default async function PartnerStatementPage({
             title={st.party.name ?? t('statements.title')}
             back={{ href: '/reports/registers', label: t('registers.arTitle') }}
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/reports/statements/${partyId}?side=ar&${keep}`}>
-              <Badge variant={side === 'ar' ? 'default' : 'outline'}>{t('registers.receivables')}</Badge>
-            </Link>
-            <Link href={`/reports/statements/${partyId}?side=ap&${keep}`}>
-              <Badge variant={side === 'ap' ? 'default' : 'outline'}>{t('registers.payables')}</Badge>
-            </Link>
-            <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            <ReportFilterBar controls={{ period: true }} actions={<><SaveViewButton /><ExportMenu kind="partner-statement" params={{ ...sp, party: partyId, side }} /></>} />
-          </div>
+          <ReportFilterBar
+            controls={{ period: true }}
+            leading={
+              <>
+                <Link href={`/reports/statements/${partyId}?side=ar&${keep}`}>
+                  <Badge variant={side === 'ar' ? 'default' : 'outline'}>{t('registers.receivables')}</Badge>
+                </Link>
+                <Link href={`/reports/statements/${partyId}?side=ap&${keep}`}>
+                  <Badge variant={side === 'ap' ? 'default' : 'outline'}>{t('registers.payables')}</Badge>
+                </Link>
+                <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+              </>
+            }
+            actions={<><SaveViewButton /><ExportMenu kind="partner-statement" params={{ ...sp, party: partyId, side }} /></>}
+          />
         </>
       }
     >

@@ -42,6 +42,11 @@ The custom report builder uses this surface for its live preview, and **Run
 now** displays the finished custom report on it. Filters and actions remain in
 the page toolbar; printable report content remains on the paper.
 
+Every standard and custom report uses the same compact toolbar as **Profit &
+Loss**. Search, report modes, dates, dimensions, saved views, and export actions
+stay inside that single non-wrapping row. On a narrow screen, scroll the toolbar
+horizontally; controls never move into a separate second row.
+
 ## Drill into report values
 
 Select any amount, count, quantity, percentage, or other numeric result to open

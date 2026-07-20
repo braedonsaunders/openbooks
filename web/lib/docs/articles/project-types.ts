@@ -7,7 +7,7 @@ export const projectTypes: DocArticle = {
   order: 1,
   summary:
     'Configure how each class of project is costed, priced, invoiced, and backed up — the profitability, invoicing, and backup profiles behind every project.',
-  updated: '2026-07-19',
+  updated: '2026-07-20',
   keywords: [
     'project type',
     'profitability',
@@ -86,10 +86,25 @@ computed. Each measure has a configurable **source**.
 - **Labor cost source** — how labor cost is measured: **In Actual Cost** (already
   included in actual cost), **Time Rate** (hours times cost rate), **Payroll JE**
   (from posted payroll journals), or **Account Group**.
-- **Overhead source** — overhead applied on top of direct labor. Today the options
-  are **None** or **Account Group** (allocate from a posted overhead pool). More
-  overhead-costing methods — including a per-labor-hour rate scoped by department —
-  are being added; this article will be updated when they ship.
+- **Overhead method** — each job's share of the cost of running the company. This
+  is a STATISTICAL, managerial number on the project P&L — never a ledger posting
+  (the real indirect costs are already expensed in the GL; posting overhead onto
+  jobs too would double-count). Methods:
+  - **None** — no overhead on this type.
+  - **Percent Of Labor** — labor cost times a flat percentage.
+  - **Per Labor Hour** — project hours times a flat dollar rate.
+  - **Rate Engine** — per-department rates applied to the project's labor hours,
+    with a **Rate source** of **standard** (the published, effective-dated rate
+    card in **Company Settings → Projects → Overhead Rates** — stable, auditable
+    job costs) or **live** (always the current computed composite from the
+    **Overhead Model** — self-truing, but historical margins move as expenses
+    post). Rates come from the **Overhead Model** workspace (Company Settings →
+    Projects), which computes each department's composite as overhead pool
+    divided by labor hours; **Publish rates** snapshots those into the rate
+    card, and the **Setup wizard** walks through method, rates, and which
+    project types to apply in one pass.
+  - **Account Group Actual** — legacy: sum project-tagged GL posted to an
+    overhead account group.
 - **Cost budget source** — **Wbs Estimates** (roll up the project's work-breakdown
   estimates) or **None**.
 - **Committed cost from** — which open documents count as committed: **Purchase
@@ -178,7 +193,8 @@ match an external system to the penny. The general approach:
 4. Confirm the numbers against a sample of known projects before relying on them.
 
 If you are migrating from a system that applies overhead as a per-labor-hour rate
-by department, note the expanded overhead methods referenced above — that method is
-being added specifically to support this pattern.
+by department, use the **Rate Engine** method with the **standard** rate source and
+import (or enter) your historical rates on the Overhead Rates card — effective
+dating means past periods keep their original rates to the penny.
 `,
 }

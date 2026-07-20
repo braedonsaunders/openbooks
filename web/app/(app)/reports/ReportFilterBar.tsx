@@ -4,8 +4,9 @@ import { useCallback, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { SlidersHorizontal } from 'lucide-react'
-import { Button, Popover, Select, cn } from '@openbooks/ui'
+import { Popover, Select, cn } from '@openbooks/ui'
 import { PERIOD_PRESETS, PERIOD_PRESET_GROUP_LABELS, type PeriodPresetGroup } from '@openbooks/reports'
+import { SearchInput } from '../../../components/search-input'
 
 type DimOption = { id: string; name: string }
 type SegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean; values: DimOption[] }
@@ -15,6 +16,7 @@ export type SubsidiaryPickerOption = { id: string; label: string }
 
 /** Which controls a given report exposes. */
 export type ReportControls = {
+  search?: boolean
   period?: boolean
   /** Always-visible explicit From/To fields rather than the period preset. */
   dateRange?: boolean
@@ -32,6 +34,8 @@ export type ReportControls = {
   scale?: boolean
 }
 
+type ReportFilterOption = { value: string; label: string }
+
 const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
   'fiscal_year',
   'fiscal_quarter',
@@ -43,13 +47,13 @@ const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
   'custom',
 ]
 
-const SELECT = 'h-8 w-auto min-w-0 border-0 bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-slate-100 dark:hover:bg-slate-800'
-const DATE = 'h-8 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
+const SELECT = 'h-8 w-auto min-w-0 shrink-0 border-0 bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-slate-100 dark:hover:bg-slate-800'
+const DATE = 'h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
 
 /** A compact inline control: tiny uppercase label + the control, on one line. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="flex items-center gap-1.5">
+    <label className="flex shrink-0 items-center gap-1.5">
       <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">{label}</span>
       {children}
     </label>
@@ -66,6 +70,9 @@ export function ReportFilterBar({
   dimensions,
   customers,
   dateRange,
+  searchPlaceholder,
+  primaryFilter,
+  leading,
   subsidiaries,
   actions,
   defaultPeriod = 'this_fiscal_year',
@@ -75,6 +82,11 @@ export function ReportFilterBar({
   customers?: DimOption[]
   /** Resolved dates displayed until an explicit URL value is selected. */
   dateRange?: { from: string; to: string }
+  searchPlaceholder?: string
+  /** A report-specific select rendered with the same compact P&L field chrome. */
+  primaryFilter?: { paramKey: string; label: string; value: string; options: ReportFilterOption[] }
+  /** Compact report mode controls that belong inside, never beside, the bar. */
+  leading?: ReactNode
   /** First entry is the default context (the root, consolidated). */
   subsidiaries?: SubsidiaryPickerOption[]
   actions?: ReactNode
@@ -124,7 +136,27 @@ export function ReportFilterBar({
     ) : null
 
   return (
-    <div className="flex flex-wrap items-center gap-x-1 gap-y-2 rounded-xl border border-slate-200 bg-slate-50/60 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900/40">
+    <div className="flex flex-nowrap items-center gap-x-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/60 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900/40">
+      {leading ? <div className="flex shrink-0 items-center gap-2">{leading}</div> : null}
+
+      {controls.search ? (
+        <SearchInput placeholder={searchPlaceholder} className="w-40 shrink-0 sm:w-44" />
+      ) : null}
+
+      {primaryFilter ? (
+        <Field label={primaryFilter.label}>
+          <Select
+            value={primaryFilter.value}
+            onChange={(e) => setParams({ [primaryFilter.paramKey]: e.target.value })}
+            className={cn(SELECT, 'font-semibold')}
+            aria-label={primaryFilter.label}
+          >
+            {primaryFilter.options.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
       {controls.period !== false && !controls.dateRange && (
         <Field label={controls.asOf ? t('asOf') : t('period')}>
           <Select
@@ -299,7 +331,7 @@ export function ReportFilterBar({
         </Popover>
       )}
 
-      {actions && <div className="ml-auto flex items-center gap-1.5">{actions}</div>}
+      {actions && <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>}
     </div>
   )
 }

@@ -1492,7 +1492,46 @@
         "title": "Overhead Model",
         "description": "The rate engine behind project overhead — cost pools, allocation bases, the department rate matrix, and profiles. Projects using the rate-engine overhead method apply these rates to their labor hours.",
         "docs": "Documentation",
-        "viewAnalytics": "View analytics"
+        "viewAnalytics": "View analytics",
+        "publish": "Publish rates",
+        "wizard": "Setup wizard",
+        "publishTitle": "Publish to the rate card",
+        "publishHint": "Locks the current engine rates into effective-dated rows on the Overhead Rates card. Projects on the standard rate source use these until you publish again.",
+        "publishConfirm": "Publish",
+        "publishDone": "Rates published to the rate card",
+        "cancel": "Cancel",
+        "wizardTitle": "Set up project overhead",
+        "wizardDone": "Overhead configured",
+        "wizardIntro": "Overhead gives every job its share of the cost of running the company — a managerial number on the project P&L, never a ledger posting. Pick how rates are determined:",
+        "recommended": "Recommended",
+        "effectiveFrom": "Effective from",
+        "liveNow": "Engine now: ${rate}/hr",
+        "liveExplain": "Projects always use the engine’s current computed composite — self-truing, no publishing step, but historical job margins move as new expenses post.",
+        "flatPercent": "Overhead % of labor cost",
+        "flatPerHour": "Overhead $ per labor hour",
+        "applyHint": "Apply this overhead method to the selected project types. Their P&L gains an Overhead line included in total job cost.",
+        "stepOf": "Step {step} of {total}",
+        "back": "Back",
+        "next": "Next",
+        "finish": "Finish",
+        "approach": {
+          "rate_card": {
+            "title": "Department rate card",
+            "desc": "Effective-dated $/hour by department, published from the engine (or entered manually). Stable, auditable job costs — the NetSuite/adminapp model."
+          },
+          "live": {
+            "title": "Live engine rates",
+            "desc": "Always use the current computed composite per department. Self-truing, but past job margins shift as expenses post."
+          },
+          "per_hour": {
+            "title": "Flat $ per labor hour",
+            "desc": "One company-wide dollar rate per labor hour. Simple, no departments."
+          },
+          "percent": {
+            "title": "Percent of labor cost",
+            "desc": "Overhead as a % markup on labor cost. Common in professional services."
+          }
+        }
       }
     },
     "fields": {

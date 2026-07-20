@@ -6,12 +6,13 @@ import { useRouter } from 'next/navigation'
 import { FileText, Play, Sheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
-import { Badge, Button } from '@openbooks/ui'
+import { Badge, Button, PageHeader } from '@openbooks/ui'
 import type { ReportCustomQuery, ReportRunResult } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { ResultView } from '../../ResultView'
 import { ScheduleEditor, type ScheduleRow } from './ScheduleEditor'
 import { ReportPaper } from '../../../ReportPaper'
+import { ReportFilterBar } from '../../../ReportFilterBar'
 
 type RunRow = {
   id: string
@@ -105,41 +106,39 @@ export function ReportRunner({
   return (
     <DetailPageLayout
       header={
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
-                {displayName}
-              </h1>
-              {definition.kind === 'built_in' ? <Badge variant="secondary">{tk('kind.builtIn')}</Badge> : null}
-            </div>
-            {displayDescription ? (
-              <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                {displayDescription}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            {canCreate ? (
-              <Button variant="outline" asChild>
-                <Link href={`/reports/custom/builder/${definition.id}`}>{tc('actions.edit')}</Link>
-              </Button>
-            ) : null}
-            <Button variant="outline" asChild>
-              <a href={`/api/reports/definitions/${definition.id}/export?format=pdf`}>
-                <FileText size={15} /> {t('downloadPdf')}
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href={`/api/reports/definitions/${definition.id}/export?format=xlsx`}>
-                <Sheet size={15} /> {t('downloadXlsx')}
-              </a>
-            </Button>
-            <Button disabled={running} onClick={runNow}>
-              <Play size={15} /> {running ? tk('running') : t('runNow')}
-            </Button>
-          </div>
-        </div>
+        <>
+          <PageHeader
+            title={displayName}
+            description={displayDescription ?? undefined}
+            back={{ href: '/reports/custom', label: tk('list.title') }}
+          />
+          <ReportFilterBar
+            controls={{ period: false }}
+            leading={definition.kind === 'built_in' ? <Badge variant="secondary">{tk('kind.builtIn')}</Badge> : null}
+            actions={
+              <>
+                {canCreate ? (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/reports/custom/builder/${definition.id}`}>{tc('actions.edit')}</Link>
+                  </Button>
+                ) : null}
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`/api/reports/definitions/${definition.id}/export?format=pdf`}>
+                    <FileText size={15} /> {t('downloadPdf')}
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`/api/reports/definitions/${definition.id}/export?format=xlsx`}>
+                    <Sheet size={15} /> {t('downloadXlsx')}
+                  </a>
+                </Button>
+                <Button size="sm" disabled={running} onClick={runNow}>
+                  <Play size={15} /> {running ? tk('running') : t('runNow')}
+                </Button>
+              </>
+            }
+          />
+        </>
       }
     >
       <div className="space-y-8">
