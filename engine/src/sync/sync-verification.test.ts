@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sourceDeletionCandidates, syncVerificationFailures, type SyncResult } from "./sync.ts";
+import { effectiveLineSubsidiary, sourceDeletionCandidates, syncVerificationFailures, type SyncResult } from "./sync.ts";
 
 function result(overrides: Partial<SyncResult> = {}): SyncResult {
   return {
@@ -52,4 +52,10 @@ test("full sweeps detect vanished source records while mirrors require tombstone
   const current = ["1", "3", "4"];
   assert.deepEqual(sourceDeletionCandidates(true, existing, current, ["3", "9"]), ["2", "3"]);
   assert.deepEqual(sourceDeletionCandidates(false, existing, current, ["3", "9"]), ["3"]);
+});
+
+test("change detection treats an inherited line subsidiary as its header subsidiary", () => {
+  assert.equal(effectiveLineSubsidiary(null, "root"), "root");
+  assert.equal(effectiveLineSubsidiary("child", "root"), "child");
+  assert.equal(effectiveLineSubsidiary(undefined, null), null);
 });

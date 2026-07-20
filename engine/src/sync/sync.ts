@@ -112,13 +112,22 @@ export function runFullMigration(
   });
 }
 
+/** Effective posting subsidiary for a line that inherits from its document. */
+export function effectiveLineSubsidiary(
+  lineSubsidiaryId: string | null | undefined,
+  documentSubsidiaryId: string | null | undefined,
+): string | null {
+  return lineSubsidiaryId ?? documentSubsidiaryId ?? null;
+}
+
 /** Canonical content key of a native document (change detection). */
 function nativeKey(d: NativeDocument): string {
   return JSON.stringify([
     d.kind, d.partyId, d.subsidiaryId, d.documentDate, d.dueDate, d.memo, d.referenceNumber, d.controlAccountId, d.extraDims ?? {},
     d.lines.map((l) => [
       l.accountId, l.itemId, toUnits(l.amount).toString(), toUnits(l.taxAmount).toString(),
-      l.taxOverridden, l.taxCodeId, l.partyId ?? null, l.departmentId, l.projectId, l.subsidiaryId, l.extraDims ?? {}, l.description,
+      l.taxOverridden, l.taxCodeId, l.partyId ?? null, l.departmentId, l.projectId,
+      effectiveLineSubsidiary(l.subsidiaryId, d.subsidiaryId), l.extraDims ?? {}, l.description,
     ]),
   ]);
 }
@@ -149,7 +158,8 @@ async function storedKey(docId: string): Promise<string> {
     d!.kind, d!.party_id, d!.subsidiary_id, d!.ddate, d!.due, d!.memo, d!.reference_number, d!.ctrl, d!.extra_dims ?? {},
     lines.map((l) => [
       l.account_id, l.item_id, toUnits(l.amount).toString(), toUnits(l.tax_amount).toString(),
-      l.tax_overridden, l.tax_code_id, l.party_id ?? null, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims ?? {}, l.description,
+      l.tax_overridden, l.tax_code_id, l.party_id ?? null, l.department_id, l.project_id,
+      effectiveLineSubsidiary(l.subsidiary_id, d!.subsidiary_id), l.extra_dims ?? {}, l.description,
     ]),
   ]);
 }
@@ -272,7 +282,7 @@ export async function runSync(
       cardLiabilityAccountId: ctx.control.ap,
       // Source replay can cross source-owned historical locks, while
       // controller-owned close locks remain authoritative.
-      migration: true,
+      migration: since === null,
     };
 
     // -- 3. pull native changes -------------------------------------------------
@@ -293,6 +303,7 @@ export async function runSync(
 
     let docsNew = 0, docsAmended = 0, docsUnchanged = 0, ordersNew = 0, docsFailed = 0;
     const skipped: string[] = [];
+    const writeFailures: string[] = [];
     for (const u of changes.unbuildable) skipped.push(`${u.ref}: ${u.reason}`);
 
     const totalDocs = changes.documents.length;
@@ -303,6 +314,7 @@ export async function runSync(
         phase: "post", message: "Posting transactions…",
         current: docIndex, total: totalDocs,
         docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
+        failureSamples: writeFailures,
       });
       const doc: NativeDocument = {
         ...sourceDoc,
@@ -450,7 +462,15 @@ export async function runSync(
         docsAmended++;
       } catch (e) {
         docsFailed++;
-        skipped.push(`${doc.sourceRef}: ${(e as Error).message.slice(0, 140)}`);
+        const failure = `${doc.sourceRef}: ${(e as Error).message.slice(0, 300)}`;
+        skipped.push(failure);
+        if (writeFailures.length < 20) writeFailures.push(failure);
+        await setProgress(run!.id, {
+          phase: "post", message: "Posting transactions…",
+          current: docIndex, total: totalDocs,
+          docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
+          failureSamples: writeFailures,
+        }, true);
       }
     }
 

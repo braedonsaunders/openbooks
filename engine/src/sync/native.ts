@@ -72,6 +72,8 @@ export interface SyncProgress {
   docsAmended?: number;
   docsUnchanged?: number;
   docsFailed?: number;
+  /** Bounded source-ref/error samples retained while a long run continues. */
+  failureSamples?: string[];
   ordersNew?: number;
 }
 
