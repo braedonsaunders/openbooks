@@ -14,9 +14,11 @@ const creds: NetSuiteCreds = {
 
 test("NetSuite bridge client exhausts deterministic pages", async () => {
   const requested: number[] = [];
+  const sizes: number[] = [];
   const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
     const pageIndex = Number(params.pageIndex);
     requested.push(pageIndex);
+    sizes.push(Number(params.pageSize));
     return {
       schemaVersion: 1,
       pageIndex,
@@ -31,6 +33,7 @@ test("NetSuite bridge client exhausts deterministic pages", async () => {
     { id: "1" }, { id: "2" }, { id: "3" },
   ]);
   assert.deepEqual(requested, [0, 1]);
+  assert.deepEqual(sizes, [1_000, 1_000]);
 });
 
 test("NetSuite bridge client fails closed on script errors and incompatible schemas", async () => {

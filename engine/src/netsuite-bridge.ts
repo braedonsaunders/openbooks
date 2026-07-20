@@ -110,7 +110,7 @@ export class NetSuiteBridgeClient {
         action: "query",
         sql,
         pageIndex,
-        pageSize: opts.pageSize ?? 500,
+        pageSize: opts.pageSize ?? 1_000,
         ...(opts.params ? { params: opts.params } : {}),
       }));
       if (page.pageIndex !== pageIndex) {
