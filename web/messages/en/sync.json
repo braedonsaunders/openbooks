@@ -98,6 +98,11 @@
     "redirectLabel": "Redirect URI to register:",
     "copy": "Copy"
   },
+  "netsuite": {
+    "setupTitle": "NetSuite extraction bridge",
+    "setupHint": "Install the read-only RESTlet and Map/Reduce bundle, then test this connection. No script is attached to transaction records.",
+    "documentation": "Documentation"
+  },
   "qbd": {
     "setupTitle": "QuickBooks Desktop setup",
     "setupHint": "After saving, download the Web Connector file from the connection card. Import it on the Windows computer running QuickBooks, approve read-only access as the QuickBooks administrator, and enter this password in Web Connector.",
@@ -110,7 +115,19 @@
   },
   "sources": {
     "netsuite": {
-      "blurb": "Token-based (TBA) access to SuiteQL. Create an integration + access token in NetSuite, then paste the four values. Native transactions, applications and orders migrate and mirror through the real posting engine."
+      "blurb": "Install the read-only extraction bridge, then connect with a dedicated token-based role. Transactions, applications, accounting controls and deletions are mirrored through proof-gated imports.",
+      "fields": {
+        "account": { "label": "Account ID", "help": "The NetSuite account realm." },
+        "host": { "label": "SuiteTalk host" },
+        "baseCurrency": { "label": "Base currency" },
+        "bridgeScriptId": { "label": "Bridge script ID", "help": "Leave blank to use customscript_openbooks_bridge_rl." },
+        "bridgeDeploymentId": { "label": "Bridge deployment ID", "help": "Leave blank to use customdeploy_openbooks_bridge_rl." },
+        "mappingJson": { "label": "Account field mappings", "help": "Optional JSON that maps account-specific custom fields and records to OpenBooks concepts." },
+        "consumerKey": { "label": "Consumer key" },
+        "consumerSecret": { "label": "Consumer secret" },
+        "tokenKey": { "label": "Token ID" },
+        "tokenSecret": { "label": "Token secret" }
+      }
     },
     "odoo": {
       "blurb": "Connect with your Odoo URL, database, user and an API key (Settings → My Profile → Account Security → API Keys). Invoices, bills, payments and journals migrate and mirror natively through the real posting engine."

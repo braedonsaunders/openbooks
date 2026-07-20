@@ -98,6 +98,11 @@
     "redirectLabel": "需注册的重定向 URI：",
     "copy": "复制"
   },
+  "netsuite": {
+    "setupTitle": "NetSuite 提取桥接器",
+    "setupHint": "安装只读 RESTlet 和 Map/Reduce 软件包，然后测试连接。不会向交易记录附加任何脚本。",
+    "documentation": "文档"
+  },
   "qbd": {
     "setupTitle": "QuickBooks Desktop 设置",
     "setupHint": "保存后，从连接卡片下载 Web Connector 文件。在运行 QuickBooks 的 Windows 计算机上导入，以 QuickBooks 管理员身份批准只读访问，并在 Web Connector 中输入此密码。",
@@ -110,7 +115,16 @@
   },
   "sources": {
     "netsuite": {
-      "blurb": "基于令牌（TBA）访问 SuiteQL。在 NetSuite 中创建集成 + 访问令牌，然后粘贴这四个值。原生交易、核销和订单将通过真实过账引擎进行迁移和镜像。"
+      "blurb": "安装只读提取桥接器，并使用专用令牌角色连接。交易、核销、会计控制和删除仅在验证通过后导入。",
+      "fields": {
+        "account": { "label": "账户 ID", "help": "NetSuite 账户领域。" },
+        "host": { "label": "SuiteTalk 主机" }, "baseCurrency": { "label": "本位币" },
+        "bridgeScriptId": { "label": "桥接脚本 ID", "help": "留空以使用 customscript_openbooks_bridge_rl。" },
+        "bridgeDeploymentId": { "label": "部署 ID", "help": "留空以使用 customdeploy_openbooks_bridge_rl。" },
+        "mappingJson": { "label": "账户字段映射", "help": "可选 JSON，用于将自定义字段和记录映射到 OpenBooks 概念。" },
+        "consumerKey": { "label": "使用者密钥" }, "consumerSecret": { "label": "使用者机密" },
+        "tokenKey": { "label": "令牌 ID" }, "tokenSecret": { "label": "令牌机密" }
+      }
     },
     "odoo": {
       "blurb": "使用您的 Odoo URL、数据库、用户和 API 密钥连接（设置 → 我的个人资料 → 账户安全 → API 密钥）。发票、账单、付款和日记账将通过真实过账引擎原生迁移和镜像。"

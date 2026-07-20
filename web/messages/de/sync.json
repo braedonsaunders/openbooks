@@ -98,6 +98,11 @@
     "redirectLabel": "Zu registrierende Redirect-URI:",
     "copy": "Kopieren"
   },
+  "netsuite": {
+    "setupTitle": "NetSuite-Extraktionsbrücke",
+    "setupHint": "Installieren Sie das schreibgeschützte RESTlet-/Map-Reduce-Paket und testen Sie die Verbindung. Transaktionen erhalten kein Skript.",
+    "documentation": "Dokumentation"
+  },
   "qbd": {
     "setupTitle": "QuickBooks Desktop einrichten",
     "setupHint": "Laden Sie nach dem Speichern die Web-Connector-Datei von der Verbindungskarte herunter. Importieren Sie sie auf dem Windows-Computer mit QuickBooks, genehmigen Sie als QuickBooks-Administrator den schreibgeschützten Zugriff und geben Sie dieses Kennwort im Web Connector ein.",
@@ -110,7 +115,16 @@
   },
   "sources": {
     "netsuite": {
-      "blurb": "Token-basierter (TBA) Zugriff auf SuiteQL. Erstellen Sie in NetSuite eine Integration + ein Access-Token und fügen Sie dann die vier Werte ein. Native Transaktionen, Anwendungen und Aufträge werden über die echte Buchungs-Engine migriert und gespiegelt."
+      "blurb": "Installieren Sie die schreibgeschützte Extraktionsbrücke und verbinden Sie eine dedizierte Token-Rolle. Transaktionen, Zuordnungen, Kontrollen und Löschungen werden prüfungsgesteuert importiert.",
+      "fields": {
+        "account": { "label": "Konto-ID", "help": "Der NetSuite-Kontobereich." },
+        "host": { "label": "SuiteTalk-Host" }, "baseCurrency": { "label": "Basiswährung" },
+        "bridgeScriptId": { "label": "Brücken-Skript-ID", "help": "Leer lassen für customscript_openbooks_bridge_rl." },
+        "bridgeDeploymentId": { "label": "Bereitstellungs-ID", "help": "Leer lassen für customdeploy_openbooks_bridge_rl." },
+        "mappingJson": { "label": "Kontofeldzuordnungen", "help": "Optionales JSON für die Zuordnung benutzerdefinierter Felder und Datensätze zu OpenBooks-Konzepten." },
+        "consumerKey": { "label": "Consumer-Schlüssel" }, "consumerSecret": { "label": "Consumer-Geheimnis" },
+        "tokenKey": { "label": "Token-ID" }, "tokenSecret": { "label": "Token-Geheimnis" }
+      }
     },
     "odoo": {
       "blurb": "Verbinden Sie sich mit Ihrer Odoo-URL, Datenbank, Benutzer und einem API-Schlüssel (Einstellungen → Mein Profil → Kontosicherheit → API-Schlüssel). Rechnungen, Eingangsrechnungen, Zahlungen und Journale werden nativ über die echte Buchungs-Engine migriert und gespiegelt."

@@ -98,6 +98,11 @@
     "redirectLabel": "URI de redirección para registrar:",
     "copy": "Copiar"
   },
+  "netsuite": {
+    "setupTitle": "Puente de extracción de NetSuite",
+    "setupHint": "Instale el paquete RESTlet y Map/Reduce de solo lectura y pruebe la conexión. No se adjunta ningún script a las transacciones.",
+    "documentation": "Documentación"
+  },
   "qbd": {
     "setupTitle": "Configuración de QuickBooks Desktop",
     "setupHint": "Después de guardar, descargue el archivo de Web Connector desde la tarjeta de conexión. Impórtelo en el equipo Windows que ejecuta QuickBooks, apruebe el acceso de solo lectura como administrador de QuickBooks e ingrese esta contraseña en Web Connector.",
@@ -110,7 +115,16 @@
   },
   "sources": {
     "netsuite": {
-      "blurb": "Acceso por token (TBA) a SuiteQL. Cree una integración y un token de acceso en NetSuite y pegue los cuatro valores. Las transacciones nativas, las aplicaciones de pago y los pedidos migran y se reflejan a través del motor de contabilización real."
+      "blurb": "Instale el puente de solo lectura y conecte un rol dedicado mediante token. Transacciones, aplicaciones, controles contables y eliminaciones se importan con verificación.",
+      "fields": {
+        "account": { "label": "ID de cuenta", "help": "El dominio de la cuenta de NetSuite." },
+        "host": { "label": "Host de SuiteTalk" }, "baseCurrency": { "label": "Moneda base" },
+        "bridgeScriptId": { "label": "ID del script del puente", "help": "Déjelo vacío para usar customscript_openbooks_bridge_rl." },
+        "bridgeDeploymentId": { "label": "ID del despliegue", "help": "Déjelo vacío para usar customdeploy_openbooks_bridge_rl." },
+        "mappingJson": { "label": "Mapeo de campos de la cuenta", "help": "JSON opcional para relacionar campos y registros personalizados con conceptos de OpenBooks." },
+        "consumerKey": { "label": "Clave de consumidor" }, "consumerSecret": { "label": "Secreto de consumidor" },
+        "tokenKey": { "label": "ID del token" }, "tokenSecret": { "label": "Secreto del token" }
+      }
     },
     "odoo": {
       "blurb": "Conéctese con su URL de Odoo, la base de datos, el usuario y una clave API (Ajustes → Mi perfil → Seguridad de la cuenta → Claves API). Las facturas de venta y de compra, los pagos y los asientos migran y se reflejan de forma nativa a través del motor de contabilización real."

@@ -98,6 +98,11 @@
     "redirectLabel": "URI de redirecionamento para registrar:",
     "copy": "Copiar"
   },
+  "netsuite": {
+    "setupTitle": "Ponte de extração do NetSuite",
+    "setupHint": "Instale o pacote RESTlet e Map/Reduce somente leitura e teste a conexão. Nenhum script é anexado às transações.",
+    "documentation": "Documentação"
+  },
   "qbd": {
     "setupTitle": "Configuração do QuickBooks Desktop",
     "setupHint": "Depois de salvar, baixe o arquivo do Web Connector no cartão da conexão. Importe-o no computador Windows que executa o QuickBooks, aprove o acesso somente leitura como administrador do QuickBooks e informe esta senha no Web Connector.",
@@ -110,7 +115,16 @@
   },
   "sources": {
     "netsuite": {
-      "blurb": "Acesso baseado em token (TBA) ao SuiteQL. Crie uma integração + token de acesso no NetSuite e cole os quatro valores. Transações nativas, aplicações e pedidos migram e são espelhados pelo mecanismo de lançamento real."
+      "blurb": "Instale a ponte de extração somente leitura e conecte uma função dedicada por token. Transações, aplicações, controles contábeis e exclusões são importados com validação.",
+      "fields": {
+        "account": { "label": "ID da conta", "help": "O domínio da conta do NetSuite." },
+        "host": { "label": "Host do SuiteTalk" }, "baseCurrency": { "label": "Moeda-base" },
+        "bridgeScriptId": { "label": "ID do script da ponte", "help": "Deixe em branco para usar customscript_openbooks_bridge_rl." },
+        "bridgeDeploymentId": { "label": "ID da implantação", "help": "Deixe em branco para usar customdeploy_openbooks_bridge_rl." },
+        "mappingJson": { "label": "Mapeamentos de campos da conta", "help": "JSON opcional que relaciona campos e registros personalizados a conceitos do OpenBooks." },
+        "consumerKey": { "label": "Chave do consumidor" }, "consumerSecret": { "label": "Segredo do consumidor" },
+        "tokenKey": { "label": "ID do token" }, "tokenSecret": { "label": "Segredo do token" }
+      }
     },
     "odoo": {
       "blurb": "Conecte com a URL do seu Odoo, banco de dados, usuário e uma chave de API (Configurações → Meu perfil → Segurança da conta → Chaves de API). Faturas, contas a pagar, pagamentos e lançamentos migram e são espelhados nativamente pelo mecanismo de lançamento real."

@@ -98,6 +98,11 @@
     "redirectLabel": "登録するリダイレクトURI:",
     "copy": "コピー"
   },
+  "netsuite": {
+    "setupTitle": "NetSuite 抽出ブリッジ",
+    "setupHint": "読み取り専用の RESTlet と Map/Reduce をインストールして接続をテストします。取引レコードにスクリプトは追加されません。",
+    "documentation": "ドキュメント"
+  },
   "qbd": {
     "setupTitle": "QuickBooks Desktop の設定",
     "setupHint": "保存後、接続カードから Web Connector ファイルをダウンロードします。QuickBooks を実行している Windows コンピューターで取り込み、QuickBooks 管理者として読み取り専用アクセスを承認し、このパスワードを Web Connector に入力してください。",
@@ -110,7 +115,16 @@
   },
   "sources": {
     "netsuite": {
-      "blurb": "SuiteQL へのトークンベース (TBA) アクセスです。NetSuite で統合とアクセストークンを作成し、4つの値を貼り付けてください。ネイティブ取引、適用、注文は、実際の記帳エンジンを通じて移行およびミラーされます。"
+      "blurb": "読み取り専用の抽出ブリッジをインストールし、専用のトークンロールで接続します。取引、適用、会計統制、削除は検証を通過した場合のみ取り込まれます。",
+      "fields": {
+        "account": { "label": "アカウント ID", "help": "NetSuite アカウントのレルムです。" },
+        "host": { "label": "SuiteTalk ホスト" }, "baseCurrency": { "label": "基準通貨" },
+        "bridgeScriptId": { "label": "ブリッジスクリプト ID", "help": "空欄の場合は customscript_openbooks_bridge_rl を使用します。" },
+        "bridgeDeploymentId": { "label": "デプロイメント ID", "help": "空欄の場合は customdeploy_openbooks_bridge_rl を使用します。" },
+        "mappingJson": { "label": "アカウントフィールドのマッピング", "help": "カスタムフィールドとレコードを OpenBooks の概念に対応付ける任意の JSON です。" },
+        "consumerKey": { "label": "コンシューマーキー" }, "consumerSecret": { "label": "コンシューマーシークレット" },
+        "tokenKey": { "label": "トークン ID" }, "tokenSecret": { "label": "トークンシークレット" }
+      }
     },
     "odoo": {
       "blurb": "Odoo の URL、データベース、ユーザー、および API キー（設定 → マイプロフィール → アカウントセキュリティ → API キー）で接続します。請求書、仕入請求書、支払、仕訳は、実際の記帳エンジンを通じてネイティブに移行およびミラーされます。"
