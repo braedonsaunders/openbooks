@@ -47,6 +47,7 @@
     "planned": "Geplant",
     "recognized": "Realisiert",
     "postedStatus": "Gebucht",
-    "plannedStatus": "Geplant"
+    "plannedStatus": "Geplant",
+    "fairValueOutOfRange": "Außerhalb der Fair-Value-Bandbreite ({low} – {high})"
   }
 }

@@ -47,6 +47,7 @@
     "planned": "Prévu",
     "recognized": "Comptabilisé",
     "postedStatus": "Comptabilisé",
-    "plannedStatus": "Prévu"
+    "plannedStatus": "Prévu",
+    "fairValueOutOfRange": "Hors fourchette de juste valeur ({low} – {high})"
   }
 }

@@ -5,6 +5,7 @@ import {
   allocateByRelativeSSP,
   apportion,
   computeRecognitionSchedule,
+  fairValueRangeFlag,
   type RecognitionInput,
 } from "./revenue-recognition.ts";
 
@@ -56,6 +57,38 @@ test("relative-SSP allocation absorbs rounding so the bundle still sums to the p
 test("relative-SSP allocation falls back to the booked amount when SSP is missing", () => {
   const alloc = allocateByRelativeSSP("1000", [{ ssp: null, booked: "500" }, { ssp: "500" }]);
   assert.deepEqual(alloc, ["500.0000", "500.0000"]);
+});
+
+// ---------------------------------------------------------------------------
+// fairValueRangeFlag — allocated per-unit price vs fair value [low, high]
+// ---------------------------------------------------------------------------
+
+test("fair value range: in-range and boundary per-unit prices never flag", () => {
+  assert.equal(fairValueRangeFlag("110.0000", "1", "100.0000", "120.0000"), null);
+  assert.equal(fairValueRangeFlag("100.0000", "1", "100.0000", "120.0000"), null);
+  assert.equal(fairValueRangeFlag("120.0000", "1", "100.0000", "120.0000"), null);
+  // 3 units at 110/unit against a 100–120 range.
+  assert.equal(fairValueRangeFlag("330.0000", "3", "100.0000", "120.0000"), null);
+});
+
+test("fair value range: out-of-range per-unit prices flag below/above", () => {
+  assert.equal(fairValueRangeFlag("99.9900", "1", "100.0000", "120.0000"), "below_range");
+  assert.equal(fairValueRangeFlag("120.0100", "1", "100.0000", "120.0000"), "above_range");
+  // 4 units, line total 360 → 90/unit, under the 100 floor.
+  assert.equal(fairValueRangeFlag("360.0000", "4", "100.0000", "120.0000"), "below_range");
+});
+
+test("fair value range: open-ended and missing bounds", () => {
+  assert.equal(fairValueRangeFlag("50.0000", "1", null, null), null);
+  assert.equal(fairValueRangeFlag("50.0000", "1", "100.0000", null), "below_range");
+  assert.equal(fairValueRangeFlag("500.0000", "1", null, "120.0000"), "above_range");
+  assert.equal(fairValueRangeFlag("500.0000", "1", "100.0000", null), null);
+});
+
+test("fair value range: zero/missing quantity falls back to the line amount", () => {
+  assert.equal(fairValueRangeFlag("110.0000", "0", "100.0000", "120.0000"), null);
+  assert.equal(fairValueRangeFlag("110.0000", null, "100.0000", "120.0000"), null);
+  assert.equal(fairValueRangeFlag("90.0000", null, "100.0000", "120.0000"), "below_range");
 });
 
 // ---------------------------------------------------------------------------

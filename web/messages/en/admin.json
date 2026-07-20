@@ -652,6 +652,17 @@
         }
       }
     },
+    "revenue": {
+      "title": "Revenue recognition",
+      "description": "Policies for ASC 606 / IFRS 15 revenue allocation.",
+      "fairValueRangePolicy": {
+        "label": "Fair value range checking",
+        "warn": "Warn — flag out-of-range allocations for review",
+        "off": "Off — no range checking",
+        "hint": "When an invoice line's allocated per-unit price falls outside the item's fair value low/high range, the performance obligation is flagged for review on its revenue contract. Never blocks posting."
+      },
+      "learnMore": "Learn more."
+    },
     "documentKinds": {
       "vendorBill": "Vendor bill",
       "customerInvoice": "Customer invoice",
@@ -1042,6 +1053,7 @@
       "none": "No official PDF uploaded"
     },
     "new": "New",
+    "learnMore": "Learn more.",
     "empty": "Nothing here yet.",
     "statusActive": "Active",
     "statusArchived": "Archived",

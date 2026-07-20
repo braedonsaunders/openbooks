@@ -85,6 +85,10 @@ export async function GET() {
         typeof settings.fiscalYearStartMonth === "number" ? settings.fiscalYearStartMonth : 1,
       defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
       reportPdfStyle: settings.reportPdfStyle === "formal" ? "formal" : "modern",
+      fairValueRangePolicy:
+        (settings.revenue as Record<string, unknown> | undefined)?.fairValueRangePolicy === "off"
+          ? "off"
+          : "warn",
       controlAccounts: Object.fromEntries(
         CONTROL_ACCOUNT_KEYS.map((k) => [k, control[k] ?? ""]),
       ) as Record<ControlAccountKey, string>,
@@ -138,6 +142,7 @@ export async function PUT(req: Request) {
     controlAccounts?: unknown;
     defaultLocale?: unknown;
     reportPdfStyle?: unknown;
+    fairValueRangePolicy?: unknown;
   };
 
   const existing = (await db.execute(sql`
@@ -304,6 +309,22 @@ export async function PUT(req: Request) {
     if (style !== curStyle) {
       nextSettings.reportPdfStyle = style;
       changes.reportPdfStyle = [curStyle, style];
+      settingsChanged = true;
+    }
+  }
+  // --- fair value range policy (rev-rec allocation review: warn | off) ---
+  if (body.fairValueRangePolicy !== undefined) {
+    if (body.fairValueRangePolicy !== "warn" && body.fairValueRangePolicy !== "off") {
+      return NextResponse.json(
+        { error: "fairValueRangePolicy must be 'warn' or 'off'" },
+        { status: 400 },
+      );
+    }
+    const curRevenue = (settings.revenue ?? {}) as Record<string, unknown>;
+    const curPolicy = curRevenue.fairValueRangePolicy === "off" ? "off" : "warn";
+    if (body.fairValueRangePolicy !== curPolicy) {
+      nextSettings.revenue = { ...curRevenue, fairValueRangePolicy: body.fairValueRangePolicy };
+      changes.fairValueRangePolicy = [curPolicy, body.fairValueRangePolicy];
       settingsChanged = true;
     }
   }

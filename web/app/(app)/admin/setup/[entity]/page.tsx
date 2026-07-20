@@ -225,6 +225,17 @@ export default async function SetupEntityPage({
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {t(`entities.${entity.key}.description`)}
+            {entity.docSlug ? (
+              <>
+                {' '}
+                <Link
+                  href={`/docs/${entity.docSlug}`}
+                  className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  {t('learnMore')}
+                </Link>
+              </>
+            ) : null}
           </p>
         </div>
         <NewSetupButton entityKey={entity.key} label={t('new')} />

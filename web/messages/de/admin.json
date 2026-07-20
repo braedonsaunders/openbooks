@@ -611,6 +611,17 @@
         }
       }
     },
+    "revenue": {
+      "title": "Umsatzrealisierung",
+      "description": "Richtlinien für die Umsatzallokation nach ASC 606 / IFRS 15.",
+      "fairValueRangePolicy": {
+        "label": "Fair-Value-Bandbreitenprüfung",
+        "warn": "Warnen — Allokationen außerhalb der Bandbreite zur Prüfung markieren",
+        "off": "Aus — keine Bandbreitenprüfung",
+        "hint": "Liegt der zugeteilte Stückpreis einer Rechnungszeile außerhalb der Unter-/Obergrenze des beizulegenden Zeitwerts des Artikels, wird die Leistungsverpflichtung im Umsatzvertrag zur Prüfung markiert. Die Buchung wird nie blockiert."
+      },
+      "learnMore": "Mehr erfahren."
+    },
     "documentKinds": {
       "vendorBill": "Eingangsrechnung",
       "customerInvoice": "Ausgangsrechnung",
@@ -1001,6 +1012,7 @@
       "none": "Kein amtliches PDF hochgeladen"
     },
     "new": "Neu",
+    "learnMore": "Mehr erfahren.",
     "empty": "Hier ist noch nichts.",
     "statusActive": "Aktiv",
     "statusArchived": "Archiviert",

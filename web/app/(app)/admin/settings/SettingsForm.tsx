@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -47,6 +48,7 @@ type Initial = {
   fiscalYearStartMonth: number
   defaultLocale: Locale
   reportPdfStyle: 'formal' | 'modern'
+  fairValueRangePolicy: 'warn' | 'off'
   controlAccounts: ControlAccounts
 }
 
@@ -272,6 +274,37 @@ export function SettingsForm({
               </AlertDescription>
             </Alert>
           ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Revenue recognition */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('revenue.title')}</CardTitle>
+          <CardDescription>
+            {t('revenue.description')}{' '}
+            <Link href="/docs/revenue-recognition" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+              {t('revenue.learnMore')}
+            </Link>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="fairValueRangePolicy">{t('revenue.fairValueRangePolicy.label')}</Label>
+            <Select
+              id="fairValueRangePolicy"
+              value={form.fairValueRangePolicy}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, fairValueRangePolicy: e.target.value === 'off' ? 'off' : 'warn' }))
+              }
+            >
+              <option value="warn">{t('revenue.fairValueRangePolicy.warn')}</option>
+              <option value="off">{t('revenue.fairValueRangePolicy.off')}</option>
+            </Select>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('revenue.fairValueRangePolicy.hint')}
+            </p>
+          </div>
         </CardContent>
       </Card>
 

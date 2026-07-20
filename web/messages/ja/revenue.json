@@ -47,6 +47,7 @@
     "planned": "計画",
     "recognized": "認識済み",
     "postedStatus": "記帳済み",
-    "plannedStatus": "計画"
+    "plannedStatus": "計画",
+    "fairValueOutOfRange": "公正価値レンジ外（{low} – {high}）"
   }
 }

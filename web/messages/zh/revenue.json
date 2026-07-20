@@ -47,6 +47,7 @@
     "planned": "计划",
     "recognized": "已确认",
     "postedStatus": "已过账",
-    "plannedStatus": "计划"
+    "plannedStatus": "计划",
+    "fairValueOutOfRange": "超出公允价值区间（{low} – {high}）"
   }
 }

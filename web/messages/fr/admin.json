@@ -634,6 +634,17 @@
         }
       }
     },
+    "revenue": {
+      "title": "Comptabilisation des produits",
+      "description": "Politiques d'allocation des produits ASC 606 / IFRS 15.",
+      "fairValueRangePolicy": {
+        "label": "Contrôle de la fourchette de juste valeur",
+        "warn": "Avertir — signaler pour revue les allocations hors fourchette",
+        "off": "Désactivé — aucun contrôle de fourchette",
+        "hint": "Lorsque le prix unitaire alloué d'une ligne de facture sort de la fourchette basse/haute de juste valeur de l'article, l'obligation de prestation est signalée pour revue sur son contrat de revenus. Ne bloque jamais la comptabilisation."
+      },
+      "learnMore": "En savoir plus."
+    },
     "documentKinds": {
       "vendorBill": "Facture fournisseur",
       "customerInvoice": "Facture client",
@@ -1023,6 +1034,7 @@
       "none": "Aucun PDF officiel téléversé"
     },
     "new": "New",
+    "learnMore": "En savoir plus.",
     "empty": "Nothing here yet.",
     "statusActive": "Active",
     "statusArchived": "Archived",

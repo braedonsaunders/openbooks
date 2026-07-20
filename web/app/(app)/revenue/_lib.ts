@@ -18,6 +18,11 @@ export interface ObligationRow {
   status: string
   method: string
   rule_name: string
+  /** Fair-value range review: set when the allocated per-unit price fell
+   *  outside the matched fair value price's [low, high] range. */
+  fair_value_flag: 'below_range' | 'above_range' | null
+  fair_value_low: string | null
+  fair_value_high: string | null
   planned: string
   recognized: string
   lines: ScheduleLineRow[]
@@ -53,6 +58,7 @@ export async function loadContract(id: string, orgId: string): Promise<ContractP
 
   const oRes = (await db.execute(sql`
     select o.id, o.description, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on, o.status,
+           o.fair_value_flag, o.fair_value_low, o.fair_value_high,
            r.method, r.name as rule_name
       from performance_obligations o
       join recognition_rules r on r.id = o.recognition_rule_id

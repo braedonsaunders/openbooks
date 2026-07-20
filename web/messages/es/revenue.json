@@ -47,6 +47,7 @@
     "planned": "Planeado",
     "recognized": "Reconocido",
     "postedStatus": "Contabilizado",
-    "plannedStatus": "Planeado"
+    "plannedStatus": "Planeado",
+    "fairValueOutOfRange": "Fuera del rango de valor razonable ({low} – {high})"
   }
 }
