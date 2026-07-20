@@ -45,10 +45,6 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
   ])
 
   const scale = scaleFactor(q.scale)
-  const backParams = new URLSearchParams()
-  for (const [k, v] of Object.entries(sp)) if (v) backParams.set(k, v)
-  const backHref = `/reports/pnl${backParams.toString() ? `?${backParams}` : ''}`
-
   return (
     <ListPageLayout
       header={
@@ -95,7 +91,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
           view={view}
           scale={q.scale}
           currency={subView.currency ?? org?.base_currency}
-          drill={{ dims: q.dims, basis: q.basis, subsidiaryId: q.subsidiaryId, back: backHref, backLabel: t('pnl.title') }}
+          drill={{ dims: q.dims, basis: q.basis, subsidiaryId: q.subsidiaryId }}
         />
       </ReportPaper>
     </ListPageLayout>

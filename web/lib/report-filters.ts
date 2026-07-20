@@ -159,10 +159,8 @@ export function buildDrillTarget(args: {
   mode: StatementMode
   reportDims: StatementDimFilter
   basis: StatementBasis
-  /** Subsidiary context node — the detail page re-resolves the same view. */
+  /** Subsidiary context node used by the shared drawer query. */
   subsidiaryId?: string
-  back: string
-  backLabel: string
   label: string
   budgetScenarioId?: string
 }): ReportDrillTarget | null {
@@ -214,44 +212,5 @@ export function buildDrillTarget(args: {
     dims,
     subsidiaryId: args.subsidiaryId,
     basis: args.basis,
-  }
-}
-
-export type DrillQuery = {
-  accountIds: string[]
-  accountTypes: string[]
-  from?: string
-  to: string
-  mode: StatementMode
-  dims: StatementDimFilter
-  subsidiaryId?: string
-  basis: StatementBasis
-  label: string
-  backLabel: string
-  /** Safe internal back link (only /reports… is honored). */
-  back: string
-}
-
-/** Parse the drill params on the detail page. */
-export function parseDrillQuery(sp: ParamSource): DrillQuery {
-  const back = read(sp, 'back') || '/reports'
-  return {
-    accountIds: (read(sp, 'accounts') || '').split(',').filter(Boolean),
-    accountTypes: (read(sp, 'types') || '').split(',').filter(Boolean),
-    from: read(sp, 'from') || undefined,
-    to: read(sp, 'to') || new Date().toISOString().slice(0, 10),
-    mode: read(sp, 'mode') === 'balance' ? 'balance' : 'flow',
-    dims: {
-      departmentId: read(sp, 'dept') || undefined,
-      projectId: read(sp, 'project') || undefined,
-      locationId: read(sp, 'location') || undefined,
-      classId: read(sp, 'class') || undefined,
-      segments: segmentFilters(sp),
-    },
-    subsidiaryId: read(sp, 'sub') || undefined,
-    basis: read(sp, 'basis') === 'cash' ? 'cash' : 'accrual',
-    label: read(sp, 'label') || '',
-    backLabel: read(sp, 'backLabel') || '',
-    back: back.startsWith('/reports') ? back : '/reports',
   }
 }

@@ -91,7 +91,7 @@ export default async function RegistersPage({
                   <span className="text-slate-400 italic">{t('aging.noParty')}</span>
                 )}
                 <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                  {t('registers.closing')}: <ReportDrillLink drillTarget={{ kind: 'ledger', label: pt.partyName ?? t('aging.noParty'), accountTypes, partyIds: pt.partyId ? [pt.partyId] : undefined, to: period.to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(pt.closing)}</ReportDrillLink>
+                  {t('registers.closing')}: <ReportDrillLink target={{ kind: 'ledger', label: pt.partyName ?? t('aging.noParty'), accountTypes, partyIds: pt.partyId ? [pt.partyId] : undefined, to: period.to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(pt.closing)}</ReportDrillLink>
                 </span>
               </h3>
               <Table>
@@ -110,7 +110,7 @@ export default async function RegistersPage({
                     <TableCell colSpan={5} className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       {t('generalLedger.opening')}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink drillTarget={{ kind: 'ledger', label: `${pt.partyName ?? t('aging.noParty')} · ${t('generalLedger.opening')}`, accountTypes, partyIds: pt.partyId ? [pt.partyId] : undefined, to: openingDate, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(pt.opening)}</ReportDrillLink></TableCell>
+                    <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink target={{ kind: 'ledger', label: `${pt.partyName ?? t('aging.noParty')} · ${t('generalLedger.opening')}`, accountTypes, partyIds: pt.partyId ? [pt.partyId] : undefined, to: openingDate, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(pt.opening)}</ReportDrillLink></TableCell>
                   </TableRow>
                   {pt.lines.map((l, i) => (
                     <TableRow key={`${l.entryId}-${i}`}>

@@ -45,7 +45,7 @@ export function StatementMatrixTable({
   scale?: ReportScale
   /** Currency code (e.g. 'CAD') → symbol shown on amount rows. */
   currency?: string
-  drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; back: string; backLabel: string; budgetScenarioId?: string }
+  drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; budgetScenarioId?: string }
 }) {
   const cols = view.columns
   const sym = currencySymbol(currency)
@@ -215,8 +215,6 @@ export function StatementMatrixTable({
                           reportDims: drill.dims,
                           basis: drill.basis,
                           subsidiaryId: drill.subsidiaryId,
-                          back: drill.back,
-                          backLabel: drill.backLabel,
                           label: `${l.label} · ${c.label}`,
                           budgetScenarioId: drill.budgetScenarioId,
                         })

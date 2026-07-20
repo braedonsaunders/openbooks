@@ -87,7 +87,7 @@ export default async function GeneralLedgerPage({
                     <TableCell colSpan={5} className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       {t('generalLedger.opening')}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink drillTarget={{ kind: 'ledger', label: `${a.name} · ${t('generalLedger.opening')}`, accountIds: [a.id], to: openingDate, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(a.opening)}</ReportDrillLink></TableCell>
+                    <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink target={{ kind: 'ledger', label: `${a.name} · ${t('generalLedger.opening')}`, accountIds: [a.id], to: openingDate, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(a.opening)}</ReportDrillLink></TableCell>
                   </TableRow>
                   {a.lines.map((l, i) => (
                     <TableRow key={`${l.entryId}-${i}`}>
@@ -115,7 +115,7 @@ export default async function GeneralLedgerPage({
                       {t('generalLedger.closing')}
                     </TableCell>
                     <TableCell className={cn('text-right font-semibold tabular-nums', a.closing < 0 && 'text-red-600 dark:text-red-400')}>
-                      <ReportDrillLink drillTarget={{ kind: 'ledger', label: `${a.name} · ${t('generalLedger.closing')}`, accountIds: [a.id], to: period.to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(a.closing)}</ReportDrillLink>
+                      <ReportDrillLink target={{ kind: 'ledger', label: `${a.name} · ${t('generalLedger.closing')}`, accountIds: [a.id], to: period.to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(a.closing)}</ReportDrillLink>
                     </TableCell>
                   </TableRow>
                 </TableBody>

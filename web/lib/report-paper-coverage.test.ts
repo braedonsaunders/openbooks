@@ -16,7 +16,6 @@ test('every in-app report result uses the shared paper surface', () => {
     'app/(app)/reports/balance-sheet/page.tsx',
     'app/(app)/reports/budget/page.tsx',
     'app/(app)/reports/cash-flow/page.tsx',
-    'app/(app)/reports/detail/page.tsx',
     'app/(app)/reports/general-ledger/page.tsx',
     'app/(app)/reports/journal/page.tsx',
     'app/(app)/reports/orders/page.tsx',
@@ -45,6 +44,30 @@ test('every in-app report result uses the shared paper surface', () => {
   assert.match(source('app/(app)/reports/custom/run/[id]/ReportRunner.tsx'), /<(?:ResultView|ReportPaper)\b/)
   assert.match(source('app/(app)/knowledge/views/[id]/page.tsx'), /<ResultView\b/)
   assert.match(source('app/(app)/knowledge/views/ViewStudio.tsx'), /<ResultView\b/)
+  assert.match(source('components/app-shell.tsx'), /<GlobalReportDrawerHost\b/)
+  assert.match(source('app/(app)/reports/PaperView.tsx'), /<ReportDrillLink\b/)
+  assert.match(source('app/(app)/reports/StatementMatrixTable.tsx'), /<ReportDrillLink\b/)
+  assert.doesNotMatch(source('lib/report-filters.ts'), /\/reports\/detail/)
+})
+
+test('every direct report with numeric output exposes a drill target or native transaction link', () => {
+  const numericReports = [
+    'app/(app)/reports/aging/page.tsx',
+    'app/(app)/reports/cash-flow/page.tsx',
+    'app/(app)/reports/general-ledger/page.tsx',
+    'app/(app)/reports/journal/page.tsx',
+    'app/(app)/reports/orders/page.tsx',
+    'app/(app)/reports/partners/page.tsx',
+    'app/(app)/reports/project-profitability/page.tsx',
+    'app/(app)/reports/registers/page.tsx',
+    'app/(app)/reports/statements/[partyId]/page.tsx',
+    'app/(app)/reports/trial-balance/page.tsx',
+  ]
+  for (const page of numericReports) {
+    assert.match(source(page), /(?:ReportDrillLink|TxnLink|drills)/, `${page} must expose numeric drill-through`)
+  }
+  assert.match(source('app/(app)/reports/custom/ResultView.tsx'), /drillTarget/)
+  assert.match(source('components/global-report-drawer-host.tsx'), /RelatedTransactionDrawerClient/)
 })
 
 test('report table primitives remain document-like rather than list-like', () => {
