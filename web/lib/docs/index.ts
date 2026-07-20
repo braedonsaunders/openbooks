@@ -7,6 +7,7 @@ import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { apps } from './articles/apps'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
+import { auditLog } from './articles/audit-log'
 
 export type { DocArticle, DocCategory } from './types'
 
@@ -39,9 +40,16 @@ export const DOC_CATEGORIES: DocCategory[] = [
     icon: 'plug',
     order: 4,
   },
+  {
+    key: 'administration',
+    title: 'Administration',
+    description: 'Permissions, configuration, security, and immutable operational evidence.',
+    icon: 'shield',
+    order: 5,
+  },
 ]
 
-export const DOC_ARTICLES: DocArticle[] = [welcome, projectTypes, apps, quickBooksDesktopConnector]
+export const DOC_ARTICLES: DocArticle[] = [welcome, projectTypes, apps, quickBooksDesktopConnector, auditLog]
 
 const BY_SLUG = new Map(DOC_ARTICLES.map((a) => [a.slug, a]))
 const CATEGORY_BY_KEY = new Map(DOC_CATEGORIES.map((c) => [c.key, c]))
