@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { NetSuiteBridgeClient } from "./netsuite-bridge.ts";
 import type { NetSuiteCreds } from "./netsuite.ts";
 
@@ -11,6 +14,15 @@ const creds: NetSuiteCreds = {
   tokenKey: "token",
   tokenSecret: "secret",
 };
+
+test("NetSuite bridge package does not commit an account-specific auth target", () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const project = JSON.parse(readFileSync(
+    join(repoRoot, "integrations", "netsuite-bridge", "project.json"),
+    "utf8",
+  )) as { defaultAuthId?: unknown };
+  assert.equal(project.defaultAuthId, undefined);
+});
 
 test("NetSuite bridge client exhausts deterministic pages", async () => {
   const requested: number[] = [];

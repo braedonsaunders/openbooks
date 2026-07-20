@@ -27,10 +27,13 @@ tenant worker for idempotent import into object storage.
 
 ## Validate and deploy
 
-Set `defaultAuthId` in `project.json` to the administrator authentication ID,
-then run from this directory:
+From this directory, run SuiteCloud's account setup and select or create an
+authentication ID for the customer account being configured. SuiteCloud writes
+that choice to the local `project.json`; do not commit the local auth ID. Then
+validate and deploy:
 
 ~~~sh
+suitecloud account:setup
 suitecloud project:validate
 suitecloud project:deploy --validate
 ~~~
