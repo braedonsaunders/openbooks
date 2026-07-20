@@ -14,7 +14,15 @@ test("financial statements exclude draft and other unposted journals", { skip: !
     import { toUnits } from "./engine/src/money.ts";
     import { agingByParty, agingDetail, cashFlow, financialTrends, profitAndLoss } from "./web/lib/reports.ts";
 
-    const orgs = await db.execute(sql\`select id from orgs order by id\`);
+    // Exercise persistent application tenants only. Other DB-backed test files
+    // create and delete short-lived orgs in parallel; sampling one between its
+    // report query and expected-value query makes this contract race against
+    // unrelated fixture teardown.
+    const orgs = await db.execute(sql\`
+      select o.id from orgs o
+       where exists (select 1 from users u where u.org_id = o.id and u.is_active)
+       order by o.id
+    \`);
     for (const org of orgs.rows) {
       await withOrg(org.id, async () => {
         const report = await profitAndLoss("0001-01-01", "9999-12-31");
