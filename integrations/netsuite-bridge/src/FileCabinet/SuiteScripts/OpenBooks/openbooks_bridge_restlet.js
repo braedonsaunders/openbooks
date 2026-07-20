@@ -32,7 +32,8 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
     const jobsFolder = () => file.load({ id: MARKER_PATH }).folder;
     const normalize = (value) => {
       if (value instanceof Date) return value.toISOString();
-      if (value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+      if (value == null || typeof value === 'string' || typeof value === 'boolean') return value;
+      if (typeof value === 'number') return String(value);
       if (Array.isArray(value)) return value.map(normalize);
       if (typeof value === 'object') {
         const out = {};
