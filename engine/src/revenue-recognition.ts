@@ -662,9 +662,11 @@ export async function runRevenueRecognition(
     select l.id             as line_id,
            l.planned_amount as planned,
            l.period_id      as period_id,
+           l.sequence       as sequence,
            s.book_id        as book_id,
            p.name           as period_name,
            p.ends_on        as period_ends_on,
+           r.method         as method,
            period_module_is_closed(${orgId}, p.id, s.book_id, coalesce(doc.subsidiary_id, prj.subsidiary_id), 'gl') as period_closed,
            o.id             as obligation_id,
            o.description    as obligation_desc,
@@ -699,7 +701,11 @@ export async function runRevenueRecognition(
      where l.org_id = ${orgId}
        and l.journal_entry_id is null
        and o.status <> 'cancelled'
-       and p.ends_on <= ${asOfDate}
+       -- Scheduled methods recognize a period once it has ENDED; percent_complete
+       -- is a measurement AS OF the date, so its catch-up in the current period
+       -- is due as soon as the period has started.
+       and (p.ends_on <= ${asOfDate}
+            or (r.method = 'percent_complete' and p.starts_on <= ${asOfDate}))
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        ${allowedSubsidiaryIds ? sql`and coalesce(doc.subsidiary_id, prj.subsidiary_id, sub0.id) = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
      order by c.contract_number, o.description, l.sequence`)) as unknown as { rows: any[] };
@@ -756,14 +762,20 @@ export async function runRevenueRecognition(
       continue;
     }
 
-    const postingDate: string = row.period_ends_on;
+    // Scheduled lines post at period end; a percent_complete catch-up in the
+    // still-open current period posts at the measurement (as-of) date instead
+    // of future-dating to period end.
+    const postingDate: string =
+      row.method === "percent_complete" && asOfDate < row.period_ends_on ? asOfDate : row.period_ends_on;
     try {
       const entryId = await db.transaction(async (tx) => {
         const entryRes = (await tx.execute(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
           values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
-                  ${`REV-${row.contract_number}-${row.period_name}`},
+                  ${row.method === "percent_complete"
+                    ? `REV-${row.contract_number}-${row.period_name}-${row.sequence}`
+                    : `REV-${row.contract_number}-${row.period_name}`},
                   ${postingDate}, ${row.period_id},
                   ${`Revenue recognition — ${row.obligation_desc} (${row.period_name})`},
                   'draft', 'revenue_recognition', ${actorId}, ${actorId})
@@ -807,12 +819,18 @@ export async function runRevenueRecognition(
     }
   }
 
-  // Flip fully-recognized obligations to 'satisfied' (no unposted non-zero lines left).
+  // Flip fully-recognized obligations to 'satisfied' (no unposted non-zero lines
+  // left). Percent-complete obligations are the exception: "caught up to the
+  // current estimate" is not "done" — they satisfy only at 100% complete, so an
+  // ongoing project contract stays open between catch-ups.
   await db.execute(sql`
     update performance_obligations o
        set status = 'satisfied', updated_at = now()
-     where o.org_id = ${orgId} and o.status = 'open'
+      from recognition_rules r
+     where r.id = o.recognition_rule_id
+       and o.org_id = ${orgId} and o.status = 'open'
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
+       and (r.method <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)
        and exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
        and not exists (
          select 1 from recognition_schedules s
