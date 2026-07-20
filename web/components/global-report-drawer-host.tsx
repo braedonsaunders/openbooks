@@ -30,6 +30,7 @@ export function GlobalReportDrawerHost() {
   const page = Math.max(1, Number(params.get('reportDrillPage') ?? 1) || 1)
   const recordId = params.get('reportRecord')
   const recordKind = params.get('reportRecordKind')
+  const reporting = pathname.startsWith('/reports') || pathname.startsWith('/knowledge/views')
   const [data, setData] = useState<ReportDrillResponse | null>(null)
   const [loadedTarget, setLoadedTarget] = useState<string | null>(null)
   const [recordData, setRecordData] = useState<RelatedTransactionDrawerData | null>(null)
@@ -174,7 +175,7 @@ export function GlobalReportDrawerHost() {
           </div>
         )}
       </UrlDrawer>
-      <EntryFlyout />
+      {reporting ? <EntryFlyout /> : null}
       {recordData && loadedRecord === `${recordKind}:${recordId}` ? <RelatedTransactionDrawerClient data={recordData} /> : null}
     </>
   )
