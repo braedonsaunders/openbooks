@@ -48,19 +48,40 @@ define(['N/file', 'N/query', 'N/search'], (file, query, search) => {
       const paged = query.runSuiteQLPaged(queryOptions);
       let rows = 0;
       const chunks = [];
-      paged.pageRanges.forEach((range) => {
-        const values = paged.fetch({ index: range.index }).data.asMappedResults().map(normalize);
-        rows += values.length;
-        const name = `ob-chunk-${jobId}-${partId}-${String(range.index).padStart(6, '0')}.json`;
+      let buffered = [];
+      let chunkIndex = 0;
+      const flush = () => {
+        if (buffered.length === 0) return;
+        const name = `ob-chunk-${jobId}-${partId}-${String(chunkIndex).padStart(6, '0')}.json`;
         const id = saveJson(name, {
           schemaVersion: SCHEMA_VERSION,
           jobId,
           partId,
-          pageIndex: range.index,
-          rows: values,
+          pageIndex: chunkIndex,
+          rows: buffered,
         });
-        chunks.push({ id: String(id), name, rows: values.length });
+        chunks.push({ id: String(id), name, rows: buffered.length });
+        chunkIndex += 1;
+        buffered = [];
+      };
+      paged.pageRanges.forEach((range) => {
+        const values = paged.fetch({ index: range.index }).data.asMappedResults().map(normalize);
+        rows += values.length;
+        const candidate = buffered.concat(values);
+        const candidateBytes = JSON.stringify({
+          schemaVersion: SCHEMA_VERSION,
+          jobId,
+          partId,
+          pageIndex: chunkIndex,
+          rows: candidate,
+        }).length;
+        // Consolidate SuiteQL pages to reduce RESTlet round-trips, while
+        // staying comfortably below the 9 MB authenticated read limit.
+        if (buffered.length > 0 && (candidate.length > 5000 || candidateBytes > 3 * 1024 * 1024)) flush();
+        buffered.push(...values);
+        if (buffered.length >= 5000) flush();
       });
+      flush();
       requestFile.name = `ob-complete-${jobId}-${partId}.json`;
       requestFile.save();
       context.write({ key: jobId, value: JSON.stringify({ partId, status: 'complete', rows, chunks }) });
