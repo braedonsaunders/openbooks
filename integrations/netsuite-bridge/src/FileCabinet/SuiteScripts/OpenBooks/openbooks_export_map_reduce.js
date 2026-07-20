@@ -7,6 +7,17 @@ define(['N/file', 'N/query', 'N/search'], (file, query, search) => {
   const SCHEMA_VERSION = 1;
   const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
   const jobsFolder = () => file.load({ id: MARKER_PATH }).folder;
+  const normalize = (value) => {
+    if (value == null || typeof value === 'string' || typeof value === 'boolean') return value;
+    if (typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return value.map(normalize);
+    if (typeof value === 'object') {
+      const out = {};
+      Object.keys(value).forEach((key) => { out[key] = normalize(value[key]); });
+      return out;
+    }
+    return String(value);
+  };
 
   const getInputData = () => search.create({
     type: 'file',
@@ -38,7 +49,7 @@ define(['N/file', 'N/query', 'N/search'], (file, query, search) => {
       let rows = 0;
       const chunks = [];
       paged.pageRanges.forEach((range) => {
-        const values = paged.fetch({ index: range.index }).data.asMappedResults();
+        const values = paged.fetch({ index: range.index }).data.asMappedResults().map(normalize);
         rows += values.length;
         const name = `ob-chunk-${jobId}-${partId}-${String(range.index).padStart(6, '0')}.json`;
         const id = saveJson(name, {
