@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { cn } from '@openbooks/ui'
 import { ReportPaper } from './ReportPaper'
+import { ReportDrillLink } from './ReportDrillLink'
+import type { ReportDrillTarget } from '../../../lib/report-drill'
 import {
   Table,
   TableBody,
@@ -39,6 +41,8 @@ export type PaperGroup = {
   money?: boolean[]
   /** Per-cell drill href (parallel to `rows`); null/absent ⇒ plain cell. */
   links?: (string | null | undefined)[][]
+  /** Per-cell report drill target (parallel to `rows`). */
+  drills?: (ReportDrillTarget | null | undefined)[][]
   /** Explicit total row. Ordinary custom result sets must not style their last data row as a total. */
   totalRowIndex?: number
   isEmpty?: boolean
@@ -50,6 +54,8 @@ export type PaperData = {
   note?: string
   summary?: { label: string; value: PaperCell }[]
   groups: PaperGroup[]
+  /** Custom reports use one source-row drill target for every numeric result. */
+  defaultDrillTarget?: ReportDrillTarget
 }
 
 function isNumericCell(v: PaperCell): boolean {
@@ -91,7 +97,13 @@ export function PaperView({
           {data.summary.map((item, index) => (
             <div key={index} className="min-w-0 px-3 text-center">
               <div className="truncate text-xs text-slate-500 dark:text-slate-400">{item.label}</div>
-              <div className="truncate font-semibold tabular-nums">{fmt(item.value, false, currency)}</div>
+              <div className="truncate font-semibold tabular-nums">
+                {data.defaultDrillTarget && isNumericCell(item.value) ? (
+                  <ReportDrillLink drillTarget={data.defaultDrillTarget} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                    {fmt(item.value, false, currency)}
+                  </ReportDrillLink>
+                ) : fmt(item.value, false, currency)}
+              </div>
             </div>
           ))}
         </div>
@@ -140,6 +152,8 @@ export function PaperView({
                             const isMoney = !!group.money?.[ci]
                             const negative = typeof cell === 'number' && cell < 0
                             const href = group.links?.[ri]?.[ci]
+                            const drill = group.drills?.[ri]?.[ci]
+                              ?? (isNumericCell(cell) ? data.defaultDrillTarget : undefined)
                             const text = fmt(cell, isMoney, currency)
                             return (
                               <TableCell
@@ -150,7 +164,11 @@ export function PaperView({
                                   negative && 'text-red-600 dark:text-red-400',
                                 )}
                               >
-                                {href ? (
+                                {drill ? (
+                                  <ReportDrillLink drillTarget={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                                    {text}
+                                  </ReportDrillLink>
+                                ) : href ? (
                                   <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
                                     {text}
                                   </Link>

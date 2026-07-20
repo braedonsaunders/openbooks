@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { money } from '../../../lib/format'
-import { moduleDrawerHref } from '../../../lib/txn-links'
+import { TxnLink } from './TxnLink'
 
 type EntryData = {
   entry: {
@@ -79,7 +79,6 @@ export function EntryFlyout() {
 
   const entry = data?.entry
   const origin = entry?.origin ? (t.has(`origins.${entry.origin}`) ? t(`origins.${entry.origin}`) : entry.origin) : ''
-  const escalateHref = moduleDrawerHref(entry?.doc_kind, entry?.doc_id)
 
   const totalDebit = (data?.lines ?? []).reduce((a, l) => a + Math.max(0, Number(l.amount)), 0)
 
@@ -107,12 +106,13 @@ export function EntryFlyout() {
               .join(' · ')
           : undefined
       }
+      stacked={params.has('reportDrill')}
       headerActions={
-        escalateHref ? (
+        entry?.doc_kind && entry.doc_id ? (
           <Button asChild variant="outline" size="sm">
-            <Link href={escalateHref}>
+            <TxnLink entryId={entry.id} docKind={entry.doc_kind} docId={entry.doc_id}>
               {tr('flyout.openTransaction')} <ArrowUpRight size={14} />
-            </Link>
+            </TxnLink>
           </Button>
         ) : undefined
       }

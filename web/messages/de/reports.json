@@ -846,6 +846,12 @@
     "empty": "Keine Transaktionen hinter diesem Wert.",
     "backTo": "Zurück zu {report}"
   },
+  "drillDrawer": {
+    "title": "Zugrunde liegende Datensätze",
+    "supporting": "Die Datensätze hinter dem ausgewählten Berichtswert.",
+    "loadFailed": "Die zugrunde liegenden Datensätze konnten nicht geladen werden.",
+    "recordLoadFailed": "Die Transaktion konnte nicht geöffnet werden."
+  },
   "flyout": {
     "title": "Buchung",
     "openTransaction": "Vollständige Transaktion öffnen"

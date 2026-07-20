@@ -827,6 +827,12 @@
     "empty": "Aucune transaction derrière cette valeur.",
     "backTo": "Retour à {report}"
   },
+  "drillDrawer": {
+    "title": "Écritures justificatives",
+    "supporting": "Les écritures à l’origine de la valeur sélectionnée dans le rapport.",
+    "loadFailed": "Impossible de charger les écritures justificatives.",
+    "recordLoadFailed": "Impossible d’ouvrir la transaction."
+  },
   "flyout": {
     "title": "Écriture de journal",
     "openTransaction": "Ouvrir la transaction complète"

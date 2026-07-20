@@ -146,7 +146,13 @@ export function ReportRunner({
         {/* --- result --- */}
         <section>
           {result ? (
-            <ResultView company={company} title={displayName} description={displayDescription} result={result} />
+            <ResultView
+              company={company}
+              title={displayName}
+              description={displayDescription}
+              result={result}
+              drillTarget={{ kind: 'custom', source: 'definition', id: definition.id, label: displayName }}
+            />
           ) : (
             <ReportPaper company={company} title={displayName} periodPhrase={displayDescription || undefined}>
               <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{t('emptyHint')}</p>

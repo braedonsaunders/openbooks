@@ -21,6 +21,7 @@ import { MobileNavToggle } from './mobile-nav-toggle'
 import { MobileTabBar } from './mobile-tab-bar'
 import { GlobalCreateMenu, type GlobalCreatePermissions } from './global-create-menu'
 import { GlobalPartyDrawerHost } from './global-party-drawer-host'
+import { GlobalReportDrawerHost } from './global-report-drawer-host'
 import { AppLauncherLink, HeaderNavLink } from './header-nav-link'
 
 export function AppShell({
@@ -104,6 +105,7 @@ export function AppShell({
           </main>
 
           <MobileTabBar groups={navigationGroups} />
+          <GlobalReportDrawerHost />
           {canReadParties ? <GlobalPartyDrawerHost canManage={canManageParties} canReadActivities={canReadActivities} /> : null}
         </div>
       </MobileNavProvider>

@@ -13,6 +13,8 @@ import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
+import { ReportDrillLink } from '../ReportDrillLink'
+import { TxnLink } from '../TxnLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,11 +99,11 @@ export default async function Aging({
                       <span className="text-slate-400 italic">{t('noParty')}</span>
                     )}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{r.reference}</TableCell>
+                  <TableCell className="font-mono text-xs"><TxnLink entryId={r.docId} docKind={r.docKind} docId={r.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{r.reference}</TxnLink></TableCell>
                   <TableCell className="tabular-nums">{r.dueDate}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.ageDays}</TableCell>
+                  <TableCell className="text-right tabular-nums"><TxnLink entryId={r.docId} docKind={r.docKind} docId={r.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{r.ageDays}</TxnLink></TableCell>
                   <TableCell>{bucketLabels[r.bucket]}</TableCell>
-                  <TableCell className="text-right font-medium tabular-nums">{m(r.open)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums"><TxnLink entryId={r.docId} docKind={r.docKind} docId={r.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(r.open)}</TxnLink></TableCell>
                 </TableRow>
               ))
             )}
@@ -137,10 +139,12 @@ export default async function Aging({
                   </TableCell>
                   {BUCKETS.map((b) => (
                     <TableCell key={b} className={cn('text-right tabular-nums', r[b] < 0 && 'text-red-600 dark:text-red-400')}>
-                      {r[b] !== 0 ? m(r[b]) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                      <ReportDrillLink target={{ kind: 'aging', label: `${r.partyName ?? t('noParty')} · ${bucketLabels[b]}`, side, asOf, dims, partyId: r.partyId ?? undefined, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                        {r[b] !== 0 ? m(r[b]) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                      </ReportDrillLink>
                     </TableCell>
                   ))}
-                  <TableCell className="text-right font-semibold tabular-nums">{m(r.total)}</TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: r.partyName ?? t('noParty'), side, asOf, dims, partyId: r.partyId ?? undefined }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(r.total)}</ReportDrillLink></TableCell>
                 </TableRow>
               ))
             )}
@@ -148,9 +152,9 @@ export default async function Aging({
               <TableRow className={reportTotalRowClass}>
                 <TableCell className="font-bold">{tr('trialBalance.totals')}</TableCell>
                 {BUCKETS.map((b) => (
-                  <TableCell key={b} className="text-right font-bold tabular-nums">{m(summary.totals[b])}</TableCell>
+                  <TableCell key={b} className="text-right font-bold tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: bucketLabels[b], side, asOf, dims, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(summary.totals[b])}</ReportDrillLink></TableCell>
                 ))}
-                <TableCell className="text-right font-bold tabular-nums">{m(summary.totals.total)}</TableCell>
+                <TableCell className="text-right font-bold tabular-nums"><ReportDrillLink target={{ kind: 'aging', label: tr('trialBalance.totals'), side, asOf, dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(summary.totals.total)}</ReportDrillLink></TableCell>
               </TableRow>
             ) : null}
           </TableBody>

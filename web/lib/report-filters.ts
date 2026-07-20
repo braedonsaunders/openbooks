@@ -14,6 +14,7 @@ import type {
   StatementDimFilter,
   StatementMode,
 } from './statement-matrix'
+import type { ReportDrillTarget } from './report-drill'
 
 export type ReportScale = 'actual' | 'thousands' | 'millions'
 
@@ -140,13 +141,6 @@ export function scaleFactor(scale: ReportScale): { divisor: number; note: string
 // account types for a subtotal), the column's date window + dimension slice,
 // the report basis, and a `back` link to the exact report.
 
-const DIM_PARAM: Record<'department' | 'project' | 'location' | 'class', keyof typeof REPORT_PARAM_KEYS> = {
-  department: 'dept',
-  project: 'project',
-  location: 'location',
-  class: 'class',
-}
-
 export type DrillColumn = {
   kind: StatementColumnKind
   from?: string | null
@@ -156,13 +150,12 @@ export type DrillColumn = {
   segmentKey?: string
 }
 
-/** Build the `/reports/detail` href for one statement cell, or null if the cell
- *  isn't drillable (variance column, no date window, Unassigned bucket, or a row
- *  with no account scope). */
-export function buildDrillHref(args: {
+/** Build the typed supporting-detail target for one statement cell. */
+export function buildDrillTarget(args: {
   accountId?: string
   drillTypes?: string[]
   column: DrillColumn
+  sourceColumns?: DrillColumn[]
   mode: StatementMode
   reportDims: StatementDimFilter
   basis: StatementBasis
@@ -171,20 +164,33 @@ export function buildDrillHref(args: {
   back: string
   backLabel: string
   label: string
-}): string | null {
+  budgetScenarioId?: string
+}): ReportDrillTarget | null {
   const { column } = args
-  if (column.kind !== 'amount') return null
-  if (!column.to) return null
+  if (args.budgetScenarioId && (column.kind !== 'amount' || !column.to)) {
+    return {
+      kind: 'budget',
+      label: args.label,
+      scenarioId: args.budgetScenarioId,
+      scope: column.kind === 'amount' ? 'budget' : 'variance',
+      accountIds: args.accountId ? [args.accountId] : undefined,
+      accountTypes: args.drillTypes,
+      dims: args.reportDims,
+    }
+  }
+  const sourceColumns = column.kind === 'amount'
+    ? [column]
+    : (args.sourceColumns ?? []).filter((source) => source.kind === 'amount' && source.to)
+  const dated = sourceColumns.filter((source): source is DrillColumn & { to: string } => !!source.to)
+  if (dated.length === 0) return null
   // Unassigned breakout bucket needs an "is null" filter we don't express in URLs.
   if ((column.dimField || column.segmentKey) && (column.dimValue === null || column.dimValue === undefined)) return null
   if (!args.accountId && !(args.drillTypes && args.drillTypes.length)) return null
 
-  const p = new URLSearchParams()
-  if (args.accountId) p.set('accounts', args.accountId)
-  else p.set('types', args.drillTypes!.join(','))
-  p.set('mode', args.mode)
-  p.set('to', column.to)
-  if (args.mode === 'flow' && column.from) p.set('from', column.from)
+  const froms = dated.map((source) => source.from).filter((value): value is string => !!value)
+  const tos = dated.map((source) => source.to)
+  const from = froms.length ? froms.reduce((a, b) => (a < b ? a : b)) : undefined
+  const to = tos.reduce((a, b) => (a > b ? a : b))
 
   const dims: StatementDimFilter = { ...args.reportDims }
   if (column.dimField && column.dimValue) {
@@ -197,17 +203,18 @@ export function buildDrillHref(args: {
   if (column.segmentKey && column.dimValue) {
     dims.segments = { ...(dims.segments ?? {}), [column.segmentKey]: column.dimValue }
   }
-  if (dims.departmentId) p.set('dept', dims.departmentId)
-  if (dims.projectId) p.set('project', dims.projectId)
-  if (dims.locationId) p.set('location', dims.locationId)
-  if (dims.classId) p.set('class', dims.classId)
-  for (const [key, value] of Object.entries(dims.segments ?? {})) p.set(`seg_${key}`, value)
-  if (args.subsidiaryId) p.set('sub', args.subsidiaryId)
-  if (args.basis !== 'accrual') p.set('basis', args.basis)
-  p.set('label', args.label)
-  p.set('backLabel', args.backLabel)
-  p.set('back', args.back)
-  return `/reports/detail?${p.toString()}`
+  return {
+    kind: 'ledger',
+    label: args.label,
+    accountIds: args.accountId ? [args.accountId] : undefined,
+    accountTypes: args.accountId ? undefined : args.drillTypes,
+    mode: args.mode,
+    from: args.mode === 'flow' ? from : undefined,
+    to,
+    dims,
+    subsidiaryId: args.subsidiaryId,
+    basis: args.basis,
+  }
 }
 
 export type DrillQuery = {

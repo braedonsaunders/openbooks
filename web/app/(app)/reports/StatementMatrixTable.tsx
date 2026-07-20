@@ -6,8 +6,9 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
 import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-matrix'
-import { buildDrillHref, type ReportScale } from '../../../lib/report-filters'
+import { buildDrillTarget, type ReportScale } from '../../../lib/report-filters'
 import { currencySymbol, formatCell, isNegative } from '../../../lib/statement-format'
+import { ReportDrillLink } from './ReportDrillLink'
 
 /**
  * Renders a multi-column statement view (P&L, Balance Sheet, …) as a clean,
@@ -44,7 +45,7 @@ export function StatementMatrixTable({
   scale?: ReportScale
   /** Currency code (e.g. 'CAD') → symbol shown on amount rows. */
   currency?: string
-  drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; back: string; backLabel: string }
+  drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; back: string; backLabel: string; budgetScenarioId?: string }
 }) {
   const cols = view.columns
   const sym = currencySymbol(currency)
@@ -203,12 +204,13 @@ export function StatementMatrixTable({
                 </td>
                 {cols.map((c, ci) => {
                   const v = l.values?.[ci]
-                  const href =
+                  const target =
                     drill && v !== undefined
-                      ? buildDrillHref({
+                      ? buildDrillTarget({
                           accountId: l.accountId,
                           drillTypes: l.drillTypes,
                           column: c,
+                          sourceColumns: cols,
                           mode: view.mode,
                           reportDims: drill.dims,
                           basis: drill.basis,
@@ -216,6 +218,7 @@ export function StatementMatrixTable({
                           back: drill.back,
                           backLabel: drill.backLabel,
                           label: `${l.label} · ${c.label}`,
+                          budgetScenarioId: drill.budgetScenarioId,
                         })
                       : null
                   const neg = v !== undefined && isNegative(v, c.kind)
@@ -230,10 +233,10 @@ export function StatementMatrixTable({
                         groupStart.has(ci) && 'border-l border-slate-100 dark:border-slate-800',
                       )}
                     >
-                      {href ? (
-                        <Link href={href} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                      {target ? (
+                        <ReportDrillLink drillTarget={target} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
                           {text}
-                        </Link>
+                        </ReportDrillLink>
                       ) : (
                         text
                       )}

@@ -40,9 +40,9 @@ import { isMultiSubsidiary, subsidiaryOptions } from '../lib/subsidiaries'
 const PAYMENT_KINDS = new Set(['vendor_payment', 'customer_payment'])
 const ORDER_KINDS = new Set(['quote', 'sales_order', 'purchase_order'])
 
-function canSeeDocument(doc: Record<string, any>, partyId: string, authz: Authz): boolean {
+function canSeeDocument(doc: Record<string, any>, partyId: string | undefined, authz: Authz): boolean {
   return String(doc.org_id) === authz.user.orgId
-    && String(doc.party_id) === partyId
+    && (!partyId || String(doc.party_id) === partyId)
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id)))
 }
 
@@ -55,10 +55,9 @@ async function visibleSubsidiaries(authz: Authz) {
 }
 
 /**
- * Hydrates a transaction selected from a party's Transactions sublist without
- * leaving the party page. The caller keeps PartyDrawer mounted immediately
- * below this component; UrlDrawer derives the child close destination by
- * removing only partyTxn/partyTxnKind from the current URL.
+ * Hydrates a native transaction drawer for any stacked record context. Party
+ * drawers pass partyId to enforce that relationship; report drawers omit it
+ * while retaining organization, subsidiary, and permission checks.
  */
 export async function loadRelatedTransactionDrawerData({
   id,
@@ -69,7 +68,7 @@ export async function loadRelatedTransactionDrawerData({
 }: {
   id: string
   kind: string
-  partyId: string
+  partyId?: string
   authz: Authz
   formLayoutId?: string
 }): Promise<RelatedTransactionDrawerData | null> {
@@ -104,7 +103,7 @@ export async function loadRelatedTransactionDrawerData({
       }),
     ])
     const openItems: OpenItemClient[] = payment.doc.status === 'draft'
-      ? await openItemsForParty(partyId, side)
+      ? await openItemsForParty(String(payment.doc.party_id), side)
       : []
     return {
       type: 'payment',
@@ -167,7 +166,7 @@ export async function loadRelatedTransactionDrawerData({
 
   if (kind === 'expense_report') {
     if (!can(authz, 'expenses.read')) return null
-    const report = await loadExpenseReport(id)
+    const report = await loadExpenseReport(id, authz.user.orgId)
     if (!report || !canSeeDocument(report.doc as Record<string, any>, partyId, authz)) return null
     const [employees, accounts, taxCodes, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
       db.execute(sql`

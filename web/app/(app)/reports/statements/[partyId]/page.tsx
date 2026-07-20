@@ -13,6 +13,7 @@ import { ReportFilterBar } from '../../ReportFilterBar'
 import { ExportMenu } from '../../ExportMenu'
 import { TxnLink } from '../../TxnLink'
 import { SaveViewButton } from '../../SaveViewButton'
+import { requirePermission } from '../../../../../lib/authz'
 import { ReportPaper } from '../../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../../ReportTable'
 
@@ -29,13 +30,14 @@ export default async function PartnerStatementPage({
 }) {
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
+  const authz = await requirePermission('reports.read')
   const { partyId } = await params
   const sp = await searchParams
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const [st, org] = await Promise.all([
-    partnerStatement(partyId, { from: period.from, to: period.to, side }),
+    partnerStatement(partyId, authz.user.orgId, { from: period.from, to: period.to, side }),
     orgInfo(),
   ])
   const sym = currencySymbol(org?.base_currency)

@@ -846,6 +846,12 @@
     "empty": "この値の背後に取引はありません。",
     "backTo": "{report}に戻る"
   },
+  "drillDrawer": {
+    "title": "根拠レコード",
+    "supporting": "選択したレポート値の根拠となるレコードです。",
+    "loadFailed": "根拠レコードを読み込めませんでした。",
+    "recordLoadFailed": "取引を開けませんでした。"
+  },
   "flyout": {
     "title": "仕訳",
     "openTransaction": "取引全体を開く"

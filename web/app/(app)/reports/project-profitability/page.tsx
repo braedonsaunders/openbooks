@@ -12,6 +12,7 @@ import { SaveViewButton } from '../SaveViewButton'
 import { ExportMenu } from '../ExportMenu'
 import { PaperView, type PaperCell } from '../PaperView'
 import { requirePermission } from '../../../../lib/authz'
+import type { ReportDrillTarget } from '../../../../lib/report-drill'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,9 +54,19 @@ export default async function ProjectProfitabilityPage({
     r.hours || '',
   ])
   const links = result.rows.map((r) => [pnlHref(r.projectId), null, null, null, null, null, null, null, null])
+  const projectDrills = (projectId: string | undefined, label: string): (ReportDrillTarget | null)[] => {
+    const ledger = (accountTypes: string[]): ReportDrillTarget => ({
+      kind: 'ledger', label, accountTypes, from: period.from, to: period.to, mode: 'flow', dims: { ...dims, projectId }, basis: q.basis,
+    })
+    const revenue = ['income', 'income_other']
+    const expenses = ['expense', 'expense_other']
+    return [null, null, ledger(revenue), ledger(['cogs']), ledger([...revenue, 'cogs']), ledger(expenses), ledger([...revenue, 'cogs', ...expenses]), ledger([...revenue, 'cogs', ...expenses]), { kind: 'time', label, from: period.from, to: period.to, projectId }]
+  }
+  const drills = result.rows.map((r) => projectDrills(r.projectId, r.projectName))
   const T = result.totals
   rows.push([t('trialBalance.totals'), '', T.revenue, T.cogs, T.grossProfit, T.expenses, T.net, pct(T.margin), T.hours || ''])
   links.push([null, null, null, null, null, null, null, null, null])
+  drills.push(projectDrills(undefined, t('trialBalance.totals')))
 
   return (
     <ListPageLayout
@@ -99,6 +110,7 @@ export default async function ProjectProfitabilityPage({
               money: [false, false, true, true, true, true, true, false, false],
               rows,
               links,
+              drills,
               totalRowIndex: rows.length - 1,
               isEmpty: result.rows.length === 0,
             },

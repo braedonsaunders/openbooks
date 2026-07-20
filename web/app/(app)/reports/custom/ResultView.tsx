@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 import type { ReportRunResult } from '@openbooks/reports'
 import { PaperView } from '../PaperView'
+import type { ReportDrillTarget } from '../../../../lib/report-drill'
 
 /**
  * Render a ReportRunResult exactly as the engine shapes it: a summary band of
@@ -15,11 +16,13 @@ export function ResultView({
   title,
   description,
   result,
+  drillTarget,
 }: {
   company: string
   title: string
   description?: string | null
   result: ReportRunResult
+  drillTarget: ReportDrillTarget
 }) {
   const t = useTranslations('reports.custom.resultView')
   return (
@@ -29,6 +32,7 @@ export function ResultView({
       data={{
         title,
         periodPhrase: description || undefined,
+        defaultDrillTarget: drillTarget,
         summary: result.summary,
         groups: result.groups.map((group) => ({
           title: group.title,

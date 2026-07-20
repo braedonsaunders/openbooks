@@ -136,7 +136,13 @@ export default async function ViewRunPage({
           <EmptyState title={t('run.emptyTitle')} description={t('run.emptyDescription')} />
         </ReportPaper>
       ) : (
-        <ResultView company={branding.orgName} title={view.name} description={view.description} result={paged} />
+        <ResultView
+          company={branding.orgName}
+          title={view.name}
+          description={view.description}
+          result={paged}
+          drillTarget={{ kind: 'custom', source: 'view', id: view.id, label: view.name }}
+        />
       )}
       <Pagination
         basePath={`/knowledge/views/${view.id}`}
