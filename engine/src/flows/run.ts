@@ -33,9 +33,16 @@ export interface RecordFlowsResult {
     gatesCreated: number;
   }>;
   gatesCreated: number;
+  /**
+   * A matched flow errored (a run is `failed`) OR dispatch itself threw. The
+   * on_submit caller MUST fail closed on this — a document that should have
+   * been gated must never be treated as "no approval required" because its
+   * approval flow errored (e.g. resolved to zero approvers).
+   */
+  failed: boolean;
 }
 
-const EMPTY_RESULT: RecordFlowsResult = Object.freeze({ runs: [], gatesCreated: 0 });
+const EMPTY_RESULT: RecordFlowsResult = Object.freeze({ runs: [], gatesCreated: 0, failed: false });
 
 /** Parse a stored jsonb graph; null (with a log) when it fails validation. */
 export function parseFlowGraph(flowId: string, graph: unknown): AutomationGraph | null {
@@ -96,7 +103,7 @@ export async function runRecordFlows(
     const subject = await adapter.loadContext(subjectId);
     if (!subject) return EMPTY_RESULT;
 
-    const result: RecordFlowsResult = { runs: [], gatesCreated: 0 };
+    const result: RecordFlowsResult = { runs: [], gatesCreated: 0, failed: false };
     for (const flow of flows) {
       const graph = parseFlowGraph(flow.id, flow.graph);
       if (!graph) continue;
@@ -187,12 +194,14 @@ export async function runRecordFlows(
 
       result.runs.push({ runId: run.id, flowId: flow.id, status, gatesCreated });
       result.gatesCreated += gatesCreated;
+      if (status === "failed") result.failed = true;
     }
     return result;
   } catch (e) {
-    // NEVER propagate into the calling business operation.
+    // NEVER propagate into the calling business operation — but report the
+    // failure so an on_submit caller can fail closed rather than auto-approve.
     console.error(`[flows] dispatch failed (${event.kind} ${subjectKind}/${subjectId}):`, e);
-    return EMPTY_RESULT;
+    return { runs: [], gatesCreated: 0, failed: true };
   }
 }
 

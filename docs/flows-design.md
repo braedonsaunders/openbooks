@@ -60,11 +60,35 @@ off the existing 60s scheduler tick using worker-safe actions only
 (email/notify — no gates), enforced by an author-time lint.
 
 Document interplay: `on_submit` flows that produce gates put the document in
-`pending_approval`; the approve branch carries a `change_status: approved`
-action that releases it. Flows own approvals outright — there is no separate
-approval engine. When no enabled flow gates a submit, the web layer decides:
-direct-post kinds and credit memos proceed to `approved`, while kinds that
-require approval surface "no approval flow is configured" until one is authored.
+`pending_approval`. Flows own approvals outright — there is no separate approval
+engine. When no enabled flow gates a submit, the web layer decides: direct-post
+kinds and credit memos proceed to `approved`, while kinds that require approval
+surface "no approval flow is configured" until one is authored.
+
+Institutional-grade guarantees (engine-enforced, not author-dependent):
+
+- **Deterministic release.** `decideGate` reconciles the SUBJECT after a quorum
+  resolves — approve releases to `approved` only once no gate remains open for
+  the subject across ALL runs (multi-step / multi-flow safe); a reject returns
+  it to `draft` and cancels every other open gate for the subject. Release comes
+  from the engine reconciling gate state (`adapter.releaseApproval`), never from
+  an author remembering to wire a `change_status` node, so a gate can never
+  strand a document in `pending_approval`.
+- **Serialized decisions.** The flip → quorum → cancel → resume → release
+  sequence runs under one per-run advisory lock (`pg_advisory_xact_lock`) in a
+  single transaction, so concurrent approvers can never both resume (no
+  double-post) and a crash rolls back to a still-pending, re-decidable gate.
+  Escalation takes the same lock.
+- **Fail closed.** A submit whose approval flow errors (e.g. resolves to zero
+  approvers) never auto-approves — `submitForApproval` returns a `flowError` and
+  the document stays `draft`.
+- **Separation of duties.** The document's submitter can never decide their own
+  approval — enforced at decision time (closing the admin / delegated-actor
+  bypass), secure by default (only an explicit `preventSelfApproval: false`
+  opts out).
+- **One-click email approvals** are HMAC-signed with `FLOWS_EMAIL_SECRET` (or,
+  absent that, the deployment's `SESSION_SECRET`) and fail closed if neither is
+  set; the signature is domain-separated so it can't be replayed elsewhere.
 
 Permissions: `flows.manage` (author/admin), `flows.approve` (act on gates —
 assignees can always act on their own). Nav: Flows under Settings/Build;

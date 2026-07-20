@@ -53,9 +53,16 @@ export async function POST(req: Request) {
       if (doc.status !== 'draft') {
         return NextResponse.json({ error: `document is ${doc.status}, not draft` }, { status: 422 })
       }
-      const { gated, runId } = await submitForApproval(doc.kind, doc.id)
+      const { gated, runId, flowError } = await submitForApproval(doc.kind, doc.id)
       if (gated) {
         return NextResponse.json({ ok: true, requestId: runId })
+      }
+      if (flowError) {
+        // An approval flow matched but errored — fail closed, never auto-approve.
+        return NextResponse.json(
+          { error: `approval could not be routed: ${flowError}` },
+          { status: 422 },
+        )
       }
       // No flow gated this document. Only direct-post kinds and credit memos
       // may skip straight to approved — bills and invoices must have an
