@@ -51,43 +51,65 @@
       "upToDate": "up to date"
     }
   },
-  "overview": {
+  "home": {
     "title": "Banking",
-    "description": "Cash and card accounts at a glance — match bank activity, reconcile, and record banking transactions.",
-    "tiles": {
-      "cash": "Cash on hand",
+    "description": "Accounts, cash movement, and reconciliation health for the whole workspace.",
+    "tabs": {
+      "overview": "Overview"
+    },
+    "actions": {
+      "match": "Match bank data",
+      "matchCount": "{count, plural, one {Match # line} other {Match # lines}}"
+    },
+    "vitals": {
+      "cash": "Total cash",
       "cards": "Card balances",
       "unmatched": "Unmatched lines",
-      "openRecons": "Open reconciliations"
+      "unmatchedSub": "waiting in Match",
+      "allMatched": "all lines matched",
+      "openRecons": "Open reconciliations",
+      "openReconsSub": "in progress",
+      "noneOpen": "none open",
+      "netFlow": "Net flow (7d)",
+      "accountCount": "{count, plural, one {# account} other {# accounts}}"
     },
-    "links": {
-      "match": {
-        "title": "Match Bank Data",
-        "description": "Match imported bank lines to the ledger"
-      },
-      "transactions": {
-        "title": "Transactions",
-        "description": "Checks, deposits, transfers, and card activity"
-      },
-      "reconciliations": {
-        "title": "Reconciliations",
-        "description": "Open and signed-off reconciliations"
-      },
-      "imports": {
-        "title": "Import History",
-        "description": "Every imported bank statement"
-      },
-      "rules": {
-        "title": "Reconciliation Rules",
-        "description": "Auto-categorize recurring bank lines"
-      }
+    "roster": {
+      "title": "Accounts",
+      "hint": "Balances from the posted ledger",
+      "empty": "No reconcilable accounts yet. Flag your bank and card accounts as reconcilable in the Chart of Accounts.",
+      "bankSection": "Bank accounts",
+      "cardSection": "Credit cards",
+      "reconciledThrough": "Reconciled through {date}",
+      "neverReconciled": "Never reconciled",
+      "lastStatement": "Statement {date}",
+      "staleStatement": "Last statement {date}",
+      "noStatements": "No statements imported",
+      "unmatchedChip": "{count} unmatched",
+      "reconciling": "Reconciling"
     },
-    "recentTransactions": "Recent transactions",
-    "recentImports": "Recent imports",
-    "viewAll": "View all",
-    "noRecentTransactions": "No banking transactions yet.",
-    "noRecentImports": "No statements imported yet.",
-    "unmatchedBadge": "{count, plural, one {# unmatched} other {# unmatched}}"
+    "trend": {
+      "title": "Cash trend",
+      "hint": "13 weeks",
+      "series": "Cash"
+    },
+    "directory": {
+      "title": "Work queues",
+      "matchHint": "bank lines waiting to be matched",
+      "matchClear": "all bank lines matched",
+      "reconsHint": "open reconciliations",
+      "rulesHint": "{total, plural, =0 {no rules configured yet} one {of # configured rule} other {of # configured rules}}",
+      "importsHint": "statements · last import {days, plural, =0 {today} one {# day ago} other {# days ago}}",
+      "importsNever": "no statements imported yet",
+      "transactionsHint": "posted in the last 7 days"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "allClear": "All clear — nothing needs attention.",
+      "negativeBalance": "{account} has a negative balance",
+      "noStatement": "{account} has never imported a statement",
+      "staleStatement": "{account} has no statement in {days} days",
+      "openRecon": "{account} has a reconciliation in progress"
+    }
   },
   "transactionsPage": {
     "title": "Banking transactions",
@@ -146,11 +168,97 @@
     "optional": "optional",
     "thenLegend": "Then",
     "action": "Action",
-    "actionCategorize": "Post a categorizing entry",
-    "actionExclude": "Exclude the line",
+    "actionCategorize": "Categorize",
+    "actionExclude": "Exclude",
     "offsetAccount": "Offset account",
     "offsetHint": "A journal is posted moving the bank line against this account, then matched automatically.",
-    "excludeHint": "The line is marked excluded and skipped during reconciliation.",
+    "excludeHint": "Matching lines are marked excluded and skipped during reconciliation.",
+    "runSuggested": "{suggested, plural, one {# line suggested for review} other {# lines suggested for review}}",
+    "modeSuggest": "Suggest",
+    "modeAuto": "Auto-post",
+    "assignPayee": "Assign payee",
+    "payeePlaceholder": "Search parties",
+    "noPayee": "No payee",
+    "memoLabel": "Memo",
+    "memoPlaceholder": "Defaults to the bank line description",
+    "suggestHint": "Matching lines get a ready-to-confirm suggestion in Match Bank Data — nothing posts until you confirm it.",
+    "autoHint": "Matching lines are posted and matched automatically when rules run.",
+    "fields": {
+      "description": "Description",
+      "payee": "Payee",
+      "anyText": "Any text field",
+      "reference": "Reference",
+      "amount": "Amount",
+      "flow": "Direction",
+      "date": "Date"
+    },
+    "ops": {
+      "contains": "contains",
+      "notContains": "does not contain",
+      "equals": "is exactly",
+      "startsWith": "starts with",
+      "endsWith": "ends with",
+      "isBlank": "is blank",
+      "eq": "=",
+      "ne": "≠",
+      "gt": "greater than",
+      "gte": "at least",
+      "lt": "less than",
+      "lte": "at most",
+      "between": "between",
+      "is": "is",
+      "on": "on",
+      "before": "before",
+      "after": "after",
+      "withinDays": "within last N days"
+    },
+    "cb": {
+      "match": "Match",
+      "allOf": "all of the following",
+      "anyOf": "any of the following",
+      "addCondition": "Add condition",
+      "addGroup": "Add group",
+      "noConditions": "No conditions — this matches every line.",
+      "remove": "Remove condition",
+      "valuePlaceholder": "Value",
+      "and": "and",
+      "to": "to"
+    },
+    "scope": {
+      "label": "Applies to",
+      "allHint": "Runs on every reconcilable account.",
+      "someHint": "Runs on {count, plural, one {# account} other {# accounts}}."
+    },
+    "split": {
+      "remainder": "Remainder",
+      "percent": "Percent",
+      "fixed": "Fixed",
+      "addLine": "Add line",
+      "removeLine": "Remove line",
+      "accountPlaceholder": "Select an account",
+      "descriptionPlaceholder": "Line memo",
+      "portion": "Portion"
+    },
+    "coding": {
+      "department": "Department",
+      "location": "Location",
+      "class": "Class",
+      "tax": "Tax code"
+    },
+    "preview": {
+      "title": "Live preview",
+      "pickAccount": "Account",
+      "pickAccountHint": "Choose an account to preview matches against.",
+      "loading": "Checking recent lines…",
+      "error": "Preview unavailable",
+      "matched": "{count, plural, one {line would match} other {lines would match}}",
+      "conflicts": "{count, plural, one {# conflict} other {# conflicts}}",
+      "noConflicts": "no conflicts",
+      "none": "No lines match yet in the last 90 days.",
+      "stolen": "higher-priority rule wins",
+      "split": "Split preview",
+      "healthHint": "Live over the last 90 days of imported lines."
+    },
     "summary": {
       "contains": "“{text}”",
       "moneyIn": "money in",
@@ -158,7 +266,10 @@
       "amountRange": "{min}–{max}",
       "exclude": "Exclude",
       "categorize": "Categorize → {account}",
-      "anyLine": "Any line"
+      "categorizeSplit": "Categorize → {account} +{count} more",
+      "anyLine": "Any line",
+      "and": "and",
+      "or": "or"
     }
   },
   "match": {
@@ -179,6 +290,9 @@
       "excluded": "Excluded"
     },
     "addJournal": "Add journal",
+    "createRule": "Create rule from this line",
+    "postAndMatch": "Post and match",
+    "suggestedBy": "Suggested: {rule}",
     "addJournalTitle": "Add journal from bank line",
     "addJournalHint": "Posts a balanced journal moving this line against the offset account, then matches it.",
     "offsetAccount": "Offset account",

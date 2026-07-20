@@ -1,10 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Ban, CheckCheck, FilePlus2, Link2, RotateCcw, Wand2, Workflow } from 'lucide-react'
+import { Ban, CheckCheck, FilePlus2, Link2, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge, Button, Drawer, EmptyState, Label, SearchSelect, Select, Table, TableBody,
@@ -44,6 +44,48 @@ export function MatchWorkspace({
   const [selectedGl, setSelectedGl] = useState<Set<string>>(new Set())
   const [addLine, setAddLine] = useState<{ id: string; label: string } | null>(null)
   const [offsetId, setOffsetId] = useState('')
+  // Suggest-mode rule proposals for the current account's unmatched lines,
+  // keyed by statement line id. Computed live via the rules preview (no post).
+  const [suggestions, setSuggestions] = useState<Map<string, { ruleId: string; ruleName: string }>>(new Map())
+
+  useEffect(() => {
+    if (!account || !session) {
+      setSuggestions(new Map())
+      return
+    }
+    const controller = new AbortController()
+    fetch('/api/banking/rules/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id, onlyUnmatched: true, limit: 200 }),
+      signal: controller.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: any) => {
+        if (!d?.matches) return
+        const next = new Map<string, { ruleId: string; ruleName: string }>()
+        for (const m of d.matches) {
+          if (m.action === 'categorize' && m.ruleMode === 'suggest' && m.ruleId) {
+            next.set(m.lineId, { ruleId: m.ruleId, ruleName: m.ruleName ?? '' })
+          }
+        }
+        setSuggestions(next)
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [account?.id, session?.id, data])
+
+  async function confirmSuggestion(lineId: string, ruleId: string) {
+    if (!session) return
+    const d = await call('POST', '/api/banking/rules/apply-line', {
+      statementLineId: lineId,
+      ruleId,
+      reconciliationId: session.id,
+    })
+    if (!d) return
+    toast.success(tW('matchedToast'))
+    router.refresh()
+  }
 
   const glSelectionSum = useMemo(
     () => (data?.glRows ?? []).filter((r: any) => selectedGl.has(r.id)).reduce((a: number, r: any) => a + Number(r.amount), 0),
@@ -247,10 +289,27 @@ export function MatchWorkspace({
                     <TableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={() => setSelectedStmt(sel ? null : l.id)}>
                       <TableCell className="w-8"><input type="radio" name="stmt" checked={sel} onChange={() => setSelectedStmt(sel ? null : l.id)} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })} /></TableCell>
                       <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
-                      <TableCell className="max-w-[14rem] truncate">{l.description ?? '—'}{l.counterparty_ref ? <span className="ml-1.5 text-xs text-slate-400">{l.counterparty_ref}</span> : null}</TableCell>
+                      <TableCell className="max-w-[14rem]">
+                        <div className="truncate">{l.description ?? '—'}{l.counterparty_ref ? <span className="ml-1.5 text-xs text-slate-400">{l.counterparty_ref}</span> : null}</div>
+                        {suggestions.has(l.id) ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId) }}
+                            disabled={busy}
+                            className="mt-1 inline-flex items-center gap-1 rounded-full border border-teal-300 bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/40"
+                            title={t('postAndMatch')}
+                          >
+                            <Sparkles size={11} /> {t('suggestedBy', { rule: suggestions.get(l.id)!.ruleName })}
+                          </button>
+                        ) : null}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
+                          {suggestions.has(l.id) ? (
+                            <Button variant="ghost" size="sm" disabled={busy} title={t('postAndMatch')} onClick={() => confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId)}><Link2 size={14} /></Button>
+                          ) : null}
+                          <Button variant="ghost" size="sm" disabled={busy} title={t('createRule')} onClick={() => router.push(`/banking/rules?rule=new&fromLine=${l.id}` as any)}><Workflow size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: `${l.posted_on} · ${money(l.amount)}` }); setOffsetId('') }}><FilePlus2 size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('exclude')} onClick={() => exclude(l.id)}><Ban size={14} /></Button>
                         </div>
