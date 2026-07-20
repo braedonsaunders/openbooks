@@ -1461,7 +1461,12 @@
         "methodPct": "{rate}% de mano de obra",
         "methodHr": "{rate} $/hora",
         "methodGl": "GL contabilizado (grupo de cuentas)",
-        "working": "Guardando…"
+        "working": "Guardando…",
+        "step1t": "Clasificar los gastos generales",
+        "step1d": "{count} categorías en la pestaña Categorías abajo; {unassigned} cuentas sin asignar. Agrupe cada cuenta de gasto indirecto para no omitir nada.",
+        "step2t": "Revisar las tasas calculadas",
+        "step2d": "La pestaña Matriz muestra la tasa de cada departamento según los reales — actualmente {rate} $/h compuesto. Solo una vista previa; nunca costea obras directamente.",
+        "step3t": "Publicar y aplicar"
       }
     },
     "fields": {

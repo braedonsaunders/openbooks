@@ -1535,7 +1535,12 @@
         "methodPct": "{rate}% of labor cost",
         "methodHr": "${rate}/labor hour",
         "methodGl": "Posted GL (account group)",
-        "working": "Saving…"
+        "working": "Saving…",
+        "step1t": "Classify overhead costs",
+        "step1d": "{count} categories on the Categories tab below; {unassigned} accounts unassigned. Group every indirect expense account so nothing is missed.",
+        "step2t": "Review computed rates",
+        "step2d": "The Matrix tab shows each department’s rate from actuals — currently ${rate}/hr composite. A preview only; it never costs jobs directly.",
+        "step3t": "Publish & apply"
       }
     },
     "fields": {

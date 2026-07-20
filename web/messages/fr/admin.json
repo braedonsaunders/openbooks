@@ -1505,7 +1505,12 @@
         "methodPct": "{rate}% du coût de main-d’œuvre",
         "methodHr": "{rate} $/heure",
         "methodGl": "GL comptabilisé (groupe de comptes)",
-        "working": "Enregistrement…"
+        "working": "Enregistrement…",
+        "step1t": "Classer les frais généraux",
+        "step1d": "{count} catégories dans l’onglet Catégories ci-dessous ; {unassigned} comptes non assignés. Groupez chaque compte de charges indirectes pour ne rien omettre.",
+        "step2t": "Vérifier les taux calculés",
+        "step2d": "L’onglet Matrice montre le taux de chaque département d’après les réels — actuellement {rate} $/h composite. Un aperçu seulement ; il ne coûte jamais les chantiers directement.",
+        "step3t": "Publier et appliquer"
       }
     },
     "fields": {
