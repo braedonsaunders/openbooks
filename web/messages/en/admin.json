@@ -99,6 +99,7 @@
   "audit": {
     "title": "Audit Log",
     "description": "A complete, tamper-proof history of every change, with full before/after detail and GL impact for posted amendments and deletions.",
+    "documentation": "Documentation",
     "searchPlaceholder": "Search record type, user, or reference…",
     "actionFilter": "Action",
     "empty": {
@@ -111,7 +112,47 @@
       "action": "Action",
       "tableName": "Record type",
       "row": "Reference",
-      "changes": "Changes"
+      "changes": "Details"
+    },
+    "openEventAria": "Open {action} event for {recordType} from {when}",
+    "summaries": {
+      "snapshot": "Full before and after snapshot",
+      "metadata": "Record metadata",
+      "changeCount": "{count, plural, =0 {Event details} one {# changed field} other {# changed fields}}"
+    },
+    "drawer": {
+      "description": "Recorded by {actor} · {when}",
+      "tabsAria": "Audit event views",
+      "tabs": {
+        "changes": "Changes",
+        "before": "Before",
+        "after": "After"
+      },
+      "when": "Recorded",
+      "actor": "User",
+      "recordType": "Record type",
+      "reference": "Record reference",
+      "changedFields": "Changed fields",
+      "eventContext": "Event context",
+      "technicalDetails": "Technical details",
+      "beforeSnapshot": "Record before this event",
+      "afterSnapshot": "Record after this event",
+      "recordRemoved": "Record removed",
+      "recordRemovedDescription": "This event deleted the record, so there is no after snapshot.",
+      "field": "Field",
+      "before": "Before",
+      "after": "After",
+      "notSet": "Not set",
+      "yes": "Yes",
+      "no": "No",
+      "emptyCollection": "No values",
+      "item": "Item",
+      "lineItem": "Line {line}",
+      "itemCount": "{count, plural, one {# item} other {# items}}",
+      "propertyCount": "{count, plural, one {# property} other {# properties}}",
+      "itemPosition": "{current} of {total}",
+      "changeCount": "{count, plural, one {# change} other {# changes}}",
+      "noDifferences": "No before-and-after field differences were recorded for this event."
     },
     "systemActor": "system",
     "actions": {
@@ -1439,7 +1480,7 @@
       "collectedAccountId": "Tax collected account",
       "paidAccountId": "Tax paid account",
       "taxCodeId": "Tax code",
-      "ratePercent": "Rate %",
+      "ratePercent": "Rate",
       "effectiveFrom": "Effective from",
       "effectiveTo": "Effective to",
       "members": "Tax codes",
@@ -1544,7 +1585,8 @@
       "receivedNotBilledAccountId": "Received-not-billed account",
       "assemblyItemId": "Assembly item",
       "componentItemId": "Component item",
-      "quantityPer": "Quantity per"
+      "quantityPer": "Quantity per",
+      "rateKind": "Rate type"
     },
     "options": {
       "appliesTo": {
@@ -1639,6 +1681,10 @@
       "overheadMethod": {
         "live": "Live",
         "standard": "Standard"
+      },
+      "overheadRateKind": {
+        "per_hour": "$/hour",
+        "percent": "% of labor"
       }
     }
   },
