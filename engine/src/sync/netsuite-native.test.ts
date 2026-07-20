@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
-import { parseNetSuiteMappings } from "./netsuite-source.ts";
+import { numericIdWindows, parseNetSuiteMappings } from "./netsuite-source.ts";
 import type { NativeContext } from "./native.ts";
 
 const context = {
@@ -70,4 +70,15 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
   });
   assert.throws(() => parseNetSuiteMappings('{"itemCategoryField":"x; DROP"}'), /invalid script ID/);
   assert.throws(() => parseNetSuiteMappings('{"projectStatuses":{"Won":"won"}}'), /invalid target/);
+});
+
+test("NetSuite high-volume streams partition every numeric ID exactly once", () => {
+  assert.deepEqual(numericIdWindows(0), []);
+  assert.deepEqual(numericIdWindows(12_001, 5_000), [
+    [0, 5_000],
+    [5_000, 10_000],
+    [10_000, 12_001],
+  ]);
+  assert.throws(() => numericIdWindows(-1), /non-negative safe integer/);
+  assert.throws(() => numericIdWindows(1, 0), /positive safe integer/);
 });

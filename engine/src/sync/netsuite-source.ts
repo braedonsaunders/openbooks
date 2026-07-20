@@ -81,6 +81,14 @@ const safeSuiteScriptId = (value: unknown, label: string): string | null => {
   return field;
 };
 
+export function numericIdWindows(maxId: number, width = 5_000): Array<[number, number]> {
+  if (!Number.isSafeInteger(maxId) || maxId < 0) throw new Error("maxId must be a non-negative safe integer");
+  if (!Number.isSafeInteger(width) || width < 1) throw new Error("window width must be a positive safe integer");
+  const windows: Array<[number, number]> = [];
+  for (let lo = 0; lo < maxId; lo += width) windows.push([lo, Math.min(lo + width, maxId)]);
+  return windows;
+}
+
 export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
   if (value == null || value === "") return {};
   const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
@@ -603,18 +611,30 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async timeEntries(since: Date | null): Promise<SourceEntity[]> {
-    const where = since
-      ? `WHERE tb.lastmodifieddate >= TO_DATE('${since.toISOString().slice(0, 19).replace("T", " ")}', 'YYYY-MM-DD HH24:MI:SS')`
-      : "";
+    const changed = since ? `tb.lastmodifieddate >= ${this.ts(since)}` : null;
     const timeType = this.mappings.timeEntryTypeField
       ? `tb.${this.mappings.timeEntryTypeField} AS timetype`
       : "NULL AS timetype";
-    const rows = await this.q<Record<string, string>>(`
-      SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
-             tb.rate, tb.laborcost, tb.isbillable,
-             ${timeType},
-             TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
-        FROM timebill tb ${where}`);
+    const maxRows = await this.q<{ m?: string }>(`
+      SELECT MAX(tb.id) AS m
+        FROM timebill tb
+       ${changed ? `WHERE ${changed}` : ""}`);
+    const maxId = Number(maxRows[0]?.m ?? 0);
+    const rows: Record<string, string>[] = [];
+    // SuiteQL paged queries are capped account-wide. Time is commonly the
+    // largest master-data stream, so keep every request bounded independently
+    // of account size while preserving the incremental watermark.
+    for (const [lo, hi] of numericIdWindows(maxId)) {
+      const conditions = [`tb.id > ${lo}`, `tb.id <= ${hi}`];
+      if (changed) conditions.push(changed);
+      rows.push(...(await this.q<Record<string, string>>(`
+        SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
+               tb.rate, tb.laborcost, tb.isbillable,
+               ${timeType},
+               TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
+          FROM timebill tb
+         WHERE ${conditions.join(" AND ")}`)));
+    }
     return rows.map((tb) => ({
       sourceRef: String(tb.id),
       fields: {
