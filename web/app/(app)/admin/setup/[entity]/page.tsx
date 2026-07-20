@@ -82,7 +82,7 @@ async function loadEntityOptions(source: string, orgId: string): Promise<RefOpti
     ? sql.raw(`case when coalesce(code, '') <> '' then code || ' · ' || name else name end`)
     : sql.raw('name')
   const r = (await db.execute(sql`
-    select id as value, ${labelExpr} as label
+    select ${sql.raw(target.idColumn ?? 'id')} as value, ${labelExpr} as label
       from ${sql.raw(target.table)}${orgFilter}${customSegmentFilter}
      order by name`)) as any
   return r.rows as RefOption[]
