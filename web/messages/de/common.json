@@ -186,7 +186,7 @@
     "description": "Keine Datensätze entsprechen den aktuellen Filtern."
   },
   "auditTrail": {
-    "tabs": { "details": "Details", "audit": "Prüfprotokoll" },
+    "tabs": { "details": "Details", "attachments": "Anhänge", "audit": "Prüfprotokoll" },
     "ariaLabel": "Datensatzabschnitte",
     "searchPlaceholder": "Prüfprotokoll durchsuchen",
     "actionFilter": "Nach Aktion filtern",

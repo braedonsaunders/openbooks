@@ -186,7 +186,7 @@
     "description": "No records match the current filters."
   },
   "auditTrail": {
-    "tabs": { "details": "Details", "audit": "Audit Trail" },
+    "tabs": { "details": "Details", "attachments": "Attachments", "audit": "Audit Trail" },
     "ariaLabel": "Record sections",
     "searchPlaceholder": "Search audit trail",
     "actionFilter": "Filter by action",

@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
 import { Button, Popover, UrlDrawer } from '@openbooks/ui'
+import { AttachmentPanel } from './attachment-panel'
 import { AuditTrailPanel } from './audit-trail-panel'
 
 interface TransactionDrawerProps {
@@ -18,7 +19,11 @@ interface TransactionDrawerProps {
   actionsMenuHeader?: ReactNode
   footer?: ReactNode
   children: ReactNode
+  canEditAttachments?: boolean
 }
+
+type TransactionTab = 'details' | 'attachments' | 'audit'
+const TRANSACTION_TABS: TransactionTab[] = ['details', 'attachments', 'audit']
 
 /**
  * The shared shell for every editable business transaction flyout.
@@ -39,11 +44,17 @@ export function TransactionDrawer({
   actionsMenuHeader,
   footer,
   children,
+  canEditAttachments = false,
 }: TransactionDrawerProps) {
   const t = useTranslations('common')
+  const pathname = usePathname()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [actionsOpen, setActionsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'details' | 'audit'>('details')
+  const requestedTab = searchParams.get('transactionTab')
+  const activeTab: TransactionTab = TRANSACTION_TABS.includes(requestedTab as TransactionTab)
+    ? requestedTab as TransactionTab
+    : 'details'
   const hasActions = actions != null || actionsMenuHeader != null
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
@@ -61,13 +72,19 @@ export function TransactionDrawer({
       description={description}
       subtabs={
         <nav className="-mb-px flex gap-1" aria-label={t('auditTrail.ariaLabel')}>
-          {(['details', 'audit'] as const).map((tab) => (
+          {TRANSACTION_TABS.map((tab) => (
             <button
               key={tab}
               type="button"
               role="tab"
               aria-selected={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams.toString())
+                if (tab === 'details') next.delete('transactionTab')
+                else next.set('transactionTab', tab)
+                const query = next.toString()
+                router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+              }}
               className={`border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
@@ -114,7 +131,11 @@ export function TransactionDrawer({
       ) : undefined}
       footer={activeTab === 'details' ? footer : undefined}
     >
-      {activeTab === 'details' ? children : <AuditTrailPanel table="documents" recordId={recordId} />}
+      {activeTab === 'details' ? children : activeTab === 'attachments' ? (
+        <AttachmentPanel targetTable="documents" targetId={recordId} canEdit={canEditAttachments} />
+      ) : (
+        <AuditTrailPanel table="documents" recordId={recordId} />
+      )}
     </UrlDrawer>
   )
 }

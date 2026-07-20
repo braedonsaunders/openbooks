@@ -186,7 +186,7 @@
     "description": "没有记录符合当前筛选条件。"
   },
   "auditTrail": {
-    "tabs": { "details": "详情", "audit": "审计轨迹" },
+    "tabs": { "details": "详情", "attachments": "附件", "audit": "审计轨迹" },
     "ariaLabel": "记录板块",
     "searchPlaceholder": "搜索审计轨迹",
     "actionFilter": "按操作筛选",
