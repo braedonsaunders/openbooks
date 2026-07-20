@@ -153,6 +153,8 @@ export interface DocumentLineInput extends BillLineInput {
   quantity?: string | null
   unit?: string | null
   unitPrice?: string | null
+  /** Line entity: the customer/vendor/employee this line belongs to. */
+  partyId?: string | null
   departmentId?: string | null
   projectId?: string | null
   locationId?: string | null
@@ -237,6 +239,7 @@ async function glSignature(
       coalesce((select string_agg(
         coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
         coalesce(tax_code_id::text,'') || ':' || tax_amount::text || ':' ||
+        coalesce(party_id::text,'') || ':' ||
         coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
         coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' ||
         coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
@@ -300,7 +303,7 @@ export async function applyDocumentEdit(
   // without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
     | null = null
   if (body.lines) {
     const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
@@ -330,6 +333,7 @@ export async function applyDocumentEdit(
         taxCodeId: l.taxCodeId ?? null,
         taxAmount: l.taxAmount,
         taxOverridden: l.taxOverridden === true,
+        partyId: l.partyId ?? null,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
@@ -366,11 +370,11 @@ export async function applyDocumentEdit(
           await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
-                                        department_id, project_id, location_id, class_id, extra_dims, custom)
+                                        party_id, department_id, project_id, location_id, class_id, extra_dims, custom)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
-                    ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
+                    ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
                     ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
           `)
         }
