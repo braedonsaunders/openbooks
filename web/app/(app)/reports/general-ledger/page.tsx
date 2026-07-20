@@ -15,6 +15,7 @@ import { TxnLink } from '../TxnLink'
 import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
+import { ReportDrillLink } from '../ReportDrillLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,9 @@ export default async function GeneralLedgerPage({
   ])
   const sym = currencySymbol(org?.base_currency)
   const m = (v: number) => money(v, sym)
+  const openingTo = new Date(`${period.from}T00:00:00Z`)
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
+  const openingDate = openingTo.toISOString().slice(0, 10)
 
   return (
     <ListPageLayout
@@ -83,7 +87,7 @@ export default async function GeneralLedgerPage({
                     <TableCell colSpan={5} className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       {t('generalLedger.opening')}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{m(a.opening)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink drillTarget={{ kind: 'ledger', label: `${a.name} · ${t('generalLedger.opening')}`, accountIds: [a.id], to: openingDate, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(a.opening)}</ReportDrillLink></TableCell>
                   </TableRow>
                   {a.lines.map((l, i) => (
                     <TableRow key={`${l.entryId}-${i}`}>
@@ -99,10 +103,10 @@ export default async function GeneralLedgerPage({
                       <TableCell className="text-slate-600 dark:text-slate-300">
                         {[l.party, l.memo].filter(Boolean).join(' · ')}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{l.debit ? m(l.debit) : ''}</TableCell>
-                      <TableCell className="text-right tabular-nums">{l.credit ? m(l.credit) : ''}</TableCell>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.debit ? m(l.debit) : ''}</TxnLink></TableCell>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.credit ? m(l.credit) : ''}</TxnLink></TableCell>
                       <TableCell className={cn('text-right tabular-nums', l.balance < 0 && 'text-red-600 dark:text-red-400')}>
-                        {m(l.balance)}
+                        <TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(l.balance)}</TxnLink>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -111,7 +115,7 @@ export default async function GeneralLedgerPage({
                       {t('generalLedger.closing')}
                     </TableCell>
                     <TableCell className={cn('text-right font-semibold tabular-nums', a.closing < 0 && 'text-red-600 dark:text-red-400')}>
-                      {m(a.closing)}
+                      <ReportDrillLink drillTarget={{ kind: 'ledger', label: `${a.name} · ${t('generalLedger.closing')}`, accountIds: [a.id], to: period.to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(a.closing)}</ReportDrillLink>
                     </TableCell>
                   </TableRow>
                 </TableBody>

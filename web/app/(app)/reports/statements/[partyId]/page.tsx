@@ -16,6 +16,7 @@ import { SaveViewButton } from '../../SaveViewButton'
 import { requirePermission } from '../../../../../lib/authz'
 import { ReportPaper } from '../../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../../ReportTable'
+import { ReportDrillLink } from '../../ReportDrillLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,10 @@ export default async function PartnerStatementPage({
   const sym = currencySymbol(org?.base_currency)
   const m = (v: number) => money(v, sym)
   const keep = toSearchParams(q).toString()
+  const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
+  const openingTo = new Date(`${period.from}T00:00:00Z`)
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
+  const openingDate = openingTo.toISOString().slice(0, 10)
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
     current: t('aging.buckets.current'),
@@ -83,12 +88,12 @@ export default async function PartnerStatementPage({
           {BUCKETS.map((b) => (
             <div key={b} className="min-w-0 px-2 text-center">
               <div className="truncate text-xs text-slate-500 dark:text-slate-400">{bucketLabels[b]}</div>
-              <div className="truncate tabular-nums">{m(st.aging[b])}</div>
+              <div className="truncate tabular-nums"><ReportDrillLink drillTarget={{ kind: 'aging', label: `${st.party.name ?? t('statements.title')} · ${bucketLabels[b]}`, side, asOf: period.to, partyId, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.aging[b])}</ReportDrillLink></div>
             </div>
           ))}
           <div className="min-w-0 px-2 text-center font-semibold">
             <div className="truncate text-xs text-slate-500 dark:text-slate-400">{t('aging.columns.total')}</div>
-            <div className="truncate tabular-nums">{m(st.aging.total)}</div>
+            <div className="truncate tabular-nums"><ReportDrillLink drillTarget={{ kind: 'aging', label: st.party.name ?? t('statements.title'), side, asOf: period.to, partyId }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.aging.total)}</ReportDrillLink></div>
           </div>
         </div>
         <Table>
@@ -107,7 +112,7 @@ export default async function PartnerStatementPage({
             <TableCell colSpan={5} className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {t('statements.opening')}
             </TableCell>
-            <TableCell className="text-right font-medium tabular-nums">{m(st.opening)}</TableCell>
+            <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink drillTarget={{ kind: 'ledger', label: t('statements.opening'), accountTypes, partyIds: [partyId], to: openingDate, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.opening)}</ReportDrillLink></TableCell>
           </TableRow>
           {st.lines.map((l, i) => (
             <TableRow key={`${l.entryId}-${i}`}>
@@ -121,10 +126,10 @@ export default async function PartnerStatementPage({
                 </span>
               </TableCell>
               <TableCell className="text-slate-600 dark:text-slate-300">{l.memo}</TableCell>
-              <TableCell className="text-right tabular-nums">{l.debit ? m(l.debit) : ''}</TableCell>
-              <TableCell className="text-right tabular-nums">{l.credit ? m(l.credit) : ''}</TableCell>
+              <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.debit ? m(l.debit) : ''}</TxnLink></TableCell>
+              <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.credit ? m(l.credit) : ''}</TxnLink></TableCell>
               <TableCell className={cn('text-right tabular-nums', l.balance < 0 && 'text-red-600 dark:text-red-400')}>
-                {m(l.balance)}
+                <TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(l.balance)}</TxnLink>
               </TableCell>
             </TableRow>
           ))}
@@ -133,7 +138,7 @@ export default async function PartnerStatementPage({
               {t('statements.closing')}
             </TableCell>
             <TableCell className={cn('text-right font-semibold tabular-nums', st.closing < 0 && 'text-red-600 dark:text-red-400')}>
-              {m(st.closing)}
+              <ReportDrillLink drillTarget={{ kind: 'ledger', label: t('statements.closing'), accountTypes, partyIds: [partyId], to: period.to, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(st.closing)}</ReportDrillLink>
             </TableCell>
           </TableRow>
           </TableBody>

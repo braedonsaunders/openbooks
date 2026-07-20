@@ -99,7 +99,7 @@ export function PaperView({
               <div className="truncate text-xs text-slate-500 dark:text-slate-400">{item.label}</div>
               <div className="truncate font-semibold tabular-nums">
                 {data.defaultDrillTarget && isNumericCell(item.value) ? (
-                  <ReportDrillLink drillTarget={data.defaultDrillTarget} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                  <ReportDrillLink target={data.defaultDrillTarget} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
                     {fmt(item.value, false, currency)}
                   </ReportDrillLink>
                 ) : fmt(item.value, false, currency)}
@@ -165,7 +165,7 @@ export function PaperView({
                                 )}
                               >
                                 {drill ? (
-                                  <ReportDrillLink drillTarget={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                                  <ReportDrillLink target={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
                                     {text}
                                   </ReportDrillLink>
                                 ) : href ? (

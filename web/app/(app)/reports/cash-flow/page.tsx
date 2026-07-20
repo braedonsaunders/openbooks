@@ -12,6 +12,8 @@ import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableRow, reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
+import { ReportDrillLink } from '../ReportDrillLink'
+import type { StatementDimFilter } from '../../../../lib/statement-matrix'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +35,9 @@ export default async function CashFlow({
   const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims), dimensionOptions(), orgInfo()])
   const sym = currencySymbol(org?.base_currency)
   const m = (v: number) => money(v, sym)
+  const openingTo = new Date(`${from}T00:00:00Z`)
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
+  const openingDate = openingTo.toISOString().slice(0, 10)
 
   const sectionLabels: Record<CashFlowSection, string> = {
     operating: t('sections.operating'),
@@ -84,6 +89,9 @@ export default async function CashFlow({
                   lines={s.lines}
                   subtotal={s.subtotal}
                   m={m}
+                  from={from}
+                  to={to}
+                  dims={dims}
                 />
               )
             })
@@ -93,17 +101,17 @@ export default async function CashFlow({
               <TableRow className={reportSubtotalRowClass}>
                 <TableCell className="font-bold">{t('netChange')}</TableCell>
                 <TableCell className={cn('text-right font-bold tabular-nums', cf.netChange < 0 && 'text-red-600 dark:text-red-400')}>
-                  {m(cf.netChange)}
+                  <ReportDrillLink drillTarget={{ kind: 'ledger', label: t('netChange'), accountTypes: cf.sections.flatMap((s) => s.lines.map((line) => line.type)), from, to, mode: 'flow', dims, cashOnly: true }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(cf.netChange)}</ReportDrillLink>
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="pl-8 text-slate-500 dark:text-slate-400">{t('openingCash')}</TableCell>
-                <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{m(cf.openingCash)}</TableCell>
+                <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400"><ReportDrillLink drillTarget={{ kind: 'ledger', label: t('openingCash'), accountTypes: ['asset_bank'], to: openingDate, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(cf.openingCash)}</ReportDrillLink></TableCell>
               </TableRow>
               <TableRow className={reportTotalRowClass}>
                 <TableCell className="font-semibold">{t('closingCash')}</TableCell>
                 <TableCell className={cn('text-right font-semibold tabular-nums', cf.closingCash < 0 && 'text-red-600 dark:text-red-400')}>
-                  {m(cf.closingCash)}
+                  <ReportDrillLink drillTarget={{ kind: 'ledger', label: t('closingCash'), accountTypes: ['asset_bank'], to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(cf.closingCash)}</ReportDrillLink>
                 </TableCell>
               </TableRow>
             </>
@@ -121,12 +129,18 @@ function SectionRows({
   lines,
   subtotal,
   m,
+  from,
+  to,
+  dims,
 }: {
   title: string
   subtotalLabel: string
   lines: { type: string; label: string; amount: number }[]
   subtotal: number
   m: (v: number) => string
+  from: string
+  to: string
+  dims: StatementDimFilter
 }) {
   return (
     <>
@@ -149,7 +163,7 @@ function SectionRows({
           <TableRow key={l.type}>
             <TableCell className="pl-8">{l.label}</TableCell>
             <TableCell className={cn('text-right tabular-nums', l.amount < 0 && 'text-red-600 dark:text-red-400')}>
-              {m(l.amount)}
+              <ReportDrillLink drillTarget={{ kind: 'ledger', label: l.label, accountTypes: [l.type], from, to, mode: 'flow', dims, cashOnly: true }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(l.amount)}</ReportDrillLink>
             </TableCell>
           </TableRow>
         ))
@@ -157,7 +171,7 @@ function SectionRows({
       <TableRow className={reportSubtotalRowClass}>
         <TableCell className="font-semibold">{subtotalLabel}</TableCell>
         <TableCell className={cn('text-right font-semibold tabular-nums', subtotal < 0 && 'text-red-600 dark:text-red-400')}>
-          {m(subtotal)}
+          <ReportDrillLink drillTarget={{ kind: 'ledger', label: subtotalLabel, accountTypes: lines.map((line) => line.type), from, to, mode: 'flow', dims, cashOnly: true }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(subtotal)}</ReportDrillLink>
         </TableCell>
       </TableRow>
     </>
