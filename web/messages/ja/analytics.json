@@ -136,7 +136,8 @@
   },
   "trueCost": {
     "title": "真のコスト",
-    "backToHub": "アナリティクス"
+    "backToHub": "アナリティクス",
+    "configureInSetup": "設定で構成 →"
   },
   "utilization": {
     "title": "稼働率",

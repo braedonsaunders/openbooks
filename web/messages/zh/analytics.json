@@ -136,7 +136,8 @@
   },
   "trueCost": {
     "title": "真实成本",
-    "backToHub": "分析"
+    "backToHub": "分析",
+    "configureInSetup": "在设置中配置 →"
   },
   "utilization": {
     "title": "利用率",

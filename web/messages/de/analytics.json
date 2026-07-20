@@ -136,7 +136,8 @@
   },
   "trueCost": {
     "title": "Echte Kosten",
-    "backToHub": "Analytik"
+    "backToHub": "Analytik",
+    "configureInSetup": "In den Einstellungen konfigurieren →"
   },
   "utilization": {
     "title": "Auslastung",

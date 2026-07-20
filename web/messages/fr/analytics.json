@@ -136,7 +136,8 @@
   },
   "trueCost": {
     "title": "Coût réel",
-    "backToHub": "Analyses"
+    "backToHub": "Analyses",
+    "configureInSetup": "Configurer dans Paramètres →"
   },
   "utilization": {
     "title": "Utilisation",
