@@ -2,7 +2,7 @@
 // center. Register new categories and articles here. Content is bundled into the
 // JS output (see ./types.ts for why and for the authoring conventions).
 
-import type { DocArticle, DocCategory } from './types'
+import type { DocArticle, DocCategory, DocSection } from './types'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { revenueRecognition } from './articles/revenue-recognition'
@@ -28,7 +28,7 @@ import { migrationAndCutover, reconciliationBeforeCutover } from './articles/mig
 import { companySettings, rolesAndPermissions, dataImports } from './articles/administration-basics'
 import { switchingArticles } from './articles/switching'
 
-export type { DocArticle, DocCategory } from './types'
+export type { DocArticle, DocCategory, DocSection } from './types'
 
 export const DOC_CATEGORIES: DocCategory[] = [
   {
@@ -103,7 +103,59 @@ export const DOC_CATEGORIES: DocCategory[] = [
   },
 ]
 
-export const DOC_ARTICLES: DocArticle[] = [
+/**
+ * Topic groups are separate from article content so the navigation can be
+ * reorganized without changing stable article URLs or touching every article.
+ * `parentKey` supports deeper trees when a category eventually needs them.
+ */
+export const DOC_SECTIONS: DocSection[] = [
+  { key: 'getting-started-first-steps', title: 'First Steps', category: 'getting-started', order: 1 },
+  { key: 'getting-started-using-openbooks', title: 'Using OpenBooks', category: 'getting-started', order: 2 },
+  { key: 'switching-small-business', title: 'Small Business Systems', category: 'switching', order: 1 },
+  { key: 'switching-erp', title: 'ERP Systems', category: 'switching', order: 2 },
+  { key: 'accounting-ledger', title: 'Ledger Foundations', category: 'accounting', order: 1 },
+  { key: 'accounting-master-data', title: 'Master Data', category: 'accounting', order: 2 },
+  { key: 'accounting-advanced', title: 'Advanced Accounting', category: 'accounting', order: 3 },
+  { key: 'transactions-daily', title: 'Daily Workflows', category: 'transactions', order: 1 },
+  { key: 'reporting-guides', title: 'Reports & Insights', category: 'reporting', order: 1 },
+  { key: 'integrations-migration', title: 'Migration & Cutover', category: 'integrations', order: 1 },
+  { key: 'integrations-connections', title: 'Source Connections', category: 'integrations', order: 2 },
+  { key: 'administration-organization', title: 'Organization & Access', category: 'administration', order: 1 },
+  { key: 'administration-data', title: 'Data & Evidence', category: 'administration', order: 2 },
+]
+
+const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
+  welcome: 'getting-started-first-steps',
+  'quick-start': 'getting-started-first-steps',
+  'navigation-and-records': 'getting-started-using-openbooks',
+  glossary: 'getting-started-using-openbooks',
+  'coming-from-quickbooks-online': 'switching-small-business',
+  'coming-from-quickbooks-desktop': 'switching-small-business',
+  'coming-from-xero': 'switching-small-business',
+  'coming-from-netsuite': 'switching-erp',
+  'coming-from-odoo': 'switching-erp',
+  'coming-from-sage-intacct': 'switching-erp',
+  'accounting-model': 'accounting-ledger',
+  'transaction-lifecycle': 'accounting-ledger',
+  'chart-of-accounts-and-dimensions': 'accounting-ledger',
+  'parties-items-and-projects': 'accounting-master-data',
+  'revenue-recognition': 'accounting-advanced',
+  'sales-workflow': 'transactions-daily',
+  'purchasing-workflow': 'transactions-daily',
+  'payments-and-applications': 'transactions-daily',
+  'financial-reports': 'reporting-guides',
+  'analytics-and-saved-views': 'reporting-guides',
+  'migration-and-cutover': 'integrations-migration',
+  'reconciliation-before-cutover': 'integrations-migration',
+  'quickbooks-desktop-connector': 'integrations-connections',
+  'company-settings': 'administration-organization',
+  'roles-and-permissions': 'administration-organization',
+  'data-imports': 'administration-data',
+  'audit-log': 'administration-data',
+  'file-cabinet': 'administration-data',
+}
+
+const RAW_DOC_ARTICLES: DocArticle[] = [
   welcome,
   quickStart,
   navigationAndRecords,
@@ -133,6 +185,11 @@ export const DOC_ARTICLES: DocArticle[] = [
   fileCabinet,
 ]
 
+export const DOC_ARTICLES: DocArticle[] = RAW_DOC_ARTICLES.map((article) => {
+  const section = ARTICLE_SECTION_BY_SLUG[article.slug]
+  return section ? { ...article, section } : article
+})
+
 const BY_SLUG = new Map(DOC_ARTICLES.map((a) => [a.slug, a]))
 const CATEGORY_BY_KEY = new Map(DOC_CATEGORIES.map((c) => [c.key, c]))
 
@@ -144,7 +201,23 @@ export function getCategory(key: string): DocCategory | undefined {
   return CATEGORY_BY_KEY.get(key)
 }
 
-/** Categories in display order, each with its articles (article order asc). */
+function orderedSections(categoryKey: string, parentKey?: string): DocSection[] {
+  return DOC_SECTIONS.filter(
+    (section) => section.category === categoryKey && section.parentKey === parentKey,
+  ).sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+}
+
+function orderedSectionArticles(categoryKey: string, section: DocSection): DocArticle[] {
+  const own = DOC_ARTICLES.filter(
+    (article) => article.category === categoryKey && article.section === section.key,
+  ).sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+  const children = orderedSections(categoryKey, section.key).flatMap((child) =>
+    orderedSectionArticles(categoryKey, child),
+  )
+  return [...own, ...children]
+}
+
+/** Categories in display order, each with articles in visible tree order. */
 export function categoriesWithArticles(): Array<{
   category: DocCategory
   articles: DocArticle[]
@@ -153,7 +226,12 @@ export function categoriesWithArticles(): Array<{
     .sort((a, b) => a.order - b.order)
     .map((category) => ({
       category,
-      articles: DOC_ARTICLES.filter((a) => a.category === category.key).sort((a, b) => a.order - b.order),
+      articles: [
+        ...DOC_ARTICLES.filter((article) => article.category === category.key && !article.section).sort(
+          (a, b) => a.order - b.order || a.title.localeCompare(b.title),
+        ),
+        ...orderedSections(category.key).flatMap((section) => orderedSectionArticles(category.key, section)),
+      ],
     }))
     .filter((group) => group.articles.length > 0)
 }
@@ -163,22 +241,26 @@ export interface DocNavArticle {
   slug: string
   title: string
   category: string
+  section?: string
   summary: string
   keywords: string[]
 }
 
 export function docNavIndex(): {
   categories: DocCategory[]
+  sections: DocSection[]
   articles: DocNavArticle[]
 } {
   const groups = categoriesWithArticles()
   return {
     categories: groups.map(({ category }) => category),
+    sections: [...DOC_SECTIONS].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)),
     articles: groups.flatMap(({ articles }) =>
       articles.map((a) => ({
         slug: a.slug,
         title: a.title,
         category: a.category,
+        ...(a.section ? { section: a.section } : {}),
         summary: a.summary,
         keywords: a.keywords ?? [],
       })),
