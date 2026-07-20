@@ -51,43 +51,65 @@
       "upToDate": "em dia"
     }
   },
-  "overview": {
+  "home": {
     "title": "Bancos",
-    "description": "Contas de caixa e cartão em resumo — corresponda a movimentação bancária, concilie e registre transações bancárias.",
-    "tiles": {
-      "cash": "Caixa disponível",
-      "cards": "Saldos de cartão",
-      "unmatched": "Linhas não correspondidas",
-      "openRecons": "Conciliações abertas"
+    "description": "Contas, movimentação de caixa e situação de conciliação de todo o espaço de trabalho.",
+    "tabs": {
+      "overview": "Visão geral"
     },
-    "links": {
-      "match": {
-        "title": "Corresponder dados bancários",
-        "description": "Corresponda linhas bancárias importadas ao razão"
-      },
-      "transactions": {
-        "title": "Transações",
-        "description": "Cheques, depósitos, transferências e movimentação de cartão"
-      },
-      "reconciliations": {
-        "title": "Conciliações",
-        "description": "Conciliações abertas e finalizadas"
-      },
-      "imports": {
-        "title": "Histórico de importações",
-        "description": "Todos os extratos bancários importados"
-      },
-      "rules": {
-        "title": "Regras de conciliação",
-        "description": "Categorize automaticamente linhas bancárias recorrentes"
-      }
+    "actions": {
+      "match": "Conciliar dados bancários",
+      "matchCount": "{count, plural, one {Conciliar # linha} other {Conciliar # linhas}}"
     },
-    "recentTransactions": "Transações recentes",
-    "recentImports": "Importações recentes",
-    "viewAll": "Ver tudo",
-    "noRecentTransactions": "Nenhuma transação bancária ainda.",
-    "noRecentImports": "Nenhum extrato importado ainda.",
-    "unmatchedBadge": "{count, plural, one {# não correspondida} other {# não correspondidas}}"
+    "vitals": {
+      "cash": "Caixa total",
+      "cards": "Saldos de cartões",
+      "unmatched": "Linhas não conciliadas",
+      "unmatchedSub": "aguardando conciliação",
+      "allMatched": "todas as linhas conciliadas",
+      "openRecons": "Conciliações abertas",
+      "openReconsSub": "em andamento",
+      "noneOpen": "nenhuma aberta",
+      "netFlow": "Fluxo líquido (7 d)",
+      "accountCount": "{count, plural, one {# conta} other {# contas}}"
+    },
+    "roster": {
+      "title": "Contas",
+      "hint": "Saldos do razão contabilizado",
+      "empty": "Ainda não há contas conciliáveis. Marque suas contas bancárias e de cartão como conciliáveis no plano de contas.",
+      "bankSection": "Contas bancárias",
+      "cardSection": "Cartões de crédito",
+      "reconciledThrough": "Conciliado até {date}",
+      "neverReconciled": "Nunca conciliado",
+      "lastStatement": "Extrato {date}",
+      "staleStatement": "Último extrato {date}",
+      "noStatements": "Nenhum extrato importado",
+      "unmatchedChip": "{count} não conciliadas",
+      "reconciling": "Conciliando"
+    },
+    "trend": {
+      "title": "Tendência de caixa",
+      "hint": "13 semanas",
+      "series": "Caixa"
+    },
+    "directory": {
+      "title": "Filas de trabalho",
+      "matchHint": "linhas bancárias aguardando conciliação",
+      "matchClear": "todas as linhas bancárias conciliadas",
+      "reconsHint": "conciliações abertas",
+      "rulesHint": "{total, plural, =0 {nenhuma regra configurada ainda} one {de # regra configurada} other {de # regras configuradas}}",
+      "importsHint": "extratos · última importação {days, plural, =0 {hoje} one {há # dia} other {há # dias}}",
+      "importsNever": "nenhum extrato importado ainda",
+      "transactionsHint": "contabilizadas nos últimos 7 dias"
+    },
+    "attention": {
+      "title": "Requer atenção",
+      "allClear": "Tudo certo — nada requer atenção.",
+      "negativeBalance": "{account} está com saldo negativo",
+      "noStatement": "{account} nunca importou um extrato",
+      "staleStatement": "{account} está sem extrato há {days} dias",
+      "openRecon": "{account} tem uma conciliação em andamento"
+    }
   },
   "transactionsPage": {
     "title": "Transações bancárias",

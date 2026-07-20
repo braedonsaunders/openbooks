@@ -7,6 +7,9 @@ type ActiveNavItem = {
 }
 
 type ActiveNavGroup = {
+  /** Workspace module home — participates in matching (exact-only, so the
+   * group header highlights on its own page without swallowing children). */
+  groupHref?: string
   items: ActiveNavItem[]
 }
 
@@ -24,6 +27,7 @@ export function findActiveNavHref(
   }
 
   for (const group of groups) {
+    if (group.groupHref) consider(group.groupHref, true)
     for (const item of group.items) {
       consider(item.href, item.exact)
       if (item.subgroupHref) consider(item.subgroupHref)

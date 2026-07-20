@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
 import { cashPosition } from '../../../../lib/cash/cash-position'
@@ -26,6 +27,7 @@ export default async function BankingCashPage({
 }) {
   const authz = await requirePermission('banking.read')
   const t = await getTranslations('banking.cash')
+  const tBanking = await getTranslations('banking')
 
   const sp = await searchParams
   const parsed = Number(sp.horizon)
@@ -38,7 +40,21 @@ export default async function BankingCashPage({
   return (
     <ListPageLayout
       className="flex h-full min-h-0 flex-col"
-      header={<PageHeader title={t('title')} description={t('description')} />}
+      header={
+        <PageHeader
+          title={t('title')}
+          description={t('description')}
+          actions={
+            // Sibling route-tabs back to the Banking module home (the /ap idiom).
+            <ModuleHomeTabs
+              tabs={[
+                { href: '/banking', label: tBanking('home.tabs.overview') },
+                { href: '/banking/cash', label: t('title'), active: true },
+              ]}
+            />
+          }
+        />
+      }
     >
       <CashCockpit
         data={data}

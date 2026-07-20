@@ -51,43 +51,65 @@
       "upToDate": "最新"
     }
   },
-  "overview": {
-    "title": "銀行",
-    "description": "現金・カード勘定を一覧で把握します。銀行取引の照合・消込を行い、銀行取引を記録します。",
-    "tiles": {
-      "cash": "手元現金",
+  "home": {
+    "title": "バンキング",
+    "description": "ワークスペース全体の口座、資金移動、消込状況。",
+    "tabs": {
+      "overview": "概要"
+    },
+    "actions": {
+      "match": "銀行データを照合",
+      "matchCount": "{count, plural, other {#件を照合}}"
+    },
+    "vitals": {
+      "cash": "現金合計",
       "cards": "カード残高",
       "unmatched": "未照合明細",
-      "openRecons": "未完了の消込"
+      "unmatchedSub": "照合待ち",
+      "allMatched": "すべて照合済み",
+      "openRecons": "進行中の消込",
+      "openReconsSub": "処理中",
+      "noneOpen": "なし",
+      "netFlow": "純増減（7日）",
+      "accountCount": "{count, plural, other {#口座}}"
     },
-    "links": {
-      "match": {
-        "title": "銀行データの照合",
-        "description": "インポートした銀行明細を総勘定元帳と照合します"
-      },
-      "transactions": {
-        "title": "取引",
-        "description": "小切手、預入、振替、カード取引"
-      },
-      "reconciliations": {
-        "title": "消込",
-        "description": "未完了および承認済みの消込"
-      },
-      "imports": {
-        "title": "インポート履歴",
-        "description": "インポートしたすべての銀行明細"
-      },
-      "rules": {
-        "title": "消込ルール",
-        "description": "繰り返し発生する銀行明細を自動分類します"
-      }
+    "roster": {
+      "title": "口座",
+      "hint": "転記済み元帳の残高",
+      "empty": "消込可能な口座がまだありません。勘定科目表で銀行口座とカード口座を消込可能に設定してください。",
+      "bankSection": "銀行口座",
+      "cardSection": "クレジットカード",
+      "reconciledThrough": "{date}まで消込済み",
+      "neverReconciled": "未消込",
+      "lastStatement": "明細書 {date}",
+      "staleStatement": "最終明細書 {date}",
+      "noStatements": "明細書の取込なし",
+      "unmatchedChip": "未照合{count}件",
+      "reconciling": "消込中"
     },
-    "recentTransactions": "最近の取引",
-    "recentImports": "最近のインポート",
-    "viewAll": "すべて表示",
-    "noRecentTransactions": "銀行取引はまだありません。",
-    "noRecentImports": "インポートされた明細はまだありません。",
-    "unmatchedBadge": "{count, plural, one {# 件未照合} other {# 件未照合}}"
+    "trend": {
+      "title": "現金推移",
+      "hint": "13週間",
+      "series": "現金"
+    },
+    "directory": {
+      "title": "作業キュー",
+      "matchHint": "照合待ちの銀行明細",
+      "matchClear": "すべての銀行明細を照合済み",
+      "reconsHint": "進行中の消込",
+      "rulesHint": "{total, plural, =0 {ルール未設定} other {全#件中有効}}",
+      "importsHint": "明細書 · 最終取込 {days, plural, =0 {本日} other {#日前}}",
+      "importsNever": "明細書はまだ取り込まれていません",
+      "transactionsHint": "過去7日間に転記"
+    },
+    "attention": {
+      "title": "要対応",
+      "allClear": "問題ありません — 対応が必要な項目はありません。",
+      "negativeBalance": "{account}の残高がマイナスです",
+      "noStatement": "{account}は明細書を一度も取り込んでいません",
+      "staleStatement": "{account}は{days}日間明細書がありません",
+      "openRecon": "{account}で消込が進行中です"
+    }
   },
   "transactionsPage": {
     "title": "銀行取引",

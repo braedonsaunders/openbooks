@@ -51,43 +51,65 @@
       "upToDate": "已是最新"
     }
   },
-  "overview": {
+  "home": {
     "title": "银行",
-    "description": "现金与信用卡账户一览 — 匹配银行活动、对账并记录银行交易。",
-    "tiles": {
-      "cash": "库存现金",
-      "cards": "信用卡余额",
+    "description": "整个工作区的账户、资金流动与对账状态。",
+    "tabs": {
+      "overview": "概览"
+    },
+    "actions": {
+      "match": "匹配银行数据",
+      "matchCount": "{count, plural, other {匹配 # 条明细}}"
+    },
+    "vitals": {
+      "cash": "现金总额",
+      "cards": "卡余额",
       "unmatched": "未匹配明细",
-      "openRecons": "未结对账"
+      "unmatchedSub": "等待匹配",
+      "allMatched": "全部已匹配",
+      "openRecons": "进行中的对账",
+      "openReconsSub": "处理中",
+      "noneOpen": "无",
+      "netFlow": "净流量（7天）",
+      "accountCount": "{count, plural, other {# 个账户}}"
     },
-    "links": {
-      "match": {
-        "title": "匹配银行数据",
-        "description": "将导入的银行明细与总账匹配"
-      },
-      "transactions": {
-        "title": "交易",
-        "description": "支票、存款、转账和信用卡活动"
-      },
-      "reconciliations": {
-        "title": "对账",
-        "description": "未结和已签核的对账"
-      },
-      "imports": {
-        "title": "导入历史",
-        "description": "每一份已导入的银行对账单"
-      },
-      "rules": {
-        "title": "对账规则",
-        "description": "自动分类经常性的银行明细"
-      }
+    "roster": {
+      "title": "账户",
+      "hint": "已过账总账余额",
+      "empty": "尚无可对账的账户。请在科目表中将银行和卡账户标记为可对账。",
+      "bankSection": "银行账户",
+      "cardSection": "信用卡",
+      "reconciledThrough": "已对账至 {date}",
+      "neverReconciled": "从未对账",
+      "lastStatement": "对账单 {date}",
+      "staleStatement": "最近对账单 {date}",
+      "noStatements": "未导入对账单",
+      "unmatchedChip": "{count} 条未匹配",
+      "reconciling": "对账中"
     },
-    "recentTransactions": "最近交易",
-    "recentImports": "最近导入",
-    "viewAll": "查看全部",
-    "noRecentTransactions": "暂无银行交易。",
-    "noRecentImports": "暂无已导入的对账单。",
-    "unmatchedBadge": "{count, plural, one {# 项未匹配} other {# 项未匹配}}"
+    "trend": {
+      "title": "现金趋势",
+      "hint": "13 周",
+      "series": "现金"
+    },
+    "directory": {
+      "title": "工作队列",
+      "matchHint": "等待匹配的银行明细",
+      "matchClear": "所有银行明细已匹配",
+      "reconsHint": "进行中的对账",
+      "rulesHint": "{total, plural, =0 {尚未配置规则} other {共 # 条规则中启用}}",
+      "importsHint": "对账单 · 最近导入 {days, plural, =0 {今天} other {# 天前}}",
+      "importsNever": "尚未导入对账单",
+      "transactionsHint": "最近 7 天内过账"
+    },
+    "attention": {
+      "title": "需要关注",
+      "allClear": "一切正常 — 无需处理。",
+      "negativeBalance": "{account} 余额为负",
+      "noStatement": "{account} 从未导入对账单",
+      "staleStatement": "{account} 已 {days} 天没有对账单",
+      "openRecon": "{account} 有进行中的对账"
+    }
   },
   "transactionsPage": {
     "title": "银行交易",

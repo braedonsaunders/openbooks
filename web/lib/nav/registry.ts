@@ -33,6 +33,20 @@ export const NAV_GROUPS = [
 export type NavGroupKey = (typeof NAV_GROUPS)[number]['key']
 export const NAV_GROUP_BY_KEY = new Map(NAV_GROUPS.map((group) => [group.key, group]))
 
+/**
+ * Module homes — group headers that navigate to a landing cockpit for the
+ * whole workspace (mirrors NAV_SUBGROUPS for sub-menu headers). Only groups
+ * whose home page actually exists belong here; the sidebar renders a plain
+ * toggle header for the rest. Group homes match exact-only in active-state
+ * resolution so they never swallow their children's routes.
+ */
+export const NAV_GROUP_HOMES: Partial<Record<NavGroupKey, string>> = {
+  'my-work': '/dashboard',
+  banking: '/banking',
+  insights: '/analytics',
+  settings: '/admin',
+}
+
 // Nav taxonomy: eight stable job-to-be-done workspaces. Customer work follows
 // the complete relationship-to-cash journey; purchasing follows buy-to-pay;
 // operations owns delivery/catalog/people; accounting owns financial control.

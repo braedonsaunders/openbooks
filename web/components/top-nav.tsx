@@ -28,7 +28,10 @@ import { visibleTopNavGroupCount } from '../lib/top-nav-overflow'
 const MORE_MENU_INDEX = -1
 
 function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | null) {
-  return group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
+  return (
+    group.groupHref === activeHref ||
+    group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
+  )
 }
 
 export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
@@ -181,6 +184,9 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
           >
             <GroupMenu
               items={group.items}
+              homeHref={group.groupHref}
+              homeLabel={group.label}
+              homeIconKey={group.iconKey}
               activeHref={activeHref}
               onEnter={() => enterMenu(i)}
               onLeave={scheduleClose}
@@ -235,12 +241,19 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
 
 function GroupMenu({
   items,
+  homeHref,
+  homeLabel,
+  homeIconKey,
   activeHref,
   onEnter,
   onLeave,
   onSelect,
 }: {
   items: SidebarNavItem[]
+  /** Workspace module home — rendered as a linked heading row above the items. */
+  homeHref?: string
+  homeLabel?: string
+  homeIconKey?: string
   activeHref: string | null
   onEnter?: () => void
   onLeave?: () => void
@@ -248,6 +261,7 @@ function GroupMenu({
 }) {
   const blocks = toBlocks(items)
   const sectioned = blocks.some((block) => block.kind === 'subgroup')
+  const homeActive = homeHref != null && activeHref === homeHref
   return (
     <div
       role="menu"
@@ -256,6 +270,24 @@ function GroupMenu({
       onClick={onSelect}
       className={cn(sectioned && 'grid w-[32rem] grid-cols-2 gap-x-2 gap-y-1 p-1')}
     >
+      {homeHref && homeLabel ? (
+        <Link
+          href={homeHref as never}
+          role="menuitem"
+          aria-current={homeActive ? 'page' : undefined}
+          data-walkthrough={`nav:${homeHref}`}
+          className={cn(
+            'flex items-center gap-1.5 border-b border-slate-100 px-3 pt-1 pb-2 text-[11px] font-semibold tracking-wide uppercase transition-colors dark:border-slate-800',
+            sectioned && 'col-span-2',
+            homeActive
+              ? 'text-teal-700 dark:text-teal-300'
+              : 'text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300',
+          )}
+        >
+          {homeIconKey ? <NavIcon iconKey={homeIconKey} size={13} /> : null}
+          {homeLabel}
+        </Link>
+      ) : null}
       {blocks.map((block, bi) =>
         block.kind === 'item' ? (
           <MenuItemLink key={block.item.href} item={block.item} active={activeHref === block.item.href} />
@@ -334,7 +366,13 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
             flip ? 'right-full -mr-1' : 'left-full -ml-1',
           )}
         >
-          <GroupMenu items={group.items} activeHref={activeHref} />
+          <GroupMenu
+            items={group.items}
+            homeHref={group.groupHref}
+            homeLabel={group.label}
+            homeIconKey={group.iconKey}
+            activeHref={activeHref}
+          />
         </div>
       ) : null}
     </div>

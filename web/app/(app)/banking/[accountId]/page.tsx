@@ -189,7 +189,7 @@ export default async function BankingAccount({
       header={
         <>
           <PageHeader
-            back={{ href: '/banking', label: t('overview.title') }}
+            back={{ href: '/banking', label: t('home.title') }}
             title={[account.number, account.name].filter(Boolean).join(' · ')}
             description={t('account.description', { details: accountDetails })}
             actions={
