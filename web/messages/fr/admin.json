@@ -95,6 +95,7 @@
   "audit": {
     "title": "Journal d’audit",
     "description": "Historique métier immuable, incluant l’état complet avant/après du document et son impact au grand livre pour les modifications comptabilisées et les suppressions.",
+    "documentation": "Documentation",
     "searchPlaceholder": "Rechercher une table, un auteur ou un id de ligne…",
     "actionFilter": "Action",
     "empty": {
@@ -107,7 +108,47 @@
       "action": "Action",
       "tableName": "Table",
       "row": "Ligne",
-      "changes": "Modifications"
+      "changes": "Détails"
+    },
+    "openEventAria": "Ouvrir l’événement {action} de {recordType} du {when}",
+    "summaries": {
+      "snapshot": "Instantané complet avant et après",
+      "metadata": "Métadonnées de l’enregistrement",
+      "changeCount": "{count, plural, =0 {Détails de l’événement} one {# champ modifié} other {# champs modifiés}}"
+    },
+    "drawer": {
+      "description": "Enregistré par {actor} · {when}",
+      "tabsAria": "Vues de l’événement d’audit",
+      "tabs": {
+        "changes": "Modifications",
+        "before": "Avant",
+        "after": "Après"
+      },
+      "when": "Enregistré",
+      "actor": "Utilisateur",
+      "recordType": "Type d’enregistrement",
+      "reference": "Référence de l’enregistrement",
+      "changedFields": "Champs modifiés",
+      "eventContext": "Contexte de l’événement",
+      "technicalDetails": "Détails techniques",
+      "beforeSnapshot": "Enregistrement avant cet événement",
+      "afterSnapshot": "Enregistrement après cet événement",
+      "recordRemoved": "Enregistrement supprimé",
+      "recordRemovedDescription": "Cet événement a supprimé l’enregistrement; il n’existe donc aucun instantané après.",
+      "field": "Champ",
+      "before": "Avant",
+      "after": "Après",
+      "notSet": "Non défini",
+      "yes": "Oui",
+      "no": "Non",
+      "emptyCollection": "Aucune valeur",
+      "item": "Élément",
+      "lineItem": "Ligne {line}",
+      "itemCount": "{count, plural, one {# élément} other {# éléments}}",
+      "propertyCount": "{count, plural, one {# propriété} other {# propriétés}}",
+      "itemPosition": "{current} sur {total}",
+      "changeCount": "{count, plural, one {# modification} other {# modifications}}",
+      "noDifferences": "Aucune différence de champ avant-après n’a été enregistrée pour cet événement."
     },
     "systemActor": "système",
     "actions": {
@@ -1409,7 +1450,7 @@
       "collectedAccountId": "Tax collected account",
       "paidAccountId": "Tax paid account",
       "taxCodeId": "Tax code",
-      "ratePercent": "Rate %",
+      "ratePercent": "Taux",
       "effectiveFrom": "Effective from",
       "effectiveTo": "Effective to",
       "members": "Tax codes",
@@ -1510,7 +1551,8 @@
       "receivedNotBilledAccountId": "Compte de réception non facturée",
       "assemblyItemId": "Article assemblé",
       "componentItemId": "Composant",
-      "quantityPer": "Quantité par"
+      "quantityPer": "Quantité par",
+      "rateKind": "Type de taux"
     },
     "options": {
       "appliesTo": {
@@ -1605,6 +1647,10 @@
       "overheadMethod": {
         "live": "Live",
         "standard": "Standard"
+      },
+      "overheadRateKind": {
+        "per_hour": "$/heure",
+        "percent": "% de la main-d’œuvre"
       }
     }
   },

@@ -95,6 +95,7 @@
   "audit": {
     "title": "Registro de auditoría",
     "description": "Historial empresarial inmutable, incluido el estado completo anterior y posterior del documento y su impacto en el libro mayor para modificaciones contabilizadas y eliminaciones.",
+    "documentation": "Documentación",
     "searchPlaceholder": "Buscar tabla, actor o id de fila…",
     "actionFilter": "Acción",
     "empty": {
@@ -107,7 +108,47 @@
       "action": "Acción",
       "tableName": "Tabla",
       "row": "Fila",
-      "changes": "Cambios"
+      "changes": "Detalles"
+    },
+    "openEventAria": "Abrir el evento {action} de {recordType} del {when}",
+    "summaries": {
+      "snapshot": "Instantánea completa anterior y posterior",
+      "metadata": "Metadatos del registro",
+      "changeCount": "{count, plural, =0 {Detalles del evento} one {# campo modificado} other {# campos modificados}}"
+    },
+    "drawer": {
+      "description": "Registrado por {actor} · {when}",
+      "tabsAria": "Vistas del evento de auditoría",
+      "tabs": {
+        "changes": "Cambios",
+        "before": "Antes",
+        "after": "Después"
+      },
+      "when": "Registrado",
+      "actor": "Usuario",
+      "recordType": "Tipo de registro",
+      "reference": "Referencia del registro",
+      "changedFields": "Campos modificados",
+      "eventContext": "Contexto del evento",
+      "technicalDetails": "Detalles técnicos",
+      "beforeSnapshot": "Registro antes de este evento",
+      "afterSnapshot": "Registro después de este evento",
+      "recordRemoved": "Registro eliminado",
+      "recordRemovedDescription": "Este evento eliminó el registro, por lo que no hay una instantánea posterior.",
+      "field": "Campo",
+      "before": "Antes",
+      "after": "Después",
+      "notSet": "Sin definir",
+      "yes": "Sí",
+      "no": "No",
+      "emptyCollection": "Sin valores",
+      "item": "Elemento",
+      "lineItem": "Línea {line}",
+      "itemCount": "{count, plural, one {# elemento} other {# elementos}}",
+      "propertyCount": "{count, plural, one {# propiedad} other {# propiedades}}",
+      "itemPosition": "{current} de {total}",
+      "changeCount": "{count, plural, one {# cambio} other {# cambios}}",
+      "noDifferences": "No se registraron diferencias de campo anteriores y posteriores para este evento."
     },
     "systemActor": "sistema",
     "actions": {
@@ -1365,7 +1406,7 @@
       "collectedAccountId": "Tax collected account",
       "paidAccountId": "Tax paid account",
       "taxCodeId": "Tax code",
-      "ratePercent": "Rate %",
+      "ratePercent": "Tasa",
       "effectiveFrom": "Effective from",
       "effectiveTo": "Effective to",
       "members": "Tax codes",
@@ -1466,7 +1507,8 @@
       "receivedNotBilledAccountId": "Cuenta de recibido no facturado",
       "assemblyItemId": "Artículo ensamblado",
       "componentItemId": "Componente",
-      "quantityPer": "Cantidad por"
+      "quantityPer": "Cantidad por",
+      "rateKind": "Tipo de tasa"
     },
     "options": {
       "appliesTo": {
@@ -1561,6 +1603,10 @@
       "overheadMethod": {
         "live": "Live",
         "standard": "Standard"
+      },
+      "overheadRateKind": {
+        "per_hour": "$/hora",
+        "percent": "% de mano de obra"
       }
     }
   },

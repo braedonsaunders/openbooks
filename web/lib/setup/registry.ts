@@ -171,6 +171,10 @@ const END_OF_LIFE = [
   { value: 'retain_balance', labelKey: 'options.endOfLife.retainBalance' },
 ]
 
+const OVERHEAD_RATE_KINDS = [
+  { value: 'per_hour', labelKey: 'options.overheadRateKind.per_hour' },
+  { value: 'percent', labelKey: 'options.overheadRateKind.percent' },
+]
 const OVERHEAD_METHODS = [
   { value: 'live', labelKey: 'options.overheadMethod.live' },
   { value: 'standard', labelKey: 'options.overheadMethod.standard' },
@@ -877,16 +881,17 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     columns: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
       { key: 'category', kind: 'text' },
-      { key: 'method', kind: 'text' },
-      { key: 'ratePercent', kind: 'percent' },
+      { key: 'rateKind', kind: 'text' },
+      { key: 'ratePercent', kind: 'number' },
       { key: 'effectiveFrom', kind: 'date' },
       { key: 'effectiveTo', kind: 'date' },
     ],
     fields: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
       { key: 'category', kind: 'text' },
+      { key: 'rateKind', kind: 'select', options: OVERHEAD_RATE_KINDS },
+      { key: 'ratePercent', kind: 'decimal', required: true },
       { key: 'method', kind: 'select', options: OVERHEAD_METHODS },
-      { key: 'ratePercent', kind: 'percent', required: true },
       { key: 'effectiveFrom', kind: 'date', required: true },
       { key: 'effectiveTo', kind: 'date' },
     ],
