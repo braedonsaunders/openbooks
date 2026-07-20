@@ -225,7 +225,10 @@ export async function recomputeOpenBalances(orgId: string): Promise<number> {
                case when count(jl.id) = 0 then null
                     else sum(abs(jl.amount)) - coalesce(sum(ap.applied), 0) end as ob
           from documents d
-          join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+          -- LEFT join: a posted document with NO open-item lines must resolve
+          -- to null (matching recompute_document_open_balance), else a stale
+          -- stored balance on such a document can never be healed.
+          left join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
           left join lateral (
             select sum(a.amount) as applied
               from applications a
