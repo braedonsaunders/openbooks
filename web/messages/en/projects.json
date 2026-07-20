@@ -217,12 +217,21 @@
     "pickItem": "Pick an item first"
   },
   "recognition": {
-    "recognizedToDate": "Revenue recognized to date",
-    "hint": "Percent-complete (cost-to-cost): DR unbilled receivable / CR project revenue.",
-    "recognize": "Recognize revenue",
-    "done": "Recognized {delta} (earned {earned} at {pct}%)",
-    "nothing": "Already fully recognized to date",
-    "failed": "Recognition failed"
+    "title": "Revenue recognition",
+    "viewContract": "View revenue contract",
+    "contractValue": "Contract value",
+    "percentComplete": "Percent complete",
+    "earnedToDate": "Earned to date",
+    "recognizedToDate": "Recognized to date",
+    "sourceOverride": "Manual override",
+    "sourceCostToCost": "Automatic (cost-to-cost)",
+    "postingHint": "Recognition posts only from the central run on the Revenue page — this card is progress data, not a posting action.",
+    "overrideLabel": "Percent complete override",
+    "overridePlaceholder": "Automatic",
+    "overrideHint": "Blank = automatic cost-to-cost. A change is a change in estimate: the catch-up (up or down) posts in the current period on the next recognition run.",
+    "overrideSaved": "Percent complete updated",
+    "clearOverride": "Clear override",
+    "mapAccountsHint": "Map the Unbilled receivable and Project revenue control accounts in Company & Accounting to activate project revenue recognition."
   },
   "measures": {
     "invoiced_to_date": "Invoiced to date",

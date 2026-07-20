@@ -255,10 +255,11 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
         return [{ month: start, units: toUnits(input.total) }];
 
       case "percent_complete": {
+        // Cumulative catch-up, BOTH directions (ASC 606 over-time): a falling
+        // estimate reverses previously recognized revenue in the current period.
         const targetUnits = pctOf(toUnits(input.total), Number(input.percentComplete ?? "0"));
         const already = toUnits(input.alreadyRecognized ?? "0");
-        const catchUp = targetUnits - already;
-        return [{ month: start, units: catchUp > 0n ? catchUp : 0n }];
+        return [{ month: start, units: targetUnits - already }];
       }
 
       case "milestone":
@@ -351,12 +352,18 @@ export interface BuildRecognitionResult {
  * and resolved term. Existing UNPOSTED lines are replaced; posted lines are
  * preserved so a rebuild after some periods have recognized never disturbs
  * history. Returns the schedule id and how many lines it planned.
+ *
+ * percent_complete: the cumulative target is credited for what the schedule
+ * has already POSTED, and the catch-up delta is planned prospectively in the
+ * `asOfDate` month (a percent change is a change in estimate — ASC 250 —
+ * recognized in the current period, never restated to the contract start).
  */
 export async function buildRecognitionSchedule(
   obligationId: string,
   orgId: string,
   actorId: string | null,
   forBookId?: string,
+  asOfDate?: string,
 ): Promise<BuildRecognitionResult> {
   const oblRes = (await db.execute(sql`
     select o.id, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on,
@@ -390,18 +397,7 @@ export async function buildRecognitionSchedule(
   const startOn = o.recognition_starts_on ?? o.contract_starts;
   if (!startOn) throw new Error("obligation has no recognition start date");
   const endOn = o.recognition_ends_on ?? (o.end_date_source === "contract" ? o.contract_ends : null);
-
-  const plan = computeRecognitionSchedule({
-    total: o.allocated_price,
-    method: o.method,
-    startOn,
-    endOn,
-    termPeriods: o.recognition_periods,
-    startOffsetDays: o.start_offset_days,
-    initialAmountPercent: o.initial_amount_percent,
-    periodOffset: o.period_offset,
-    percentComplete: o.percent_complete,
-  });
+  const isPercentComplete = o.method === "percent_complete";
 
   const bookId = forBookId ?? (await primaryBookId(orgId));
 
@@ -427,11 +423,28 @@ export async function buildRecognitionSchedule(
     }
 
     const posted = (await tx.execute(sql`
-      select period_id from recognition_schedule_lines
+      select period_id, planned_amount, sequence from recognition_schedule_lines
        where schedule_id = ${scheduleId} and journal_entry_id is not null`)) as unknown as {
-      rows: { period_id: string }[];
+      rows: { period_id: string; planned_amount: string; sequence: number }[];
     };
     const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
+    const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
+    const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
+
+    // Percent-complete: the catch-up delta lands in the as-of month (clamped to
+    // the term start), credited for everything this schedule already posted.
+    const plan = computeRecognitionSchedule({
+      total: o.allocated_price,
+      method: o.method,
+      startOn: isPercentComplete && asOfDate && asOfDate > startOn ? asOfDate : startOn,
+      endOn,
+      termPeriods: o.recognition_periods,
+      startOffsetDays: o.start_offset_days,
+      initialAmountPercent: o.initial_amount_percent,
+      periodOffset: o.period_offset,
+      percentComplete: o.percent_complete,
+      alreadyRecognized: isPercentComplete ? postedToDate : null,
+    });
 
     await tx.execute(sql`
       delete from recognition_schedule_lines where schedule_id = ${scheduleId} and journal_entry_id is null`);
@@ -444,11 +457,15 @@ export async function buildRecognitionSchedule(
         skippedMonths.push(p.periodMonth);
         continue;
       }
-      if (postedPeriods.has(periodId)) continue;
+      // A period that already recognized is closed to re-planning — EXCEPT for
+      // percent_complete, where later catch-ups legitimately post additional
+      // lines into the current period (distinct sequence numbers).
+      if (!isPercentComplete && postedPeriods.has(periodId)) continue;
+      if (isPercentComplete && Number(p.planned) === 0) continue;
       await tx.execute(sql`
         insert into recognition_schedule_lines
           (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${periodId}, ${p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
+        values (${orgId}, ${scheduleId}, ${periodId}, ${nextSequence + p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
       lineCount++;
     }
     return { scheduleId, lineCount, skippedMonths };
@@ -460,12 +477,13 @@ export async function buildAllRecognitionSchedules(
   obligationId: string,
   orgId: string,
   actorId: string | null,
+  asOfDate?: string,
 ): Promise<BuildRecognitionResult[]> {
   const books = (await db.execute(sql`
     select id from accounting_books where org_id = ${orgId} and is_active and posts_gl
      order by is_primary desc, code`)) as unknown as { rows: { id: string }[] };
   const results: BuildRecognitionResult[] = [];
-  for (const b of books.rows) results.push(await buildRecognitionSchedule(obligationId, orgId, actorId, b.id));
+  for (const b of books.rows) results.push(await buildRecognitionSchedule(obligationId, orgId, actorId, b.id, asOfDate));
   return results;
 }
 
@@ -647,7 +665,7 @@ export async function runRevenueRecognition(
            s.book_id        as book_id,
            p.name           as period_name,
            p.ends_on        as period_ends_on,
-           period_module_is_closed(${orgId}, p.id, s.book_id, doc.subsidiary_id, 'gl') as period_closed,
+           period_module_is_closed(${orgId}, p.id, s.book_id, coalesce(doc.subsidiary_id, prj.subsidiary_id), 'gl') as period_closed,
            o.id             as obligation_id,
            o.description    as obligation_desc,
            o.deferred_account_id    as obl_deferred,
@@ -657,10 +675,10 @@ export async function runRevenueRecognition(
            r.deferred_account_id    as rule_deferred,
            r.recognized_account_id  as rule_recognized,
            c.contract_number as contract_number,
-           coalesce(doc.subsidiary_id, sub0.id) as subsidiary_id,
-           coalesce(sub.base_currency, sub0.base_currency) as base_currency,
+           coalesce(doc.subsidiary_id, prj.subsidiary_id, sub0.id) as subsidiary_id,
+           coalesce(sub.base_currency, psub.base_currency, sub0.base_currency) as base_currency,
            dl.department_id as department_id,
-           dl.project_id    as project_id,
+           coalesce(dl.project_id, c.project_id) as project_id,
            dl.location_id   as location_id
       from recognition_schedule_lines l
       join recognition_schedules s on s.id = l.schedule_id
@@ -671,8 +689,10 @@ export async function runRevenueRecognition(
       join accounting_periods p on p.id = l.period_id
       left join document_lines dl on dl.id = o.document_line_id
       left join documents doc on doc.id = dl.document_id
+      left join projects prj on prj.id = c.project_id
       left join items it on it.id = o.item_id
       left join subsidiaries sub on sub.id = doc.subsidiary_id
+      left join subsidiaries psub on psub.id = prj.subsidiary_id
       left join lateral (
         select id, base_currency from subsidiaries where org_id = ${orgId} order by created_at limit 1
       ) sub0 on true
@@ -681,7 +701,7 @@ export async function runRevenueRecognition(
        and o.status <> 'cancelled'
        and p.ends_on <= ${asOfDate}
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
-       ${allowedSubsidiaryIds ? sql`and coalesce(doc.subsidiary_id, sub0.id) = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
+       ${allowedSubsidiaryIds ? sql`and coalesce(doc.subsidiary_id, prj.subsidiary_id, sub0.id) = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
      order by c.contract_number, o.description, l.sequence`)) as unknown as { rows: any[] };
 
   const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };

@@ -85,6 +85,15 @@ test("fair value range: open-ended and missing bounds", () => {
   assert.equal(fairValueRangeFlag("500.0000", "1", "100.0000", null), null);
 });
 
+test("cost-to-cost fraction clamps to [0,1] and guards zero budgets", async () => {
+  const { costToCostFraction } = await import("./project-revenue.ts");
+  assert.equal(costToCostFraction(1000, 250), 0.25);
+  assert.equal(costToCostFraction(1000, 1500), 1);
+  assert.equal(costToCostFraction(0, 500), 0);
+  assert.equal(costToCostFraction(-5, 500), 0);
+  assert.equal(costToCostFraction(1000, -20), 0);
+});
+
 test("fair value range: zero/missing quantity falls back to the line amount", () => {
   assert.equal(fairValueRangeFlag("110.0000", "0", "100.0000", "120.0000"), null);
   assert.equal(fairValueRangeFlag("110.0000", null, "100.0000", "120.0000"), null);
@@ -171,7 +180,7 @@ test("percent_complete recognizes the cumulative target minus already-recognized
   assert.equal(toUnits(plan[0].planned), toUnits("150")); // 40% of 1000 = 400; 400 − 250
 });
 
-test("percent_complete never claws back when already-recognized exceeds the target", () => {
+test("percent_complete claws back when the estimate falls (ASC 606 cumulative catch-up)", () => {
   const plan = computeRecognitionSchedule({
     total: "1000",
     method: "percent_complete",
@@ -179,7 +188,8 @@ test("percent_complete never claws back when already-recognized exceeds the targ
     percentComplete: "40",
     alreadyRecognized: "500",
   });
-  assert.equal(toUnits(plan[0].planned), 0n);
+  // target 400 − already 500 → −100 reversal in the current period.
+  assert.equal(plan[0].planned, "-100.0000");
 });
 
 test("milestone recognizes exactly the entered event amounts", () => {

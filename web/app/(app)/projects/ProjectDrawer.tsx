@@ -12,6 +12,7 @@ import type { CustomFieldDefClient } from '../../../components/custom-field-inpu
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
+import type { RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
 import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquipmentOption } from './tabs/ChargesSection'
@@ -64,7 +65,7 @@ export interface ProjectCockpitData {
   items: ChargeItemOption[]
   equipment: ChargeEquipmentOption[]
   absorption: { recovered: string; billValue: string }
-  recognizedToDate: string
+  recognition: RecognitionStatus | null
   transactions: {
     id: string
     kind: string
@@ -656,7 +657,7 @@ export function ProjectDrawer({
           data={cockpit.financials}
           projectId={pr.id}
           billingMethod={billingMethod || null}
-          recognizedToDate={cockpit.recognizedToDate}
+          recognition={cockpit.recognition}
           canManage={canManage}
         />
       ) : null}

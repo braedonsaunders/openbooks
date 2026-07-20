@@ -12,6 +12,7 @@ import {
   Coins,
   Download,
   FileText,
+  Gauge,
   Hash,
   History,
   Landmark,
@@ -41,6 +42,7 @@ const ICONS: Record<string, ReactNode> = {
   percent: <Percent size={15} />,
   layers: <Layers size={15} />,
   file: <FileText size={15} />,
+  gauge: <Gauge size={15} />,
   tag: <Tag size={15} />,
   'map-pin': <MapPin size={15} />,
   package: <Package size={15} />,
@@ -122,9 +124,10 @@ export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: 
                     iconKey: e.iconKey,
                   })),
                 ]
-              : group.key === 'billing'
+              : group.key === 'projects'
               ? [
                   { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
+                  { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),

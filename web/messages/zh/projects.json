@@ -217,12 +217,21 @@
     "pickItem": "请先选择一项物料"
   },
   "recognition": {
-    "recognizedToDate": "累计已确认收入",
-    "hint": "完工百分比（成本对成本法）：借 未开票应收 / 贷 项目收入。",
-    "recognize": "确认收入",
-    "done": "已确认 {delta}（已赚取 {earned}，为 {pct}%）",
-    "nothing": "累计收入已全部确认",
-    "failed": "收入确认失败"
+    "title": "收入确认",
+    "viewContract": "查看收入合同",
+    "contractValue": "合同金额",
+    "percentComplete": "完工百分比",
+    "earnedToDate": "累计应得",
+    "recognizedToDate": "累计已确认",
+    "sourceOverride": "手动覆盖",
+    "sourceCostToCost": "自动（成本比例法）",
+    "postingHint": "确认仅通过收入页面的集中运行过账——此卡片是进度数据，不是过账操作。",
+    "overrideLabel": "完工百分比覆盖",
+    "overridePlaceholder": "自动",
+    "overrideHint": "留空 = 自动成本比例法。变更属于会计估计变更：追补金额（增或减）将在下次确认运行时计入当期。",
+    "overrideSaved": "完工百分比已更新",
+    "clearOverride": "清除覆盖",
+    "mapAccountsHint": "请在公司与会计中设置未开票应收和项目收入统制科目，以启用项目收入确认。"
   },
   "measures": {
     "invoiced_to_date": "累计已开票",

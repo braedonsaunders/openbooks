@@ -217,12 +217,21 @@
     "pickItem": "Choisissez un article"
   },
   "recognition": {
-    "recognizedToDate": "Produits comptabilisés à ce jour",
-    "hint": "Selon l'avancement (coût à coût) : DR créance non facturée / CR produits du projet.",
-    "recognize": "Comptabiliser les produits",
-    "done": "Comptabilisé {delta} (acquis {earned} à {pct} %)",
-    "nothing": "Déjà entièrement comptabilisé à ce jour",
-    "failed": "Échec de la comptabilisation"
+    "title": "Comptabilisation des produits",
+    "viewContract": "Voir le contrat de revenus",
+    "contractValue": "Valeur du contrat",
+    "percentComplete": "Pourcentage d'avancement",
+    "earnedToDate": "Acquis à ce jour",
+    "recognizedToDate": "Comptabilisé à ce jour",
+    "sourceOverride": "Remplacement manuel",
+    "sourceCostToCost": "Automatique (coût sur coût)",
+    "postingHint": "La comptabilisation se fait uniquement depuis l'exécution centrale de la page Revenus — cette carte présente l'avancement, ce n'est pas une action comptable.",
+    "overrideLabel": "Remplacement du pourcentage d'avancement",
+    "overridePlaceholder": "Automatique",
+    "overrideHint": "Vide = coût sur coût automatique. Un changement est un changement d'estimation : le rattrapage (à la hausse ou à la baisse) est comptabilisé dans la période en cours à la prochaine exécution.",
+    "overrideSaved": "Pourcentage d'avancement mis à jour",
+    "clearOverride": "Effacer le remplacement",
+    "mapAccountsHint": "Associez les comptes de contrôle Produits à facturer et Revenus de projet dans Société et comptabilité pour activer la comptabilisation des revenus de projet."
   },
   "measures": {
     "invoiced_to_date": "Facturé à ce jour",

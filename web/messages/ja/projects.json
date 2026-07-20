@@ -217,12 +217,21 @@
     "pickItem": "先に品目を選択してください"
   },
   "recognition": {
-    "recognizedToDate": "認識済み収益累計",
-    "hint": "進捗度（原価対原価）：借方 未請求債権 / 貸方 プロジェクト収益。",
-    "recognize": "収益を認識",
-    "done": "{delta} を認識しました（{pct}% で {earned} を計上）",
-    "nothing": "すでに全額が認識済みです",
-    "failed": "収益認識に失敗しました"
+    "title": "収益認識",
+    "viewContract": "収益契約を表示",
+    "contractValue": "契約金額",
+    "percentComplete": "進捗率",
+    "earnedToDate": "累計稼得額",
+    "recognizedToDate": "累計認識額",
+    "sourceOverride": "手動上書き",
+    "sourceCostToCost": "自動（コスト・トゥ・コスト）",
+    "postingHint": "転記は収益ページの一括実行からのみ行われます。このカードは進捗データであり、転記操作ではありません。",
+    "overrideLabel": "進捗率の上書き",
+    "overridePlaceholder": "自動",
+    "overrideHint": "空欄 = 自動コスト・トゥ・コスト。変更は見積りの変更です。キャッチアップ（増減いずれも）は次回の認識実行時に当期に転記されます。",
+    "overrideSaved": "進捗率を更新しました",
+    "clearOverride": "上書きを解除",
+    "mapAccountsHint": "プロジェクト収益認識を有効にするには、会社と会計で未請求債権とプロジェクト収益の統制勘定を設定してください。"
   },
   "measures": {
     "invoiced_to_date": "請求済み累計",

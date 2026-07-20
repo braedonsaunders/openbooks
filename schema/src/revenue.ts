@@ -107,6 +107,9 @@ export const revenueContracts = pgTable(
     id: id(),
     orgId: orgRef(),
     customerId: uuid("customer_id").notNull(), // → parties
+    /** Set when the contract IS a fixed-price project's revenue contract
+     *  (percent-complete over-time recognition); null for invoice bundles. */
+    projectId: uuid("project_id"),
     contractNumber: text("contract_number").notNull(),
     status: text("status", { enum: ["draft", "active", "complete", "cancelled"] })
       .notNull()
@@ -118,7 +121,7 @@ export const revenueContracts = pgTable(
     memo: text("memo"),
     ...auditColumns,
   },
-  (t) => [index("rev_contracts_customer").on(t.customerId)],
+  (t) => [index("rev_contracts_customer").on(t.customerId), index("rev_contracts_project").on(t.projectId)],
 );
 
 /**

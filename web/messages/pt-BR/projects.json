@@ -217,12 +217,21 @@
     "pickItem": "Escolha um item primeiro"
   },
   "recognition": {
-    "recognizedToDate": "Receita reconhecida até a data",
-    "hint": "Percentual concluído (custo a custo): débito em conta a receber não faturada / crédito em receita do projeto.",
-    "recognize": "Reconhecer receita",
-    "done": "Reconhecido {delta} (ganho {earned} a {pct}%)",
-    "nothing": "Já totalmente reconhecido até a data",
-    "failed": "O reconhecimento falhou"
+    "title": "Reconhecimento de receita",
+    "viewContract": "Ver contrato de receita",
+    "contractValue": "Valor do contrato",
+    "percentComplete": "Percentual de avanço",
+    "earnedToDate": "Apropriado até a data",
+    "recognizedToDate": "Reconhecido até a data",
+    "sourceOverride": "Substituição manual",
+    "sourceCostToCost": "Automático (custo sobre custo)",
+    "postingHint": "O lançamento ocorre apenas pela execução central na página de Receitas — este cartão traz dados de avanço, não uma ação contábil.",
+    "overrideLabel": "Substituição do percentual de avanço",
+    "overridePlaceholder": "Automático",
+    "overrideHint": "Vazio = custo sobre custo automático. Uma mudança é uma mudança de estimativa: o ajuste acumulado (para cima ou para baixo) é lançado no período atual na próxima execução.",
+    "overrideSaved": "Percentual de avanço atualizado",
+    "clearOverride": "Limpar substituição",
+    "mapAccountsHint": "Mapeie as contas de controle Recebível não faturado e Receita de projeto em Empresa e Contabilidade para ativar o reconhecimento de receita de projetos."
   },
   "measures": {
     "invoiced_to_date": "Faturado até a data",

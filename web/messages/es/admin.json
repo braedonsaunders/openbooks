@@ -1026,7 +1026,8 @@
       "assets": "Assets",
       "currency": "Currency",
       "revenue": "Ingresos",
-      "inventory": "Inventario"
+      "inventory": "Inventario",
+      "projects": "Proyectos"
     },
     "fxProvider": {
       "title": "Proveedor de tipos de cambio",
@@ -1412,6 +1413,12 @@
       "overhead-rates": {
         "title": "Tasas de gastos generales",
         "description": "Tasas de gastos generales con fecha de vigencia aplicadas al costo de mano de obra."
+      },
+      "overhead-model": {
+        "title": "Modelo de gastos generales",
+        "description": "El motor de tasas detrás de los gastos generales de proyecto: grupos de costos, bases de asignación, la matriz de tasas por departamento y perfiles. Los proyectos que usan el método de motor de tasas aplican estas tasas a sus horas de mano de obra.",
+        "docs": "Documentación",
+        "viewAnalytics": "Ver analítica"
       }
     },
     "fields": {

@@ -217,12 +217,21 @@
     "pickItem": "Elija un artículo primero"
   },
   "recognition": {
-    "recognizedToDate": "Ingresos reconocidos a la fecha",
-    "hint": "Porcentaje de avance (costo a costo): DR cuenta por cobrar no facturada / CR ingresos del proyecto.",
-    "recognize": "Reconocer ingresos",
-    "done": "Reconocido {delta} (devengado {earned} al {pct}%)",
-    "nothing": "Ya reconocido totalmente a la fecha",
-    "failed": "Falló el reconocimiento"
+    "title": "Reconocimiento de ingresos",
+    "viewContract": "Ver contrato de ingresos",
+    "contractValue": "Valor del contrato",
+    "percentComplete": "Porcentaje de avance",
+    "earnedToDate": "Devengado a la fecha",
+    "recognizedToDate": "Reconocido a la fecha",
+    "sourceOverride": "Ajuste manual",
+    "sourceCostToCost": "Automático (costo sobre costo)",
+    "postingHint": "El reconocimiento se contabiliza solo desde la ejecución central en la página de Ingresos: esta tarjeta es información de avance, no una acción contable.",
+    "overrideLabel": "Ajuste del porcentaje de avance",
+    "overridePlaceholder": "Automático",
+    "overrideHint": "Vacío = costo sobre costo automático. Un cambio es un cambio de estimación: el ajuste acumulado (al alza o a la baja) se contabiliza en el período actual en la próxima ejecución.",
+    "overrideSaved": "Porcentaje de avance actualizado",
+    "clearOverride": "Quitar ajuste",
+    "mapAccountsHint": "Asigne las cuentas de control Facturación pendiente e Ingresos de proyecto en Compañía y Contabilidad para activar el reconocimiento de ingresos de proyectos."
   },
   "measures": {
     "invoiced_to_date": "Facturado a la fecha",

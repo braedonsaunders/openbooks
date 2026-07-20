@@ -217,12 +217,21 @@
     "pickItem": "Wählen Sie zuerst einen Artikel"
   },
   "recognition": {
-    "recognizedToDate": "Bisher realisierter Umsatz",
-    "hint": "Fertigstellungsgrad (Cost-to-Cost): Soll unrealisierte Forderung / Haben Projektumsatz.",
-    "recognize": "Umsatz realisieren",
-    "done": "{delta} realisiert (verdient {earned} bei {pct}%)",
-    "nothing": "Bereits vollständig bis dato realisiert",
-    "failed": "Realisierung fehlgeschlagen"
+    "title": "Umsatzrealisierung",
+    "viewContract": "Umsatzvertrag anzeigen",
+    "contractValue": "Vertragswert",
+    "percentComplete": "Fertigstellungsgrad",
+    "earnedToDate": "Bisher erwirtschaftet",
+    "recognizedToDate": "Bisher realisiert",
+    "sourceOverride": "Manuelle Übersteuerung",
+    "sourceCostToCost": "Automatisch (Cost-to-Cost)",
+    "postingHint": "Die Buchung erfolgt ausschließlich über den zentralen Lauf auf der Umsatzseite — diese Karte zeigt Fortschrittsdaten, keine Buchungsaktion.",
+    "overrideLabel": "Übersteuerung Fertigstellungsgrad",
+    "overridePlaceholder": "Automatisch",
+    "overrideHint": "Leer = automatisch Cost-to-Cost. Eine Änderung ist eine Schätzungsänderung: der Nachhol-Betrag (nach oben oder unten) wird beim nächsten Lauf in der aktuellen Periode gebucht.",
+    "overrideSaved": "Fertigstellungsgrad aktualisiert",
+    "clearOverride": "Übersteuerung löschen",
+    "mapAccountsHint": "Ordnen Sie die Kontrollkonten Unfakturierte Forderungen und Projekterlöse unter Unternehmen & Buchhaltung zu, um die Projekt-Umsatzrealisierung zu aktivieren."
   },
   "measures": {
     "invoiced_to_date": "Bisher berechnet",

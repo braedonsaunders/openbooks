@@ -1089,7 +1089,8 @@
       "assets": "Assets",
       "currency": "Currency",
       "revenue": "Revenue",
-      "inventory": "Inventory"
+      "inventory": "Inventory",
+      "projects": "Projects"
     },
     "fxProvider": {
       "title": "Exchange rate provider",
@@ -1486,6 +1487,12 @@
       "overhead-rates": {
         "title": "Overhead Rates",
         "description": "Effective-dated overhead rates applied to labor cost."
+      },
+      "overhead-model": {
+        "title": "Overhead Model",
+        "description": "The rate engine behind project overhead — cost pools, allocation bases, the department rate matrix, and profiles. Projects using the rate-engine overhead method apply these rates to their labor hours.",
+        "docs": "Documentation",
+        "viewAnalytics": "View analytics"
       }
     },
     "fields": {

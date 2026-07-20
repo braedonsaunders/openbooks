@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runRevenueRecognition } from '@openbooks/engine/src/revenue-recognition.ts'
+import { syncProjectRevenueContracts } from '@openbooks/engine/src/project-revenue.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Refresh fixed-price project contracts first (percent complete → catch-up
+    // schedule lines), so the run below posts current project progress too.
+    const projectSync = await syncProjectRevenueContracts(user.orgId, user.id, asOfDate)
     const result = await runRevenueRecognition(
       user.orgId,
       asOfDate,
@@ -37,6 +41,7 @@ export async function POST(req: Request) {
       body.obligationId,
       gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
     )
+    result.problems.push(...projectSync.problems)
     return NextResponse.json(result)
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
