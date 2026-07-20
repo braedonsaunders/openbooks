@@ -35,10 +35,7 @@ function stripSqlNoise(input: string): string {
     .replace(STRING_OR_DOLLAR_QUOTE, " ");
 }
 
-export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Promise<UserSqlResult> {
-  const maxRows = Math.min(opts.maxRows ?? 1_000, 50_000);
-  const timeoutMs = Math.min(opts.timeoutMs ?? 5_000, 60_000);
-
+export function validateUserSql(sqlText: string): string {
   const stripped = stripSqlNoise(sqlText).trim();
   if (!stripped) throw new Error("empty query");
   if (stripped.replace(/;\s*$/, "").includes(";")) throw new Error("one statement per query");
@@ -47,8 +44,14 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Pr
     throw new Error("read-only: set_config() is not allowed in user SQL");
   }
   if (!/^\s*(select|with)\b/i.test(stripped)) throw new Error("queries must start with SELECT or WITH");
+  return sqlText.trim().replace(/;\s*$/, "");
+}
 
-  const body = stripped.replace(/;\s*$/, "");
+export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Promise<UserSqlResult> {
+  const maxRows = Math.min(opts.maxRows ?? 1_000, 50_000);
+  const timeoutMs = Math.min(opts.timeoutMs ?? 5_000, 60_000);
+
+  const body = validateUserSql(sqlText);
   const wrapped = `select * from (${body}) __q limit ${maxRows + 1}`;
 
   const client = await pool.connect();
