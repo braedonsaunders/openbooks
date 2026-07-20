@@ -3,8 +3,8 @@
  * @NScriptType Restlet
  * @NModuleScope SameAccount
  */
-define(['N/file', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
-  (file, query, record, runtime, search, task) => {
+define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
+  (file, format, query, record, runtime, search, task) => {
     const BRIDGE_VERSION = '1.0.0';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
@@ -120,12 +120,14 @@ define(['N/file', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
     const deletedRecords = (input) => {
       const since = text(input.since);
       assert(/^\d{4}-\d{2}-\d{2}/.test(since), 'since must be an ISO date or timestamp');
-      const filters = [['deleteddate', 'onorafter', since.slice(0, 10)]];
+      const sinceDate = new Date(`${since.slice(0, 10)}T00:00:00Z`);
+      const localDate = format.format({ value: sinceDate, type: format.Type.DATE });
+      const filters = [['deleteddate', 'onorafter', localDate]];
       if (input.recordType) filters.push('AND', ['recordtype', 'is', text(input.recordType)]);
       const deleted = search.create({
         type: 'deletedrecord',
         filters,
-        columns: ['deleteddate', 'recordtype', 'name', 'externalid'],
+        columns: ['deleteddate', 'recordtype', 'name'],
       });
       const rows = [];
       deleted.runPaged({ pageSize: 1000 }).pageRanges.forEach((range) => {
@@ -135,7 +137,7 @@ define(['N/file', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
             deletedAt: text(result.getValue({ name: 'deleteddate' })),
             recordType: text(result.getValue({ name: 'recordtype' })),
             name: text(result.getValue({ name: 'name' })),
-            externalId: text(result.getValue({ name: 'externalid' })),
+            externalId: '',
           });
         });
       });
@@ -223,6 +225,12 @@ define(['N/file', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
       return { schemaVersion: SCHEMA_VERSION, fileId, name: loaded.name, contents: loaded.getContents() };
     };
 
+    const deleteExport = (input) => {
+      const state = exportFiles(input);
+      state.files.forEach((item) => file.delete({ id: item.id }));
+      return { schemaVersion: SCHEMA_VERSION, jobId: state.jobId, deleted: state.files.length };
+    };
+
     const dispatch = (input) => {
       try {
         const action = text(input && input.action || 'health');
@@ -234,6 +242,7 @@ define(['N/file', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
         if (action === 'startExport') return startExport(input);
         if (action === 'exportStatus') return exportFiles(input);
         if (action === 'readChunk') return readChunk(input);
+        if (action === 'deleteExport') return deleteExport(input);
         throw new Error(`unsupported action ${action}`);
       } catch (error) {
         return {

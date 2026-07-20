@@ -37,6 +37,14 @@ export interface NetSuitePaymentTerm {
   discountDays: number | null;
 }
 
+export interface NetSuiteExportFile {
+  id: string;
+  name: string;
+  size: number;
+  createdAt: string;
+  modifiedAt: string;
+}
+
 interface BridgeError {
   ok: false;
   error: string;
@@ -153,5 +161,36 @@ export class NetSuiteBridgeClient {
       taskId: string;
       partitions: number;
     } | BridgeError>({ action: "startExport", jobId, partitions }));
+  }
+
+  async exportStatus(jobId: string): Promise<{
+    schemaVersion: number;
+    jobId: string;
+    status: "running" | "complete" | "failed";
+    files: NetSuiteExportFile[];
+  }> {
+    return assertBridgeResponse(await this.request<{
+      schemaVersion: number;
+      jobId: string;
+      status: "running" | "complete" | "failed";
+      files: NetSuiteExportFile[];
+    } | BridgeError>({ action: "exportStatus", jobId }));
+  }
+
+  async readChunk(fileId: string): Promise<{ schemaVersion: number; fileId: string; name: string; contents: string }> {
+    return assertBridgeResponse(await this.request<{
+      schemaVersion: number;
+      fileId: string;
+      name: string;
+      contents: string;
+    } | BridgeError>({ action: "readChunk", fileId }));
+  }
+
+  async deleteExport(jobId: string): Promise<{ schemaVersion: number; jobId: string; deleted: number }> {
+    return assertBridgeResponse(await this.request<{
+      schemaVersion: number;
+      jobId: string;
+      deleted: number;
+    } | BridgeError>({ action: "deleteExport", jobId }));
   }
 }
