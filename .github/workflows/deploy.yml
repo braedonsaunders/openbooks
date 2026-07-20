@@ -147,8 +147,8 @@ jobs:
           set -euo pipefail
           for i in $(seq 1 30); do
             code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
-              https://openbooks.cloud.rassaun.com/api/v1/health || true)"
-            echo "health: HTTP $code (poll $i)"
+              'https://openbooks.cloud.rassaun.com/api/v1/health?include=worker' || true)"
+            echo "web + worker health: HTTP $code (poll $i)"
             if [ "$code" = "200" ]; then
               echo "openbooks dev is up: https://openbooks.cloud.rassaun.com"
               exit 0

@@ -10,6 +10,7 @@ import { getRedisUrl } from './config'
 
 let producerConnection: Redis | undefined
 let blockingConnection: Redis | undefined
+const WORKER_HEARTBEAT_KEY = 'openbooks:worker:heartbeat'
 
 export function getConnection(): ConnectionOptions {
   producerConnection ??= new Redis(getRedisUrl(), { enableReadyCheck: false, maxRetriesPerRequest: 1 })
@@ -19,6 +20,18 @@ export function getConnection(): ConnectionOptions {
 export function getBlockingConnection(): ConnectionOptions {
   blockingConnection ??= new Redis(getRedisUrl(), { enableReadyCheck: false, maxRetriesPerRequest: null })
   return blockingConnection as unknown as ConnectionOptions
+}
+
+/** Refresh the deployment-wide worker heartbeat with a short expiry. */
+export async function markWorkerHeartbeat(now = new Date()): Promise<void> {
+  const connection = getConnection() as unknown as Redis
+  await connection.set(WORKER_HEARTBEAT_KEY, now.toISOString(), 'EX', 60)
+}
+
+/** Read the latest worker heartbeat; null means no live worker has reported. */
+export async function getWorkerHeartbeat(): Promise<string | null> {
+  const connection = getConnection() as unknown as Redis
+  return connection.get(WORKER_HEARTBEAT_KEY)
 }
 
 /** Close both shared clients after BullMQ workers have finished draining. */
