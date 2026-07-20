@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
-import { numericIdWindows, parseNetSuiteMappings } from "./netsuite-source.ts";
+import { numericIdWindows, parseNetSuiteMappings, uniqueNetSuiteTransactionLines } from "./netsuite-source.ts";
 import type { NativeContext } from "./native.ts";
 
 const context = {
@@ -106,4 +106,16 @@ test("NetSuite high-volume streams partition every numeric ID exactly once", () 
   ]);
   assert.throws(() => numericIdWindows(-1), /non-negative safe integer/);
   assert.throws(() => numericIdWindows(1, 0), /positive safe integer/);
+});
+
+test("NetSuite transaction lines are ingested exactly once and conflicts fail closed", () => {
+  const row: NsLine = {
+    transaction: "4803", id: "1", mainline: "F", taxline: "F",
+    account: "53", netamount: "2473.89",
+  };
+  assert.deepEqual(uniqueNetSuiteTransactionLines([row, { ...row }]), [row]);
+  assert.throws(
+    () => uniqueNetSuiteTransactionLines([row, { ...row, netamount: "2473.88" }]),
+    /conflicting transaction line 4803:1/,
+  );
 });

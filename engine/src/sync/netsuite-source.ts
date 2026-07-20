@@ -90,6 +90,29 @@ export function numericIdWindows(maxId: number, width = NETSUITE_ID_WINDOW): Arr
   return windows;
 }
 
+/** Enforce NetSuite's transaction-line identity across governed export retries. */
+export function uniqueNetSuiteTransactionLines(rows: NsLine[]): NsLine[] {
+  const unique = new Map<string, { payload: string; row: NsLine }>();
+  for (const row of rows) {
+    const key = `${String(row.transaction)}:${String(row.id)}`;
+    const payload = JSON.stringify([
+      row.transaction, row.id, row.mainline, row.taxline, row.item ?? null,
+      row.account ?? null, row.expenseaccount ?? null, row.netamount ?? null,
+      row.foreignamount ?? null, row.department ?? null, row.entity ?? null,
+      row.subsidiary ?? null, row.memo ?? null, row.taxrate1 ?? null,
+    ]);
+    const prior = unique.get(key);
+    if (prior) {
+      if (prior.payload !== payload) {
+        throw new Error(`NetSuite returned conflicting transaction line ${key}`);
+      }
+      continue;
+    }
+    unique.set(key, { payload, row });
+  }
+  return [...unique.values()].map(({ row }) => row);
+}
+
 export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
   if (value == null || value === "") return {};
   const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
@@ -747,7 +770,12 @@ export class NetSuiteSource implements MigrationSource {
         });
       }
     }
-    for (const arr of linesByTxn.values()) arr.sort((a, b) => Number(a.id) - Number(b.id));
+    for (const [transactionId, rows] of linesByTxn) {
+      linesByTxn.set(
+        transactionId,
+        uniqueNetSuiteTransactionLines(rows).sort((a, b) => Number(a.id) - Number(b.id)),
+      );
+    }
 
     // Build native documents.
     const documents: NativeDocument[] = [];
