@@ -13,7 +13,6 @@ import { ExportMenu } from '../ExportMenu'
 import { requirePermission } from '../../../../lib/authz'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { parseListParams } from '../../../../lib/list-params'
-import { SearchInput } from '../../../../components/search-input'
 import { ProjectProfitabilityTable, type ProjectProfitabilityGroup } from './ProjectProfitabilityTable'
 
 export const dynamic = 'force-dynamic'
@@ -109,20 +108,15 @@ export default async function ProjectProfitabilityPage({
           <PageHeader
             title={t('projectProfitability.title')}
             back={{ href: '/reports', label: t('hub.title') }}
-            actions={
-              <div className="flex items-center gap-2">
-                <SaveViewButton />
-                <ExportMenu kind="project-profitability" params={sp} />
-              </div>
-            }
           />
           <ReportFilterBar
-            controls={{ dateRange: true, customer: true, dimensions: true }}
+            controls={{ search: true, dateRange: true, customer: true, dimensions: true }}
             dateRange={{ from: period.from, to: period.to }}
+            searchPlaceholder={t('projectProfitability.searchPlaceholder')}
             customers={customers}
             dimensions={opts}
+            actions={<><SaveViewButton /><ExportMenu kind="project-profitability" params={sp} /></>}
           />
-          <SearchInput placeholder={t('projectProfitability.searchPlaceholder')} />
         </>
       }
     >

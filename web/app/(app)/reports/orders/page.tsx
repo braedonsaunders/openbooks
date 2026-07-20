@@ -9,6 +9,8 @@ import { orgInfo } from '../../../../lib/data'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
+import { ReportFilterBar } from '../ReportFilterBar'
+import { SaveViewButton } from '../SaveViewButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,7 +57,12 @@ export default async function OrdersReport() {
 
   return (
     <ListPageLayout
-      header={<PageHeader back={{ href: '/reports', label: tr('hub.title') }} title={t('title')} description={t('description')} />}
+      header={
+        <>
+          <PageHeader back={{ href: '/reports', label: tr('hub.title') }} title={t('title')} description={t('description')} />
+          <ReportFilterBar controls={{ period: false }} actions={<SaveViewButton />} />
+        </>
+      }
     >
       <ReportPaper company={org?.name ?? ''} title={t('title')} periodPhrase={t('description')} wide>
         <Table>

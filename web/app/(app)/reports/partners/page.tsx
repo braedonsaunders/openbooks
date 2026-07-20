@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { Badge, PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
@@ -14,6 +13,7 @@ import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
+import { ReportFilterBar } from '../ReportFilterBar'
 
 export const dynamic = 'force-dynamic'
 const PER_PAGE = 50
@@ -48,19 +48,21 @@ export default async function Partners({
             title={k === 'payable' ? t('payablesTitle') : t('receivablesTitle')}
             back={{ href: '/reports', label: tr('hub.title') }}
           />
-          <div className="flex items-center gap-2">
-            <Link href="/reports/partners?kind=payable">
-              <Badge variant={k === 'payable' ? 'default' : 'outline'}>{t('payables')}</Badge>
-            </Link>
-            <Link href="/reports/partners?kind=receivable">
-              <Badge variant={k === 'receivable' ? 'default' : 'outline'}>{t('receivables')}</Badge>
-            </Link>
-            <div className="ml-auto flex items-center gap-2">
-              <SaveViewButton />
-              <ExportMenu kind="partners" params={{ side: k }} />
-            </div>
-          </div>
-          <SearchInput placeholder={t('searchPlaceholder')} />
+          <ReportFilterBar
+            controls={{ search: true, period: false }}
+            searchPlaceholder={t('searchPlaceholder')}
+            leading={
+              <>
+                <Link href="/reports/partners?kind=payable">
+                  <Badge variant={k === 'payable' ? 'default' : 'outline'}>{t('payables')}</Badge>
+                </Link>
+                <Link href="/reports/partners?kind=receivable">
+                  <Badge variant={k === 'receivable' ? 'default' : 'outline'}>{t('receivables')}</Badge>
+                </Link>
+              </>
+            }
+            actions={<><SaveViewButton /><ExportMenu kind="partners" params={{ ...sp, side: k }} /></>}
+          />
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('totalOutstanding')}: <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200"><ReportDrillLink target={{ kind: 'ledger', label: t('totalOutstanding'), accountTypes, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(flip * total)}</ReportDrillLink></span>
           </p>

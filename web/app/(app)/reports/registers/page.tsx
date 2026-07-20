@@ -52,20 +52,22 @@ export default async function RegistersPage({
             title={side === 'ap' ? t('registers.apTitle') : t('registers.arTitle')}
             back={{ href: '/reports', label: t('hub.title') }}
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/reports/registers?side=ar&${keep}`}>
-              <Badge variant={side === 'ar' ? 'default' : 'outline'}>{t('registers.receivables')}</Badge>
-            </Link>
-            <Link href={`/reports/registers?side=ap&${keep}`}>
-              <Badge variant={side === 'ap' ? 'default' : 'outline'}>{t('registers.payables')}</Badge>
-            </Link>
-            <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
-            <ReportFilterBar
-              controls={{ period: true, dimensions: true }}
-              dimensions={opts}
-              actions={<><SaveViewButton /><ExportMenu kind="registers" params={sp} /></>}
-            />
-          </div>
+          <ReportFilterBar
+            controls={{ period: true, dimensions: true }}
+            leading={
+              <>
+                <Link href={`/reports/registers?side=ar&${keep}`}>
+                  <Badge variant={side === 'ar' ? 'default' : 'outline'}>{t('registers.receivables')}</Badge>
+                </Link>
+                <Link href={`/reports/registers?side=ap&${keep}`}>
+                  <Badge variant={side === 'ap' ? 'default' : 'outline'}>{t('registers.payables')}</Badge>
+                </Link>
+                <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+              </>
+            }
+            dimensions={opts}
+            actions={<><SaveViewButton /><ExportMenu kind="registers" params={sp} /></>}
+          />
           {reg.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('registers.truncated')}</p>}
         </>
       }

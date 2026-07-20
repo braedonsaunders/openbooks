@@ -58,7 +58,10 @@ export default async function CustomReports({
 
   /** One-line human summary of what a plan does, for the list. Entity labels
    *  resolve through the reports.catalog.* message catalog at render time. */
-  function summarizePlan(query: ReportCustomQuery): string {
+  function summarizePlan(query: ReportCustomQuery | null): string {
+    // Statement definitions intentionally store their governed statement plan
+    // in `statement`, not the entity-query column used by custom reports.
+    if (!query) return t('kind.builtIn')
     const entity = REPORT_ENTITY_MAP[query.entity]
     const source = entity ? tReports(`catalog.entities.${entity.key}.label`) : query.entity
     if (query.mode === 'summarize') {
@@ -173,7 +176,7 @@ export default async function CustomReports({
                       {definitionName(d)}
                     </Link>
                     <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      {summarizePlan(d.query as ReportCustomQuery)}
+                      {summarizePlan(d.query as ReportCustomQuery | null)}
                     </div>
                   </TableCell>
                   <TableCell className="max-w-md text-sm text-slate-600 dark:text-slate-300">

@@ -63,6 +63,26 @@ async function rateEngineOverhead(
   const basis = cfg?.hoursBasis ?? 'billed_hours'
   const scope = cfg?.scope ?? 'department'
 
+  if ((cfg?.rateSource ?? 'live') === 'standard') {
+    // STANDARD: the published rate card (overhead_rates), applied date-effectively
+    // per time entry — the NetSuite/adminapp model, penny-validated against the
+    // synced GL burden. A department's rate is the SUM of its effective rows
+    // (a rate card may stack category rows); per_hour rows bill hours × $rate,
+    // percent rows bill labor cost × rate%.
+    const r = (await db.execute(sql`
+      select coalesce(sum(case when o.rate_kind = 'percent'
+                    then te.hours * coalesce(te.cost_rate, 0) * o.rate_percent / 100
+                    else te.hours * o.rate_percent end), 0) as overhead
+        from time_entries te
+        join overhead_rates o on o.department_id = te.department_id
+          and te.worked_on >= o.effective_from
+          and (o.effective_to is null or te.worked_on <= o.effective_to)
+          and o.org_id = ${orgId}
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+         ${basis === 'billed_hours' ? sql`and te.is_billable` : sql``}`)) as unknown as { rows: { overhead: string }[] }
+    return n(r.rows[0]?.overhead)
+  }
+
   // Trailing-12-month window ending today (annual overhead ÷ annual hours).
   const to = new Date()
   const from = new Date(to)

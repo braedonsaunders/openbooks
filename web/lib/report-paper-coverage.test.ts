@@ -51,6 +51,38 @@ test('every in-app report result uses the shared paper surface', () => {
   assert.doesNotMatch(source('lib/report-filters.ts'), /\/reports\/detail/)
 })
 
+test('every report result uses the P&L filter bar as one non-wrapping row', () => {
+  const directReportPages = [
+    'app/(app)/reports/aging/page.tsx',
+    'app/(app)/reports/balance-sheet/page.tsx',
+    'app/(app)/reports/budget/page.tsx',
+    'app/(app)/reports/cash-flow/page.tsx',
+    'app/(app)/reports/general-ledger/page.tsx',
+    'app/(app)/reports/journal/page.tsx',
+    'app/(app)/reports/orders/page.tsx',
+    'app/(app)/reports/partners/page.tsx',
+    'app/(app)/reports/pnl/page.tsx',
+    'app/(app)/reports/project-profitability/page.tsx',
+    'app/(app)/reports/registers/page.tsx',
+    'app/(app)/reports/statements/[partyId]/page.tsx',
+    'app/(app)/reports/trial-balance/page.tsx',
+  ]
+
+  for (const page of directReportPages) {
+    const pageSource = source(page)
+    assert.match(pageSource, /<ReportFilterBar\b/, `${page} must render the shared P&L filter bar`)
+    assert.doesNotMatch(pageSource, /<SearchInput\b/, `${page} must not render search outside the shared filter bar`)
+  }
+
+  const filterBar = source('app/(app)/reports/ReportFilterBar.tsx')
+  assert.match(filterBar, /flex-nowrap/)
+  assert.match(filterBar, /overflow-x-auto/)
+  assert.doesNotMatch(filterBar, /flex-wrap/)
+  assert.match(filterBar, /controls\.search[\s\S]*<SearchInput\b/)
+  assert.match(source('app/(app)/reports/custom/run/[id]/ReportRunner.tsx'), /<ReportFilterBar\b/)
+  assert.match(source('app/(app)/reports/custom/page.tsx'), /if \(!query\) return/)
+})
+
 test('every direct report with numeric output exposes a drill target or native transaction link', () => {
   const numericReports = [
     'app/(app)/reports/aging/page.tsx',

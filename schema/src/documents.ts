@@ -267,7 +267,7 @@ export const overheadRates = pgTable("overhead_rates", {
   orgId: orgRef(),
   departmentId: uuid("department_id"),
   category: text("category"), // Equipment / Indirect Labour / Consumables…
-  method: text("method", { enum: ["three_year_average", "live"] }).notNull().default("live"),
+  method: text("method", { enum: ["three_year_average", "live", "standard"] }).notNull().default("live"),
   /** How to read `rate`: per_hour = $/labor-hour (the NetSuite/adminapp model),
    *  percent = % of labor cost. */
   rateKind: text("rate_kind", { enum: ["per_hour", "percent"] }).notNull().default("per_hour"),

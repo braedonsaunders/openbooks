@@ -1462,7 +1462,46 @@
         "title": "Modèle de frais généraux",
         "description": "Le moteur de taux derrière les frais généraux de projet — pools de coûts, bases de répartition, matrice de taux par département et profils. Les projets utilisant la méthode « moteur de taux » appliquent ces taux à leurs heures de main-d’œuvre.",
         "docs": "Documentation",
-        "viewAnalytics": "Voir l’analytique"
+        "viewAnalytics": "Voir l’analytique",
+        "publish": "Publier les taux",
+        "wizard": "Assistant de configuration",
+        "publishTitle": "Publier sur la grille de taux",
+        "publishHint": "Fige les taux actuels du moteur dans des lignes datées de la grille de taux. Les projets en source « standard » les utilisent jusqu’à la prochaine publication.",
+        "publishConfirm": "Publier",
+        "publishDone": "Taux publiés sur la grille",
+        "cancel": "Annuler",
+        "wizardTitle": "Configurer les frais généraux de projet",
+        "wizardDone": "Frais généraux configurés",
+        "wizardIntro": "Les frais généraux attribuent à chaque chantier sa part du coût de fonctionnement de l’entreprise — un indicateur de gestion sur le P&L du projet, jamais une écriture comptable. Choisissez la méthode :",
+        "recommended": "Recommandé",
+        "effectiveFrom": "En vigueur à partir du",
+        "liveNow": "Moteur actuel : ${rate}/h",
+        "liveExplain": "Les projets utilisent toujours le taux composite calculé du moteur — auto-ajusté, sans publication, mais les marges historiques bougent au fil des dépenses.",
+        "flatPercent": "Frais généraux % du coût de main-d’œuvre",
+        "flatPerHour": "Frais généraux $ par heure de main-d’œuvre",
+        "applyHint": "Applique cette méthode aux types de projet sélectionnés. Leur P&L gagne une ligne Frais généraux incluse dans le coût total.",
+        "stepOf": "Étape {step} sur {total}",
+        "back": "Retour",
+        "next": "Suivant",
+        "finish": "Terminer",
+        "approach": {
+          "rate_card": {
+            "title": "Grille de taux par département",
+            "desc": "$/heure daté par département, publié depuis le moteur (ou saisi manuellement). Coûts stables et auditables — le modèle NetSuite/adminapp."
+          },
+          "live": {
+            "title": "Taux moteur en direct",
+            "desc": "Toujours le composite calculé actuel par département. Auto-ajusté, mais les marges passées bougent."
+          },
+          "per_hour": {
+            "title": "$ fixe par heure",
+            "desc": "Un taux horaire unique pour toute l’entreprise. Simple, sans départements."
+          },
+          "percent": {
+            "title": "% du coût de main-d’œuvre",
+            "desc": "Frais généraux en majoration du coût de main-d’œuvre. Courant en services professionnels."
+          }
+        }
       }
     },
     "fields": {

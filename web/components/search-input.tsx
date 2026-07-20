@@ -4,17 +4,19 @@ import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Input } from '@openbooks/ui'
+import { Input, cn } from '@openbooks/ui'
 
 export function SearchInput({
   placeholder,
   paramKey = 'q',
   pageParamKey = 'page',
+  className,
 }: {
   placeholder?: string
   paramKey?: string
   /** Pagination param to reset when the search changes (sub-tables use prefixed params). */
   pageParamKey?: string
+  className?: string
 }) {
   const t = useTranslations('ui.search')
   const pathname = usePathname()
@@ -50,7 +52,7 @@ export function SearchInput({
   }, [pageParamKey, paramKey, pathname, router, search, startTransition, value])
 
   return (
-    <div className="relative w-full sm:w-72">
+    <div className={cn('relative w-full sm:w-72', className)}>
       <Search
         className="pointer-events-none absolute top-2 left-2.5 text-slate-400 dark:text-slate-500"
         size={16}

@@ -1418,7 +1418,46 @@
         "title": "Modelo de gastos generales",
         "description": "El motor de tasas detrás de los gastos generales de proyecto: grupos de costos, bases de asignación, la matriz de tasas por departamento y perfiles. Los proyectos que usan el método de motor de tasas aplican estas tasas a sus horas de mano de obra.",
         "docs": "Documentación",
-        "viewAnalytics": "Ver analítica"
+        "viewAnalytics": "Ver analítica",
+        "publish": "Publicar tasas",
+        "wizard": "Asistente de configuración",
+        "publishTitle": "Publicar en la tarjeta de tasas",
+        "publishHint": "Fija las tasas actuales del motor en filas con fecha de vigencia en la tarjeta de tasas. Los proyectos con fuente «estándar» las usan hasta la próxima publicación.",
+        "publishConfirm": "Publicar",
+        "publishDone": "Tasas publicadas en la tarjeta",
+        "cancel": "Cancelar",
+        "wizardTitle": "Configurar gastos generales de proyecto",
+        "wizardDone": "Gastos generales configurados",
+        "wizardIntro": "Los gastos generales dan a cada obra su parte del costo de operar la empresa — una cifra gerencial en el P&L del proyecto, nunca un asiento contable. Elija el método:",
+        "recommended": "Recomendado",
+        "effectiveFrom": "Vigente desde",
+        "liveNow": "Motor ahora: ${rate}/h",
+        "liveExplain": "Los proyectos usan siempre el compuesto calculado del motor — autoajustable, sin publicación, pero los márgenes históricos cambian al registrar gastos.",
+        "flatPercent": "Gastos generales % del costo de mano de obra",
+        "flatPerHour": "Gastos generales $ por hora de mano de obra",
+        "applyHint": "Aplica este método a los tipos de proyecto seleccionados. Su P&L gana una línea de Gastos generales incluida en el costo total.",
+        "stepOf": "Paso {step} de {total}",
+        "back": "Atrás",
+        "next": "Siguiente",
+        "finish": "Finalizar",
+        "approach": {
+          "rate_card": {
+            "title": "Tarjeta de tasas por departamento",
+            "desc": "$/hora con fecha de vigencia por departamento, publicada desde el motor (o manual). Costos estables y auditables — el modelo NetSuite/adminapp."
+          },
+          "live": {
+            "title": "Tasas del motor en vivo",
+            "desc": "Siempre el compuesto calculado actual por departamento. Autoajustable, pero los márgenes pasados cambian."
+          },
+          "per_hour": {
+            "title": "$ fijo por hora",
+            "desc": "Una tasa horaria única para toda la empresa. Simple, sin departamentos."
+          },
+          "percent": {
+            "title": "% del costo de mano de obra",
+            "desc": "Gastos generales como recargo sobre la mano de obra. Común en servicios profesionales."
+          }
+        }
       }
     },
     "fields": {
