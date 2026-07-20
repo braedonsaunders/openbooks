@@ -91,7 +91,7 @@ export default async function AP({
           </div>
           <div className="flex items-center gap-3">{tabs}{headerActions}</div>
         </div>
-        <ApCockpit data={data} />
+        <ApCockpit data={data} canConfigure={can(authz, 'admin.setup.manage')} />
       </PageContainer>
     )
   }
