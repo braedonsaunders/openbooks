@@ -1865,7 +1865,7 @@
           "skipHint": "Los costos mostrarán solo salarios brutos hasta que agregue componentes."
         },
         "customBurdenName": "Cargas de nómina (est.)",
-        "q2": "¿Cuánto paga a cada persona por hora?",
+        "q2": "¿De dónde salen los salarios?",
         "q2Hint": "Cada empleado tiene su propio salario. Busque y complete la cuadrilla — quien quede en blanco puede usar el respaldo opcional de abajo.",
         "orgRate": "Salario por hora predeterminado (quien no tenga tarifa específica)",
         "tradeRates": "Tarifas por oficio (opcional — gana al predeterminado)",
@@ -1901,10 +1901,13 @@
         "searchEmployees": "Buscar empleados…",
         "ratePlaceholder": "0.00",
         "ratedCount": "{rated} de {total} empleados tienen salario",
-        "fallbackRate": "Tarifa de respaldo para quien quede en blanco (opcional)",
-        "fallbackHint": "Solo se usa cuando alguien no tiene tarifa propia — la mayoría lo deja vacío.",
+        "fallbackRate": "Tarifa de respaldo opcional para empleados sin salario aún",
+        "fallbackHint": "Mantiene el costeo funcionando mientras se completan las fichas — la mayoría lo deja vacío.",
         "reviewEmployeeRates": "Salarios para {count} empleado(s).",
-        "reviewFallback": "Respaldo de ${rate}/h para quien no tenga tarifa."
+        "reviewFallback": "Respaldo de ${rate}/h para quien no tenga tarifa.",
+        "wagesOnRecord": "El salario de cada empleado (y su historial) se define en su ficha de empleado — donde gestiona todo lo demás. Aquí no hay nada que llenar.",
+        "openEmployees": "Abrir Empleados",
+        "reviewWagesOnRecord": "Los salarios provienen de la ficha de cada empleado."
       },
       "unsaved": "Cambios sin guardar",
       "discard": "Descartar",

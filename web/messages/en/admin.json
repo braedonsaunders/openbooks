@@ -1943,7 +1943,7 @@
           "skipHint": "Job costs will show raw wages only until you add components."
         },
         "customBurdenName": "Payroll burden (est.)",
-        "q2": "What do you pay each person per hour?",
+        "q2": "Where do wages come from?",
         "q2Hint": "Every employee gets their own wage. Search and fill the crew — anyone left blank can use the optional fallback below, and salaried staff can be refined in the workspace afterward.",
         "orgRate": "Default hourly wage (everyone without a specific rate)",
         "tradeRates": "Per-trade rates (optional — beats the default)",
@@ -1979,10 +1979,13 @@
         "searchEmployees": "Search employees…",
         "ratePlaceholder": "0.00",
         "ratedCount": "{rated} of {total} employees have a wage",
-        "fallbackRate": "Fallback rate for anyone left blank (optional)",
-        "fallbackHint": "Only used when someone has no rate of their own — most companies leave this empty.",
+        "fallbackRate": "Optional fallback rate for employees without a wage yet",
+        "fallbackHint": "Keeps job costing working while records are being filled in — most companies leave this empty.",
         "reviewEmployeeRates": "Wages for {count} employee(s).",
-        "reviewFallback": "Fallback ${rate}/h for anyone unrated."
+        "reviewFallback": "Fallback ${rate}/h for anyone unrated.",
+        "wagesOnRecord": "Each employee's wage (and raise history) is set on their employee record — exactly where you manage everything else about them. Nothing to fill in here.",
+        "openEmployees": "Open Employees",
+        "reviewWagesOnRecord": "Wages come from each employee's record."
       },
       "unsaved": "Unsaved changes",
       "discard": "Discard",

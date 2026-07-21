@@ -269,7 +269,6 @@ export function LaborCostingWorkspace(props: {
       <LaborCostingWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
-        employees={props.employees}
         onApplied={(applied) => {
           const next = {
             mode: applied.mode,
