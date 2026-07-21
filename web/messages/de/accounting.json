@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "Buchhaltung",
+    "description": "Ihr Finanzkontroll-Arbeitsbereich — Hauptbuch-Gesundheit, Abschlussfortschritt und die Zahlen hinter dem Score.",
+    "tabs": {
+      "overview": "Übersicht",
+      "health": "Finanzgesundheit"
+    },
+    "score": {
+      "excellent": "Exzellent",
+      "good": "Gut",
+      "average": "Durchschnitt",
+      "needsWork": "Verbesserungsbedarf"
+    },
+    "categories": {
+      "profitability": "Rentabilität",
+      "efficiency": "Effizienz",
+      "operating": "Betrieb"
+    },
+    "vitals": {
+      "healthScore": "Gesundheitsscore",
+      "netIncome": "Jahresüberschuss",
+      "close": "Abschlussfortschritt",
+      "closeSub": "{period}",
+      "noClose": "—",
+      "noCloseSub": "Kein Abschluss gestartet",
+      "draftJournals": "Buchungsentwürfe",
+      "draftJournalsSub": "{posted} gebucht diese Woche",
+      "openFindings": "Offene Feststellungen",
+      "openFindingsSub": "{critical} kritisch"
+    },
+    "hero": {
+      "title": "Finanzgesundheit",
+      "ratio": "Kennzahl",
+      "value": "Wert",
+      "benchmark": "Benchmark",
+      "grade": "Note",
+      "fullAnalysis": "Vollständige Analyse — Margen, Segmente, Szenarien, Treiber"
+    },
+    "directory": {
+      "title": "Arbeitsbereich",
+      "journalHint": "Entwürfe · {posted} gebucht diese Woche",
+      "accountsHint": "aktive Konten",
+      "budgetsHint": "Budgetszenarien",
+      "assetsHint": "Anlagegüter",
+      "continuousCloseHint": "{critical} kritisch"
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "allClear": "Alles klar — das Hauptbuch ist sauber.",
+      "criticalItems": "{count} kritische Feststellungen offen",
+      "warningItems": "{count} Warnungen aus dem Continuous Close",
+      "draftJournals": "{count} Buchungen noch im Entwurf",
+      "weakRatio": "{ratio} liegt unter dem Benchmark"
+    }
+  }
+}

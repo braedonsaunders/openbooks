@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "Accounting",
+    "description": "Your financial-control workspace — ledger health, close progress, and the numbers behind the score.",
+    "tabs": {
+      "overview": "Overview",
+      "health": "Financial Health"
+    },
+    "score": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "average": "Average",
+      "needsWork": "Needs work"
+    },
+    "categories": {
+      "profitability": "Profitability",
+      "efficiency": "Efficiency",
+      "operating": "Operating"
+    },
+    "vitals": {
+      "healthScore": "Health score",
+      "netIncome": "Net income",
+      "close": "Close progress",
+      "closeSub": "{period}",
+      "noClose": "—",
+      "noCloseSub": "No close run started",
+      "draftJournals": "Draft journals",
+      "draftJournalsSub": "{posted} posted this week",
+      "openFindings": "Open findings",
+      "openFindingsSub": "{critical} critical"
+    },
+    "hero": {
+      "title": "Financial health",
+      "ratio": "Ratio",
+      "value": "Value",
+      "benchmark": "Benchmark",
+      "grade": "Grade",
+      "fullAnalysis": "Full analysis — margins, segments, scenarios, drivers"
+    },
+    "directory": {
+      "title": "Workspace",
+      "journalHint": "drafts · {posted} posted this week",
+      "accountsHint": "active accounts",
+      "budgetsHint": "budget scenarios",
+      "assetsHint": "fixed assets",
+      "continuousCloseHint": "{critical} critical"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "allClear": "All clear — the ledger is tidy.",
+      "criticalItems": "{count} critical close findings open",
+      "warningItems": "{count} warnings from continuous close",
+      "draftJournals": "{count} journals still in draft",
+      "weakRatio": "{ratio} is grading below benchmark"
+    }
+  }
+}

@@ -45,6 +45,7 @@ export const NAV_GROUP_HOMES: Partial<Record<NavGroupKey, string>> = {
   customers: '/customers',
   purchasing: '/purchasing',
   banking: '/banking',
+  accounting: '/accounting',
   insights: '/analytics',
   settings: '/admin',
 }

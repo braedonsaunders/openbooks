@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   Building2,
   CalendarClock,
+  HeartPulse,
   CheckCircle2,
   ClipboardList,
   CreditCard,
@@ -42,6 +43,7 @@ const HOME_ICONS: Record<string, LucideIcon> = {
   timer: Timer,
   clipboard: ClipboardList,
   'calendar-clock': CalendarClock,
+  'heart-pulse': HeartPulse,
 }
 
 export function HomeStatTile({
