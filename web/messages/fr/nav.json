@@ -60,7 +60,8 @@
     "crm-forecasts": "Prévisions et quotas",
     "revenue": "Comptabilisation des revenus",
     "inventory": "Inventaire",
-    "docs": "Documentation"
+    "docs": "Documentation",
+    "field-tickets": "Bons de régie"
   },
   "groups": {
     "my-work": "Mon travail",

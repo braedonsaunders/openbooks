@@ -106,6 +106,7 @@ export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: 
               : group.key === 'company'
               ? [
                   { href: '/admin/setup/company', label: t('entities.company.title'), iconKey: 'building' },
+                  { href: '/admin/setup/features', label: t('features.navTitle'), iconKey: 'layers' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),

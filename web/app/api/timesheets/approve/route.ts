@@ -3,10 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { postProjectLaborCost } from '@openbooks/engine/src/project-recognition.ts'
-import { laborCostingSettings, snapshotLaborCostRates } from '@openbooks/engine/src/labor-costing.ts'
-import { applyOverheadForTime } from '@openbooks/engine/src/overhead-apply.ts'
-import { snapshotTimeBillRates } from '../../../../lib/item-rates'
+import { runTimeApprovalEffects } from '../../../../lib/time-approval'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -60,13 +57,7 @@ export async function POST(req: Request) {
   const ids = approved.rows.map((r) => r.id)
   if (ids.length > 0) {
     try {
-      const settings = await laborCostingSettings(orgId)
-      await snapshotLaborCostRates(orgId, ids)
-      await snapshotTimeBillRates(orgId, ids)
-      if (settings.mode === 'post') await postProjectLaborCost(orgId, user.id, ids)
-      // Overhead rides with the hours (net-zero pair) — inert unless that
-      // application mode is on; never waits for payroll actuals.
-      await applyOverheadForTime(orgId, user.id, ids)
+      await runTimeApprovalEffects(orgId, user.id, ids)
     } catch (e) {
       console.error('[timesheets/approve] labor cost snapshot/posting failed:', (e as Error).message)
     }

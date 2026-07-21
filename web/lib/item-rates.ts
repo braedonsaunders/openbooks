@@ -119,8 +119,13 @@ export async function resolveItemRate(input: {
  * Entries stay untouched when nothing resolves (billing falls back to the
  * item default at invoice time, exactly as before).
  */
-export async function snapshotTimeBillRates(orgId: string, timeEntryIds: string[]): Promise<number> {
-  if (timeEntryIds.length === 0) return 0
+export async function snapshotTimeBillRates(
+  orgId: string,
+  timeEntryIds: string[],
+  opts: { dryRun?: boolean } = {},
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>()
+  if (timeEntryIds.length === 0) return resolved
   const idArr = `{${timeEntryIds.join(',')}}`
   const rows = (await db.execute(sql`
     select te.id, te.item_id, te.project_id, te.time_type_id, te.worked_on,
@@ -141,7 +146,6 @@ export async function snapshotTimeBillRates(orgId: string, timeEntryIds: string[
       default_rate: string | null
     }[]
   }
-  let stamped = 0
   for (const te of rows.rows) {
     const line = (await db.execute(sql`
       with candidates as (
@@ -183,9 +187,11 @@ export async function snapshotTimeBillRates(orgId: string, timeEntryIds: string[
     else if (hit?.bill_rate != null) rate = mulRate(String(hit.bill_rate), String(te.bill_multiplier))
     else if (te.default_rate != null) rate = mulRate(String(te.default_rate), String(te.bill_multiplier))
     if (rate == null) continue
-    await db.execute(sql`
-      update time_entries set bill_rate = ${rate} where id = ${te.id} and org_id = ${orgId} and bill_rate is null`)
-    stamped++
+    resolved.set(te.id, rate)
+    if (!opts.dryRun) {
+      await db.execute(sql`
+        update time_entries set bill_rate = ${rate} where id = ${te.id} and org_id = ${orgId} and bill_rate is null`)
+    }
   }
-  return stamped
+  return resolved
 }

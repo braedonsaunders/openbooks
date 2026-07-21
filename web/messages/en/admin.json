@@ -1981,6 +1981,13 @@
         "timeTypes": "Time Types",
         "timeTypesHint": "Regular, overtime, double-time — the cost and bill multipliers this page uses."
       }
+    },
+    "features": {
+      "navTitle": "Features",
+      "title": "Features",
+      "description": "Switch optional modules on or off for your company. Turning a feature off hides it everywhere — its data is never deleted.",
+      "enabled": "{name} enabled",
+      "disabled": "{name} disabled"
     }
   },
   "flows": {
@@ -2233,6 +2240,12 @@
         "finished": "Finished",
         "error": "Error"
       }
+    }
+  },
+  "features": {
+    "fieldTickets": {
+      "title": "Field Tickets",
+      "description": "Signed crew timesheets for T&M work: a foreman records the whole crew's hours plus equipment and materials, the customer signs, and invoices are built from the signed tickets."
     }
   }
 }

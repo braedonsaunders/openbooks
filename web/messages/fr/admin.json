@@ -1947,6 +1947,13 @@
         "timeTypes": "Types d'heures",
         "timeTypesHint": "Normal, supplémentaire, double — les multiplicateurs de coût et de facturation utilisés ici."
       }
+    },
+    "features": {
+      "navTitle": "Fonctionnalités",
+      "title": "Fonctionnalités",
+      "description": "Activez ou désactivez des modules optionnels pour votre entreprise. Désactiver une fonctionnalité la masque partout — ses données ne sont jamais supprimées.",
+      "enabled": "{name} activée",
+      "disabled": "{name} désactivée"
     }
   },
   "flows": {
@@ -2199,6 +2206,12 @@
         "finished": "Terminée",
         "error": "Erreur"
       }
+    }
+  },
+  "features": {
+    "fieldTickets": {
+      "title": "Bons de régie",
+      "description": "Feuilles d'heures d'équipe signées pour les travaux en régie : le contremaître saisit les heures de toute l'équipe plus l'équipement et les matériaux, le client signe, et les factures se construisent à partir des bons signés."
     }
   }
 }
