@@ -271,7 +271,7 @@ export function ExpenseDrawer({
     const res = await fetch(`/api/expenses/${doc.id}`, { method: 'DELETE' })
     if (res.ok) {
       toast.success(t('toasts.deleted'))
-      router.push('/expenses')
+      router.push('/expenses/reports')
       router.refresh()
     } else {
       toast.error((await res.json()).error ?? t('toasts.deleteFailed'))

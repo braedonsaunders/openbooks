@@ -1403,7 +1403,7 @@ function transactionTarget(row: TransactionRow): { path: string; param: string }
   if (row.kind === 'purchase_order') return { path: '/purchase-orders', param: 'order' }
   if (row.kind === 'sales_order') return { path: '/sales-orders', param: 'order' }
   if (row.kind === 'quote') return { path: '/estimates', param: 'estimate' }
-  if (row.kind === 'expense_report') return { path: '/expenses', param: 'expense' }
+  if (row.kind === 'expense_report') return { path: '/expenses/reports', param: 'expense' }
   if (row.kind === 'journal') return { path: '/journal', param: 'entry' }
   return { path: '/banking/transactions', param: 'doc' }
 }

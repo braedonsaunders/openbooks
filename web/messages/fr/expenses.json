@@ -41,5 +41,47 @@
     "deleted": "Note de frais supprimée",
     "deleteFailed": "Échec de la suppression",
     "draftFailed": "Impossible de créer une note de frais brouillon"
+  },
+  "dashboard": {
+    "title": "Dépenses",
+    "description": "Centre de contrôle des notes de frais — file d'approbation, dépenses par employé et par catégorie, et tendance des frais.",
+    "vitals": {
+      "pending": "En attente d'approbation",
+      "pendingSub": "{count} notes",
+      "awaiting": "En attente de comptabilisation",
+      "awaitingSub": "{count} approuvées",
+      "month": "Comptabilisé ce mois-ci",
+      "monthSub": "{count} notes",
+      "highSpenders": "Gros dépensiers",
+      "highSpendersSub": ">20 % de hausse vs période précédente",
+      "creep": "Hausses par catégorie",
+      "creepSub": "catégories en hausse >10 %"
+    },
+    "panels": {
+      "categories": "Répartition par catégorie",
+      "categoriesHint": "notes de frais · 12 mois",
+      "trend": "Tendance mensuelle",
+      "trendHint": "notes de frais vs factures fournisseurs",
+      "queue": "File d'approbation",
+      "queueHint": "les plus anciennes d'abord",
+      "queueEmpty": "Rien en attente d'approbation.",
+      "spenders": "Principaux dépensiers",
+      "spendersHint": "vs 12 mois précédents",
+      "categoryTable": "Catégories",
+      "categoryTableHint": "actuel vs 12 mois précédents"
+    },
+    "table": {
+      "employee": "Employé",
+      "spend": "Dépense",
+      "reports": "Notes",
+      "change": "Variation",
+      "category": "Catégorie",
+      "current": "Actuel",
+      "prior": "Précédent"
+    },
+    "series": {
+      "bills": "Factures fournisseurs",
+      "expenses": "Notes de frais"
+    }
   }
 }

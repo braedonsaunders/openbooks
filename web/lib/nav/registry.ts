@@ -277,7 +277,7 @@ export const NAV_MODULES: NavModule[] = [
   },
   {
     key: 'expenses',
-    href: '/expenses',
+    href: '/expenses/reports',
     label: 'Expenses',
     iconKey: 'scroll',
     group: 'purchasing',

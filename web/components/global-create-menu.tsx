@@ -83,7 +83,7 @@ const ACTIONS: CreateAction[] = [
   { key: 'purchaseOrder', group: 'purchases', enabled: (p) => p.accountsPayable, icon: ShoppingCart, endpoint: '/api/purchase-orders/draft', destination: (id) => `/purchase-orders?order=${id}` },
   { key: 'vendorPayment', group: 'purchases', enabled: (p) => p.vendorPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'vendor_payment' }, destination: (id) => `/payments?payment=${id}` },
   { key: 'journal', group: 'accounting', enabled: (p) => p.journal, icon: ScrollText, endpoint: '/api/journals/draft', destination: (id) => `/journal?entry=${id}` },
-  { key: 'expense', group: 'accounting', enabled: (p) => p.expenses, icon: Receipt, endpoint: '/api/expenses/draft', destination: (id) => `/expenses?expense=${id}` },
+  { key: 'expense', group: 'accounting', enabled: (p) => p.expenses, icon: Receipt, endpoint: '/api/expenses/draft', destination: (id) => `/expenses/reports?expense=${id}` },
   { key: 'cardCharge', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, endpoint: '/api/documents/draft', body: { kind: 'card_charge' }, destination: (id) => `/banking/transactions?doc=${id}` },
   { key: 'cardRefund', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, endpoint: '/api/documents/draft', body: { kind: 'card_refund' }, destination: (id) => `/banking/transactions?doc=${id}` },
   { key: 'check', group: 'accounting', enabled: (p) => p.accountsPayable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'check' }, destination: (id) => `/banking/transactions?doc=${id}` },

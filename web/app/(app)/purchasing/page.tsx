@@ -76,7 +76,7 @@ export default async function PurchasingHomePage({
         }
       case '/payments':
         return { value: String(data.badges.payments7d), hint: t('home.directory.paymentsHint') }
-      case '/expenses':
+      case '/expenses/reports':
         return {
           value: String(data.badges.unpostedExpenses),
           hint: t('home.directory.expensesHint'),
@@ -265,7 +265,7 @@ function needsAttention(exposure: VendorExposureRow[], unpostedExpenses: number,
     }
   }
   if (unpostedExpenses > 0) {
-    items.push({ tone: 'warning', text: t('home.attention.unpostedExpenses', { count: unpostedExpenses }), href: '/expenses' })
+    items.push({ tone: 'warning', text: t('home.attention.unpostedExpenses', { count: unpostedExpenses }), href: '/expenses/reports' })
   }
   return items.slice(0, 6)
 }

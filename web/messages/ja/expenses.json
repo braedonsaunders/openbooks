@@ -41,5 +41,47 @@
     "deleted": "経費精算書を削除しました",
     "deleteFailed": "削除に失敗しました",
     "draftFailed": "下書きの経費精算書を作成できませんでした"
+  },
+  "dashboard": {
+    "title": "経費",
+    "description": "経費精算コントロールセンター — 承認パイプライン、従業員別・カテゴリ別の支出、経費支出のトレンド。",
+    "vitals": {
+      "pending": "承認待ち",
+      "pendingSub": "{count} 件",
+      "awaiting": "計上待ち",
+      "awaitingSub": "承認済み {count} 件",
+      "month": "今月の計上額",
+      "monthSub": "{count} 件",
+      "highSpenders": "高額支出者",
+      "highSpendersSub": "前期比 >20% 増",
+      "creep": "カテゴリ増加",
+      "creepSub": ">10% 増のカテゴリ"
+    },
+    "panels": {
+      "categories": "カテゴリ内訳",
+      "categoriesHint": "経費精算書 · 12か月",
+      "trend": "月次トレンド",
+      "trendHint": "経費精算 vs 仕入先請求書",
+      "queue": "承認キュー",
+      "queueHint": "古い順",
+      "queueEmpty": "承認待ちはありません。",
+      "spenders": "支出上位者",
+      "spendersHint": "前12か月比",
+      "categoryTable": "カテゴリ",
+      "categoryTableHint": "当期 vs 前12か月"
+    },
+    "table": {
+      "employee": "従業員",
+      "spend": "支出",
+      "reports": "件数",
+      "change": "増減",
+      "category": "カテゴリ",
+      "current": "当期",
+      "prior": "前期"
+    },
+    "series": {
+      "bills": "仕入先請求書",
+      "expenses": "経費精算書"
+    }
   }
 }
