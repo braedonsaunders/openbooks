@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Check, ChevronDown } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { cn, Popover } from '@openbooks/ui'
+import { cn, Popover, SearchSelect } from '@openbooks/ui'
 import { mergeHref } from '@/lib/list-params'
 
 type FilterOption = { value: string; label: string; count?: number }
@@ -118,6 +119,65 @@ export function FilterChips({
         ))}
       </div>
     </Popover>
+  )
+}
+
+/**
+ * Searchable single-select filter for long option lists (accounts, parties…)
+ * where a chip dropdown would be an unscrollable wall. Same URL-param contract
+ * as FilterChips (value in the URL, pagination reset on change), but rendered
+ * as the app's SearchSelect — typeahead on desktop, bottom sheet on mobile —
+ * sized to sit on the same toolbar row as the chips.
+ */
+export function SearchSelectFilter({
+  paramKey,
+  label,
+  options,
+  allLabel,
+  pageParamKey = 'page',
+  className,
+}: {
+  paramKey: string
+  label: string
+  options: { value: string; label: string; hint?: string }[]
+  allLabel?: string
+  pageParamKey?: string
+  className?: string
+}) {
+  const tLabels = useTranslations('common.labels')
+  const router = useRouter()
+  const pathname = usePathname()
+  const sp = useSearchParams()
+  const value = sp.get(paramKey) ?? ''
+
+  function onChange(v: string) {
+    const next = new URLSearchParams(sp.toString())
+    if (v) next.set(paramKey, v)
+    else next.delete(paramKey)
+    next.delete(pageParamKey)
+    const qs = next.toString()
+    router.replace((qs ? `${pathname}?${qs}` : pathname) as any)
+  }
+
+  return (
+    <SearchSelect
+      value={value}
+      onChange={onChange}
+      options={options}
+      clearable
+      emptyLabel={allLabel ?? tLabels('all')}
+      placeholder={label}
+      ariaLabel={label}
+      sheetTitle={label}
+      searchable
+      className={cn('w-52', className)}
+      triggerClassName={cn(
+        'h-8 rounded-md px-3 shadow-none',
+        value
+          ? 'border-teal-300 bg-teal-50 dark:border-teal-800 dark:bg-teal-950/50 [&>span]:font-semibold [&>span]:text-teal-800 dark:[&>span]:text-teal-300'
+          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:border-slate-600 dark:hover:bg-slate-800/60 [&>span]:text-slate-700 dark:[&>span]:text-slate-200',
+      )}
+    />
   )
 }
 
