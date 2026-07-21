@@ -1,4 +1,6 @@
+import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
+import { BookOpen } from 'lucide-react'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { laborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
@@ -48,9 +50,17 @@ export default async function LaborCostingSetup() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t('setup.laborCosting.title')}</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('setup.laborCosting.description')}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t('setup.laborCosting.title')}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('setup.laborCosting.description')}</p>
+        </div>
+        <Link
+          href="/docs/labor-costing"
+          className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+        >
+          <BookOpen size={13} aria-hidden /> {t('setup.laborCosting.docs')}
+        </Link>
       </div>
       <LaborCostingWorkspace
         settings={settings}

@@ -128,6 +128,28 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
     select count(*) n from calc where stored is distinct from recomputed`);
   checks.push({ name: "open-balance-fresh", ok: Number(drift.n) === 0, detail: `${drift.n} closed-period documents have stale open_balance (want 0)` });
 
+  // -- CHECK 4: overhead net-zero pairs never move any account -----------------
+  // The application mechanism (DR overhead acct [project] / CR same acct
+  // untagged) must net to zero PER ACCOUNT, not just per entry — the doctrine
+  // is that overhead never changes the company P&L.
+  const ovh = await one<{ n: string }>(sql`
+    select count(*) n from (
+      select l.account_id from journal_lines l
+        join journal_entries e on e.id = l.entry_id
+       where l.org_id = ${orgId} and e.origin = 'overhead_applied' and e.status in ('posted','reversed')
+       group by l.account_id having abs(sum(l.amount)) >= 0.005) x`);
+  checks.push({ name: "overhead-pair-zero", ok: Number(ovh.n) === 0, detail: `${ovh.n} accounts moved by overhead_applied entries (want 0 — pairs must net to zero)` });
+
+  // -- Labor clearing balance (informational): standards in, payroll out — the
+  // residual is in-flight work + unposted variance, so it is reported, not gated.
+  const clr = await one<{ b: string | null }>(sql`
+    select (select coalesce(sum(l.amount), 0) from journal_lines l
+             join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
+            where l.org_id = ${orgId}
+              and l.account_id = (select (settings->'controlAccounts'->>'laborClearing')::uuid from orgs where id = ${orgId})) b
+     where exists (select 1 from orgs where id = ${orgId} and settings->'controlAccounts'->>'laborClearing' is not null)`);
+  checks.push({ name: "labor-clearing", ok: true, detail: clr?.b != null ? `clearing balance = ${clr.b} (standards − payroll − variance; informational)` : "labor clearing not configured (inert)" });
+
   // -- Subledger ↔ GL tie-out for AR/AP control accounts, POINT-IN-TIME as-of
   // the cutoff. GL balance and open-item remaining are BOTH reconstructed to the
   // cutoff (payments applied after it don't reduce the balance, and their GL is
