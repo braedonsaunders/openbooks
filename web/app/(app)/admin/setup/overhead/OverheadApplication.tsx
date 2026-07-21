@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Input, Label, Select, cn } from '@openbooks/ui'
+import { Button, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
 
 export interface ApplicationRow {
@@ -14,14 +14,6 @@ export interface ApplicationRow {
   status: string
   applied_total: string
   projects: number
-}
-
-function monthWindow(offset: number): { start: string; end: string } {
-  const now = new Date()
-  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() + offset, 1))
-  const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))
-  const iso = (x: Date) => x.toISOString().slice(0, 10)
-  return { start: iso(d), end: iso(end) }
 }
 
 /**
@@ -35,13 +27,13 @@ export function OverheadApplication(props: {
   accountId: string | null
   accounts: { id: string; label: string }[]
   applications: ApplicationRow[]
+  unapplied: { entries: number; hours: string }
 }) {
   const t = useTranslations('admin.setup.entities.overhead-model.application')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState(props.mode)
   const [accountId, setAccountId] = useState(props.accountId ?? '')
-  const [period, setPeriod] = useState(monthWindow(-1))
 
   async function post(payload: Record<string, unknown>) {
     const res = await fetch('/api/admin/setup/overhead', {
@@ -67,11 +59,11 @@ export function OverheadApplication(props: {
     }
   }
 
-  async function applyPeriod() {
+  async function backfill() {
     setBusy(true)
     try {
-      const r = await post({ action: 'apply-period', periodStart: period.start, periodEnd: period.end })
-      toast.success(t('applied', { total: Number(r.total).toFixed(2), projects: r.projects }))
+      const r = await post({ action: 'backfill-overhead' })
+      toast.success(t('backfilled', { total: Number(r.total).toFixed(2), entries: r.entries }))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -119,20 +111,17 @@ export function OverheadApplication(props: {
 
       {mode === 'net_zero_pair' && (
         <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <Label htmlFor="ovh-from">{t('periodStart')}</Label>
-              <Input id="ovh-from" type="date" value={period.start} onChange={(e) => setPeriod({ ...period, start: e.target.value })} />
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('autoHint')}</p>
+          {props.unapplied.entries > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-amber-50 p-2.5 dark:bg-amber-950/30">
+              <span className="text-xs text-amber-700 dark:text-amber-300">
+                {t('backfillPrompt', { entries: props.unapplied.entries, hours: Number(props.unapplied.hours).toFixed(0) })}
+              </span>
+              <Button size="sm" variant="outline" onClick={backfill} disabled={busy || !props.accountId}>
+                {t('backfill')}
+              </Button>
             </div>
-            <div>
-              <Label htmlFor="ovh-to">{t('periodEnd')}</Label>
-              <Input id="ovh-to" type="date" value={period.end} onChange={(e) => setPeriod({ ...period, end: e.target.value })} />
-            </div>
-            <Button size="sm" variant="outline" onClick={applyPeriod} disabled={busy || !props.accountId}>
-              {t('apply')}
-            </Button>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('applyHint')}</p>
-          </div>
+          )}
           {props.applications.length > 0 && (
             <div className="mt-3">
               <PagedTable

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile } from '@openbooks/schema'
-import { applyOverheadPairs } from '@openbooks/engine/src/overhead-apply.ts'
+import { backfillOverhead } from '@openbooks/engine/src/overhead-apply.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
@@ -98,13 +98,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (body.action === 'apply-period') {
-    const { periodStart, periodEnd } = body
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(periodStart ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd ?? '') || periodEnd < periodStart) {
-      return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
-    }
+  // Overhead applies automatically as hours are approved; backfill only
+  // carries hours approved before the mode was enabled (or imported).
+  if (body.action === 'backfill-overhead') {
     try {
-      const result = await applyOverheadPairs({ orgId, actorId: gate.user.id, periodStart, periodEnd })
+      const result = await backfillOverhead(orgId, gate.user.id)
       return NextResponse.json({ ok: true, ...result })
     } catch (e) {
       return NextResponse.json({ error: (e as Error).message }, { status: 422 })

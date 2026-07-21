@@ -1552,16 +1552,15 @@
           "account": "Overhead applied account",
           "save": "Save",
           "saved": "Overhead application saved",
-          "periodStart": "Period start",
-          "periodEnd": "Period end",
-          "apply": "Apply overhead for period",
-          "applyHint": "Uses the published standard rates. Re-applying a period reverses the prior entry first.",
-          "applied": "Applied ${total} across {projects} projects",
           "entry": "Entry",
           "date": "Date",
           "projects": "Projects",
           "total": "Applied",
-          "status": "Status"
+          "status": "Status",
+          "autoHint": "Overhead applies automatically: when hours are approved, each entry's share (hours × the published department rate on the worked day) posts with the same approval — no month-end step, and it never waits for payroll.",
+          "backfillPrompt": "{entries} approved entries (~{hours}h) predate this mode and aren't carrying overhead yet.",
+          "backfill": "Apply to past hours",
+          "backfilled": "Applied ${total} of overhead across {entries} past entries"
         },
         "lifecycle": {
           "title": "Rate lifecycle",
