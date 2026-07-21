@@ -423,7 +423,7 @@
     "title": "Serveurs SFTP",
     "description": "Points de terminaison SFTP intégrés adossés au stockage objet — les banques et partenaires déposent des relevés ou récupèrent des fichiers de paiement, et ces mêmes objets alimentent l’import et l’export.",
     "emptyTitle": "Aucun serveur SFTP",
-    "emptyDescription": "Créez un serveur SFTP pour offrir à une banque ou un partenaire un dépôt sécurisé adossé au stockage objet.",
+    "emptyDescription": "Le point de connexion SFTP (voir l'onglet Connexion et accès) est prêt. Ajoutez un accès pour donner à une banque ou un partenaire son propre dossier de dépôt sécurisé.",
     "newServer": "Nouveau serveur SFTP",
     "newServerHint": "Un identifiant et un mot de passe sont générés ; connectez tout client SFTP à l’hôte de l’application.",
     "create": "Créer",
@@ -489,7 +489,8 @@
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... banque@hote",
     "authorizedKeysHint": "Une clé publique OpenSSH par ligne. Les clients disposant de la clé privée correspondante peuvent se connecter sans mot de passe.",
     "tabs": {
-      "servers": "Serveurs et démon",
+      "endpoint": "Connexion et accès",
+      "servers": "Accès partenaires",
       "schedules": "Programmes d'importation"
     }
   }

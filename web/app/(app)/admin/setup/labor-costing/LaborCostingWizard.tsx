@@ -44,6 +44,7 @@ export function LaborCostingWizard(props: {
     laborClearing: string | null
     payrollVariance: string | null
   }) => void
+  employees: Opt[]
   trades: Opt[]
   accounts: { id: string; label: string }[]
   hoursPerDay: number
@@ -57,9 +58,11 @@ export function LaborCostingWizard(props: {
   // Q1 — burden approach.
   const [burden, setBurden] = useState<'canada' | 'us' | 'custom' | 'skip'>('canada')
   const [customPct, setCustomPct] = useState('25')
-  // Q2 — wages.
-  const [orgRate, setOrgRate] = useState('')
-  const [tradeRates, setTradeRates] = useState<Record<string, string>>({})
+  // Q2 — wages: per-employee FIRST (each person has their own rate); an
+  // optional fallback only covers anyone left blank.
+  const [empRates, setEmpRates] = useState<Record<string, string>>({})
+  const [empQuery, setEmpQuery] = useState('')
+  const [fallbackRate, setFallbackRate] = useState('')
   // Q3 — posting.
   const [posting, setPosting] = useState<'off' | 'post'>('off')
   const guessAccount = (patterns: RegExp[]) =>
@@ -79,7 +82,8 @@ export function LaborCostingWizard(props: {
     return BURDEN_PRESETS[burden].components
   }, [burden, customPct, t])
 
-  const exampleWage = Number(orgRate) > 0 ? Number(orgRate) : 40
+  const firstEmpRate = Object.values(empRates).map(Number).find((v) => v > 0)
+  const exampleWage = firstEmpRate ?? (Number(fallbackRate) > 0 ? Number(fallbackRate) : 40)
   const example = (mult: number) => {
     let r = exampleWage * mult
     for (const c of components) {
@@ -92,7 +96,7 @@ export function LaborCostingWizard(props: {
 
   const canNext =
     step === 0 ? burden !== 'custom' || Number(customPct) > 0
-    : step === 1 ? Number(orgRate) > 0 || Object.values(tradeRates).some((v) => Number(v) > 0)
+    : step === 1 ? Object.values(empRates).some((v) => Number(v) > 0) || Number(fallbackRate) > 0
     : step === 2 ? posting === 'off' || (wipAcct !== '' && clrAcct !== '')
     : true
 
@@ -108,13 +112,13 @@ export function LaborCostingWizard(props: {
         })
         if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
       }
-      if (Number(orgRate) > 0) {
-        await call('POST', { action: 'save-rate', employeePartyId: null, tradeId: null, rate: Number(orgRate), basis: 'hour', effectiveFrom: today })
-      }
-      for (const [tradeId, v] of Object.entries(tradeRates)) {
+      for (const [employeePartyId, v] of Object.entries(empRates)) {
         if (Number(v) > 0) {
-          await call('POST', { action: 'save-rate', employeePartyId: null, tradeId, rate: Number(v), basis: 'hour', effectiveFrom: today })
+          await call('POST', { action: 'save-rate', employeePartyId, tradeId: null, rate: Number(v), basis: 'hour', effectiveFrom: today })
         }
+      }
+      if (Number(fallbackRate) > 0) {
+        await call('POST', { action: 'save-rate', employeePartyId: null, tradeId: null, rate: Number(fallbackRate), basis: 'hour', effectiveFrom: today })
       }
       await call('PUT', {
         settings: { mode: posting, hoursPerDay: props.hoursPerDay, annualHours: props.annualHours, components },
@@ -184,33 +188,39 @@ export function LaborCostingWizard(props: {
           <div className="space-y-3">
             <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('q2')}</p>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('q2Hint')}</p>
-            <div>
-              <Label htmlFor="wiz-org">{t('orgRate')}</Label>
-              <Input id="wiz-org" type="number" min="0" step="0.5" placeholder="40.00" value={orgRate} onChange={(e) => setOrgRate(e.target.value)} />
+            <Input
+              aria-label={t('searchEmployees')}
+              placeholder={t('searchEmployees')}
+              value={empQuery}
+              onChange={(e) => setEmpQuery(e.target.value)}
+            />
+            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+              {props.employees
+                .filter((e) => !empQuery || e.name.toLowerCase().includes(empQuery.toLowerCase()))
+                .map((e) => (
+                  <div key={e.id} className="flex items-center gap-2">
+                    <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{e.name}</span>
+                    <Input
+                      aria-label={e.name}
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      className="h-8 w-28"
+                      placeholder={t('ratePlaceholder')}
+                      value={empRates[e.id] ?? ''}
+                      onChange={(ev) => setEmpRates((m) => ({ ...m, [e.id]: ev.target.value }))}
+                    />
+                  </div>
+                ))}
             </div>
-            {props.trades.length > 0 && (
-              <div>
-                <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">{t('tradeRates')}</p>
-                <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-                  {props.trades.map((tr) => (
-                    <div key={tr.id} className="flex items-center gap-2">
-                      <span className="w-40 truncate text-sm text-slate-700 dark:text-slate-200">{tr.name}</span>
-                      <Input
-                        aria-label={tr.name}
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        className="h-8 w-28"
-                        placeholder={orgRate || '—'}
-                        value={tradeRates[tr.id] ?? ''}
-                        onChange={(e) => setTradeRates((m) => ({ ...m, [tr.id]: e.target.value }))}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-xs text-slate-400 dark:text-slate-500">{t('perEmployeeLater')}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('ratedCount', { rated: Object.values(empRates).filter((v) => Number(v) > 0).length, total: props.employees.length })}
+            </p>
+            <div className="border-t border-slate-100 pt-2 dark:border-slate-800">
+              <Label htmlFor="wiz-fallback">{t('fallbackRate')}</Label>
+              <Input id="wiz-fallback" type="number" min="0" step="0.25" className="w-40" value={fallbackRate} onChange={(e) => setFallbackRate(e.target.value)} />
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{t('fallbackHint')}</p>
+            </div>
           </div>
         )}
 
@@ -267,9 +277,8 @@ export function LaborCostingWizard(props: {
               <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
                 {burden === 'skip' ? t('reviewNoBurden') : t('reviewBurden', { name: components[0]?.name ?? '', pct: components[0]?.value ?? 0 })}</li>
               <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-                {Number(orgRate) > 0 ? t('reviewOrgRate', { rate: Number(orgRate).toFixed(2) }) : t('reviewNoOrgRate')}
-                {Object.values(tradeRates).filter((v) => Number(v) > 0).length > 0 &&
-                  ` ${t('reviewTradeRates', { count: Object.values(tradeRates).filter((v) => Number(v) > 0).length })}`}</li>
+                {t('reviewEmployeeRates', { count: Object.values(empRates).filter((v) => Number(v) > 0).length })}
+                {Number(fallbackRate) > 0 && ` ${t('reviewFallback', { rate: Number(fallbackRate).toFixed(2) })}`}</li>
               <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
                 {posting === 'post' ? t('reviewPosting') : t('reviewNoPosting')}</li>
             </ul>

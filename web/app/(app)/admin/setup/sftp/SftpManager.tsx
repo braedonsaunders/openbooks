@@ -22,7 +22,7 @@ interface Srv {
 interface Creds { username: string; password: string; rootPrefix?: string }
 interface Daemon { enabled: boolean; port: number; host: string; advertisedHost: string | null; fingerprint: string }
 
-export function SftpManager({ servers, daemon, empty }: { servers: Srv[]; daemon: Daemon; empty?: ReactNode }) {
+export function SftpManager({ servers, daemon, empty, show = 'all' }: { servers: Srv[]; daemon: Daemon; empty?: ReactNode; show?: 'all' | 'daemon' | 'servers' }) {
   const t = useTranslations('banking.sftp')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -90,6 +90,7 @@ export function SftpManager({ servers, daemon, empty }: { servers: Srv[]; daemon
   return (
     <div className="space-y-4">
       {/* the endpoint — the single shared SFTP server clients connect to (all from the DB, no env) */}
+      {show !== 'servers' && (
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-3">
           <div className="mr-auto flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -109,7 +110,10 @@ export function SftpManager({ servers, daemon, empty }: { servers: Srv[]; daemon
         </div>
       </div>
 
+      )}
+
       {/* logins — per-partner credentials the endpoint authenticates */}
+      {show !== 'daemon' && (<>
       <div className="flex items-center gap-2">
         <h3 className="mr-auto flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
           <KeyRound size={15} className="text-teal-600 dark:text-teal-400" /> {t('loginsTitle')}
@@ -184,6 +188,8 @@ export function SftpManager({ servers, daemon, empty }: { servers: Srv[]; daemon
           </div>
         ) : null}
       </Drawer>
+
+      </>)}
 
       {/* daemon settings — the former env vars, now fully in the UI */}
       <Drawer open={settingsOpen} onClose={() => setSettingsOpen(false)} size="sm" title={t('settingsTitle')} description={t('settingsHint')}

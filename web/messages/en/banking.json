@@ -532,7 +532,7 @@
     "endpointHint": "Where clients connect. Share these details with your bank or partner, along with a login below.",
     "loginsTitle": "Logins",
     "emptyTitle": "No logins yet",
-    "emptyDescription": "The endpoint above is running and ready. Add a login to give a bank or partner their own secure, password-protected drop-off folder.",
+    "emptyDescription": "The SFTP endpoint (see the Connection & login tab) is running and ready. Add a login to give a bank or partner their own secure, password-protected drop-off folder.",
     "newServer": "Add login",
     "newServerHint": "A username and password are generated. Hand them, plus the endpoint details above, to the bank or partner.",
     "create": "Create login",
@@ -603,7 +603,8 @@
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
     "authorizedKeysHint": "One OpenSSH public key per line. Clients with a matching private key can log in without a password.",
     "tabs": {
-      "servers": "Servers & daemon",
+      "endpoint": "Connection & login",
+      "servers": "Partner logins",
       "schedules": "Import schedules"
     }
   },
