@@ -9,7 +9,7 @@ import { cn } from '@openbooks/ui'
 /** Toggle-card grid — QBO's "Enable features" page, with plain-language
  * descriptions of what each switch turns on. Saves on toggle (no save
  * button); nav updates on next render. */
-export function FeaturesWorkspace(props: { features: { key: string; enabled: boolean }[] }) {
+export function FeaturesWorkspace(props: { features: { key: string; category: string; enabled: boolean }[] }) {
   const t = useTranslations('admin')
   const router = useRouter()
   const [state, setState] = useState<Record<string, boolean>>(
@@ -38,9 +38,18 @@ export function FeaturesWorkspace(props: { features: { key: string; enabled: boo
     }
   }
 
+  const categories = ['sales', 'operations', 'accounting', 'platform'].filter((c) =>
+    props.features.some((f) => f.category === c),
+  )
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {props.features.map((f) => (
+    <div className="space-y-6">
+      {categories.map((cat) => (
+        <div key={cat} className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t(`setup.features.categories.${cat}`)}
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {props.features.filter((f) => f.category === cat).map((f) => (
         <button
           key={f.key}
           type="button"
@@ -77,6 +86,9 @@ export function FeaturesWorkspace(props: { features: { key: string; enabled: boo
             {t(`features.${f.key}.description`)}
           </p>
         </button>
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   )

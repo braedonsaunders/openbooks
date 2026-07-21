@@ -22,7 +22,7 @@ export default async function FeaturesSetup() {
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('setup.features.description')}</p>
       </div>
       <FeaturesWorkspace
-        features={FEATURES.map((f) => ({ key: f.key, enabled: featureEnabled(state, f.key) }))}
+        features={FEATURES.map((f) => ({ key: f.key, category: f.category, enabled: featureEnabled(state, f.key) }))}
       />
     </div>
   )

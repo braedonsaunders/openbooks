@@ -1920,7 +1920,13 @@
       "title": "Funciones",
       "description": "Active o desactive módulos opcionales para su empresa. Desactivar una función la oculta en todas partes — sus datos nunca se eliminan.",
       "enabled": "{name} activada",
-      "disabled": "{name} desactivada"
+      "disabled": "{name} desactivada",
+      "categories": {
+        "sales": "Ventas y clientes",
+        "operations": "Operaciones",
+        "accounting": "Contabilidad",
+        "platform": "Plataforma"
+      }
     }
   },
   "flows": {
@@ -2176,9 +2182,65 @@
     }
   },
   "features": {
+    "crm": {
+      "title": "CRM",
+      "description": "Prospectos, oportunidades, actividades y pronósticos de ventas."
+    },
+    "orders": {
+      "title": "Cotizaciones y pedidos",
+      "description": "Presupuestos, pedidos de venta y órdenes de compra con conversión a facturas."
+    },
+    "revenueRecognition": {
+      "title": "Reconocimiento de ingresos",
+      "description": "Reglas, calendarios e ingresos diferidos por contratos."
+    },
+    "projects": {
+      "title": "Proyectos y costeo",
+      "description": "Obras con presupuestos, costeo, facturación y rentabilidad."
+    },
+    "timeTracking": {
+      "title": "Control de horas",
+      "description": "Partes de horas semanales personales con envío y aprobación."
+    },
     "fieldTickets": {
       "title": "Partes de obra",
-      "description": "Partes de horas firmados para trabajo T&M: el capataz registra las horas de toda la cuadrilla más equipos y materiales, el cliente firma, y las facturas se construyen a partir de los partes firmados."
+      "description": "Partes de cuadrilla firmados para trabajo T&M: horas, equipos y materiales firmados por el cliente y facturados desde los partes."
+    },
+    "inventory": {
+      "title": "Inventario",
+      "description": "Existencias, ubicaciones, costeo de artículos y ensamblajes."
+    },
+    "equipment": {
+      "title": "Equipos y alquileres",
+      "description": "Unidades de equipo, tarifas escalonadas y cargos de uso a obras."
+    },
+    "expenses": {
+      "title": "Informes de gastos",
+      "description": "Captura, aprobación y reembolso de gastos de empleados."
+    },
+    "banking": {
+      "title": "Bancos",
+      "description": "Conexiones bancarias, conciliación y reglas."
+    },
+    "fixedAssets": {
+      "title": "Activos fijos",
+      "description": "Registros de activos, libros de depreciación y depreciación fiscal."
+    },
+    "budgets": {
+      "title": "Presupuestos",
+      "description": "Presupuestos por cuenta y dimensión con comparación en informes."
+    },
+    "continuousClose": {
+      "title": "Cierre continuo",
+      "description": "Controles de cierre permanentes además del cierre de período."
+    },
+    "flows": {
+      "title": "Flujos y aprobaciones",
+      "description": "Automatización: disparadores, condiciones y aprobaciones."
+    },
+    "apps": {
+      "title": "Aplicaciones",
+      "description": "Extensiones instalables y el mercado de aplicaciones."
     }
   }
 }

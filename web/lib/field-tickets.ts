@@ -1,5 +1,5 @@
 import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { mulRate, add, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
@@ -151,8 +151,9 @@ export async function updateTicketHeader(
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
   const ft = { ...doc.custom.fieldTicket }
-  let partySet: SQL | null = null
 
+  // Resolve every column ONCE in JS (a column may only be assigned once).
+  let projChange: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null } | null = null
   if (patch.projectId !== undefined && patch.projectId !== doc.project_id) {
     if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
     const proj = (await db.execute(sql`
@@ -161,12 +162,10 @@ export async function updateTicketHeader(
       rows: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }[]
     }
     if (!proj.rows[0]) throw new FieldTicketError('Project not found')
-    partySet = sql`project_id = ${proj.rows[0].id}, party_id = ${proj.rows[0].customer_id},
-                   subsidiary_id = ${proj.rows[0].subsidiary_id},
-                   reference_number = coalesce(${patch.referenceNumber ?? null}, reference_number, ${proj.rows[0].po}),`
+    projChange = proj.rows[0]
     // Re-resolve the period for the new job unless the caller pinned one.
     if (patch.period === undefined) {
-      const resolved = await resolveTicketPeriod(orgId, proj.rows[0].id)
+      const resolved = await resolveTicketPeriod(orgId, projChange.id)
       if (resolved !== ft.period) patch.period = resolved
     }
   }
@@ -186,19 +185,30 @@ export async function updateTicketHeader(
   }
   if (patch.foremanPartyId !== undefined) ft.foremanPartyId = patch.foremanPartyId
 
+  const nextRef =
+    patch.referenceNumber !== undefined
+      ? patch.referenceNumber
+      : projChange && !doc.reference_number
+        ? projChange.po
+        : doc.reference_number
+  const nextMemo = patch.memo !== undefined ? patch.memo : doc.memo
+  const nextDate = patch.documentDate ?? doc.document_date
+
   await db.execute(sql`
     update documents set
-      ${partySet ?? sql``}
-      document_date = coalesce(${patch.documentDate ?? null}, document_date),
-      reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
-      memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
+      project_id = ${projChange ? projChange.id : doc.project_id},
+      party_id = ${projChange ? projChange.customer_id : sql`party_id`},
+      subsidiary_id = ${projChange ? projChange.subsidiary_id : sql`subsidiary_id`},
+      document_date = ${nextDate},
+      reference_number = ${nextRef},
+      memo = ${nextMemo},
       custom = jsonb_set(custom, '{fieldTicket}', ${JSON.stringify(ft)}::jsonb),
       updated_at = now(), updated_by = ${userId}
      where id = ${ticketId} and org_id = ${orgId}`)
   // Re-home any existing draft hours/lines onto the new project.
-  if (partySet && patch.projectId) {
-    await db.execute(sql`update time_entries set project_id = ${patch.projectId} where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
-    await db.execute(sql`update document_lines set project_id = ${patch.projectId} where document_id = ${ticketId} and org_id = ${orgId}`)
+  if (projChange) {
+    await db.execute(sql`update time_entries set project_id = ${projChange.id} where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
+    await db.execute(sql`update document_lines set project_id = ${projChange.id} where document_id = ${ticketId} and org_id = ${orgId}`)
   }
 }
 
