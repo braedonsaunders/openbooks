@@ -6,8 +6,9 @@ import { getAuthz } from "../../../../lib/authz";
 export const runtime = "nodejs";
 
 /** Stable page keys that accept per-user layout prefs (grow as cockpits adopt it). */
-const PAGES = new Set(["banking-cash"]);
-const MAX_KEYS = 40;
+const PAGES = new Set(["banking-cash", "banking-accounts"]);
+/** Roster surfaces store row ids (an org can have dozens of card accounts). */
+const MAX_KEYS = 300;
 
 /**
  * Per-user page layout preference (user_page_layouts): PUT

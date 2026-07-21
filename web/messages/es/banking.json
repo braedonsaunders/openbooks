@@ -85,7 +85,12 @@
       "staleStatement": "Último extracto {date}",
       "noStatements": "Sin extractos importados",
       "unmatchedChip": "{count} sin conciliar",
-      "reconciling": "Conciliando"
+      "reconciling": "Conciliando",
+      "customize": "Personalizar cuentas",
+      "customizeTitle": "Mostrar, ocultar y reordenar cuentas",
+      "reset": "Restablecer",
+      "allHidden": "Todas las cuentas están ocultas — use el control de personalización para restaurarlas.",
+      "hiddenCount": "{count, plural, one {# oculta} other {# ocultas}}"
     },
     "trend": {
       "title": "Tendencia de efectivo",

@@ -85,7 +85,12 @@
       "staleStatement": "Letzter Auszug {date}",
       "noStatements": "Keine Auszüge importiert",
       "unmatchedChip": "{count} offen",
-      "reconciling": "Wird abgestimmt"
+      "reconciling": "Wird abgestimmt",
+      "customize": "Konten anpassen",
+      "customizeTitle": "Konten ein-/ausblenden & sortieren",
+      "reset": "Auf Standard zurücksetzen",
+      "allHidden": "Alle Konten sind ausgeblendet — über das Anpassen-Menü wieder einblenden.",
+      "hiddenCount": "{count, plural, one {# ausgeblendet} other {# ausgeblendet}}"
     },
     "trend": {
       "title": "Liquiditätstrend",

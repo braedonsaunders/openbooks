@@ -85,7 +85,12 @@
       "staleStatement": "Dernier relevé {date}",
       "noStatements": "Aucun relevé importé",
       "unmatchedChip": "{count} non rapprochées",
-      "reconciling": "Rapprochement en cours"
+      "reconciling": "Rapprochement en cours",
+      "customize": "Personnaliser les comptes",
+      "customizeTitle": "Afficher, masquer et réordonner les comptes",
+      "reset": "Réinitialiser",
+      "allHidden": "Tous les comptes sont masqués — utilisez le contrôle de personnalisation pour les réafficher.",
+      "hiddenCount": "{count, plural, one {# masqué} other {# masqués}}"
     },
     "trend": {
       "title": "Tendance de trésorerie",

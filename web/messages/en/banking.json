@@ -85,7 +85,12 @@
       "staleStatement": "Last statement {date}",
       "noStatements": "No statements imported",
       "unmatchedChip": "{count} unmatched",
-      "reconciling": "Reconciling"
+      "reconciling": "Reconciling",
+      "customize": "Customize accounts",
+      "customizeTitle": "Show, hide & reorder accounts",
+      "reset": "Reset to default",
+      "allHidden": "All accounts are hidden — use the customize control to bring them back.",
+      "hiddenCount": "{count, plural, one {# hidden} other {# hidden}}"
     },
     "trend": {
       "title": "Cash trend",

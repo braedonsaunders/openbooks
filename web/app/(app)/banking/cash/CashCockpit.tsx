@@ -18,18 +18,13 @@ import {
   CalendarRange,
   Building2,
   SlidersHorizontal,
-  LayoutGrid,
-  Eye,
-  EyeOff,
-  ChevronUp,
-  ChevronDown,
-  RotateCcw,
 } from 'lucide-react'
-import { Button, Popover, cn } from '@openbooks/ui'
+import { Button, cn } from '@openbooks/ui'
 import type { PageLayoutPrefs } from '@openbooks/schema'
 import { money, moneyCompact } from '../../../../lib/format'
 import type { CashPosition } from '../../../../lib/cash/cash-position'
-import { orderPanels } from '../../../../lib/page-layout-shared'
+import { LayoutMenu } from '../../../../components/page-layout/LayoutMenu'
+import { usePageLayout } from '../../../../components/page-layout/use-page-layout'
 import { StatTile, CockpitPanel } from '../../../../components/cockpit/ui'
 import { CashTimeline } from '../../analytics/_ui/CashTimeline'
 import { Chart, cashBridgeOption, cashForecastOption } from '../../analytics/_ui/charts'
@@ -70,7 +65,6 @@ export function CashCockpit({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [showConfig, setShowConfig] = useState(false)
-  const [prefs, setPrefs] = useState<PageLayoutPrefs>(layoutPrefs)
   const pushHorizon = (h: number) => {
     // Merge into the current query so the subsidiary view (?sub=) survives.
     const next = new URLSearchParams(searchParams?.toString())
@@ -78,37 +72,14 @@ export function CashCockpit({
     router.push(`/banking/cash?${next.toString()}` as never)
   }
 
-  // -- per-user layout ------------------------------------------------------
-  const order = orderPanels(PANEL_KEYS, prefs) as PanelKey[]
-  const hidden = new Set(prefs.hidden ?? [])
-  const visible = order.filter((k) => !hidden.has(k))
+  // -- per-user layout (shared kit) -----------------------------------------
+  const layout = usePageLayout(PAGE_KEY, layoutPrefs, PANEL_KEYS)
+  const { hidden, toggle, move, reset } = layout
+  const order = layout.order as PanelKey[]
+  const visible = layout.visible as PanelKey[]
   const heroKey = visible[0]
   const railKeys = visible.slice(1)
   const statsHidden = hidden.has(STATS_KEY)
-
-  const save = (next: PageLayoutPrefs) => {
-    setPrefs(next)
-    void fetch('/api/me/page-layout', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ page: PAGE_KEY, layout: next }),
-    })
-  }
-  const toggle = (key: string) => {
-    const nextHidden = new Set(prefs.hidden ?? [])
-    if (nextHidden.has(key)) nextHidden.delete(key)
-    else nextHidden.add(key)
-    save({ order, hidden: [...nextHidden] })
-  }
-  const move = (key: PanelKey, dir: -1 | 1) => {
-    const i = order.indexOf(key)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= order.length) return
-    const next = [...order]
-    next[i] = next[j]!
-    next[j] = key
-    save({ order: next, hidden: prefs.hidden ?? [] })
-  }
 
   const lowestDate = new Date(data.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
   const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
@@ -226,11 +197,13 @@ export function CashCockpit({
             title={t('layout.title')}
             triggerLabel={t('layout.customize')}
             resetLabel={t('layout.reset')}
-            statsRow={{ key: STATS_KEY, label: panelLabel(STATS_KEY), hidden: statsHidden }}
-            rows={order.map((key) => ({ key, label: panelLabel(key), hidden: hidden.has(key) }))}
+            rows={[
+              { key: STATS_KEY, label: panelLabel(STATS_KEY), hidden: statsHidden, orderable: false },
+              ...order.map((key) => ({ key, label: panelLabel(key), hidden: hidden.has(key) })),
+            ]}
             onToggle={toggle}
             onMove={move}
-            onReset={() => save({})}
+            onReset={reset}
           />
           {canConfigure ? (
             <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
@@ -295,84 +268,5 @@ export function CashCockpit({
         />
       ) : null}
     </div>
-  )
-}
-
-/** Customize-layout popover: eye toggles + up/down reorder + reset. */
-function LayoutMenu({
-  title,
-  triggerLabel,
-  resetLabel,
-  statsRow,
-  rows,
-  onToggle,
-  onMove,
-  onReset,
-}: {
-  title: string
-  triggerLabel: string
-  resetLabel: string
-  statsRow: { key: string; label: string; hidden: boolean }
-  rows: { key: PanelKey; label: string; hidden: boolean }[]
-  onToggle: (key: string) => void
-  onMove: (key: PanelKey, dir: -1 | 1) => void
-  onReset: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const iconBtn =
-    'grid h-6 w-6 place-items-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent dark:hover:bg-slate-800 dark:hover:text-slate-200'
-  return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-      align="end"
-      className="w-64 p-2"
-      trigger={
-        <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-          <LayoutGrid size={14} />
-          {triggerLabel}
-        </Button>
-      }
-    >
-      <div className="px-2 pt-1 pb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {title}
-      </div>
-      <ul className="space-y-0.5">
-        <li className="flex items-center gap-1 rounded-md px-2 py-1.5">
-          <span className={cn('min-w-0 flex-1 truncate text-sm', statsRow.hidden ? 'text-slate-400 line-through dark:text-slate-500' : 'text-slate-700 dark:text-slate-200')}>
-            {statsRow.label}
-          </span>
-          <button type="button" className={iconBtn} aria-label={statsRow.label} onClick={() => onToggle(statsRow.key)}>
-            {statsRow.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
-        </li>
-        {rows.map((row, i) => (
-          <li key={row.key} className="flex items-center gap-1 rounded-md px-2 py-1.5">
-            <span className={cn('min-w-0 flex-1 truncate text-sm', row.hidden ? 'text-slate-400 line-through dark:text-slate-500' : 'text-slate-700 dark:text-slate-200')}>
-              {row.label}
-            </span>
-            <button type="button" className={iconBtn} aria-label={`${row.label} ↑`} disabled={i === 0} onClick={() => onMove(row.key, -1)}>
-              <ChevronUp size={14} />
-            </button>
-            <button type="button" className={iconBtn} aria-label={`${row.label} ↓`} disabled={i === rows.length - 1} onClick={() => onMove(row.key, 1)}>
-              <ChevronDown size={14} />
-            </button>
-            <button type="button" className={iconBtn} aria-label={row.label} onClick={() => onToggle(row.key)}>
-              {row.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={onReset}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-slate-100"
-        >
-          <RotateCcw size={13} />
-          {resetLabel}
-        </button>
-      </div>
-    </Popover>
   )
 }

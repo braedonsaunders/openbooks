@@ -4,12 +4,8 @@ import { ListChecks } from 'lucide-react'
 import { Button, cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
-import {
-  LiveDirectory,
-  ModuleHomeTabs,
-  Sparkline,
-  type DirectoryItem,
-} from '../../../components/module-home/ui'
+import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
+import { AccountsRosterPanel } from './AccountsRoster'
 import { TrendChart } from '../analytics/_ui/charts'
 import { SubsidiarySwitcher } from '../../../components/subsidiary-switcher'
 import { requirePermission, can } from '../../../lib/authz'
@@ -17,7 +13,8 @@ import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
 import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
-import { money, moneyCompact } from '../../../lib/format'
+import { userPageLayout } from '../../../lib/page-layout'
+import { moneyCompact } from '../../../lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,8 +50,9 @@ export default async function BankingHomePage({
   // (roster, balances, trend, badges) scopes to the selected view.
   const subView = await reportSubsidiaryView(sp.sub, resolveAsOf())
 
-  const [data, navGroups] = await Promise.all([
+  const [data, rosterPrefs, navGroups] = await Promise.all([
     bankingHome(authz.user.orgId, subView.subsidiary?.ids),
+    userPageLayout(authz.user.id, 'banking-accounts'),
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),
@@ -196,38 +194,12 @@ export default async function BankingHomePage({
 
         {/* Roster hero + supporting rail */}
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
-          <HomePanel
-            title={t('home.roster.title')}
-            icon="building"
-            hint={t('home.roster.hint')}
-            bodyClassName="min-h-0 overflow-y-auto p-0"
-            className="min-h-[24rem] lg:col-span-2"
-          >
-            {data.accounts.length === 0 ? (
-              <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">
-                {t('home.roster.empty')}
-              </p>
-            ) : (
-              <div>
-                <RosterSection
-                  label={t('home.roster.bankSection')}
-                  accounts={banks}
-                  totalLabel={t('home.vitals.cash')}
-                  total={data.totalCash}
-                  t={t}
-                />
-                {cards.length > 0 ? (
-                  <RosterSection
-                    label={t('home.roster.cardSection')}
-                    accounts={cards}
-                    totalLabel={t('home.vitals.cards')}
-                    total={data.totalCards}
-                    t={t}
-                  />
-                ) : null}
-              </div>
-            )}
-          </HomePanel>
+          <AccountsRosterPanel
+            accounts={data.accounts}
+            totalCash={data.totalCash}
+            totalCards={data.totalCards}
+            layoutPrefs={rosterPrefs}
+          />
 
           <div className="flex min-h-0 flex-col gap-5 overflow-y-auto">
             <HomePanel title={t('home.trend.title')} icon="area-chart" hint={t('home.trend.hint')} className="shrink-0">
@@ -289,107 +261,6 @@ export default async function BankingHomePage({
 /* ------------------------------------------------------------------------- */
 
 type T = Awaited<ReturnType<typeof getTranslations<'banking'>>>
-
-function RosterSection({
-  label,
-  accounts,
-  totalLabel,
-  total,
-  t,
-}: {
-  label: string
-  accounts: BankingAccountRow[]
-  totalLabel: string
-  total: number
-  t: T
-}) {
-  return (
-    <div>
-      <div className="sticky top-0 border-b border-slate-100 bg-slate-50/80 px-4 py-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase backdrop-blur dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
-        {label}
-      </div>
-      <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-        {accounts.map((a) => {
-          const statementAge = daysSince(a.lastImportedAt)
-          const stale = a.lastStatementDate !== null && statementAge !== null && statementAge > STALE_STATEMENT_DAYS
-          return (
-            <li key={a.id}>
-              <Link
-                href={`/banking/${a.id}` as never}
-                className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{a.name}</span>
-                    {a.number ? (
-                      <span className="shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">{a.number}</span>
-                    ) : null}
-                    {a.currency ? (
-                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                        {a.currency}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
-                    {a.reconciledThrough
-                      ? t('home.roster.reconciledThrough', { date: String(a.reconciledThrough) })
-                      : t('home.roster.neverReconciled')}
-                    {' · '}
-                    {a.lastStatementDate === null ? (
-                      t('home.roster.noStatements')
-                    ) : stale ? (
-                      <span className="text-amber-600 dark:text-amber-400">
-                        {t('home.roster.staleStatement', { date: String(a.lastStatementDate) })}
-                      </span>
-                    ) : (
-                      t('home.roster.lastStatement', { date: String(a.lastStatementDate) })
-                    )}
-                  </span>
-                </span>
-                {a.unmatched > 0 ? (
-                  <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 tabular-nums dark:bg-amber-950/50 dark:text-amber-300">
-                    {t('home.roster.unmatchedChip', { count: a.unmatched })}
-                  </span>
-                ) : null}
-                {a.openReconciliationId ? (
-                  <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
-                    {t('home.roster.reconciling')}
-                  </span>
-                ) : null}
-                <Sparkline
-                  points={a.spark}
-                  className={cn(
-                    'hidden sm:block',
-                    a.balance < 0 ? 'text-red-400 dark:text-red-500' : 'text-teal-500 dark:text-teal-400',
-                  )}
-                />
-                <span
-                  className={cn(
-                    'w-28 shrink-0 text-right text-sm font-semibold tabular-nums',
-                    a.balance < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100',
-                  )}
-                >
-                  {money(a.balance)}
-                </span>
-              </Link>
-            </li>
-          )
-        })}
-      </ul>
-      <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/30">
-        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{totalLabel}</span>
-        <span
-          className={cn(
-            'text-sm font-bold tabular-nums',
-            total < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100',
-          )}
-        >
-          {money(total)}
-        </span>
-      </div>
-    </div>
-  )
-}
 
 function needsAttention(accounts: BankingAccountRow[], t: T) {
   const items: { tone: 'negative' | 'warning' | 'neutral'; text: string; href: string }[] = []
