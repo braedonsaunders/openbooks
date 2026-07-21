@@ -367,7 +367,7 @@ export async function rejectFieldTicket(orgId: string, userId: string, ticketId:
 export async function loadFieldTicket(orgId: string, ticketId: string) {
   const doc = await loadHeader(orgId, ticketId)
   const [customer, project, foreman, entries, lines] = await Promise.all([
-    db.execute(sql`select display_name from parties where id = ${doc.party_id}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
+    db.execute(sql`select display_name, email from parties where id = ${doc.party_id}`) as unknown as Promise<{ rows: { display_name: string; email: string | null }[] }>,
     db.execute(sql`select code, name from projects where id = ${doc.project_id}`) as unknown as Promise<{ rows: { code: string | null; name: string }[] }>,
     db.execute(sql`select display_name from parties where id = ${doc.custom.fieldTicket.foremanPartyId}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
     db.execute(sql`
@@ -404,6 +404,7 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
     documentDate: doc.document_date,
     customerId: doc.party_id,
     customerName: customer.rows[0]?.display_name ?? '',
+    customerEmail: customer.rows[0]?.email ?? null,
     projectId: doc.project_id,
     projectName: project.rows[0] ? [project.rows[0].code, project.rows[0].name].filter(Boolean).join(' · ') : '',
     foremanName: foreman.rows[0]?.display_name ?? '',

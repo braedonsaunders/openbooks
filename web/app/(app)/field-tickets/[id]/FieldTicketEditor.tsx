@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowLeft, Check, Plus, Send, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Check, FileText, Mail, Plus, Send, Trash2, X } from 'lucide-react'
 import { Badge, Button, Input, Label, Select, Textarea, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
 import { money } from '../../../../lib/format'
@@ -53,6 +53,7 @@ export interface TicketPayload {
   documentNumber: string
   status: string
   customerName: string
+  customerEmail?: string | null
   projectName: string
   foremanName: string
   fieldTicket: {
@@ -138,6 +139,10 @@ export function FieldTicketEditor(props: {
   const [foreman, setForeman] = useState(props.initial.fieldTicket.foremanPartyId ?? '')
 
   // add-line form
+  const [sending, setSending] = useState(false)
+  const [sendTo, setSendTo] = useState(props.initial.customerEmail ?? '')
+  const [sendMessage, setSendMessage] = useState('')
+
   const [lineItem, setLineItem] = useState('')
   const [lineQty, setLineQty] = useState('1')
   const [lineRate, setLineRate] = useState('')
@@ -276,6 +281,16 @@ export function FieldTicketEditor(props: {
             </Button>
           </>
         )}
+        {ticket.status === 'approved' && props.canManage && !sig?.customer && (
+          <Button size="sm" onClick={() => setSending(true)} disabled={busy}>
+            <Mail size={14} /> {t('editor.sendSignature')}
+          </Button>
+        )}
+        <Button size="sm" variant="outline" asChild>
+          <a href={`/api/record-pdf/field_ticket/${ticket.id}`} target="_blank" rel="noreferrer">
+            <FileText size={14} /> {t('editor.pdf')}
+          </a>
+        </Button>
       </div>
 
       {ticket.fieldTicket.rejectionReason && ticket.status === 'draft' && (
@@ -292,6 +307,32 @@ export function FieldTicketEditor(props: {
           </div>
           <Button size="sm" onClick={reject} disabled={busy || !rejectReason.trim()}>{t('editor.confirmReject')}</Button>
           <Button size="sm" variant="ghost" onClick={() => setRejecting(false)}>{t('editor.cancel')}</Button>
+        </div>
+      )}
+
+      {sending && (
+        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+          <div className="min-w-64">
+            <Label htmlFor="ft-send-to">{t('editor.sendTo')}</Label>
+            <Input id="ft-send-to" type="email" value={sendTo} onChange={(e) => setSendTo(e.target.value)} />
+          </div>
+          <div className="min-w-72 flex-1">
+            <Label htmlFor="ft-send-msg">{t('editor.sendMessage')}</Label>
+            <Input id="ft-send-msg" value={sendMessage} onChange={(e) => setSendMessage(e.target.value)} />
+          </div>
+          <Button
+            size="sm"
+            disabled={busy || !sendTo.trim()}
+            onClick={async () => {
+              if (await action({ action: 'send-signature', to: sendTo, message: sendMessage || null })) {
+                setSending(false)
+                toast.success(t('editor.signatureSent', { to: sendTo }))
+              }
+            }}
+          >
+            <Send size={14} /> {t('editor.send')}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSending(false)}>{t('editor.cancel')}</Button>
         </div>
       )}
 
@@ -596,6 +637,12 @@ export function FieldTicketEditor(props: {
                 <span className="text-xs text-slate-400">{t('editor.signatures.notSent')}</span>
               )}
             </div>
+            {sig?.customer?.image && (
+              <div className="rounded-md border border-slate-100 bg-white p-2 dark:border-slate-800 dark:bg-slate-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={sig.customer.image} alt={t('editor.signatures.customer')} className="max-h-16" />
+              </div>
+            )}
           </div>
         </div>
       </section>

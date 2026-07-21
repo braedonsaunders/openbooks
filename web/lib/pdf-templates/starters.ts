@@ -179,7 +179,88 @@ function journalStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplat
 }
 
 /** The starter design for a record type, tinted with the org's brand accent. */
+
+/**
+ * Field-ticket starter — the modern signed crew timesheet. Summarized crew
+ * table (Reg/OT/DT), equipment & materials, totals, and a signature block.
+ * The full per-day grid keys (day1_reg … day7_dt + day1_label…) are available
+ * to authors who want an exact classic weekly-grid replica.
+ */
+function fieldTicketStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
+  const sourceHtml =
+    `<div style="${FONT}color:${INK};">` +
+    // masthead
+    `<table style="width:100%;border-collapse:collapse;margin-bottom:22px;"><tr>` +
+    `<td style="vertical-align:top;">` +
+    `<div style="font-size:20px;font-weight:800;letter-spacing:-.01em;">{{org_name}}</div>` +
+    `<div style="font-size:10.5px;color:${MUTED};padding-top:2px;">${meta.docTitle}</div>` +
+    `</td>` +
+    `<td style="vertical-align:top;text-align:right;">` +
+    `<div style="font-size:16px;font-weight:800;color:${accent};">{{document_number}}</div>` +
+    `<div style="font-size:10.5px;color:${MUTED};padding-top:2px;">{{period}} · {{period_start}} → {{period_end}}</div>` +
+    `</td></tr></table>` +
+    // meta band
+    `<table style="width:100%;border-collapse:collapse;margin-bottom:18px;background:${WASH};border-radius:8px;"><tr>` +
+    `<td style="padding:12px 16px;">` +
+    `<table style="border-collapse:collapse;"><tr>` +
+    metaCell('Customer', 'party_name') +
+    metaCell('Project', 'project_name') +
+    metaCell('Customer PO', 'po_number') +
+    metaCell('Foreman', 'foreman_name') +
+    metaCell('Status', 'status') +
+    `</tr></table>` +
+    `</td></tr></table>` +
+    `<div data-if="work_description" style="font-size:11.5px;color:${INK};line-height:1.6;margin-bottom:18px;"><span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};display:block;padding-bottom:3px;">Work description</span>{{work_description}}</div>` +
+    // crew hours
+    `<div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${MUTED};font-weight:700;padding-bottom:6px;">Crew hours</div>` +
+    `<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">` +
+    `<thead><tr>` +
+    th('Employee') + th('Class') + th('Reg', 'right') + th('OT', 'right') + th('DT', 'right') + th('Hours', 'right') + th('Amount', 'right') +
+    `</tr></thead>` +
+    `<tbody><tr data-each="crew">` +
+    td('employee_name') + td('labor_class') + td('reg_hours', 'right') + td('ot_hours', 'right') + td('dt_hours', 'right') + td('total_hours', 'right') + td('amount', 'right') +
+    `</tr></tbody></table>` +
+    // equipment & materials
+    `<div data-if="lines" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${MUTED};font-weight:700;padding-bottom:6px;">Equipment, consumables &amp; materials</div>` +
+    `<table data-if="lines" style="width:100%;border-collapse:collapse;margin-bottom:20px;">` +
+    `<thead><tr>` +
+    th('Item') + th('Description') + th('Qty', 'right') + th('Rate', 'right') + th('Amount', 'right') +
+    `</tr></thead>` +
+    `<tbody><tr data-each="lines">` +
+    td('item_name') + td('description') + td('quantity', 'right') + td('unit_price', 'right') + td('amount', 'right') +
+    `</tr></tbody></table>` +
+    // totals
+    `<table style="width:100%;border-collapse:collapse;margin-bottom:26px;"><tr><td></td>` +
+    `<td style="width:260px;"><table style="width:100%;border-collapse:collapse;">` +
+    totalsRow('Labor', 'labor_total') +
+    totalsRow('Equipment &amp; materials', 'lines_total') +
+    totalsRow('Total', 'grand_total', { strong: true, accent }) +
+    `</table></td></tr></table>` +
+    // signatures
+    `<table style="width:100%;border-collapse:collapse;"><tr>` +
+    `<td style="width:50%;padding-right:20px;vertical-align:bottom;">` +
+    `<div data-if="foreman_signature_image"><img src="{{foreman_signature_image}}" style="max-height:52px;" /></div>` +
+    `<div style="border-top:1px solid ${INK};margin-top:6px;padding-top:4px;font-size:9.5px;color:${MUTED};">Foreman — {{foreman_name}}</div>` +
+    `</td>` +
+    `<td style="width:50%;padding-left:20px;vertical-align:bottom;">` +
+    `<div data-if="customer_signature_image"><img src="{{customer_signature_image}}" style="max-height:52px;" /></div>` +
+    `<div style="border-top:1px solid ${INK};margin-top:6px;padding-top:4px;font-size:9.5px;color:${MUTED};">Customer — {{customer_signature_name}} <span style="color:${FAINT};">{{customer_signed_at}}</span></div>` +
+    `<div data-if="customer_comment" style="padding-top:4px;font-size:10px;color:${MUTED};font-style:italic;">&ldquo;{{customer_comment}}&rdquo;</div>` +
+    `</td></tr></table>` +
+    `</div>`
+
+  return {
+    sourceHtml,
+    headerHtml: '',
+    footerHtml:
+      `<div style="${FONT}font-size:9px;color:${FAINT};width:100%;text-align:center;">` +
+      `{{org_name}} · ${meta.docTitle} {{document_number}} · Printed {{printed_date}}</div>`,
+  }
+}
+
 export function starterTemplate(meta: PdfRecordTypeMeta, accent?: string | null): StarterTemplate {
   const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : '#0f766e'
-  return meta.key === 'journal_entry' ? journalStarter(meta, color) : documentStarter(meta, color)
+  if (meta.key === 'journal_entry') return journalStarter(meta, color)
+  if (meta.key === 'field_ticket') return fieldTicketStarter(meta, color)
+  return documentStarter(meta, color)
 }

@@ -144,6 +144,81 @@ const JOURNAL_ENTRY: PdfRecordTypeMeta = {
   ],
 }
 
+
+/** Field ticket — the signed crew timesheet. Its merge surface is a superset
+ * of what the classic Rassaun weekly billable-timesheet PDF needs: per-crew-row
+ * day columns (day1..day7 × reg/ot/dt) for exact grid replicas, plus the
+ * summarized reg/OT/DT totals the modern starter uses. */
+const CREW_DAY_FIELDS: PdfMergeField[] = Array.from({ length: 7 }, (_, i) => [
+  { key: `day${i + 1}_reg`, label: `Day ${i + 1} regular`, sample: i === 2 ? '8' : '' },
+  { key: `day${i + 1}_ot`, label: `Day ${i + 1} overtime`, sample: i === 3 ? '2' : '' },
+  { key: `day${i + 1}_dt`, label: `Day ${i + 1} double`, sample: '' },
+]).flat()
+
+const FIELD_TICKET: PdfRecordTypeMeta = {
+  key: 'field_ticket',
+  label: 'Field ticket',
+  docKind: 'field_ticket',
+  docTitle: 'Field Ticket',
+  partyHeading: 'Customer',
+  readPermission: 'time.read',
+  fields: [
+    { key: 'document_number', label: 'Ticket number', sample: 'FT-000123' },
+    { key: 'document_date', label: 'Date', sample: 'Jul 18, 2026' },
+    { key: 'status', label: 'Status', sample: 'Approved' },
+    { key: 'period', label: 'Period kind', sample: 'Weekly' },
+    { key: 'period_start', label: 'Period start', sample: 'Jul 12, 2026' },
+    { key: 'period_end', label: 'Period end', sample: 'Jul 18, 2026' },
+    ...Array.from({ length: 7 }, (_, i) => ({ key: `day${i + 1}_label`, label: `Day ${i + 1} header`, sample: ['Sun 07-12', 'Mon 07-13', 'Tue 07-14', 'Wed 07-15', 'Thu 07-16', 'Fri 07-17', 'Sat 07-18'][i] })),
+    { key: 'project_name', label: 'Project / job', sample: 'S26-0471 Splitter Box' },
+    { key: 'po_number', label: 'Customer PO', sample: 'PO-2024-88' },
+    { key: 'foreman_name', label: 'Foreman', sample: 'J. Martin' },
+    { key: 'work_description', label: 'Work description', sample: 'Mudroom splitter box tie-ins, levels 1–2.' },
+    ...PARTY_FIELDS,
+    { key: 'labor_total', label: 'Labor total', sample: '$3,264.00' },
+    { key: 'lines_total', label: 'Equipment & materials total', sample: '$1,086.00' },
+    { key: 'grand_total', label: 'Grand total', sample: '$4,350.00' },
+    { key: 'total_hours', label: 'Total hours', sample: '32.0' },
+    { key: 'customer_signature_image', label: 'Customer signature (image)', sample: '' },
+    { key: 'customer_signature_name', label: 'Customer signed by', sample: 'D. Alvarez' },
+    { key: 'customer_signed_at', label: 'Customer signed on', sample: 'Jul 19, 2026' },
+    { key: 'customer_comment', label: 'Customer comment', sample: '' },
+    { key: 'foreman_signature_image', label: 'Foreman signature (image)', sample: '' },
+    ...ORG_FIELDS,
+  ],
+  collections: [
+    {
+      key: 'crew',
+      label: 'Crew hours',
+      fields: [
+        { key: 'employee_name', label: 'Employee', sample: 'P. Benko' },
+        { key: 'labor_class', label: 'Labor class', sample: 'Journeyman Electrician' },
+        { key: 'class_code', label: 'Class code', sample: 'J' },
+        { key: 'reg_hours', label: 'Regular hours', sample: '24.0' },
+        { key: 'ot_hours', label: 'Overtime hours', sample: '6.0' },
+        { key: 'dt_hours', label: 'Double-time hours', sample: '2.0' },
+        { key: 'total_hours', label: 'Total hours', sample: '32.0' },
+        { key: 'reg_rate', label: 'Regular rate', sample: '$102.00' },
+        { key: 'ot_rate', label: 'Overtime rate', sample: '$130.00' },
+        { key: 'dt_rate', label: 'Double rate', sample: '$204.00' },
+        { key: 'amount', label: 'Amount', sample: '$3,264.00' },
+        ...CREW_DAY_FIELDS,
+      ],
+    },
+    {
+      key: 'lines',
+      label: 'Equipment & materials',
+      fields: [
+        { key: 'item_name', label: 'Item', sample: 'Scissor lift 19ft' },
+        { key: 'description', label: 'Description', sample: 'Week rental' },
+        { key: 'quantity', label: 'Quantity', sample: '1' },
+        { key: 'unit_price', label: 'Rate', sample: '$1,086.00' },
+        { key: 'amount', label: 'Amount', sample: '$1,086.00' },
+      ],
+    },
+  ],
+}
+
 /** Every record type a PDF template can target, in nav order. */
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'customer_invoice', label: 'Customer invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
@@ -160,6 +235,7 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'card_charge', label: 'Card charge', docTitle: 'Card Charge', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'card_refund', label: 'Card refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'journal', label: 'Journal (document)', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),
+  FIELD_TICKET,
   JOURNAL_ENTRY,
 ]
 
