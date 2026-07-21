@@ -42,6 +42,8 @@ export const NAV_GROUP_BY_KEY = new Map(NAV_GROUPS.map((group) => [group.key, gr
  */
 export const NAV_GROUP_HOMES: Partial<Record<NavGroupKey, string>> = {
   'my-work': '/dashboard',
+  customers: '/customers',
+  purchasing: '/purchasing',
   banking: '/banking',
   insights: '/analytics',
   settings: '/admin',

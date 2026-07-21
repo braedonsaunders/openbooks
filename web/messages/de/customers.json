@@ -1,0 +1,52 @@
+{
+  "home": {
+    "title": "Kunden",
+    "description": "Ihr Arbeitsbereich von der Beziehung bis zum Zahlungseingang — Pipeline, Verkauf, Fakturierung und Inkasso an einem Ort.",
+    "subsidiary": "Tochtergesellschaft",
+    "tabs": {
+      "overview": "Übersicht"
+    },
+    "vitals": {
+      "openAr": "Offene Forderungen",
+      "openArSub": "{count} offene Rechnungen",
+      "overdue": "Überfällig",
+      "overdueSub": "{count} Rechnungen",
+      "pipeline": "Pipeline (Quartal)",
+      "pipelineSub": "{weighted} gewichtet",
+      "closedQuarter": "Fakturiert dieses Quartal",
+      "dso": "Forderungslaufzeit",
+      "dsoSub": "Ø Tage bis Zahlungseingang",
+      "days": "{n} T"
+    },
+    "hero": {
+      "title": "Wichtigste Beziehungen",
+      "hint": "Größte offene Salden mit Pipeline daneben",
+      "empty": "Keine offenen Forderungen.",
+      "customer": "Kunde",
+      "openOpps": "Chancen",
+      "openInvoices": "Rechnungen",
+      "oldestDue": "Älteste fällig",
+      "overdue": "Überfällig",
+      "open": "Offen"
+    },
+    "trend": {
+      "title": "Zahlungseingänge",
+      "hint": "13 Wochen gebuchte Zahlungen",
+      "series": "Eingegangen"
+    },
+    "directory": {
+      "title": "Arbeitsbereich",
+      "opportunitiesHint": "offene Chancen",
+      "estimatesHint": "offene Angebote",
+      "salesOrdersHint": "offene Aufträge",
+      "invoicesHint": "{overdue} überfällig",
+      "receiptsHint": "Zahlungen diese Woche",
+      "customersHint": "aktive Kunden"
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "allClear": "Alles klar — nichts anzumahnen.",
+      "overdueCustomer": "{customer} ist mit {amount} überfällig"
+    }
+  }
+}

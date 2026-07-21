@@ -1,0 +1,50 @@
+{
+  "home": {
+    "title": "Compras",
+    "description": "Seu espaço de compra a pagamento — compromissos, faturas, pagamentos e gastos com fornecedores em um só lugar.",
+    "subsidiary": "Subsidiária",
+    "tabs": {
+      "overview": "Visão geral"
+    },
+    "vitals": {
+      "openAp": "Contas a pagar",
+      "openApSub": "{count} faturas em aberto",
+      "overdue": "Vencido",
+      "dueNext7": "Vence em 7 dias",
+      "openPos": "OCs abertas",
+      "openPosSub": "{count} pedidos",
+      "spend30d": "Gasto 30 dias",
+      "spend30dSub": "Faturas de fornecedor lançadas"
+    },
+    "hero": {
+      "title": "Compromissos com fornecedores",
+      "hint": "Ordens de compra abertas ao lado de faturas abertas, maior exposição primeiro",
+      "empty": "Sem compromissos ou contas a pagar em aberto.",
+      "vendor": "Fornecedor",
+      "openPos": "OCs abertas",
+      "openBills": "Faturas",
+      "oldestDue": "Mais antiga",
+      "overdue": "Vencido",
+      "billedOpen": "Faturado em aberto"
+    },
+    "trend": {
+      "title": "Tendência de gastos",
+      "hint": "13 semanas de faturas lançadas",
+      "series": "Faturado"
+    },
+    "directory": {
+      "title": "Espaço de trabalho",
+      "posHint": "{value} comprometido",
+      "billsHint": "{overdue} vencido",
+      "paymentsHint": "pagamentos esta semana",
+      "expensesHint": "aguardando lançamento",
+      "vendorsHint": "fornecedores ativos"
+    },
+    "attention": {
+      "title": "Requer atenção",
+      "allClear": "Tudo certo — nada vencido.",
+      "overdueVendor": "{vendor} está com {amount} vencido",
+      "unpostedExpenses": "{count} relatórios de despesas aguardando lançamento"
+    }
+  }
+}

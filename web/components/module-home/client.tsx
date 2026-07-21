@@ -5,11 +5,16 @@ import {
   AreaChart,
   ArrowLeftRight,
   Building2,
+  CalendarClock,
   CheckCircle2,
+  ClipboardList,
   CreditCard,
   Landmark,
   ListChecks,
+  Timer,
+  TrendingUp,
   TriangleAlert,
+  Users,
   Wallet,
   type LucideIcon,
 } from 'lucide-react'
@@ -32,6 +37,11 @@ const HOME_ICONS: Record<string, LucideIcon> = {
   'area-chart': AreaChart,
   'triangle-alert': TriangleAlert,
   wallet: Wallet,
+  users: Users,
+  'trending-up': TrendingUp,
+  timer: Timer,
+  clipboard: ClipboardList,
+  'calendar-clock': CalendarClock,
 }
 
 export function HomeStatTile({

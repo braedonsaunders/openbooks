@@ -1,0 +1,50 @@
+{
+  "home": {
+    "title": "Achats",
+    "description": "Votre espace achat-à-paiement — engagements, factures, paiements et dépenses fournisseurs au même endroit.",
+    "subsidiary": "Filiale",
+    "tabs": {
+      "overview": "Vue d'ensemble"
+    },
+    "vitals": {
+      "openAp": "Dettes ouvertes",
+      "openApSub": "{count} factures ouvertes",
+      "overdue": "En retard",
+      "dueNext7": "Échéance sous 7 jours",
+      "openPos": "BC ouverts",
+      "openPosSub": "{count} commandes",
+      "spend30d": "Dépenses 30 jours",
+      "spend30dSub": "Factures fournisseurs comptabilisées"
+    },
+    "hero": {
+      "title": "Engagements fournisseurs",
+      "hint": "Bons de commande ouverts et factures ouvertes, plus forte exposition d'abord",
+      "empty": "Aucun engagement ni dette ouverte.",
+      "vendor": "Fournisseur",
+      "openPos": "BC ouverts",
+      "openBills": "Factures",
+      "oldestDue": "Plus ancienne",
+      "overdue": "En retard",
+      "billedOpen": "Facturé ouvert"
+    },
+    "trend": {
+      "title": "Tendance des dépenses",
+      "hint": "13 semaines de factures comptabilisées",
+      "series": "Facturé"
+    },
+    "directory": {
+      "title": "Espace de travail",
+      "posHint": "{value} engagés",
+      "billsHint": "{overdue} en retard",
+      "paymentsHint": "paiements cette semaine",
+      "expensesHint": "en attente de comptabilisation",
+      "vendorsHint": "fournisseurs actifs"
+    },
+    "attention": {
+      "title": "À traiter",
+      "allClear": "Tout est en ordre — rien en retard.",
+      "overdueVendor": "{vendor} a {amount} en retard",
+      "unpostedExpenses": "{count} notes de frais à comptabiliser"
+    }
+  }
+}

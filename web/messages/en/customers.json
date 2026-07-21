@@ -1,0 +1,52 @@
+{
+  "home": {
+    "title": "Customers",
+    "description": "Your relationship-to-cash workspace — pipeline, sales, invoicing, and collections in one place.",
+    "subsidiary": "Subsidiary",
+    "tabs": {
+      "overview": "Overview"
+    },
+    "vitals": {
+      "openAr": "Open receivables",
+      "openArSub": "{count} open invoices",
+      "overdue": "Overdue",
+      "overdueSub": "{count} invoices",
+      "pipeline": "Pipeline (quarter)",
+      "pipelineSub": "{weighted} weighted",
+      "closedQuarter": "Invoiced this quarter",
+      "dso": "Days sales out",
+      "dsoSub": "Avg days to collect",
+      "days": "{n}d"
+    },
+    "hero": {
+      "title": "Top relationships",
+      "hint": "Largest open balances with pipeline beside them",
+      "empty": "No open receivables. Everything is collected.",
+      "customer": "Customer",
+      "openOpps": "Open opps",
+      "openInvoices": "Invoices",
+      "oldestDue": "Oldest due",
+      "overdue": "Overdue",
+      "open": "Open"
+    },
+    "trend": {
+      "title": "Collections trend",
+      "hint": "13 weeks of posted receipts",
+      "series": "Collected"
+    },
+    "directory": {
+      "title": "Workspace",
+      "opportunitiesHint": "open opportunities",
+      "estimatesHint": "open estimates",
+      "salesOrdersHint": "open sales orders",
+      "invoicesHint": "{overdue} overdue",
+      "receiptsHint": "receipts this week",
+      "customersHint": "active customers"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "allClear": "All clear — nothing needs chasing.",
+      "overdueCustomer": "{customer} is {amount} overdue"
+    }
+  }
+}
