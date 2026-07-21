@@ -41,5 +41,47 @@
     "deleted": "Informe de gastos eliminado",
     "deleteFailed": "No se pudo eliminar",
     "draftFailed": "No se pudo crear un borrador de informe de gastos"
+  },
+  "dashboard": {
+    "title": "Gastos",
+    "description": "Centro de control de informes de gastos — la cola de aprobación, gasto por empleado y categoría, y la tendencia del gasto.",
+    "vitals": {
+      "pending": "Pendiente de aprobación",
+      "pendingSub": "{count} informes",
+      "awaiting": "Pendiente de contabilizar",
+      "awaitingSub": "{count} aprobados",
+      "month": "Contabilizado este mes",
+      "monthSub": "{count} informes",
+      "highSpenders": "Mayores gastadores",
+      "highSpendersSub": ">20% de aumento vs anterior",
+      "creep": "Aumentos por categoría",
+      "creepSub": "categorías con subida >10%"
+    },
+    "panels": {
+      "categories": "Desglose por categoría",
+      "categoriesHint": "informes de gastos · 12 meses",
+      "trend": "Tendencia mensual",
+      "trendHint": "informes de gastos vs facturas de proveedores",
+      "queue": "Cola de aprobación",
+      "queueHint": "más antiguos primero",
+      "queueEmpty": "Nada pendiente de aprobación.",
+      "spenders": "Principales gastadores",
+      "spendersHint": "vs 12 meses anteriores",
+      "categoryTable": "Categorías",
+      "categoryTableHint": "actual vs 12 meses anteriores"
+    },
+    "table": {
+      "employee": "Empleado",
+      "spend": "Gasto",
+      "reports": "Informes",
+      "change": "Variación",
+      "category": "Categoría",
+      "current": "Actual",
+      "prior": "Anterior"
+    },
+    "series": {
+      "bills": "Facturas de proveedores",
+      "expenses": "Informes de gastos"
+    }
   }
 }

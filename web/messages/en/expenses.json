@@ -41,5 +41,47 @@
     "deleted": "Expense report deleted",
     "deleteFailed": "Delete failed",
     "draftFailed": "Could not create a draft expense report"
+  },
+  "dashboard": {
+    "title": "Expenses",
+    "description": "Expense-report control center — the approval pipeline, spend by employee and category, and how expense spend is trending.",
+    "vitals": {
+      "pending": "Pending approval",
+      "pendingSub": "{count} reports",
+      "awaiting": "Awaiting posting",
+      "awaitingSub": "{count} approved",
+      "month": "Posted this month",
+      "monthSub": "{count} reports",
+      "highSpenders": "High spenders",
+      "highSpendersSub": ">20% increase vs prior",
+      "creep": "Category increases",
+      "creepSub": "categories up >10%"
+    },
+    "panels": {
+      "categories": "Category breakdown",
+      "categoriesHint": "expense reports · 12 months",
+      "trend": "Monthly trend",
+      "trendHint": "expense reports vs vendor bills",
+      "queue": "Approval queue",
+      "queueHint": "oldest first",
+      "queueEmpty": "Nothing waiting for approval.",
+      "spenders": "Top spenders",
+      "spendersHint": "vs prior 12 months",
+      "categoryTable": "Categories",
+      "categoryTableHint": "current vs prior 12 months"
+    },
+    "table": {
+      "employee": "Employee",
+      "spend": "Spend",
+      "reports": "Reports",
+      "change": "Change",
+      "category": "Category",
+      "current": "Current",
+      "prior": "Prior"
+    },
+    "series": {
+      "bills": "Vendor bills",
+      "expenses": "Expense reports"
+    }
   }
 }

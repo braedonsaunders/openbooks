@@ -1,8 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { ModuleHomeTabs } from '../../../../components/module-home/ui'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { RecordListView } from '../../../../components/record-list-view'
 import { DocumentDrawer } from '../../../../components/document-drawer'
 import { DocumentRowActions } from '../../../../components/document-row-actions'
@@ -62,7 +60,6 @@ export default async function ArInvoices({
     />
   ) : undefined
 
-  const tabs = <ModuleHomeTabs tabs={await groupTabs('customers', '/ar/invoices')} />
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
@@ -141,7 +138,7 @@ export default async function ArInvoices({
         <PageHeader
           title={t('list.title')}
           description={t('list.description')}
-          actions={<div className="flex items-center gap-3">{newButton}{tabs}</div>}
+          actions={newButton}
         />
       }
     >

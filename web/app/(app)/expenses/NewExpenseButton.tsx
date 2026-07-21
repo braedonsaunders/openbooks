@@ -23,7 +23,7 @@ export function NewExpenseButton() {
       setBusy(false)
       return
     }
-    router.push(`/expenses?expense=${data.id}`)
+    router.push(`/expenses/reports?expense=${data.id}`)
     router.refresh()
     setBusy(false)
   }

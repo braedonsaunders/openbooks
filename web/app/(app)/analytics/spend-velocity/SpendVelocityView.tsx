@@ -19,11 +19,12 @@ import { fmtMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
 
-const TABS = ['overview', 'velocity', 'detectors', 'accounts', 'expenses', 'trends', 'config'] as const
+// 'expenses' moved out: the expense-report analysis now lives on the /expenses dashboard.
+const TABS = ['overview', 'velocity', 'detectors', 'accounts', 'trends', 'config'] as const
 type Tab = (typeof TABS)[number]
 const TAB_LABEL: Record<Tab, string> = {
   overview: 'Overview', velocity: 'Velocity', detectors: 'Detectors', accounts: 'Accounts',
-  expenses: 'Expenses', trends: 'Trends', config: 'Configuration',
+  trends: 'Trends', config: 'Configuration',
 }
 
 const money = (n: number) => fmtMoney(n, { compact: true })
@@ -136,7 +137,6 @@ export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
         {tab === 'velocity' ? <VelocityTab data={data} onDrill={setDrill} /> : null}
         {tab === 'detectors' ? <DetectorsTab data={data} onDrill={setDrill} /> : null}
         {tab === 'accounts' ? <AccountsTab data={data} onDrill={setDrill} /> : null}
-        {tab === 'expenses' ? <ExpensesTab data={data} /> : null}
         {tab === 'trends' ? <TrendsTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
@@ -582,95 +582,6 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
 
 /* ---------------------------------------------------------------- Expenses */
 
-function ExpensesTab({ data }: { data: SpendVelocityData }) {
-  const e = data.expenseAnalysis
-  const topCats = e.categories.slice(0, 8)
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={UserRound} accent="sky" label="Expense Reports" value={money(e.summary.expenseReportTotal)} sub="employee-submitted" />
-        <KpiCard icon={DollarSign} accent="violet" label="Vendor Bills" value={money(e.summary.vendorBillTotal)} sub="AP spend" />
-        <KpiCard icon={AlertTriangle} accent="amber" label="High Spenders" value={String(e.summary.topSpenderCount)} sub=">20% increase" tone={e.summary.topSpenderCount > 0 ? 'negative' : 'neutral'} />
-        <KpiCard icon={TrendingUp} accent="red" label="Category Increases" value={money(e.summary.categoryIncreaseTotal)} sub="categories up >10%" tone="negative" />
-      </div>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        <div className="lg:col-span-5">
-          <Panel title="Expense Categories Breakdown" icon={PieIcon}>
-            <Donut data={topCats.map((c) => ({ name: c.categoryName, value: c.currentAmount }))} height={260} />
-          </Panel>
-        </div>
-        <div className="lg:col-span-7">
-          <Panel title="Monthly Expense Trends" icon={BarChart3}>
-            <Chart
-              height={260}
-              option={{
-                grid: { top: 26, bottom: 26, left: 60, right: 12 },
-                legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: any) => money0(Number(v ?? 0)) },
-                xAxis: { type: 'category', data: e.monthlyTrends.map((m) => m.month) },
-                yAxis: { type: 'value', axisLabel: { formatter: (v: number) => money(v) } },
-                series: [
-                  { name: 'Vendor Bills', type: 'bar', stack: 's', data: e.monthlyTrends.map((m) => m.billAmount), itemStyle: { color: '#6366f1' } },
-                  { name: 'Expense Reports', type: 'bar', stack: 's', data: e.monthlyTrends.map((m) => m.expenseAmount), itemStyle: { color: '#ec4899' } },
-                ],
-              }}
-            />
-          </Panel>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title="Top Spenders" icon={UserRound} hint="Employees by expense-report spend, vs prior period" bodyClassName="p-0">
-          <div className="max-h-88 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Employee</th>
-                  <th className="px-4 py-2 text-right font-medium">Spend</th>
-                  <th className="px-4 py-2 text-right font-medium">Reports</th>
-                  <th className="px-4 py-2 text-right font-medium">Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {e.topSpenders.slice(0, 25).map((sp) => (
-                  <tr key={sp.employeeId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{sp.employeeName}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(sp.totalSpend)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-400">{sp.reportCount}</td>
-                    <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', sp.changePct > 20 ? 'text-rose-600 dark:text-rose-400' : sp.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>{sp.changePct > 0 ? '+' : ''}{pct1(sp.changePct)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-        <Panel title="Expense Categories" icon={Layers} hint="Current vs prior period" bodyClassName="p-0">
-          <div className="max-h-88 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Category</th>
-                  <th className="px-4 py-2 text-right font-medium">Current</th>
-                  <th className="px-4 py-2 text-right font-medium">Prior</th>
-                  <th className="px-4 py-2 text-right font-medium">Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {e.categories.slice(0, 25).map((c) => (
-                  <tr key={c.categoryId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="max-w-56 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={c.categoryName}>{c.categoryName}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(c.currentAmount)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(c.priorAmount)}</td>
-                    <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', c.changePct > 10 ? 'text-rose-600 dark:text-rose-400' : c.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>{c.changePct > 0 ? '+' : ''}{pct1(c.changePct)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-      </div>
-    </div>
-  )
-}
 
 /* ------------------------------------------------------------------ Trends */
 

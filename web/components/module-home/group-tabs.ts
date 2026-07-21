@@ -12,16 +12,16 @@ import type { ModuleHomeTab } from './ui'
 
 export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting'
 
+// DASHBOARDS ONLY — record lists (bills, invoices, expense reports, …) are
+// menu destinations, never strip tabs. A tab must land on a cockpit/dashboard.
 const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> = {
   customers: [
     { href: '/customers', ns: 'customers', key: 'home.title' },
     { href: '/ar', ns: 'nav', key: 'modules.ar' },
-    { href: '/ar/invoices', ns: 'ar', key: 'cockpit.tabs.invoices' },
   ],
   purchasing: [
     { href: '/purchasing', ns: 'purchasing', key: 'home.title' },
     { href: '/ap', ns: 'nav', key: 'modules.ap' },
-    { href: '/ap/bills', ns: 'ap', key: 'cockpit.tabs.bills' },
     { href: '/expenses', ns: 'nav', key: 'modules.expenses' },
   ],
   banking: [

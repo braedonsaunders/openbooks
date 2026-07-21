@@ -15,7 +15,7 @@ const DOC_MODULE: Record<string, { path: string; param: string }> = {
   transfer: { path: '/banking/transactions', param: 'doc' },
   vendor_payment: { path: '/payments', param: 'payment' },
   customer_payment: { path: '/payments', param: 'payment' },
-  expense_report: { path: '/expenses', param: 'expense' },
+  expense_report: { path: '/expenses/reports', param: 'expense' },
   journal: { path: '/journal', param: 'entry' },
 }
 

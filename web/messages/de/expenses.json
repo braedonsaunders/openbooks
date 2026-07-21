@@ -41,5 +41,47 @@
     "deleted": "Spesenabrechnung gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen",
     "draftFailed": "Entwurf der Spesenabrechnung konnte nicht erstellt werden"
+  },
+  "dashboard": {
+    "title": "Ausgaben",
+    "description": "Spesen-Kontrollzentrum — Freigabe-Pipeline, Ausgaben nach Mitarbeiter und Kategorie sowie der Ausgabentrend.",
+    "vitals": {
+      "pending": "Freigabe ausstehend",
+      "pendingSub": "{count} Berichte",
+      "awaiting": "Buchung ausstehend",
+      "awaitingSub": "{count} freigegeben",
+      "month": "Diesen Monat gebucht",
+      "monthSub": "{count} Berichte",
+      "highSpenders": "Vielausgeber",
+      "highSpendersSub": ">20 % Anstieg ggü. Vorperiode",
+      "creep": "Kategorie-Anstiege",
+      "creepSub": "Kategorien mit >10 % Anstieg"
+    },
+    "panels": {
+      "categories": "Kategorien-Aufschlüsselung",
+      "categoriesHint": "Spesenberichte · 12 Monate",
+      "trend": "Monatstrend",
+      "trendHint": "Spesenberichte vs. Lieferantenrechnungen",
+      "queue": "Freigabe-Warteschlange",
+      "queueHint": "älteste zuerst",
+      "queueEmpty": "Nichts wartet auf Freigabe.",
+      "spenders": "Top-Ausgeber",
+      "spendersHint": "ggü. 12 Vormonaten",
+      "categoryTable": "Kategorien",
+      "categoryTableHint": "aktuell vs. 12 Vormonate"
+    },
+    "table": {
+      "employee": "Mitarbeiter",
+      "spend": "Ausgaben",
+      "reports": "Berichte",
+      "change": "Änderung",
+      "category": "Kategorie",
+      "current": "Aktuell",
+      "prior": "Vorher"
+    },
+    "series": {
+      "bills": "Lieferantenrechnungen",
+      "expenses": "Spesenberichte"
+    }
   }
 }

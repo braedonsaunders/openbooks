@@ -41,5 +41,47 @@
     "deleted": "费用报销单已删除",
     "deleteFailed": "删除失败",
     "draftFailed": "无法创建草稿费用报销单"
+  },
+  "dashboard": {
+    "title": "费用",
+    "description": "费用报销控制中心——审批流水线、按员工和类别的支出，以及费用支出趋势。",
+    "vitals": {
+      "pending": "待审批",
+      "pendingSub": "{count} 份报销单",
+      "awaiting": "待过账",
+      "awaitingSub": "{count} 份已批准",
+      "month": "本月已过账",
+      "monthSub": "{count} 份报销单",
+      "highSpenders": "高支出员工",
+      "highSpendersSub": "较上期增长 >20%",
+      "creep": "类别增长",
+      "creepSub": "增长 >10% 的类别"
+    },
+    "panels": {
+      "categories": "类别构成",
+      "categoriesHint": "费用报销单 · 12 个月",
+      "trend": "月度趋势",
+      "trendHint": "费用报销 vs 供应商账单",
+      "queue": "审批队列",
+      "queueHint": "最早的优先",
+      "queueEmpty": "没有待审批的报销单。",
+      "spenders": "支出排行",
+      "spendersHint": "对比前 12 个月",
+      "categoryTable": "类别",
+      "categoryTableHint": "当前 vs 前 12 个月"
+    },
+    "table": {
+      "employee": "员工",
+      "spend": "支出",
+      "reports": "报销单",
+      "change": "变化",
+      "category": "类别",
+      "current": "当前",
+      "prior": "上期"
+    },
+    "series": {
+      "bills": "供应商账单",
+      "expenses": "费用报销单"
+    }
   }
 }

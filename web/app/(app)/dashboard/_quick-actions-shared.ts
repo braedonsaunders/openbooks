@@ -162,7 +162,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   {
     id: 'd-expense',
     label: 'New expense',
-    href: '/expenses',
+    href: '/expenses/reports',
     iconKey: 'clipboard',
     tone: 'amber',
     hint: 'Create',
