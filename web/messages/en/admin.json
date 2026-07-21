@@ -1845,7 +1845,8 @@
         "hr": "hr",
         "yr": "yr",
         "search": "Search rates…",
-        "showHistory": "History ({count})"
+        "showHistory": "History ({count})",
+        "confirmDelete": "Delete this rate? Time already costed keeps its snapshot; future approvals will resolve without it."
       },
       "components": {
         "title": "Cost estimate components",

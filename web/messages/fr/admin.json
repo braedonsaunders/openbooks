@@ -1811,7 +1811,8 @@
         "hr": "h",
         "yr": "an",
         "search": "Rechercher des taux…",
-        "showHistory": "Historique ({count})"
+        "showHistory": "Historique ({count})",
+        "confirmDelete": "Supprimer ce taux ? Le temps déjà chiffré conserve son instantané ; les approbations futures se résoudront sans lui."
       },
       "components": {
         "title": "Composantes d'estimation du coût",

@@ -4,9 +4,10 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowRight, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowRight, Plus, Sparkles, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-import { Button, Input, Label, cn } from '@openbooks/ui'
+import { Button, Input, Label, Select, cn } from '@openbooks/ui'
+import { PagedTable } from '../../../../../components/paged-table'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { LaborCostingWizard } from './LaborCostingWizard'
 
@@ -43,9 +44,6 @@ function previewRate(wage: number, mult: number, s: { hoursPerDay: number; compo
   }
   return rate
 }
-
-const selectCls =
-  'h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
 
 function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -100,7 +98,6 @@ export function LaborCostingWorkspace(props: {
   const dirty = currentSnap !== savedSnap
 
   // Rates list controls.
-  const [rateQuery, setRateQuery] = useState('')
   const [showHistory, setShowHistory] = useState(false)
 
   // ---- reconciliation state ------------------------------------------------
@@ -328,26 +325,26 @@ export function LaborCostingWorkspace(props: {
       {/* ---- wage rates ---- */}
       <Card title={t('rates.title')} hint={t('rates.hint')}>
         <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-6">
-          <select aria-label={t('rates.scope')} className={cn(selectCls)} value={scope} onChange={(e) => { setScope(e.target.value as typeof scope); setScopeId('') }}>
+          <Select aria-label={t('rates.scope')} value={scope} onChange={(e) => { setScope(e.target.value as typeof scope); setScopeId('') }}>
             <option value="employee">{t('rates.scopeEmployee')}</option>
             <option value="trade">{t('rates.scopeTrade')}</option>
             <option value="org">{t('rates.scopeOrg')}</option>
-          </select>
+          </Select>
           {scope !== 'org' ? (
-            <select aria-label={t('rates.who')} className={cn(selectCls, 'lg:col-span-2')} value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
+            <Select aria-label={t('rates.who')} className="lg:col-span-2" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
               <option value="">—</option>
               {(scope === 'employee' ? props.employees : props.trades).map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
-            </select>
+            </Select>
           ) : (
             <div className="lg:col-span-2" />
           )}
           <Input aria-label={t('rates.rate')} type="number" min="0" step="0.01" placeholder={t('rates.rate')} value={rate} onChange={(e) => setRate(e.target.value)} />
-          <select aria-label={t('rates.basis')} className={cn(selectCls)} value={basis} onChange={(e) => setBasis(e.target.value as typeof basis)}>
+          <Select aria-label={t('rates.basis')} value={basis} onChange={(e) => setBasis(e.target.value as typeof basis)}>
             <option value="hour">{t('rates.perHour')}</option>
             <option value="year">{t('rates.perYear')}</option>
-          </select>
+          </Select>
           <div className="flex gap-2">
             <Input aria-label={t('rates.from')} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <Button size="sm" onClick={addRate} disabled={busy} aria-label={t('rates.add')}>
@@ -355,63 +352,60 @@ export function LaborCostingWorkspace(props: {
             </Button>
           </div>
         </div>
-        <div className="mb-2 flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden />
-            <Input aria-label={t('rates.search')} className="h-8 pl-7" placeholder={t('rates.search')} value={rateQuery} onChange={(e) => setRateQuery(e.target.value)} />
-          </div>
+        <div className="mb-2 flex justify-end">
           <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
             <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
             {t('rates.showHistory', { count: props.rates.filter((r) => r.effective_to).length })}
           </label>
         </div>
-        <div className="max-h-96 overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-                <th className="py-1 pr-2 font-medium">{t('rates.scope')}</th>
-                <th className="py-1 pr-2 font-medium">{t('rates.rate')}</th>
-                <th className="py-1 pr-2 font-medium">{t('rates.from')}</th>
-                <th className="py-1 pr-2 font-medium">{t('rates.to')}</th>
-                <th className="py-1" />
-              </tr>
-            </thead>
-            <tbody>
-              {props.rates.length === 0 && (
-                <tr><td colSpan={5} className="py-8 text-center">
-                  <p className="text-sm text-slate-400">{t('rates.empty')}</p>
-                  <Button size="sm" variant="outline" className="mt-2" onClick={() => setWizardOpen(true)}>
-                    <Sparkles size={14} /> {t('checklist.launchWizard')}
-                  </Button>
-                </td></tr>
-              )}
-              {props.rates
-                .filter((r) => showHistory || !r.effective_to)
-                .filter((r) => !rateQuery || scopeLabel(r).toLowerCase().includes(rateQuery.toLowerCase()))
-                .map((r) => (
-                <tr key={r.id} className={cn('border-t border-slate-100 dark:border-slate-800', r.effective_to && 'text-slate-400 dark:text-slate-500')}>
-                  <td className="py-1.5 pr-2">{scopeLabel(r)}</td>
-                  <td className="py-1.5 pr-2 tabular-nums">
-                    ${Number(r.rate).toFixed(2)}
-                    <span className="text-xs text-slate-400"> /{r.basis === 'year' ? t('rates.yr') : t('rates.hr')}</span>
-                  </td>
-                  <td className="py-1.5 pr-2 tabular-nums">{r.effective_from}</td>
-                  <td className="py-1.5 pr-2 tabular-nums">{r.effective_to ?? '—'}</td>
-                  <td className="py-1.5 text-right">
-                    <button
-                      type="button"
-                      aria-label={t('rates.delete')}
-                      className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                      onClick={() => post({ action: 'delete-rate', id: r.id })}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <PagedTable
+          rows={props.rates.filter((r) => showHistory || !r.effective_to)}
+          rowKey={(r) => r.id}
+          searchable
+          pageSize={10}
+          empty={
+            <div className="py-6 text-center">
+              <p className="text-sm text-slate-400">{t('rates.empty')}</p>
+              <Button size="sm" variant="outline" className="mt-2" onClick={() => setWizardOpen(true)}>
+                <Sparkles size={14} /> {t('checklist.launchWizard')}
+              </Button>
+            </div>
+          }
+          columns={[
+            {
+              key: 'scope',
+              header: t('rates.scope'),
+              cell: (r) => <span className={cn(r.effective_to && 'text-slate-400 dark:text-slate-500')}>{scopeLabel(r)}</span>,
+              search: (r) => scopeLabel(r),
+            },
+            {
+              key: 'rate',
+              header: t('rates.rate'),
+              cell: (r) => (
+                <span className="tabular-nums">
+                  ${Number(r.rate).toFixed(2)}
+                  <span className="text-xs text-slate-400"> /{r.basis === 'year' ? t('rates.yr') : t('rates.hr')}</span>
+                </span>
+              ),
+            },
+            { key: 'from', header: t('rates.from'), cell: (r) => <span className="tabular-nums">{r.effective_from}</span> },
+            { key: 'to', header: t('rates.to'), cell: (r) => <span className="tabular-nums">{r.effective_to ?? '—'}</span> },
+            {
+              key: 'actions',
+              header: '',
+              cell: (r) => (
+                <button
+                  type="button"
+                  aria-label={t('rates.delete')}
+                  className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                  onClick={() => { if (confirm(t('rates.confirmDelete'))) void post({ action: 'delete-rate', id: r.id }) }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              ),
+            },
+          ]}
+        />
       </Card>
 
       {/* ---- estimate components ---- */}
@@ -420,11 +414,11 @@ export function LaborCostingWorkspace(props: {
           {components.map((c, i) => (
             <div key={i} className="grid grid-cols-12 items-center gap-2">
               <Input aria-label={t('components.name')} className="col-span-4" value={c.name} onChange={(e) => setComponent(i, { name: e.target.value })} />
-              <select aria-label={t('components.kind')} className={cn(selectCls, 'col-span-3')} value={c.kind} onChange={(e) => setComponent(i, { kind: e.target.value as LaborCostComponent['kind'] })}>
+              <Select aria-label={t('components.kind')} className="col-span-3" value={c.kind} onChange={(e) => setComponent(i, { kind: e.target.value as LaborCostComponent['kind'] })}>
                 <option value="percent_of_wage">{t('components.percentOfWage')}</option>
                 <option value="per_hour">{t('components.perHour')}</option>
                 <option value="per_day">{t('components.perDay')}</option>
-              </select>
+              </Select>
               <Input aria-label={t('components.value')} className="col-span-2" type="number" min="0" step="0.01" value={String(c.value)} onChange={(e) => setComponent(i, { value: Number(e.target.value) })} />
               <label className="col-span-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
                 <input type="checkbox" checked={c.scaleWithOvertime === true} onChange={(e) => setComponent(i, { scaleWithOvertime: e.target.checked })} disabled={c.kind === 'per_day'} />
@@ -507,30 +501,30 @@ export function LaborCostingWorkspace(props: {
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="lc-wip">{t('posting.laborWip')}</Label>
-              <select id="lc-wip" className={cn(selectCls)} value={laborWip} onChange={(e) => setLaborWip(e.target.value)}>
+              <Select id="lc-wip" value={laborWip} onChange={(e) => setLaborWip(e.target.value)}>
                 <option value="">—</option>
                 {props.accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <Label htmlFor="lc-clr">{t('posting.laborClearing')}</Label>
-              <select id="lc-clr" className={cn(selectCls)} value={laborClearing} onChange={(e) => setLaborClearing(e.target.value)}>
+              <Select id="lc-clr" value={laborClearing} onChange={(e) => setLaborClearing(e.target.value)}>
                 <option value="">—</option>
                 {props.accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <Label htmlFor="lc-var">{t('posting.payrollVariance')}</Label>
-              <select id="lc-var" className={cn(selectCls)} value={payrollVariance} onChange={(e) => setPayrollVariance(e.target.value)}>
+              <Select id="lc-var" value={payrollVariance} onChange={(e) => setPayrollVariance(e.target.value)}>
                 <option value="">—</option>
                 {props.accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('posting.overheadNote')}</p>
@@ -573,22 +567,16 @@ export function LaborCostingWorkspace(props: {
               ))}
             </div>
             {rec.perProject.length > 0 && (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-                    <th className="py-1 pr-2 font-medium">{t('reconciliation.project')}</th>
-                    <th className="py-1 pr-2 text-right font-medium">{t('reconciliation.standardCost')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rec.perProject.map((r) => (
-                    <tr key={r.projectId} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="py-1.5 pr-2">{r.name}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">${Number(r.standard).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PagedTable
+                rows={rec.perProject}
+                rowKey={(r) => r.projectId}
+                pageSize={10}
+                empty={null}
+                columns={[
+                  { key: 'project', header: t('reconciliation.project'), cell: (r) => r.name, search: (r) => r.name },
+                  { key: 'standard', header: t('reconciliation.standardCost'), cell: (r) => <span className="tabular-nums">${Number(r.standard).toFixed(2)}</span> },
+                ]}
+              />
             )}
           </div>
         )}
