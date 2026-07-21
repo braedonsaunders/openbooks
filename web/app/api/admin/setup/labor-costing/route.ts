@@ -3,7 +3,11 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import type { LaborCostComponent } from '@openbooks/engine/src/labor-costing.ts'
+import {
+  laborClearingReconciliation,
+  postPayrollVariance,
+  type LaborCostComponent,
+} from '@openbooks/engine/src/labor-costing.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,7 +69,7 @@ export async function PUT(req: Request) {
 
   // Control accounts ride the same save (existing controlAccounts keys).
   const accounts: Record<string, string | null> = {}
-  for (const key of ['laborWip', 'laborClearing'] as const) {
+  for (const key of ['laborWip', 'laborClearing', 'payrollVariance'] as const) {
     if (!(key in body)) continue
     const v = body[key]
     if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
@@ -141,6 +145,29 @@ export async function POST(req: Request) {
     if (!isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     await db.execute(sql`delete from labor_cost_rates where org_id = ${orgId} and id = ${body.id}`)
     return NextResponse.json({ ok: true })
+  }
+
+  // Payroll true-up: read the clearing wash for a period / post its residue.
+  const DATE_OK = (v: unknown) => DATE_RE.test(String(v ?? ''))
+  if (body.action === 'reconcile') {
+    if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
+      return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
+    }
+    const rec = await laborClearingReconciliation(orgId, body.periodStart, body.periodEnd)
+    if (!rec) return NextResponse.json({ error: 'labor clearing account is not configured' }, { status: 422 })
+    return NextResponse.json({ ok: true, ...rec })
+  }
+
+  if (body.action === 'post-variance') {
+    if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
+      return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
+    }
+    try {
+      const result = await postPayrollVariance({ orgId, actorId: userId, periodStart: body.periodStart, periodEnd: body.periodEnd })
+      return NextResponse.json({ ok: true, ...result })
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+    }
   }
 
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })

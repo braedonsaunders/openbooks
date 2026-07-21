@@ -63,6 +63,7 @@ export default async function LaborCostingSetup() {
         }))}
         laborWip={control.laborWip ?? null}
         laborClearing={control.laborClearing ?? null}
+        payrollVariance={control.payrollVariance ?? null}
       />
     </div>
   )

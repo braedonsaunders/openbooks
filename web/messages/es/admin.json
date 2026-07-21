@@ -1795,7 +1795,23 @@
         "modePost": "Contabilizar costo estándar a proyectos",
         "laborWip": "Cuenta de obra en curso / costo de proyecto",
         "laborClearing": "Cuenta puente de mano de obra",
-        "overheadNote": "Los gastos generales no forman parte de esta tarifa — los aplica el Modelo de gastos generales como su propia capa."
+        "overheadNote": "Los gastos generales no forman parte de esta tarifa — los aplica el Modelo de gastos generales como su propia capa.",
+        "payrollVariance": "Cuenta de variación de nómina"
+      },
+      "reconciliation": {
+        "title": "Conciliación de nómina",
+        "hint": "La mano de obra estándar acredita la cuenta puente al aprobar; el asiento de nómina (importado o manual) debita la misma cuenta. El residuo es su variación de nómina — contabilícelo al cerrar el período.",
+        "from": "Desde",
+        "to": "Hasta",
+        "load": "Cargar",
+        "standardPosted": "Mano de obra estándar contabilizada",
+        "payrollPosted": "Nómina real conciliada",
+        "periodVariance": "Variación del período",
+        "openBalance": "Saldo de la cuenta puente (total)",
+        "postVariance": "Contabilizar variación",
+        "variancePosted": "Variación de nómina de ${amount} contabilizada",
+        "project": "Proyecto",
+        "standardCost": "Costo estándar"
       }
     }
   },
