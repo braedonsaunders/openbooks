@@ -1,15 +1,28 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const laborCosting: DocArticle = {
-  slug: 'labor-costing',
-  title: 'Labor Costing',
-  category: 'projects',
+  slug: "labor-costing",
+  title: "Labor Costing",
+  category: "projects",
   order: 3,
   summary:
-    'What an hour of labor costs and how it reaches your jobs: effective-dated wages, estimate components that anticipate payroll, standard-cost posting, bill-out rate tiers, and the payroll true-up.',
-  updated: '2026-07-21',
-  keywords: ['labor', 'labour', 'wages', 'cost rate', 'bill rate', 'overtime', 'payroll', 'burden', 'per diem', 'variance', 'clearing', 'timesheets'],
-  related: ['overhead-costing', 'item-rates', 'project-types'],
+    "What an hour of labor costs and how it reaches your jobs: effective-dated wages, estimate components that anticipate payroll, standard-cost posting, bill-out rate tiers, and the payroll true-up.",
+  updated: "2026-07-21",
+  keywords: [
+    "labor",
+    "labour",
+    "wages",
+    "cost rate",
+    "bill rate",
+    "overtime",
+    "payroll",
+    "burden",
+    "per diem",
+    "variance",
+    "clearing",
+    "timesheets",
+  ],
+  related: ["overhead-costing", "item-rates", "project-types"],
   body: `# Labor Costing
 
 An hour of job labor carries three numbers with three different fates:
@@ -30,6 +43,10 @@ Company-wide fallbacks and posting configuration live at **Setup → Workforce
 → Labor Costing**. Each employee's confidential wage history lives on the
 employee record under **Wage rates**.
 
+The workspace always opens on the ordinary settings page. Choose **Setup
+guide** when you want the optional guided flow for burden, wage fallback, and
+posting choices; the guide opens in a drawer and never launches on its own.
+
 ## Wage rates
 
 Rates are effective-dated and resolve most-specific-wins:
@@ -43,6 +60,12 @@ Rates are effective-dated and resolve most-specific-wins:
 Starting a new rate automatically closes the previous one the day before — no
 overlaps, ever. Salaried staff use the *per year* basis; the hourly wage is
 salary ÷ annual hours (2080 by default, configurable).
+
+Use search plus the **Scope** and **Status** filters to narrow the company-wide
+wage-rate table. Choose **Add rate** to create a fallback in a drawer, or select
+any row to edit its amount, basis, notes, or end date. Deleting an incorrect
+rate is also contained in that rate's drawer. The table is paginated, and its
+filters remain in the URL so refreshes and shared links preserve the view.
 
 To add a person's wage or raise, open **Operations → Employees**, select the
 employee, and open **Wage rates**. The table keeps the complete effective-dated
@@ -124,4 +147,4 @@ diem, 8-hour days:
 Bill-out from the customer's rate card: $102 regular, $130 overtime
 (explicit), so margin is visible per tier before payroll ever runs.
 `,
-}
+};

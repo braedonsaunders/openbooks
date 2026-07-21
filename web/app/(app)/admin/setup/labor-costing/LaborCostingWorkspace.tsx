@@ -1,12 +1,17 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Sparkles, Trash2 } from 'lucide-react'
-import { Button, Input, Label, Select, cn } from '@openbooks/ui'
+import { Plus, Trash2 } from 'lucide-react'
+import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
+import { SearchInput } from '../../../../../components/search-input'
+import { FilterChips } from '../../../../../components/filter-bar'
+import { Pagination } from '../../../../../components/pagination'
+import { mergeHref } from '../../../../../lib/list-params'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { LaborCostingWizard } from './LaborCostingWizard'
 
@@ -29,7 +34,33 @@ interface Opt {
   name: string
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => {
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function rateState(row: RateRow): 'current' | 'scheduled' | 'ended' {
+  const date = today()
+  if (row.effective_from > date) return 'scheduled'
+  if (row.effective_to && row.effective_to < date) return 'ended'
+  return 'current'
+}
+
+function formatRate(value: string, currency: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Number(value))
+  } catch {
+    return `${currency} ${Number(value).toFixed(2)}`
+  }
+}
 
 /** Mirror of engine computeCostRate for the live preview (display only). */
 function previewRate(wage: number, mult: number, s: { hoursPerDay: number; components: LaborCostComponent[] }): number {
@@ -58,9 +89,16 @@ export function LaborCostingWorkspace(props: {
   view: 'rates' | 'components' | 'posting' | 'reconciliation'
   settings: LaborCostingSettings
   rates: RateRow[]
-  employees: Opt[]
+  selectedRate: RateRow | null
+  creatingRate: boolean
+  guideOpen: boolean
+  currentParams: Record<string, string | string[] | undefined>
+  totalRates: number
+  ratePage: number
+  ratePerPage: number
   trades: Opt[]
   accounts: { id: string; label: string }[]
+  currency: string
   laborWip: string | null
   laborClearing: string | null
   payrollVariance: string | null
@@ -69,7 +107,6 @@ export function LaborCostingWorkspace(props: {
   const t = useTranslations('admin.setup.laborCosting')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
-  const [wizardOpen, setWizardOpen] = useState(props.rates.length === 0)
 
   // ---- settings state ------------------------------------------------------
   const [mode, setMode] = useState(props.settings.mode)
@@ -93,12 +130,18 @@ export function LaborCostingWorkspace(props: {
       laborWip: props.laborWip ?? '',
       laborClearing: props.laborClearing ?? '',
       payrollVariance: props.payrollVariance ?? '',
-    }))
-  const currentSnap = makeSnap({ mode, hoursPerDay, annualHours, components, laborWip, laborClearing, payrollVariance })
+    }),
+  )
+  const currentSnap = makeSnap({
+    mode,
+    hoursPerDay,
+    annualHours,
+    components,
+    laborWip,
+    laborClearing,
+    payrollVariance,
+  })
   const dirty = currentSnap !== savedSnap
-
-  // Rates list controls.
-  const [showHistory, setShowHistory] = useState(false)
 
   // ---- reconciliation state ------------------------------------------------
   const now = new Date()
@@ -115,15 +158,8 @@ export function LaborCostingWorkspace(props: {
     perProject: { projectId: string; name: string; standard: string }[]
   } | null>(null)
 
-  // ---- new-rate form -------------------------------------------------------
-  const [scope, setScope] = useState<'trade' | 'org'>('trade')
-  const [scopeId, setScopeId] = useState('')
-  const [rate, setRate] = useState('')
-  const [basis, setBasis] = useState<'hour' | 'year'>('hour')
-  const [from, setFrom] = useState(today())
-
   const exampleWage = useMemo(() => {
-    const current = props.rates.find((r) => r.employee_party_id && !r.effective_to)
+    const current = props.rates.find((r) => !r.effective_to)
     return current ? Number(current.rate) : 40
   }, [props.rates])
   const live = { hoursPerDay: Number(hoursPerDay) || 8, components }
@@ -135,7 +171,12 @@ export function LaborCostingWorkspace(props: {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          settings: { mode, hoursPerDay: Number(hoursPerDay), annualHours: Number(annualHours), components },
+          settings: {
+            mode,
+            hoursPerDay: Number(hoursPerDay),
+            annualHours: Number(annualHours),
+            components,
+          },
           laborWip: laborWip || null,
           laborClearing: laborClearing || null,
           payrollVariance: payrollVariance || null,
@@ -162,46 +203,17 @@ export function LaborCostingWorkspace(props: {
     setPayrollVariance(props.payrollVariance ?? '')
   }
 
-  async function post(payload: Record<string, unknown>) {
-    setBusy(true)
-    try {
-      const res = await fetch('/api/admin/setup/labor-costing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
-      router.refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function addRate() {
-    if (!rate || Number(rate) < 0) return toast.error(t('rateRequired'))
-    if (scope === 'trade' && !scopeId) return toast.error(t('scopeRequired'))
-    await post({
-      action: 'save-rate',
-      employeePartyId: null,
-      tradeId: scope === 'trade' ? scopeId : null,
-      rate: Number(rate),
-      basis,
-      annualHours: Number(annualHours) || 2080,
-      effectiveFrom: from,
-    })
-    setRate('')
-    toast.success(t('rateSaved'))
-  }
-
   async function loadReconciliation() {
     setBusy(true)
     try {
       const res = await fetch('/api/admin/setup/labor-costing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reconcile', periodStart: recFrom, periodEnd: recTo }),
+        body: JSON.stringify({
+          action: 'reconcile',
+          periodStart: recFrom,
+          periodEnd: recTo,
+        }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
@@ -219,11 +231,19 @@ export function LaborCostingWorkspace(props: {
       const res = await fetch('/api/admin/setup/labor-costing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'post-variance', periodStart: recFrom, periodEnd: recTo }),
+        body: JSON.stringify({
+          action: 'post-variance',
+          periodStart: recFrom,
+          periodEnd: recTo,
+        }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
-      toast.success(t('reconciliation.variancePosted', { amount: Number(j.variance).toFixed(2) }))
+      toast.success(
+        t('reconciliation.variancePosted', {
+          amount: Number(j.variance).toFixed(2),
+        }),
+      )
       await loadReconciliation()
       router.refresh()
     } catch (e) {
@@ -237,14 +257,16 @@ export function LaborCostingWorkspace(props: {
     setComponents((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)))
   }
 
-  const scopeLabel = (r: RateRow) =>
-    r.employee_name ?? (r.trade_name ? `${t('tradePrefix')} ${r.trade_name}` : t('orgDefault'))
+  const scopeLabel = (r: RateRow) => r.employee_name ?? (r.trade_name ? `${t('tradePrefix')} ${r.trade_name}` : t('orgDefault'))
 
   const steps = [
     {
       key: 'wages',
       done: props.coverage.employees > 0 && props.coverage.covered === props.coverage.employees,
-      detail: t('checklist.wagesDetail', { covered: props.coverage.covered, total: props.coverage.employees }),
+      detail: t('checklist.wagesDetail', {
+        covered: props.coverage.covered,
+        total: props.coverage.employees,
+      }),
     },
     {
       key: 'burden',
@@ -264,11 +286,22 @@ export function LaborCostingWorkspace(props: {
   ]
 
   const view = props.view
+  const basePath = '/admin/setup/labor-costing'
+  const guideCloseHref = mergeHref(basePath, props.currentParams, {
+    guide: undefined,
+  })
+  const rateCloseHref = mergeHref(basePath, props.currentParams, {
+    rate: undefined,
+  })
+  const newRateHref = mergeHref(basePath, props.currentParams, {
+    rate: 'new',
+    guide: undefined,
+  })
   return (
     <div className="space-y-4">
       <LaborCostingWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
+        open={props.guideOpen}
+        closeHref={guideCloseHref}
         onApplied={(applied) => {
           const next = {
             mode: applied.mode,
@@ -286,24 +319,21 @@ export function LaborCostingWorkspace(props: {
           setPayrollVariance(next.payrollVariance)
           setSavedSnap(makeSnap(next))
         }}
-        trades={props.trades}
         accounts={props.accounts}
         hoursPerDay={Number(hoursPerDay) || 8}
         annualHours={Number(annualHours) || 2080}
       />
 
       {/* ---- guided status ---- */}
-      <div>
-        <div className="flex flex-wrap items-stretch gap-3">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="grid min-w-[760px] grid-cols-4 divide-x divide-slate-200 dark:divide-slate-800">
           {steps.map((st, i) => (
-            <div key={st.key} className="min-w-48 flex-1 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+            <div key={st.key} className="p-3">
               <div className="mb-1 flex items-center gap-2">
                 <span
                   className={cn(
                     'grid h-5 w-5 place-items-center rounded-full text-[11px] font-semibold',
-                    st.done
-                      ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950'
-                      : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200',
+                    st.done ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200',
                   )}
                 >
                   {st.done ? '✓' : i + 1}
@@ -313,285 +343,391 @@ export function LaborCostingWorkspace(props: {
               <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{st.detail}</p>
             </div>
           ))}
-          <div className="flex items-center">
-            <Button variant="outline" onClick={() => setWizardOpen(true)}>
-              <Sparkles size={15} /> {t('checklist.launchWizard')}
-            </Button>
-          </div>
         </div>
       </div>
 
       {/* ---- wage rates ---- */}
       {view === 'rates' && (
-      <Card title={t('rates.title')} hint={t('rates.hint')}>
-        <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-6">
-          <Select aria-label={t('rates.scope')} value={scope} onChange={(e) => { setScope(e.target.value as typeof scope); setScopeId('') }}>
-            <option value="trade">{t('rates.scopeTrade')}</option>
-            <option value="org">{t('rates.scopeOrg')}</option>
-          </Select>
-          {scope === 'trade' ? (
-            <Select aria-label={t('rates.who')} className="lg:col-span-2" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
-              <option value="">—</option>
-              {props.trades.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </Select>
-          ) : (
-            <div className="lg:col-span-2" />
-          )}
-          <Input aria-label={t('rates.rate')} type="number" min="0" step="0.01" placeholder={t('rates.rate')} value={rate} onChange={(e) => setRate(e.target.value)} />
-          <Select aria-label={t('rates.basis')} value={basis} onChange={(e) => setBasis(e.target.value as typeof basis)}>
-            <option value="hour">{t('rates.perHour')}</option>
-            <option value="year">{t('rates.perYear')}</option>
-          </Select>
-          <div className="flex gap-2">
-            <Input aria-label={t('rates.from')} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            <Button size="sm" onClick={addRate} disabled={busy} aria-label={t('rates.add')}>
-              <Plus size={14} />
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('rates.title')}</h3>
+            <p className="mt-0.5 max-w-4xl text-xs text-slate-500 dark:text-slate-400">{t('rates.hint')}</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <SearchInput placeholder={t('rates.search')} />
+            <FilterChips
+              basePath={basePath}
+              currentParams={props.currentParams}
+              paramKey="rateScope"
+              label={t('rates.scope')}
+              options={[
+                { value: 'trade', label: t('rates.scopeTrade') },
+                { value: 'org', label: t('rates.scopeOrg') },
+              ]}
+            />
+            <FilterChips
+              basePath={basePath}
+              currentParams={props.currentParams}
+              paramKey="rateStatus"
+              label={t('rates.status')}
+              defaultValue="active"
+              options={[
+                { value: 'active', label: t('rates.statusActive') },
+                { value: 'current', label: t('rates.statusCurrent') },
+                { value: 'scheduled', label: t('rates.statusScheduled') },
+                { value: 'ended', label: t('rates.statusEnded') },
+              ]}
+            />
+            <Button asChild size="sm" className="sm:ml-auto">
+              <Link href={newRateHref as never}>
+                <Plus size={14} /> {t('rates.add')}
+              </Link>
             </Button>
           </div>
-        </div>
-        <div className="mb-2 flex justify-end">
-          <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-            {t('rates.showHistory', { count: props.rates.filter((r) => !r.employee_party_id && r.effective_to).length })}
-          </label>
-        </div>
-        <PagedTable
-          rows={props.rates.filter((r) => !r.employee_party_id).filter((r) => showHistory || !r.effective_to)}
-          rowKey={(r) => r.id}
-          searchable
-          pageSize={10}
-          empty={
-            <div className="py-6 text-center">
-              <p className="text-sm text-slate-400">{t('rates.empty')}</p>
-              <Button size="sm" variant="outline" className="mt-2" onClick={() => setWizardOpen(true)}>
-                <Sparkles size={14} /> {t('checklist.launchWizard')}
-              </Button>
-            </div>
-          }
-          columns={[
-            {
-              key: 'scope',
-              header: t('rates.scope'),
-              cell: (r) => <span className={cn(r.effective_to && 'text-slate-400 dark:text-slate-500')}>{scopeLabel(r)}</span>,
-              search: (r) => scopeLabel(r),
-            },
-            {
-              key: 'rate',
-              header: t('rates.rate'),
-              cell: (r) => (
-                <span className="tabular-nums">
-                  ${Number(r.rate).toFixed(2)}
-                  <span className="text-xs text-slate-400"> /{r.basis === 'year' ? t('rates.yr') : t('rates.hr')}</span>
-                </span>
-              ),
-            },
-            { key: 'from', header: t('rates.from'), cell: (r) => <span className="tabular-nums">{r.effective_from}</span> },
-            { key: 'to', header: t('rates.to'), cell: (r) => <span className="tabular-nums">{r.effective_to ?? '—'}</span> },
-            {
-              key: 'actions',
-              header: '',
-              cell: (r) => (
-                <button
-                  type="button"
-                  aria-label={t('rates.delete')}
-                  className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                  onClick={() => { if (confirm(t('rates.confirmDelete'))) void post({ action: 'delete-rate', id: r.id }) }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              ),
-            },
-          ]}
-        />
-        <p className="mt-3 rounded-md bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-          {t('rates.employeeNote', { covered: props.coverage.covered, total: props.coverage.employees })}
-        </p>
-      </Card>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('rates.scope')}</TableHead>
+                  <TableHead className="text-right">{t('rates.rate')}</TableHead>
+                  <TableHead>{t('rates.from')}</TableHead>
+                  <TableHead>{t('rates.to')}</TableHead>
+                  <TableHead>{t('rates.status')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {props.rates.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                      <p>{t('rates.emptyFiltered')}</p>
+                      <Button asChild variant="outline" size="sm" className="mt-3">
+                        <Link href={newRateHref as never}>
+                          <Plus size={14} /> {t('rates.add')}
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {props.rates.map((row) => {
+                  const href = mergeHref(basePath, props.currentParams, {
+                    rate: row.id,
+                    guide: undefined,
+                  })
+                  const status = rateState(row)
+                  return (
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer"
+                      tabIndex={0}
+                      aria-label={t('rates.openRate', {
+                        scope: scopeLabel(row),
+                      })}
+                      onClick={() => router.push(href)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') router.push(href)
+                      }}
+                    >
+                      <TableCell>
+                        <Link href={href as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300" onClick={(event) => event.stopPropagation()}>
+                          {scopeLabel(row)}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatRate(row.rate, props.currency)}
+                        <span className="ml-1 text-xs text-slate-400">/{row.basis === 'year' ? t('rates.yr') : t('rates.hr')}</span>
+                      </TableCell>
+                      <TableCell className="tabular-nums">{row.effective_from}</TableCell>
+                      <TableCell className="tabular-nums">{row.effective_to ?? '—'}</TableCell>
+                      <TableCell>
+                        <Badge variant={status === 'current' ? 'success' : status === 'scheduled' ? 'default' : 'outline'}>
+                          {t(status === 'current' ? 'rates.statusCurrent' : status === 'scheduled' ? 'rates.statusScheduled' : 'rates.statusEnded')}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+            {props.totalRates > 0 ? <Pagination basePath={basePath} currentParams={props.currentParams} total={props.totalRates} page={props.ratePage} perPage={props.ratePerPage} /> : null}
+          </div>
+          <p className="rounded-md bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+            {t('rates.employeeNote', {
+              covered: props.coverage.covered,
+              total: props.coverage.employees,
+            })}
+          </p>
+        </section>
       )}
+
+      {props.creatingRate || props.selectedRate ? (
+        <RateDrawer key={props.selectedRate?.id ?? 'new'} row={props.selectedRate} trades={props.trades} defaultAnnualHours={Number(annualHours) || 2080} currency={props.currency} closeHref={rateCloseHref} />
+      ) : null}
 
       {/* ---- estimate components ---- */}
       {view === 'components' && (
-      <Card title={t('components.title')} hint={t('components.hint')}>
-        <div className="space-y-2">
-          {components.map((c, i) => (
-            <div key={i} className="grid grid-cols-12 items-center gap-2">
-              <Input aria-label={t('components.name')} className="col-span-4" value={c.name} onChange={(e) => setComponent(i, { name: e.target.value })} />
-              <Select aria-label={t('components.kind')} className="col-span-3" value={c.kind} onChange={(e) => setComponent(i, { kind: e.target.value as LaborCostComponent['kind'] })}>
-                <option value="percent_of_wage">{t('components.percentOfWage')}</option>
-                <option value="per_hour">{t('components.perHour')}</option>
-                <option value="per_day">{t('components.perDay')}</option>
-              </Select>
-              <Input aria-label={t('components.value')} className="col-span-2" type="number" min="0" step="0.01" value={String(c.value)} onChange={(e) => setComponent(i, { value: Number(e.target.value) })} />
-              <label className="col-span-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-                <input type="checkbox" checked={c.scaleWithOvertime === true} onChange={(e) => setComponent(i, { scaleWithOvertime: e.target.checked })} disabled={c.kind === 'per_day'} />
-                {t('components.scalesOt')}
-              </label>
-              <button type="button" aria-label={t('components.remove')} className="col-span-1 rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950" onClick={() => setComponents((cs) => cs.filter((_, j) => j !== i))}>
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-          {components.length === 0 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{t('components.presetLead')}</span>
-              <Button size="sm" variant="outline" onClick={() => setComponents([{ key: 'burden', name: t('components.presetCaName'), kind: 'percent_of_wage', value: 13, scaleWithOvertime: true }])}>
-                {t('components.presetCa')}
+        <Card title={t('components.title')} hint={t('components.hint')}>
+          <div className="space-y-2">
+            {components.map((c, i) => (
+              <div key={i} className="grid grid-cols-12 items-center gap-2">
+                <Input aria-label={t('components.name')} className="col-span-4" value={c.name} onChange={(e) => setComponent(i, { name: e.target.value })} />
+                <Select
+                  aria-label={t('components.kind')}
+                  className="col-span-3"
+                  value={c.kind}
+                  onChange={(e) =>
+                    setComponent(i, {
+                      kind: e.target.value as LaborCostComponent['kind'],
+                    })
+                  }
+                >
+                  <option value="percent_of_wage">{t('components.percentOfWage')}</option>
+                  <option value="per_hour">{t('components.perHour')}</option>
+                  <option value="per_day">{t('components.perDay')}</option>
+                </Select>
+                <Input aria-label={t('components.value')} className="col-span-2" type="number" min="0" step="0.01" value={String(c.value)} onChange={(e) => setComponent(i, { value: Number(e.target.value) })} />
+                <label className="col-span-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+                  <input type="checkbox" checked={c.scaleWithOvertime === true} onChange={(e) => setComponent(i, { scaleWithOvertime: e.target.checked })} disabled={c.kind === 'per_day'} />
+                  {t('components.scalesOt')}
+                </label>
+                <button
+                  type="button"
+                  aria-label={t('components.remove')}
+                  className="col-span-1 rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                  onClick={() => setComponents((cs) => cs.filter((_, j) => j !== i))}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            {components.length === 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
+                <span className="text-xs text-slate-500 dark:text-slate-400">{t('components.presetLead')}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setComponents([
+                      {
+                        key: 'burden',
+                        name: t('components.presetCaName'),
+                        kind: 'percent_of_wage',
+                        value: 13,
+                        scaleWithOvertime: true,
+                      },
+                    ])
+                  }
+                >
+                  {t('components.presetCa')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setComponents([
+                      {
+                        key: 'burden',
+                        name: t('components.presetUsName'),
+                        kind: 'percent_of_wage',
+                        value: 30,
+                        scaleWithOvertime: true,
+                      },
+                    ])
+                  }
+                >
+                  {t('components.presetUs')}
+                </Button>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setComponents((cs) => [
+                    ...cs,
+                    {
+                      key: `c${cs.length}`,
+                      name: t('components.newBurden'),
+                      kind: 'percent_of_wage',
+                      value: 13,
+                      scaleWithOvertime: true,
+                    },
+                  ])
+                }
+              >
+                <Plus size={14} /> {t('components.addBurden')}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setComponents([{ key: 'burden', name: t('components.presetUsName'), kind: 'percent_of_wage', value: 30, scaleWithOvertime: true }])}>
-                {t('components.presetUs')}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setComponents((cs) => [
+                    ...cs,
+                    {
+                      key: `c${cs.length}`,
+                      name: t('components.newPerDiem'),
+                      kind: 'per_day',
+                      value: 0,
+                    },
+                  ])
+                }
+              >
+                <Plus size={14} /> {t('components.addPerDiem')}
               </Button>
             </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setComponents((cs) => [...cs, { key: `c${cs.length}`, name: t('components.newBurden'), kind: 'percent_of_wage', value: 13, scaleWithOvertime: true }])}
-            >
-              <Plus size={14} /> {t('components.addBurden')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setComponents((cs) => [...cs, { key: `c${cs.length}`, name: t('components.newPerDiem'), kind: 'per_day', value: 0 }])}
-            >
-              <Plus size={14} /> {t('components.addPerDiem')}
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <div>
-              <Label htmlFor="lc-hpd">{t('components.hoursPerDay')}</Label>
-              <Input id="lc-hpd" type="number" min="1" max="24" value={hoursPerDay} onChange={(e) => setHoursPerDay(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div>
+                <Label htmlFor="lc-hpd">{t('components.hoursPerDay')}</Label>
+                <Input id="lc-hpd" type="number" min="1" max="24" value={hoursPerDay} onChange={(e) => setHoursPerDay(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="lc-ah">{t('components.annualHours')}</Label>
+                <Input id="lc-ah" type="number" min="1" value={annualHours} onChange={(e) => setAnnualHours(e.target.value)} />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="lc-ah">{t('components.annualHours')}</Label>
-              <Input id="lc-ah" type="number" min="1" value={annualHours} onChange={(e) => setAnnualHours(e.target.value)} />
-            </div>
-          </div>
-          {/* live example */}
-          <div className="mt-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-            {t('components.example', { wage: exampleWage.toFixed(2) })}
-            <div className="mt-1 flex gap-4 font-medium tabular-nums text-slate-900 dark:text-slate-100">
-              <span>{t('components.exampleReg')}: ${previewRate(exampleWage, 1, live).toFixed(2)}/h</span>
-              <span>{t('components.exampleOt')}: ${previewRate(exampleWage, 1.5, live).toFixed(2)}/h</span>
-              <span>{t('components.exampleDt')}: ${previewRate(exampleWage, 2, live).toFixed(2)}/h</span>
+            {/* live example */}
+            <div className="mt-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+              {t('components.example', { wage: exampleWage.toFixed(2) })}
+              <div className="mt-1 flex gap-4 font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                <span>
+                  {t('components.exampleReg')}: ${previewRate(exampleWage, 1, live).toFixed(2)}/h
+                </span>
+                <span>
+                  {t('components.exampleOt')}: ${previewRate(exampleWage, 1.5, live).toFixed(2)}/h
+                </span>
+                <span>
+                  {t('components.exampleDt')}: ${previewRate(exampleWage, 2, live).toFixed(2)}/h
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
-
+        </Card>
       )}
 
       {/* ---- posting ---- */}
       {view === 'posting' && (
-      <Card title={t('posting.title')} hint={t('posting.hint')}>
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            {(['off', 'post'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={cn(
-                  'rounded-md border px-3 py-1.5 text-sm',
-                  mode === m
-                    ? 'border-teal-600 bg-teal-50 font-medium text-teal-700 dark:border-teal-400 dark:bg-teal-950/50 dark:text-teal-300'
-                    : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800',
-                )}
-              >
-                {m === 'off' ? t('posting.modeOff') : t('posting.modePost')}
-              </button>
-            ))}
+        <Card title={t('posting.title')} hint={t('posting.hint')}>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              {(['off', 'post'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={cn(
+                    'rounded-md border px-3 py-1.5 text-sm',
+                    mode === m
+                      ? 'border-teal-600 bg-teal-50 font-medium text-teal-700 dark:border-teal-400 dark:bg-teal-950/50 dark:text-teal-300'
+                      : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800',
+                  )}
+                >
+                  {m === 'off' ? t('posting.modeOff') : t('posting.modePost')}
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="lc-wip">{t('posting.laborWip')}</Label>
+                <Select id="lc-wip" value={laborWip} onChange={(e) => setLaborWip(e.target.value)}>
+                  <option value="">—</option>
+                  {props.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="lc-clr">{t('posting.laborClearing')}</Label>
+                <Select id="lc-clr" value={laborClearing} onChange={(e) => setLaborClearing(e.target.value)}>
+                  <option value="">—</option>
+                  {props.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="lc-var">{t('posting.payrollVariance')}</Label>
+                <Select id="lc-var" value={payrollVariance} onChange={(e) => setPayrollVariance(e.target.value)}>
+                  <option value="">—</option>
+                  {props.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('posting.overheadNote')}</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="lc-wip">{t('posting.laborWip')}</Label>
-              <Select id="lc-wip" value={laborWip} onChange={(e) => setLaborWip(e.target.value)}>
-                <option value="">—</option>
-                {props.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.label}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="lc-clr">{t('posting.laborClearing')}</Label>
-              <Select id="lc-clr" value={laborClearing} onChange={(e) => setLaborClearing(e.target.value)}>
-                <option value="">—</option>
-                {props.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.label}</option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="lc-var">{t('posting.payrollVariance')}</Label>
-              <Select id="lc-var" value={payrollVariance} onChange={(e) => setPayrollVariance(e.target.value)}>
-                <option value="">—</option>
-                {props.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.label}</option>
-                ))}
-              </Select>
-            </div>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('posting.overheadNote')}</p>
-        </div>
-      </Card>
-
+        </Card>
       )}
 
       {/* ---- payroll reconciliation ---- */}
       {view === 'reconciliation' && (
-      <Card title={t('reconciliation.title')} hint={t('reconciliation.hint')}>
-        <div className="flex flex-wrap items-end gap-2">
-          <div>
-            <Label htmlFor="rec-from">{t('reconciliation.from')}</Label>
-            <Input id="rec-from" type="date" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="rec-to">{t('reconciliation.to')}</Label>
-            <Input id="rec-to" type="date" value={recTo} onChange={(e) => setRecTo(e.target.value)} />
-          </div>
-          <Button size="sm" variant="outline" onClick={loadReconciliation} disabled={busy}>{t('reconciliation.load')}</Button>
-          {rec && Number(rec.periodVariance) !== 0 && (
-            <Button size="sm" onClick={postVariance} disabled={busy || !props.payrollVariance}>
-              {t('reconciliation.postVariance')}
-            </Button>
-          )}
-        </div>
-        {rec && (
-          <div className="mt-3 space-y-3">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[
-                { k: 'standardPosted', v: rec.standardPosted },
-                { k: 'payrollPosted', v: rec.payrollPosted },
-                { k: 'periodVariance', v: rec.periodVariance },
-                { k: 'openBalance', v: rec.openBalance },
-              ].map(({ k, v }) => (
-                <div key={k} className="rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">{t(`reconciliation.${k}`)}</div>
-                  <div className={cn('text-sm font-semibold tabular-nums', k !== 'standardPosted' && k !== 'payrollPosted' && Number(v) !== 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100')}>
-                    ${Number(v).toFixed(2)}
-                  </div>
-                </div>
-              ))}
+        <Card title={t('reconciliation.title')} hint={t('reconciliation.hint')}>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <Label htmlFor="rec-from">{t('reconciliation.from')}</Label>
+              <Input id="rec-from" type="date" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} />
             </div>
-            {rec.perProject.length > 0 && (
-              <PagedTable
-                rows={rec.perProject}
-                rowKey={(r) => r.projectId}
-                pageSize={10}
-                empty={null}
-                columns={[
-                  { key: 'project', header: t('reconciliation.project'), cell: (r) => r.name, search: (r) => r.name },
-                  { key: 'standard', header: t('reconciliation.standardCost'), cell: (r) => <span className="tabular-nums">${Number(r.standard).toFixed(2)}</span> },
-                ]}
-              />
+            <div>
+              <Label htmlFor="rec-to">{t('reconciliation.to')}</Label>
+              <Input id="rec-to" type="date" value={recTo} onChange={(e) => setRecTo(e.target.value)} />
+            </div>
+            <Button size="sm" variant="outline" onClick={loadReconciliation} disabled={busy}>
+              {t('reconciliation.load')}
+            </Button>
+            {rec && Number(rec.periodVariance) !== 0 && (
+              <Button size="sm" onClick={postVariance} disabled={busy || !props.payrollVariance}>
+                {t('reconciliation.postVariance')}
+              </Button>
             )}
           </div>
-        )}
-      </Card>
-
+          {rec && (
+            <div className="mt-3 space-y-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { k: 'standardPosted', v: rec.standardPosted },
+                  { k: 'payrollPosted', v: rec.payrollPosted },
+                  { k: 'periodVariance', v: rec.periodVariance },
+                  { k: 'openBalance', v: rec.openBalance },
+                ].map(({ k, v }) => (
+                  <div key={k} className="rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{t(`reconciliation.${k}`)}</div>
+                    <div className={cn('text-sm font-semibold tabular-nums', k !== 'standardPosted' && k !== 'payrollPosted' && Number(v) !== 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100')}>
+                      ${Number(v).toFixed(2)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {rec.perProject.length > 0 && (
+                <PagedTable
+                  rows={rec.perProject}
+                  rowKey={(r) => r.projectId}
+                  pageSize={10}
+                  empty={null}
+                  columns={[
+                    {
+                      key: 'project',
+                      header: t('reconciliation.project'),
+                      cell: (r) => r.name,
+                      search: (r) => r.name,
+                    },
+                    {
+                      key: 'standard',
+                      header: t('reconciliation.standardCost'),
+                      cell: (r) => <span className="tabular-nums">${Number(r.standard).toFixed(2)}</span>,
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          )}
+        </Card>
       )}
 
       {/* ---- sticky unsaved-changes bar ---- */}
@@ -599,11 +735,207 @@ export function LaborCostingWorkspace(props: {
         <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
           <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white py-2 pl-4 pr-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
             <span className="text-sm text-slate-600 dark:text-slate-300">{t('unsaved')}</span>
-            <Button size="sm" variant="ghost" onClick={discardChanges} disabled={busy}>{t('discard')}</Button>
-            <Button size="sm" onClick={saveSettings} disabled={busy}>{t('save')}</Button>
+            <Button size="sm" variant="ghost" onClick={discardChanges} disabled={busy}>
+              {t('discard')}
+            </Button>
+            <Button size="sm" onClick={saveSettings} disabled={busy}>
+              {t('save')}
+            </Button>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+function RateDrawer({ row, trades, defaultAnnualHours, currency, closeHref }: { row: RateRow | null; trades: Opt[]; defaultAnnualHours: number; currency: string; closeHref: string }) {
+  const t = useTranslations('admin.setup.laborCosting')
+  const tc = useTranslations('common')
+  const router = useRouter()
+  const creating = !row
+  const [busy, setBusy] = useState(false)
+  const [scope, setScope] = useState<'trade' | 'org'>(() => (row ? (row.trade_id ? 'trade' : 'org') : trades.length ? 'trade' : 'org'))
+  const [tradeId, setTradeId] = useState(row?.trade_id ?? '')
+  const [rate, setRate] = useState(row?.rate ?? '')
+  const [basis, setBasis] = useState<'hour' | 'year'>(() => (row?.basis === 'year' ? 'year' : 'hour'))
+  const [annualHours, setAnnualHours] = useState(row?.annual_hours ?? String(defaultAnnualHours))
+  const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? today())
+  const [effectiveTo, setEffectiveTo] = useState(row?.effective_to ?? '')
+  const [notes, setNotes] = useState(row?.notes ?? '')
+
+  async function call(body: Record<string, unknown>) {
+    const response = await fetch('/api/admin/setup/labor-costing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!response.ok) throw new Error((await response.json()).error ?? tc('feedback.saveFailed'))
+  }
+
+  async function save() {
+    if (rate === '' || !Number.isFinite(Number(rate)) || Number(rate) < 0) {
+      toast.error(t('rateRequired'))
+      return
+    }
+    if (scope === 'trade' && !tradeId) {
+      toast.error(t('scopeRequired'))
+      return
+    }
+    if (basis === 'year' && (!Number.isFinite(Number(annualHours)) || Number(annualHours) <= 0)) {
+      toast.error(t('rates.annualHoursRequired'))
+      return
+    }
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      toast.error(t('rates.invalidEndDate'))
+      return
+    }
+    setBusy(true)
+    try {
+      await call({
+        action: 'save-rate',
+        employeePartyId: null,
+        tradeId: scope === 'trade' ? tradeId : null,
+        rate: Number(rate),
+        basis,
+        annualHours: Number(annualHours) || defaultAnnualHours,
+        effectiveFrom,
+        notes: notes.trim() || null,
+      })
+      if (row) {
+        await call({
+          action: 'end-rate',
+          id: row.id,
+          effectiveTo: effectiveTo || null,
+        })
+      }
+      toast.success(t(creating ? 'rateSaved' : 'rates.rateUpdated'))
+      router.push(closeHref)
+      router.refresh()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove() {
+    if (!row || !confirm(t('rates.confirmDelete'))) return
+    setBusy(true)
+    try {
+      await call({ action: 'delete-rate', id: row.id })
+      toast.success(t('rates.rateDeleted'))
+      router.push(closeHref)
+      router.refresh()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const scopeName = row?.trade_name ?? t('orgDefault')
+  return (
+    <UrlDrawer
+      open
+      closeHref={closeHref}
+      size="lg"
+      title={t(creating ? 'rates.drawerNewTitle' : 'rates.drawerEditTitle')}
+      description={creating ? t('rates.drawerNewDescription') : t('rates.drawerEditDescription', { scope: scopeName })}
+      headerActions={
+        <Button disabled={busy} onClick={save}>
+          {busy ? tc('actions.saving') : tc(creating ? 'actions.create' : 'actions.save')}
+        </Button>
+      }
+      footer={
+        row ? (
+          <button type="button" disabled={busy} onClick={remove} className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50 dark:text-red-400">
+            <Trash2 size={14} /> {tc('actions.delete')}
+          </button>
+        ) : (
+          <span />
+        )
+      }
+    >
+      <div className="grid gap-4 p-1 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="rate-scope">{t('rates.scope')}</Label>
+          <Select
+            id="rate-scope"
+            value={scope}
+            disabled={!creating}
+            onChange={(event) => {
+              const next = event.target.value as 'trade' | 'org'
+              setScope(next)
+              if (next === 'org') setTradeId('')
+            }}
+          >
+            <option value="trade">{t('rates.scopeTrade')}</option>
+            <option value="org">{t('rates.scopeOrg')}</option>
+          </Select>
+        </div>
+        {scope === 'trade' ? (
+          <div>
+            <Label>{t('rates.who')}</Label>
+            <SearchSelect
+              value={tradeId}
+              onChange={setTradeId}
+              options={trades.map((trade) => ({
+                value: trade.id,
+                label: trade.name,
+              }))}
+              disabled={!creating}
+              searchable
+              placeholder={t('rates.selectTrade')}
+              ariaLabel={t('rates.selectTrade')}
+              sheetTitle={t('rates.selectTrade')}
+            />
+          </div>
+        ) : (
+          <div />
+        )}
+        <div>
+          <Label htmlFor="rate-value">{t('rates.rate')}</Label>
+          <div className="relative">
+            <Input id="rate-value" type="number" min="0" step="0.01" value={rate} onChange={(event) => setRate(event.target.value)} className="pr-16" />
+            <span className="pointer-events-none absolute top-2 right-3 text-xs text-slate-400">{currency}</span>
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="rate-basis">{t('rates.basis')}</Label>
+          <Select id="rate-basis" value={basis} onChange={(event) => setBasis(event.target.value as 'hour' | 'year')}>
+            <option value="hour">{t('rates.perHour')}</option>
+            <option value="year">{t('rates.perYear')}</option>
+          </Select>
+        </div>
+        {basis === 'year' ? (
+          <div>
+            <Label htmlFor="rate-annual-hours">{t('rates.annualHours')}</Label>
+            <Input id="rate-annual-hours" type="number" min="1" step="1" value={annualHours} onChange={(event) => setAnnualHours(event.target.value)} />
+            {rate ? (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t('rates.hourlyEquivalent', {
+                  amount: formatRate(String(Number(rate) / (Number(annualHours) || defaultAnnualHours)), currency),
+                })}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        <div>
+          <Label htmlFor="rate-from">{t('rates.from')}</Label>
+          <Input id="rate-from" type="date" value={effectiveFrom} disabled={!creating} onChange={(event) => setEffectiveFrom(event.target.value)} />
+        </div>
+        {!creating ? (
+          <div>
+            <Label htmlFor="rate-to">{t('rates.to')}</Label>
+            <Input id="rate-to" type="date" min={effectiveFrom} value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('rates.endDateHint')}</p>
+          </div>
+        ) : null}
+        <div className="sm:col-span-2">
+          <Label htmlFor="rate-notes">{t('rates.notes')}</Label>
+          <Textarea id="rate-notes" rows={4} maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </div>
+      </div>
+    </UrlDrawer>
   )
 }
