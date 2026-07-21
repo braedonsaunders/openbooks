@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ClipboardList,
   CreditCard,
+  Gauge,
   Landmark,
   ListChecks,
   Timer,
@@ -44,6 +45,7 @@ const HOME_ICONS: Record<string, LucideIcon> = {
   clipboard: ClipboardList,
   'calendar-clock': CalendarClock,
   'heart-pulse': HeartPulse,
+  gauge: Gauge,
 }
 
 export function HomeStatTile({

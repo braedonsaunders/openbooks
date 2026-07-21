@@ -14,7 +14,12 @@
       "openPos": "OC abiertas",
       "openPosSub": "{count} órdenes",
       "spend30d": "Gasto 30 días",
-      "spend30dSub": "Facturas de proveedor registradas"
+      "spend30dSub": "Facturas de proveedor registradas",
+      "activeVendors": "Proveedores activos",
+      "paymentsWeek": "Pagos esta semana",
+      "paymentsWeekSub": "{count} registrados · últimos 7 días",
+      "unposted": "Gastos sin contabilizar",
+      "unpostedSub": "pendientes de contabilizar"
     },
     "hero": {
       "title": "Compromisos con proveedores",
@@ -45,6 +50,13 @@
       "allClear": "Todo en orden — nada vencido.",
       "overdueVendor": "{vendor} tiene {amount} vencido",
       "unpostedExpenses": "{count} informes de gastos por registrar"
+    },
+    "pulse": {
+      "title": "Pulso de pagos",
+      "open": "Abierto",
+      "overdue": "Vencido",
+      "due7": "Vence en 7 días",
+      "cta": "Abrir cuentas por pagar"
     }
   }
 }

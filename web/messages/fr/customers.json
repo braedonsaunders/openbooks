@@ -16,7 +16,12 @@
       "closedQuarter": "Facturé ce trimestre",
       "dso": "Délai d'encaissement",
       "dsoSub": "Jours moyens pour encaisser",
-      "days": "{n} j"
+      "days": "{n} j",
+      "activeCustomers": "Clients actifs",
+      "quotesOrders": "Devis et commandes ouverts",
+      "quotesOrdersSub": "{quotes} devis · {orders} commandes",
+      "collectedWeek": "Encaissé cette semaine",
+      "collectedWeekSub": "{count} encaissements · 7 jours"
     },
     "hero": {
       "title": "Relations principales",
@@ -47,6 +52,13 @@
       "title": "À traiter",
       "allClear": "Tout est en ordre — rien à relancer.",
       "overdueCustomer": "{customer} a {amount} en retard"
+    },
+    "pulse": {
+      "title": "Pouls des créances",
+      "open": "En cours",
+      "overdue": "En retard",
+      "dso": "DSO",
+      "cta": "Ouvrir les comptes clients"
     }
   }
 }

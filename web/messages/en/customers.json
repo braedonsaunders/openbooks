@@ -16,7 +16,12 @@
       "closedQuarter": "Invoiced this quarter",
       "dso": "Days sales out",
       "dsoSub": "Avg days to collect",
-      "days": "{n}d"
+      "days": "{n}d",
+      "activeCustomers": "Active customers",
+      "quotesOrders": "Open quotes & orders",
+      "quotesOrdersSub": "{quotes} quotes · {orders} orders",
+      "collectedWeek": "Collected this week",
+      "collectedWeekSub": "{count} receipts · 7 days"
     },
     "hero": {
       "title": "Top relationships",
@@ -47,6 +52,13 @@
       "title": "Needs attention",
       "allClear": "All clear — nothing needs chasing.",
       "overdueCustomer": "{customer} is {amount} overdue"
+    },
+    "pulse": {
+      "title": "Receivables pulse",
+      "open": "Open",
+      "overdue": "Overdue",
+      "dso": "DSO",
+      "cta": "Open Accounts Receivable"
     }
   }
 }

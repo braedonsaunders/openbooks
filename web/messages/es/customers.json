@@ -16,7 +16,12 @@
       "closedQuarter": "Facturado este trimestre",
       "dso": "Días de cobro",
       "dsoSub": "Días promedio para cobrar",
-      "days": "{n} d"
+      "days": "{n} d",
+      "activeCustomers": "Clientes activos",
+      "quotesOrders": "Cotizaciones y pedidos abiertos",
+      "quotesOrdersSub": "{quotes} cotizaciones · {orders} pedidos",
+      "collectedWeek": "Cobrado esta semana",
+      "collectedWeekSub": "{count} cobros · 7 días"
     },
     "hero": {
       "title": "Relaciones principales",
@@ -47,6 +52,13 @@
       "title": "Requiere atención",
       "allClear": "Todo en orden — nada que reclamar.",
       "overdueCustomer": "{customer} tiene {amount} vencido"
+    },
+    "pulse": {
+      "title": "Pulso de cobros",
+      "open": "Abierto",
+      "overdue": "Vencido",
+      "dso": "DSO",
+      "cta": "Abrir cuentas por cobrar"
     }
   }
 }

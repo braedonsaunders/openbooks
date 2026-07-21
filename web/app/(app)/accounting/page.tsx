@@ -6,6 +6,7 @@ import { cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
 import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
+import { groupTabs } from '../../../components/module-home/group-tabs'
 import { Gauge } from '../analytics/_ui/Gauge'
 import { getAuthz, can, assertCan } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
@@ -55,14 +56,9 @@ export default async function AccountingHomePage() {
   ])
 
   const groupItems = navGroups.find((g) => g.id === 'accounting')?.items ?? []
-  const closeItem = groupItems.find((i) => i.href === '/close')
-  const tabs = [
-    { href: '/accounting', label: t('home.tabs.overview'), active: true },
-    ...(closeItem ? [{ href: closeItem.href, label: closeItem.label }] : []),
-    ...(can(authz, 'reports.read')
-      ? [{ href: '/analytics/financial-health', label: t('home.tabs.health') }]
-      : []),
-  ]
+  const tabs = await groupTabs('accounting', '/accounting', {
+    exclude: can(authz, 'reports.read') ? [] : ['/analytics/financial-health'],
+  })
 
   const badgeFor = (href: string): DirectoryItem['badge'] => {
     switch (href) {

@@ -5,6 +5,7 @@ import { cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
 import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
+import { groupTabs } from '../../../components/module-home/group-tabs'
 import { TrendChart } from '../analytics/_ui/charts'
 import { SubsidiarySwitcher } from '../../../components/subsidiary-switcher'
 import { getAuthz, can, assertCan } from '../../../lib/authz'
@@ -12,7 +13,8 @@ import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
 import { customersHome, type CustomerExposureRow } from '../../../lib/module-home/customers'
-import { money, moneyCompact } from '../../../lib/format'
+import { moneyCompact } from '../../../lib/format'
+import { RelationshipsTable } from './RelationshipsTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,12 +63,8 @@ export default async function CustomersHomePage({
   ])
 
   const groupItems = navGroups.find((g) => g.id === 'customers')?.items ?? []
-  const arItem = groupItems.find((i) => i.href === '/ar')
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
-  const tabs = [
-    { href: '/customers', label: t('home.tabs.overview'), active: true },
-    ...(arItem ? [{ href: `${arItem.href}${subQs}`, label: arItem.label }] : []),
-  ]
+  const tabs = await groupTabs('customers', '/customers', { subQs })
 
   const badgeFor = (href: string): DirectoryItem['badge'] => {
     switch (href) {
@@ -118,22 +116,15 @@ export default async function CustomersHomePage({
       }
     >
       <div className="flex h-full min-h-0 flex-col gap-4">
-        {/* Vitals */}
+        {/* Vitals — workspace-level (relationship + sales cycle). The
+            receivables figures live on the AR cockpit; here they are one
+            compact pulse panel in the rail, not a second dashboard. */}
         <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <HomeStatTile
-            icon="wallet"
-            accent="sky"
-            label={t('home.vitals.openAr')}
-            value={moneyCompact(data.arOutstanding)}
-            sub={t('home.vitals.openArSub', { count: data.openInvoices })}
-          />
-          <HomeStatTile
-            icon="triangle-alert"
-            accent="red"
-            label={t('home.vitals.overdue')}
-            value={moneyCompact(data.arOverdue)}
-            sub={t('home.vitals.overdueSub', { count: data.overdueInvoices })}
-            tone={data.arOverdue > 0 ? 'negative' : 'positive'}
+            icon="users"
+            accent="teal"
+            label={t('home.vitals.activeCustomers')}
+            value={String(data.activeCustomers)}
           />
           <HomeStatTile
             icon="trending-up"
@@ -150,11 +141,22 @@ export default async function CustomersHomePage({
             tone="positive"
           />
           <HomeStatTile
-            icon="timer"
-            accent="teal"
-            label={t('home.vitals.dso')}
-            value={data.dsoLite === null ? '—' : t('home.vitals.days', { n: data.dsoLite })}
-            sub={t('home.vitals.dsoSub')}
+            icon="clipboard"
+            accent="sky"
+            label={t('home.vitals.quotesOrders')}
+            value={String(data.badges.openQuotes + data.badges.openSalesOrders)}
+            sub={t('home.vitals.quotesOrdersSub', {
+              quotes: data.badges.openQuotes,
+              orders: data.badges.openSalesOrders,
+            })}
+          />
+          <HomeStatTile
+            icon="wallet"
+            accent="emerald"
+            label={t('home.vitals.collectedWeek')}
+            value={moneyCompact(data.badges.collected7d)}
+            sub={t('home.vitals.collectedWeekSub', { count: data.badges.receipts7d })}
+            tone="positive"
           />
         </div>
 
@@ -170,55 +172,38 @@ export default async function CustomersHomePage({
             {data.topExposure.length === 0 ? (
               <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">{t('home.hero.empty')}</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('home.hero.customer')}</th>
-                    <th className="px-3 py-2 text-center font-medium">{t('home.hero.openOpps')}</th>
-                    <th className="px-3 py-2 text-center font-medium">{t('home.hero.openInvoices')}</th>
-                    <th className="px-3 py-2 text-right font-medium">{t('home.hero.oldestDue')}</th>
-                    <th className="px-3 py-2 text-right font-medium">{t('home.hero.overdue')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('home.hero.open')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.topExposure.map((r) => (
-                    <tr key={r.partyId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-2.5">
-                        <Link
-                          href={`/ar/invoices?q=${encodeURIComponent(r.name)}` as never}
-                          className="font-medium text-slate-800 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-300"
-                        >
-                          {r.name}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        {r.openOpportunities > 0 ? (
-                          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 tabular-nums dark:bg-violet-950/50 dark:text-violet-300">
-                            {r.openOpportunities}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-600">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400">{r.openInvoices}</td>
-                      <td className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{r.oldestDue ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">
-                        {r.overdue > 0 ? (
-                          <span className="text-red-600 dark:text-red-400">{moneyCompact(r.overdue)}</span>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-600">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money(r.open)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <RelationshipsTable rows={data.topExposure} />
             )}
           </HomePanel>
 
           <div className="flex min-h-0 flex-col gap-5 overflow-y-auto">
+            <HomePanel title={t('home.pulse.title')} icon="gauge" bodyClassName="p-0" className="shrink-0">
+              <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-800">
+                <div className="px-3 py-2.5 text-center">
+                  <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{moneyCompact(data.arOutstanding)}</p>
+                  <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('home.pulse.open')}</p>
+                </div>
+                <div className="px-3 py-2.5 text-center">
+                  <p className={cn('text-sm font-bold tabular-nums', data.arOverdue > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100')}>
+                    {moneyCompact(data.arOverdue)}
+                  </p>
+                  <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('home.pulse.overdue')}</p>
+                </div>
+                <div className="px-3 py-2.5 text-center">
+                  <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                    {data.dsoLite === null ? '—' : t('home.vitals.days', { n: data.dsoLite })}
+                  </p>
+                  <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('home.pulse.dso')}</p>
+                </div>
+              </div>
+              <Link
+                href={`/ar${subQs}` as never}
+                className="block border-t border-slate-100 px-4 py-2 text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-teal-400 dark:hover:text-teal-300"
+              >
+                {t('home.pulse.cta')} →
+              </Link>
+            </HomePanel>
+
             <HomePanel title={t('home.trend.title')} icon="area-chart" hint={t('home.trend.hint')} className="shrink-0">
               <TrendChart
                 labels={trendLabels}

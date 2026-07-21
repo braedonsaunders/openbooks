@@ -14,7 +14,12 @@
       "openPos": "未決発注",
       "openPosSub": "{count} 件の発注",
       "spend30d": "30 日間支出",
-      "spend30dSub": "計上済み仕入請求書"
+      "spend30dSub": "計上済み仕入請求書",
+      "activeVendors": "アクティブな仕入先",
+      "paymentsWeek": "今週の支払",
+      "paymentsWeekSub": "計上 {count} 件 · 直近7日",
+      "unposted": "未計上の経費",
+      "unpostedSub": "計上待ち"
     },
     "hero": {
       "title": "仕入先コミットメント",
@@ -45,6 +50,13 @@
       "allClear": "すべて順調 — 期限超過なし。",
       "overdueVendor": "{vendor} が {amount} 期限超過",
       "unpostedExpenses": "経費精算 {count} 件が計上待ち"
+    },
+    "pulse": {
+      "title": "買掛金パルス",
+      "open": "未払",
+      "overdue": "期限超過",
+      "due7": "7日以内期日",
+      "cta": "買掛金管理を開く"
     }
   }
 }

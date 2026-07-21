@@ -17,6 +17,7 @@ import { money, moneyCompact } from '../../../../lib/format'
 import type { ApPosition } from '../../../../lib/cash/ap-position'
 import { StatTile, CockpitPanel, AgingBars, ScheduleBars } from '../../../../components/cockpit/ui'
 import { CashWeekFlyout } from '../../analytics/_ui/CashWeekFlyout'
+import { EntityDrawer } from '../../analytics/_ui/EntityDrawer'
 import { ApSelectionConfigDrawer } from './ApSelectionConfigDrawer'
 import { PayRunPlanner } from './PayRunPlanner'
 
@@ -31,6 +32,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
   const t = useTranslations('ap.cockpit')
   const [showConfig, setShowConfig] = useState(false)
   const [drillWeek, setDrillWeek] = useState<number | null>(null)
+  const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
 
   const overduePct = data.outstanding > 0 ? Math.round((data.overdue / data.outstanding) * 100) : 0
   const gear = canConfigure ? (
@@ -105,7 +107,11 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
                   </thead>
                   <tbody>
                     {data.byVendor.map((v) => (
-                      <tr key={v.partyId ?? v.partyName} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <tr
+                        key={v.partyId ?? v.partyName}
+                        onClick={v.partyId ? () => setEntity({ id: v.partyId!, name: v.partyName }) : undefined}
+                        className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${v.partyId ? 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`}
+                      >
                         <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{v.partyName}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {v.overdue > 0 ? <span className="text-red-600 dark:text-red-400">{moneyCompact(v.overdue)}</span> : <span className="text-slate-300 dark:text-slate-600">—</span>}
@@ -131,6 +137,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
           onClose={() => setDrillWeek(null)}
         />
       ) : null}
+      {entity ? <EntityDrawer party={entity.id} name={entity.name} side="ap" onClose={() => setEntity(null)} /> : null}
       {showConfig ? (
         <ApSelectionConfigDrawer
           onClose={() => setShowConfig(false)}

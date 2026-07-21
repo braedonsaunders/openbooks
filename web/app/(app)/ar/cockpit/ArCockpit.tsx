@@ -23,6 +23,7 @@ import {
   ScheduleBars,
 } from "../../../../components/cockpit/ui";
 import { CashWeekFlyout } from "../../analytics/_ui/CashWeekFlyout";
+import { EntityDrawer } from "../../analytics/_ui/EntityDrawer";
 import { ArCollectionsInfoDrawer } from "./ArCollectionsInfoDrawer";
 import { CollectionsWorklist } from "./CollectionsWorklist";
 import { SearchInput } from "../../../../components/search-input";
@@ -50,6 +51,9 @@ export function ArCockpit({
   const currentParams = Object.fromEntries(search.entries());
   const [showInfo, setShowInfo] = useState(false);
   const [drillWeek, setDrillWeek] = useState<number | null>(null);
+  const [entity, setEntity] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
   const overduePct =
     data.outstanding > 0
@@ -236,7 +240,13 @@ export function ArCockpit({
                       {visibleCustomers.map((c) => (
                         <tr
                           key={c.partyId ?? c.partyName}
-                          className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                          onClick={
+                            c.partyId
+                              ? () =>
+                                  setEntity({ id: c.partyId!, name: c.partyName })
+                              : undefined
+                          }
+                          className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${c.partyId ? "cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
                         >
                           <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
                             {c.partyName}
@@ -282,6 +292,14 @@ export function ArCockpit({
           weekIndex={drillWeek}
           canCollectionRun={canCollect}
           onClose={() => setDrillWeek(null)}
+        />
+      ) : null}
+      {entity ? (
+        <EntityDrawer
+          party={entity.id}
+          name={entity.name}
+          side="ar"
+          onClose={() => setEntity(null)}
         />
       ) : null}
       {showInfo ? (

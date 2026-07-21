@@ -14,7 +14,12 @@
       "openPos": "BC ouverts",
       "openPosSub": "{count} commandes",
       "spend30d": "Dépenses 30 jours",
-      "spend30dSub": "Factures fournisseurs comptabilisées"
+      "spend30dSub": "Factures fournisseurs comptabilisées",
+      "activeVendors": "Fournisseurs actifs",
+      "paymentsWeek": "Paiements cette semaine",
+      "paymentsWeekSub": "{count} comptabilisés · 7 derniers jours",
+      "unposted": "Dépenses non comptabilisées",
+      "unpostedSub": "en attente de comptabilisation"
     },
     "hero": {
       "title": "Engagements fournisseurs",
@@ -45,6 +50,13 @@
       "allClear": "Tout est en ordre — rien en retard.",
       "overdueVendor": "{vendor} a {amount} en retard",
       "unpostedExpenses": "{count} notes de frais à comptabiliser"
+    },
+    "pulse": {
+      "title": "Pouls des dettes fournisseurs",
+      "open": "En cours",
+      "overdue": "En retard",
+      "due7": "Échéance 7 jours",
+      "cta": "Ouvrir les comptes fournisseurs"
     }
   }
 }

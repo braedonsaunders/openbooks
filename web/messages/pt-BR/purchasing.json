@@ -14,7 +14,12 @@
       "openPos": "OCs abertas",
       "openPosSub": "{count} pedidos",
       "spend30d": "Gasto 30 dias",
-      "spend30dSub": "Faturas de fornecedor lançadas"
+      "spend30dSub": "Faturas de fornecedor lançadas",
+      "activeVendors": "Fornecedores ativos",
+      "paymentsWeek": "Pagamentos esta semana",
+      "paymentsWeekSub": "{count} lançados · últimos 7 dias",
+      "unposted": "Despesas não lançadas",
+      "unpostedSub": "aguardando lançamento"
     },
     "hero": {
       "title": "Compromissos com fornecedores",
@@ -45,6 +50,13 @@
       "allClear": "Tudo certo — nada vencido.",
       "overdueVendor": "{vendor} está com {amount} vencido",
       "unpostedExpenses": "{count} relatórios de despesas aguardando lançamento"
+    },
+    "pulse": {
+      "title": "Pulso de contas a pagar",
+      "open": "Em aberto",
+      "overdue": "Vencido",
+      "due7": "Vence em 7 dias",
+      "cta": "Abrir contas a pagar"
     }
   }
 }

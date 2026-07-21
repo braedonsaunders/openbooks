@@ -39,6 +39,7 @@ export interface CustomersHome {
     openQuotes: number
     openSalesOrders: number
     receipts7d: number
+    collected7d: number
     customers: number
   }
 }
@@ -147,6 +148,9 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= current_date - 7) as receipts_7d,
+        (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
+          and d.status = 'posted' and d.voided_at is null${docScope}
+          and coalesce(d.document_date, d.posting_date) >= current_date - 7) as collected_7d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and (p.custom->>'nsKind' = 'customer'
                or exists (select 1 from customer_roles cr where cr.org_id = ${orgId} and cr.party_id = p.id))
@@ -204,6 +208,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
       openQuotes: Number(badge.open_quotes ?? 0),
       openSalesOrders: Number(badge.open_sos ?? 0),
       receipts7d: Number(badge.receipts_7d ?? 0),
+      collected7d: Number(badge.collected_7d ?? 0),
       customers: Number(badge.customers ?? 0),
     },
   }
