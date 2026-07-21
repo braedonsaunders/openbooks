@@ -132,6 +132,7 @@ export function SetupNav({ canExport, canImport, canManageSetup, hiddenEntityKey
               ? [
                   { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
                   { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
+                  { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'coins' },
                   // Overhead rates live as a subtab of the Overhead workspace, not
                   // a standalone rail entry — filter it out of the generic group.
                   ...(byGroup.get(group.key) ?? [])
@@ -141,15 +142,6 @@ export function SetupNav({ canExport, canImport, canManageSetup, hiddenEntityKey
                       label: t(`entities.${e.key}.title`),
                       iconKey: e.iconKey,
                     })),
-                ]
-              : group.key === 'workforce'
-              ? [
-                  { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'coins' },
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
                 ]
               : (byGroup.get(group.key) ?? []).map((e) => ({
                   href: `/admin/setup/${e.key}`,
