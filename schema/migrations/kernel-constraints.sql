@@ -203,6 +203,110 @@ drop trigger if exists audit_log_append_only on audit_log;
 create trigger audit_log_append_only before update or delete on audit_log
   for each row execute function audit_log_append_only_guard();
 
+-- Approved-time pricing evidence is immutable. Corrections reverse/reprice
+-- through new evidence; they never rewrite the explanation used for posting.
+create or replace function labor_rate_snapshot_immutable() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'DELETE' and openbooks_sandbox_wipe_allowed(old.org_id) then return old; end if;
+  raise exception 'approved-time rate explanations are immutable';
+end $$;
+
+drop trigger if exists time_entry_rate_components_append_only on time_entry_rate_components;
+create trigger time_entry_rate_components_append_only
+before update or delete on time_entry_rate_components
+for each row execute function labor_rate_snapshot_immutable();
+
+-- A published rate version and every price row it owns are evidence. The only
+-- permitted change is retiring an active version without changing its dates.
+create or replace function rate_version_immutable() returns trigger
+language plpgsql as $$
+begin
+  if old.status in ('active','retired') then
+    if old.status = 'active' and new.status = 'active'
+       and new.rate_book_id = old.rate_book_id and new.effective_from = old.effective_from
+       and new.effective_to is not null and new.effective_to >= old.effective_from
+       and (old.effective_to is null or new.effective_to <= old.effective_to) then return new; end if;
+    if old.status = 'active' and new.status = 'retired'
+       and new.rate_book_id = old.rate_book_id and new.effective_from = old.effective_from
+       and new.effective_to is not distinct from old.effective_to then return new; end if;
+    raise exception 'activated and retired rate versions are immutable';
+  end if;
+  return new;
+end $$;
+drop trigger if exists item_rate_versions_immutable on item_rate_versions;
+create trigger item_rate_versions_immutable before update on item_rate_versions
+for each row execute function rate_version_immutable();
+
+create or replace function rate_version_child_guard() returns trigger
+language plpgsql as $$
+declare version_status text;
+begin
+  select status into version_status from item_rate_versions where id = coalesce(new.version_id, old.version_id);
+  if version_status <> 'draft' then raise exception 'rate lines in an activated or retired version are immutable'; end if;
+  return coalesce(new, old);
+end $$;
+drop trigger if exists item_rate_lines_version_guard on item_rate_lines;
+create trigger item_rate_lines_version_guard before insert or update or delete on item_rate_lines for each row execute function rate_version_child_guard();
+drop trigger if exists labor_rate_lines_version_guard on labor_rate_lines;
+create trigger labor_rate_lines_version_guard before insert or update or delete on labor_rate_lines for each row execute function rate_version_child_guard();
+drop trigger if exists labor_rate_components_version_guard on labor_rate_components;
+create trigger labor_rate_components_version_guard before insert or update or delete on labor_rate_components for each row execute function rate_version_child_guard();
+
+create or replace function payroll_posted_guard() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.status = 'draft' or openbooks_sandbox_wipe_allowed(old.org_id) then return old; end if;
+    raise exception 'validated, reconciled, and posted external payroll batches are immutable';
+  end if;
+  if old.status = 'posted' then
+    raise exception 'posted external payroll cost batch % is immutable', old.id;
+  end if;
+  if old.status = 'reconciled' and new.status <> 'posted' then
+    raise exception 'a reconciled external payroll batch can only be posted';
+  end if;
+  if old.status = 'reconciled' and
+     (to_jsonb(new) - array['status','variance_journal_entry_id','updated_at','updated_by']) <>
+     (to_jsonb(old) - array['status','variance_journal_entry_id','updated_at','updated_by']) then
+    raise exception 'reconciled external payroll evidence is immutable';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists payroll_cost_batches_posted_guard on payroll_cost_batches;
+create trigger payroll_cost_batches_posted_guard
+before update or delete on payroll_cost_batches
+for each row execute function payroll_posted_guard();
+
+create or replace function payroll_cost_line_draft_guard() returns trigger
+language plpgsql as $$
+declare batch_status text;
+begin
+  select status into batch_status from payroll_cost_batches where id = coalesce(new.batch_id, old.batch_id);
+  if batch_status <> 'draft' then raise exception 'external payroll cost lines are immutable after validation'; end if;
+  return coalesce(new, old);
+end $$;
+drop trigger if exists payroll_cost_lines_draft_guard on payroll_cost_lines;
+create trigger payroll_cost_lines_draft_guard before insert or update or delete on payroll_cost_lines
+for each row execute function payroll_cost_line_draft_guard();
+
+create or replace function payroll_allocation_guard() returns trigger
+language plpgsql as $$
+declare batch_status text;
+begin
+  select b.status into batch_status
+    from payroll_cost_lines l join payroll_cost_batches b on b.id = l.batch_id
+   where l.id = coalesce(new.payroll_line_id, old.payroll_line_id);
+  if batch_status not in ('draft','validated') then
+    raise exception 'external payroll allocations are immutable after reconciliation';
+  end if;
+  return coalesce(new, old);
+end $$;
+drop trigger if exists payroll_time_allocations_guard on payroll_time_allocations;
+create trigger payroll_time_allocations_guard before insert or update or delete on payroll_time_allocations
+for each row execute function payroll_allocation_guard();
+
 -- Prepared tax-return snapshots are evidence, not a mutable working table.
 -- A user may only transition a prepared snapshot to filed and record the
 -- government reference/timestamp; every value used to prepare it stays frozen.

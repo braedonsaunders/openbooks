@@ -10,6 +10,7 @@ export const runtime = 'nodejs'
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 const BILLING_METHODS = ['time_and_materials', 'fixed_price', 'cost_plus'] as const
+const LABOR_RATE_POLICIES = ['work_date', 'locked', 'scheduled_escalation', 'manual_reprice'] as const
 const TASK_STATUSES = ['open', 'complete', 'cancelled'] as const
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -56,6 +57,8 @@ interface PatchBody {
   managerId?: string | null
   status?: string
   billingMethod?: string | null
+  laborRateBookId?: string | null
+  laborRatePolicy?: string | null
   projectTypeId?: string | null
   invoicingPreference?: Record<string, unknown> | null
   customerPoNumber?: string | null
@@ -119,6 +122,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   ) {
     return bad('Invalid billing method')
   }
+  if (body.laborRatePolicy !== undefined && body.laborRatePolicy !== null && !LABOR_RATE_POLICIES.includes(body.laborRatePolicy as (typeof LABOR_RATE_POLICIES)[number])) {
+    return bad('Invalid labor rate policy')
+  }
 
   // -- name / activation ---------------------------------------------------
   const name = body.name !== undefined ? body.name.trim() : undefined
@@ -164,6 +170,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!subsidiary.rows.length) return bad('Subsidiary not found')
     }
     subsidiaryId = value
+  }
+
+  let laborRateBookId: string | null | undefined
+  if (body.laborRateBookId !== undefined) {
+    const value = uuidOrNull(body.laborRateBookId)
+    if (value === 'invalid') return bad('Invalid labor rate book')
+    if (value) {
+      const book = (await db.execute(sql`
+        select 1 from item_rate_books where id = ${value} and org_id = ${user.orgId} and is_active`)) as any
+      if (!book.rows.length) return bad('Labor rate book not found')
+    }
+    laborRateBookId = value
   }
 
   // -- dates ---------------------------------------------------------------
@@ -267,6 +285,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
       status = coalesce(${body.status ?? null}, status),
       billing_method = ${body.billingMethod !== undefined ? body.billingMethod : (derivedBilling !== undefined ? derivedBilling : sql`billing_method`)},
+      labor_rate_locked_version_id = case
+        when (${laborRateBookId !== undefined} and labor_rate_book_id is distinct from ${laborRateBookId ?? null})
+          or (${body.laborRatePolicy !== undefined} and labor_rate_policy is distinct from ${body.laborRatePolicy ?? null})
+          or ${body.laborRatePolicy === 'work_date' || body.laborRatePolicy === 'scheduled_escalation'}
+        then null else labor_rate_locked_version_id end,
+      labor_rate_lock_date = case
+        when (${laborRateBookId !== undefined} and labor_rate_book_id is distinct from ${laborRateBookId ?? null})
+          or (${body.laborRatePolicy !== undefined} and labor_rate_policy is distinct from ${body.laborRatePolicy ?? null})
+          or ${body.laborRatePolicy === 'work_date' || body.laborRatePolicy === 'scheduled_escalation'}
+        then null else labor_rate_lock_date end,
+      labor_rate_book_id = ${laborRateBookId !== undefined ? laborRateBookId : sql`labor_rate_book_id`},
+      labor_rate_policy = ${body.laborRatePolicy !== undefined ? body.laborRatePolicy : sql`labor_rate_policy`},
       customer_po_number = ${body.customerPoNumber !== undefined ? strOrNull(body.customerPoNumber) : sql`customer_po_number`},
       starts_on = ${startsOn !== undefined ? startsOn : sql`starts_on`},
       ends_on = ${endsOn !== undefined ? endsOn : sql`ends_on`},

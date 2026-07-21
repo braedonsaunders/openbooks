@@ -82,6 +82,15 @@
     "empty": "No rate versions yet.",
     "rates": "Rates"
   },
+  "laborRates": {
+    "title": "Labor and service rate overrides",
+    "description": "Item-specific rules inside the selected project rate book. These override broader class or company rules without changing the project's rate book.",
+    "documentation": "Documentation", "addRule": "Add override", "draftRequired": "Create or install a draft rate-book version before adding an override.",
+    "version": "Draft version", "code": "Rule code", "lane": "Rate lane", "method": "Method", "hourlyRate": "Hourly rate", "percent": "Percent", "priority": "Priority",
+    "rule": "Rule", "book": "Rate book", "value": "Rate", "hour": "hour", "atCost": "At cost", "empty": "No labor or service overrides for this item.", "saved": "Item rate override saved", "saveFailed": "Could not save the override",
+    "lanes": { "direct_cost": "Direct cost", "bill": "Customer billing", "transfer": "Internal transfer", "planning_cost": "Planning cost", "planning_bill": "Planning bill" },
+    "methods": { "fixed": "Fixed hourly rate", "at_cost": "At burdened cost", "markup_on_cost": "Markup on cost", "margin_on_cost": "Target margin on cost" }
+  },
   "revrec": {
     "title": "Revenue recognition",
     "hint": "Defer and recognize this item's revenue over time (ASC 606)",

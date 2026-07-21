@@ -12,6 +12,7 @@ import {
   Coins,
   Download,
   FileText,
+  FileSpreadsheet,
   Gauge,
   Hash,
   History,
@@ -20,6 +21,7 @@ import {
   MapPin,
   Package,
   Percent,
+  Plug,
   Receipt,
   Server,
   Shield,
@@ -42,6 +44,8 @@ const ICONS: Record<string, ReactNode> = {
   percent: <Percent size={15} />,
   layers: <Layers size={15} />,
   file: <FileText size={15} />,
+  'file-spreadsheet': <FileSpreadsheet size={15} />,
+  plug: <Plug size={15} />,
   gauge: <Gauge size={15} />,
   tag: <Tag size={15} />,
   'map-pin': <MapPin size={15} />,
@@ -128,6 +132,18 @@ export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: 
               ? [
                   { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
                   { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
+                ]
+              : group.key === 'workforce'
+              ? [
+                  { href: '/admin/setup/labor-costing', label: t('laborWizard.navTitle'), iconKey: 'gauge' },
+                  { href: '/admin/setup/labor-rate-templates', label: t('templates.navTitle'), iconKey: 'gauge' },
+                  { href: '/admin/setup/labor-rate-test', label: t('rateTest.navTitle'), iconKey: 'timer' },
+                  { href: '/admin/setup/payroll-costs', label: t('payrollOperations.navTitle'), iconKey: 'payments' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),

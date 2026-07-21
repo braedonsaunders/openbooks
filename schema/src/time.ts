@@ -28,11 +28,23 @@ export const timeEntries = pgTable(
     projectId: uuid("project_id"),
     projectTaskId: uuid("project_task_id"),
     departmentId: uuid("department_id"),
+    locationId: uuid("location_id"),
     memo: text("memo"),
     memoIsPrivate: boolean("memo_is_private").notNull().default(false),
     isBillable: boolean("is_billable").notNull().default(false),
-    costRate: money("cost_rate"), // snapshot at approval
+    /** Standard burdened cost and customer bill rate, snapshotted atomically at approval. */
+    costRate: money("cost_rate"),
     billRate: money("bill_rate"),
+    directCostRate: money("direct_cost_rate"),
+    burdenRate: money("burden_rate"),
+    transferRate: money("transfer_rate"),
+    standardCostAmount: money("standard_cost_amount"),
+    actualCostAmount: money("actual_cost_amount"),
+    costVarianceAmount: money("cost_variance_amount"),
+    costRateVersionId: uuid("cost_rate_version_id"),
+    billRateVersionId: uuid("bill_rate_version_id"),
+    rateResolvedAt: timestamp("rate_resolved_at", { withTimezone: true }),
+    rateResolutionHash: text("rate_resolution_hash"),
     status: text("status", { enum: ["draft", "submitted", "approved", "rejected"] })
       .notNull()
       .default("draft"),

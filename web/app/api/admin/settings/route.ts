@@ -92,6 +92,8 @@ export async function GET() {
       controlAccounts: Object.fromEntries(
         CONTROL_ACCOUNT_KEYS.map((k) => [k, control[k] ?? ""]),
       ) as Record<ControlAccountKey, string>,
+      defaultLaborRatePolicy:
+        (settings.laborCosting as Record<string, unknown> | undefined)?.defaultRatePolicy ?? "work_date",
     },
     currencies: currencies.rows as { code: string; name: string }[],
     numberSequences: sequences.rows as {
@@ -143,6 +145,8 @@ export async function PUT(req: Request) {
     defaultLocale?: unknown;
     reportPdfStyle?: unknown;
     fairValueRangePolicy?: unknown;
+    defaultLaborRateBookId?: unknown;
+    defaultLaborRatePolicy?: unknown;
   };
 
   const existing = (await db.execute(sql`
@@ -151,6 +155,29 @@ export async function PUT(req: Request) {
   const cur = existing.rows[0];
   if (!cur) return NextResponse.json({ error: "org not found" }, { status: 404 });
   const settings = (cur.settings ?? {}) as Record<string, unknown>;
+
+  const laborPolicies = ["work_date", "locked", "scheduled_escalation", "manual_reprice"] as const;
+  let nextDefaultBookId: string | null | undefined;
+  if (body.defaultLaborRateBookId !== undefined) {
+    nextDefaultBookId = body.defaultLaborRateBookId === "" || body.defaultLaborRateBookId === null
+      ? null
+      : String(body.defaultLaborRateBookId);
+    if (nextDefaultBookId && !isUuid(nextDefaultBookId)) {
+      return NextResponse.json({ error: "default labor rate book is invalid" }, { status: 400 });
+    }
+    if (nextDefaultBookId) {
+      const found = (await db.execute(sql`
+        select 1 from item_rate_books where id = ${nextDefaultBookId} and org_id = ${orgId} and is_active`)) as any;
+      if (!found.rows[0]) return NextResponse.json({ error: "default labor rate book was not found" }, { status: 400 });
+    }
+  }
+  let nextLaborPolicy: string | undefined;
+  if (body.defaultLaborRatePolicy !== undefined) {
+    if (!laborPolicies.includes(body.defaultLaborRatePolicy as typeof laborPolicies[number])) {
+      return NextResponse.json({ error: "default labor rate policy is invalid" }, { status: 400 });
+    }
+    nextLaborPolicy = body.defaultLaborRatePolicy as string;
+  }
 
   const changes: Record<string, unknown> = {};
   const sets: SQL[] = [];
@@ -281,6 +308,15 @@ export async function PUT(req: Request) {
     nextStartMonth !== undefined && nextStartMonth !== curStartMonth;
   const nextSettings = { ...settings } as Record<string, unknown>;
   let settingsChanged = false;
+  if (nextLaborPolicy !== undefined) {
+    const currentLabor = (settings.laborCosting ?? {}) as Record<string, unknown>;
+    const currentPolicy = currentLabor.defaultRatePolicy ?? "work_date";
+    if (nextLaborPolicy !== currentPolicy) {
+      nextSettings.laborCosting = { ...currentLabor, defaultRatePolicy: nextLaborPolicy };
+      changes.defaultLaborRatePolicy = [currentPolicy, nextLaborPolicy];
+      settingsChanged = true;
+    }
+  }
   if (nextStartMonth !== undefined && nextStartMonth !== curStartMonth) {
     nextSettings.fiscalYearStartMonth = nextStartMonth;
     changes.fiscalYearStartMonth = [curStartMonth, nextStartMonth];
@@ -332,7 +368,13 @@ export async function PUT(req: Request) {
     sets.push(sql`settings = ${JSON.stringify(nextSettings)}::jsonb`);
   }
 
-  if (sets.length === 0) {
+  const currentDefaultBook = (await db.execute(sql`
+    select id from item_rate_books where org_id = ${orgId} and is_active and is_default order by id limit 1`)) as any;
+  const bookChanged = nextDefaultBookId !== undefined
+    && (currentDefaultBook.rows[0]?.id ?? null) !== nextDefaultBookId;
+  if (bookChanged) changes.defaultLaborRateBookId = [currentDefaultBook.rows[0]?.id ?? null, nextDefaultBookId];
+
+  if (sets.length === 0 && !bookChanged) {
     return NextResponse.json({ ok: true, changed: false });
   }
 
@@ -340,10 +382,18 @@ export async function PUT(req: Request) {
   // every period — all in one transaction so a failure leaves nothing partial.
   const effectiveStart = nextStartMonth ?? curStartMonth;
   await db.transaction(async (tx) => {
-    await tx.execute(sql`
-      update orgs
-         set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
-       where id = ${orgId}`);
+    if (sets.length > 0) {
+      await tx.execute(sql`
+        update orgs
+           set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
+         where id = ${orgId}`);
+    }
+    if (bookChanged) {
+      await tx.execute(sql`update item_rate_books set is_default = false, updated_at = now(), updated_by = ${actor.id} where org_id = ${orgId} and is_default`);
+      if (nextDefaultBookId) {
+        await tx.execute(sql`update item_rate_books set is_default = true, updated_at = now(), updated_by = ${actor.id} where id = ${nextDefaultBookId} and org_id = ${orgId}`);
+      }
+    }
 
     if (startMonthChanged) {
       // Drop the (org_id, fiscal_year, period_number) unique index so the

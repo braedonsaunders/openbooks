@@ -318,6 +318,8 @@ const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
     name: 3,
     project_type_id: 2,
     customer_id: 2,
+    labor_rate_book_id: 2,
+    labor_rate_policy: 2,
     foreman_id: 2,
     manager_id: 2,
     starts_on: 2,

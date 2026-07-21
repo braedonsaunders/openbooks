@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { postDocument } from "./posting.ts";
+import { fromUnits, toUnits } from "./money.ts";
 
 /**
  * Governed journal writes for sandboxed code (App backends + user scripts).
@@ -25,6 +26,8 @@ export interface ScriptJournalLine {
   description?: string;
   departmentId?: string;
   projectId?: string;
+  locationId?: string;
+  subsidiaryId?: string;
 }
 
 export interface ScriptJournalInput {
@@ -32,6 +35,7 @@ export interface ScriptJournalInput {
   documentDate?: string;
   memo?: string;
   referenceNumber?: string;
+  subsidiaryId?: string;
   lines: ScriptJournalLine[];
 }
 
@@ -50,11 +54,6 @@ const MAX_LINES = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Round to the ledger's 4dp and return a fixed string (numeric(19,4)). */
-function amt4(n: number): string {
-  return (Math.round(n * 10_000) / 10_000).toFixed(4);
-}
-
 /**
  * Pure validation + normalization — exported separately so it unit-tests
  * without a database. Throws JournalWriteError with a script-readable message.
@@ -63,7 +62,8 @@ export function validateJournalInput(input: ScriptJournalInput): {
   documentDate: string;
   memo: string | null;
   referenceNumber: string | null;
-  lines: { accountId?: string; accountCode?: string; amount: string; description: string | null; departmentId: string | null; projectId: string | null }[];
+  subsidiaryId: string | null;
+  lines: { accountId?: string; accountCode?: string; amount: string; description: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; subsidiaryId: string | null }[];
   totalDebits: string;
 } {
   if (!input || typeof input !== "object") throw new JournalWriteError("journal input must be an object");
@@ -74,35 +74,46 @@ export function validateJournalInput(input: ScriptJournalInput): {
   const documentDate = input.documentDate ?? new Date().toISOString().slice(0, 10);
   if (!DATE_RE.test(documentDate)) throw new JournalWriteError(`invalid documentDate "${input.documentDate}" (use YYYY-MM-DD)`);
 
-  let balance = 0;
-  let debits = 0;
+  if (input.subsidiaryId && !UUID_RE.test(input.subsidiaryId)) throw new JournalWriteError("invalid subsidiaryId");
+  let balance = 0n;
+  let debits = 0n;
   const lines = input.lines.map((l, i) => {
-    const n = Number(l.amount);
-    if (!Number.isFinite(n) || n === 0) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
-    if (Math.abs(n) > 1e13) throw new JournalWriteError(`line ${i + 1}: amount out of range`);
+    let units: bigint;
+    try {
+      units = toUnits(String(l.amount));
+    } catch {
+      throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
+    }
+    if (units === 0n) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
+    if (units > 9999999999999999999n || units < -9999999999999999999n) throw new JournalWriteError(`line ${i + 1}: amount out of range`);
     if (!l.accountId && !l.accountCode) throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
     if (l.accountId && !UUID_RE.test(l.accountId)) throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
-    balance += n;
-    if (n > 0) debits += n;
+    for (const [name, value] of Object.entries({ departmentId: l.departmentId, projectId: l.projectId, locationId: l.locationId, subsidiaryId: l.subsidiaryId })) {
+      if (value && !UUID_RE.test(value)) throw new JournalWriteError(`line ${i + 1}: invalid ${name}`);
+    }
+    balance += units;
+    if (units > 0n) debits += units;
     return {
       accountId: l.accountId,
       accountCode: l.accountCode ? String(l.accountCode) : undefined,
-      amount: amt4(n),
+      amount: fromUnits(units),
       description: l.description ? String(l.description).slice(0, 500) : null,
       departmentId: l.departmentId && UUID_RE.test(l.departmentId) ? l.departmentId : null,
       projectId: l.projectId && UUID_RE.test(l.projectId) ? l.projectId : null,
+      locationId: l.locationId && UUID_RE.test(l.locationId) ? l.locationId : null,
+      subsidiaryId: l.subsidiaryId && UUID_RE.test(l.subsidiaryId) ? l.subsidiaryId : null,
     };
   });
-  // Balanced to the 4dp the ledger stores.
-  if (Math.abs(Math.round(balance * 10_000)) > 0) {
-    throw new JournalWriteError(`journal is not balanced (debits − credits = ${amt4(balance)})`);
+  if (balance !== 0n) {
+    throw new JournalWriteError(`journal is not balanced (debits − credits = ${fromUnits(balance)})`);
   }
   return {
     documentDate,
     memo: input.memo ? String(input.memo).slice(0, 2000) : null,
     referenceNumber: input.referenceNumber ? String(input.referenceNumber).slice(0, 100) : null,
+    subsidiaryId: input.subsidiaryId ?? null,
     lines,
-    totalDebits: amt4(debits),
+    totalDebits: fromUnits(debits),
   };
 }
 
@@ -150,8 +161,27 @@ export async function createScriptJournal(
     for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, or summary accountId "${id}"`);
   }
 
-  const currency = ((await db.execute(sql`select base_currency from orgs where id = ${orgId}`)) as any)
-    .rows[0]?.base_currency ?? "CAD";
+  const subsidiaryIds = [...new Set([v.subsidiaryId, ...v.lines.map((line) => line.subsidiaryId)].filter((id): id is string => Boolean(id)))];
+  const dimensionSpecs = [
+    { table: "subsidiaries", ids: subsidiaryIds },
+    { table: "departments", ids: [...new Set(v.lines.map((line) => line.departmentId).filter((id): id is string => Boolean(id)))] },
+    { table: "projects", ids: [...new Set(v.lines.map((line) => line.projectId).filter((id): id is string => Boolean(id)))] },
+    { table: "locations", ids: [...new Set(v.lines.map((line) => line.locationId).filter((id): id is string => Boolean(id)))] },
+  ];
+  for (const spec of dimensionSpecs) {
+    if (!spec.ids.length) continue;
+    const r = (await db.execute(sql`
+      select id from ${sql.raw(spec.table)} where org_id = ${orgId} and id in ${spec.ids}`)) as any;
+    const found = new Set(r.rows.map((row: any) => String(row.id)));
+    for (const id of spec.ids) if (!found.has(id)) throw new JournalWriteError(`unknown ${spec.table} id "${id}"`);
+  }
+
+  const root = ((await db.execute(sql`
+    select id, base_currency from subsidiaries
+     where org_id = ${orgId} and parent_id is null and is_active limit 1`)) as any).rows[0];
+  if (!root) throw new JournalWriteError("organization has no active root subsidiary");
+  const documentSubsidiaryId = v.subsidiaryId ?? String(root.id);
+  const currency = String(root.base_currency);
 
   const docId = await db.transaction(async (tx) => {
     // JE- sequence, same upsert the UI path uses (web/lib/bills.ts).
@@ -166,8 +196,8 @@ export async function createScriptJournal(
 
     const ins = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, document_date, currency,
-                             memo, reference_number, subtotal, tax_total, total, created_by)
-      values (${orgId}, 'journal', ${documentNumber}, ${v.documentDate}, ${currency},
+                             subsidiary_id, memo, reference_number, subtotal, tax_total, total, created_by)
+      values (${orgId}, 'journal', ${documentNumber}, ${v.documentDate}, ${currency}, ${documentSubsidiaryId},
               ${v.memo}, ${v.referenceNumber}, ${v.totalDebits}, '0', ${v.totalDebits}, ${actorId})
       returning id`)) as any;
     const id = String(ins.rows[0].id);
@@ -177,9 +207,9 @@ export async function createScriptJournal(
       const accountId = l.accountId ?? byCode.get(l.accountCode!)!;
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                    quantity, unit_price, amount, department_id, project_id, custom)
+                                    quantity, unit_price, amount, subsidiary_id, department_id, project_id, location_id, custom)
         values (${orgId}, ${id}, ${i + 1}, ${accountId}, ${l.description},
-                '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
+                '1', ${l.amount}, ${l.amount}, ${l.subsidiaryId ?? documentSubsidiaryId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, '{}')`);
     }
     const num = (await tx.execute(sql`select document_number from documents where id = ${id}`)) as any;
     return { id, documentNumber: String(num.rows[0].document_number) };

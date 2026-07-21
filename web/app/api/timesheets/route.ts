@@ -16,6 +16,7 @@ interface SaveRow {
   itemId?: string | null
   timeTypeId?: string | null
   departmentId?: string | null
+  locationId?: string | null
   isBillable?: boolean
   memo?: string | null
   hours?: (string | number | null)[]
@@ -92,6 +93,7 @@ async function save(req: Request) {
     itemId: string | null
     timeTypeId: string | null
     departmentId: string | null
+    locationId: string | null
     isBillable: boolean
     memo: string | null
   }
@@ -105,6 +107,8 @@ async function save(req: Request) {
     if (timeTypeId === 'invalid') return bad('Invalid time type')
     const departmentId = uuidOrNull(r.departmentId)
     if (departmentId === 'invalid') return bad('Invalid department')
+    const locationId = uuidOrNull(r.locationId)
+    if (locationId === 'invalid') return bad('Invalid location')
     const memo = typeof r.memo === 'string' && r.memo.trim() !== '' ? r.memo.trim() : null
     const isBillable = r.isBillable === true
     const cells = Array.isArray(r.hours) ? r.hours : []
@@ -122,6 +126,7 @@ async function save(req: Request) {
         itemId,
         timeTypeId,
         departmentId,
+        locationId,
         isBillable,
         memo,
       })
@@ -144,11 +149,11 @@ async function save(req: Request) {
       await tx.execute(sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
-           project_id, department_id, memo, is_billable, status,
+           project_id, department_id, location_id, memo, is_billable, status,
            created_by, updated_by)
         values
           (${orgId}, ${employee}, ${p.workedOn}, ${p.hours}, ${p.timeTypeId},
-           ${p.itemId}, ${p.projectId}, ${p.departmentId}, ${p.memo},
+           ${p.itemId}, ${p.projectId}, ${p.departmentId}, ${p.locationId}, ${p.memo},
            ${p.isBillable}, 'draft', ${user.id}, ${user.id})
       `)
     }

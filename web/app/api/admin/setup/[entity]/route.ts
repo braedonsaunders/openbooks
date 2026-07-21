@@ -220,41 +220,166 @@ async function validateEntityIntegrity(
     if (rowId) {
       const current = (await db.execute(sql`
         select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
+               project_task_id as "projectTaskId", subsidiary_id as "subsidiaryId",
+               department_id as "departmentId", location_id as "locationId", priority,
                effective_from as "effectiveFrom", effective_to as "effectiveTo"
           from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}
       `)) as any
       if (!current.rows[0]) return 'Rate book assignment not found'
       values = { ...current.rows[0], ...body }
     }
-    if (values.customerId && values.projectId) return 'Choose a customer or a project, not both'
     if (values.effectiveFrom && values.effectiveTo && String(values.effectiveTo) < String(values.effectiveFrom)) {
       return 'The end date cannot precede the start date'
     }
-    const scope = values.projectId
-      ? sql`project_id = ${values.projectId}`
-      : values.customerId
-        ? sql`customer_id = ${values.customerId}`
-        : sql`project_id is null and customer_id is null`
     const [refs, overlap] = await Promise.all([
       db.execute(sql`
         select
           exists(select 1 from item_rate_books where id = ${values.rateBookId} and org_id = ${orgId}) as book_ok,
           ${values.customerId ? sql`exists(select 1 from customer_roles where party_id = ${values.customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
-          ${values.projectId ? sql`exists(select 1 from projects where id = ${values.projectId} and org_id = ${orgId})` : sql`true`} as project_ok
+          ${values.projectId ? sql`exists(select 1 from projects where id = ${values.projectId} and org_id = ${orgId})` : sql`true`} as project_ok,
+          ${values.projectTaskId ? sql`exists(select 1 from project_tasks where id = ${values.projectTaskId} and org_id = ${orgId} and (${values.projectId ?? null}::uuid is null or project_id = ${values.projectId ?? null}))` : sql`true`} as task_ok,
+          ${values.subsidiaryId ? sql`exists(select 1 from subsidiaries where id = ${values.subsidiaryId} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
+          ${values.departmentId ? sql`exists(select 1 from departments where id = ${values.departmentId} and org_id = ${orgId})` : sql`true`} as department_ok,
+          ${values.locationId ? sql`exists(select 1 from locations where id = ${values.locationId} and org_id = ${orgId})` : sql`true`} as location_ok
       `) as any,
       db.execute(sql`
         select 1 from item_rate_book_assignments
          where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active
-           and ${scope}
+           and customer_id is not distinct from ${values.customerId ?? null}
+           and project_id is not distinct from ${values.projectId ?? null}
+           and project_task_id is not distinct from ${values.projectTaskId ?? null}
+           and subsidiary_id is not distinct from ${values.subsidiaryId ?? null}
+           and department_id is not distinct from ${values.departmentId ?? null}
+           and location_id is not distinct from ${values.locationId ?? null}
+           and priority = ${Number(values.priority ?? 0)}
            and daterange(effective_from, effective_to, '[]') &&
                daterange(${values.effectiveFrom ?? null}::date, ${values.effectiveTo ?? null}::date, '[]')
          limit 1
       `) as any,
     ])
-    if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) {
+    if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok || !refs.rows[0]?.task_ok ||
+        !refs.rows[0]?.subsidiary_ok || !refs.rows[0]?.department_ok || !refs.rows[0]?.location_ok) {
       return 'Choose records from this organization'
     }
     if (overlap.rows.length) return 'This scope already has an active rate book for part of that date range'
+  }
+  if (entity.key === 'employee-labor-class-assignments' || entity.key === 'employee-compensation-rates') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from ${sql.raw(entity.table)} where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const employeeId = String(body.employeePartyId ?? current?.employee_party_id ?? '')
+    const from = String(body.effectiveFrom ?? current?.effective_from ?? '')
+    const to = body.effectiveTo === undefined ? current?.effective_to ?? null : body.effectiveTo || null
+    const employee = (await db.execute(sql`
+      select 1 from employee_roles where org_id = ${orgId} and party_id = ${employeeId} and is_active`)) as any
+    if (!employee.rows.length) return 'Choose an active employee from this organization'
+    if (to && String(to) < from) return 'The end date cannot precede the start date'
+    const overlap = (await db.execute(sql`
+      select 1 from ${sql.raw(entity.table)} where org_id = ${orgId} and id is distinct from ${rowId ?? null}
+       and employee_party_id = ${employeeId} and is_active
+       and daterange(effective_from, effective_to, '[]') && daterange(${from}::date, ${to}::date, '[]') limit 1`)) as any
+    if (overlap.rows.length) return 'This employee already has an active record covering part of that date range'
+  }
+  if (entity.key === 'labor-rate-lines' || entity.key === 'labor-rate-components') {
+    const current = rowId
+      ? ((await db.execute(sql`select version_id from ${sql.raw(entity.table)} where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const versionId = String(body.versionId ?? current?.version_id ?? '')
+    const version = (await db.execute(sql`
+      select status from item_rate_versions where id = ${versionId} and org_id = ${orgId}`)) as any
+    if (!version.rows[0]) return 'Choose a rate version from this organization'
+    if (version.rows[0].status !== 'draft') return 'Activated and retired rate versions are immutable; create a new draft version'
+  }
+  if (entity.key === 'item-rate-versions') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from item_rate_versions where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const bookId = String(body.rateBookId ?? current?.rate_book_id ?? '')
+    const from = String(body.effectiveFrom ?? current?.effective_from ?? '')
+    const to = body.effectiveTo === undefined ? current?.effective_to ?? null : body.effectiveTo || null
+    const status = String(body.status ?? current?.status ?? 'draft')
+    if (current && current.status !== 'draft' && status !== 'retired') {
+      return 'Activated and retired versions are immutable'
+    }
+    const book = (await db.execute(sql`select 1 from item_rate_books where id = ${bookId} and org_id = ${orgId} and is_active`)) as any
+    if (!book.rows.length) return 'Choose an active rate book from this organization'
+    if (to && String(to) < from) return 'The end date cannot precede the start date'
+    if (status === 'active') {
+      const conflictingStart = (await db.execute(sql`
+        select 1 from item_rate_versions where org_id = ${orgId} and rate_book_id = ${bookId}
+         and id is distinct from ${rowId ?? null} and status = 'active' and effective_from = ${from} limit 1`)) as any
+      if (conflictingStart.rows.length) return 'Another active version starts on that date'
+    }
+  }
+  if (entity.key === 'payroll-cost-batches') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from payroll_cost_batches where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    if (current && current.status !== 'draft') return 'Only draft external payroll batches can be edited'
+    const start = String(body.periodStart ?? current?.period_start ?? '')
+    const end = String(body.periodEnd ?? current?.period_end ?? '')
+    if (end < start) return 'The period end cannot precede the period start'
+    const subsidiaryId = String(body.subsidiaryId ?? current?.subsidiary_id ?? '')
+    const subsidiary = (await db.execute(sql`
+      select 1 from subsidiaries where id = ${subsidiaryId} and org_id = ${orgId} and is_active and not is_elimination`)) as any
+    if (!subsidiary.rows.length) return 'Choose an active subsidiary from this organization'
+    const sourceId = String(body.sourceId ?? current?.source_id ?? '')
+    const source = (await db.execute(sql`
+      select accounting_mode, payroll_clearing_account_id from external_payroll_sources
+       where id = ${sourceId} and org_id = ${orgId} and is_active`)) as any
+    if (!source.rows.length) return 'Choose an active external payroll source from this organization'
+    if (source.rows[0].accounting_mode === 'variance_to_clearing' && !source.rows[0].payroll_clearing_account_id) {
+      return 'The selected source needs a payroll clearing account before batches can be created'
+    }
+    const journalId = body.sourceJournalDocumentId === undefined ? current?.source_journal_document_id : body.sourceJournalDocumentId || null
+    if (journalId) {
+      const journal = (await db.execute(sql`
+        select 1 from documents where id = ${String(journalId)} and org_id = ${orgId} and kind = 'journal' and status = 'posted'`)) as any
+      if (!journal.rows.length) return 'Choose a posted journal from this organization'
+    }
+  }
+  if (entity.key === 'external-payroll-sources') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from external_payroll_sources where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const mode = String(body.accountingMode ?? current?.accounting_mode ?? 'variance_to_clearing')
+    const clearing = body.payrollClearingAccountId === undefined ? current?.payroll_clearing_account_id : body.payrollClearingAccountId || null
+    if (mode === 'variance_to_clearing' && !clearing) return 'Variance-to-clearing mode requires a payroll clearing account'
+    if (mode === 'variance_to_clearing') {
+      const org = (await db.execute(sql`select settings #>> '{controlAccounts,laborClearing}' as labor_clearing from orgs where id = ${orgId}`)) as any
+      if (!org.rows[0]?.labor_clearing) return 'Configure the company labor clearing account first'
+      if (clearing !== org.rows[0].labor_clearing) return 'The source clearing account must match the company labor clearing account'
+    }
+  }
+  if (entity.key === 'external-payroll-import-templates') {
+    const current = rowId
+      ? ((await db.execute(sql`select source_id from external_payroll_import_templates where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const sourceId = String(body.sourceId ?? current?.source_id ?? '')
+    const source = (await db.execute(sql`
+      select 1 from external_payroll_sources where id = ${sourceId} and org_id = ${orgId}`)) as any
+    if (!source.rows.length) return 'Choose an external payroll source from this organization'
+  }
+  if (entity.key === 'payroll-cost-lines') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from payroll_cost_lines where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const batchId = String(body.batchId ?? current?.batch_id ?? '')
+    const batch = (await db.execute(sql`
+      select status from payroll_cost_batches where id = ${batchId} and org_id = ${orgId}`)) as any
+    if (!batch.rows[0]) return 'Choose an external payroll batch from this organization'
+    if (batch.rows[0].status !== 'draft') return 'External payroll lines are immutable after validation'
+    const employeeId = String(body.employeePartyId ?? current?.employee_party_id ?? '')
+    const employee = (await db.execute(sql`
+      select 1 from employee_roles where party_id = ${employeeId} and org_id = ${orgId} and is_active limit 1`)) as any
+    if (!employee.rows.length) return 'Choose an active employee from this organization'
   }
   return null
 }
@@ -349,7 +474,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
     }
   }
-
   // Natural-key uniqueness (these tables mostly lack a DB unique constraint).
   if (entity.naturalKey) {
     const col = toSnake(entity.naturalKey)
@@ -504,6 +628,40 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     }
   }
 
+  if (entity.key === 'item-rate-versions' && body.status === 'active') {
+    try {
+      await db.transaction(async (tx) => {
+        const current = (await tx.execute(sql`
+          select * from item_rate_versions where id = ${id} and org_id = ${orgId} for update`)) as any
+        const version = current.rows[0]
+        if (!version) throw new Error('not found')
+        if (version.status !== 'draft') throw new Error('Only a draft version can be activated')
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`rate-version:${version.rate_book_id}`}, 0))`)
+        const next = (await tx.execute(sql`
+          select effective_from from item_rate_versions
+           where org_id = ${orgId} and rate_book_id = ${version.rate_book_id} and status = 'active'
+             and effective_from > ${version.effective_from}
+           order by effective_from limit 1`)) as any
+        await tx.execute(sql`
+          update item_rate_versions set effective_to = (${version.effective_from}::date - interval '1 day')::date,
+                                        updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and rate_book_id = ${version.rate_book_id} and status = 'active'
+             and effective_from < ${version.effective_from}
+             and (effective_to is null or effective_to >= ${version.effective_from})`)
+        await tx.execute(sql`
+          update item_rate_versions set status = 'active',
+                                        effective_to = ${next.rows[0]?.effective_from ? sql`(${next.rows[0].effective_from}::date - interval '1 day')::date` : version.effective_to},
+                                        updated_at = now(), updated_by = ${actorId}
+           where id = ${id} and org_id = ${orgId}`)
+        await audit({ orgId, table: 'item_rate_versions', rowId: id, action: 'update', changes: { status: 'active' }, actorId }, tx)
+      })
+      return NextResponse.json({ id })
+    } catch (error) {
+      const message = (error as Error).message
+      return NextResponse.json({ error: message === 'not found' ? message : describeDbError(error) }, { status: message === 'not found' ? 404 : 400 })
+    }
+  }
+
   const updateCols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : built.cols
@@ -575,9 +733,36 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
     const current = (await db.execute(sql`select is_default from item_rate_books where id = ${id} and org_id = ${orgId}`)) as any
     if (current.rows[0]?.is_default) return NextResponse.json({ error: 'default-required' }, { status: 409 })
   }
+  if (entity.key === 'payroll-cost-batches') {
+    const current = (await db.execute(sql`select status from payroll_cost_batches where id = ${id} and org_id = ${orgId}`)) as any
+    if (current.rows[0]?.status !== 'draft') return NextResponse.json({ error: 'Only draft payroll batches can be deleted' }, { status: 409 })
+  }
+  if (entity.key === 'payroll-cost-lines') {
+    const current = (await db.execute(sql`
+      select b.status from payroll_cost_lines l join payroll_cost_batches b on b.id = l.batch_id
+       where l.id = ${id} and l.org_id = ${orgId}`)) as any
+    if (current.rows[0]?.status !== 'draft') return NextResponse.json({ error: 'Payroll lines are immutable after reconciliation' }, { status: 409 })
+  }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
+    if (entity.hasActive) {
+      const archived = (await db.execute(sql`
+        update ${sql.raw(entity.table)} set is_active = false
+          ${entity.actorCols ? sql`, updated_at = now(), updated_by = ${actorId}` : sql``}
+         where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
+        returning ${sql.raw(idColumn(entity))} as id`)) as any
+      if (archived.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      await audit({
+        orgId: entity.orgScoped ? orgId : null,
+        table: entity.table,
+        rowId: id,
+        action: 'update',
+        changes: { is_active: false },
+        actorId,
+      })
+      return NextResponse.json({ ok: true })
+    }
     const deleted = (await db.execute(sql`
       delete from ${sql.raw(entity.table)}
        where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}

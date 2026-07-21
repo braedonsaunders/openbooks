@@ -7,6 +7,7 @@ import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
 import { itemRates } from './articles/item-rates'
+import { laborRates } from './articles/labor-rates'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
@@ -177,6 +178,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   periodClose,
   projectTypes, overheadCosting,
   itemRates,
+  laborRates,
   financialReports,
   analyticsAndSavedViews,
   migrationAndCutover,

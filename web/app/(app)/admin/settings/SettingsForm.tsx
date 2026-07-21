@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { CalendarClock } from 'lucide-react'
+import { CalendarClock, HardHat } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -50,6 +50,8 @@ type Initial = {
   reportPdfStyle: 'formal' | 'modern'
   fairValueRangePolicy: 'warn' | 'off'
   controlAccounts: ControlAccounts
+  defaultLaborRateBookId: string
+  defaultLaborRatePolicy: 'work_date' | 'locked' | 'scheduled_escalation' | 'manual_reprice'
 }
 
 // Month message keys under admin.settings.months, indexed 0–11.
@@ -78,10 +80,12 @@ export function SettingsForm({
   initial,
   accounts,
   currencies,
+  rateBooks,
 }: {
   initial: Initial
   accounts: AccountOption[]
   currencies: { code: string; name: string }[]
+  rateBooks: { id: string; name: string; isDefault: boolean }[]
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
@@ -304,6 +308,51 @@ export function SettingsForm({
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {t('revenue.fairValueRangePolicy.hint')}
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Control accounts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <HardHat size={17} className="text-teal-600 dark:text-teal-300" />
+            {t('laborCosting.title')}
+          </CardTitle>
+          <CardDescription>
+            {t('laborCosting.description')}{' '}
+            <Link href="/admin/setup/labor-costing" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+              {t('laborCosting.openGuide')}
+            </Link>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="defaultLaborRateBookId">{t('laborCosting.defaultBook')}</Label>
+            <SearchSelect
+              id="defaultLaborRateBookId"
+              value={form.defaultLaborRateBookId}
+              onChange={(value) => setForm((f) => ({ ...f, defaultLaborRateBookId: value }))}
+              options={rateBooks.map((book) => ({ value: book.id, label: book.name }))}
+              placeholder={t('laborCosting.selectBook')}
+              clearable
+              emptyLabel={tCommon('labels.notSet')}
+              ariaLabel={t('laborCosting.defaultBook')}
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('laborCosting.defaultBookHint')}</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="defaultLaborRatePolicy">{t('laborCosting.defaultPolicy')}</Label>
+            <Select
+              id="defaultLaborRatePolicy"
+              value={form.defaultLaborRatePolicy}
+              onChange={(e) => setForm((f) => ({ ...f, defaultLaborRatePolicy: e.target.value as Initial['defaultLaborRatePolicy'] }))}
+            >
+              {(['work_date', 'locked', 'scheduled_escalation', 'manual_reprice'] as const).map((policy) => (
+                <option key={policy} value={policy}>{t(`laborCosting.policies.${policy}`)}</option>
+              ))}
+            </Select>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('laborCosting.defaultPolicyHint')}</p>
           </div>
         </CardContent>
       </Card>

@@ -13,6 +13,8 @@
     "code": "Código",
     "billing": "Facturación",
     "billingMethod": "Método de facturación",
+    "laborRateBook": "Libro de tarifas laborales",
+    "laborRatePolicy": "Política de tarifas laborales",
     "contractValue": "Valor del contrato",
     "actualCost": "Costo real",
     "foreman": "Capataz",
@@ -24,6 +26,19 @@
     "estHours": "Horas est.",
     "estCost": "Costo est.",
     "kind": "Tipo"
+  },
+  "laborRates": {
+    "organizationDefault": "Predeterminado de la organización",
+    "inheritedDefault": "Heredar del tipo de proyecto / empresa",
+    "policies": {
+      "work_date": "Versión vigente en la fecha de trabajo",
+      "locked": "Bloquear en la primera aprobación",
+      "scheduled_escalation": "Aumento programado por fecha de vigencia",
+      "manual_reprice": "Bloqueado hasta la recotización manual"
+    },
+    "resetLock": "Restablecer bloqueo de tarifa laboral",
+    "resetSuccess": "Bloqueo restablecido; {count, plural, one {# entrada no aprobada se recalculará} other {# entradas no aprobadas se recalcularán}}",
+    "resetFailed": "No se pudo restablecer el bloqueo de tarifa"
   },
   "status": {
     "quoted": "Cotizado",
