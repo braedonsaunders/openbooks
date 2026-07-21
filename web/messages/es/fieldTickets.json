@@ -1,0 +1,98 @@
+{
+  "title": "Partes de obra",
+  "description": "Partes de horas firmados para trabajo T&M — horas, equipos y materiales capturados una vez, aprobados, firmados por su cliente y volcados a facturas.",
+  "period": {
+    "shift": "Turno",
+    "daily": "Diario",
+    "weekly": "Semanal"
+  },
+  "status": {
+    "draft": "Borrador",
+    "pending_approval": "Enviado",
+    "approved": "Aprobado",
+    "voided": "Anulado"
+  },
+  "list": {
+    "new": "Nuevo parte",
+    "create": "Crear",
+    "cancel": "Cancelar",
+    "empty": "Aún no hay partes de obra.",
+    "projectRequired": "Elija un proyecto",
+    "pickProject": "Elija un proyecto…",
+    "number": "Parte",
+    "project": "Proyecto",
+    "customer": "Cliente",
+    "periodLabel": "Período",
+    "period": "Período",
+    "foreman": "Capataz",
+    "hours": "Horas",
+    "itemsTotal": "Artículos",
+    "status": "Estado",
+    "signature": "Firma",
+    "allStatuses": "Todos los estados",
+    "allSignatures": "Todas las firmas",
+    "unsigned": "Sin enviar",
+    "waiting": "Esperando firma",
+    "signed": "Firmado",
+    "date": "Fecha"
+  },
+  "editor": {
+    "back": "Partes de obra",
+    "submit": "Enviar",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "saveHours": "Guardar horas",
+    "cancel": "Cancelar",
+    "confirmReject": "Confirmar rechazo",
+    "rejectReason": "Motivo del rechazo",
+    "rejectionNote": "Rechazado: {reason}",
+    "submitted": "Parte enviado",
+    "approved": "Parte aprobado — horas costeadas y artículos cargados al proyecto",
+    "rejected": "Parte rechazado",
+    "project": "Proyecto",
+    "customer": "Cliente",
+    "po": "OC del cliente",
+    "foreman": "Capataz",
+    "workDescription": "Descripción del trabajo",
+    "crew": {
+      "title": "Horas de la cuadrilla",
+      "hint": "Una fila por persona (opcionalmente por clase). R / O / D = iniciales de los tipos de hora.",
+      "employee": "Empleado",
+      "laborItem": "Clase de trabajo",
+      "addRow": "Agregar persona",
+      "removeRow": "Quitar fila",
+      "rowTotal": "Total",
+      "dayTotals": "Totales por día",
+      "total": "{hours} h en total"
+    },
+    "lines": {
+      "title": "Equipos, consumibles y materiales",
+      "hint": "Líneas estilo pedido de venta facturadas con el parte. Las tarifas se precargan del artículo y siguen editables.",
+      "item": "Artículo",
+      "pickItem": "Elija un artículo…",
+      "description": "Descripción",
+      "quantity": "Cant.",
+      "rate": "Tarifa",
+      "amount": "Importe",
+      "add": "Agregar línea",
+      "remove": "Quitar línea",
+      "empty": "Aún no hay líneas.",
+      "itemRequired": "Elija un artículo"
+    },
+    "totals": {
+      "title": "Totales del parte",
+      "labor": "Mano de obra",
+      "items": "Equipos y materiales",
+      "grand": "Total general",
+      "previewNote": "La mano de obra usa tarifas de vista previa hasta que la aprobación las fija.",
+      "snappedNote": "Las tarifas están fijadas — el historial de este parte nunca cambia."
+    },
+    "signatures": {
+      "title": "Firmas",
+      "customer": "Cliente",
+      "signedBy": "Firmado — {name}",
+      "waiting": "Esperando firma",
+      "notSent": "Sin enviar"
+    }
+  }
+}

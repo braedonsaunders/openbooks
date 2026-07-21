@@ -43,6 +43,9 @@ export const timeEntries = pgTable(
     /** The net-zero overhead pair that carried this entry's hours (stamped at
      * approval / backfill; overhead applies with the hours, never monthly). */
     overheadJournalEntryId: uuid("overhead_journal_entry_id"),
+    /** The field ticket (documents kind 'field_ticket') this entry belongs to,
+     * when hours were captured on a crew ticket rather than a personal week. */
+    fieldTicketId: uuid("field_ticket_id"),
     invoicedByLineId: uuid("invoiced_by_line_id"),
     payrollBatchRef: text("payroll_batch_ref"),
     /** Keeps the NetSuite timebill nsId + source flags for the import bridge. */

@@ -1903,6 +1903,13 @@
         "timeTypes": "Tipos de hora",
         "timeTypesHint": "Normal, extra, doble — los multiplicadores de costo y facturación que usa esta página."
       }
+    },
+    "features": {
+      "navTitle": "Funciones",
+      "title": "Funciones",
+      "description": "Active o desactive módulos opcionales para su empresa. Desactivar una función la oculta en todas partes — sus datos nunca se eliminan.",
+      "enabled": "{name} activada",
+      "disabled": "{name} desactivada"
     }
   },
   "flows": {
@@ -2155,6 +2162,12 @@
         "finished": "Terminada",
         "error": "Error"
       }
+    }
+  },
+  "features": {
+    "fieldTickets": {
+      "title": "Partes de obra",
+      "description": "Partes de horas firmados para trabajo T&M: el capataz registra las horas de toda la cuadrilla más equipos y materiales, el cliente firma, y las facturas se construyen a partir de los partes firmados."
     }
   }
 }

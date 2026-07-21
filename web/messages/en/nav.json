@@ -60,7 +60,8 @@
     "crm-forecasts": "Forecasts & Quotas",
     "revenue": "Revenue Recognition",
     "inventory": "Inventory",
-    "docs": "Documentation"
+    "docs": "Documentation",
+    "field-tickets": "Field Tickets"
   },
   "groups": {
     "my-work": "My Work",

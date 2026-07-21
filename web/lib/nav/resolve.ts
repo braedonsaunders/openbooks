@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { featureEnabled, type FeatureState } from '../features'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
 import {
@@ -42,6 +43,11 @@ export async function resolveNav(
   }
   const saved = r.rows[0]?.config
   const config = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
+  const featureState = (
+    (await db.execute(sql`select settings->'features' as f from orgs where id = ${orgId}`)) as unknown as {
+      rows: { f: FeatureState | null }[]
+    }
+  ).rows[0]?.f ?? {}
 
   const groups: SidebarNavGroup[] = []
   for (const g of config.groups) {
@@ -57,6 +63,7 @@ export async function resolveNav(
         if (mod.key === ADMIN_MODULE_KEY) {
           if (!ADMIN_HUB_PERMISSIONS.some((p) => can(p))) continue
         } else if (!can(mod.requiredPermission)) continue
+        if (mod.featureKey && !featureEnabled(featureState, mod.featureKey)) continue
         items.push({
           href: mod.href,
           label: item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`) || mod.label,

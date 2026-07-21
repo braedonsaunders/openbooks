@@ -10,6 +10,8 @@ export interface NavModule {
   iconKey: string
   /** Permission required to see the module (wildcards supported). */
   requiredPermission?: string
+  /** Optional-feature gate — hidden while the org has the feature off. */
+  featureKey?: string
   /** Stable default workspace key used when no org config exists. */
   group: NavGroupKey
   /** Optional nested section within the group — rendered as a collapsible
@@ -465,6 +467,16 @@ export const NAV_MODULES: NavModule[] = [
     subgroup: 'delivery',
     requiredPermission: 'time.read',
   },
+  {
+    key: 'field-tickets',
+    href: '/field-tickets',
+    label: 'Field Tickets',
+    iconKey: 'clipboard',
+    group: 'operations',
+    subgroup: 'delivery',
+    requiredPermission: 'time.read',
+    featureKey: 'fieldTickets',
+  },
 
   // Insights — reports, native analytics, custom dashboards, and saved views.
   {
@@ -683,7 +695,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'receipts',
   ],
   purchasing: ['purchase-orders', 'ap', 'ap-bills', 'payments', 'expenses', 'vendors'],
-  operations: ['projects', 'timesheets', 'items', 'inventory', 'equipment', 'employees'],
+  operations: ['projects', 'timesheets', 'field-tickets', 'items', 'inventory', 'equipment', 'employees'],
   banking: [
     'banking',
     'banking-cash',

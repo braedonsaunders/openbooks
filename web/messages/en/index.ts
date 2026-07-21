@@ -51,6 +51,7 @@ import reports from './reports.json'
 import salesOrders from './salesOrders.json'
 import sync from './sync.json'
 import tax from './tax.json'
+import fieldTickets from './fieldTickets.json'
 import timesheets from './timesheets.json'
 
 export default {
@@ -104,5 +105,6 @@ export default {
   salesOrders,
   sync,
   tax,
+  fieldTickets,
   timesheets,
 } as const

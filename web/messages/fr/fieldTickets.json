@@ -1,0 +1,98 @@
+{
+  "title": "Bons de régie",
+  "description": "Feuilles d'heures d'équipe signées pour les travaux en régie — heures, équipement et matériaux saisis une fois, approuvés, signés par votre client et intégrés aux factures.",
+  "period": {
+    "shift": "Quart",
+    "daily": "Quotidien",
+    "weekly": "Hebdomadaire"
+  },
+  "status": {
+    "draft": "Brouillon",
+    "pending_approval": "Soumis",
+    "approved": "Approuvé",
+    "voided": "Annulé"
+  },
+  "list": {
+    "new": "Nouveau bon",
+    "create": "Créer",
+    "cancel": "Annuler",
+    "empty": "Aucun bon de régie pour l'instant.",
+    "projectRequired": "Choisissez un projet",
+    "pickProject": "Choisissez un projet…",
+    "number": "Bon",
+    "project": "Projet",
+    "customer": "Client",
+    "periodLabel": "Période",
+    "period": "Période",
+    "foreman": "Contremaître",
+    "hours": "Heures",
+    "itemsTotal": "Articles",
+    "status": "Statut",
+    "signature": "Signature",
+    "allStatuses": "Tous les statuts",
+    "allSignatures": "Toutes les signatures",
+    "unsigned": "Non envoyé",
+    "waiting": "Signature en attente",
+    "signed": "Signé",
+    "date": "Date"
+  },
+  "editor": {
+    "back": "Bons de régie",
+    "submit": "Soumettre",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "saveHours": "Enregistrer les heures",
+    "cancel": "Annuler",
+    "confirmReject": "Confirmer le rejet",
+    "rejectReason": "Motif du rejet",
+    "rejectionNote": "Rejeté : {reason}",
+    "submitted": "Bon soumis",
+    "approved": "Bon approuvé — heures chiffrées et articles imputés au projet",
+    "rejected": "Bon rejeté",
+    "project": "Projet",
+    "customer": "Client",
+    "po": "BC du client",
+    "foreman": "Contremaître",
+    "workDescription": "Description des travaux",
+    "crew": {
+      "title": "Heures de l'équipe",
+      "hint": "Une ligne par personne (optionnellement par classe). R / O / D = initiales des types d'heures.",
+      "employee": "Employé",
+      "laborItem": "Classe de travail",
+      "addRow": "Ajouter une personne",
+      "removeRow": "Retirer la ligne",
+      "rowTotal": "Total",
+      "dayTotals": "Totaux par jour",
+      "total": "{hours} h au total"
+    },
+    "lines": {
+      "title": "Équipement, consommables et matériaux",
+      "hint": "Lignes de type bon de commande facturées avec le bon. Les taux se préremplissent depuis l'article et restent modifiables.",
+      "item": "Article",
+      "pickItem": "Choisissez un article…",
+      "description": "Description",
+      "quantity": "Qté",
+      "rate": "Taux",
+      "amount": "Montant",
+      "add": "Ajouter une ligne",
+      "remove": "Retirer la ligne",
+      "empty": "Aucune ligne pour l'instant.",
+      "itemRequired": "Choisissez un article"
+    },
+    "totals": {
+      "title": "Totaux du bon",
+      "labor": "Main-d'œuvre",
+      "items": "Équipement et matériaux",
+      "grand": "Total général",
+      "previewNote": "La main-d'œuvre utilise des taux d'aperçu jusqu'à ce que l'approbation les fige.",
+      "snappedNote": "Les taux sont figés — l'historique de ce bon ne change jamais."
+    },
+    "signatures": {
+      "title": "Signatures",
+      "customer": "Client",
+      "signedBy": "Signé — {name}",
+      "waiting": "Signature en attente",
+      "notSent": "Pas encore envoyé"
+    }
+  }
+}
