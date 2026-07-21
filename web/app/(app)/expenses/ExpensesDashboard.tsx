@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -11,6 +12,7 @@ import type { ExpensesDashboardData } from '../../../lib/expenses-dashboard'
 import { KpiCard } from '../analytics/_ui/KpiCard'
 import { Panel } from '../analytics/_ui/Panel'
 import { Donut, Chart } from '../analytics/_ui/charts'
+import { DrillDrawer, type DrillTarget } from '../analytics/_ui/DrillDrawer'
 import { fmtMoney } from '../analytics/_ui/format'
 
 const money = (n: number) => fmtMoney(n, { compact: true })
@@ -32,7 +34,9 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
  */
 export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
   const t = useTranslations('expenses.dashboard')
+  const [drill, setDrill] = useState<DrillTarget | null>(null)
   const topCats = data.categories.slice(0, 8)
+  const drillRow = 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50'
 
   return (
     <div className="space-y-5">
@@ -149,7 +153,11 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
               </thead>
               <tbody>
                 {data.topSpenders.slice(0, 25).map((sp) => (
-                  <tr key={sp.employeeId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <tr
+                    key={sp.employeeId}
+                    onClick={() => setDrill({ kind: 'party', id: sp.employeeId, name: sp.employeeName })}
+                    className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)}
+                  >
                     <td className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={sp.employeeName}>{sp.employeeName}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(sp.totalSpend)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-400">{sp.reportCount}</td>
@@ -176,7 +184,11 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
               </thead>
               <tbody>
                 {data.categories.slice(0, 25).map((c) => (
-                  <tr key={c.categoryId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <tr
+                    key={c.categoryId}
+                    onClick={() => setDrill({ kind: 'account', id: c.categoryId, name: c.categoryName })}
+                    className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)}
+                  >
                     <td className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={c.categoryName}>{c.categoryName}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(c.currentAmount)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(c.priorAmount)}</td>
@@ -190,6 +202,8 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
           </div>
         </Panel>
       </div>
+
+      <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>
   )
 }
