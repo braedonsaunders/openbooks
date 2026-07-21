@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "会计",
+    "description": "财务管控工作区 — 总账健康、结账进度以及评分背后的数据。",
+    "tabs": {
+      "overview": "概览",
+      "health": "财务健康"
+    },
+    "score": {
+      "excellent": "优秀",
+      "good": "良好",
+      "average": "一般",
+      "needsWork": "需改进"
+    },
+    "categories": {
+      "profitability": "盈利能力",
+      "efficiency": "效率",
+      "operating": "运营"
+    },
+    "vitals": {
+      "healthScore": "健康评分",
+      "netIncome": "净利润",
+      "close": "结账进度",
+      "closeSub": "{period}",
+      "noClose": "—",
+      "noCloseSub": "尚未开始结账",
+      "draftJournals": "草稿凭证",
+      "draftJournalsSub": "本周已过账 {posted} 笔",
+      "openFindings": "未处理发现",
+      "openFindingsSub": "{critical} 项严重"
+    },
+    "hero": {
+      "title": "财务健康",
+      "ratio": "比率",
+      "value": "数值",
+      "benchmark": "基准",
+      "grade": "评级",
+      "fullAnalysis": "完整分析 — 毛利、分部、情景、驱动因素"
+    },
+    "directory": {
+      "title": "工作区",
+      "journalHint": "份草稿 · 本周已过账 {posted} 笔",
+      "accountsHint": "个启用科目",
+      "budgetsHint": "个预算方案",
+      "assetsHint": "项固定资产",
+      "continuousCloseHint": "{critical} 项严重"
+    },
+    "attention": {
+      "title": "需要关注",
+      "allClear": "一切正常 — 总账整洁。",
+      "criticalItems": "{count} 项严重结账发现未处理",
+      "warningItems": "持续结账有 {count} 项警告",
+      "draftJournals": "{count} 笔凭证仍为草稿",
+      "weakRatio": "{ratio} 低于基准"
+    }
+  }
+}

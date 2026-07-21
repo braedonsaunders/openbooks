@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "Comptabilité",
+    "description": "Votre espace de contrôle financier — santé du grand livre, avancement de la clôture et les chiffres derrière le score.",
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "health": "Santé financière"
+    },
+    "score": {
+      "excellent": "Excellent",
+      "good": "Bon",
+      "average": "Moyen",
+      "needsWork": "À améliorer"
+    },
+    "categories": {
+      "profitability": "Rentabilité",
+      "efficiency": "Efficience",
+      "operating": "Exploitation"
+    },
+    "vitals": {
+      "healthScore": "Score de santé",
+      "netIncome": "Résultat net",
+      "close": "Avancement clôture",
+      "closeSub": "{period}",
+      "noClose": "—",
+      "noCloseSub": "Aucune clôture lancée",
+      "draftJournals": "Écritures en brouillon",
+      "draftJournalsSub": "{posted} comptabilisées cette semaine",
+      "openFindings": "Constats ouverts",
+      "openFindingsSub": "{critical} critiques"
+    },
+    "hero": {
+      "title": "Santé financière",
+      "ratio": "Ratio",
+      "value": "Valeur",
+      "benchmark": "Référence",
+      "grade": "Note",
+      "fullAnalysis": "Analyse complète — marges, segments, scénarios, leviers"
+    },
+    "directory": {
+      "title": "Espace de travail",
+      "journalHint": "brouillons · {posted} comptabilisées cette semaine",
+      "accountsHint": "comptes actifs",
+      "budgetsHint": "scénarios budgétaires",
+      "assetsHint": "immobilisations",
+      "continuousCloseHint": "{critical} critiques"
+    },
+    "attention": {
+      "title": "À traiter",
+      "allClear": "Tout est en ordre — le grand livre est propre.",
+      "criticalItems": "{count} constats critiques ouverts",
+      "warningItems": "{count} avertissements de clôture continue",
+      "draftJournals": "{count} écritures encore en brouillon",
+      "weakRatio": "{ratio} est sous la référence"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "Contabilidad",
+    "description": "Su espacio de control financiero — salud del libro mayor, avance del cierre y las cifras detrás del puntaje.",
+    "tabs": {
+      "overview": "Resumen",
+      "health": "Salud financiera"
+    },
+    "score": {
+      "excellent": "Excelente",
+      "good": "Bueno",
+      "average": "Promedio",
+      "needsWork": "Por mejorar"
+    },
+    "categories": {
+      "profitability": "Rentabilidad",
+      "efficiency": "Eficiencia",
+      "operating": "Operación"
+    },
+    "vitals": {
+      "healthScore": "Puntaje de salud",
+      "netIncome": "Resultado neto",
+      "close": "Avance del cierre",
+      "closeSub": "{period}",
+      "noClose": "—",
+      "noCloseSub": "Sin cierre iniciado",
+      "draftJournals": "Asientos en borrador",
+      "draftJournalsSub": "{posted} registrados esta semana",
+      "openFindings": "Hallazgos abiertos",
+      "openFindingsSub": "{critical} críticos"
+    },
+    "hero": {
+      "title": "Salud financiera",
+      "ratio": "Ratio",
+      "value": "Valor",
+      "benchmark": "Referencia",
+      "grade": "Nota",
+      "fullAnalysis": "Análisis completo — márgenes, segmentos, escenarios, impulsores"
+    },
+    "directory": {
+      "title": "Espacio de trabajo",
+      "journalHint": "borradores · {posted} registrados esta semana",
+      "accountsHint": "cuentas activas",
+      "budgetsHint": "escenarios de presupuesto",
+      "assetsHint": "activos fijos",
+      "continuousCloseHint": "{critical} críticos"
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "allClear": "Todo en orden — el libro mayor está limpio.",
+      "criticalItems": "{count} hallazgos críticos abiertos",
+      "warningItems": "{count} advertencias del cierre continuo",
+      "draftJournals": "{count} asientos aún en borrador",
+      "weakRatio": "{ratio} está por debajo de la referencia"
+    }
+  }
+}

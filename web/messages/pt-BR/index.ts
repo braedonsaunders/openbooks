@@ -26,6 +26,7 @@ import banking from './banking.json'
 import budgets from './budgets.json'
 import close from './close.json'
 import crm from './crm.json'
+import accountingHome from './accounting.json'
 import customersHome from './customers.json'
 import purchasingHome from './purchasing.json'
 import continuousClose from './continuous-close.json'
@@ -78,6 +79,7 @@ export default {
   budgets,
   close,
   crm,
+  accounting: accountingHome,
   customers: customersHome,
   purchasing: purchasingHome,
   continuousClose,
