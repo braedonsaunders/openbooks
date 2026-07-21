@@ -85,7 +85,12 @@
       "staleStatement": "最近对账单 {date}",
       "noStatements": "未导入对账单",
       "unmatchedChip": "{count} 条未匹配",
-      "reconciling": "对账中"
+      "reconciling": "对账中",
+      "customize": "自定义账户",
+      "customizeTitle": "显示、隐藏和排序账户",
+      "reset": "恢复默认",
+      "allHidden": "所有账户均已隐藏 — 通过自定义控件可恢复显示。",
+      "hiddenCount": "{count, plural, other {已隐藏 # 个}}"
     },
     "trend": {
       "title": "现金趋势",

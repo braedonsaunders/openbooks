@@ -85,7 +85,12 @@
       "staleStatement": "Último extrato {date}",
       "noStatements": "Nenhum extrato importado",
       "unmatchedChip": "{count} não conciliadas",
-      "reconciling": "Conciliando"
+      "reconciling": "Conciliando",
+      "customize": "Personalizar contas",
+      "customizeTitle": "Mostrar, ocultar e reordenar contas",
+      "reset": "Restaurar padrão",
+      "allHidden": "Todas as contas estão ocultas — use o controle de personalização para restaurá-las.",
+      "hiddenCount": "{count, plural, one {# oculta} other {# ocultas}}"
     },
     "trend": {
       "title": "Tendência de caixa",

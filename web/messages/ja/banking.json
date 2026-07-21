@@ -85,7 +85,12 @@
       "staleStatement": "最終明細書 {date}",
       "noStatements": "明細書の取込なし",
       "unmatchedChip": "未照合{count}件",
-      "reconciling": "消込中"
+      "reconciling": "消込中",
+      "customize": "口座をカスタマイズ",
+      "customizeTitle": "口座の表示・非表示・並べ替え",
+      "reset": "初期設定に戻す",
+      "allHidden": "すべての口座が非表示です — カスタマイズから再表示できます。",
+      "hiddenCount": "{count, plural, other {#件非表示}}"
     },
     "trend": {
       "title": "現金推移",
