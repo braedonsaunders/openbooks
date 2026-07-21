@@ -1830,7 +1830,12 @@
         "example": "Exemple avec un salaire de {wage}/h :",
         "exampleReg": "Normal",
         "exampleOt": "Supp. ×1,5",
-        "exampleDt": "Double ×2"
+        "exampleDt": "Double ×2",
+        "presetLead": "Démarrage rapide :",
+        "presetCa": "Canada ~13 %",
+        "presetCaName": "Charges statutaires — RPC, AE, WSIB, ISE, congés (est.)",
+        "presetUs": "É.-U. ~30 %",
+        "presetUsName": "Charges de paie — FICA, FUTA/SUTA, workers comp (est.)"
       },
       "posting": {
         "title": "Comptabilisation",
@@ -1857,7 +1862,73 @@
         "project": "Projet",
         "standardCost": "Coût standard"
       },
-      "docs": "Documentation"
+      "docs": "Documentation",
+      "checklist": {
+        "wages": "Taux de salaire",
+        "burden": "Estimation des charges",
+        "posting": "Comptabilisation",
+        "trueup": "Rapprochement de paie",
+        "wagesDetail": "{covered} employés sur {total} résolvent à un taux",
+        "burdenDone": "{count} composante(s) configurée(s)",
+        "burdenNone": "Aucune composante — coût pré-paie = salaire brut",
+        "postingOn": "Le coût standard se comptabilise à l'approbation",
+        "postingAccounts": "L'activation requiert les comptes TEC et attente",
+        "postingOff": "Désactivé — capture des taux seulement",
+        "trueupReady": "Compte d'écart affecté — rapprochez ci-dessous",
+        "trueupNone": "Affectez un compte d'écart pour clore les périodes",
+        "launchWizard": "Guide de configuration"
+      },
+      "wizard": {
+        "title": "Configurer le coût de la main-d'œuvre",
+        "close": "Fermer",
+        "back": "Retour",
+        "next": "Suivant",
+        "apply": "Appliquer",
+        "applying": "Application…",
+        "done": "Coût de la main-d'œuvre configuré",
+        "q1": "Comment estimer les charges de paie ?",
+        "q1Hint": "Les coûts patronaux causés par les salaires — cotisations, assurances, congés. L'estimation garde le coût réaliste avant la paie ; la paie réelle la remplace.",
+        "burden": {
+          "canada": "Canada — statutaire ~13 %",
+          "canadaHint": "RPC/CPP, AE, WSIB, ISE, congés. Un point de départ raisonnable ; affinez quand vous voulez.",
+          "us": "États-Unis — construction ~30 %",
+          "usHint": "FICA, FUTA/SUTA, workers comp. Plage typique : 25–40 %.",
+          "custom": "Pourcentage personnalisé",
+          "customHint": "Vous connaissez votre chiffre — saisissez-le.",
+          "customPct": "% du salaire",
+          "skip": "Passer pour l'instant",
+          "skipHint": "Les coûts n'afficheront que les salaires bruts tant qu'aucune composante n'est ajoutée."
+        },
+        "customBurdenName": "Charges de paie (est.)",
+        "q2": "Combien payez-vous de l'heure ?",
+        "q2Hint": "Commencez large — un taux par défaut, et des taux par métier s'ils diffèrent. Ce sont des salaires, pas des taux de facturation.",
+        "orgRate": "Salaire horaire par défaut (sans taux spécifique)",
+        "tradeRates": "Taux par métier (optionnel — prime sur le défaut)",
+        "perEmployeeLater": "Vous pourrez ajouter des taux par employé dans l'espace de travail — ils priment sur métier et défaut.",
+        "q3": "Comptabiliser le coût de main-d'œuvre sur les projets ?",
+        "q3Hint": "Une fois activée, l'approbation du temps inscrit le coût standard au grand livre par projet, en anticipant la paie.",
+        "posting": {
+          "off": "Pas encore — suivre les taux seulement",
+          "offHint": "Le temps est chiffré pour les rapports ; rien n'est comptabilisé.",
+          "post": "Oui — comptabiliser le coût standard à l'approbation",
+          "postHint": "DR travaux en cours (par projet) / CR compte d'attente. La paie réelle solde ensuite le même compte.",
+          "wip": "Compte travaux en cours / coût",
+          "clearing": "Compte d'attente main-d'œuvre"
+        },
+        "review": "Prêt à appliquer :",
+        "reviewBurden": "Estimation des charges : {name} à {pct} %",
+        "reviewNoBurden": "Aucune estimation de charges (salaires bruts seulement)",
+        "reviewOrgRate": "Salaire par défaut ${rate}/h.",
+        "reviewNoOrgRate": "Aucun salaire par défaut.",
+        "reviewTradeRates": "+ {count} taux par métier.",
+        "reviewPosting": "Le coût standard sera comptabilisé à l'approbation",
+        "reviewNoPosting": "La comptabilisation reste désactivée — activable plus tard",
+        "reviewExample": "Exemple avec un salaire de ${wage}/h :",
+        "exReg": "Normal",
+        "exOt": "Supp. ×1,5",
+        "exDt": "Double ×2",
+        "reviewNote": "Tout reste modifiable ensuite dans l'espace de travail — le guide remplit simplement les mêmes paramètres."
+      }
     }
   },
   "flows": {
