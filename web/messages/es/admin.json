@@ -1478,16 +1478,15 @@
           "account": "Cuenta de gastos generales aplicados",
           "save": "Guardar",
           "saved": "Aplicación de gastos generales guardada",
-          "periodStart": "Inicio del período",
-          "periodEnd": "Fin del período",
-          "apply": "Aplicar gastos generales del período",
-          "applyHint": "Usa las tarifas estándar publicadas. Reaplicar un período reversa primero el asiento anterior.",
-          "applied": "Aplicado ${total} en {projects} proyectos",
           "entry": "Asiento",
           "date": "Fecha",
           "projects": "Proyectos",
           "total": "Aplicado",
-          "status": "Estado"
+          "status": "Estado",
+          "autoHint": "Los gastos generales se aplican automáticamente: al aprobar horas, la parte de cada registro (horas × la tarifa publicada del departamento en el día trabajado) se contabiliza con la misma aprobación — sin paso de fin de mes, y sin esperar a la nómina.",
+          "backfillPrompt": "{entries} registros aprobados (~{hours}h) son anteriores a este modo y aún no llevan gastos generales.",
+          "backfill": "Aplicar a horas pasadas",
+          "backfilled": "Aplicados ${total} de gastos generales en {entries} registros pasados"
         },
         "lifecycle": {
           "title": "Ciclo de vida de tarifas",

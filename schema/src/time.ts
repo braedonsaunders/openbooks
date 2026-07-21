@@ -40,6 +40,9 @@ export const timeEntries = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     /** Downstream linkage. */
     costJournalEntryId: uuid("cost_journal_entry_id"),
+    /** The net-zero overhead pair that carried this entry's hours (stamped at
+     * approval / backfill; overhead applies with the hours, never monthly). */
+    overheadJournalEntryId: uuid("overhead_journal_entry_id"),
     invoicedByLineId: uuid("invoiced_by_line_id"),
     payrollBatchRef: text("payroll_batch_ref"),
     /** Keeps the NetSuite timebill nsId + source flags for the import bridge. */

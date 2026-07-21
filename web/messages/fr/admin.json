@@ -1522,16 +1522,15 @@
           "account": "Compte de frais généraux appliqués",
           "save": "Enregistrer",
           "saved": "Application des frais généraux enregistrée",
-          "periodStart": "Début de période",
-          "periodEnd": "Fin de période",
-          "apply": "Appliquer les frais généraux de la période",
-          "applyHint": "Utilise les taux standard publiés. Réappliquer une période contrepasse d'abord l'écriture précédente.",
-          "applied": "Appliqué ${total} sur {projects} projets",
           "entry": "Écriture",
           "date": "Date",
           "projects": "Projets",
           "total": "Appliqué",
-          "status": "Statut"
+          "status": "Statut",
+          "autoHint": "Les frais généraux s'appliquent automatiquement : à l'approbation des heures, la part de chaque saisie (heures × le taux publié du département au jour travaillé) se comptabilise avec la même approbation — aucune étape de fin de mois, et sans attendre la paie.",
+          "backfillPrompt": "{entries} saisies approuvées (~{hours} h) sont antérieures à ce mode et ne portent pas encore de frais généraux.",
+          "backfill": "Appliquer aux heures passées",
+          "backfilled": "{entries} saisies passées portées : ${total} de frais généraux appliqués"
         },
         "lifecycle": {
           "title": "Cycle de vie des taux",

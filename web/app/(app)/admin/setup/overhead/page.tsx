@@ -8,7 +8,7 @@ import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 import { TrueCostView } from '../../../../(app)/analytics/true-cost/TrueCostView'
 import { OverheadActions } from './OverheadActions'
 import { OverheadApplication } from './OverheadApplication'
-import { listOverheadApplications, overheadApplicationSettings } from '@openbooks/engine/src/overhead-apply.ts'
+import { countUnappliedOverheadTime, listOverheadApplications, overheadApplicationSettings } from '@openbooks/engine/src/overhead-apply.ts'
 import { OverheadLifecycle } from './OverheadLifecycle'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 
@@ -60,9 +60,10 @@ export default async function OverheadModelSetup() {
   const drift = data.departments
     .filter((d) => d.composite > 0 || publishedRates.has(d.id))
     .map((d) => ({ id: d.id, name: d.name, live: Math.round(d.composite * 100) / 100, published: publishedRates.get(d.id) ?? null }))
-  const [application, applications, accountsRes] = await Promise.all([
+  const [application, applications, unapplied, accountsRes] = await Promise.all([
     overheadApplicationSettings(authz.user.orgId),
     listOverheadApplications(authz.user.orgId),
+    countUnappliedOverheadTime(authz.user.orgId),
     db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active order by number nulls last, name`),
   ])
 
@@ -181,6 +182,7 @@ export default async function OverheadModelSetup() {
           label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
         }))}
         applications={applications}
+        unapplied={unapplied}
       />
       <TrueCostView data={data} mode="setup" />
     </div>
