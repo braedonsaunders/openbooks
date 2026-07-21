@@ -62,12 +62,16 @@ export interface SetupField {
   defaultHintKey?: string
   /** Initial value for a new record; database defaults remain authoritative. */
   defaultValue?: string | number | boolean
+  /** Persisted field managed by another visible control; omit it from drawers. */
+  hidden?: boolean
 }
 
 export interface SetupColumn {
   key: string
   kind: SetupColumnKind
   ref?: SetupRefSource
+  /** Optional value labels for enum-like list columns. */
+  options?: { value: string; labelKey: string }[]
 }
 
 export interface SetupEntity {
@@ -421,8 +425,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'country', kind: 'text' },
-      { key: 'submissionChannel', kind: 'text' },
-      { key: 'governmentFormat', kind: 'text' },
+      { key: 'submissionChannel', kind: 'text', options: SUBMISSION_CHANNELS },
       { key: 'officialPdfFileId', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
@@ -432,7 +435,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'country', kind: 'text' },
       { key: 'region', kind: 'text' },
       { key: 'submissionChannel', kind: 'select', options: SUBMISSION_CHANNELS, keepDefault: true },
-      { key: 'governmentFormat', kind: 'select', options: GOVERNMENT_FORMATS, keepDefault: true },
+      { key: 'governmentFormat', kind: 'select', options: GOVERNMENT_FORMATS, keepDefault: true, hidden: true },
       { key: 'submissionUrl', kind: 'text' },
       { key: 'watermark', kind: 'text' },
       { key: 'isActive', kind: 'boolean' },

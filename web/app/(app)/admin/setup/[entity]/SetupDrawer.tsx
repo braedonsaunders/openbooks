@@ -225,7 +225,7 @@ export function SetupDrawer({
       }
     >
       {nestedTabActive ? nestedTab?.content : <div className="grid gap-4 p-1 sm:grid-cols-2">
-        {entity.fields.map((field) => (
+        {entity.fields.filter((field) => !field.hidden).map((field) => (
           <FieldControl
             key={field.key}
             field={field}

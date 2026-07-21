@@ -11,6 +11,7 @@ import {
   multirefField,
   UUID_RE,
 } from '../../../../../lib/setup/coerce'
+import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
 
 export const runtime = 'nodejs'
 
@@ -266,7 +267,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const body = normalizeTaxReturnFormInput(
+    entity.key,
+    (await req.json().catch(() => ({}))) as Record<string, unknown>,
+  )
   const built = buildRow(entity, body, { forCreate: true })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
@@ -411,7 +415,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const body = normalizeTaxReturnFormInput(
+    entity.key,
+    (await req.json().catch(() => ({}))) as Record<string, unknown>,
+  )
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 

@@ -1493,7 +1493,7 @@
       "label": "标签",
       "basis": "计税基础",
       "sign": "符号",
-      "submissionChannel": "提交渠道",
+      "submissionChannel": "申报方式",
       "governmentFormat": "政府格式",
       "submissionUrl": "政府申报 URL",
       "officialPdfFileId": "官方 PDF",

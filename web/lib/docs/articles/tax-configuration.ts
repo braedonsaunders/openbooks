@@ -29,6 +29,10 @@ import it or reset an installed return to the maintained defaults. Resetting
 replaces that return's configured structure, so review local customizations
 before confirming the action.
 
+On a return's **Details** tab, **Filing method** is the single control for how
+the jurisdiction accepts the return. The compatible government format is
+derived automatically, preventing contradictory method and format settings.
+
 ## Configure return boxes
 
 Open **Tax Returns**, select a return, and choose the **Tax Return Boxes**

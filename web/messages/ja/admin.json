@@ -1493,7 +1493,7 @@
       "label": "ラベル",
       "basis": "基準",
       "sign": "符号",
-      "submissionChannel": "提出チャネル",
+      "submissionChannel": "提出方法",
       "governmentFormat": "政府フォーマット",
       "submissionUrl": "政府提出URL",
       "officialPdfFileId": "公式PDF",
