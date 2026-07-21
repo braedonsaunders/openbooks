@@ -88,7 +88,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
           select s.statement_date, s.imported_at from bank_statements s
            where s.account_id = a.id
            order by s.imported_at desc limit 1) st on true
-       where a.org_id = ${orgId} and a.reconcilable and not a.is_summary
+       where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}
        order by a.type, coalesce(bal.balance, 0) desc
     `),
@@ -104,7 +104,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
         join accounts a on a.id = jl.account_id
-       where a.org_id = ${orgId} and a.reconcilable and not a.is_summary
+       where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}
          and je.posting_date >= (date_trunc('week', current_date) - interval '${sql.raw(String(TREND_WEEKS - 1))} weeks')
        group by 1, 2
@@ -115,9 +115,9 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
         (select count(*) from bank_match_rules r where r.org_id = ${orgId} and r.is_active) as active_rules,
         (select count(*) from bank_match_rules r where r.org_id = ${orgId}) as total_rules,
         (select count(*) from bank_statements s join accounts a on a.id = s.account_id
-          where s.org_id = ${orgId}${acctScope}) as statements,
+          where s.org_id = ${orgId} and a.is_active${acctScope}) as statements,
         (select max(s.imported_at) from bank_statements s join accounts a on a.id = s.account_id
-          where s.org_id = ${orgId}${acctScope}) as last_imported_at,
+          where s.org_id = ${orgId} and a.is_active${acctScope}) as last_imported_at,
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.kind in ${txList}
             and d.document_date >= current_date - 7

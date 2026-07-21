@@ -883,7 +883,7 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
     from accounts a
     left join (journal_lines l join journal_entries e on e.id = l.entry_id)
       on l.account_id = a.id and e.posting_date <= ${asOf}${subScope(sql`l.subsidiary_id`, subIds)}
-    where a.type = 'asset_bank' and a.is_summary = false
+    where a.type = 'asset_bank' and a.is_summary = false and a.is_active
       ${subIds && subIds.length > 0 ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
     group by a.id, a.name, a.number
     order by coalesce(sum(l.amount), 0) desc
