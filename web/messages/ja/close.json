@@ -65,7 +65,11 @@
     "approve": "承認",
     "requestChanges": "変更を依頼",
     "addEvidence": "証跡を追加",
-    "finalApproval": "最終承認を付与",
+    "takeAction": "対応する",
+    "requestApproval": "承認を依頼",
+    "reviewApprovals": "承認を確認",
+    "configureApprovalFlow": "承認フローを設定",
+    "documentation": "ドキュメント",
     "lockPeriod": "期間をロック",
     "publish": "パッケージを公表",
     "downloadBinder": "改ざん不可の監査バインダーをダウンロード"
@@ -73,7 +77,7 @@
   "errors": { "actionFailed": "決算アクションを完了できませんでした" },
   "messages": {
     "refresh": "決算状態を更新しました",
-    "approve": "決算を承認しました",
+    "request_approval": "決算を承認申請しました",
     "close": "期間をロックしました",
     "publish": "決算パッケージを公表しました",
     "taskUpdated": "タスクを更新しました",
@@ -197,7 +201,8 @@
     "package": "決算報告パッケージ",
     "description": "設定された成果物を確認し、証跡バインダーを凍結してパッケージを公表します。",
     "complete": "{name}がパッケージを公表しました",
-    "closeFirst": "公表する前に期間を締めてロックしてください。"
+    "lockFirst": "公表前に承認済みの期間ロックを適用してください。",
+    "awaitingApproval": "公表前に決算レビューと承認フローを完了してください。"
   },
   "timeline": {
     "title": "改ざん不可の決算タイムライン",
@@ -208,6 +213,8 @@
     "run": {
       "started": "決算実行を開始しました",
       "data_changed": "元帳の変更により従前の作業が無効化されました",
+      "approval_requested": "決算承認を依頼しました",
+      "approval_rejected": "決算承認が却下されました",
       "approved": "決算が最終承認を受けました",
       "closed": "期間ロックが適用されました",
       "published": "決算パッケージを公表しました"

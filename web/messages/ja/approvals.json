@@ -36,7 +36,8 @@
     "journal": "仕訳",
     "purchase_order": "発注書",
     "sales_order": "受注",
-    "quote": "見積"
+    "quote": "見積",
+    "close_run": "期間決算"
   },
   "decide": {
     "rejectionReason": "却下理由:",

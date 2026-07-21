@@ -172,7 +172,7 @@ export const periodClose: DocArticle = {
   category: 'banking-close',
   order: 2,
   summary: 'Prepare, execute, approve, lock, publish, and—when governed—reopen an accounting period.',
-  updated: '2026-07-19',
+  updated: '2026-07-20',
   keywords: [
     'period close',
     'month end',
@@ -207,15 +207,46 @@ Start the period from **Accounting → Period Close**. Complete tasks in depende
 order, attach evidence, resolve exceptions, and obtain required reviewer
 sign-offs. The workspace records events and evidence for the close run.
 
+Each incomplete checklist card includes **Take action**, which opens the
+workspace where the underlying work is performed. Return to the close run and
+**Revalidate** after posting, reconciling, or correcting records. A task is only
+complete when its configured completion rule, evidence requirement, and review
+gate are satisfied.
+
 Do not mark a task complete merely because an export exists. Confirm the report
 scope, explain differences, and retain the reconciliation or approval that proves
 the result.
+
+## Configure close approval
+
+Close approval uses the same visual flow system as other governed records. Go to
+**Administration → Flows**, filter to **Period close run**, and edit the enabled
+flow. The default flow has one independent approval gate. A smaller organization
+can keep that single gate; a larger organization can add sequential gates or an
+**All must approve** gate with several assignees. Conditions can route month-end,
+quarter-end, year-end, books, readiness scores, or exception counts differently.
+
+The **Request approval** action evaluates every enabled matching close flow and
+places its gates in **Approvals**. Approval fails closed when no gate is produced
+or an assignee cannot be resolved. The run initiator cannot decide any close gate,
+even if a flow gate is authored to permit self-approval. This separation is an
+accounting invariant.
+
+Every approval is tied to the validated ledger fingerprint. If ledger data changes
+while review is pending or after final approval, open gates are cancelled, prior
+sign-off is invalidated, and the run returns to review. Revalidate the close,
+repeat affected work, and request a new approval round.
 
 ## Lock and publish
 
 Module and accounting locks prevent new activity or amendments in the closed
 scope. Approval and publication should occur only after the reporting package is
 reproducible and named reviewers accept the result.
+
+After the final configured gate approves, use **Lock period** to apply subledger
+locks before the GL lock. The **Publish package** button remains visible on the
+Publish stage throughout the run; it becomes available only after the period is
+locked, so the required next step is always clear.
 
 ## Reopen carefully
 

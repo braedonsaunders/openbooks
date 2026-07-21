@@ -127,7 +127,11 @@ export async function decideGate(args: {
     (await preAdapter?.loadContext(pre.subjectId))?.submitterUserId ?? null;
   if (submitterUserId && submitterUserId === userId) {
     const node = await gateNodeData(pre.flowId, pre.nodeId);
-    if (!node || node.preventSelfApproval !== false) {
+    if (
+      preAdapter?.selfApprovalPolicy === "forbidden" ||
+      !node ||
+      node.preventSelfApproval !== false
+    ) {
       throw new GateError("you cannot approve your own submission");
     }
   }
@@ -399,6 +403,9 @@ export interface WorklistGate {
    * for the caller's own gates.
    */
   onBehalfOf: { userId: string; name: string } | null;
+  /** Native subject label/link for non-document approvals such as close runs. */
+  subjectLabel: string | null;
+  href: string | null;
   /** Joined document header (null for future non-document subjects). */
   document: {
     documentNumber: string;
@@ -433,6 +440,8 @@ function mapWorklistRow(
     remindAt: (row.remindAt as Date | null) ?? null,
     escalateAt: (row.escalateAt as Date | null) ?? null,
     onBehalfOf,
+    subjectLabel: (row.subjectLabel as string | null) ?? null,
+    href: row.closePeriodName ? `/close?run=${String(row.subjectId)}&stage=lock` : null,
     document: row.documentNumber
       ? {
           documentNumber: String(row.documentNumber),
@@ -457,10 +466,13 @@ const WORKLIST_SELECT = sql`
            g.created_at as "createdAt", g.remind_at as "remindAt", g.escalate_at as "escalateAt",
            d.document_number as "documentNumber", d.kind as "docKind", d.status as "docStatus",
            d.total, d.currency, d.document_date as "documentDate", d.memo,
-           p.display_name as "partyName"
+           p.display_name as "partyName", cp.name as "closePeriodName",
+           case when cp.name is not null then cp.name || ' close' else null end as "subjectLabel"
       from flow_gates g
       left join documents d on d.id = g.subject_id
-      left join parties p on p.id = d.party_id`;
+      left join parties p on p.id = d.party_id
+      left join close_runs cr on cr.id = g.subject_id and g.subject_kind = 'close_run'
+      left join accounting_periods cp on cp.id = cr.period_id`;
 
 /**
  * Pending gates the user may act on: assigned to them directly, to a role

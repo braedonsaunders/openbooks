@@ -130,6 +130,7 @@ export default async function PeriodClose({
           canRun={can(authz, "close.run")}
           canApprove={can(authz, "close.approve")}
           canReopen={can(authz, "close.reopen")}
+          canManageFlows={can(authz, "flows.manage")}
         />
       );
     }

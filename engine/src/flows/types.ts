@@ -40,6 +40,13 @@ export interface FlowSubjectAdapter {
   profile: FlowSubjectProfile;
   /** Header fields a flow may persist into via set_field. */
   writableFields: Set<string>;
+  /**
+   * Some governed subjects never permit the submitter to decide a gate,
+   * even when an authored gate opts out of the normal self-approval guard.
+   * Period close uses this because independent approval is an accounting
+   * invariant, not a tenant preference.
+   */
+  selfApprovalPolicy?: "configurable" | "forbidden";
 
   /** Load the record's evaluation snapshot; null when the record is gone. */
   loadContext(subjectId: string): Promise<FlowSubjectContext | null>;

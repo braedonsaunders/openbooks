@@ -65,7 +65,11 @@
     "approve": "Approuver",
     "requestChanges": "Demander des modifications",
     "addEvidence": "Ajouter une preuve",
-    "finalApproval": "Donner l’approbation finale",
+    "takeAction": "Agir",
+    "requestApproval": "Demander l’approbation",
+    "reviewApprovals": "Examiner les approbations",
+    "configureApprovalFlow": "Configurer le flux d’approbation",
+    "documentation": "Documentation",
     "lockPeriod": "Verrouiller la période",
     "publish": "Publier le dossier",
     "downloadBinder": "Télécharger le dossier d’audit immuable"
@@ -73,7 +77,7 @@
   "errors": { "actionFailed": "L’action de clôture n’a pas pu être effectuée" },
   "messages": {
     "refresh": "État de clôture actualisé",
-    "approve": "Clôture approuvée",
+    "request_approval": "Clôture soumise à approbation",
     "close": "Période verrouillée",
     "publish": "Dossier de clôture publié",
     "taskUpdated": "Tâche mise à jour",
@@ -201,7 +205,8 @@
     "package": "Dossier de rapports de clôture",
     "description": "Vérifiez les sorties configurées, puis figez le dossier de preuves et publiez-le.",
     "complete": "Dossier publié par {name}",
-    "closeFirst": "Clôturez et verrouillez la période avant de publier."
+    "lockFirst": "Appliquez les verrous de période approuvés avant de publier.",
+    "awaitingApproval": "Terminez la révision et le flux d’approbation avant de publier."
   },
   "timeline": {
     "title": "Chronologie immuable",
@@ -212,6 +217,8 @@
     "run": {
       "started": "Exécution démarrée",
       "data_changed": "Une modification du grand livre a invalidé des travaux",
+      "approval_requested": "Approbation de clôture demandée",
+      "approval_rejected": "Approbation de clôture refusée",
       "approved": "Clôture approuvée définitivement",
       "closed": "Verrous de période appliqués",
       "published": "Dossier de clôture publié"
