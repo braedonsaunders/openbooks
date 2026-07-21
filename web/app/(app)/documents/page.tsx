@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { ChevronRight, Home } from 'lucide-react'
+import { ChevronRight, Home, Trash2 } from 'lucide-react'
 import { EmptyState, PageHeader } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
@@ -133,6 +133,13 @@ export default async function Documents({
 
   const actions = canManage ? (
     <div className="flex items-center gap-2">
+      <Link
+        href="/documents/trash"
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        <Trash2 className="h-4 w-4" />
+        {t('trash.link')}
+      </Link>
       <NewFolderButton parentId={newFolderParent} />
       <UploadButton folderId={newFolderParent} />
     </div>

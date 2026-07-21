@@ -59,8 +59,8 @@
       "save": "Save"
     },
     "delete": {
-      "title": "Delete this folder?",
-      "body": "All files in this folder will be permanently deleted. This cannot be undone."
+      "title": "Move this folder to Trash?",
+      "body": "This folder and its contents will be moved to Trash. You can restore them, or delete them permanently from there."
     },
     "systemNoDelete": "System folders cannot be deleted or renamed.",
     "subfolderCount": "{count, plural, one {# folder} other {# folders}}",
@@ -88,8 +88,8 @@
       "attachedTo": "Attached to records",
       "notAttached": "Not attached to any record.",
       "delete": {
-        "title": "Delete this file?",
-        "body": "The file will be permanently deleted from the File Cabinet and detached from all records. This cannot be undone."
+        "title": "Move this file to Trash?",
+        "body": "The file will be moved to Trash. You can restore it, or delete it permanently from there."
       }
     },
     "preview": {
@@ -137,6 +137,25 @@
       "editorHint": "Upload, rename, move, replace",
       "managerHint": "Full control, including delete and sharing"
     }
+  },
+  "trash": {
+    "title": "Trash",
+    "link": "Trash",
+    "description": "Deleted files and folders. Restore them, or delete them permanently.",
+    "empty": "Trash is empty.",
+    "back": "Back to File Cabinet",
+    "restore": "Restore",
+    "deleteForever": "Delete forever",
+    "purgeConfirm": {
+      "title": "Delete permanently?",
+      "body": "This item and its contents will be permanently deleted. This cannot be undone."
+    },
+    "folderLabel": "Folder",
+    "inLocation": "in {location}",
+    "restored": "Restored",
+    "restoreFailed": "Could not restore",
+    "purged": "Permanently deleted",
+    "purgeFailed": "Could not delete"
   },
   "activity": {
     "title": "Activity",

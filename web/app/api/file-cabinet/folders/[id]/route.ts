@@ -3,11 +3,13 @@ import {
   deleteFolder,
   getFolder,
   moveFolder,
+  purgeFolder,
   renameFolder,
   updateFolder,
 } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
+import { recordFileEvent } from '../../../../../lib/file-audit'
 import { requireFolderAccess, requireSession } from '../../lib'
 
 export const runtime = 'nodejs'
@@ -58,7 +60,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /** Delete a folder (fails if it contains attached files). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -66,11 +68,22 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // Deleting a folder needs Manager on it.
   const access = await requireFolderAccess(gate, id, 'manager')
   if (access) return access
-  const result = await deleteFolder(gate.user.orgId, id)
+  const purge = new URL(req.url).searchParams.get('purge') === '1'
+  const result = purge
+    ? await purgeFolder(gate.user.orgId, id)
+    : await deleteFolder(gate.user.orgId, id)
   if (!result.ok) {
     const status =
       result.reason === 'not found' ? 404 : result.reason === 'system' ? 400 : 409
     return NextResponse.json({ error: result.reason }, { status })
   }
+  await recordFileEvent({
+    orgId: gate.user.orgId,
+    actorId: gate.user.id,
+    table: 'folders',
+    rowId: id,
+    action: 'delete',
+    changes: { permanent: purge },
+  })
   return NextResponse.json({ ok: true })
 }

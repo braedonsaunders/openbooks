@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
-import { deleteFile, getFile, moveFile, renameFile } from '../../../../../lib/file-cabinet'
+import { deleteFile, getFile, moveFile, purgeFile, renameFile } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
+import { recordFileEvent } from '../../../../../lib/file-audit'
 import { fileViewer, requireFileAccess, requireFolderAccess, requireSession } from '../../lib'
 
 export const runtime = 'nodejs'
@@ -46,8 +47,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return NextResponse.json({ ok: true })
 }
 
-/** Delete a file (cascades to versions, blobs, and attachment links). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+/** Trash a file (soft-delete), or permanently delete it with `?purge=1`. */
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -55,7 +56,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // Deleting needs Manager on the file.
   const gateAccess = await requireFileAccess(gate, id, 'manager')
   if (gateAccess) return gateAccess
-  const ok = await deleteFile(gate.user.orgId, id)
+  const purge = new URL(req.url).searchParams.get('purge') === '1'
+  const ok = purge ? await purgeFile(gate.user.orgId, id) : await deleteFile(gate.user.orgId, id)
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  await recordFileEvent({
+    orgId: gate.user.orgId,
+    actorId: gate.user.id,
+    table: 'files',
+    rowId: id,
+    action: 'delete',
+    changes: { permanent: purge },
+  })
   return NextResponse.json({ ok: true })
 }
