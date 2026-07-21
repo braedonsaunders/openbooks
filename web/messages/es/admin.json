@@ -989,6 +989,17 @@
       "removed": "Formulario oficial quitado",
       "none": "No hay PDF oficial cargado"
     },
+    "taxBoxes": {
+      "description": "Casillas asignadas a {code}, además de las casillas calculadas y manuales compartidas.",
+      "calculatedNote": "Las casillas calculadas y manuales se aplican a toda la declaración y aparecen en cada código de impuesto asignado a ella.",
+      "new": "Nueva casilla de declaración",
+      "searchPlaceholder": "Buscar casillas…",
+      "source": "Origen",
+      "empty": "Ninguna casilla coincide con este código de impuesto y la búsqueda.",
+      "mapped": "Asignada",
+      "calculated": "Calculada",
+      "manual": "Manual"
+    },
     "new": "New",
     "learnMore": "Más información.",
     "empty": "Nothing here yet.",
@@ -1005,8 +1016,12 @@
       "required": "{field} is required"
     },
     "drawer": {
-      "newTitle": "New {name}",
-      "editTitle": "Edit {name}"
+      "newTitle": "Nuevo: {name}",
+      "editTitle": "Editar: {name}",
+      "tabs": {
+        "ariaLabel": "Secciones de configuración",
+        "details": "Detalles"
+      }
     },
     "errors": {
       "duplicate": "A record with that code already exists.",
@@ -1283,8 +1298,9 @@
         "description": "Organization identity, base currency, fiscal year, and control accounts."
       },
       "tax-codes": {
-        "title": "Tax Codes",
-        "description": "Rates you charge and pay, and the accounts they post to."
+        "title": "Códigos de impuesto",
+        "singularTitle": "Código de impuesto",
+        "description": "Las tasas que cobra y paga, y las cuentas en las que se contabilizan."
       },
       "tax-rates": {
         "title": "Tax Rates",
@@ -1300,6 +1316,7 @@
       },
       "tax-report-lines": {
         "title": "Casillas de la declaración",
+        "singularTitle": "Casilla de la declaración",
         "description": "Asigne códigos de impuesto a las casillas de una declaración, o calcule una casilla a partir de otras."
       },
       "classes": {

@@ -7,6 +7,7 @@ import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
 import { laborCosting } from './articles/labor-costing'
+import { taxConfiguration } from './articles/tax-configuration'
 import { fieldTickets } from './articles/field-tickets'
 import { itemRates } from './articles/item-rates'
 import { revenueRecognition } from './articles/revenue-recognition'
@@ -155,6 +156,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'quickbooks-desktop-connector': 'integrations-connections',
   'netsuite-extraction-bridge': 'integrations-connections',
   'company-settings': 'administration-organization',
+  'tax-configuration': 'administration-organization',
   'roles-and-permissions': 'administration-organization',
   'data-imports': 'administration-data',
   'audit-log': 'administration-data',
@@ -187,6 +189,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   netSuiteBridge,
   apps,
   companySettings,
+  taxConfiguration,
   rolesAndPermissions,
   dataImports,
   auditLog,

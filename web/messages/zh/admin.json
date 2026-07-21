@@ -1011,6 +1011,17 @@
       "removed": "官方表单已移除",
       "none": "未上传官方 PDF"
     },
+    "taxBoxes": {
+      "description": "映射到 {code} 的申报框，以及共享的计算框和手动框。",
+      "calculatedNote": "计算框和手动框适用于整份申报表，并显示在映射到该申报表的每个税码下。",
+      "new": "新建纳税申报框",
+      "searchPlaceholder": "搜索申报框…",
+      "source": "来源",
+      "empty": "没有符合此税码和搜索条件的申报框。",
+      "mapped": "已映射",
+      "calculated": "已计算",
+      "manual": "手动"
+    },
     "new": "新建",
     "learnMore": "了解更多。",
     "empty": "此处暂无内容。",
@@ -1028,7 +1039,11 @@
     },
     "drawer": {
       "newTitle": "新建 {name}",
-      "editTitle": "编辑 {name}"
+      "editTitle": "编辑 {name}",
+      "tabs": {
+        "ariaLabel": "配置分区",
+        "details": "详细信息"
+      }
     },
     "errors": {
       "duplicate": "已存在使用该代码的记录。",
@@ -1312,6 +1327,7 @@
       },
       "tax-codes": {
         "title": "税码",
+        "singularTitle": "税码",
         "description": "你收取和支付的税率，以及它们过账所至的科目。"
       },
       "tax-rates": {
@@ -1328,6 +1344,7 @@
       },
       "tax-report-lines": {
         "title": "纳税申报框",
+        "singularTitle": "纳税申报框",
         "description": "将税码映射到纳税申报的各框上，或从其他框计算某个框。"
       },
       "classes": {

@@ -1011,6 +1011,17 @@
       "removed": "Formulário oficial removido",
       "none": "Nenhum PDF oficial enviado"
     },
+    "taxBoxes": {
+      "description": "Caixas mapeadas para {code}, além das caixas calculadas e manuais compartilhadas.",
+      "calculatedNote": "As caixas calculadas e manuais se aplicam a toda a declaração e aparecem em cada código de imposto mapeado para ela.",
+      "new": "Nova caixa da declaração",
+      "searchPlaceholder": "Pesquisar caixas da declaração…",
+      "source": "Origem",
+      "empty": "Nenhuma caixa corresponde a este código de imposto e à pesquisa.",
+      "mapped": "Mapeada",
+      "calculated": "Calculada",
+      "manual": "Manual"
+    },
     "new": "Novo",
     "learnMore": "Saiba mais.",
     "empty": "Nada aqui ainda.",
@@ -1028,7 +1039,11 @@
     },
     "drawer": {
       "newTitle": "Novo {name}",
-      "editTitle": "Editar {name}"
+      "editTitle": "Editar {name}",
+      "tabs": {
+        "ariaLabel": "Seções de configuração",
+        "details": "Detalhes"
+      }
     },
     "errors": {
       "duplicate": "Já existe um registro com esse código.",
@@ -1312,6 +1327,7 @@
       },
       "tax-codes": {
         "title": "Códigos de Imposto",
+        "singularTitle": "Código de Imposto",
         "description": "Alíquotas que você cobra e paga, e as contas em que são lançadas."
       },
       "tax-rates": {
@@ -1328,6 +1344,7 @@
       },
       "tax-report-lines": {
         "title": "Caixas da Declaração Fiscal",
+        "singularTitle": "Caixa da Declaração Fiscal",
         "description": "Mapeie códigos de imposto nas caixas de uma declaração fiscal, ou calcule uma caixa a partir de outras caixas."
       },
       "classes": {

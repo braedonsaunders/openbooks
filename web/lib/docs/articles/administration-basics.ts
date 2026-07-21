@@ -7,7 +7,7 @@ export const companySettings: DocArticle = {
   order: 1,
   summary:
     'Use the configuration center for company, accounting, tax, dimensions, billing, revenue, inventory, workforce, assets, and currency.',
-  updated: '2026-07-19',
+  updated: '2026-07-21',
   keywords: [
     'company settings',
     'setup',
@@ -31,7 +31,8 @@ The setup rail groups configuration by purpose:
 
 - **Company** — organization identity, subsidiaries, and intercompany structure.
 - **Accounting** — books, periods, policies, accounts, and close-related defaults.
-- **Taxes** — codes, rates, nexus, reporting lines, forms, and filing behavior.
+- **Taxes** — codes, rates, forms, and filing behavior. Return-box mappings live
+  in each **Tax Code** flyout instead of occupying a separate setup tab.
 - **Dimensions** — departments, locations, classes, account groups, and related
   analysis structures.
 - **Billing and revenue** — terms, sequences, recognition, pricing, and project

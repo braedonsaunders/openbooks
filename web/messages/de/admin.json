@@ -1011,6 +1011,17 @@
       "removed": "Amtliches Formular entfernt",
       "none": "Kein amtliches PDF hochgeladen"
     },
+    "taxBoxes": {
+      "description": "{code} zugeordnete Felder sowie gemeinsame berechnete und manuelle Felder.",
+      "calculatedNote": "Berechnete und manuelle Felder gelten für die gesamte Erklärung und werden unter jedem ihr zugeordneten Steuercode angezeigt.",
+      "new": "Neues Steuererklärungsfeld",
+      "searchPlaceholder": "Erklärungsfelder durchsuchen…",
+      "source": "Quelle",
+      "empty": "Keine Erklärungsfelder entsprechen diesem Steuercode und der Suche.",
+      "mapped": "Zugeordnet",
+      "calculated": "Berechnet",
+      "manual": "Manuell"
+    },
     "new": "Neu",
     "learnMore": "Mehr erfahren.",
     "empty": "Hier ist noch nichts.",
@@ -1028,7 +1039,11 @@
     },
     "drawer": {
       "newTitle": "Neu: {name}",
-      "editTitle": "{name} bearbeiten"
+      "editTitle": "{name} bearbeiten",
+      "tabs": {
+        "ariaLabel": "Konfigurationsbereiche",
+        "details": "Details"
+      }
     },
     "errors": {
       "duplicate": "Ein Datensatz mit diesem Code existiert bereits.",
@@ -1312,6 +1327,7 @@
       },
       "tax-codes": {
         "title": "Steuercodes",
+        "singularTitle": "Steuercode",
         "description": "Sätze, die Sie berechnen und zahlen, sowie die Konten, auf die sie gebucht werden."
       },
       "tax-rates": {
@@ -1328,6 +1344,7 @@
       },
       "tax-report-lines": {
         "title": "Steuererklärungsfelder",
+        "singularTitle": "Steuererklärungsfeld",
         "description": "Ordnen Sie Steuercodes den Feldern einer Steuererklärung zu oder berechnen Sie ein Feld aus anderen Feldern."
       },
       "classes": {

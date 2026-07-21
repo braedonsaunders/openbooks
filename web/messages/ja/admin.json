@@ -1011,6 +1011,17 @@
       "removed": "公式フォームを削除しました",
       "none": "公式PDFがアップロードされていません"
     },
+    "taxBoxes": {
+      "description": "{code} にマッピングされたボックスと、共有の計算・手入力ボックスです。",
+      "calculatedNote": "計算ボックスと手入力ボックスは申告書全体に適用され、その申告書にマッピングされた各税コードに表示されます。",
+      "new": "税務申告ボックスを追加",
+      "searchPlaceholder": "申告ボックスを検索…",
+      "source": "ソース",
+      "empty": "この税コードと検索条件に一致する申告ボックスはありません。",
+      "mapped": "マッピング済み",
+      "calculated": "計算",
+      "manual": "手入力"
+    },
     "new": "新規",
     "learnMore": "詳細はこちら。",
     "empty": "ここにはまだ何もありません。",
@@ -1028,7 +1039,11 @@
     },
     "drawer": {
       "newTitle": "新規{name}",
-      "editTitle": "{name}を編集"
+      "editTitle": "{name}を編集",
+      "tabs": {
+        "ariaLabel": "設定セクション",
+        "details": "詳細"
+      }
     },
     "errors": {
       "duplicate": "そのコードのレコードは既に存在します。",
@@ -1312,6 +1327,7 @@
       },
       "tax-codes": {
         "title": "税コード",
+        "singularTitle": "税コード",
         "description": "課税および支払するレートと、それらが記帳される勘定。"
       },
       "tax-rates": {
@@ -1328,6 +1344,7 @@
       },
       "tax-report-lines": {
         "title": "税務申告ボックス",
+        "singularTitle": "税務申告ボックス",
         "description": "税コードを税務申告書のボックスにマッピングするか、他のボックスからボックスを計算します。"
       },
       "classes": {
