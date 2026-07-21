@@ -81,7 +81,7 @@ export default async function AP({
         <PageHeader
           title={t('cockpit.title')}
           description={t('cockpit.description')}
-          actions={<div className="flex items-center gap-3">{tabs}{headerActions}</div>}
+          actions={<div className="flex items-center gap-3">{headerActions}{tabs}</div>}
         />
       }
     >

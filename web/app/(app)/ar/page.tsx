@@ -72,7 +72,7 @@ export default async function AR({
         <PageHeader
           title={t('cockpit.title')}
           description={t('cockpit.description')}
-          actions={<div className="flex items-center gap-3">{tabs}{newButton}</div>}
+          actions={<div className="flex items-center gap-3">{newButton}{tabs}</div>}
         />
       }
     >

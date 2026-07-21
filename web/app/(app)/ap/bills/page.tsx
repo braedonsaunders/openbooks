@@ -152,7 +152,7 @@ export default async function ApBills({
         <PageHeader
           title={t('list.title')}
           description={t('list.description')}
-          actions={<div className="flex items-center gap-3">{tabs}{headerActions}</div>}
+          actions={<div className="flex items-center gap-3">{headerActions}{tabs}</div>}
         />
       }
     >

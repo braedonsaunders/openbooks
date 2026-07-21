@@ -22,6 +22,7 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/purchasing', ns: 'purchasing', key: 'home.title' },
     { href: '/ap', ns: 'nav', key: 'modules.ap' },
     { href: '/ap/bills', ns: 'ap', key: 'cockpit.tabs.bills' },
+    { href: '/expenses', ns: 'nav', key: 'modules.expenses' },
   ],
   banking: [
     { href: '/banking', ns: 'banking', key: 'home.title' },
@@ -39,6 +40,10 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
  * "?sub=<id>") rides along on every tab so the subsidiary lens survives the
  * hop; `exclude` drops routes the viewer can't open (permission gates stay at
  * the call site).
+ *
+ * Layout rule: render the strip as the LAST (rightmost) header action on
+ * every page — sibling buttons vary per page, and a right-anchored strip of
+ * constant width is the only way the switcher doesn't jump between tabs.
  */
 export async function groupTabs(
   group: TabGroup,
