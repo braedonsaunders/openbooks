@@ -600,13 +600,6 @@
       "november": "November",
       "december": "December"
     },
-    "laborCosting": {
-      "title": "Labor costing and billing",
-      "description": "Company defaults inherited by project types and projects. Item and service rules then specialize the selected book.",
-      "openGuide": "Open guided setup.", "defaultBook": "Default labor rate book", "selectBook": "Select a rate book…", "defaultBookHint": "Final fallback when no project, assignment, or project-type book applies.",
-      "defaultPolicy": "Default rate policy", "defaultPolicyHint": "Projects may inherit or override this effective-date behavior.",
-      "policies": { "work_date": "Rate on work date", "locked": "Lock awarded version", "scheduled_escalation": "Scheduled escalation", "manual_reprice": "Manual reprice only" }
-    },
     "controlAccounts": {
       "title": "Control accounts",
       "description": "The general-ledger accounts subledgers and tax post through. Only postable (non-summary) accounts appear.",
@@ -1354,78 +1347,6 @@
       "cancel": "Cancel",
       "saveFailed": "Could not save the configuration."
     },
-    "laborWizard": {
-      "navTitle": "Labor Costing Guide", "title": "Labor Costing Setup Guide", "description": "Choose a practical starting model, connect accounting, apply project defaults, and decide how external payroll actuals reconcile.", "docs": "Documentation",
-      "steps": { "template": "Starter model", "company": "Company accounting", "projects": "Project defaults", "payroll": "External payroll" },
-      "templateTitle": "Start from a proven pattern", "templateHint": "Templates create ordinary editable rate books, rules, burdens, labor classes, and time premiums—never hidden behavior.",
-      "templates": { "construction-union": "Construction and union labor", "professional-services": "Professional services", "field-service-equipment": "Field service and equipment", "blended-crew": "Blended crew cost plus" },
-      "templateDescriptions": { "construction-union": "Trades, overtime, payroll taxes, benefits, pension, and workers compensation.", "professional-services": "Role-based cost and bill rates with shared-services burden.", "field-service-equipment": "Operator, technician, emergency callout, tooling, and internal transfer rates.", "blended-crew": "A simple crew standard cost with overhead and target-margin billing." },
-      "useExisting": "Use an existing book", "createStarter": "Create editable starter", "templateCreated": "Editable starter created", "templateFailed": "Could not create the starter",
-      "companyTitle": "Set the company fallback", "companyHint": "These values apply only after project-specific assignments, project overrides, and project-type defaults.", "defaultBook": "Default rate book", "policy": "Default policy", "laborWip": "Labor WIP / cost account", "laborClearing": "Labor clearing account",
-      "policies": { "work_date": "Rate on work date", "locked": "Lock awarded version", "scheduled_escalation": "Scheduled escalation", "manual_reprice": "Manual reprice only" },
-      "projectsTitle": "Apply defaults to project types", "projectsHint": "Selected types inherit this model automatically. A project may still override it.", "next": "Next",
-      "payrollTitle": "Choose how payroll actuals arrive", "payrollHint": "OpenBooks does not run payroll yet. Import the payroll journal and employer-cost detail from the external payroll system.",
-      "modes": { "costingOnly": "Project costing only", "costingOnlyHint": "Allocate imported actuals to projects without posting a variance journal.", "variance": "Reconcile actual to standard through clearing", "varianceHint": "Require the posted payroll journal, prove its clearing amount, and post only the project cost variance." },
-      "createSource": "Create a generic External Payroll source", "finish": "Save configuration", "saveFailed": "Could not save labor costing", "saved": "Labor costing configured", "completeTitle": "Labor costing is connected", "completeHint": "Review the draft rate rules, test a rate, then import payroll journals and cost detail when available.", "testRate": "Test a rate", "payrollWorkspace": "External payroll costs"
-    },
-    "templates": {
-      "title": "Labor Rate Starter Templates",
-      "navTitle": "Labor Rate Templates",
-      "description": "Start with an editable industry example, review every rule, then activate it when it matches your policy.",
-      "professionalServices": { "title": "Professional services", "description": "Role-based standard cost and bill rates for consultant, senior, and principal work." },
-      "constructionUnion": { "title": "Construction and union labor", "description": "Apprentice, journey, and foreperson wages with overtime, payroll taxes, benefits, pension, and workers compensation." },
-      "fieldServiceEquipment": { "title": "Field service and equipment operators", "description": "Operator and technician rates with callout premiums, field overhead, PPE, small tools, and internal transfer cost." },
-      "blendedCrew": { "title": "Blended crew cost plus", "description": "A simple blended crew cost with overhead, target-margin billing, and separate planning rates." },
-      "draftBadge": "Editable draft",
-      "classCount": "{count, plural, one {# labor class} other {# labor classes}}",
-      "rateCount": "{count, plural, one {# rate rule} other {# rate rules}}",
-      "componentCount": "{count, plural, one {# component} other {# components}}",
-      "useTemplate": "Use template",
-      "selected": "Selected",
-      "createTitle": "Create from {template}",
-      "createDescription": "These values identify the new tenant-owned rate book. All generated rules remain editable until activation.",
-      "reviewHint": "The template creates a draft version. Review its labor classes, rates, burdens, time multipliers, and accounting setup before changing the version to Active.",
-      "createDraft": "Create editable draft",
-      "installing": "Creating…",
-      "installed": "Labor-rate draft created",
-      "installError": "Could not create the labor-rate draft"
-    },
-    "payrollOperations": {
-      "title": "External Payroll Costs",
-      "navTitle": "External Payroll Costs",
-      "description": "Import employer costs calculated by an external payroll system, reconcile them to approved project time, and safely actualize job cost.",
-      "newBatch": "New external payroll batch",
-      "manageLines": "Manage cost lines",
-      "manageSources": "Payroll sources",
-      "manageTemplates": "Saved mappings",
-      "importJournal": "Import payroll journal",
-      "importCosts": "Import employer costs",
-      "search": "Search batch, source, external ID, or subsidiary…",
-      "statusFilter": "Status",
-      "documentation": "Documentation",
-      "examples": { "generic": "Generic example", "constructionUnion": "Construction / union example", "professionalServices": "Professional services example" },
-      "useTemplate": "Import with {name}",
-      "columns": { "batch": "Batch", "source": "Source", "subsidiary": "Subsidiary", "period": "Payroll period", "lines": "Lines", "journal": "Source journal", "actual": "Actual cost (base)", "variance": "Variance", "status": "Status", "action": "Action" },
-      "statuses": { "draft": "Draft", "validated": "Validated", "reconciled": "Reconciled", "posted": "Complete" },
-      "validate": "Validate",
-      "reconcile": "Reconcile",
-      "postVariance": "Post variance",
-      "completeCosting": "Complete costing",
-      "complete": "Complete",
-      "validated": "External payroll batch validated",
-      "reconciled": "External payroll costs reconciled",
-      "posted": "External payroll accounting completed",
-      "exceptionsFound": "{count, plural, one {# exception needs attention} other {# exceptions need attention}}",
-      "exceptionCount": "{count, plural, one {# exception} other {# exceptions}}",
-      "notLinked": "Not linked",
-      "failed": "External payroll operation failed"
-    },
-    "rateTest": {
-      "title": "Test a Labor Rate", "navTitle": "Test a Labor Rate", "description": "Preview the exact effective rule stack without saving or posting anything.",
-      "employee": "Employee", "project": "Project", "item": "Service item", "timeType": "Time type", "department": "Department", "location": "Location", "workDate": "Work date", "hours": "Hours", "billable": "Billable", "selectEmployee": "Select an employee", "selectProject": "Select a project", "optional": "Optional", "test": "Test rate", "testing": "Testing…", "failed": "Could not resolve the rate",
-      "directCostRate": "Direct cost / hour", "burdenRate": "Burden / hour", "costRate": "Standard cost / hour", "billRate": "Bill rate / hour", "transferRate": "Transfer rate / hour",
-      "explanation": "Rate explanation", "lane": "Lane", "component": "Rule or component", "method": "Method", "ratePerHour": "Rate / hour", "amount": "Amount", "why": "Explanation"
-    },
     "entities": {
       "company": {
         "title": "Company & Accounting",
@@ -1481,17 +1402,8 @@
       },
       "time-types": {
         "title": "Time Types",
-        "description": "Cost and billing multipliers plus billable defaults for regular time, overtime, premiums, and leave."
+        "description": "Cost multipliers and billable defaults for timesheets."
       },
-      "labor-classes": { "title": "Labor Classes", "description": "Tenant-defined roles and trades used to match cost, billing, planning, and transfer rates." },
-      "employee-labor-class-assignments": { "title": "Employee Labor Classes", "description": "Effective-dated employee role and trade history used on each work date." },
-      "employee-compensation-rates": { "title": "Employee Standard Cost", "description": "Confidential effective-dated hourly or annual compensation used as the direct-cost fallback." },
-      "labor-rate-lines": { "title": "Labor Rate Rules", "description": "Dimensioned direct cost, bill, transfer, and planning rules inside draft rate-book versions." },
-      "labor-rate-components": { "title": "Labor Burden Components", "description": "Ordered taxes, benefits, insurance, overhead, and other additions to cost, bill, or transfer rates." },
-      "external-payroll-sources": { "title": "External Payroll Sources", "description": "Configure how each external payroll feed proves its journal and actualizes project cost." },
-      "external-payroll-import-templates": { "title": "External Payroll Import Mappings", "description": "Save reusable source-column mappings for recurring employer-cost files." },
-      "payroll-cost-batches": { "title": "External Payroll Cost Batches", "description": "Source- and subsidiary-specific payroll periods that reconcile imported employer costs to approved standard labor." },
-      "payroll-cost-lines": { "title": "External Payroll Cost Lines", "description": "Imported gross pay, employer taxes, benefits, workers compensation, and other employer-cost components." },
       "worker-comp-groups": {
         "title": "Worker Comp Groups",
         "description": "Workers' compensation rate groups for labor costing."
@@ -1550,11 +1462,7 @@
       },
       "item-rate-book-assignments": {
         "title": "Rate Book Assignments",
-        "description": "Choose which effective-dated rate book applies by customer, project, task, subsidiary, department, or location."
-      },
-      "item-rate-versions": {
-        "title": "Rate Book Versions",
-        "description": "Draft, activate, and retire immutable effective-dated rate-book versions."
+        "description": "Choose which effective-dated rate book applies to a customer or project."
       },
       "recognition-rules": {
         "title": "Recognition Rules",
@@ -1674,7 +1582,6 @@
       "padding": "Padding",
       "gapless": "Gapless",
       "costMultiplier": "Cost multiplier",
-      "billMultiplier": "Billing multiplier",
       "isBillableDefault": "Billable by default",
       "category": "Category",
       "method": "Method",
@@ -1756,42 +1663,6 @@
       "quantityPer": "Quantity per",
       "rateKind": "Rate type",
       "rateBookId": "Rate book",
-      "versionId": "Rate version",
-      "status": "Status",
-      "employeePartyId": "Employee",
-      "laborClassId": "Labor class",
-      "projectTaskId": "Project task",
-      "workerCompGroupId": "Worker compensation group",
-      "lane": "Rate lane",
-      "amount": "Amount",
-      "percent": "Percentage",
-      "annualHours": "Annual hours",
-      "priority": "Priority",
-      "value": "Value",
-      "sourceId": "External payroll source",
-      "accountingMode": "Accounting mode",
-      "payrollClearingAccountId": "Payroll clearing account",
-      "requirePostedJournal": "Require a posted source journal",
-      "externalLineIdColumn": "External line ID column",
-      "employeeCodeColumn": "Employee code column",
-      "componentColumn": "Component column",
-      "amountColumn": "Amount column",
-      "payCodeColumn": "Pay code column",
-      "hoursColumn": "Hours column",
-      "memoColumn": "Memo column",
-      "batchId": "External payroll batch",
-      "externalBatchId": "External batch ID",
-      "sourceJournalDocumentId": "Posted source journal",
-      "externalLineId": "External line ID",
-      "payCode": "Pay code",
-      "hours": "Hours",
-      "periodStart": "Period start",
-      "periodEnd": "Period end",
-      "postingDate": "Posting date",
-      "component": "Payroll component",
-      "memo": "Memo",
-      "actualTotal": "Actual total",
-      "varianceTotal": "Variance total",
       "customerId": "Customer",
       "projectId": "Project",
       "isDefault": "Default"
@@ -1893,16 +1764,8 @@
       "overheadRateKind": {
         "per_hour": "$/hour",
         "percent": "% of labor"
-      },
-      "rateVersionStatus": { "draft": "Draft", "active": "Active", "retired": "Retired" },
-      "compensationBasis": { "hour": "Per hour", "year": "Per year" },
-      "laborRateLane": { "directCost": "Direct cost", "bill": "Customer billing", "transfer": "Internal transfer", "planningCost": "Planning cost", "planningBill": "Planning bill" },
-      "laborRateMethod": { "fixed": "Fixed hourly rate", "atCost": "At burdened cost", "markupOnCost": "Markup on burdened cost", "marginOnCost": "Target margin on burdened cost" },
-      "laborComponentLane": { "cost": "Cost burden", "bill": "Billing addition", "transfer": "Transfer addition" },
-      "laborComponentMethod": { "fixedPerHour": "Fixed per hour", "percentOfBaseDirect": "% of base direct", "percentOfDirect": "% of adjusted direct", "percentOfSubtotal": "% of running subtotal" }
-      ,"payrollComponent": { "grossPay": "Gross pay", "employerTax": "Employer tax", "benefit": "Benefit", "workerComp": "Workers compensation", "other": "Other" }
-      ,"externalPayrollAccountingMode": { "costingOnly": "Project costing only (no GL posting)", "varianceToClearing": "Actualize project cost through payroll clearing" }
       }
+    }
   },
   "flows": {
     "title": "Flows",

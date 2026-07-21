@@ -7,12 +7,6 @@
   "key": "Clave",
   "billingMethod": "Método de facturación",
   "sortOrder": "Orden",
-  "laborRateBook": "Libro de tarifas predeterminado",
-  "laborRateBookHint": "Los proyectos de este tipo heredan este libro salvo que el proyecto o una asignación específica lo reemplace.",
-  "laborRatePolicy": "Política de tarifas predeterminada",
-  "laborRatePolicyHint": "Controla la fecha efectiva y el bloqueo de los proyectos que heredan este tipo.",
-  "inheritCompany": "Heredar valor de la empresa",
-  "laborPolicies": { "work_date": "Tarifa en la fecha de trabajo", "locked": "Bloquear versión adjudicada", "scheduled_escalation": "Escalamiento programado", "manual_reprice": "Revalorar solo manualmente" },
   "saved": "Tipo de proyecto guardado",
   "deleteConfirm": "¿Eliminar o archivar “{name}”?",
   "tabs": {

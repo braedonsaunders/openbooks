@@ -82,15 +82,6 @@
     "empty": "Aucune version tarifaire.",
     "rates": "Tarifs"
   },
-  "laborRates": {
-    "title": "Remplacements des taux de main-d’œuvre et de service",
-    "description": "Règles propres à l’article dans la grille du projet. Elles remplacent les règles générales sans changer la grille du projet.",
-    "documentation": "Documentation", "addRule": "Ajouter un remplacement", "draftRequired": "Créez ou installez une version provisoire avant d’ajouter un remplacement.",
-    "version": "Version provisoire", "code": "Code de règle", "lane": "Voie de taux", "method": "Méthode", "hourlyRate": "Taux horaire", "percent": "Pourcentage", "priority": "Priorité",
-    "rule": "Règle", "book": "Grille de taux", "value": "Taux", "hour": "heure", "atCost": "Au coût", "empty": "Aucun remplacement de taux pour cet article.", "saved": "Remplacement enregistré", "saveFailed": "Impossible d’enregistrer le remplacement",
-    "lanes": { "direct_cost": "Coût direct", "bill": "Facturation client", "transfer": "Transfert interne", "planning_cost": "Coût planifié", "planning_bill": "Facturation planifiée" },
-    "methods": { "fixed": "Taux horaire fixe", "at_cost": "Au coût chargé", "markup_on_cost": "Majoration du coût", "margin_on_cost": "Marge cible sur le coût" }
-  },
   "revrec": {
     "title": "Comptabilisation des produits",
     "hint": "Différer et comptabiliser les produits de cet article dans le temps (ASC 606)",

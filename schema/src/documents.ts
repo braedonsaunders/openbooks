@@ -283,7 +283,6 @@ export const timeTypes = pgTable("time_types", {
   orgId: orgRef(),
   name: text("name").notNull(), // Regular, Overtime, Double-time, Shop…
   costMultiplier: money("cost_multiplier").notNull().default("1"),
-  billMultiplier: money("bill_multiplier").notNull().default("1"),
   isBillableDefault: boolean("is_billable_default").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}), // keeps NetSuite nsId for the time-record import bridge

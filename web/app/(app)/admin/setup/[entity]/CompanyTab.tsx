@@ -13,7 +13,7 @@ import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies, rateBooks] = (await Promise.all([
+  const [org, accounts, currencies] = (await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
@@ -22,15 +22,11 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
        where org_id = ${orgId} and not is_summary and is_active
        order by number nulls last, name`),
     db.execute(sql`select code, name from currencies order by code`),
-    db.execute(sql`
-      select id, name, is_default as "isDefault" from item_rate_books
-       where org_id = ${orgId} and is_active order by name`),
   ])) as any[]
 
   const row = org.rows[0]
   const settings = (row?.settings ?? {}) as Record<string, unknown>
   const control = (settings.controlAccounts ?? {}) as Record<string, string>
-  const laborCosting = (settings.laborCosting ?? {}) as Record<string, unknown>
 
   const accountOptions: AccountOption[] = accounts.rows.map((a: any) => ({
     id: a.id as string,
@@ -68,21 +64,10 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             taxPaid: control.taxPaid ?? '',
             employeePayable: control.employeePayable ?? '',
             fxUnrealizedGainLoss: control.fxUnrealizedGainLoss ?? '',
-            laborWip: control.laborWip ?? '',
-            laborClearing: control.laborClearing ?? '',
-            unbilledReceivable: control.unbilledReceivable ?? '',
-            projectRevenue: control.projectRevenue ?? '',
           },
-          defaultLaborRateBookId:
-            (rateBooks.rows.find((b: any) => b.isDefault)?.id as string | undefined) ?? '',
-          defaultLaborRatePolicy:
-            typeof laborCosting.defaultRatePolicy === 'string'
-              ? laborCosting.defaultRatePolicy as 'work_date' | 'locked' | 'scheduled_escalation' | 'manual_reprice'
-              : 'work_date',
         }}
         accounts={accountOptions}
         currencies={currencies.rows as { code: string; name: string }[]}
-        rateBooks={rateBooks.rows as { id: string; name: string; isDefault: boolean }[]}
       />
     </div>
   )

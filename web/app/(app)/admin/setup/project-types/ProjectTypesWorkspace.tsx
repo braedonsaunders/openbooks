@@ -18,8 +18,6 @@ export interface ProjectTypeRow {
   isActive: boolean
   sortOrder: number
   billingMethod: string | null
-  laborRateBookId: string | null
-  laborRatePolicy: string | null
   financialProfile: FinancialProfile
   invoicingProfile: InvoicingProfile
   backupProfile: BackupProfile
@@ -99,7 +97,6 @@ function Chips({ label, all, selected, onToggle }: { label: string; all: string[
 
 const BLANK = (t: string, name: string): ProjectTypeRow => ({
   id: 'new', key: '', name, description: '', isBuiltIn: false, isActive: true, sortOrder: 50, billingMethod: null,
-  laborRateBookId: null, laborRatePolicy: null,
   financialProfile: {
     invoicedToDate: { docKinds: ['customer_invoice'], creditKinds: ['customer_credit'] },
     actualCost: { source: 'account_types', accountTypes: ['expense', 'cogs', 'expense_other', 'expense_deferred'] },
@@ -123,7 +120,7 @@ const BLANK = (t: string, name: string): ProjectTypeRow => ({
   backupProfile: { required: true, defaultBackupType: 'costed_timesheets', allowedBackupTypes: ['costed_timesheets', 'purchases', 'none'] },
 })
 
-export function ProjectTypesWorkspace({ types, dimensions, rateBooks }: { types: ProjectTypeRow[]; dimensions: string[]; incomeAccounts: { id: string; number: string; name: string }[]; rateBooks: { id: string; name: string }[] }) {
+export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTypeRow[]; dimensions: string[]; incomeAccounts: { id: string; number: string; name: string }[] }) {
   const t = useTranslations('projectTypes')
   const tCommon = useTranslations('common')
   const tMeasures = useTranslations('projects.measures')
@@ -225,24 +222,6 @@ export function ProjectTypesWorkspace({ types, dimensions, rateBooks }: { types:
               <div className="space-y-1.5 sm:col-span-2"><Label>{tCommon('labels.description')}</Label><Textarea value={draft.description ?? ''} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></div>
               <EnumField label={t('billingMethod')} value={draft.billingMethod ?? ''} options={BILLING_METHODS} onChange={(v) => setDraft({ ...draft, billingMethod: v || null })} />
               <div className="space-y-1.5"><Label>{t('sortOrder')}</Label><Input inputMode="numeric" value={String(draft.sortOrder)} onChange={(e) => setDraft({ ...draft, sortOrder: Number(e.target.value) || 0 })} /></div>
-              <div className="space-y-1.5">
-                <Label>{t('laborRateBook')}</Label>
-                <Select value={draft.laborRateBookId ?? ''} onChange={(e) => setDraft({ ...draft, laborRateBookId: e.target.value || null })}>
-                  <option value="">{t('inheritCompany')}</option>
-                  {rateBooks.map((book) => <option key={book.id} value={book.id}>{book.name}</option>)}
-                </Select>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('laborRateBookHint')}</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t('laborRatePolicy')}</Label>
-                <Select value={draft.laborRatePolicy ?? ''} onChange={(e) => setDraft({ ...draft, laborRatePolicy: e.target.value || null })}>
-                  <option value="">{t('inheritCompany')}</option>
-                  {['work_date', 'locked', 'scheduled_escalation', 'manual_reprice'].map((policy) => (
-                    <option key={policy} value={policy}>{t(`laborPolicies.${policy}`)}</option>
-                  ))}
-                </Select>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('laborRatePolicyHint')}</p>
-              </div>
               <EnumField label={tCommon('labels.status')} value={draft.isActive ? 'active' : 'inactive'} options={['active', 'inactive']} onChange={(v) => setDraft({ ...draft, isActive: v === 'active' })} />
             </div>
           ) : null}
@@ -252,7 +231,7 @@ export function ProjectTypesWorkspace({ types, dimensions, rateBooks }: { types:
               <EnumField label={t('priceMethod')} value={fp.totalPrice.method} options={PRICE_METHODS} onChange={(v) => setFp({ totalPrice: { ...fp.totalPrice, method: v as any } })} />
               <EnumField label={t('cbiFormula')} value={fp.couldBeInvoiced.formula} options={CBI_FORMULAS} onChange={(v) => setFp({ couldBeInvoiced: { formula: v as any } })} />
               <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as any } })} />
-              {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : null}
+              {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as any } })} />
               <EnumField label={t('overheadMethod')} value={fp.overhead.method} options={OVERHEAD_METHODS} onChange={(v) => setFp({ overhead: { ...fp.overhead, method: v as any } })} />
               {fp.overhead.method === 'percent_of_labor' ? (
@@ -261,7 +240,7 @@ export function ProjectTypesWorkspace({ types, dimensions, rateBooks }: { types:
                 <div className="space-y-1.5"><Label>{t('overheadRatePerHour')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePerHour ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePerHour: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
               ) : fp.overhead.method === 'account_group_actual' ? (
                 <EnumField label={t('overheadDimension')} value={fp.overhead.accountGroup?.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ overhead: { ...fp.overhead, accountGroup: { dimension: v } } })} />
-              ) : null}
+              ) : <div />}
               {fp.overhead.method === 'rate_engine' ? (
                 <>
                   <EnumField label={t('overheadHoursBasis')} value={fp.overhead.rateEngine?.hoursBasis ?? 'billed_hours'} options={['billed_hours', 'total_hours']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, hoursBasis: v as any } } })} />
