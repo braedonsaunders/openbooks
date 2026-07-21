@@ -2,56 +2,129 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { requirePermission } from '../../../lib/authz'
+import { PageHeader } from '@openbooks/ui'
+import { ListPageLayout } from '../../../components/page-layout'
+import { RecordListView } from '../../../components/record-list-view'
+import { pickString } from '../../../lib/list-params'
+import { requirePermission, can } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { FieldTicketsList, type TicketListRow } from './FieldTicketsList'
+import { loadFieldTicket, FieldTicketError } from '../../../lib/field-tickets'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
+import { NewOrderButton } from '../_order/NewOrderButton'
+import { FieldTicketDrawer, type TicketPayload } from './FieldTicketDrawer'
 
 export const dynamic = 'force-dynamic'
 
+const BASE = '/field-tickets'
+const PARAM = 'ticket'
+const API = '/api/field-tickets'
+
 /**
- * Field tickets — the signed crew timesheets T&M invoices are built from.
- * Feature-gated: /admin/setup/features → Field Tickets.
+ * Field tickets — the universal RecordListView (same filters/views/columns as
+ * every other list) + the standard instant-create button and transaction
+ * flyout. Feature-gated (Setup → Features → Field Tickets).
  */
-export default async function FieldTicketsPage() {
+export default async function FieldTicketsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const authz = await requirePermission('time.read')
   const orgId = authz.user.orgId
   if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) notFound()
+  const canManage = can(authz, 'time.manage')
+  const canApprove = can(authz, 'time.approve')
   const t = await getTranslations('fieldTickets')
+  const sp = await searchParams
+  const openId = pickString(sp[PARAM])
 
-  const [tickets, projects] = await Promise.all([
-    db.execute(sql`
-      select d.id, d.document_number, d.status, d.document_date::text as document_date, d.total,
-             d.custom->'fieldTicket'->>'period' as period,
-             d.custom->'fieldTicket'->>'periodStart' as period_start,
-             d.custom->'fieldTicket'->>'periodEnd' as period_end,
-             (d.custom->'fieldTicket'->'signatures'->'customer'->>'at') as signed_at,
-             (d.custom->'fieldTicket'->'send'->>'sentAt') as sent_at,
-             cust.display_name as customer_name, p.name as project_name, p.code as project_code,
-             fm.display_name as foreman_name,
-             (select coalesce(sum(te.hours), 0) from time_entries te where te.field_ticket_id = d.id) as total_hours
-        from documents d
-        left join parties cust on cust.id = d.party_id
-        left join projects p on p.id = d.project_id
-        left join parties fm on fm.id = (d.custom->'fieldTicket'->>'foremanPartyId')::uuid
-       where d.org_id = ${orgId} and d.kind = 'field_ticket'
-       order by d.document_date desc, d.created_at desc
-       limit 500`) as unknown as Promise<{ rows: TicketListRow[] }>,
-    db.execute(sql`
-      select id, code, name from projects where org_id = ${orgId} and is_active order by name`) as unknown as Promise<{
-      rows: { id: string; code: string | null; name: string }[]
-    }>,
-  ])
+  let openTicket: TicketPayload | null = null
+  let pickers: {
+    employees: { id: string; name: string }[]
+    laborItems: { id: string; name: string }[]
+    timeTypes: { id: string; name: string; bill_multiplier: string }[]
+    catalogItems: { id: string; name: string; default_rate: string | null }[]
+    projects: { id: string; name: string }[]
+  } | null = null
+  if (openId) {
+    try {
+      openTicket = (await loadFieldTicket(orgId, openId)) as unknown as TicketPayload
+    } catch (e) {
+      if (!(e instanceof FieldTicketError)) throw e
+    }
+    if (openTicket) {
+      const [employees, laborItems, timeTypes, catalogItems, projects] = (await Promise.all([
+        db.execute(sql`
+          select p.id, p.display_name as name from parties p
+           where p.org_id = ${orgId} and p.is_active
+             and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = ${orgId} and r.is_active)
+           order by p.display_name`),
+        db.execute(sql`
+          select id, name from items where org_id = ${orgId} and is_active and kind in ('labor', 'service') order by name`),
+        db.execute(sql`
+          select id, name, bill_multiplier from time_types where org_id = ${orgId} and is_active order by bill_multiplier, name`),
+        db.execute(sql`
+          select id, name, default_rate from items
+           where org_id = ${orgId} and is_active
+             and kind in ('equipment_charge', 'non_inventory', 'other_charge', 'inventory', 'service')
+           order by kind, name`),
+        db.execute(sql`
+          select id, coalesce(code || ' · ' || name, name) as name from projects
+           where org_id = ${orgId} and is_active order by name limit 2000`),
+      ])) as unknown as { rows: Record<string, unknown>[] }[]
+      pickers = {
+        employees: employees.rows as never,
+        laborItems: laborItems.rows as never,
+        timeTypes: timeTypes.rows as never,
+        catalogItems: catalogItems.rows as never,
+        projects: projects.rows as never,
+      }
+    }
+  }
+
+  const resolvedForm = openTicket
+    ? await resolveFormLayout({
+        orgId,
+        userId: authz.user.id,
+        recordType: 'field_ticket',
+        userRoles: [authz.user.role],
+        headerDefs: [],
+        lineDefs: [],
+        explicitLayoutId: pickString(sp.form),
+      })
+    : null
+
+  const newBtn = canManage ? (
+    <NewOrderButton apiPath={API} base={BASE} param={PARAM} label={t('list.new')} createFailedMessage={t('list.createFailed')} />
+  ) : undefined
+
+  const drawer =
+    openTicket && pickers ? (
+      <FieldTicketDrawer
+        ticket={openTicket}
+        employees={pickers.employees}
+        laborItems={pickers.laborItems}
+        timeTypes={pickers.timeTypes}
+        catalogItems={pickers.catalogItems}
+        projects={pickers.projects}
+        layout={resolvedForm?.layout}
+        canApprove={canApprove}
+        canManage={canManage}
+      />
+    ) : null
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
-      </div>
-      <FieldTicketsList
-        tickets={tickets.rows}
-        projects={projects.rows.map((p) => ({ id: p.id, label: p.code ? `${p.code} · ${p.name}` : p.name }))}
+    <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} actions={newBtn} />}>
+      <RecordListView
+        recordType="field_ticket"
+        basePath={BASE}
+        orgId={orgId}
+        userId={authz.user.id}
+        canManage={can(authz, 'admin.customization.manage')}
+        sp={sp}
+        drawer={drawer}
+        emptyAction={newBtn}
       />
-    </div>
+    </ListPageLayout>
   )
 }

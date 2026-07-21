@@ -34,7 +34,8 @@
     "unsigned": "Non envoyé",
     "waiting": "Signature en attente",
     "signed": "Signé",
-    "date": "Date"
+    "date": "Date",
+    "createFailed": "Impossible de créer le bon"
   },
   "editor": {
     "back": "Bons de régie",

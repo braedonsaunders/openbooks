@@ -43,9 +43,9 @@ export default async function SignFieldTicketPage({ params }: { params: Promise<
         </p>
       </div>
 
-      {ticket.fieldTicket.workDescription && (
+      {ticket.memo && (
         <p className="mb-5 whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-          {ticket.fieldTicket.workDescription}
+          {ticket.memo}
         </p>
       )}
 

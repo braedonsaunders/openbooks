@@ -54,19 +54,35 @@
     "sending": "Sending…"
   },
   "transactionTypes": {
-    "vendorBill": "Vendor Bill", "bill": "Bill",
-    "vendorCredit": "Vendor Credit", "credit": "Credit",
-    "purchaseOrder": "Purchase Order", "purchaseOrderShort": "PO",
-    "customerInvoice": "Customer Invoice", "invoice": "Invoice",
-    "customerCredit": "Customer Credit", "customerCreditShort": "Customer Credit",
-    "salesOrder": "Sales Order", "salesOrderShort": "SO",
-    "estimate": "Estimate", "expenseReport": "Expense Report", "expense": "Expense",
-    "journalEntry": "Journal Entry", "journal": "Journal",
-    "vendorPayment": "Vendor Payment", "vendorPaymentShort": "Vendor Pmt",
-    "customerPayment": "Customer Payment", "customerPaymentShort": "Customer Pmt",
-    "check": "Check", "bankDeposit": "Bank Deposit", "deposit": "Deposit",
-    "transfer": "Transfer", "cardCharge": "Card Charge", "cardChargeShort": "Card",
-    "cardRefund": "Card Refund", "cardRefundShort": "Card Refund"
+    "vendorBill": "Vendor Bill",
+    "bill": "Bill",
+    "vendorCredit": "Vendor Credit",
+    "credit": "Credit",
+    "purchaseOrder": "Purchase Order",
+    "purchaseOrderShort": "PO",
+    "customerInvoice": "Customer Invoice",
+    "invoice": "Invoice",
+    "customerCredit": "Customer Credit",
+    "customerCreditShort": "Customer Credit",
+    "salesOrder": "Sales Order",
+    "salesOrderShort": "SO",
+    "estimate": "Estimate",
+    "expenseReport": "Expense Report",
+    "expense": "Expense",
+    "journalEntry": "Journal Entry",
+    "journal": "Journal",
+    "vendorPayment": "Vendor Payment",
+    "vendorPaymentShort": "Vendor Pmt",
+    "customerPayment": "Customer Payment",
+    "customerPaymentShort": "Customer Pmt",
+    "check": "Check",
+    "bankDeposit": "Bank Deposit",
+    "deposit": "Deposit",
+    "transfer": "Transfer",
+    "cardCharge": "Card Charge",
+    "cardChargeShort": "Card",
+    "cardRefund": "Card Refund",
+    "cardRefundShort": "Card Refund"
   },
   "labels": {
     "name": "Name",
@@ -148,7 +164,8 @@
     "active": "Active",
     "inactive": "Inactive",
     "error": "Error",
-    "ok": "OK"
+    "ok": "OK",
+    "pending_approval": "Submitted"
   },
   "filters": {
     "showInactive": "Show inactive"
@@ -186,7 +203,11 @@
     "description": "No records match the current filters."
   },
   "auditTrail": {
-    "tabs": { "details": "Details", "attachments": "Attachments", "audit": "Audit Trail" },
+    "tabs": {
+      "details": "Details",
+      "attachments": "Attachments",
+      "audit": "Audit Trail"
+    },
     "ariaLabel": "Record sections",
     "searchPlaceholder": "Search audit trail",
     "actionFilter": "Filter by action",
@@ -207,7 +228,15 @@
     "loadFailedTitle": "Audit trail unavailable",
     "loadFailedDescription": "The audit trail could not be loaded. Try again shortly.",
     "retry": "Retry",
-    "actions": { "insert": "Created", "update": "Updated", "delete": "Deleted", "post": "Posted", "void": "Voided", "approve": "Approved", "reject": "Rejected" }
+    "actions": {
+      "insert": "Created",
+      "update": "Updated",
+      "delete": "Deleted",
+      "post": "Posted",
+      "void": "Voided",
+      "approve": "Approved",
+      "reject": "Rejected"
+    }
   },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",

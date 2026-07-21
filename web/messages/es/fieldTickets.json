@@ -34,7 +34,8 @@
     "unsigned": "Sin enviar",
     "waiting": "Esperando firma",
     "signed": "Firmado",
-    "date": "Fecha"
+    "date": "Fecha",
+    "createFailed": "No se pudo crear el parte"
   },
   "editor": {
     "back": "Partes de obra",

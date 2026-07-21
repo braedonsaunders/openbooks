@@ -1,5 +1,5 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { mulRate, add, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
@@ -39,8 +39,6 @@ export interface FieldTicketCustom {
   periodStart: string
   periodEnd: string
   foremanPartyId: string | null
-  poNumber: string | null
-  workDescription: string | null
   signatures?: { foreman?: TicketSignature; customer?: TicketSignature }
   send?: { sentAt: string; expiresAt: string; message?: string | null; respondedAt?: string | null }
   /** The project_charge materialized at approval (item lines → job cost + billing). */
@@ -84,19 +82,28 @@ export async function resolveTicketPeriod(orgId: string, projectId: string | nul
   return valid(o.rows[0]?.p) ? (o.rows[0]!.p as TicketPeriod) : 'weekly'
 }
 
-/** Create a draft ticket for a project (customer, PO, foreman defaulted). */
+/**
+ * Create a draft ticket instantly (no inputs needed — the standard flyout form
+ * picks the project, which then derives customer/PO/period). PO lives in
+ * documents.reference_number and the work description in documents.memo, so
+ * the ordinary configurable header form covers them.
+ */
 export async function createFieldTicket(
   orgId: string,
   userId: string,
-  input: { projectId: string; date?: string; period?: TicketPeriod },
+  input: { projectId?: string | null; date?: string; period?: TicketPeriod } = {},
 ): Promise<{ id: string; documentNumber: string }> {
-  const proj = (await db.execute(sql`
-    select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-      from projects p where p.id = ${input.projectId} and p.org_id = ${orgId}`)) as unknown as {
-    rows: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }[]
-  }
-  if (!proj.rows[0]) throw new FieldTicketError('Project not found')
-  const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId))
+  const proj = input.projectId
+    ? (
+        (await db.execute(sql`
+          select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
+            from projects p where p.id = ${input.projectId} and p.org_id = ${orgId}`)) as unknown as {
+          rows: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }[]
+        }
+      ).rows[0] ?? null
+    : null
+  if (input.projectId && !proj) throw new FieldTicketError('Project not found')
+  const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null))
   const window = ticketWindow(period, input.date ?? iso(new Date()))
   const org = (await db.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
     rows: { base_currency: string }[]
@@ -110,19 +117,89 @@ export async function createFieldTicket(
       periodStart: window.start,
       periodEnd: window.end,
       foremanPartyId: foreman.rows[0]?.party_id ?? null,
-      poNumber: proj.rows[0].po ?? null,
-      workDescription: null,
     },
   }
-  const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', proj.rows[0].subsidiary_id ?? undefined)
+  const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', proj?.subsidiary_id ?? undefined)
   const row = (await db.execute(sql`
     insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, project_id,
-                           subsidiary_id, billing_method, subtotal, tax_total, total, custom, created_by)
+                           subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
     values (${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
-            'draft', ${proj.rows[0].customer_id}, ${input.projectId}, ${proj.rows[0].subsidiary_id},
-            'time_and_materials', '0', '0', '0', ${JSON.stringify(custom)}, ${userId})
+            'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${proj?.subsidiary_id ?? null},
+            ${proj?.po ?? null}, 'time_and_materials', '0', '0', '0', ${JSON.stringify(custom)}, ${userId})
     returning id, document_number`)) as unknown as { rows: { id: string; document_number: string }[] }
   return { id: row.rows[0].id, documentNumber: row.rows[0].document_number }
+}
+
+/**
+ * Header updates from the standard flyout form. Changing the project
+ * re-derives customer/subsidiary/PO and (unless hours exist) the period
+ * window; changing the period or anchor date re-windows a still-empty ticket.
+ */
+export async function updateTicketHeader(
+  orgId: string,
+  userId: string,
+  ticketId: string,
+  patch: {
+    projectId?: string | null
+    documentDate?: string
+    referenceNumber?: string | null
+    memo?: string | null
+    period?: TicketPeriod
+    foremanPartyId?: string | null
+  },
+): Promise<void> {
+  const doc = await loadHeader(orgId, ticketId)
+  if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
+  const ft = { ...doc.custom.fieldTicket }
+  let partySet: SQL | null = null
+
+  if (patch.projectId !== undefined && patch.projectId !== doc.project_id) {
+    if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
+    const proj = (await db.execute(sql`
+      select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
+        from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId}`)) as unknown as {
+      rows: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }[]
+    }
+    if (!proj.rows[0]) throw new FieldTicketError('Project not found')
+    partySet = sql`project_id = ${proj.rows[0].id}, party_id = ${proj.rows[0].customer_id},
+                   subsidiary_id = ${proj.rows[0].subsidiary_id},
+                   reference_number = coalesce(${patch.referenceNumber ?? null}, reference_number, ${proj.rows[0].po}),`
+    // Re-resolve the period for the new job unless the caller pinned one.
+    if (patch.period === undefined) {
+      const resolved = await resolveTicketPeriod(orgId, proj.rows[0].id)
+      if (resolved !== ft.period) patch.period = resolved
+    }
+  }
+
+  const hourCount = (
+    (await db.execute(sql`select count(*)::int as n from time_entries where field_ticket_id = ${ticketId}`)) as unknown as {
+      rows: { n: number }[]
+    }
+  ).rows[0].n
+  if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
+    const period = patch.period ?? ft.period
+    const anchor = patch.documentDate ?? doc.document_date
+    const window = ticketWindow(period, anchor)
+    ft.period = period
+    ft.periodStart = window.start
+    ft.periodEnd = window.end
+  }
+  if (patch.foremanPartyId !== undefined) ft.foremanPartyId = patch.foremanPartyId
+
+  await db.execute(sql`
+    update documents set
+      ${partySet ?? sql``}
+      document_date = coalesce(${patch.documentDate ?? null}, document_date),
+      reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
+      memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
+      custom = jsonb_set(custom, '{fieldTicket}', ${JSON.stringify(ft)}::jsonb),
+      updated_at = now(), updated_by = ${userId}
+     where id = ${ticketId} and org_id = ${orgId}`)
+  // Re-home any existing draft hours/lines onto the new project.
+  if (partySet && patch.projectId) {
+    await db.execute(sql`update time_entries set project_id = ${patch.projectId} where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
+    await db.execute(sql`update document_lines set project_id = ${patch.projectId} where document_id = ${ticketId} and org_id = ${orgId}`)
+  }
 }
 
 export interface CrewRowInput {
@@ -247,12 +324,14 @@ interface HeaderRow {
   party_id: string | null
   project_id: string | null
   document_date: string
+  reference_number: string | null
+  memo: string | null
   custom: { fieldTicket: FieldTicketCustom }
 }
 
 async function loadHeader(orgId: string, ticketId: string): Promise<HeaderRow> {
   const r = (await db.execute(sql`
-    select id, document_number, status, party_id, project_id, document_date::text as document_date, custom
+    select id, document_number, status, party_id, project_id, document_date::text as document_date, reference_number, memo, custom
       from documents where id = ${ticketId} and org_id = ${orgId} and kind = 'field_ticket'`)) as unknown as {
     rows: HeaderRow[]
   }
@@ -402,6 +481,8 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
     documentNumber: doc.document_number,
     status: doc.status,
     documentDate: doc.document_date,
+    referenceNumber: doc.reference_number,
+    memo: doc.memo,
     customerId: doc.party_id,
     customerName: customer.rows[0]?.display_name ?? '',
     customerEmail: customer.rows[0]?.email ?? null,
