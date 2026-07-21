@@ -1562,6 +1562,30 @@
           "projects": "Projects",
           "total": "Applied",
           "status": "Status"
+        },
+        "lifecycle": {
+          "title": "Rate lifecycle",
+          "hint": "Who maintains the published rate card the standard method and the net-zero pair read.",
+          "modes": {
+            "manual": "Manual",
+            "scheduled": "Scheduled",
+            "live": "Live"
+          },
+          "modeHints": {
+            "manual": "The engine calculates and recommends; a person reviews the drift below and clicks Publish.",
+            "scheduled": "The worker snapshots the live composite rates into the card at the start of each period.",
+            "live": "Project types read the live engine directly (rate source \"live\"); the published card is advisory only."
+          },
+          "cadences": {
+            "monthly": "Monthly",
+            "quarterly": "Quarterly"
+          },
+          "save": "Save",
+          "saved": "Rate lifecycle saved",
+          "department": "Department",
+          "published": "Published $/h",
+          "live": "Live $/h",
+          "drift": "Drift"
         }
       }
     },

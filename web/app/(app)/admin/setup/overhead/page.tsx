@@ -9,6 +9,8 @@ import { TrueCostView } from '../../../../(app)/analytics/true-cost/TrueCostView
 import { OverheadActions } from './OverheadActions'
 import { OverheadApplication } from './OverheadApplication'
 import { listOverheadApplications, overheadApplicationSettings } from '@openbooks/engine/src/overhead-apply.ts'
+import { OverheadLifecycle } from './OverheadLifecycle'
+import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +47,19 @@ export default async function OverheadModelSetup() {
     rows: { n: number; from_date: string | null }[]
   }
   const card = cardRes.rows[0] ?? { n: 0, from_date: null }
+  const lifecycleRes = (await db.execute(sql`
+    select settings->'overheadRateLifecycle' as c from orgs where id = ${authz.user.orgId}`)) as unknown as {
+    rows: { c: { mode?: string; cadence?: string } | null }[]
+  }
+  const lifecycleCfg = lifecycleRes.rows[0]?.c ?? {}
+  const lifecycle = {
+    mode: (['manual', 'scheduled', 'live'].includes(lifecycleCfg.mode ?? '') ? lifecycleCfg.mode : 'manual') as 'manual' | 'scheduled' | 'live',
+    cadence: (lifecycleCfg.cadence === 'quarterly' ? 'quarterly' : 'monthly') as 'monthly' | 'quarterly',
+  }
+  const publishedRates = await currentPublishedRates(authz.user.orgId)
+  const drift = data.departments
+    .filter((d) => d.composite > 0 || publishedRates.has(d.id))
+    .map((d) => ({ id: d.id, name: d.name, live: Math.round(d.composite * 100) / 100, published: publishedRates.get(d.id) ?? null }))
   const [application, applications, accountsRes] = await Promise.all([
     overheadApplicationSettings(authz.user.orgId),
     listOverheadApplications(authz.user.orgId),
@@ -150,6 +165,7 @@ export default async function OverheadModelSetup() {
           </span>
         ))}
       </div>
+      <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
       <OverheadApplication
         mode={application.mode}
         accountId={application.accountId}

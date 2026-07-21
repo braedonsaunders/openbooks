@@ -13,6 +13,7 @@ import { createSandboxWorker } from "./sandbox-worker.ts";
 import { createScriptsWorker } from "./scripts-worker.ts";
 import { startReportScheduler } from "./scheduler.ts";
 import { startSandboxScheduler } from "./sandbox-scheduler.ts";
+import { startOverheadScheduler } from "./overhead-scheduler.ts";
 import { createApCaptureWorker } from "./ap-capture-worker.ts";
 
 const workers = [
@@ -26,6 +27,7 @@ const workers = [
 startReportScheduler();
 startSandboxScheduler();
 startMirrorScheduler();
+startOverheadScheduler();
 
 for (const w of workers) {
   w.on("failed", (job, err) => console.error(`[worker] ${w.name} job ${job?.id} failed:`, err?.message));

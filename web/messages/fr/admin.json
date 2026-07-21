@@ -1532,6 +1532,30 @@
           "projects": "Projets",
           "total": "Appliqué",
           "status": "Statut"
+        },
+        "lifecycle": {
+          "title": "Cycle de vie des taux",
+          "hint": "Qui maintient la carte de taux publiée lue par la méthode standard et la paire à somme nulle.",
+          "modes": {
+            "manual": "Manuel",
+            "scheduled": "Planifié",
+            "live": "En direct"
+          },
+          "modeHints": {
+            "manual": "Le moteur calcule et recommande ; une personne examine la dérive et clique sur Publier.",
+            "scheduled": "Le worker capture les taux composites en direct dans la carte au début de chaque période.",
+            "live": "Les types de projet lisent directement le moteur en direct ; la carte publiée est indicative."
+          },
+          "cadences": {
+            "monthly": "Mensuel",
+            "quarterly": "Trimestriel"
+          },
+          "save": "Enregistrer",
+          "saved": "Cycle de vie enregistré",
+          "department": "Département",
+          "published": "Publié $/h",
+          "live": "En direct $/h",
+          "drift": "Dérive"
         }
       }
     },
