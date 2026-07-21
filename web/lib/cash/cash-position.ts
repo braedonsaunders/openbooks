@@ -169,16 +169,19 @@ export async function cashPosition(
   horizonWeeks: number,
   apSettings: ApSettings,
   asOfDate?: string,
+  /** Active subsidiary view (subtree ids) — scopes cash, open items, and
+   * SQL-backed forecast categories. Omitted = whole company, unchanged SQL. */
+  subIds?: string[],
 ): Promise<CashPosition> {
   const asOfIso = resolveAsOf(asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows] = await Promise.all([
-    openItems("ar", asOfIso),
-    openItems("ap", asOfIso),
+    openItems("ar", asOfIso, subIds),
+    openItems("ap", asOfIso, subIds),
     paymentStats("ar", asOfIso),
     paymentStats("ap", asOfIso),
-    bankBalances(asOfIso),
+    bankBalances(asOfIso, subIds),
     loadCategories(orgId),
     db.execute(sql`
       select id, number, name, type from accounts
@@ -202,7 +205,7 @@ export async function cashPosition(
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
   const weekTotals = (byWeek: Map<string, { amount: number }[]>): Record<string, number> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, es.reduce((a, e) => a + e.amount, 0)]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,

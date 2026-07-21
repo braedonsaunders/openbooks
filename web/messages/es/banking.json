@@ -109,7 +109,8 @@
       "noStatement": "{account} nunca ha importado un extracto",
       "staleStatement": "{account} no tiene extracto desde hace {days} días",
       "openRecon": "{account} tiene una conciliación en curso"
-    }
+    },
+    "subsidiary": "Filial"
   },
   "transactionsPage": {
     "title": "Transacciones bancarias",

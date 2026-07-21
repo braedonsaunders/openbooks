@@ -154,6 +154,12 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
       {visibleGroups.map((group, i) => {
         const open = openIdx === i
         const groupActive = groupContainsActiveHref(group, activeHref)
+        const triggerCls = cn(
+          'flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium transition-colors',
+          groupActive
+            ? 'text-teal-700 dark:text-teal-300'
+            : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
+        )
         return (
           <Popover
             key={group.label}
@@ -162,31 +168,42 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
             align="start"
             className="min-w-[15rem] py-1.5"
             trigger={
-              <button
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-current={groupActive ? 'true' : undefined}
-                onMouseEnter={() => enterMenu(i)}
-                onMouseLeave={scheduleClose}
-                onClick={() => enterMenu(i)}
-                className={cn(
-                  'flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium transition-colors',
-                  groupActive
-                    ? 'text-teal-700 dark:text-teal-300'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
-                )}
-              >
-                {group.label}
-                <ChevronDown size={12} className="opacity-50" />
-              </button>
+              group.groupHref ? (
+                // Workspace with a module home: clicking the parent NAVIGATES
+                // (hover still opens the dropdown for direct child access).
+                <Link
+                  href={group.groupHref as never}
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  aria-current={groupActive ? 'true' : undefined}
+                  data-walkthrough={`nav:${group.groupHref}`}
+                  onMouseEnter={() => enterMenu(i)}
+                  onMouseLeave={scheduleClose}
+                  onClick={() => setOpenIdx(null)}
+                  className={triggerCls}
+                >
+                  {group.label}
+                  <ChevronDown size={12} className="opacity-50" />
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  aria-current={groupActive ? 'true' : undefined}
+                  onMouseEnter={() => enterMenu(i)}
+                  onMouseLeave={scheduleClose}
+                  onClick={() => enterMenu(i)}
+                  className={triggerCls}
+                >
+                  {group.label}
+                  <ChevronDown size={12} className="opacity-50" />
+                </button>
+              )
             }
           >
             <GroupMenu
               items={group.items}
-              homeHref={group.groupHref}
-              homeLabel={group.label}
-              homeIconKey={group.iconKey}
               activeHref={activeHref}
               onEnter={() => enterMenu(i)}
               onLeave={scheduleClose}
@@ -241,19 +258,12 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
 
 function GroupMenu({
   items,
-  homeHref,
-  homeLabel,
-  homeIconKey,
   activeHref,
   onEnter,
   onLeave,
   onSelect,
 }: {
   items: SidebarNavItem[]
-  /** Workspace module home — rendered as a linked heading row above the items. */
-  homeHref?: string
-  homeLabel?: string
-  homeIconKey?: string
   activeHref: string | null
   onEnter?: () => void
   onLeave?: () => void
@@ -261,7 +271,6 @@ function GroupMenu({
 }) {
   const blocks = toBlocks(items)
   const sectioned = blocks.some((block) => block.kind === 'subgroup')
-  const homeActive = homeHref != null && activeHref === homeHref
   return (
     <div
       role="menu"
@@ -270,24 +279,6 @@ function GroupMenu({
       onClick={onSelect}
       className={cn(sectioned && 'grid w-[32rem] grid-cols-2 gap-x-2 gap-y-1 p-1')}
     >
-      {homeHref && homeLabel ? (
-        <Link
-          href={homeHref as never}
-          role="menuitem"
-          aria-current={homeActive ? 'page' : undefined}
-          data-walkthrough={`nav:${homeHref}`}
-          className={cn(
-            'flex items-center gap-1.5 border-b border-slate-100 px-3 pt-1 pb-2 text-[11px] font-semibold tracking-wide uppercase transition-colors dark:border-slate-800',
-            sectioned && 'col-span-2',
-            homeActive
-              ? 'text-teal-700 dark:text-teal-300'
-              : 'text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300',
-          )}
-        >
-          {homeIconKey ? <NavIcon iconKey={homeIconKey} size={13} /> : null}
-          {homeLabel}
-        </Link>
-      ) : null}
       {blocks.map((block, bi) =>
         block.kind === 'item' ? (
           <MenuItemLink key={block.item.href} item={block.item} active={activeHref === block.item.href} />
@@ -336,28 +327,50 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
     closeTimer.current = window.setTimeout(() => setOpen(false), 150)
   }
 
+  const rowCls = cn(
+    'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
+    active
+      ? 'text-teal-800 dark:text-teal-200'
+      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
+  )
+  const rowContent = (
+    <>
+      <NavIcon iconKey={group.iconKey} size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
+      <span className="flex-1 truncate text-left">{group.label}</span>
+      <ChevronRight size={12} className={cn('shrink-0 opacity-50', flip && open && 'rotate-180')} />
+    </>
+  )
+
   return (
     <div ref={rowRef} className="relative" onMouseEnter={openMenu} onMouseLeave={scheduleClose}>
-      <button
-        type="button"
-        role="menuitem"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={(event) => {
-          event.stopPropagation()
-          setOpen((current) => !current)
-        }}
-        className={cn(
-          'flex w-full items-center gap-2.5 px-3 py-1.5 text-sm transition-colors',
-          active
-            ? 'text-teal-800 dark:text-teal-200'
-            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
-        )}
-      >
-        <NavIcon iconKey={group.iconKey} size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
-        <span className="flex-1 truncate text-left">{group.label}</span>
-        <ChevronRight size={12} className={cn('shrink-0 opacity-50', flip && open && 'rotate-180')} />
-      </button>
+      {group.groupHref ? (
+        // Workspace with a module home: the row NAVIGATES on click (the parent
+        // More-menu's onClick closes it); hover still opens the child flyout.
+        <Link
+          href={group.groupHref as never}
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          data-walkthrough={`nav:${group.groupHref}`}
+          className={rowCls}
+        >
+          {rowContent}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={(event) => {
+            event.stopPropagation()
+            setOpen((current) => !current)
+          }}
+          className={rowCls}
+        >
+          {rowContent}
+        </button>
+      )}
       {open ? (
         <div
           role="menu"
@@ -366,13 +379,7 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
             flip ? 'right-full -mr-1' : 'left-full -ml-1',
           )}
         >
-          <GroupMenu
-            items={group.items}
-            homeHref={group.groupHref}
-            homeLabel={group.label}
-            homeIconKey={group.iconKey}
-            activeHref={activeHref}
-          />
+          <GroupMenu items={group.items} activeHref={activeHref} />
         </div>
       ) : null}
     </div>

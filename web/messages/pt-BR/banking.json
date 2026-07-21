@@ -109,7 +109,8 @@
       "noStatement": "{account} nunca importou um extrato",
       "staleStatement": "{account} está sem extrato há {days} dias",
       "openRecon": "{account} tem uma conciliação em andamento"
-    }
+    },
+    "subsidiary": "Subsidiária"
   },
   "transactionsPage": {
     "title": "Transações bancárias",

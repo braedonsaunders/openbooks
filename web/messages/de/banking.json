@@ -109,7 +109,8 @@
       "noStatement": "{account} hat noch nie einen Auszug importiert",
       "staleStatement": "{account} hat seit {days} Tagen keinen Auszug",
       "openRecon": "{account} hat eine laufende Abstimmung"
-    }
+    },
+    "subsidiary": "Tochtergesellschaft"
   },
   "transactionsPage": {
     "title": "Banktransaktionen",

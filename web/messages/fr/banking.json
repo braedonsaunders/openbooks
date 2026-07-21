@@ -109,7 +109,8 @@
       "noStatement": "{account} n'a jamais importé de relevé",
       "staleStatement": "{account} n'a aucun relevé depuis {days} jours",
       "openRecon": "{account} a un rapprochement en cours"
-    }
+    },
+    "subsidiary": "Filiale"
   },
   "transactionsPage": {
     "title": "Transactions bancaires",

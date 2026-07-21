@@ -48,8 +48,13 @@ export interface BankingHome {
 
 const TREND_WEEKS = 13
 
-export async function bankingHome(orgId: string): Promise<BankingHome> {
+export async function bankingHome(orgId: string, subIds?: string[]): Promise<BankingHome> {
   const txList = sql`(${sql.join(BANK_KINDS.map((kind) => sql`${kind}`), sql`, `)})`
+  // Active subsidiary view: journal sums scope to the subtree's lines, and the
+  // roster keeps only accounts whose restriction intersects it (null = shared).
+  const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
+  const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
+  const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
 
   const [rosterRes, flowsRes, badgesRes] = (await Promise.all([
     // Roster — one row per reconcilable account with balance + workflow state.
@@ -66,7 +71,7 @@ export async function bankingHome(orgId: string): Promise<BankingHome> {
           select sum(jl.amount) as balance
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-           where jl.account_id = a.id) bal on true
+           where jl.account_id = a.id${lineScope}) bal on true
         left join lateral (
           select count(*) as n
             from bank_statement_lines l
@@ -84,7 +89,7 @@ export async function bankingHome(orgId: string): Promise<BankingHome> {
            where s.account_id = a.id
            order by s.imported_at desc limit 1) st on true
        where a.org_id = ${orgId} and a.reconcilable and not a.is_summary
-         and a.type in ('asset_bank', 'liability_card')
+         and a.type in ('asset_bank', 'liability_card')${acctScope}
        order by a.type, coalesce(bal.balance, 0) desc
     `),
     // Weekly net flow per account over the sparkline window (+ the trailing
@@ -100,7 +105,7 @@ export async function bankingHome(orgId: string): Promise<BankingHome> {
         join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
         join accounts a on a.id = jl.account_id
        where a.org_id = ${orgId} and a.reconcilable and not a.is_summary
-         and a.type in ('asset_bank', 'liability_card')
+         and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}
          and je.posting_date >= (date_trunc('week', current_date) - interval '${sql.raw(String(TREND_WEEKS - 1))} weeks')
        group by 1, 2
     `),
@@ -109,11 +114,14 @@ export async function bankingHome(orgId: string): Promise<BankingHome> {
       select
         (select count(*) from bank_match_rules r where r.org_id = ${orgId} and r.is_active) as active_rules,
         (select count(*) from bank_match_rules r where r.org_id = ${orgId}) as total_rules,
-        (select count(*) from bank_statements s where s.org_id = ${orgId}) as statements,
-        (select max(s.imported_at) from bank_statements s where s.org_id = ${orgId}) as last_imported_at,
+        (select count(*) from bank_statements s join accounts a on a.id = s.account_id
+          where s.org_id = ${orgId}${acctScope}) as statements,
+        (select max(s.imported_at) from bank_statements s join accounts a on a.id = s.account_id
+          where s.org_id = ${orgId}${acctScope}) as last_imported_at,
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.kind in ${txList}
-            and d.document_date >= current_date - 7) as txns_7d
+            and d.document_date >= current_date - 7
+            ${subArr ? sql`and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``}) as txns_7d
     `),
   ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }]
 
