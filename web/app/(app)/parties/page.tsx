@@ -51,7 +51,7 @@ export default async function Parties({
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
-    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'audit'
+    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages' || requestedPartyTab === 'audit'
     ? requestedPartyTab
     : 'overview'
   const params = parseListParams(sp, {
@@ -204,6 +204,7 @@ export default async function Parties({
           salesReps={pickers[7].rows}
           canManage={canManage}
           canReadActivities={can(authz, 'crm.activities.read')}
+          canManageWages={can(authz, 'admin.setup.manage')}
           initialTab={partyTab}
         />
       ) : null}

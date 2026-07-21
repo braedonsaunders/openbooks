@@ -34,6 +34,7 @@ export function AppShell({
   canReadParties,
   canManageParties,
   canReadActivities,
+  canManageWages,
   children,
 }: {
   account: {
@@ -53,6 +54,7 @@ export function AppShell({
   canReadParties: boolean
   canManageParties: boolean
   canReadActivities: boolean
+  canManageWages: boolean
   children: React.ReactNode
 }) {
   const topbar = navMode === 'topbar'
@@ -106,7 +108,13 @@ export function AppShell({
 
           <MobileTabBar groups={navigationGroups} />
           <GlobalReportDrawerHost />
-          {canReadParties ? <GlobalPartyDrawerHost canManage={canManageParties} canReadActivities={canReadActivities} /> : null}
+          {canReadParties ? (
+            <GlobalPartyDrawerHost
+              canManage={canManageParties}
+              canReadActivities={canReadActivities}
+              canManageWages={canManageWages}
+            />
+          ) : null}
         </div>
       </MobileNavProvider>
     </div>

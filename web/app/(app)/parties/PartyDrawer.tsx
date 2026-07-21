@@ -27,6 +27,7 @@ import { CustomFieldInputs, type CustomFieldDefClient } from '../../../component
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { AuditTrailPanel } from '../../../components/audit-trail-panel'
+import { EmployeeWageRates } from './EmployeeWageRates'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { money } from '../../../lib/format'
@@ -108,7 +109,7 @@ const emptyContact = (): ContactRow => ({
   mobilePhone: '', isPrimary: 'false', isActive: 'true',
 })
 
-export type PartyTab = 'overview' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'audit'
+export type PartyTab = 'overview' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages' | 'audit'
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -125,6 +126,7 @@ export function PartyDrawer({
   subsidiaries,
   canManage,
   canReadActivities = false,
+  canManageWages = false,
   role,
   initialTab = 'overview',
   basePath = '/parties',
@@ -140,6 +142,8 @@ export function PartyDrawer({
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   canReadActivities?: boolean
+  /** admin.setup.manage — wage data is confidential; gates the Wages tab. */
+  canManageWages?: boolean
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -152,8 +156,9 @@ export function PartyDrawer({
   const tc = useTranslations('common')
   const tInv = useTranslations('projects.invoicingPref')
   const router = useRouter()
-  const [tab, setTab] = useState<PartyTab>(initialTab)
-  useEffect(() => setTab(initialTab), [initialTab])
+  const allowedInitialTab = initialTab === 'wages' && (role !== 'employee' || !canManageWages) ? 'overview' : initialTab
+  const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
+  useEffect(() => setTab(allowedInitialTab), [allowedInitialTab])
   const p = payload.party
   const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((payload.party.invoicing_preference as InvoicingPref) ?? {})
   // 'New party' is the server-side draft sentinel stored in the DB — compare
@@ -448,6 +453,7 @@ export function PartyDrawer({
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
     { key: 'accounting', label: t('tabs.accounting') },
+    ...(role === 'employee' && canManageWages ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
     { key: 'audit', label: tc('auditTrail.tabs.audit') },
   ]
 
@@ -966,6 +972,7 @@ export function PartyDrawer({
           <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} />
         ) : null}
 
+        {tab === 'wages' && role === 'employee' && canManageWages ? <EmployeeWageRates partyId={String(p.id)} /> : null}
         {tab === 'audit' ? <AuditTrailPanel table="parties" recordId={String(p.id)} /> : null}
       </div>
       </TabContent>
