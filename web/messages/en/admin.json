@@ -1052,6 +1052,17 @@
       "removed": "Official form removed",
       "none": "No official PDF uploaded"
     },
+    "taxBoxes": {
+      "description": "Boxes mapped to {code}, plus shared calculated and manual boxes.",
+      "calculatedNote": "Calculated and manual boxes apply across the return and appear under each tax code mapped to it.",
+      "new": "New tax return box",
+      "searchPlaceholder": "Search return boxes…",
+      "source": "Source",
+      "empty": "No return boxes match this tax code and search.",
+      "mapped": "Mapped",
+      "calculated": "Calculated",
+      "manual": "Manual"
+    },
     "new": "New",
     "learnMore": "Learn more.",
     "empty": "Nothing here yet.",
@@ -1069,7 +1080,11 @@
     },
     "drawer": {
       "newTitle": "New {name}",
-      "editTitle": "Edit {name}"
+      "editTitle": "Edit {name}",
+      "tabs": {
+        "ariaLabel": "Configuration sections",
+        "details": "Details"
+      }
     },
     "errors": {
       "duplicate": "A record with that code already exists.",
@@ -1354,6 +1369,7 @@
       },
       "tax-codes": {
         "title": "Tax Codes",
+        "singularTitle": "Tax Code",
         "description": "Rates you charge and pay, and the accounts they post to."
       },
       "tax-rates": {
@@ -1370,6 +1386,7 @@
       },
       "tax-report-lines": {
         "title": "Tax Return Boxes",
+        "singularTitle": "Tax Return Box",
         "description": "Map tax codes onto the boxes of a tax return, or compute a box from other boxes."
       },
       "classes": {

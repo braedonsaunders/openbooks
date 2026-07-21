@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, type ReactNode } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Trash2, Upload } from 'lucide-react'
@@ -14,6 +14,7 @@ import {
   Select,
   Textarea,
   UrlDrawer,
+  cn,
   type SelectOption,
 } from '@openbooks/ui'
 import { toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
@@ -52,16 +53,24 @@ export function SetupDrawer({
   members,
   refOptions,
   closeHref: closeHrefProp,
+  initialValues,
+  nestedTab,
+  stacked = false,
 }: {
   entity: SetupEntity
   row: Record<string, any> | null
   members: string[]
   refOptions: Record<string, RefOption[]>
   closeHref?: string
+  initialValues?: Record<string, unknown>
+  nestedTab?: { key: string; label: string; content: ReactNode }
+  stacked?: boolean
 }) {
   const t = useTranslations('admin.setup')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const creating = !row
   const idColumn = entity.idColumn ?? 'id'
   const closeHref = closeHrefProp ?? `/admin/setup/${entity.key}`
@@ -69,7 +78,7 @@ export function SetupDrawer({
   const [form, setForm] = useState<Record<string, any>>(() => {
     const init: Record<string, any> = {}
     for (const f of entity.fields) init[f.key] = f.kind === 'multiref' ? members : initialValue(f, row)
-    return init
+    return { ...init, ...initialValues }
   })
   const [busy, setBusy] = useState(false)
   const [officialBusy, setOfficialBusy] = useState(false)
@@ -78,6 +87,19 @@ export function SetupDrawer({
     ? t(entity.singularTitleKey)
     : t(`entities.${entity.key}.title`)
   const set = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }))
+  const nestedTabActive = !creating && nestedTab != null && searchParams.get('setupTab') === nestedTab.key
+
+  function selectTab(key: 'details' | string) {
+    const next = new URLSearchParams(searchParams.toString())
+    if (key === 'details') {
+      next.delete('setupTab')
+      next.delete('boxRow')
+    } else {
+      next.set('setupTab', key)
+    }
+    const query = next.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
 
   function validate(): string | null {
     for (const f of entity.fields) {
@@ -150,14 +172,42 @@ export function SetupDrawer({
       open
       closeHref={closeHref}
       size="lg"
+      stacked={stacked}
       title={creating ? t('drawer.newTitle', { name: entityTitle }) : t('drawer.editTitle', { name: entityTitle })}
+      subtabs={!creating && nestedTab ? (
+        <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('drawer.tabs.ariaLabel')}>
+          {[
+            { key: 'details', label: t('drawer.tabs.details') },
+            { key: nestedTab.key, label: nestedTab.label },
+          ].map((tab) => {
+            const active = tab.key === 'details' ? !nestedTabActive : nestedTabActive
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => selectTab(tab.key)}
+                className={cn(
+                  'shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+                  active
+                    ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
+                )}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </nav>
+      ) : undefined}
       headerActions={
-        <Button disabled={busy} onClick={save}>
+        !nestedTabActive ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
-        </Button>
+        </Button> : undefined
       }
       footer={
-        !creating && !entity.hasActive ? (
+        nestedTabActive ? undefined : !creating && !entity.hasActive ? (
           <button
             type="button"
             onClick={remove}
@@ -171,7 +221,7 @@ export function SetupDrawer({
         )
       }
     >
-      <div className="grid gap-4 p-1 sm:grid-cols-2">
+      {nestedTabActive ? nestedTab?.content : <div className="grid gap-4 p-1 sm:grid-cols-2">
         {entity.fields.map((field) => (
           <FieldControl
             key={field.key}
@@ -246,7 +296,7 @@ export function SetupDrawer({
             </div>
           </div>
         ) : null}
-      </div>
+      </div>}
     </UrlDrawer>
   )
 }

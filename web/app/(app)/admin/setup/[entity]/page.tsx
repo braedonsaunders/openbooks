@@ -17,7 +17,7 @@ import { can, requirePermission } from '../../../../../lib/authz'
 import { ShowInactivesToggle } from '../../../../../components/show-inactives-toggle'
 import { SearchInput } from '../../../../../components/search-input'
 import { Pagination } from '../../../../../components/pagination'
-import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
+import { isUuid, mergeHref, parseListParams, parsePrefixedListParams, pickString } from '../../../../../lib/list-params'
 import {
   SETUP_ENTITY_BY_KEY,
   toSnake,
@@ -30,6 +30,7 @@ import { CloseSetupPage } from './CloseSetupPage'
 import { FxProviderPage } from './FxProviderPage'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 import { TaxReturnLibrary } from './TaxReturnLibrary'
+import { TaxReturnBoxesTab, type TaxReturnBoxRow } from './TaxReturnBoxesTab'
 
 export const dynamic = 'force-dynamic'
 
@@ -180,13 +181,19 @@ export default async function SetupEntityPage({
   if (entityKey === 'fx-provider') return <FxProviderPage orgId={orgId} />
 
   const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!entity) notFound()
+  if (!entity || entity.nestedUnder) notFound()
 
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
   const showInactive = pickString(sp.showInactive) === 'true'
   const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
-  const closeHref = mergeHref(`/admin/setup/${entity.key}`, sp, { row: undefined })
+  const closeHref = mergeHref(`/admin/setup/${entity.key}`, sp, {
+    row: undefined,
+    setupTab: undefined,
+    boxRow: undefined,
+    taxBoxQ: undefined,
+    taxBoxPage: undefined,
+  })
 
   const searchColumns = entity.columns.map((column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`)
   const rowFilter = sql`where 1 = 1
@@ -234,6 +241,85 @@ export default async function SetupEntityPage({
           return { creating: false, row: found, members }
         })()
     : null
+
+  const taxBoxEntity = SETUP_ENTITY_BY_KEY.get('tax-report-lines')!
+  const taxBoxList = parsePrefixedListParams(sp, 'taxBox', {
+    sort: 'default',
+    allowedSorts: ['default'] as const,
+    perPage: 10,
+  })
+  const taxBoxTabActive = entity.key === 'tax-codes'
+    && Boolean(open?.row)
+    && pickString(sp.setupTab) === 'tax-return-boxes'
+  let taxBoxRows: TaxReturnBoxRow[] = []
+  let taxBoxTotal = 0
+  let taxBoxRefOptions: Record<string, RefOption[]> = {}
+  let taxBoxOpen: { creating: boolean; row: Record<string, any> | null } | null = null
+
+  if (taxBoxTabActive) {
+    const taxCodeId = String(open!.row![idColumn])
+    const taxBoxSearch = `%${taxBoxList.q ?? ''}%`
+    const taxBoxScope = sql`(
+      tax_code_id = ${taxCodeId}
+      or (
+        tax_code_id is null
+        and report_code in (
+          select distinct mapped.report_code
+            from tax_report_lines mapped
+           where mapped.org_id = ${orgId} and mapped.tax_code_id = ${taxCodeId}
+        )
+      )
+    )`
+    const taxBoxFilter = sql`where org_id = ${orgId}
+      and ${taxBoxScope}
+      ${taxBoxList.q ? sql`and (
+        report_code ilike ${taxBoxSearch}
+        or line_code ilike ${taxBoxSearch}
+        or label ilike ${taxBoxSearch}
+        or coalesce(basis, '') ilike ${taxBoxSearch}
+        or coalesce(formula, '') ilike ${taxBoxSearch}
+      )` : sql``}`
+    const [boxRowsRes, boxCountRes, childRefs] = await Promise.all([
+      db.execute(sql`
+        select id, report_code, line_code, label, basis, formula, tax_code_id
+          from tax_report_lines ${taxBoxFilter}
+         order by report_code, sequence, line_code
+         limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`) as any,
+      db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`) as any,
+      loadRefOptions(taxBoxEntity, orgId),
+    ])
+    taxBoxRows = boxRowsRes.rows as TaxReturnBoxRow[]
+    taxBoxTotal = Number(boxCountRes.rows[0]?.n ?? 0)
+    taxBoxRefOptions = childRefs
+
+    const boxRowParam = pickString(sp.boxRow)
+    if (boxRowParam) {
+      if (boxRowParam === 'new') {
+        taxBoxOpen = { creating: true, row: null }
+      } else if (isUuid(boxRowParam)) {
+        const selected = (await db.execute(sql`
+          select * from tax_report_lines
+           where id = ${boxRowParam} and org_id = ${orgId}
+             and ${taxBoxScope}
+           limit 1`)) as any
+        taxBoxOpen = selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
+      }
+    }
+  }
+
+  const taxCodeRow = entity.key === 'tax-codes' ? open?.row : null
+  const taxBoxCloseHref = mergeHref('/admin/setup/tax-codes', sp, {
+    setupTab: 'tax-return-boxes',
+    boxRow: undefined,
+  })
+  const taxBoxTab = taxCodeRow ? await TaxReturnBoxesTab({
+    taxCode: String(taxCodeRow.code),
+    rows: taxBoxRows,
+    total: taxBoxTotal,
+    page: taxBoxList.page,
+    perPage: taxBoxList.perPage,
+    currentParams: sp,
+  }) : null
 
   return (
     <div className="space-y-4">
@@ -328,6 +414,23 @@ export default async function SetupEntityPage({
           members={open.members}
           refOptions={refOptions}
           closeHref={closeHref}
+          nestedTab={entity.key === 'tax-codes' && open.row ? {
+            key: 'tax-return-boxes',
+            label: t('entities.tax-report-lines.title'),
+            content: taxBoxTab,
+          } : undefined}
+        />
+      ) : null}
+
+      {taxBoxOpen ? (
+        <SetupDrawer
+          entity={taxBoxEntity}
+          row={taxBoxOpen.row}
+          members={[]}
+          refOptions={taxBoxRefOptions}
+          closeHref={taxBoxCloseHref}
+          initialValues={taxBoxOpen.creating && taxCodeRow ? { taxCodeId: taxCodeRow[idColumn] } : undefined}
+          stacked
         />
       ) : null}
     </div>

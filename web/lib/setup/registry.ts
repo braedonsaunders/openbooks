@@ -97,6 +97,10 @@ export interface SetupEntity {
   hasActive: boolean
   /** Documentation-center article slug — renders a "Learn more" link on the tab. */
   docSlug?: string
+  /** Parent setup entity that owns this configuration surface. Nested entities
+   *  remain available to the shared CRUD API but do not render as standalone
+   *  setup-rail pages. */
+  nestedUnder?: string
   columns: SetupColumn[]
   fields: SetupField[]
 }
@@ -329,12 +333,14 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   {
     key: 'tax-codes',
     table: 'tax_codes',
+    singularTitleKey: 'entities.tax-codes.singularTitle',
     actorCols: true,
     groupKey: 'taxes',
     iconKey: 'receipt',
     orgScoped: true,
     naturalKey: 'code',
     hasActive: true,
+    docSlug: 'tax-configuration',
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
@@ -432,12 +438,15 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   {
     key: 'tax-report-lines',
     table: 'tax_report_lines',
+    singularTitleKey: 'entities.tax-report-lines.singularTitle',
     actorCols: true,
     groupKey: 'taxes',
     iconKey: 'file',
     orgScoped: true,
     orderBy: 'report_code, sequence, line_code',
     hasActive: false,
+    docSlug: 'tax-configuration',
+    nestedUnder: 'tax-codes',
     columns: [
       { key: 'reportCode', kind: 'code' },
       { key: 'sequence', kind: 'number' },
@@ -1115,6 +1124,7 @@ export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
   const byGroup = new Map<string, SetupEntity[]>()
   for (const g of SETUP_GROUPS) byGroup.set(g.key, [])
   for (const e of SETUP_ENTITIES) {
+    if (e.nestedUnder) continue
     const list = byGroup.get(e.groupKey)
     if (list) list.push(e)
   }

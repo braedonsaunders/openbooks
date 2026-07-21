@@ -1033,6 +1033,17 @@
       "removed": "Formulaire officiel retiré",
       "none": "Aucun PDF officiel téléversé"
     },
+    "taxBoxes": {
+      "description": "Cases associées à {code}, avec les cases calculées et manuelles partagées.",
+      "calculatedNote": "Les cases calculées et manuelles s’appliquent à toute la déclaration et figurent sous chaque code de taxe qui lui est associé.",
+      "new": "Nouvelle case de déclaration",
+      "searchPlaceholder": "Rechercher des cases…",
+      "source": "Source",
+      "empty": "Aucune case ne correspond à ce code de taxe et à cette recherche.",
+      "mapped": "Associée",
+      "calculated": "Calculée",
+      "manual": "Manuelle"
+    },
     "new": "New",
     "learnMore": "En savoir plus.",
     "empty": "Nothing here yet.",
@@ -1049,8 +1060,12 @@
       "required": "{field} is required"
     },
     "drawer": {
-      "newTitle": "New {name}",
-      "editTitle": "Edit {name}"
+      "newTitle": "Nouveau : {name}",
+      "editTitle": "Modifier : {name}",
+      "tabs": {
+        "ariaLabel": "Sections de configuration",
+        "details": "Détails"
+      }
     },
     "errors": {
       "duplicate": "A record with that code already exists.",
@@ -1327,8 +1342,9 @@
         "description": "Organization identity, base currency, fiscal year, and control accounts."
       },
       "tax-codes": {
-        "title": "Tax Codes",
-        "description": "Rates you charge and pay, and the accounts they post to."
+        "title": "Codes de taxe",
+        "singularTitle": "Code de taxe",
+        "description": "Les taux que vous facturez et payez, ainsi que les comptes auxquels ils sont imputés."
       },
       "tax-rates": {
         "title": "Tax Rates",
@@ -1344,6 +1360,7 @@
       },
       "tax-report-lines": {
         "title": "Cases de déclaration",
+        "singularTitle": "Case de déclaration",
         "description": "Associez les codes de taxe aux cases d’une déclaration, ou calculez une case à partir d’autres cases."
       },
       "classes": {
