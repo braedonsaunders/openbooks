@@ -35,11 +35,19 @@ function isRole(value: string | null): value is RelatedPartyRole {
 
 function isPartyTab(value: string | null): value is PartyTab {
   return value === 'overview' || value === 'transactions' || value === 'activities' || value === 'contacts'
-    || value === 'addresses' || value === 'accounting' || value === 'audit'
+    || value === 'addresses' || value === 'accounting' || value === 'wages' || value === 'audit'
 }
 
 /** Shell-level related-party overlay. Its close URL is the exact page beneath it. */
-export function GlobalPartyDrawerHost({ canManage, canReadActivities }: { canManage: boolean; canReadActivities: boolean }) {
+export function GlobalPartyDrawerHost({
+  canManage,
+  canReadActivities,
+  canManageWages,
+}: {
+  canManage: boolean
+  canReadActivities: boolean
+  canManageWages: boolean
+}) {
   const t = useTranslations('shell.relatedParty')
   const pathname = usePathname() ?? '/'
   const searchParams = useSearchParams()
@@ -156,6 +164,7 @@ export function GlobalPartyDrawerHost({ canManage, canReadActivities }: { canMan
         salesReps={data.salesReps}
         canManage={canManage}
         canReadActivities={canReadActivities}
+        canManageWages={canManageWages}
         role={role}
         initialTab={initialTab}
         basePath={closeHref}

@@ -26,7 +26,9 @@ An hour of job labor carries three numbers with three different fates:
    separate, permanent layer configured in the **Overhead Model** — it is
    never part of the labor rate. See *Setting Up Overhead Costing*.
 
-Everything below lives on one screen: **Setup → Workforce → Labor Costing**.
+Company-wide fallbacks and posting configuration live at **Setup → Workforce
+→ Labor Costing**. Each employee's confidential wage history lives on the
+employee record under **Wage rates**.
 
 ## Wage rates
 
@@ -41,6 +43,11 @@ Rates are effective-dated and resolve most-specific-wins:
 Starting a new rate automatically closes the previous one the day before — no
 overlaps, ever. Salaried staff use the *per year* basis; the hourly wage is
 salary ÷ annual hours (2080 by default, configurable).
+
+To add a person's wage or raise, open **Operations → Employees**, select the
+employee, and open **Wage rates**. The table keeps the complete effective-dated
+history; the current row is highlighted. You can end the current rate today or
+delete an incorrect rate. Access requires the **Manage setup** permission.
 
 Wage data is confidential: project screens only ever show the blended
 standard cost rate, never anyone's pay.

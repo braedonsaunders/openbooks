@@ -50,6 +50,30 @@ function cleanComponents(input: unknown): LaborCostComponent[] {
   return out
 }
 
+/** GET ?employee=<partyId> → that employee's wage-rate history (confidential;
+ * the employee record's Wages tab reads this). */
+export async function GET(req: Request) {
+  const gate = await guardPermission('admin.setup.manage')
+  if (gate instanceof NextResponse) return gate
+  const url = new URL(req.url)
+  const employee = url.searchParams.get('employee')
+  if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'employee required' }, { status: 422 })
+  const [rates, org] = await Promise.all([
+    db.execute(sql`
+      select id, rate, basis, annual_hours, effective_from::text as effective_from,
+             effective_to::text as effective_to, notes,
+             effective_from <= current_date and (effective_to is null or effective_to >= current_date) as is_current
+        from labor_cost_rates
+       where org_id = ${gate.user.orgId} and employee_party_id = ${employee} and is_active
+       order by effective_from desc`),
+    db.execute(sql`select base_currency from orgs where id = ${gate.user.orgId}`),
+  ]) as unknown as [
+    { rows: Record<string, unknown>[] },
+    { rows: { base_currency: string }[] },
+  ]
+  return NextResponse.json({ rates: rates.rows, currency: org.rows[0]?.base_currency ?? 'CAD' })
+}
+
 export async function PUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate

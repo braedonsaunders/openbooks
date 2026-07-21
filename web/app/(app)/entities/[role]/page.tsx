@@ -60,7 +60,7 @@ export default async function EntityRole({
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
-    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'audit'
+    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages' || requestedPartyTab === 'audit'
     ? requestedPartyTab
     : 'overview'
   const listParams = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: ['name', 'code'] as const })
@@ -172,6 +172,7 @@ export default async function EntityRole({
           payload={openParty as any}
           canManage={canManage}
           canReadActivities={can(authz, 'crm.activities.read')}
+          canManageWages={can(authz, 'admin.setup.manage')}
           role={role}
           initialTab={partyTab}
           basePath={basePath}

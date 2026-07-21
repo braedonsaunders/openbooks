@@ -34,6 +34,7 @@ export function PagedTable<T>({
   searchable = false,
   empty,
   rowKey,
+  rowClassName,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -41,6 +42,7 @@ export function PagedTable<T>({
   searchable?: boolean
   empty: ReactNode
   rowKey: (row: T, index: number) => string
+  rowClassName?: (row: T) => string | undefined
 }) {
   const t = useTranslations('common')
   const tp = useTranslations('ui.pagination')
@@ -87,7 +89,7 @@ export function PagedTable<T>({
         </TableHeader>
         <TableBody>
           {view.map((row, i) => (
-            <TableRow key={rowKey(row, start + i)}>
+            <TableRow key={rowKey(row, start + i)} className={rowClassName?.(row)}>
               {columns.map((c) => (
                 <TableCell key={c.key} className={c.align === 'right' ? 'text-right tabular-nums' : undefined}>
                   {c.cell(row)}
