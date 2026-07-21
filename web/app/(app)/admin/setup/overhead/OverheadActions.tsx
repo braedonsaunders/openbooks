@@ -41,10 +41,10 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
  *    overhead_rates rows (editable before committing).
  *  • Wizard — guided one-pass setup: approach → rates → apply to types.
  */
-export function OverheadActions({ departments, projectTypes }: { departments: DeptRate[]; projectTypes: TypeOpt[] }) {
+export function OverheadActions({ departments, projectTypes, autoOpen }: { departments: DeptRate[]; projectTypes: TypeOpt[]; autoOpen?: boolean }) {
   const t = useTranslations('admin.setup.entities.overhead-model')
   const router = useRouter()
-  const [open, setOpen] = useState<'publish' | 'wizard' | null>(null)
+  const [open, setOpen] = useState<'publish' | 'wizard' | null>(autoOpen ? 'wizard' : null)
   const [busy, setBusy] = useState(false)
 
   // Publish state — pre-seeded from the live engine, editable.

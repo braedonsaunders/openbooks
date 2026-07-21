@@ -103,6 +103,7 @@ export default async function OverheadModelSetup() {
           <OverheadActions
             departments={data.departments.map((d) => ({ id: d.id, name: d.name, composite: d.composite }))}
             projectTypes={typesRes.rows.map((r) => ({ id: r.id, name: r.name }))}
+            autoOpen={card.n === 0 && !typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none')}
           />
         </div>
       </div>

@@ -45,6 +45,7 @@ export function LaborCostingWizard(props: {
     components: LaborCostComponent[]
     laborWip: string | null
     laborClearing: string | null
+    payrollVariance: string | null
   }) => void
   trades: Opt[]
   accounts: { id: string; label: string }[]
@@ -68,6 +69,7 @@ export function LaborCostingWizard(props: {
     props.accounts.find((a) => patterns.some((p) => p.test(a.label)))?.id ?? ''
   const [wipAcct, setWipAcct] = useState(() => guessAccount([/labou?r.*(wip|progress)/i, /\bwip\b/i, /work in progress/i]))
   const [clrAcct, setClrAcct] = useState(() => guessAccount([/labou?r.*clearing/i, /clearing/i, /accrued (wages|labou?r|payroll)/i]))
+  const [varAcct, setVarAcct] = useState(() => guessAccount([/payroll.*variance/i, /labou?r.*variance/i, /variance/i]))
 
   const components = useMemo<LaborCostComponent[]>(() => {
     if (burden === 'skip') return []
@@ -119,7 +121,7 @@ export function LaborCostingWizard(props: {
       }
       await call('PUT', {
         settings: { mode: posting, hoursPerDay: props.hoursPerDay, annualHours: props.annualHours, components },
-        ...(posting === 'post' ? { laborWip: wipAcct, laborClearing: clrAcct } : {}),
+        ...(posting === 'post' ? { laborWip: wipAcct, laborClearing: clrAcct, ...(varAcct ? { payrollVariance: varAcct } : {}) } : {}),
       })
       toast.success(t('done'))
       props.onApplied({
@@ -127,6 +129,7 @@ export function LaborCostingWizard(props: {
         components,
         laborWip: posting === 'post' ? wipAcct : null,
         laborClearing: posting === 'post' ? clrAcct : null,
+        payrollVariance: posting === 'post' && varAcct ? varAcct : null,
       })
       props.onClose()
       router.refresh()
@@ -246,6 +249,15 @@ export function LaborCostingWizard(props: {
                     ))}
                   </select>
                 </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="wiz-var">{t('posting.variance')}</Label>
+                  <select id="wiz-var" className={cn(selectCls)} value={varAcct} onChange={(e) => setVarAcct(e.target.value)}>
+                    <option value="">{t('posting.varianceLater')}</option>
+                    {props.accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
           </div>
@@ -273,6 +285,13 @@ export function LaborCostingWizard(props: {
               </div>
             </div>
             <p className="text-xs text-slate-400 dark:text-slate-500">{t('reviewNote')}</p>
+            <div className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
+              <p className="text-xs font-medium text-slate-700 dark:text-slate-200">{t('nextSteps')}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('nextOverhead')}</p>
+              <a href="/admin/setup/overhead" className="mt-1.5 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+                {t('nextOverheadLink')} →
+              </a>
+            </div>
           </div>
         )}
 
