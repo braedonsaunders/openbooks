@@ -1512,7 +1512,8 @@
           "published": "Publicada $/h",
           "live": "En vivo $/h",
           "drift": "Deriva"
-        }
+        },
+        "laborCostingLink": "Costeo de mano de obra"
       }
     },
     "fields": {
@@ -1764,7 +1765,9 @@
         "empty": "Aún no hay tarifas — agregue la primera arriba.",
         "delete": "Eliminar tarifa",
         "hr": "h",
-        "yr": "año"
+        "yr": "año",
+        "search": "Buscar tarifas…",
+        "showHistory": "Historial ({count})"
       },
       "components": {
         "title": "Componentes de estimación de costo",
@@ -1889,6 +1892,16 @@
         "nextSteps": "Después de esto: gastos generales",
         "nextOverhead": "El costeo de mano de obra cubre salarios y cargas estatutarias. Los GASTOS GENERALES de su empresa (renta, administración, flota…) son una capa aparte con su propia configuración guiada — clasifique costos, revise tarifas calculadas y aplíquelas a los tipos de proyecto.",
         "nextOverheadLink": "Abrir el Modelo de gastos generales"
+      },
+      "unsaved": "Cambios sin guardar",
+      "discard": "Descartar",
+      "related": {
+        "overhead": "Modelo de gastos generales",
+        "overheadHint": "La capa de costos de la empresa — grupos, tarifas por departamento y cómo llegan a los proyectos.",
+        "rateBooks": "Libros de tarifas",
+        "rateBooksHint": "Lo que cobra — tarifas de facturación por artículo y cliente, con niveles normal/extra/doble.",
+        "timeTypes": "Tipos de hora",
+        "timeTypesHint": "Normal, extra, doble — los multiplicadores de costo y facturación que usa esta página."
       }
     }
   },

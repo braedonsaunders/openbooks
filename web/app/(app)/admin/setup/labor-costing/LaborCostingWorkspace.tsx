@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowRight, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
+import Link from 'next/link'
 import { Button, Input, Label, cn } from '@openbooks/ui'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { LaborCostingWizard } from './LaborCostingWizard'
@@ -81,6 +82,27 @@ export function LaborCostingWorkspace(props: {
   const [laborClearing, setLaborClearing] = useState(props.laborClearing ?? '')
   const [payrollVariance, setPayrollVariance] = useState(props.payrollVariance ?? '')
 
+  // Unsaved-changes tracking: everything the Save action persists, in one
+  // stable snapshot. Rates save instantly and are not part of this.
+  const makeSnap = (v: { mode: string; hoursPerDay: string; annualHours: string; components: LaborCostComponent[]; laborWip: string; laborClearing: string; payrollVariance: string }) =>
+    JSON.stringify([v.mode, v.hoursPerDay, v.annualHours, v.components, v.laborWip, v.laborClearing, v.payrollVariance])
+  const [savedSnap, setSavedSnap] = useState(() =>
+    makeSnap({
+      mode: props.settings.mode,
+      hoursPerDay: String(props.settings.hoursPerDay),
+      annualHours: String(props.settings.annualHours),
+      components: props.settings.components,
+      laborWip: props.laborWip ?? '',
+      laborClearing: props.laborClearing ?? '',
+      payrollVariance: props.payrollVariance ?? '',
+    }))
+  const currentSnap = makeSnap({ mode, hoursPerDay, annualHours, components, laborWip, laborClearing, payrollVariance })
+  const dirty = currentSnap !== savedSnap
+
+  // Rates list controls.
+  const [rateQuery, setRateQuery] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+
   // ---- reconciliation state ------------------------------------------------
   const now = new Date()
   const lastMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1))
@@ -124,12 +146,23 @@ export function LaborCostingWorkspace(props: {
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
       toast.success(t('saved'))
+      setSavedSnap(currentSnap)
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
       setBusy(false)
     }
+  }
+
+  function discardChanges() {
+    setMode(props.settings.mode)
+    setHoursPerDay(String(props.settings.hoursPerDay))
+    setAnnualHours(String(props.settings.annualHours))
+    setComponents(props.settings.components)
+    setLaborWip(props.laborWip ?? '')
+    setLaborClearing(props.laborClearing ?? '')
+    setPayrollVariance(props.payrollVariance ?? '')
   }
 
   async function post(payload: Record<string, unknown>) {
@@ -239,11 +272,21 @@ export function LaborCostingWorkspace(props: {
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onApplied={(applied) => {
-          setMode(applied.mode)
-          setComponents(applied.components)
-          if (applied.laborWip) setLaborWip(applied.laborWip)
-          if (applied.laborClearing) setLaborClearing(applied.laborClearing)
-          if (applied.payrollVariance) setPayrollVariance(applied.payrollVariance)
+          const next = {
+            mode: applied.mode,
+            hoursPerDay,
+            annualHours,
+            components: applied.components,
+            laborWip: applied.laborWip ?? laborWip,
+            laborClearing: applied.laborClearing ?? laborClearing,
+            payrollVariance: applied.payrollVariance ?? payrollVariance,
+          }
+          setMode(next.mode)
+          setComponents(next.components)
+          setLaborWip(next.laborWip)
+          setLaborClearing(next.laborClearing)
+          setPayrollVariance(next.payrollVariance)
+          setSavedSnap(makeSnap(next))
         }}
         trades={props.trades}
         accounts={props.accounts}
@@ -312,6 +355,16 @@ export function LaborCostingWorkspace(props: {
             </Button>
           </div>
         </div>
+        <div className="mb-2 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden />
+            <Input aria-label={t('rates.search')} className="h-8 pl-7" placeholder={t('rates.search')} value={rateQuery} onChange={(e) => setRateQuery(e.target.value)} />
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+            {t('rates.showHistory', { count: props.rates.filter((r) => r.effective_to).length })}
+          </label>
+        </div>
         <div className="max-h-96 overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
@@ -332,7 +385,10 @@ export function LaborCostingWorkspace(props: {
                   </Button>
                 </td></tr>
               )}
-              {props.rates.map((r) => (
+              {props.rates
+                .filter((r) => showHistory || !r.effective_to)
+                .filter((r) => !rateQuery || scopeLabel(r).toLowerCase().includes(rateQuery.toLowerCase()))
+                .map((r) => (
                 <tr key={r.id} className={cn('border-t border-slate-100 dark:border-slate-800', r.effective_to && 'text-slate-400 dark:text-slate-500')}>
                   <td className="py-1.5 pr-2">{scopeLabel(r)}</td>
                   <td className="py-1.5 pr-2 tabular-nums">
@@ -538,9 +594,39 @@ export function LaborCostingWorkspace(props: {
         )}
       </Card>
 
+      {/* ---- where the other pieces live ---- */}
       <div className="xl:col-span-2">
-        <Button onClick={saveSettings} disabled={busy}>{t('save')}</Button>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { href: '/admin/setup/overhead', key: 'overhead' },
+            { href: '/admin/setup/item-rate-books', key: 'rateBooks' },
+            { href: '/admin/setup/time-types', key: 'timeTypes' },
+          ].map((l) => (
+            <Link
+              key={l.key}
+              href={l.href}
+              className="group rounded-lg border border-slate-200 bg-white p-3 transition-colors hover:border-teal-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{t(`related.${l.key}`)}</span>
+                <ArrowRight size={14} className="text-slate-300 transition-colors group-hover:text-teal-600 dark:text-slate-600 dark:group-hover:text-teal-400" aria-hidden />
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t(`related.${l.key}Hint`)}</p>
+            </Link>
+          ))}
+        </div>
       </div>
+
+      {/* ---- sticky unsaved-changes bar ---- */}
+      {dirty && (
+        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white py-2 pl-4 pr-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <span className="text-sm text-slate-600 dark:text-slate-300">{t('unsaved')}</span>
+            <Button size="sm" variant="ghost" onClick={discardChanges} disabled={busy}>{t('discard')}</Button>
+            <Button size="sm" onClick={saveSettings} disabled={busy}>{t('save')}</Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

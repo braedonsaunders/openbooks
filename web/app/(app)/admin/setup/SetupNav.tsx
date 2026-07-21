@@ -136,7 +136,7 @@ export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: 
                 ]
               : group.key === 'workforce'
               ? [
-                  { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'timer' },
+                  { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'coins' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),
