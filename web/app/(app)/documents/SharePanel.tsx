@@ -115,6 +115,59 @@ export function SharePanel({
         </p>
       </div>
 
+      {/* Add grant — kept at the top so the principal dropdown always has room
+          to open below it inside the drawer. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={selected}
+          disabled={busy}
+          searchable
+          sheetTitle={t('addPrincipal')}
+          placeholder={t('selectPrincipal')}
+          className="h-9 min-w-[12rem] flex-1"
+          onChange={(e) => setSelected(e.target.value)}
+        >
+          <option value="">{t('selectPrincipal')}</option>
+          <optgroup label={t('usersGroup')}>
+            {users
+              .filter((u) => !granted.has(`user:${u.id}`))
+              .map((u) => (
+                <option key={u.id} value={`user:${u.id}`}>
+                  {u.name}
+                </option>
+              ))}
+          </optgroup>
+          <optgroup label={t('rolesGroup')}>
+            {roles
+              .filter((r) => !granted.has(`role:${r.id}`))
+              .map((r) => (
+                <option key={r.id} value={`role:${r.id}`}>
+                  {r.name}
+                </option>
+              ))}
+          </optgroup>
+        </Select>
+        <Select
+          value={tier}
+          disabled={busy || !selected}
+          className="h-9 w-28"
+          onChange={(e) => setTier(e.target.value as Tier)}
+        >
+          {TIERS.map((tr) => (
+            <option key={tr} value={tr}>
+              {t(`tiers.${tr}`)}
+            </option>
+          ))}
+        </Select>
+        <Button size="sm" disabled={busy || !selected} onClick={addGrant}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          {t('add')}
+        </Button>
+      </div>
+      {resourceType === 'folder' ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">{t('inheritedHint')}</p>
+      ) : null}
+
       {grants == null ? (
         <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -164,55 +217,6 @@ export function SharePanel({
           ))}
         </div>
       )}
-
-      {/* Add grant */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={selected}
-          disabled={busy}
-          className="h-9 min-w-[12rem] flex-1"
-          onChange={(e) => setSelected(e.target.value)}
-        >
-          <option value="">{t('selectPrincipal')}</option>
-          <optgroup label={t('usersGroup')}>
-            {users
-              .filter((u) => !granted.has(`user:${u.id}`))
-              .map((u) => (
-                <option key={u.id} value={`user:${u.id}`}>
-                  {u.name}
-                </option>
-              ))}
-          </optgroup>
-          <optgroup label={t('rolesGroup')}>
-            {roles
-              .filter((r) => !granted.has(`role:${r.id}`))
-              .map((r) => (
-                <option key={r.id} value={`role:${r.id}`}>
-                  {r.name}
-                </option>
-              ))}
-          </optgroup>
-        </Select>
-        <Select
-          value={tier}
-          disabled={busy || !selected}
-          className="h-9 w-28"
-          onChange={(e) => setTier(e.target.value as Tier)}
-        >
-          {TIERS.map((tr) => (
-            <option key={tr} value={tr}>
-              {t(`tiers.${tr}`)}
-            </option>
-          ))}
-        </Select>
-        <Button size="sm" disabled={busy || !selected} onClick={addGrant}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          {t('add')}
-        </Button>
-      </div>
-      {resourceType === 'folder' ? (
-        <p className="text-xs text-slate-400 dark:text-slate-500">{t('inheritedHint')}</p>
-      ) : null}
     </section>
   )
 }

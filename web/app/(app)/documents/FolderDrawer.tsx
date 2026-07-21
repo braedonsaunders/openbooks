@@ -9,6 +9,7 @@ import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { SharePanel } from './SharePanel'
 import { ActivityLog } from './ActivityLog'
+import { DrawerTabs, type DrawerTab } from './DrawerTabs'
 
 interface TreeFolder {
   id: string
@@ -59,6 +60,15 @@ export function FolderDrawer({
   const [isPrivate, setIsPrivate] = useState(folder?.isPrivate ?? false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Subtabs (existing folders only) — Details / Sharing / Activity.
+  const tabs: DrawerTab[] = [
+    { key: 'details', label: t('tabs.details') },
+    ...(canManage ? [{ key: 'sharing', label: t('tabs.sharing') }] : []),
+    { key: 'activity', label: t('tabs.activity') },
+  ]
+  const initialTab = search.get('folderTab') ?? 'details'
+  const [tab, setTab] = useState(tabs.some((x) => x.key === initialTab) ? initialTab : 'details')
 
   // NetSuite-style record model: an EXISTING folder ALWAYS opens READ-ONLY
   // (view mode) with an Edit button in the header; Save/Cancel replace it while
@@ -177,6 +187,9 @@ export function FolderDrawer({
       closeHref={closeHref()}
       title={title}
       size="md"
+      subtabs={
+        mode === 'edit' ? <DrawerTabs tabs={tabs} active={tab} onSelect={setTab} /> : undefined
+      }
       headerActions={
         mode === 'edit' ? (
           editing ? (
@@ -191,7 +204,13 @@ export function FolderDrawer({
             </div>
           ) : canManage && !isSystem ? (
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setUiMode('edit')}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setTab('details')
+                  setUiMode('edit')
+                }}
+              >
                 {tc('actions.edit')}
               </Button>
               <Button variant="ghost" size="icon" disabled={deleting} onClick={handleDelete}>
@@ -216,91 +235,92 @@ export function FolderDrawer({
       }
     >
       <div className="space-y-4">
-        {isSystem ? (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-            {t('systemNoDelete')}
-          </p>
-        ) : null}
+        {/* DETAILS TAB (also the whole body in create mode) */}
+        {mode === 'create' || tab === 'details' ? (
+          <>
+            {isSystem ? (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                {t('systemNoDelete')}
+              </p>
+            ) : null}
 
-        <div className="space-y-1.5">
-          <Label htmlFor="folder-name">{t('edit.nameLabel')}</Label>
-          {editing ? (
-            <Input
-              id="folder-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('create.namePlaceholder')}
-              disabled={isSystem}
-              autoFocus={mode === 'create'}
-            />
-          ) : (
-            <p className="text-sm">{name || '—'}</p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="folder-parent">{t('edit.parentLabel')}</Label>
-          {editing ? (
-            <Select
-              id="folder-parent"
-              value={parent}
-              onChange={(e) => setParent(e.target.value)}
-              disabled={isSystem}
-            >
-              <option value="">—</option>
-              {availableParents().map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.path}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <p className="text-sm">{parent ? buildPath(folders, parent) : '—'}</p>
-          )}
-        </div>
-
-        {mode === 'edit' && !isSystem ? (
-          <label className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              checked={isPrivate}
-              onChange={(e) => setIsPrivate(e.target.checked)}
-              disabled={!editing}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-            />
-            <div>
-              <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                {t('edit.private')}
-              </span>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('edit.privateHint')}</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="folder-name">{t('edit.nameLabel')}</Label>
+              {editing ? (
+                <Input
+                  id="folder-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t('create.namePlaceholder')}
+                  disabled={isSystem}
+                  autoFocus={mode === 'create'}
+                />
+              ) : (
+                <p className="text-sm">{name || '—'}</p>
+              )}
             </div>
-          </label>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="folder-parent">{t('edit.parentLabel')}</Label>
+              {editing ? (
+                <Select
+                  id="folder-parent"
+                  value={parent}
+                  onChange={(e) => setParent(e.target.value)}
+                  disabled={isSystem}
+                >
+                  <option value="">—</option>
+                  {availableParents().map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.path}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <p className="text-sm">{parent ? buildPath(folders, parent) : '—'}</p>
+              )}
+            </div>
+
+            {mode === 'edit' && !isSystem ? (
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={isPrivate}
+                  onChange={(e) => setIsPrivate(e.target.checked)}
+                  disabled={!editing}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {t('edit.private')}
+                  </span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('edit.privateHint')}</p>
+                </div>
+              </label>
+            ) : null}
+
+            {/* Download the whole folder */}
+            {mode === 'edit' && folder ? (
+              <div className="pt-2">
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`/api/file-cabinet/folders/${folder.id}/download-zip`}>
+                    <Download className="h-4 w-4" />
+                    {t('downloadZip')}
+                  </a>
+                </Button>
+              </div>
+            ) : null}
+          </>
         ) : null}
 
-        {/* Sharing — Manager access only */}
-        {mode === 'edit' && folder && canManage ? (
-          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-            <SharePanel resourceType="folder" resourceId={folder.id} />
-          </div>
+        {/* SHARING TAB — Manager access only */}
+        {mode === 'edit' && tab === 'sharing' && folder && canManage ? (
+          <SharePanel resourceType="folder" resourceId={folder.id} />
         ) : null}
 
-        {/* Download the whole folder */}
-        {mode === 'edit' && folder ? (
-          <div>
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/api/file-cabinet/folders/${folder.id}/download-zip`}>
-                <Download className="h-4 w-4" />
-                {t('downloadZip')}
-              </a>
-            </Button>
-          </div>
-        ) : null}
-
-        {/* Activity */}
-        {mode === 'edit' && folder ? (
-          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-            <ActivityLog resourceType="folder" resourceId={folder.id} />
-          </div>
+        {/* ACTIVITY TAB */}
+        {mode === 'edit' && tab === 'activity' && folder ? (
+          <ActivityLog resourceType="folder" resourceId={folder.id} />
         ) : null}
       </div>
     </UrlDrawer>
