@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { replaceFile } from '../../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../../lib/list-params'
+import { recordFileEvent } from '../../../../../../lib/file-audit'
 import { isAllowedContentType, MAX_BYTES, requireFileAccess, requireSession } from '../../../lib'
 
 export const runtime = 'nodejs'
@@ -37,5 +38,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     updatedBy: gate.user.id,
   })
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  await recordFileEvent({
+    orgId: gate.user.orgId,
+    actorId: gate.user.id,
+    table: 'files',
+    rowId: id,
+    action: 'replace',
+    changes: { name: file.name || 'file' },
+  })
   return NextResponse.json({ ok: true })
 }

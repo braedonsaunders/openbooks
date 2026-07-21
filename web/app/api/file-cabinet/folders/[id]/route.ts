@@ -45,10 +45,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const ok = await moveFolder(gate.user.orgId, id, body.parentId, gate.user.id)
     if (!ok) return NextResponse.json({ error: 'cannot move folder' }, { status: 400 })
+    await recordFileEvent({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      table: 'folders',
+      rowId: id,
+      action: 'move',
+      changes: { parentId: body.parentId },
+    })
   }
   if (typeof body.name === 'string' && body.name.trim()) {
     const ok = await renameFolder(gate.user.orgId, id, body.name.trim(), gate.user.id)
     if (!ok) return NextResponse.json({ error: 'cannot rename system folder' }, { status: 400 })
+    await recordFileEvent({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      table: 'folders',
+      rowId: id,
+      action: 'rename',
+      changes: { name: body.name.trim() },
+    })
   }
   const patch: { isPrivate?: boolean; isInactive?: boolean } = {}
   if (typeof body.isPrivate === 'boolean') patch.isPrivate = body.isPrivate

@@ -33,6 +33,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof body.name === 'string' && body.name.trim()) {
     const ok = await renameFile(gate.user.orgId, id, body.name.trim(), gate.user.id)
     if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    await recordFileEvent({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      table: 'files',
+      rowId: id,
+      action: 'rename',
+      changes: { name: body.name.trim() },
+    })
   }
   if (typeof body.folderId === 'string') {
     if (!isUuid(body.folderId)) {
@@ -43,6 +51,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (destGate) return destGate
     const ok = await moveFile(gate.user.orgId, id, body.folderId, gate.user.id)
     if (!ok) return NextResponse.json({ error: 'cannot move file' }, { status: 400 })
+    await recordFileEvent({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      table: 'files',
+      rowId: id,
+      action: 'move',
+      changes: { folderId: body.folderId },
+    })
   }
   return NextResponse.json({ ok: true })
 }
