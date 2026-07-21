@@ -1015,13 +1015,20 @@
       "open": "Bibliothèque",
       "description": "Importez les structures maintenues pour le Canada, le Royaume-Uni, l’Australie, la Nouvelle-Zélande et une feuille de travail américaine pour les taxes locales.",
       "pack": "Module de juridiction",
-      "optionInstalled": "{country} · {name} · installé",
-      "optionAvailable": "{country} · {name}",
-      "import": "Importer le module",
-      "reset": "Rétablir les valeurs de la bibliothèque",
-      "working": "Importation…",
-      "importSuccess": "Module de déclaration importé",
+      "status": "État",
+      "installed": "Installé",
+      "available": "Disponible",
+      "searchPlaceholder": "Rechercher des modules de juridiction…",
+      "selectVisible": "Sélectionner tous les modules disponibles visibles",
+      "selectPack": "Sélectionner {name}",
+      "installSelected": "{count, plural, one {Installer # module sélectionné} other {Installer # modules sélectionnés}}",
+      "selectionCount": "{count, plural, =0 {Aucun module sélectionné} one {# module sélectionné} other {# modules sélectionnés}}",
+      "resultCount": "{count, plural, one {# module} other {# modules}}",
+      "pageOf": "Page {page} sur {pages}",
+      "working": "Traitement…",
+      "installSuccess": "{count, plural, one {# module de déclaration installé} other {# modules de déclaration installés}}",
       "resetSuccess": "Module rétabli selon la bibliothèque",
+      "confirmReset": "Rétablir {name} selon les valeurs maintenues de la bibliothèque ? Cette action remplace ses cases de déclaration configurées.",
       "usNotice": "Les États-Unis n’ont pas de déclaration fédérale de taxe de vente. Cette feuille doit être adaptée à chaque juridiction étatique et locale."
     },
     "taxOfficial": {
@@ -1481,10 +1488,11 @@
       },
       "overhead-rates": {
         "title": "Taux de frais généraux",
-        "description": "Taux de frais généraux datés appliqués au coût de la main-d'œuvre."
+        "description": "Taux de frais généraux datés appliqués au coût de la main-d'œuvre.",
+        "singular": "Taux de frais généraux"
       },
       "overhead-model": {
-        "title": "Modèle de frais généraux",
+        "title": "Frais généraux",
         "description": "Le moteur de taux derrière les frais généraux de projet — pools de coûts, bases de répartition, matrice de taux par département et profils. Les projets utilisant la méthode « moteur de taux » appliquent ces taux à leurs heures de main-d’œuvre.",
         "docs": "Documentation",
         "viewAnalytics": "Voir l’analytique",
@@ -1583,7 +1591,8 @@
         },
         "laborCostingLink": "Coût de la main-d'œuvre",
         "tabs": {
-          "model": "Modèle et taux",
+          "model": "Modèle",
+          "rates": "Taux",
           "lifecycle": "Cycle de vie des taux",
           "application": "Application au grand livre"
         }

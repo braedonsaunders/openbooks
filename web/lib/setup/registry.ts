@@ -32,6 +32,7 @@ export type SetupColumnKind =
   | 'text'
   | 'code'
   | 'badge-active'
+  | 'badge'
   | 'percent'
   | 'ref'
   | 'date'
@@ -106,6 +107,14 @@ export interface SetupEntity {
    *  remain available to the shared CRUD API but do not render as standalone
    *  setup-rail pages. */
   nestedUnder?: string
+  /** Re-homed onto an operational record/module (e.g. Inventory, Items,
+   *  customer/project drawers). Still served by the shared CRUD API and
+   *  embeddable via <SetupEntitySection>, but hidden from the setup rail and
+   *  404s as a standalone /admin/setup page — it has one home elsewhere. */
+  rehomed?: boolean
+  /** Optional-feature gate (web/lib/features.ts key). When the feature is off,
+   *  this entity is hidden from the setup rail and 404s as a standalone page. */
+  featureKey?: string
   columns: SetupColumn[]
   fields: SetupField[]
 }
@@ -183,7 +192,7 @@ const END_OF_LIFE = [
   { value: 'retain_balance', labelKey: 'options.endOfLife.retainBalance' },
 ]
 
-const OVERHEAD_RATE_KINDS = [
+export const OVERHEAD_RATE_KINDS = [
   { value: 'per_hour', labelKey: 'options.overheadRateKind.per_hour' },
   { value: 'percent', labelKey: 'options.overheadRateKind.percent' },
 ]
@@ -257,6 +266,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     actorCols: true,
     groupKey: 'company',
     iconKey: 'building',
+    featureKey: 'multiSubsidiary',
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
@@ -286,6 +296,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     actorCols: true,
     groupKey: 'company',
     iconKey: 'layers',
+    featureKey: 'multiSubsidiary',
     orgScoped: true,
     orderBy: 'created_at',
     hasActive: true,
@@ -488,7 +499,14 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     columns: [
       { key: 'name', kind: 'text' },
       { key: 'key', kind: 'code' },
-      { key: 'sourceKind', kind: 'text' },
+      {
+        key: 'sourceKind',
+        kind: 'badge',
+        options: [
+          { value: 'builtin', labelKey: 'options.sourceKind.builtin' },
+          { value: 'custom', labelKey: 'options.sourceKind.custom' },
+        ],
+      },
       { key: 'showOnHeader', kind: 'boolean' },
       { key: 'showOnLines', kind: 'boolean' },
       { key: 'showInReports', kind: 'boolean' },
@@ -510,6 +528,9 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   {
     key: 'segment-values',
     table: 'segment_values',
+    // Values live inside their owning segment's drawer (custom segments only);
+    // built-in dimension values stay on the Classes/Departments/Locations tabs.
+    nestedUnder: 'segment-definitions',
     actorCols: true,
     groupKey: 'dimensions',
     iconKey: 'tag',
@@ -694,6 +715,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   {
     key: 'item-rate-books',
     table: 'item_rate_books',
+    rehomed: true, // lives as a tab on the Items catalog module
     actorCols: true,
     groupKey: 'billing',
     iconKey: 'tag',
@@ -719,6 +741,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   {
     key: 'item-rate-book-assignments',
     table: 'item_rate_book_assignments',
+    rehomed: true, // lives on the customer & project records as an override section
     actorCols: true,
     groupKey: 'billing',
     iconKey: 'tag',
@@ -785,6 +808,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // to allocate a bundle's transaction price across obligations (relative SSP).
     key: 'fair-value-prices',
     table: 'fair_value_prices',
+    rehomed: true, // lives as a section on the item record (dated SSPs)
     actorCols: true,
     groupKey: 'revenue',
     iconKey: 'coins',
@@ -817,6 +841,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Stock locations — physical bins/zones under the `locations` dimension.
     key: 'stock-locations',
     table: 'stock_locations',
+    rehomed: true, // lives as a tab on the Inventory module
     actorCols: true,
     groupKey: 'inventory',
     iconKey: 'package',
@@ -843,6 +868,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // reorder points. One per inventory item.
     key: 'item-inventory-profiles',
     table: 'item_inventory_profiles',
+    rehomed: true, // lives as a Costing section on the item record
     actorCols: true,
     groupKey: 'inventory',
     iconKey: 'package',
@@ -875,6 +901,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Bill of materials — components consumed to build an assembly item.
     key: 'bom-components',
     table: 'bom_components',
+    rehomed: true, // lives as a tab on the Inventory module
     actorCols: true,
     groupKey: 'inventory',
     iconKey: 'package',
@@ -943,6 +970,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   {
     key: 'overhead-rates',
     table: 'overhead_rates',
+    singularTitleKey: 'entities.overhead-rates.singular',
     actorCols: true,
     groupKey: 'projects',
     iconKey: 'percent',
@@ -1079,6 +1107,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     actorCols: true,
     groupKey: 'currency',
     iconKey: 'layers',
+    featureKey: 'multiSubsidiary',
     orgScoped: true,
     orderBy: 'period_id desc',
     hasActive: false,
@@ -1131,7 +1160,7 @@ export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
   const byGroup = new Map<string, SetupEntity[]>()
   for (const g of SETUP_GROUPS) byGroup.set(g.key, [])
   for (const e of SETUP_ENTITIES) {
-    if (e.nestedUnder) continue
+    if (e.nestedUnder || e.rehomed) continue
     const list = byGroup.get(e.groupKey)
     if (list) list.push(e)
   }

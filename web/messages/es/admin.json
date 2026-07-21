@@ -971,13 +971,20 @@
       "open": "Biblioteca",
       "description": "Importe estructuras mantenidas para Canadá, Reino Unido, Australia, Nueva Zelanda y una hoja de trabajo estadounidense para impuestos estatales y locales.",
       "pack": "Paquete de jurisdicción",
-      "optionInstalled": "{country} · {name} · instalado",
-      "optionAvailable": "{country} · {name}",
-      "import": "Importar paquete",
-      "reset": "Restablecer valores de biblioteca",
-      "working": "Importando…",
-      "importSuccess": "Paquete de declaración importado",
+      "status": "Estado",
+      "installed": "Instalado",
+      "available": "Disponible",
+      "searchPlaceholder": "Buscar paquetes de jurisdicción…",
+      "selectVisible": "Seleccionar todos los paquetes disponibles visibles",
+      "selectPack": "Seleccionar {name}",
+      "installSelected": "{count, plural, one {Instalar # paquete seleccionado} other {Instalar # paquetes seleccionados}}",
+      "selectionCount": "{count, plural, =0 {Ningún paquete seleccionado} one {# paquete seleccionado} other {# paquetes seleccionados}}",
+      "resultCount": "{count, plural, one {# paquete} other {# paquetes}}",
+      "pageOf": "Página {page} de {pages}",
+      "working": "Procesando…",
+      "installSuccess": "{count, plural, one {# paquete de declaración instalado} other {# paquetes de declaración instalados}}",
       "resetSuccess": "Paquete restablecido a los valores de biblioteca",
+      "confirmReset": "¿Restablecer {name} a los valores mantenidos de la biblioteca? Esto reemplaza sus casillas de declaración configuradas.",
       "usNotice": "Estados Unidos no tiene una declaración federal de impuesto sobre ventas. Esta hoja debe adaptarse a cada jurisdicción estatal y local."
     },
     "taxOfficial": {
@@ -1437,10 +1444,11 @@
       },
       "overhead-rates": {
         "title": "Tasas de gastos generales",
-        "description": "Tasas de gastos generales con fecha de vigencia aplicadas al costo de mano de obra."
+        "description": "Tasas de gastos generales con fecha de vigencia aplicadas al costo de mano de obra.",
+        "singular": "Tasa de gastos generales"
       },
       "overhead-model": {
-        "title": "Modelo de gastos generales",
+        "title": "Gastos generales",
         "description": "El motor de tasas detrás de los gastos generales de proyecto: grupos de costos, bases de asignación, la matriz de tasas por departamento y perfiles. Los proyectos que usan el método de motor de tasas aplican estas tasas a sus horas de mano de obra.",
         "docs": "Documentación",
         "viewAnalytics": "Ver analítica",
@@ -1539,7 +1547,8 @@
         },
         "laborCostingLink": "Costeo de mano de obra",
         "tabs": {
-          "model": "Modelo y tarifas",
+          "model": "Modelo",
+          "rates": "Tasas",
           "lifecycle": "Ciclo de vida de tarifas",
           "application": "Aplicación al libro mayor"
         }

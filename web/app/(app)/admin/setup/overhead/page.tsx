@@ -11,6 +11,7 @@ import { OverheadActions } from './OverheadActions'
 import { OverheadApplication } from './OverheadApplication'
 import { countUnappliedOverheadTime, listOverheadApplications, overheadApplicationSettings } from '@openbooks/engine/src/overhead-apply.ts'
 import { OverheadLifecycle } from './OverheadLifecycle'
+import { RatesTab } from './RatesTab'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,7 @@ export const dynamic = 'force-dynamic'
  * Window: trailing 12 months — the same window the project-costing bridge uses,
  * so the rates previewed here are the rates projects get.
  */
-const VIEWS = ['model', 'lifecycle', 'application'] as const
+const VIEWS = ['model', 'rates', 'lifecycle', 'application'] as const
 type OverheadView = (typeof VIEWS)[number]
 
 export default async function OverheadModelSetup({
@@ -39,6 +40,7 @@ export default async function OverheadModelSetup({
   const sp = await searchParams
   const rawView = typeof sp.view === 'string' ? sp.view : ''
   const view: OverheadView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as OverheadView) : 'model'
+  const rowParam = typeof sp.row === 'string' ? sp.row : null
 
   const to = new Date()
   const from = new Date(to)
@@ -203,6 +205,7 @@ export default async function OverheadModelSetup({
         ))}
       </div>
       </>)}
+      {view === 'rates' && <RatesTab orgId={authz.user.orgId} rowParam={rowParam} />}
       {view === 'lifecycle' && (
         <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
       )}
