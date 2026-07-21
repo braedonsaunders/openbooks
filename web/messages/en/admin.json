@@ -1034,13 +1034,20 @@
       "open": "Library",
       "description": "Import maintained return structures for Canada, the United Kingdom, Australia, New Zealand, and a United States state/local workpaper.",
       "pack": "Jurisdiction pack",
-      "optionInstalled": "{country} · {name} · installed",
-      "optionAvailable": "{country} · {name}",
-      "import": "Import pack",
-      "reset": "Reset to library defaults",
-      "working": "Importing…",
-      "importSuccess": "Tax return pack imported",
+      "status": "Status",
+      "installed": "Installed",
+      "available": "Available",
+      "searchPlaceholder": "Search jurisdiction packs…",
+      "selectVisible": "Select all visible available packs",
+      "selectPack": "Select {name}",
+      "installSelected": "{count, plural, one {Install # selected pack} other {Install # selected packs}}",
+      "selectionCount": "{count, plural, =0 {No packs selected} one {# pack selected} other {# packs selected}}",
+      "resultCount": "{count, plural, one {# pack} other {# packs}}",
+      "pageOf": "Page {page} of {pages}",
+      "working": "Working…",
+      "installSuccess": "{count, plural, one {# tax return pack installed} other {# tax return packs installed}}",
       "resetSuccess": "Tax return pack reset to library defaults",
+      "confirmReset": "Reset {name} to the maintained library defaults? This replaces its configured return boxes.",
       "usNotice": "The United States has no federal sales-tax return. This workpaper must be customized for every state and local filing jurisdiction."
     },
     "taxOfficial": {
@@ -1069,6 +1076,16 @@
       "new": "New tax rate",
       "searchPlaceholder": "Search tax rates…",
       "empty": "No tax rates match this code and search."
+    },
+    "segmentValues": {
+      "description": "Selectable values for the {name} segment.",
+      "new": "New value",
+      "searchPlaceholder": "Search values…",
+      "empty": "No values yet — add the first one.",
+      "builtinTitle": "Built-in dimension",
+      "builtinNotice": "{name} is a built-in dimension. Its values are managed on the {name} tab.",
+      "builtinNoticeNoLink": "{name} is a built-in dimension. Its values are managed on their own dedicated tab.",
+      "builtinLink": "Open {name}"
     },
     "new": "New",
     "learnMore": "Learn more.",
@@ -1403,10 +1420,10 @@
       },
       "segment-definitions": {
         "title": "Segments",
-        "description": "Configure built-in and custom accounting segments across transactions, accounts, and reports."
+        "description": "Every reporting dimension in one place — the five built-ins (Subsidiary, Department, Location, Class, Project) plus any custom segments you add. Open a custom segment to manage its values here; built-in values live on their own Classes, Departments, and Locations tabs."
       },
       "segment-values": {
-        "title": "Segment Values",
+        "title": "Values",
         "description": "Manage the selectable values and hierarchies for custom segments."
       },
       "departments": {
@@ -1511,10 +1528,11 @@
       },
       "overhead-rates": {
         "title": "Overhead Rates",
-        "description": "Effective-dated overhead rates applied to labor cost."
+        "description": "Effective-dated overhead rates applied to labor cost.",
+        "singular": "Overhead Rate"
       },
       "overhead-model": {
-        "title": "Overhead Model",
+        "title": "Overhead",
         "description": "The rate engine behind project overhead — cost pools, allocation bases, the department rate matrix, and profiles. Projects using the rate-engine overhead method apply these rates to their labor hours.",
         "docs": "Documentation",
         "viewAnalytics": "View analytics",
@@ -1613,7 +1631,8 @@
         },
         "laborCostingLink": "Labor costing",
         "tabs": {
-          "model": "Model & rates",
+          "model": "Model",
+          "rates": "Rates",
           "lifecycle": "Rate lifecycle",
           "application": "Ledger application"
         }
@@ -1745,6 +1764,10 @@
       "billMultiplier": "Bill multiplier"
     },
     "options": {
+      "sourceKind": {
+        "builtin": "Built-in",
+        "custom": "Custom"
+      },
       "appliesTo": {
         "sales": "Sales",
         "purchases": "Purchases",
@@ -2362,6 +2385,10 @@
     "expenses": {
       "title": "Expense reports",
       "description": "Employee expense capture, approval, and reimbursement."
+    },
+    "multiSubsidiary": {
+      "title": "Multi-subsidiary",
+      "description": "Run more than one legal entity with its own currency and books, then consolidate. Turns on subsidiaries, intercompany, and consolidated exchange rates."
     },
     "banking": {
       "title": "Banking",

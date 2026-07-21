@@ -69,14 +69,17 @@ type NavItem = { href: string; label: string; iconKey: string }
  * links (permission-gated). Client component (needs the active pathname).
  * Setup labels resolve under `admin.setup`; the data links under `data`.
  */
-export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: boolean; canImport: boolean; canManageSetup: boolean }) {
+export function SetupNav({ canExport, canImport, canManageSetup, hiddenEntityKeys = [] }: { canExport: boolean; canImport: boolean; canManageSetup: boolean; hiddenEntityKeys?: string[] }) {
   const t = useTranslations('admin.setup')
   const tClose = useTranslations('close.setup')
   const td = useTranslations('data')
   const tCrm = useTranslations('crm')
   const tProjectTypes = useTranslations('projectTypes')
   const pathname = usePathname()
+  // Drop feature-gated entities (e.g. subsidiary tabs when multi-subsidiary is off).
+  const hidden = new Set(hiddenEntityKeys)
   const byGroup = setupEntitiesByGroup()
+  if (hidden.size) for (const [g, list] of byGroup) byGroup.set(g, list.filter((e) => !hidden.has(e.key)))
 
   const dataItems: NavItem[] = [
     ...(canExport ? [{ href: '/data/export', label: td('nav.export'), iconKey: 'download' }] : []),
@@ -129,11 +132,15 @@ export function SetupNav({ canExport, canImport, canManageSetup }: { canExport: 
               ? [
                   { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
                   { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
+                  // Overhead rates live as a subtab of the Overhead workspace, not
+                  // a standalone rail entry — filter it out of the generic group.
+                  ...(byGroup.get(group.key) ?? [])
+                    .filter((e) => e.key !== 'overhead-rates')
+                    .map((e) => ({
+                      href: `/admin/setup/${e.key}`,
+                      label: t(`entities.${e.key}.title`),
+                      iconKey: e.iconKey,
+                    })),
                 ]
               : group.key === 'workforce'
               ? [
