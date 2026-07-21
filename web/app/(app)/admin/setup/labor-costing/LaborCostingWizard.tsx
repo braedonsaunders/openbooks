@@ -44,7 +44,6 @@ export function LaborCostingWizard(props: {
     laborClearing: string | null
     payrollVariance: string | null
   }) => void
-  employees: Opt[]
   trades: Opt[]
   accounts: { id: string; label: string }[]
   hoursPerDay: number
@@ -58,10 +57,8 @@ export function LaborCostingWizard(props: {
   // Q1 — burden approach.
   const [burden, setBurden] = useState<'canada' | 'us' | 'custom' | 'skip'>('canada')
   const [customPct, setCustomPct] = useState('25')
-  // Q2 — wages: per-employee FIRST (each person has their own rate); an
-  // optional fallback only covers anyone left blank.
-  const [empRates, setEmpRates] = useState<Record<string, string>>({})
-  const [empQuery, setEmpQuery] = useState('')
+  // Q2 — wages are set on each EMPLOYEE'S RECORD (like every accounting
+  // system); the wizard only offers the optional org-wide fallback.
   const [fallbackRate, setFallbackRate] = useState('')
   // Q3 — posting.
   const [posting, setPosting] = useState<'off' | 'post'>('off')
@@ -82,8 +79,7 @@ export function LaborCostingWizard(props: {
     return BURDEN_PRESETS[burden].components
   }, [burden, customPct, t])
 
-  const firstEmpRate = Object.values(empRates).map(Number).find((v) => v > 0)
-  const exampleWage = firstEmpRate ?? (Number(fallbackRate) > 0 ? Number(fallbackRate) : 40)
+  const exampleWage = Number(fallbackRate) > 0 ? Number(fallbackRate) : 40
   const example = (mult: number) => {
     let r = exampleWage * mult
     for (const c of components) {
@@ -96,7 +92,7 @@ export function LaborCostingWizard(props: {
 
   const canNext =
     step === 0 ? burden !== 'custom' || Number(customPct) > 0
-    : step === 1 ? Object.values(empRates).some((v) => Number(v) > 0) || Number(fallbackRate) > 0
+    : step === 1 ? true
     : step === 2 ? posting === 'off' || (wipAcct !== '' && clrAcct !== '')
     : true
 
@@ -111,11 +107,6 @@ export function LaborCostingWizard(props: {
           body: JSON.stringify(body),
         })
         if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
-      }
-      for (const [employeePartyId, v] of Object.entries(empRates)) {
-        if (Number(v) > 0) {
-          await call('POST', { action: 'save-rate', employeePartyId, tradeId: null, rate: Number(v), basis: 'hour', effectiveFrom: today })
-        }
       }
       if (Number(fallbackRate) > 0) {
         await call('POST', { action: 'save-rate', employeePartyId: null, tradeId: null, rate: Number(fallbackRate), basis: 'hour', effectiveFrom: today })
@@ -187,36 +178,13 @@ export function LaborCostingWizard(props: {
         {step === 1 && (
           <div className="space-y-3">
             <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('q2')}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('q2Hint')}</p>
-            <Input
-              aria-label={t('searchEmployees')}
-              placeholder={t('searchEmployees')}
-              value={empQuery}
-              onChange={(e) => setEmpQuery(e.target.value)}
-            />
-            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
-              {props.employees
-                .filter((e) => !empQuery || e.name.toLowerCase().includes(empQuery.toLowerCase()))
-                .map((e) => (
-                  <div key={e.id} className="flex items-center gap-2">
-                    <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{e.name}</span>
-                    <Input
-                      aria-label={e.name}
-                      type="number"
-                      min="0"
-                      step="0.25"
-                      className="h-8 w-28"
-                      placeholder={t('ratePlaceholder')}
-                      value={empRates[e.id] ?? ''}
-                      onChange={(ev) => setEmpRates((m) => ({ ...m, [e.id]: ev.target.value }))}
-                    />
-                  </div>
-                ))}
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <p className="text-sm text-slate-700 dark:text-slate-200">{t('wagesOnRecord')}</p>
+              <a href="/employees" target="_blank" rel="noreferrer" className="mt-1.5 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+                {t('openEmployees')} →
+              </a>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('ratedCount', { rated: Object.values(empRates).filter((v) => Number(v) > 0).length, total: props.employees.length })}
-            </p>
-            <div className="border-t border-slate-100 pt-2 dark:border-slate-800">
+            <div>
               <Label htmlFor="wiz-fallback">{t('fallbackRate')}</Label>
               <Input id="wiz-fallback" type="number" min="0" step="0.25" className="w-40" value={fallbackRate} onChange={(e) => setFallbackRate(e.target.value)} />
               <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{t('fallbackHint')}</p>
@@ -277,8 +245,7 @@ export function LaborCostingWizard(props: {
               <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
                 {burden === 'skip' ? t('reviewNoBurden') : t('reviewBurden', { name: components[0]?.name ?? '', pct: components[0]?.value ?? 0 })}</li>
               <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-                {t('reviewEmployeeRates', { count: Object.values(empRates).filter((v) => Number(v) > 0).length })}
-                {Number(fallbackRate) > 0 && ` ${t('reviewFallback', { rate: Number(fallbackRate).toFixed(2) })}`}</li>
+                {Number(fallbackRate) > 0 ? t('reviewFallback', { rate: Number(fallbackRate).toFixed(2) }) : t('reviewWagesOnRecord')}</li>
               <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
                 {posting === 'post' ? t('reviewPosting') : t('reviewNoPosting')}</li>
             </ul>

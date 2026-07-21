@@ -1909,7 +1909,7 @@
           "skipHint": "Les coûts n'afficheront que les salaires bruts tant qu'aucune composante n'est ajoutée."
         },
         "customBurdenName": "Charges de paie (est.)",
-        "q2": "Combien payez-vous chaque personne de l'heure ?",
+        "q2": "D'où viennent les salaires ?",
         "q2Hint": "Chaque employé a son propre salaire. Cherchez et remplissez l'équipe — quiconque reste vide peut utiliser le taux de repli optionnel ci-dessous.",
         "orgRate": "Salaire horaire par défaut (sans taux spécifique)",
         "tradeRates": "Taux par métier (optionnel — prime sur le défaut)",
@@ -1945,10 +1945,13 @@
         "searchEmployees": "Rechercher des employés…",
         "ratePlaceholder": "0,00",
         "ratedCount": "{rated} employés sur {total} ont un salaire",
-        "fallbackRate": "Taux de repli pour les personnes sans taux (optionnel)",
-        "fallbackHint": "Utilisé seulement quand quelqu'un n'a pas de taux propre — la plupart le laissent vide.",
+        "fallbackRate": "Taux de repli optionnel pour les employés sans salaire",
+        "fallbackHint": "Garde le calcul des coûts fonctionnel pendant que les fiches se remplissent — la plupart le laissent vide.",
         "reviewEmployeeRates": "Salaires pour {count} employé(s).",
-        "reviewFallback": "Repli de {rate} $/h pour les non-tarifés."
+        "reviewFallback": "Repli de {rate} $/h pour les non-tarifés.",
+        "wagesOnRecord": "Le salaire de chaque employé (et son historique) se définit sur sa fiche d'employé — là où vous gérez tout le reste. Rien à remplir ici.",
+        "openEmployees": "Ouvrir les employés",
+        "reviewWagesOnRecord": "Les salaires proviennent de la fiche de chaque employé."
       },
       "unsaved": "Modifications non enregistrées",
       "discard": "Annuler",
