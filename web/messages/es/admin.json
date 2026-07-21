@@ -1488,6 +1488,30 @@
           "projects": "Proyectos",
           "total": "Aplicado",
           "status": "Estado"
+        },
+        "lifecycle": {
+          "title": "Ciclo de vida de tarifas",
+          "hint": "Quién mantiene la tarjeta de tarifas publicada que leen el método estándar y el par neto-cero.",
+          "modes": {
+            "manual": "Manual",
+            "scheduled": "Programado",
+            "live": "En vivo"
+          },
+          "modeHints": {
+            "manual": "El motor calcula y recomienda; una persona revisa la deriva y hace clic en Publicar.",
+            "scheduled": "El worker captura las tarifas compuestas en vivo en la tarjeta al inicio de cada período.",
+            "live": "Los tipos de proyecto leen el motor en vivo directamente; la tarjeta publicada es solo indicativa."
+          },
+          "cadences": {
+            "monthly": "Mensual",
+            "quarterly": "Trimestral"
+          },
+          "save": "Guardar",
+          "saved": "Ciclo de vida guardado",
+          "department": "Departamento",
+          "published": "Publicada $/h",
+          "live": "En vivo $/h",
+          "drift": "Deriva"
         }
       }
     },

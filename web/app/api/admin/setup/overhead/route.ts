@@ -5,7 +5,7 @@ import type { FinancialProfile } from '@openbooks/schema'
 import { applyOverheadPairs } from '@openbooks/engine/src/overhead-apply.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
-import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
+import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,35 +32,10 @@ export async function POST(req: Request) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '')) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
     }
-    let rates: { departmentId: string; ratePerHour: number }[] = Array.isArray(body.rates) ? body.rates : []
-    if (rates.length === 0) {
-      // No explicit rates → snapshot the live engine (trailing 12 months).
-      const to = new Date()
-      const from = new Date(to)
-      from.setFullYear(from.getFullYear() - 1)
-      const iso = (d: Date) => d.toISOString().slice(0, 10)
-      const tc = await trueCostData(orgId, { from: iso(from), to: iso(to), label: 'TTM' })
-      rates = tc.departments.filter((d) => d.composite > 0).map((d) => ({ departmentId: d.id, ratePerHour: Math.round(d.composite * 100) / 100 }))
-    }
-    if (rates.length === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
-
-    for (const r of rates) {
-      // Close any open per-hour rows for the department so rates never stack
-      // across periods, then start the new effective-dated row.
-      await db.execute(sql`
-        update overhead_rates set effective_to = (${effectiveFrom}::date - 1)
-         where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
-           and (effective_to is null or effective_to >= ${effectiveFrom}::date)
-           and effective_from < ${effectiveFrom}::date`)
-      await db.execute(sql`
-        delete from overhead_rates
-         where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
-           and effective_from >= ${effectiveFrom}::date`)
-      await db.execute(sql`
-        insert into overhead_rates (org_id, department_id, category, method, rate_kind, rate_percent, effective_from, created_by, updated_by)
-        values (${orgId}, ${r.departmentId}, 'Published', 'standard', 'per_hour', ${r.ratePerHour}, ${effectiveFrom}, ${gate.user.id}, ${gate.user.id})`)
-    }
-    return NextResponse.json({ ok: true, published: rates.length })
+    const rates: { departmentId: string; ratePerHour: number }[] = Array.isArray(body.rates) ? body.rates : []
+    const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
+    if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
+    return NextResponse.json({ ok: true, published: result.published })
   }
 
   if (body.action === 'apply') {
@@ -87,6 +62,22 @@ export async function POST(req: Request) {
          where org_id = ${orgId} and id = ${id}`)
     }
     return NextResponse.json({ ok: true, applied: typeIds.length })
+  }
+
+  // Rate lifecycle: who maintains the published card — manual (a human
+  // publishes), scheduled (the worker publishes each period), live (project
+  // types read the live engine; the card is advisory).
+  if (body.action === 'set-lifecycle') {
+    const mode = ['manual', 'scheduled', 'live'].includes(body.mode) ? body.mode : 'manual'
+    const cadence = ['monthly', 'quarterly'].includes(body.cadence) ? body.cadence : 'monthly'
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadRateLifecycle}',
+        ${JSON.stringify({ mode, cadence })}::jsonb)
+       where id = ${orgId}`)
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ overheadRateLifecycle: { mode, cadence } })}, ${gate.user.id})`)
+    return NextResponse.json({ ok: true })
   }
 
   // How overhead reaches the ledger: report_only (statistical, default),
