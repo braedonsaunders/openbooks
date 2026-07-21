@@ -18,9 +18,12 @@ the **fully-burdened** cost of the work, not just its direct costs.
 
 Two principles the system enforces:
 
-- **Overhead is a managerial figure, never a ledger posting.** Your indirect
-  costs are already expensed in the GL. Overhead appears only on the project
-  P&L, so nothing is double-counted.
+- **Overhead never changes the company P&L.** Your indirect costs are already
+  expensed in the GL, so nothing is double-counted. By default overhead is a
+  report-only managerial figure; optionally, the **net-zero pair** application
+  mode posts each project's share to the overhead account WITH the project tag
+  and reverses the same amount without it — job-cost ledger views carry
+  overhead while the account (and the P&L) nets to exactly zero.
 - **Job costs never restate.** Projects are costed only from **published,
   effective-dated rates**. Each hour of labor uses the rate that was in effect
   on the day it was worked, so closed periods never change.

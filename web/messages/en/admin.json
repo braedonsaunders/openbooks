@@ -1890,7 +1890,8 @@
         "variancePosted": "Posted ${amount} payroll variance",
         "project": "Project",
         "standardCost": "Standard cost"
-      }
+      },
+      "docs": "Documentation"
     }
   },
   "flows": {

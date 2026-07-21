@@ -1812,7 +1812,8 @@
         "variancePosted": "Variación de nómina de ${amount} contabilizada",
         "project": "Proyecto",
         "standardCost": "Costo estándar"
-      }
+      },
+      "docs": "Documentación"
     }
   },
   "flows": {

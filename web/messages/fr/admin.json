@@ -1856,7 +1856,8 @@
         "variancePosted": "Écart de paie de ${amount} comptabilisé",
         "project": "Projet",
         "standardCost": "Coût standard"
-      }
+      },
+      "docs": "Documentation"
     }
   },
   "flows": {
