@@ -654,11 +654,53 @@ export async function updateFolder(
   return r.rows.length > 0
 }
 
+const FOLDER_DESCENDANTS = (orgId: string, id: string): SQL => sql`
+  with recursive descendants as (
+    select id from folders where id = ${id} and org_id = ${orgId}
+    union
+    select f.id from folders f join descendants d on f.parent_folder_id = d.id and f.org_id = ${orgId}
+  )
+  select id from descendants`
+
 /**
- * Delete a folder. Fails if it contains files that are attached to records
- * (matching NetSuite behavior). System folders cannot be deleted.
+ * Trash a folder — soft-delete (is_inactive) the folder and everything beneath
+ * it (sub-folders + their files) so it can be restored. System folders cannot
+ * be trashed. Files kept as AP-capture evidence are left in place.
  */
 export async function deleteFolder(orgId: string, id: string): Promise<{ ok: boolean; reason?: string }> {
+  const folder = await getFolder(orgId, id)
+  if (!folder) return { ok: false, reason: 'not found' }
+  if (folder.isSystem) return { ok: false, reason: 'system' }
+  await db.transaction(async (tx) => {
+    const descendants = FOLDER_DESCENDANTS(orgId, id)
+    await tx.execute(sql`update folders set is_inactive = true, updated_at = now() where id in (${descendants})`)
+    await tx.execute(sql`
+      update files set is_inactive = true, updated_at = now()
+       where folder_id in (${descendants}) and not is_inactive
+         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+    `)
+  })
+  return { ok: true }
+}
+
+/** Restore a trashed folder subtree (folder + descendants + their files). */
+export async function restoreFolder(orgId: string, id: string): Promise<boolean> {
+  const folder = await getFolder(orgId, id)
+  if (!folder) return false
+  await db.transaction(async (tx) => {
+    const descendants = FOLDER_DESCENDANTS(orgId, id)
+    await tx.execute(sql`update folders set is_inactive = false, updated_at = now() where id in (${descendants})`)
+    await tx.execute(sql`update files set is_inactive = false, updated_at = now() where folder_id in (${descendants})`)
+  })
+  return true
+}
+
+/**
+ * Permanently delete a folder subtree — files, versions, blobs, attachment
+ * links, and the folders. Fails if it contains files attached to records
+ * (matching NetSuite). System folders cannot be purged.
+ */
+export async function purgeFolder(orgId: string, id: string): Promise<{ ok: boolean; reason?: string }> {
   const folder = await getFolder(orgId, id)
   if (!folder) return { ok: false, reason: 'not found' }
   if (folder.isSystem) return { ok: false, reason: 'system' }
@@ -721,6 +763,62 @@ export async function deleteFolder(orgId: string, id: string): Promise<{ ok: boo
   })
   await deleteS3Blobs(s3VersionIds)
   return { ok: true }
+}
+
+// --- trash ------------------------------------------------------------------
+
+export interface TrashItem {
+  kind: 'folder' | 'file'
+  id: string
+  name: string
+  fileType: string | null
+  folderName: string | null
+  updatedAt: string
+}
+
+/**
+ * Trashed items for the recycle bin — the TOP of each trashed subtree only
+ * (a folder trashed with its contents shows once; a file trashed on its own
+ * shows once). Respects private-folder + grant visibility.
+ */
+export async function listTrash(orgId: string, viewer: FileViewer): Promise<TrashItem[]> {
+  const scope = await resolveReadScope(orgId, viewer)
+  const [folders, files] = await Promise.all([
+    db.execute(sql`
+      select f.id, f.name, f.updated_at as "updatedAt"
+        from folders f
+        left join folders p on p.id = f.parent_folder_id
+       where f.org_id = ${orgId} and f.is_inactive and not f.is_system
+         and (p.id is null or not p.is_inactive)
+         and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
+       order by f.updated_at desc`),
+    db.execute(sql`
+      select fi.id, fi.name, fi.file_type as "fileType", fo.name as "folderName", fi.updated_at as "updatedAt"
+        from files fi
+        left join folders fo on fo.id = fi.folder_id
+       where fi.org_id = ${orgId} and fi.is_inactive
+         and (fo.id is null or not fo.is_inactive)
+         and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
+       order by fi.updated_at desc`),
+  ])
+  return [
+    ...((folders as any).rows as any[]).map((f) => ({
+      kind: 'folder' as const,
+      id: f.id,
+      name: f.name,
+      fileType: null,
+      folderName: null,
+      updatedAt: f.updatedAt,
+    })),
+    ...((files as any).rows as any[]).map((f) => ({
+      kind: 'file' as const,
+      id: f.id,
+      name: f.name,
+      fileType: f.fileType,
+      folderName: f.folderName,
+      updatedAt: f.updatedAt,
+    })),
+  ]
 }
 
 // --- file CRUD --------------------------------------------------------------
@@ -1073,11 +1171,34 @@ export async function moveFile(
 }
 
 /**
- * Delete a file with its versions, blobs, and attachment links. Explicit
- * deletes (not FK cascades) so nothing is orphaned even without
- * ON DELETE CASCADE constraints.
+ * Trash a file — soft-delete (is_inactive) so it can be restored. AP-capture
+ * evidence files are protected. Attachment links are kept (restore re-shows it).
  */
 export async function deleteFile(orgId: string, id: string): Promise<boolean> {
+  const r = (await db.execute(sql`
+    update files set is_inactive = true, updated_at = now()
+     where id = ${id} and org_id = ${orgId} and not is_inactive
+       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+    returning id
+  `)) as unknown as { rows: { id: string }[] }
+  return r.rows.length > 0
+}
+
+/** Restore a trashed file. */
+export async function restoreFile(orgId: string, id: string): Promise<boolean> {
+  const r = (await db.execute(sql`
+    update files set is_inactive = false, updated_at = now()
+     where id = ${id} and org_id = ${orgId} and is_inactive
+    returning id
+  `)) as unknown as { rows: { id: string }[] }
+  return r.rows.length > 0
+}
+
+/**
+ * Permanently delete a file with its versions, blobs, and attachment links.
+ * Explicit deletes (not FK cascades) so nothing is orphaned.
+ */
+export async function purgeFile(orgId: string, id: string): Promise<boolean> {
   const deleted = await db.transaction(async (tx) => {
     const owned = (await tx.execute(sql`
       select id from files where id = ${id} and org_id = ${orgId}
