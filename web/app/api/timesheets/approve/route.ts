@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { postProjectLaborCost } from '@openbooks/engine/src/project-recognition.ts'
+import { laborCostingSettings, snapshotLaborCostRates } from '@openbooks/engine/src/labor-costing.ts'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -48,15 +49,20 @@ export async function POST(req: Request) {
      returning id
   `)) as unknown as { rows: { id: string }[] }
 
-  // Post approved labor cost to project WIP (DR labor WIP / CR labor clearing).
-  // Inert unless the labor accounts are mapped in Settings; non-blocking so a
-  // GL hiccup never strands the approval (the entries stay re-postable).
+  // Snapshot standard cost rates (wage × time-type multiplier + estimate
+  // components) onto entries that don't carry one, then post labor cost to
+  // project WIP (DR labor WIP / CR labor clearing). Both are inert until
+  // configured (rates entered + labor accounts mapped + mode 'post') and
+  // non-blocking so a GL hiccup never strands the approval — the entries stay
+  // re-postable.
   const ids = approved.rows.map((r) => r.id)
   if (ids.length > 0) {
     try {
-      await postProjectLaborCost(orgId, user.id, ids)
+      const settings = await laborCostingSettings(orgId)
+      await snapshotLaborCostRates(orgId, ids)
+      if (settings.mode === 'post') await postProjectLaborCost(orgId, user.id, ids)
     } catch (e) {
-      console.error('[timesheets/approve] labor cost posting failed:', (e as Error).message)
+      console.error('[timesheets/approve] labor cost snapshot/posting failed:', (e as Error).message)
     }
   }
 
