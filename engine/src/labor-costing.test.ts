@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { computeCostRate, type LaborCostComponent } from "./labor-costing.ts";
+import { computeCostRate, convertFixedLaborComponents, convertLaborWage, type LaborCostComponent } from "./labor-costing.ts";
 
 const cfg = (components: LaborCostComponent[], hoursPerDay = 8) => ({ hoursPerDay, components });
 
@@ -76,4 +76,23 @@ test("worker_comp with a 0% group adds nothing", () => {
     { key: "wc", name: "WSIB", kind: "worker_comp", value: 3, scaleWithOvertime: true },
   ];
   assert.equal(computeCostRate("40", "1", cfg(comps), { workerCompPercent: 0 }), "40.0000");
+});
+
+test("labor wage FX conversion is exact to numeric(19,4)", () => {
+  assert.equal(convertLaborWage("40", "1.3725"), "54.9000");
+  assert.equal(convertLaborWage("0", "1.3725"), "0.0000");
+  assert.equal(convertLaborWage("38.125", "0.7312345678"), "27.8783");
+});
+
+test("only fixed labor components convert to subsidiary functional currency", () => {
+  const components: LaborCostComponent[] = [
+    { key: "pct", name: "Burden", kind: "percent_of_wage", value: 13 },
+    { key: "hour", name: "Allowance", kind: "per_hour", value: 3 },
+    { key: "day", name: "Per diem", kind: "per_day", value: 60 },
+  ];
+  assert.deepEqual(convertFixedLaborComponents(components, "0.75"), [
+    components[0],
+    { ...components[1], value: 2.25 },
+    { ...components[2], value: 45 },
+  ]);
 });

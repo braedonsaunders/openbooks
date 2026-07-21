@@ -91,6 +91,8 @@ export const employeeRoles = pgTable("employee_roles", {
   orgId: orgRef(),
   partyId: uuid("party_id").notNull().unique(),
   employeeNumber: text("employee_number"),
+  /** Free-form operational title used for workforce planning and wage scope. */
+  jobTitle: text("job_title"),
   departmentId: uuid("department_id"),
   supervisorId: uuid("supervisor_id"), // → parties
   tradeId: uuid("trade_id"),

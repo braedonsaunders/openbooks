@@ -8,7 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { auditColumns, id, money, orgRef } from "./helpers";
+import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 
 /**
  * Time entries — the atom of services job costing. Approved time flows
@@ -32,6 +32,13 @@ export const timeEntries = pgTable(
     memoIsPrivate: boolean("memo_is_private").notNull().default(false),
     isBillable: boolean("is_billable").notNull().default(false),
     costRate: money("cost_rate"), // snapshot at approval
+    /** Audit provenance for a resolved multicurrency labor wage. */
+    laborCostRateId: uuid("labor_cost_rate_id"),
+    wageRate: money("wage_rate"),
+    wageCurrency: currencyCode("wage_currency"),
+    wageFxRate: fxRate("wage_fx_rate"),
+    costRateCurrency: currencyCode("cost_rate_currency"),
+    costRateSubsidiaryId: uuid("cost_rate_subsidiary_id"),
     billRate: money("bill_rate"),
     status: text("status", { enum: ["draft", "submitted", "approved", "rejected"] })
       .notNull()

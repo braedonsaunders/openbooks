@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -18,7 +18,11 @@ import { LaborCostingWizard } from './LaborCostingWizard'
 export interface RateRow {
   id: string
   employee_party_id: string | null
+  job_title: string | null
   trade_id: string | null
+  department_id: string | null
+  subsidiary_id: string | null
+  currency: string
   rate: string
   basis: string
   annual_hours: string
@@ -27,12 +31,20 @@ export interface RateRow {
   notes: string | null
   employee_name: string | null
   trade_name: string | null
+  department_name: string | null
+  subsidiary_name: string | null
 }
 
 interface Opt {
   id: string
   name: string
 }
+
+interface SubsidiaryOpt extends Opt {
+  currency: string
+}
+
+type ScopeKind = 'job_title' | 'trade' | 'department' | 'subsidiary' | 'org'
 
 const today = () => {
   const date = new Date()
@@ -54,6 +66,7 @@ function formatRate(value: string, currency: string): string {
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency,
+      currencyDisplay: 'code',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(Number(value))
@@ -97,8 +110,12 @@ export function LaborCostingWorkspace(props: {
   ratePage: number
   ratePerPage: number
   trades: Opt[]
+  departments: Opt[]
+  subsidiaries: SubsidiaryOpt[]
+  jobTitles: string[]
   accounts: { id: string; label: string }[]
-  currency: string
+  currencies: string[]
+  orgCurrency: string
   laborWip: string | null
   laborClearing: string | null
   payrollVariance: string | null
@@ -150,18 +167,21 @@ export function LaborCostingWorkspace(props: {
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   const [recFrom, setRecFrom] = useState(iso(lastMonth))
   const [recTo, setRecTo] = useState(iso(lastMonthEnd))
+  const [recSubsidiaryId, setRecSubsidiaryId] = useState(props.subsidiaries[0]?.id ?? '')
   const [rec, setRec] = useState<{
+    subsidiaryId: string
+    currency: string
     standardPosted: string
     payrollPosted: string
     periodVariance: string
     openBalance: string
     perProject: { projectId: string; name: string; standard: string }[]
   } | null>(null)
+  const reconciliationCurrency = props.subsidiaries.find((subsidiary) => subsidiary.id === recSubsidiaryId)?.currency ?? props.orgCurrency
 
-  const exampleWage = useMemo(() => {
-    const current = props.rates.find((r) => !r.effective_to)
-    return current ? Number(current.rate) : 40
-  }, [props.rates])
+  // Fixed adders are configured in org base currency, so the illustrative
+  // wage must also be base currency (never borrow a foreign wage row).
+  const exampleWage = 40
   const live = { hoursPerDay: Number(hoursPerDay) || 8, components }
 
   async function saveSettings() {
@@ -213,6 +233,7 @@ export function LaborCostingWorkspace(props: {
           action: 'reconcile',
           periodStart: recFrom,
           periodEnd: recTo,
+          subsidiaryId: recSubsidiaryId,
         }),
       })
       const j = await res.json()
@@ -235,13 +256,14 @@ export function LaborCostingWorkspace(props: {
           action: 'post-variance',
           periodStart: recFrom,
           periodEnd: recTo,
+          subsidiaryId: recSubsidiaryId,
         }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
       toast.success(
         t('reconciliation.variancePosted', {
-          amount: Number(j.variance).toFixed(2),
+          amount: formatRate(String(j.variance), reconciliationCurrency),
         }),
       )
       await loadReconciliation()
@@ -257,7 +279,12 @@ export function LaborCostingWorkspace(props: {
     setComponents((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)))
   }
 
-  const scopeLabel = (r: RateRow) => r.employee_name ?? (r.trade_name ? `${t('tradePrefix')} ${r.trade_name}` : t('orgDefault'))
+  const scopeLabel = (r: RateRow) => r.employee_name
+    ?? (r.job_title ? `${t('rates.scopeJobTitle')}: ${r.job_title}`
+      : r.trade_name ? `${t('rates.scopeTrade')}: ${r.trade_name}`
+        : r.department_name ? `${t('rates.scopeDepartment')}: ${r.department_name}`
+          : r.subsidiary_name ? `${t('rates.scopeSubsidiary')}: ${r.subsidiary_name}`
+            : t('orgDefault'))
 
   const steps = [
     {
@@ -361,7 +388,10 @@ export function LaborCostingWorkspace(props: {
               paramKey="rateScope"
               label={t('rates.scope')}
               options={[
+                { value: 'job_title', label: t('rates.scopeJobTitle') },
                 { value: 'trade', label: t('rates.scopeTrade') },
+                { value: 'department', label: t('rates.scopeDepartment') },
+                { value: 'subsidiary', label: t('rates.scopeSubsidiary') },
                 { value: 'org', label: t('rates.scopeOrg') },
               ]}
             />
@@ -434,7 +464,7 @@ export function LaborCostingWorkspace(props: {
                         </Link>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatRate(row.rate, props.currency)}
+                        {formatRate(row.rate, row.currency)}
                         <span className="ml-1 text-xs text-slate-400">/{row.basis === 'year' ? t('rates.yr') : t('rates.hr')}</span>
                       </TableCell>
                       <TableCell className="tabular-nums">{row.effective_from}</TableCell>
@@ -461,7 +491,18 @@ export function LaborCostingWorkspace(props: {
       )}
 
       {props.creatingRate || props.selectedRate ? (
-        <RateDrawer key={props.selectedRate?.id ?? 'new'} row={props.selectedRate} trades={props.trades} defaultAnnualHours={Number(annualHours) || 2080} currency={props.currency} closeHref={rateCloseHref} />
+        <RateDrawer
+          key={props.selectedRate?.id ?? 'new'}
+          row={props.selectedRate}
+          trades={props.trades}
+          departments={props.departments}
+          subsidiaries={props.subsidiaries}
+          jobTitles={props.jobTitles}
+          defaultAnnualHours={Number(annualHours) || 2080}
+          currencies={props.currencies}
+          orgCurrency={props.orgCurrency}
+          closeHref={rateCloseHref}
+        />
       ) : null}
 
       {/* ---- estimate components ---- */}
@@ -613,13 +654,13 @@ export function LaborCostingWorkspace(props: {
               {t('components.example', { wage: exampleWage.toFixed(2) })}
               <div className="mt-1 flex gap-4 font-medium tabular-nums text-slate-900 dark:text-slate-100">
                 <span>
-                  {t('components.exampleReg')}: ${previewRate(exampleWage, 1, live).toFixed(2)}/h
+                  {t('components.exampleReg')}: {formatRate(String(previewRate(exampleWage, 1, live)), props.orgCurrency)}/h
                 </span>
                 <span>
-                  {t('components.exampleOt')}: ${previewRate(exampleWage, 1.5, live).toFixed(2)}/h
+                  {t('components.exampleOt')}: {formatRate(String(previewRate(exampleWage, 1.5, live)), props.orgCurrency)}/h
                 </span>
                 <span>
-                  {t('components.exampleDt')}: ${previewRate(exampleWage, 2, live).toFixed(2)}/h
+                  {t('components.exampleDt')}: {formatRate(String(previewRate(exampleWage, 2, live)), props.orgCurrency)}/h
                 </span>
               </div>
             </div>
@@ -693,6 +734,21 @@ export function LaborCostingWorkspace(props: {
         <Card title={t('reconciliation.title')} hint={t('reconciliation.hint')}>
           <div className="flex flex-wrap items-end gap-2">
             <div>
+              <Label htmlFor="rec-subsidiary">{t('reconciliation.subsidiary')}</Label>
+              <Select
+                id="rec-subsidiary"
+                value={recSubsidiaryId}
+                onChange={(event) => {
+                  setRecSubsidiaryId(event.target.value)
+                  setRec(null)
+                }}
+              >
+                {props.subsidiaries.map((subsidiary) => (
+                  <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name} · {subsidiary.currency}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
               <Label htmlFor="rec-from">{t('reconciliation.from')}</Label>
               <Input id="rec-from" type="date" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} />
             </div>
@@ -721,7 +777,7 @@ export function LaborCostingWorkspace(props: {
                   <div key={k} className="rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
                     <div className="text-xs text-slate-500 dark:text-slate-400">{t(`reconciliation.${k}`)}</div>
                     <div className={cn('text-sm font-semibold tabular-nums', k !== 'standardPosted' && k !== 'payrollPosted' && Number(v) !== 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100')}>
-                      ${Number(v).toFixed(2)}
+                      {formatRate(v, rec.currency)}
                     </div>
                   </div>
                 ))}
@@ -742,7 +798,7 @@ export function LaborCostingWorkspace(props: {
                     {
                       key: 'standard',
                       header: t('reconciliation.standardCost'),
-                      cell: (r) => <span className="tabular-nums">${Number(r.standard).toFixed(2)}</span>,
+                      cell: (r) => <span className="tabular-nums">{formatRate(r.standard, rec.currency)}</span>,
                     },
                   ]}
                 />
@@ -770,14 +826,40 @@ export function LaborCostingWorkspace(props: {
   )
 }
 
-function RateDrawer({ row, trades, defaultAnnualHours, currency, closeHref }: { row: RateRow | null; trades: Opt[]; defaultAnnualHours: number; currency: string; closeHref: string }) {
+function RateDrawer({
+  row,
+  trades,
+  departments,
+  subsidiaries,
+  jobTitles,
+  defaultAnnualHours,
+  currencies,
+  orgCurrency,
+  closeHref,
+}: {
+  row: RateRow | null
+  trades: Opt[]
+  departments: Opt[]
+  subsidiaries: SubsidiaryOpt[]
+  jobTitles: string[]
+  defaultAnnualHours: number
+  currencies: string[]
+  orgCurrency: string
+  closeHref: string
+}) {
   const t = useTranslations('admin.setup.laborCosting')
   const tc = useTranslations('common')
   const router = useRouter()
   const creating = !row
   const [busy, setBusy] = useState(false)
-  const [scope, setScope] = useState<'trade' | 'org'>(() => (row ? (row.trade_id ? 'trade' : 'org') : trades.length ? 'trade' : 'org'))
+  const [scope, setScope] = useState<ScopeKind>(() => row
+    ? row.job_title ? 'job_title' : row.trade_id ? 'trade' : row.department_id ? 'department' : row.subsidiary_id ? 'subsidiary' : 'org'
+    : jobTitles.length ? 'job_title' : trades.length ? 'trade' : departments.length ? 'department' : subsidiaries.length > 1 ? 'subsidiary' : 'org')
+  const [jobTitle, setJobTitle] = useState(row?.job_title ?? '')
   const [tradeId, setTradeId] = useState(row?.trade_id ?? '')
+  const [departmentId, setDepartmentId] = useState(row?.department_id ?? '')
+  const [subsidiaryId, setSubsidiaryId] = useState(row?.subsidiary_id ?? '')
+  const [currency, setCurrency] = useState(row?.currency ?? orgCurrency)
   const [rate, setRate] = useState(row?.rate ?? '')
   const [basis, setBasis] = useState<'hour' | 'year'>(() => (row?.basis === 'year' ? 'year' : 'hour'))
   const [annualHours, setAnnualHours] = useState(row?.annual_hours ?? String(defaultAnnualHours))
@@ -799,7 +881,8 @@ function RateDrawer({ row, trades, defaultAnnualHours, currency, closeHref }: { 
       toast.error(t('rateRequired'))
       return
     }
-    if (scope === 'trade' && !tradeId) {
+    const selectedScope = scope === 'job_title' ? jobTitle : scope === 'trade' ? tradeId : scope === 'department' ? departmentId : scope === 'subsidiary' ? subsidiaryId : 'org'
+    if (!selectedScope) {
       toast.error(t('scopeRequired'))
       return
     }
@@ -816,7 +899,11 @@ function RateDrawer({ row, trades, defaultAnnualHours, currency, closeHref }: { 
       await call({
         action: 'save-rate',
         employeePartyId: null,
+        jobTitle: scope === 'job_title' ? jobTitle : null,
         tradeId: scope === 'trade' ? tradeId : null,
+        departmentId: scope === 'department' ? departmentId : null,
+        subsidiaryId: scope === 'subsidiary' ? subsidiaryId : null,
+        currency,
         rate: Number(rate),
         basis,
         annualHours: Number(annualHours) || defaultAnnualHours,
@@ -855,7 +942,7 @@ function RateDrawer({ row, trades, defaultAnnualHours, currency, closeHref }: { 
     }
   }
 
-  const scopeName = row?.trade_name ?? t('orgDefault')
+  const scopeName = row?.job_title ?? row?.trade_name ?? row?.department_name ?? row?.subsidiary_name ?? t('orgDefault')
   return (
     <UrlDrawer
       open
@@ -886,42 +973,77 @@ function RateDrawer({ row, trades, defaultAnnualHours, currency, closeHref }: { 
             value={scope}
             disabled={!creating}
             onChange={(event) => {
-              const next = event.target.value as 'trade' | 'org'
+              const next = event.target.value as ScopeKind
               setScope(next)
-              if (next === 'org') setTradeId('')
+              setJobTitle('')
+              setTradeId('')
+              setDepartmentId('')
+              setSubsidiaryId('')
             }}
           >
+            <option value="job_title">{t('rates.scopeJobTitle')}</option>
             <option value="trade">{t('rates.scopeTrade')}</option>
+            <option value="department">{t('rates.scopeDepartment')}</option>
+            <option value="subsidiary">{t('rates.scopeSubsidiary')}</option>
             <option value="org">{t('rates.scopeOrg')}</option>
           </Select>
         </div>
-        {scope === 'trade' ? (
+        {scope !== 'org' ? (
           <div>
             <Label>{t('rates.who')}</Label>
+            {scope === 'job_title' ? (
+              <>
+                <Input
+                  value={jobTitle}
+                  onChange={(event) => setJobTitle(event.target.value)}
+                  disabled={!creating}
+                  placeholder={t('rates.select.job_title')}
+                  list="labor-job-titles"
+                />
+                <datalist id="labor-job-titles">
+                  {jobTitles.map((title) => <option key={title} value={title} />)}
+                </datalist>
+              </>
+            ) : (
             <SearchSelect
-              value={tradeId}
-              onChange={setTradeId}
-              options={trades.map((trade) => ({
-                value: trade.id,
-                label: trade.name,
-              }))}
+              value={scope === 'trade' ? tradeId : scope === 'department' ? departmentId : subsidiaryId}
+              onChange={(value) => {
+                if (scope === 'trade') setTradeId(value)
+                else if (scope === 'department') setDepartmentId(value)
+                else {
+                  setSubsidiaryId(value)
+                  const selected = subsidiaries.find((subsidiary) => subsidiary.id === value)
+                  if (selected && creating) setCurrency(selected.currency)
+                }
+              }}
+              options={(scope === 'trade'
+                  ? trades.map((trade) => ({ value: trade.id, label: trade.name }))
+                  : scope === 'department'
+                    ? departments.map((department) => ({ value: department.id, label: department.name }))
+                    : subsidiaries.map((subsidiary) => ({ value: subsidiary.id, label: subsidiary.name }))) }
               disabled={!creating}
               searchable
-              placeholder={t('rates.selectTrade')}
-              ariaLabel={t('rates.selectTrade')}
-              sheetTitle={t('rates.selectTrade')}
+              placeholder={t(`rates.select.${scope}`)}
+              ariaLabel={t(`rates.select.${scope}`)}
+              sheetTitle={t(`rates.select.${scope}`)}
             />
+            )}
           </div>
         ) : (
           <div />
         )}
         <div>
           <Label htmlFor="rate-value">{t('rates.rate')}</Label>
-          <div className="relative">
-            <Input id="rate-value" type="number" min="0" step="0.01" value={rate} onChange={(event) => setRate(event.target.value)} className="pr-16" />
-            <span className="pointer-events-none absolute top-2 right-3 text-xs text-slate-400">{currency}</span>
-          </div>
+          <Input id="rate-value" type="number" min="0" step="0.0001" value={rate} onChange={(event) => setRate(event.target.value)} />
         </div>
+        {currencies.length > 1 ? (
+          <div>
+            <Label htmlFor="rate-currency">{t('rates.currency')}</Label>
+            <Select id="rate-currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>
+              {currencies.map((code) => <option key={code} value={code}>{code}</option>)}
+            </Select>
+          </div>
+        ) : null}
         <div>
           <Label htmlFor="rate-basis">{t('rates.basis')}</Label>
           <Select id="rate-basis" value={basis} onChange={(event) => setBasis(event.target.value as 'hour' | 'year')}>
