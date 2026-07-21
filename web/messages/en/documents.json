@@ -62,6 +62,7 @@
       "title": "Move this folder to Trash?",
       "body": "This folder and its contents will be moved to Trash. You can restore them, or delete them permanently from there."
     },
+    "downloadZip": "Download as ZIP",
     "systemNoDelete": "System folders cannot be deleted or renamed.",
     "subfolderCount": "{count, plural, one {# folder} other {# folders}}",
     "fileCount": "{count, plural, one {# file} other {# files}}",
