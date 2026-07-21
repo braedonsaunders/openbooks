@@ -652,6 +652,16 @@
       "netFlow": "Net period flow",
       "netFlowHint": "Inflows − Outflows",
       "runway": "Cash runway"
+    },
+    "layout": {
+      "customize": "Layout",
+      "title": "Customize layout",
+      "reset": "Reset to default",
+      "stats": "Vitals strip",
+      "health": "Health vitals",
+      "empty": "All panels are hidden — use Layout to bring them back.",
+      "timeline": "Weekly timeline",
+      "forecast": "Forecast chart"
     }
   }
 }

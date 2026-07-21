@@ -475,6 +475,7 @@ alter table ai_work_item_feedback add foreign key (org_id) references orgs(id) o
 
 -- dashboard layouts
 alter table user_dashboard_layouts add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade;
+alter table user_page_layouts add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade;
 alter table role_dashboard_layouts add foreign key (org_id) references orgs(id);
 
 -- api keys

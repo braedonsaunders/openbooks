@@ -137,3 +137,38 @@ export const roleDashboardLayouts = pgTable(
  *   alter table role_dashboard_layouts
  *     add foreign key (org_id) references orgs(id);
  */
+
+/**
+ * Per-user page layout preferences — reorder + show/hide of a page's panels
+ * (cockpits, module homes). One row per (org, user, page); `page` is a stable
+ * key like "banking-cash". Deliberately generic so every cockpit shares one
+ * store instead of growing bespoke tables.
+ */
+export type PageLayoutPrefs = {
+  /** Panel keys in display order; panels absent from the list append in
+   *  default order (new panels ship visible without migrations). */
+  order?: string[];
+  /** Panel keys the user hid. */
+  hidden?: string[];
+};
+
+export const userPageLayouts = pgTable(
+  "user_page_layouts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    userId: uuid("user_id").notNull(),
+    page: text("page").notNull(),
+    layout: jsonb("layout").$type<PageLayoutPrefs>().notNull().default({}),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("user_page_layouts_unique").on(t.orgId, t.userId, t.page)],
+);
+
+/*
+ * Foreign keys (in schema/migrations/referential-integrity.sql):
+ *
+ *   alter table user_page_layouts
+ *     add foreign key (org_id) references orgs(id),
+ *     add foreign key (user_id) references users(id) on delete cascade;
+ */
