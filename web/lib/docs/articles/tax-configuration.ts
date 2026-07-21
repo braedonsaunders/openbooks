@@ -20,6 +20,13 @@ percentage.
 Keep rates in **Tax Rates**. Rates are effective-dated so a new statutory rate
 does not rewrite transactions from an earlier period.
 
+## Install a maintained return
+
+Open **Tax Returns** and choose **Library**. Select a jurisdiction pack, then
+import it or reset an installed return to the maintained defaults. Resetting
+replaces that return's configured structure, so review local customizations
+before confirming the action.
+
 ## Map a tax code to a return
 
 Open a tax code and choose the **Tax Return Boxes** subtab. The list contains:

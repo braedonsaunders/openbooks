@@ -194,6 +194,9 @@ export default async function SetupEntityPage({
     taxBoxQ: undefined,
     taxBoxPage: undefined,
   })
+  const taxLibraryOpen = entity.key === 'tax-return-forms' && pickString(sp.library) === 'true'
+  const taxLibraryOpenHref = mergeHref('/admin/setup/tax-return-forms', sp, { library: 'true' })
+  const taxLibraryCloseHref = mergeHref('/admin/setup/tax-return-forms', sp, { library: undefined })
 
   const searchColumns = entity.columns.map((column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`)
   const rowFilter = sql`where 1 = 1
@@ -343,15 +346,19 @@ export default async function SetupEntityPage({
             ) : null}
           </p>
         </div>
-        <NewSetupButton entityKey={entity.key} label={t('new')} />
+        <div className="flex items-center gap-2">
+          {entity.key === 'tax-return-forms' ? (
+            <TaxReturnLibrary
+              packs={TAX_RETURN_PACKS.map(({ code, name, country }) => ({ code, name, country }))}
+              installedCodes={installedPackRows.rows.map((row: { code: string }) => row.code)}
+              open={taxLibraryOpen}
+              openHref={taxLibraryOpenHref}
+              closeHref={taxLibraryCloseHref}
+            />
+          ) : null}
+          <NewSetupButton entityKey={entity.key} label={t('new')} />
+        </div>
       </div>
-
-      {entity.key === 'tax-return-forms' ? (
-        <TaxReturnLibrary
-          packs={TAX_RETURN_PACKS.map(({ code, name, country }) => ({ code, name, country }))}
-          installedCodes={installedPackRows.rows.map((row: { code: string }) => row.code)}
-        />
-      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
           <SearchInput placeholder={t('searchPlaceholder')} />

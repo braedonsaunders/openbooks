@@ -990,6 +990,7 @@
     "description": "配置税务、维度、条款，以及你的账目运行所依赖的参考数据。",
     "taxLibrary": {
       "title": "纳税申报库",
+      "open": "申报库",
       "description": "导入加拿大、英国、澳大利亚、新西兰的受维护申报结构，以及一份美国州/地方工作底稿。",
       "pack": "辖区包",
       "optionInstalled": "{country} · {name} · 已安装",
