@@ -68,9 +68,19 @@
     "baseUnit": "Base unit",
     "policy": "Pricing policy",
     "presentation": "Invoice presentation",
-    "defaults": { "day": "Day", "week": "Week", "month": "Month" },
-    "policies": { "capped_ladder": "Capped ladder", "lowest_cost": "Lowest-cost combination" },
-    "presentations": { "rate_components": "Show rate components", "summary": "Single summary line" },
+    "defaults": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
+    },
+    "policies": {
+      "capped_ladder": "Capped ladder",
+      "lowest_cost": "Lowest-cost combination"
+    },
+    "presentations": {
+      "rate_components": "Show rate components",
+      "summary": "Single summary line"
+    },
     "unitCode": "Unit code",
     "unitName": "Unit name",
     "baseQuantity": "Base quantity",
@@ -80,7 +90,9 @@
     "saveFailed": "Could not save rates",
     "saved": "Rate version saved",
     "empty": "No rate versions yet.",
-    "rates": "Rates"
+    "rates": "Rates",
+    "tierOverrides": "Time-type rates:",
+    "tierAuto": "auto"
   },
   "revrec": {
     "title": "Revenue recognition",

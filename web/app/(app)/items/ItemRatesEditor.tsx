@@ -8,11 +8,12 @@ import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openboo
 import { PagedTable } from '../../../components/paged-table'
 import { money } from '../../../lib/format'
 
-interface Tier { unitCode: string; unitName: string; baseQuantity: string; costRate: string; billRate: string }
+interface Tier { unitCode: string; unitName: string; baseQuantity: string; costRate: string; billRate: string; timeTypeBillRates: Record<string, string> }
 interface RateData {
   books: { id: string; code: string; name: string; currency: string; is_default: boolean }[]
   profile: { base_unit: string; pricing_policy: string; invoice_presentation: string } | null
   versions: { id: string; rate_book_id: string; rate_book_name: string; effective_from: string; effective_to: string | null; status: string; tiers: any[] }[]
+  timeTypes: { id: string; name: string; bill_multiplier: string }[]
 }
 
 export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canManage: boolean }) {
@@ -27,9 +28,9 @@ export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canMana
   const [pricingPolicy, setPricingPolicy] = useState('capped_ladder')
   const [invoicePresentation, setInvoicePresentation] = useState('rate_components')
   const [tiers, setTiers] = useState<Tier[]>([
-    { unitCode: 'day', unitName: t('defaults.day'), baseQuantity: '1', costRate: '0', billRate: '0' },
-    { unitCode: 'week', unitName: t('defaults.week'), baseQuantity: '4', costRate: '0', billRate: '0' },
-    { unitCode: 'month', unitName: t('defaults.month'), baseQuantity: '12', costRate: '0', billRate: '0' },
+    { unitCode: 'day', unitName: t('defaults.day'), baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} },
+    { unitCode: 'week', unitName: t('defaults.week'), baseQuantity: '4', costRate: '0', billRate: '0', timeTypeBillRates: {} },
+    { unitCode: 'month', unitName: t('defaults.month'), baseQuantity: '12', costRate: '0', billRate: '0', timeTypeBillRates: {} },
   ])
 
   async function load() {
@@ -49,6 +50,19 @@ export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canMana
   function updateTier(index: number, key: keyof Tier, value: string) {
     setTiers((rows) => rows.map((row, i) => i === index ? { ...row, [key]: value } : row))
   }
+
+  function updateTierTypeRate(index: number, timeTypeId: string, value: string) {
+    setTiers((rows) => rows.map((row, i) => {
+      if (i !== index) return row
+      const next = { ...row.timeTypeBillRates }
+      if (value === '') delete next[timeTypeId]
+      else next[timeTypeId] = value
+      return { ...row, timeTypeBillRates: next }
+    }))
+  }
+
+  // Time-type tiers only make sense on hourly/labor lines.
+  const tierTypes = (data?.timeTypes ?? []).filter((x) => Number(x.bill_multiplier) !== 1)
 
   async function save() {
     setBusy(true)
@@ -101,8 +115,17 @@ export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canMana
               <Input aria-label={t('costRate')} inputMode="decimal" className="text-right tabular-nums" value={tier.costRate} onChange={(e) => updateTier(index, 'costRate', e.target.value)} placeholder={t('costRate')} />
               <Input aria-label={t('billRate')} inputMode="decimal" className="text-right tabular-nums" value={tier.billRate} onChange={(e) => updateTier(index, 'billRate', e.target.value)} placeholder={t('billRate')} />
               <Button variant="ghost" onClick={() => setTiers((rows) => rows.filter((_, i) => i !== index))}>{common('actions.remove')}</Button>
+              {tierTypes.length > 0 ? <div className="flex flex-wrap items-center gap-2 sm:col-span-6">
+                <span className="text-xs text-slate-500 dark:text-slate-400">{t('tierOverrides')}</span>
+                {tierTypes.map((tt) => <div key={tt.id} className="flex items-center gap-1">
+                  <span className="text-xs text-slate-600 dark:text-slate-300">{tt.name}</span>
+                  <Input aria-label={tt.name} inputMode="decimal" className="h-8 w-24 text-right tabular-nums" value={tier.timeTypeBillRates[tt.id] ?? ''}
+                    placeholder={tier.billRate ? (Number(tier.billRate) * Number(tt.bill_multiplier)).toFixed(2) : t('tierAuto')}
+                    onChange={(e) => updateTierTypeRate(index, tt.id, e.target.value)} />
+                </div>)}
+              </div> : null}
             </div>)}
-            <Button variant="outline" size="sm" onClick={() => setTiers((rows) => [...rows, { unitCode: '', unitName: '', baseQuantity: '1', costRate: '0', billRate: '0' }])}>{t('addUnit')}</Button>
+            <Button variant="outline" size="sm" onClick={() => setTiers((rows) => [...rows, { unitCode: '', unitName: '', baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} }])}>{t('addUnit')}</Button>
           </div>
           <div className="flex gap-2"><Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button><Button variant="outline" onClick={() => setEditing(false)}>{common('actions.cancel')}</Button></div>
         </CardContent></Card>

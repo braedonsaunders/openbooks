@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   uniqueIndex,
@@ -84,6 +85,9 @@ export const itemRateLines = pgTable(
     baseQuantity: money("base_quantity").notNull(),
     costRate: money("cost_rate"),
     billRate: money("bill_rate"),
+    /** Explicit bill rates by time-type id (reg/OT/DT card): overrides
+     * billRate × timeType.billMultiplier for that tier. */
+    timeTypeBillRates: jsonb("time_type_bill_rates").$type<Record<string, string>>().notNull().default({}),
     sortOrder: integer("sort_order").notNull().default(0),
     ...auditColumns,
   },

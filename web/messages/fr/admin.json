@@ -1631,7 +1631,8 @@
       "rateBookId": "Grille tarifaire",
       "customerId": "Client",
       "projectId": "Projet",
-      "isDefault": "Par défaut"
+      "isDefault": "Par défaut",
+      "billMultiplier": "Multiplicateur de facturation"
     },
     "options": {
       "appliesTo": {
