@@ -1786,7 +1786,12 @@
         "example": "Ejemplo con salario de {wage}/h:",
         "exampleReg": "Normal",
         "exampleOt": "Extra ×1.5",
-        "exampleDt": "Doble ×2"
+        "exampleDt": "Doble ×2",
+        "presetLead": "Inicio rápido:",
+        "presetCa": "Canadá ~13%",
+        "presetCaName": "Cargas estatutarias — CPP, EI, WSIB, EHT, vacaciones (est.)",
+        "presetUs": "EE. UU. ~30%",
+        "presetUsName": "Cargas de nómina — FICA, FUTA/SUTA, workers comp (est.)"
       },
       "posting": {
         "title": "Contabilización",
@@ -1813,7 +1818,73 @@
         "project": "Proyecto",
         "standardCost": "Costo estándar"
       },
-      "docs": "Documentación"
+      "docs": "Documentación",
+      "checklist": {
+        "wages": "Tarifas salariales",
+        "burden": "Estimación de cargas",
+        "posting": "Contabilización",
+        "trueup": "Conciliación de nómina",
+        "wagesDetail": "{covered} de {total} empleados resuelven a una tarifa",
+        "burdenDone": "{count} componente(s) configurado(s)",
+        "burdenNone": "Sin componentes — el costo previo = salario bruto",
+        "postingOn": "El costo estándar se contabiliza al aprobar",
+        "postingAccounts": "Activar requiere cuentas de obra en curso y puente",
+        "postingOff": "Apagado — solo captura de tarifas",
+        "trueupReady": "Cuenta de variación asignada — concilie abajo",
+        "trueupNone": "Asigne una cuenta de variación para cerrar períodos",
+        "launchWizard": "Guía de configuración"
+      },
+      "wizard": {
+        "title": "Configurar costeo de mano de obra",
+        "close": "Cerrar",
+        "back": "Atrás",
+        "next": "Siguiente",
+        "apply": "Aplicar configuración",
+        "applying": "Aplicando…",
+        "done": "Costeo de mano de obra configurado",
+        "q1": "¿Cómo desea estimar las cargas de nómina?",
+        "q1Hint": "Los costos patronales que causan los salarios — impuestos, seguros, vacaciones. La estimación mantiene realista el costo antes de la nómina; la nómina real la reemplaza.",
+        "burden": {
+          "canada": "Canadá — estatutario ~13%",
+          "canadaHint": "CPP, EI, WSIB, EHT, vacaciones. Un punto de partida razonable; refínelo cuando quiera.",
+          "us": "Estados Unidos — construcción ~30%",
+          "usHint": "FICA, FUTA/SUTA, workers comp. El rango típico es 25–40%.",
+          "custom": "Porcentaje personalizado",
+          "customHint": "Conoce su número — ingréselo.",
+          "customPct": "% del salario",
+          "skip": "Omitir por ahora",
+          "skipHint": "Los costos mostrarán solo salarios brutos hasta que agregue componentes."
+        },
+        "customBurdenName": "Cargas de nómina (est.)",
+        "q2": "¿Cuánto paga por hora?",
+        "q2Hint": "Empiece amplio — un valor predeterminado y tarifas por oficio si difieren. Son salarios, no tarifas de facturación.",
+        "orgRate": "Salario por hora predeterminado (quien no tenga tarifa específica)",
+        "tradeRates": "Tarifas por oficio (opcional — gana al predeterminado)",
+        "perEmployeeLater": "Puede agregar tarifas exactas por empleado en el espacio de trabajo — ganan a las de oficio y predeterminada.",
+        "q3": "¿Contabilizar el costo de mano de obra en los proyectos?",
+        "q3Hint": "Con la contabilización activada, aprobar tiempo registra el costo estándar en el libro mayor por proyecto, anticipando la nómina.",
+        "posting": {
+          "off": "Todavía no — solo seguir tarifas",
+          "offHint": "El tiempo se costea para informes; nada se contabiliza en el libro mayor.",
+          "post": "Sí — contabilizar el costo estándar al aprobar",
+          "postHint": "DR obra en curso (por proyecto) / CR cuenta puente. La nómina real liquida la misma cuenta después.",
+          "wip": "Cuenta de obra en curso / costo",
+          "clearing": "Cuenta puente de mano de obra"
+        },
+        "review": "Listo para aplicar:",
+        "reviewBurden": "Estimación de cargas: {name} al {pct}%",
+        "reviewNoBurden": "Sin estimación de cargas (solo salarios brutos)",
+        "reviewOrgRate": "Salario predeterminado ${rate}/h.",
+        "reviewNoOrgRate": "Sin salario predeterminado.",
+        "reviewTradeRates": "+ {count} tarifa(s) por oficio.",
+        "reviewPosting": "El costo estándar se contabilizará al aprobar",
+        "reviewNoPosting": "La contabilización queda apagada — puede activarla después",
+        "reviewExample": "Ejemplo con salario de ${wage}/h:",
+        "exReg": "Normal",
+        "exOt": "Extra ×1.5",
+        "exDt": "Doble ×2",
+        "reviewNote": "Todo es editable después en el espacio de trabajo — la guía solo completa la misma configuración."
+      }
     }
   },
   "flows": {

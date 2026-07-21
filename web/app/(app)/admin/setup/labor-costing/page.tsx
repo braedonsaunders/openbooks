@@ -46,6 +46,32 @@ export default async function LaborCostingSetup() {
   ])
 
   const control = ((orgRes as unknown as { rows: { c: Record<string, string> | null }[] }).rows[0]?.c ?? {}) as Record<string, string>
+
+  // Coverage: how many active employees resolve to SOME current wage rate
+  // (their own, their trade's, or the org default) — the number the checklist
+  // and the wizard lead with.
+  const coverageRes = (await db.execute(sql`
+    with active_emp as (
+      select p.id, er.trade_id from parties p
+      join employee_roles er on er.party_id = p.id and er.org_id = ${orgId} and er.is_active
+     where p.org_id = ${orgId} and p.is_active
+    ),
+    current_rates as (
+      select employee_party_id, trade_id from labor_cost_rates
+       where org_id = ${orgId} and is_active and effective_from <= current_date
+         and (effective_to is null or effective_to >= current_date)
+    )
+    select
+      (select count(*) from active_emp) as employees,
+      (select count(*) from active_emp e where
+         exists (select 1 from current_rates r where r.employee_party_id = e.id)
+         or exists (select 1 from current_rates r where r.employee_party_id is null and r.trade_id = e.trade_id and r.trade_id is not null)
+         or exists (select 1 from current_rates r where r.employee_party_id is null and r.trade_id is null)
+      ) as covered,
+      exists (select 1 from current_rates where employee_party_id is null and trade_id is null) as has_org_default`)) as unknown as {
+    rows: { employees: number; covered: number; has_org_default: boolean }[]
+  }
+  const coverage = coverageRes.rows[0] ?? { employees: 0, covered: 0, has_org_default: false }
   const opt = (r: Record<string, unknown>) => ({ id: String(r.id), name: String(r.name ?? '') })
 
   return (
@@ -74,6 +100,7 @@ export default async function LaborCostingSetup() {
         laborWip={control.laborWip ?? null}
         laborClearing={control.laborClearing ?? null}
         payrollVariance={control.payrollVariance ?? null}
+        coverage={{ employees: Number(coverage.employees), covered: Number(coverage.covered), hasOrgDefault: coverage.has_org_default === true }}
       />
     </div>
   )

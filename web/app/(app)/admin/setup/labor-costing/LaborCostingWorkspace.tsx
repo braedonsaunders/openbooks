@@ -4,9 +4,10 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Sparkles, Trash2 } from 'lucide-react'
 import { Button, Input, Label, cn } from '@openbooks/ui'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
+import { LaborCostingWizard } from './LaborCostingWizard'
 
 export interface RateRow {
   id: string
@@ -64,10 +65,12 @@ export function LaborCostingWorkspace(props: {
   laborWip: string | null
   laborClearing: string | null
   payrollVariance: string | null
+  coverage: { employees: number; covered: number; hasOrgDefault: boolean }
 }) {
   const t = useTranslations('admin.setup.laborCosting')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(props.rates.length === 0)
 
   // ---- settings state ------------------------------------------------------
   const [mode, setMode] = useState(props.settings.mode)
@@ -207,8 +210,77 @@ export function LaborCostingWorkspace(props: {
   const scopeLabel = (r: RateRow) =>
     r.employee_name ?? (r.trade_name ? `${t('tradePrefix')} ${r.trade_name}` : t('orgDefault'))
 
+  const steps = [
+    {
+      key: 'wages',
+      done: props.coverage.employees > 0 && props.coverage.covered === props.coverage.employees,
+      detail: t('checklist.wagesDetail', { covered: props.coverage.covered, total: props.coverage.employees }),
+    },
+    {
+      key: 'burden',
+      done: components.length > 0,
+      detail: components.length > 0 ? t('checklist.burdenDone', { count: components.length }) : t('checklist.burdenNone'),
+    },
+    {
+      key: 'posting',
+      done: mode === 'post' && !!laborWip && !!laborClearing,
+      detail: mode === 'post' ? (laborWip && laborClearing ? t('checklist.postingOn') : t('checklist.postingAccounts')) : t('checklist.postingOff'),
+    },
+    {
+      key: 'trueup',
+      done: !!payrollVariance,
+      detail: payrollVariance ? t('checklist.trueupReady') : t('checklist.trueupNone'),
+    },
+  ]
+
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      <LaborCostingWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onApplied={(applied) => {
+          setMode(applied.mode)
+          setComponents(applied.components)
+          if (applied.laborWip) setLaborWip(applied.laborWip)
+          if (applied.laborClearing) setLaborClearing(applied.laborClearing)
+        }}
+        trades={props.trades}
+        accounts={props.accounts}
+        hoursPerDay={Number(hoursPerDay) || 8}
+        annualHours={Number(annualHours) || 2080}
+      />
+
+      {/* ---- guided status ---- */}
+      <div className="xl:col-span-2">
+        <div className="flex flex-wrap items-stretch gap-3">
+          {steps.map((st, i) => (
+            <div key={st.key} className="min-w-48 flex-1 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+              <div className="mb-1 flex items-center gap-2">
+                <span
+                  className={cn(
+                    'grid h-5 w-5 place-items-center rounded-full text-[11px] font-semibold',
+                    st.done
+                      ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950'
+                      : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200',
+                  )}
+                >
+                  {st.done ? '✓' : i + 1}
+                </span>
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t(`checklist.${st.key}`)}</span>
+              </div>
+              <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{st.detail}</p>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setWizardOpen(true)}
+            className="flex min-w-40 items-center justify-center gap-2 rounded-lg border border-dashed border-teal-400 px-4 text-sm font-medium text-teal-700 hover:bg-teal-50 dark:border-teal-600 dark:text-teal-300 dark:hover:bg-teal-950/40"
+          >
+            <Sparkles size={15} /> {t('checklist.launchWizard')}
+          </button>
+        </div>
+      </div>
+
       {/* ---- wage rates ---- */}
       <Card title={t('rates.title')} hint={t('rates.hint')}>
         <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-6">
@@ -252,7 +324,12 @@ export function LaborCostingWorkspace(props: {
             </thead>
             <tbody>
               {props.rates.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-sm text-slate-400">{t('rates.empty')}</td></tr>
+                <tr><td colSpan={5} className="py-8 text-center">
+                  <p className="text-sm text-slate-400">{t('rates.empty')}</p>
+                  <Button size="sm" variant="outline" className="mt-2" onClick={() => setWizardOpen(true)}>
+                    <Sparkles size={14} /> {t('checklist.launchWizard')}
+                  </Button>
+                </td></tr>
               )}
               {props.rates.map((r) => (
                 <tr key={r.id} className={cn('border-t border-slate-100 dark:border-slate-800', r.effective_to && 'text-slate-400 dark:text-slate-500')}>
@@ -301,6 +378,17 @@ export function LaborCostingWorkspace(props: {
               </button>
             </div>
           ))}
+          {components.length === 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
+              <span className="text-xs text-slate-500 dark:text-slate-400">{t('components.presetLead')}</span>
+              <Button size="sm" variant="outline" onClick={() => setComponents([{ key: 'burden', name: t('components.presetCaName'), kind: 'percent_of_wage', value: 13, scaleWithOvertime: true }])}>
+                {t('components.presetCa')}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setComponents([{ key: 'burden', name: t('components.presetUsName'), kind: 'percent_of_wage', value: 30, scaleWithOvertime: true }])}>
+                {t('components.presetUs')}
+              </Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
