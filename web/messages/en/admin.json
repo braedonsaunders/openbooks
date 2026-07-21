@@ -1873,7 +1873,23 @@
         "modePost": "Post standard cost to jobs",
         "laborWip": "Labor WIP / job cost account",
         "laborClearing": "Labor clearing account",
-        "overheadNote": "Overhead is not part of this rate — it is applied by the Overhead Model as its own layer."
+        "overheadNote": "Overhead is not part of this rate — it is applied by the Overhead Model as its own layer.",
+        "payrollVariance": "Payroll variance account"
+      },
+      "reconciliation": {
+        "title": "Payroll reconciliation",
+        "hint": "Standard labor credits the clearing account at approval; the payroll journal (imported or manual) debits the same account. The residue is your payroll variance — post it out when the period is done.",
+        "from": "From",
+        "to": "To",
+        "load": "Load",
+        "standardPosted": "Standard labor posted",
+        "payrollPosted": "Payroll actuals matched",
+        "periodVariance": "Period variance",
+        "openBalance": "Clearing balance (all time)",
+        "postVariance": "Post variance",
+        "variancePosted": "Posted ${amount} payroll variance",
+        "project": "Project",
+        "standardCost": "Standard cost"
       }
     }
   },

@@ -37,6 +37,8 @@ const CONTROL_ACCOUNT_KEYS = [
   // unbilledReceivable / CR projectRevenue and the invoice relieves unbilledReceivable.
   "laborWip",
   "laborClearing",
+  // Period residue on laborClearing (standard − payroll actuals) posts here.
+  "payrollVariance",
   "unbilledReceivable",
   "projectRevenue",
 ] as const;

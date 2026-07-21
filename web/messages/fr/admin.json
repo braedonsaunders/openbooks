@@ -1839,7 +1839,23 @@
         "modePost": "Comptabiliser le coût standard aux projets",
         "laborWip": "Compte travaux en cours / coût projet",
         "laborClearing": "Compte d'attente main-d'œuvre",
-        "overheadNote": "Les frais généraux ne font pas partie de ce taux — ils sont appliqués par le Modèle de frais généraux comme couche distincte."
+        "overheadNote": "Les frais généraux ne font pas partie de ce taux — ils sont appliqués par le Modèle de frais généraux comme couche distincte.",
+        "payrollVariance": "Compte d'écart de paie"
+      },
+      "reconciliation": {
+        "title": "Rapprochement de paie",
+        "hint": "La main-d'œuvre standard crédite le compte d'attente à l'approbation ; l'écriture de paie (importée ou manuelle) débite le même compte. Le résidu est votre écart de paie — comptabilisez-le à la clôture de la période.",
+        "from": "Du",
+        "to": "Au",
+        "load": "Charger",
+        "standardPosted": "Main-d'œuvre standard comptabilisée",
+        "payrollPosted": "Paie réelle rapprochée",
+        "periodVariance": "Écart de la période",
+        "openBalance": "Solde du compte d'attente (total)",
+        "postVariance": "Comptabiliser l'écart",
+        "variancePosted": "Écart de paie de ${amount} comptabilisé",
+        "project": "Projet",
+        "standardCost": "Coût standard"
       }
     }
   },

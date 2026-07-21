@@ -63,6 +63,7 @@ export function LaborCostingWorkspace(props: {
   accounts: { id: string; label: string }[]
   laborWip: string | null
   laborClearing: string | null
+  payrollVariance: string | null
 }) {
   const t = useTranslations('admin.setup.laborCosting')
   const router = useRouter()
@@ -75,6 +76,22 @@ export function LaborCostingWorkspace(props: {
   const [components, setComponents] = useState<LaborCostComponent[]>(props.settings.components)
   const [laborWip, setLaborWip] = useState(props.laborWip ?? '')
   const [laborClearing, setLaborClearing] = useState(props.laborClearing ?? '')
+  const [payrollVariance, setPayrollVariance] = useState(props.payrollVariance ?? '')
+
+  // ---- reconciliation state ------------------------------------------------
+  const now = new Date()
+  const lastMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1))
+  const lastMonthEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 0))
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  const [recFrom, setRecFrom] = useState(iso(lastMonth))
+  const [recTo, setRecTo] = useState(iso(lastMonthEnd))
+  const [rec, setRec] = useState<{
+    standardPosted: string
+    payrollPosted: string
+    periodVariance: string
+    openBalance: string
+    perProject: { projectId: string; name: string; standard: string }[]
+  } | null>(null)
 
   // ---- new-rate form -------------------------------------------------------
   const [scope, setScope] = useState<'employee' | 'trade' | 'org'>('employee')
@@ -99,6 +116,7 @@ export function LaborCostingWorkspace(props: {
           settings: { mode, hoursPerDay: Number(hoursPerDay), annualHours: Number(annualHours), components },
           laborWip: laborWip || null,
           laborClearing: laborClearing || null,
+          payrollVariance: payrollVariance || null,
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
@@ -142,6 +160,44 @@ export function LaborCostingWorkspace(props: {
     })
     setRate('')
     toast.success(t('rateSaved'))
+  }
+
+  async function loadReconciliation() {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/admin/setup/labor-costing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reconcile', periodStart: recFrom, periodEnd: recTo }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      setRec(j)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function postVariance() {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/admin/setup/labor-costing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'post-variance', periodStart: recFrom, periodEnd: recTo }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      toast.success(t('reconciliation.variancePosted', { amount: Number(j.variance).toFixed(2) }))
+      await loadReconciliation()
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   function setComponent(i: number, patch: Partial<LaborCostComponent>) {
@@ -322,9 +378,75 @@ export function LaborCostingWorkspace(props: {
                 ))}
               </select>
             </div>
+            <div>
+              <Label htmlFor="lc-var">{t('posting.payrollVariance')}</Label>
+              <select id="lc-var" className={cn(selectCls)} value={payrollVariance} onChange={(e) => setPayrollVariance(e.target.value)}>
+                <option value="">—</option>
+                {props.accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('posting.overheadNote')}</p>
         </div>
+      </Card>
+
+      {/* ---- payroll reconciliation ---- */}
+      <Card title={t('reconciliation.title')} hint={t('reconciliation.hint')}>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <Label htmlFor="rec-from">{t('reconciliation.from')}</Label>
+            <Input id="rec-from" type="date" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="rec-to">{t('reconciliation.to')}</Label>
+            <Input id="rec-to" type="date" value={recTo} onChange={(e) => setRecTo(e.target.value)} />
+          </div>
+          <Button size="sm" variant="outline" onClick={loadReconciliation} disabled={busy}>{t('reconciliation.load')}</Button>
+          {rec && Number(rec.periodVariance) !== 0 && (
+            <Button size="sm" onClick={postVariance} disabled={busy || !props.payrollVariance}>
+              {t('reconciliation.postVariance')}
+            </Button>
+          )}
+        </div>
+        {rec && (
+          <div className="mt-3 space-y-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                { k: 'standardPosted', v: rec.standardPosted },
+                { k: 'payrollPosted', v: rec.payrollPosted },
+                { k: 'periodVariance', v: rec.periodVariance },
+                { k: 'openBalance', v: rec.openBalance },
+              ].map(({ k, v }) => (
+                <div key={k} className="rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{t(`reconciliation.${k}`)}</div>
+                  <div className={cn('text-sm font-semibold tabular-nums', k !== 'standardPosted' && k !== 'payrollPosted' && Number(v) !== 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100')}>
+                    ${Number(v).toFixed(2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {rec.perProject.length > 0 && (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
+                    <th className="py-1 pr-2 font-medium">{t('reconciliation.project')}</th>
+                    <th className="py-1 pr-2 text-right font-medium">{t('reconciliation.standardCost')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rec.perProject.map((r) => (
+                    <tr key={r.projectId} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="py-1.5 pr-2">{r.name}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">${Number(r.standard).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </Card>
 
       <div className="xl:col-span-2">
