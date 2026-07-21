@@ -119,6 +119,7 @@ export function PartyDrawer({
   paymentTerms,
   departments,
   trades,
+  workerCompGroups = [],
   accounts = [],
   taxCodes = [],
   salesReps = [],
@@ -135,6 +136,7 @@ export function PartyDrawer({
   paymentTerms: Opt[]
   departments: Opt[]
   trades: Opt[]
+  workerCompGroups?: Opt[]
   accounts?: Opt[]
   taxCodes?: Opt[]
   salesReps?: Opt[]
@@ -208,6 +210,7 @@ export function PartyDrawer({
     employeeNumber: payload.employee?.employee_number ?? '',
     departmentId: payload.employee?.department_id ?? '',
     tradeId: payload.employee?.trade_id ?? '',
+    workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
     hiredOn: payload.employee?.hired_on ?? '',
   })
 
@@ -287,6 +290,7 @@ export function PartyDrawer({
           employeeNumber: employee.employeeNumber || null,
           departmentId: employee.departmentId || null,
           tradeId: employee.tradeId || null,
+          workerCompGroupId: employee.workerCompGroupId || null,
           hiredOn: employee.hiredOn || null,
         },
       },
@@ -353,6 +357,7 @@ export function PartyDrawer({
       employeeNumber: payload.employee?.employee_number ?? '',
       departmentId: payload.employee?.department_id ?? '',
       tradeId: payload.employee?.trade_id ?? '',
+      workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
       hiredOn: payload.employee?.hired_on ?? '',
     })
     setAddresses(
@@ -901,6 +906,21 @@ export function PartyDrawer({
                     {trades.map((trade) => (
                       <option key={trade.id} value={trade.id}>
                         {trade.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className={field}>
+                  <Label>{t('workerCompGroup')}</Label>
+                  <Select
+                    value={employee.workerCompGroupId}
+                    onChange={(e) => setEmployee({ ...employee, workerCompGroupId: e.target.value })}
+                    disabled={ro}
+                  >
+                    <option value="">—</option>
+                    {workerCompGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
                       </option>
                     ))}
                   </Select>

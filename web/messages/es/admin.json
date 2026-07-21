@@ -991,15 +991,21 @@
       "none": "No hay PDF oficial cargado"
     },
     "taxBoxes": {
-      "description": "Casillas asignadas a {code}, además de las casillas calculadas y manuales compartidas.",
-      "calculatedNote": "Las casillas calculadas y manuales se aplican a toda la declaración y aparecen en cada código de impuesto asignado a ella.",
+      "description": "Casillas asignadas, calculadas y manuales para {code}.",
+      "calculatedNote": "Cada casilla pertenece a esta declaración; las casillas asignadas seleccionan el código de impuesto cuya actividad resumen.",
       "new": "Nueva casilla de declaración",
       "searchPlaceholder": "Buscar casillas…",
       "source": "Origen",
-      "empty": "Ninguna casilla coincide con este código de impuesto y la búsqueda.",
+      "empty": "Ninguna casilla coincide con esta declaración y la búsqueda.",
       "mapped": "Asignada",
       "calculated": "Calculada",
       "manual": "Manual"
+    },
+    "taxRates": {
+      "description": "Tasas con fecha de vigencia para {code}.",
+      "new": "Nueva tasa de impuesto",
+      "searchPlaceholder": "Buscar tasas de impuesto…",
+      "empty": "Ninguna tasa coincide con este código y la búsqueda."
     },
     "new": "New",
     "learnMore": "Más información.",
@@ -1304,8 +1310,9 @@
         "description": "Las tasas que cobra y paga, y las cuentas en las que se contabilizan."
       },
       "tax-rates": {
-        "title": "Tax Rates",
-        "description": "Effective-dated rate history for each tax code."
+        "title": "Tasas de impuesto",
+        "singularTitle": "Tasa de impuesto",
+        "description": "Historial de tasas con fecha de vigencia para cada código de impuesto."
       },
       "tax-groups": {
         "title": "Tax Groups",
@@ -1834,7 +1841,11 @@
         "presetCa": "Canadá ~13%",
         "presetCaName": "Cargas estatutarias — CPP, EI, WSIB, EHT, vacaciones (est.)",
         "presetUs": "EE. UU. ~30%",
-        "presetUsName": "Cargas de nómina — FICA, FUTA/SUTA, workers comp (est.)"
+        "presetUsName": "Cargas de nómina — FICA, FUTA/SUTA, workers comp (est.)",
+        "workerComp": "Compensación (por grupo)",
+        "addWorkerComp": "Agregar compensación",
+        "newWorkerComp": "Compensación (WSIB)",
+        "workerCompHint": "La tarifa proviene del grupo de compensación asignado a cada empleado (Configuración → Personal → Grupos de compensación; se asigna en la ficha del empleado). El valor aquí es solo el % de respaldo cuando un empleado no tiene grupo."
       },
       "posting": {
         "title": "Contabilización",

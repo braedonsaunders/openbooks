@@ -19,10 +19,13 @@ import { postProjectGlEntry, reverseProjectGlEntry, recognitionAccounts } from "
 
 export interface LaborCostComponent {
   key: string;
+  /** worker_comp: a % of wage whose RATE comes from the employee's assigned
+   * worker-comp/WSIB group (value is only the fallback when unassigned). */
+  kind: "percent_of_wage" | "per_hour" | "per_day" | "worker_comp";
   name: string;
-  kind: "percent_of_wage" | "per_hour" | "per_day";
   value: number;
-  /** percent_of_wage/per_hour: apply to (or alongside) the OT-multiplied wage. */
+  /** percent_of_wage/worker_comp/per_hour: apply to (or alongside) the
+   * OT-multiplied wage. */
   scaleWithOvertime?: boolean;
 }
 
@@ -115,10 +118,20 @@ export function computeCostRate(
   wage: string,
   costMultiplier: string,
   settings: Pick<LaborCostingSettings, "hoursPerDay" | "components">,
+  opts: { workerCompPercent?: number } = {},
 ): string {
   const base = mulRate(wage, costMultiplier);
   let rate = base;
   for (const c of settings.components) {
+    if (c.kind === "worker_comp") {
+      // Rate = the employee's assigned comp-group %, else the component's
+      // fallback value. A 0% group means no worker comp for that person.
+      const pct = opts.workerCompPercent ?? Number(c.value);
+      if (!Number.isFinite(pct) || pct === 0) continue;
+      const on = c.scaleWithOvertime ? base : wage;
+      rate = add(rate, mulRate(on, String(pct / 100)));
+      continue;
+    }
     const v = Number(c.value);
     if (!Number.isFinite(v) || v === 0) continue;
     if (c.kind === "percent_of_wage") {
@@ -147,12 +160,13 @@ export async function snapshotLaborCostRates(orgId: string, timeEntryIds: string
   const rows = (await db.execute(sql`
     select te.id, te.employee_party_id, te.worked_on,
            coalesce(tt.cost_multiplier, '1') as cost_multiplier,
-           er.trade_id
+           er.trade_id, wcg.rate_percent as worker_comp_percent
       from time_entries te
       left join time_types tt on tt.id = te.time_type_id
       left join employee_roles er on er.org_id = te.org_id and er.party_id = te.employee_party_id
+      left join worker_comp_groups wcg on wcg.id = er.worker_comp_group_id
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`)) as unknown as {
-    rows: { id: string; employee_party_id: string; worked_on: string; cost_multiplier: string; trade_id: string | null }[];
+    rows: { id: string; employee_party_id: string; worked_on: string; cost_multiplier: string; trade_id: string | null; worker_comp_percent: string | null }[];
   };
   let stamped = 0;
   // Cache wage resolution per employee+date (a week of entries shares both).
@@ -168,7 +182,8 @@ export async function snapshotLaborCostRates(orgId: string, timeEntryIds: string
       cache.set(key, wage);
     }
     if (!wage) continue;
-    const rate = computeCostRate(wage.wage, String(r.cost_multiplier), settings);
+    const workerCompPercent = r.worker_comp_percent != null ? Number(r.worker_comp_percent) : undefined;
+    const rate = computeCostRate(wage.wage, String(r.cost_multiplier), settings, { workerCompPercent });
     await db.execute(sql`update time_entries set cost_rate = ${rate} where id = ${r.id} and org_id = ${orgId} and cost_rate is null`);
     stamped++;
   }

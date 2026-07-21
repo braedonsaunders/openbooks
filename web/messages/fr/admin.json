@@ -1035,15 +1035,21 @@
       "none": "Aucun PDF officiel téléversé"
     },
     "taxBoxes": {
-      "description": "Cases associées à {code}, avec les cases calculées et manuelles partagées.",
-      "calculatedNote": "Les cases calculées et manuelles s’appliquent à toute la déclaration et figurent sous chaque code de taxe qui lui est associé.",
+      "description": "Cases associées, calculées et manuelles pour {code}.",
+      "calculatedNote": "Chaque case appartient à cette déclaration; les cases associées sélectionnent le code de taxe dont elles récapitulent l’activité.",
       "new": "Nouvelle case de déclaration",
       "searchPlaceholder": "Rechercher des cases…",
       "source": "Source",
-      "empty": "Aucune case ne correspond à ce code de taxe et à cette recherche.",
+      "empty": "Aucune case ne correspond à cette déclaration et à cette recherche.",
       "mapped": "Associée",
       "calculated": "Calculée",
       "manual": "Manuelle"
+    },
+    "taxRates": {
+      "description": "Taux avec dates d’effet pour {code}.",
+      "new": "Nouveau taux de taxe",
+      "searchPlaceholder": "Rechercher des taux de taxe…",
+      "empty": "Aucun taux ne correspond à ce code et à cette recherche."
     },
     "new": "New",
     "learnMore": "En savoir plus.",
@@ -1348,8 +1354,9 @@
         "description": "Les taux que vous facturez et payez, ainsi que les comptes auxquels ils sont imputés."
       },
       "tax-rates": {
-        "title": "Tax Rates",
-        "description": "Effective-dated rate history for each tax code."
+        "title": "Taux de taxe",
+        "singularTitle": "Taux de taxe",
+        "description": "Historique des taux avec dates d’effet pour chaque code de taxe."
       },
       "tax-groups": {
         "title": "Tax Groups",
@@ -1878,7 +1885,11 @@
         "presetCa": "Canada ~13 %",
         "presetCaName": "Charges statutaires — RPC, AE, WSIB, ISE, congés (est.)",
         "presetUs": "É.-U. ~30 %",
-        "presetUsName": "Charges de paie — FICA, FUTA/SUTA, workers comp (est.)"
+        "presetUsName": "Charges de paie — FICA, FUTA/SUTA, workers comp (est.)",
+        "workerComp": "Indemnisation (par groupe)",
+        "addWorkerComp": "Ajouter l'indemnisation",
+        "newWorkerComp": "Indemnisation (WSIB)",
+        "workerCompHint": "Le taux provient du groupe d'indemnisation assigné à chaque employé (Configuration → Personnel → Groupes d'indemnisation ; assigné sur la fiche employé). La valeur ici n'est que le % de repli quand un employé n'a pas de groupe."
       },
       "posting": {
         "title": "Comptabilisation",

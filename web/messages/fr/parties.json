@@ -170,6 +170,7 @@
       "customer": "Détails du client",
       "vendor": "Détails du fournisseur",
       "employee": "Détails de l'employé"
-    }
+    },
+    "workerCompGroup": "Groupe d'indemnisation"
   }
 }

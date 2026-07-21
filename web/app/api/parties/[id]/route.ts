@@ -31,7 +31,7 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
 }
 
 async function orgRefExists(
-  kind: 'terms' | 'receivable' | 'payable' | 'expense' | 'tax' | 'salesRep' | 'department' | 'trade',
+  kind: 'terms' | 'receivable' | 'payable' | 'expense' | 'tax' | 'salesRep' | 'department' | 'trade' | 'workerComp',
   id: string | null,
   orgId: string,
 ): Promise<boolean> {
@@ -50,7 +50,9 @@ async function orgRefExists(
               ? sql`select 1 from parties p join employee_roles r on r.party_id = p.id and r.is_active where p.id = ${id} and p.org_id = ${orgId} and p.is_active`
               : kind === 'department'
                 ? sql`select 1 from departments where id = ${id} and org_id = ${orgId} and is_active`
-                : sql`select 1 from trades where id = ${id} and org_id = ${orgId} and is_active`
+                : kind === 'workerComp'
+                  ? sql`select 1 from worker_comp_groups where id = ${id} and org_id = ${orgId} and is_active`
+                  : sql`select 1 from trades where id = ${id} and org_id = ${orgId} and is_active`
   const result = await db.execute(query) as unknown as { rows: unknown[] }
   return result.rows.length === 1
 }
@@ -80,6 +82,7 @@ interface EmployeeRoleInput {
   employeeNumber?: string | null
   departmentId?: string | null
   tradeId?: string | null
+  workerCompGroupId?: string | null
   hiredOn?: string | null
 }
 interface AddressInput {
@@ -365,19 +368,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (departmentId === 'invalid') return bad('Invalid department')
       const tradeId = uuidOrNull(e.tradeId)
       if (tradeId === 'invalid') return bad('Invalid trade')
+      const workerCompGroupId = uuidOrNull(e.workerCompGroupId)
+      if (workerCompGroupId === 'invalid') return bad('Invalid worker-comp group')
       if (!await orgRefExists('department', departmentId, user.orgId)) return bad('Invalid department')
       if (!await orgRefExists('trade', tradeId, user.orgId)) return bad('Invalid trade')
+      if (!await orgRefExists('workerComp', workerCompGroupId, user.orgId)) return bad('Invalid worker-comp group')
       const hiredOn = strOrNull(e.hiredOn)
       if (hiredOn && !DATE_RE.test(hiredOn)) return bad('Hired-on must be a date (YYYY-MM-DD)')
       await db.execute(sql`
         insert into employee_roles (org_id, party_id, employee_number, department_id, trade_id,
-                                    hired_on, created_by, updated_by)
+                                    worker_comp_group_id, hired_on, created_by, updated_by)
         values (${user.orgId}, ${id}, ${strOrNull(e.employeeNumber)}, ${departmentId}, ${tradeId},
-                ${hiredOn}, ${user.id}, ${user.id})
+                ${workerCompGroupId}, ${hiredOn}, ${user.id}, ${user.id})
         on conflict (party_id) do update set
           employee_number = excluded.employee_number,
           department_id = excluded.department_id,
           trade_id = excluded.trade_id,
+          worker_comp_group_id = excluded.worker_comp_group_id,
           hired_on = excluded.hired_on,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}

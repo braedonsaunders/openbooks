@@ -68,7 +68,7 @@ function previewRate(wage: number, mult: number, s: { hoursPerDay: number; compo
   for (const c of s.components) {
     const v = Number(c.value)
     if (!Number.isFinite(v) || v === 0) continue
-    if (c.kind === 'percent_of_wage') rate += (c.scaleWithOvertime ? wage * mult : wage) * (v / 100)
+    if (c.kind === 'percent_of_wage' || c.kind === 'worker_comp') rate += (c.scaleWithOvertime ? wage * mult : wage) * (v / 100)
     else if (c.kind === 'per_hour') rate += c.scaleWithOvertime ? v * mult : v
     else if (c.kind === 'per_day') rate += s.hoursPerDay > 0 ? v / s.hoursPerDay : 0
   }
@@ -482,6 +482,7 @@ export function LaborCostingWorkspace(props: {
                   }
                 >
                   <option value="percent_of_wage">{t('components.percentOfWage')}</option>
+                  <option value="worker_comp">{t('components.workerComp')}</option>
                   <option value="per_hour">{t('components.perHour')}</option>
                   <option value="per_day">{t('components.perDay')}</option>
                 </Select>
@@ -498,6 +499,9 @@ export function LaborCostingWorkspace(props: {
                 >
                   <Trash2 size={14} />
                 </button>
+                {c.kind === 'worker_comp' && (
+                  <p className="col-span-12 -mt-1 text-xs text-slate-400 dark:text-slate-500">{t('components.workerCompHint')}</p>
+                )}
               </div>
             ))}
             {components.length === 0 && (
@@ -574,6 +578,24 @@ export function LaborCostingWorkspace(props: {
                 }
               >
                 <Plus size={14} /> {t('components.addPerDiem')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setComponents((cs) => [
+                    ...cs,
+                    {
+                      key: `c${cs.length}`,
+                      name: t('components.newWorkerComp'),
+                      kind: 'worker_comp',
+                      value: 0,
+                      scaleWithOvertime: true,
+                    },
+                  ])
+                }
+              >
+                <Plus size={14} /> {t('components.addWorkerComp')}
               </Button>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
