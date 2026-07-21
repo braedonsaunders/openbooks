@@ -36,20 +36,31 @@ export async function GET(req: Request) {
       where ba.type = ${acctType} and ap.unapplied_at is null and bl.party_id = ${party}
         and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
     `) as Promise<any>,
-    // Open items with days-overdue.
+    // Open items with days-overdue. Applications drain from EITHER side of the
+    // link (credits/payments can sit on to_ or from_), and fully-applied lines
+    // with a stale is_open_item flag are filtered out — "open" means money is
+    // actually outstanding.
     db.execute(sql`
-      select jl.id, je.source_document_id as doc_id, d.kind as doc_kind, d.document_number,
-        je.posting_date::text as tran_date, jl.due_date::text as due_date,
-        abs(jl.amount) - coalesce((select sum(x.amount) from applications x where x.to_line_id = jl.id and x.unapplied_at is null), 0) as remaining
-      from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-      join accounts a on a.id = jl.account_id
-      left join documents d on d.id = je.source_document_id
-      where jl.is_open_item and a.type = ${acctType} and jl.party_id = ${party}
-        and ${side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`}
-      order by jl.due_date nulls last
+      with oi as (
+        select jl.id, je.id as entry_id, je.source_document_id as doc_id,
+          d.kind as doc_kind, d.document_number,
+          je.posting_date::text as tran_date, jl.due_date::text as due_date,
+          abs(jl.amount) - coalesce((
+            select sum(x.amount) from applications x
+             where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
+          ), 0) as remaining
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        join accounts a on a.id = jl.account_id
+        left join documents d on d.id = je.source_document_id
+        where jl.org_id = ${user.orgId} and jl.is_open_item and a.type = ${acctType}
+          and jl.party_id = ${party}
+          and ${side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`}
+      )
+      select * from oi where remaining > 0.005
+      order by due_date nulls last
     `) as Promise<any>,
-    // Recent payments (20).
+    // Recent payments (drawer paginates client-side).
     db.execute(sql`
       select d.id as doc_id, d.kind as doc_kind, d.document_number, je.id as entry_id,
         coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount
@@ -58,7 +69,7 @@ export async function GET(req: Request) {
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and d.kind in (${side === "ar" ? sql`'customer_payment', 'deposit'` : sql`'vendor_payment', 'check'`})
       order by coalesce(d.document_date, d.posting_date) desc
-      limit 20
+      limit 200
     `) as Promise<any>,
   ]);
 
@@ -69,7 +80,7 @@ export async function GET(req: Request) {
     const due = r.due_date as string | null;
     const overdue = due && due < today;
     return {
-      docId: r.doc_id, docKind: r.doc_kind, entryId: r.doc_id, docNumber: r.document_number ?? "",
+      docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "",
       tranDate: r.tran_date, dueDate: due, remaining: Number(r.remaining), overdue: Boolean(overdue),
     };
   });

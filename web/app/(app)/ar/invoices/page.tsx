@@ -141,7 +141,7 @@ export default async function ArInvoices({
         <PageHeader
           title={t('list.title')}
           description={t('list.description')}
-          actions={<div className="flex items-center gap-3">{tabs}{newButton}</div>}
+          actions={<div className="flex items-center gap-3">{newButton}{tabs}</div>}
         />
       }
     >

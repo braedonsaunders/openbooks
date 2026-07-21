@@ -4,6 +4,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
+import { ModuleHomeTabs } from '../../../components/module-home/ui'
+import { groupTabs } from '../../../components/module-home/group-tabs'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
@@ -174,7 +176,12 @@ export default async function Expenses({
           <PageHeader
             title={t('list.title')}
             description={t('list.description')}
-            actions={canSubmit ? <NewExpenseButton /> : undefined}
+            actions={
+              <div className="flex items-center gap-3">
+                {canSubmit ? <NewExpenseButton /> : null}
+                <ModuleHomeTabs tabs={await groupTabs('purchasing', '/expenses')} />
+              </div>
+            }
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder={t('list.searchPlaceholder')} />

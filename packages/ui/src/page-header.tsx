@@ -31,9 +31,11 @@ export function PageHeader({
       ) : null}
       {/* One row at every breakpoint: title on the left (truncates to make
           room), actions pinned right. Phones drop the description to keep the
-          header to a single line; sm+ shows it below and bottom-aligns the
-          actions. */}
-      <header className="flex items-center justify-between gap-3 sm:items-end sm:gap-4">
+          header to a single line; sm+ shows it below. Actions TOP-align to
+          the (single-line) title so their position never depends on whether
+          the description wraps — route-tab strips must not move between
+          sibling pages. */}
+      <header className="flex items-center justify-between gap-3 sm:items-start sm:gap-4">
         <div className="min-w-0 space-y-1">
           <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">
             {title}
