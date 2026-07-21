@@ -26,6 +26,8 @@ import banking from './banking.json'
 import budgets from './budgets.json'
 import close from './close.json'
 import crm from './crm.json'
+import customersHome from './customers.json'
+import purchasingHome from './purchasing.json'
 import continuousClose from './continuous-close.json'
 import customization from './customization.json'
 import pdfTemplates from './pdfTemplates.json'
@@ -76,6 +78,8 @@ export default {
   budgets,
   close,
   crm,
+  customers: customersHome,
+  purchasing: purchasingHome,
   continuousClose,
   customization,
   pdfTemplates,

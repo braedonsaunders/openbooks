@@ -1,0 +1,52 @@
+{
+  "home": {
+    "title": "顧客",
+    "description": "商談から入金までのワークスペース — パイプライン、販売、請求、回収をひとつに。",
+    "subsidiary": "子会社",
+    "tabs": {
+      "overview": "概要"
+    },
+    "vitals": {
+      "openAr": "未回収債権",
+      "openArSub": "未決済請求書 {count} 件",
+      "overdue": "期限超過",
+      "overdueSub": "請求書 {count} 件",
+      "pipeline": "パイプライン（四半期）",
+      "pipelineSub": "加重 {weighted}",
+      "closedQuarter": "今四半期の請求額",
+      "dso": "売掛回転日数",
+      "dsoSub": "平均回収日数",
+      "days": "{n} 日"
+    },
+    "hero": {
+      "title": "主要顧客",
+      "hint": "未決済残高の大きい順に商談件数を併記",
+      "empty": "未回収債権はありません。",
+      "customer": "顧客",
+      "openOpps": "商談",
+      "openInvoices": "請求書",
+      "oldestDue": "最古の期日",
+      "overdue": "期限超過",
+      "open": "未決済"
+    },
+    "trend": {
+      "title": "入金トレンド",
+      "hint": "過去 13 週間の入金計上",
+      "series": "入金額"
+    },
+    "directory": {
+      "title": "ワークスペース",
+      "opportunitiesHint": "件の進行中商談",
+      "estimatesHint": "件の未決見積",
+      "salesOrdersHint": "件の未決受注",
+      "invoicesHint": "期限超過 {overdue}",
+      "receiptsHint": "今週の入金",
+      "customersHint": "アクティブな顧客"
+    },
+    "attention": {
+      "title": "要対応",
+      "allClear": "すべて順調 — 督促は不要です。",
+      "overdueCustomer": "{customer} が {amount} 期限超過"
+    }
+  }
+}

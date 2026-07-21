@@ -1,0 +1,52 @@
+{
+  "home": {
+    "title": "Clientes",
+    "description": "Su espacio de relación a cobro — pipeline, ventas, facturación y cobranza en un solo lugar.",
+    "subsidiary": "Filial",
+    "tabs": {
+      "overview": "Resumen"
+    },
+    "vitals": {
+      "openAr": "Cuentas por cobrar",
+      "openArSub": "{count} facturas abiertas",
+      "overdue": "Vencido",
+      "overdueSub": "{count} facturas",
+      "pipeline": "Pipeline (trimestre)",
+      "pipelineSub": "{weighted} ponderado",
+      "closedQuarter": "Facturado este trimestre",
+      "dso": "Días de cobro",
+      "dsoSub": "Días promedio para cobrar",
+      "days": "{n} d"
+    },
+    "hero": {
+      "title": "Relaciones principales",
+      "hint": "Mayores saldos abiertos con el pipeline al lado",
+      "empty": "Sin cuentas por cobrar abiertas.",
+      "customer": "Cliente",
+      "openOpps": "Oportunidades",
+      "openInvoices": "Facturas",
+      "oldestDue": "Más antigua",
+      "overdue": "Vencido",
+      "open": "Abierto"
+    },
+    "trend": {
+      "title": "Tendencia de cobros",
+      "hint": "13 semanas de cobros registrados",
+      "series": "Cobrado"
+    },
+    "directory": {
+      "title": "Espacio de trabajo",
+      "opportunitiesHint": "oportunidades abiertas",
+      "estimatesHint": "presupuestos abiertos",
+      "salesOrdersHint": "pedidos abiertos",
+      "invoicesHint": "{overdue} vencido",
+      "receiptsHint": "cobros esta semana",
+      "customersHint": "clientes activos"
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "allClear": "Todo en orden — nada que reclamar.",
+      "overdueCustomer": "{customer} tiene {amount} vencido"
+    }
+  }
+}

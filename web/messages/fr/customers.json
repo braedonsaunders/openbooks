@@ -1,0 +1,52 @@
+{
+  "home": {
+    "title": "Clients",
+    "description": "Votre espace relation-à-encaissement — pipeline, ventes, facturation et recouvrement au même endroit.",
+    "subsidiary": "Filiale",
+    "tabs": {
+      "overview": "Vue d'ensemble"
+    },
+    "vitals": {
+      "openAr": "Créances ouvertes",
+      "openArSub": "{count} factures ouvertes",
+      "overdue": "En retard",
+      "overdueSub": "{count} factures",
+      "pipeline": "Pipeline (trimestre)",
+      "pipelineSub": "{weighted} pondéré",
+      "closedQuarter": "Facturé ce trimestre",
+      "dso": "Délai d'encaissement",
+      "dsoSub": "Jours moyens pour encaisser",
+      "days": "{n} j"
+    },
+    "hero": {
+      "title": "Relations principales",
+      "hint": "Plus gros soldes ouverts avec le pipeline en regard",
+      "empty": "Aucune créance ouverte. Tout est encaissé.",
+      "customer": "Client",
+      "openOpps": "Opportunités",
+      "openInvoices": "Factures",
+      "oldestDue": "Plus ancienne",
+      "overdue": "En retard",
+      "open": "Ouvert"
+    },
+    "trend": {
+      "title": "Tendance des encaissements",
+      "hint": "13 semaines de règlements comptabilisés",
+      "series": "Encaissé"
+    },
+    "directory": {
+      "title": "Espace de travail",
+      "opportunitiesHint": "opportunités ouvertes",
+      "estimatesHint": "devis ouverts",
+      "salesOrdersHint": "commandes ouvertes",
+      "invoicesHint": "{overdue} en retard",
+      "receiptsHint": "règlements cette semaine",
+      "customersHint": "clients actifs"
+    },
+    "attention": {
+      "title": "À traiter",
+      "allClear": "Tout est en ordre — rien à relancer.",
+      "overdueCustomer": "{customer} a {amount} en retard"
+    }
+  }
+}

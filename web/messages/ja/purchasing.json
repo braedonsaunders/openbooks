@@ -1,0 +1,50 @@
+{
+  "home": {
+    "title": "購買",
+    "description": "発注から支払までのワークスペース — 発注残、請求書、支払、支出をひとつに。",
+    "subsidiary": "子会社",
+    "tabs": {
+      "overview": "概要"
+    },
+    "vitals": {
+      "openAp": "未払債務",
+      "openApSub": "未決済請求書 {count} 件",
+      "overdue": "期限超過",
+      "dueNext7": "7 日以内に期日",
+      "openPos": "未決発注",
+      "openPosSub": "{count} 件の発注",
+      "spend30d": "30 日間支出",
+      "spend30dSub": "計上済み仕入請求書"
+    },
+    "hero": {
+      "title": "仕入先コミットメント",
+      "hint": "未決発注と未決請求書をエクスポージャーの大きい順に",
+      "empty": "未決のコミットメント・債務はありません。",
+      "vendor": "仕入先",
+      "openPos": "未決発注",
+      "openBills": "請求書",
+      "oldestDue": "最古の期日",
+      "overdue": "期限超過",
+      "billedOpen": "請求済み未払"
+    },
+    "trend": {
+      "title": "支出トレンド",
+      "hint": "過去 13 週間の請求書計上",
+      "series": "請求額"
+    },
+    "directory": {
+      "title": "ワークスペース",
+      "posHint": "コミット {value}",
+      "billsHint": "期限超過 {overdue}",
+      "paymentsHint": "今週の支払",
+      "expensesHint": "計上待ち",
+      "vendorsHint": "アクティブな仕入先"
+    },
+    "attention": {
+      "title": "要対応",
+      "allClear": "すべて順調 — 期限超過なし。",
+      "overdueVendor": "{vendor} が {amount} 期限超過",
+      "unpostedExpenses": "経費精算 {count} 件が計上待ち"
+    }
+  }
+}

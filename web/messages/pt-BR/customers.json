@@ -1,0 +1,52 @@
+{
+  "home": {
+    "title": "Clientes",
+    "description": "Seu espaço de relacionamento a recebimento — pipeline, vendas, faturamento e cobrança em um só lugar.",
+    "subsidiary": "Subsidiária",
+    "tabs": {
+      "overview": "Visão geral"
+    },
+    "vitals": {
+      "openAr": "Contas a receber",
+      "openArSub": "{count} faturas em aberto",
+      "overdue": "Vencido",
+      "overdueSub": "{count} faturas",
+      "pipeline": "Pipeline (trimestre)",
+      "pipelineSub": "{weighted} ponderado",
+      "closedQuarter": "Faturado neste trimestre",
+      "dso": "Prazo médio de recebimento",
+      "dsoSub": "Dias médios para receber",
+      "days": "{n} d"
+    },
+    "hero": {
+      "title": "Principais relacionamentos",
+      "hint": "Maiores saldos em aberto com o pipeline ao lado",
+      "empty": "Sem contas a receber em aberto.",
+      "customer": "Cliente",
+      "openOpps": "Oportunidades",
+      "openInvoices": "Faturas",
+      "oldestDue": "Mais antiga",
+      "overdue": "Vencido",
+      "open": "Em aberto"
+    },
+    "trend": {
+      "title": "Tendência de recebimentos",
+      "hint": "13 semanas de recebimentos lançados",
+      "series": "Recebido"
+    },
+    "directory": {
+      "title": "Espaço de trabalho",
+      "opportunitiesHint": "oportunidades abertas",
+      "estimatesHint": "orçamentos abertos",
+      "salesOrdersHint": "pedidos abertos",
+      "invoicesHint": "{overdue} vencido",
+      "receiptsHint": "recebimentos esta semana",
+      "customersHint": "clientes ativos"
+    },
+    "attention": {
+      "title": "Requer atenção",
+      "allClear": "Tudo certo — nada a cobrar.",
+      "overdueCustomer": "{customer} está com {amount} vencido"
+    }
+  }
+}

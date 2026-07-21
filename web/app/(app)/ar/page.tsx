@@ -58,8 +58,10 @@ export default async function AR({
     />
   ) : undefined
 
+  const tHome = await getTranslations('customers')
   const tabs = (
     <div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+      <Link href={'/customers' as any} className={tabCls(false)}>{tHome('home.title')}</Link>
       <Link href="/ar" className={tabCls(true)}>{t('cockpit.tabs.overview')}</Link>
       <Link href={'/ar/invoices' as any} className={tabCls(false)}>{t('cockpit.tabs.invoices')}</Link>
     </div>

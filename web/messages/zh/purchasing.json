@@ -1,0 +1,50 @@
+{
+  "home": {
+    "title": "采购",
+    "description": "从采购到付款的工作区 — 采购承诺、账单、付款与供应商支出一站式管理。",
+    "subsidiary": "子公司",
+    "tabs": {
+      "overview": "概览"
+    },
+    "vitals": {
+      "openAp": "未付账款",
+      "openApSub": "{count} 张未结账单",
+      "overdue": "逾期",
+      "dueNext7": "未来 7 天到期",
+      "openPos": "未结采购订单",
+      "openPosSub": "{count} 张订单",
+      "spend30d": "近 30 天支出",
+      "spend30dSub": "已入账供应商账单"
+    },
+    "hero": {
+      "title": "供应商承诺",
+      "hint": "未结采购订单与未结账单并列，按敞口从大到小",
+      "empty": "没有未结承诺或应付款。",
+      "vendor": "供应商",
+      "openPos": "未结采购订单",
+      "openBills": "账单",
+      "oldestDue": "最早到期",
+      "overdue": "逾期",
+      "billedOpen": "已开票未付"
+    },
+    "trend": {
+      "title": "支出趋势",
+      "hint": "近 13 周已入账账单",
+      "series": "已开票"
+    },
+    "directory": {
+      "title": "工作区",
+      "posHint": "承诺 {value}",
+      "billsHint": "逾期 {overdue}",
+      "paymentsHint": "本周付款",
+      "expensesHint": "待入账",
+      "vendorsHint": "位活跃供应商"
+    },
+    "attention": {
+      "title": "需要关注",
+      "allClear": "一切正常 — 无逾期。",
+      "overdueVendor": "{vendor} 逾期 {amount}",
+      "unpostedExpenses": "{count} 份费用报告待入账"
+    }
+  }
+}

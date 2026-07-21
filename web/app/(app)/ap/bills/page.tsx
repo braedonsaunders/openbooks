@@ -71,8 +71,10 @@ export default async function ApBills({
     </div>
   )
 
+  const tHome = await getTranslations('purchasing')
   const tabs = (
     <div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+      <Link href={'/purchasing' as any} className={tabCls(false)}>{tHome('home.title')}</Link>
       <Link href="/ap" className={tabCls(false)}>{t('cockpit.tabs.overview')}</Link>
       <Link href={'/ap/bills' as any} className={tabCls(true)}>{t('cockpit.tabs.bills')}</Link>
     </div>
