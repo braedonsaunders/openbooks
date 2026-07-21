@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
+import { currencies, orgs } from '@openbooks/schema'
 import { requirePermission } from '../../../../../lib/authz'
 import { LABOR_RATE_TEMPLATES } from '../../../../../lib/labor-rate-templates'
 import { LaborRateTemplateLibrary } from './LaborRateTemplateLibrary'
@@ -11,9 +12,9 @@ export const dynamic = 'force-dynamic'
 export default async function LaborRateTemplatesPage() {
   const { user } = await requirePermission('admin.setup.manage')
   const t = await getTranslations('admin.setup')
-  const [org, currencies] = await Promise.all([
-    db.execute(sql`select base_currency from orgs where id = ${user.orgId}`) as any,
-    db.execute(sql`select code, name from currencies where is_active order by code`) as any,
+  const [org, currencyRows] = await Promise.all([
+    db.select({ baseCurrency: orgs.baseCurrency }).from(orgs).where(eq(orgs.id, user.orgId)).limit(1),
+    db.select({ code: currencies.code, name: currencies.name }).from(currencies).orderBy(currencies.code),
   ])
   return (
     <div className="space-y-5">
@@ -28,8 +29,8 @@ export default async function LaborRateTemplatesPage() {
       </div>
       <LaborRateTemplateLibrary
         templates={LABOR_RATE_TEMPLATES}
-        currencies={currencies.rows}
-        defaultCurrency={String(org.rows[0]?.base_currency ?? 'CAD')}
+        currencies={currencyRows}
+        defaultCurrency={org[0]?.baseCurrency ?? 'CAD'}
       />
     </div>
   )
