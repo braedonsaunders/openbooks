@@ -18,14 +18,33 @@ export interface FeatureDef {
   defaultEnabled: boolean
   /** Nav module keys hidden while the feature is off. */
   navModules?: string[]
+  /** Grouping on the Features page. */
+  category: 'sales' | 'operations' | 'accounting' | 'platform'
 }
 
+/** The full switchboard (QBO "Enable features" / NetSuite Enable Features):
+ * everything currently visible defaults ON so existing orgs see no change;
+ * new optional modules (field tickets) default OFF. */
 export const FEATURES: FeatureDef[] = [
-  {
-    key: 'fieldTickets',
-    defaultEnabled: false,
-    navModules: ['field-tickets'],
-  },
+  // Sales & customers
+  { key: 'crm', defaultEnabled: true, category: 'sales', navModules: ['crm-leads', 'crm-prospects', 'crm-opportunities', 'crm-activities', 'crm-forecasts'] },
+  { key: 'orders', defaultEnabled: true, category: 'sales', navModules: ['estimates', 'sales-orders', 'purchase-orders'] },
+  { key: 'revenueRecognition', defaultEnabled: true, category: 'sales', navModules: ['revenue'] },
+  // Operations
+  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects'] },
+  { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'] },
+  { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'] },
+  { key: 'inventory', defaultEnabled: true, category: 'operations', navModules: ['inventory'] },
+  { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
+  { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },
+  // Accounting
+  { key: 'banking', defaultEnabled: true, category: 'accounting', navModules: ['banking-cash', 'banking-transactions', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
+  { key: 'fixedAssets', defaultEnabled: true, category: 'accounting', navModules: ['assets', 'tax-depreciation'] },
+  { key: 'budgets', defaultEnabled: true, category: 'accounting', navModules: ['budgets'] },
+  { key: 'continuousClose', defaultEnabled: true, category: 'accounting', navModules: ['continuous-close'] },
+  // Platform
+  { key: 'flows', defaultEnabled: true, category: 'platform', navModules: ['flows'] },
+  { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps', 'admin-apps'] },
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))

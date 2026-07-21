@@ -1964,7 +1964,13 @@
       "title": "Fonctionnalités",
       "description": "Activez ou désactivez des modules optionnels pour votre entreprise. Désactiver une fonctionnalité la masque partout — ses données ne sont jamais supprimées.",
       "enabled": "{name} activée",
-      "disabled": "{name} désactivée"
+      "disabled": "{name} désactivée",
+      "categories": {
+        "sales": "Ventes et clients",
+        "operations": "Opérations",
+        "accounting": "Comptabilité",
+        "platform": "Plateforme"
+      }
     }
   },
   "flows": {
@@ -2220,9 +2226,65 @@
     }
   },
   "features": {
+    "crm": {
+      "title": "CRM",
+      "description": "Prospects, opportunités, activités et prévisions de ventes."
+    },
+    "orders": {
+      "title": "Devis et commandes",
+      "description": "Devis, commandes client et bons de commande convertibles en factures."
+    },
+    "revenueRecognition": {
+      "title": "Reconnaissance des revenus",
+      "description": "Règles, échéanciers et revenus reportés des contrats."
+    },
+    "projects": {
+      "title": "Projets et coûts de revient",
+      "description": "Chantiers avec budgets, coûts, facturation et rentabilité."
+    },
+    "timeTracking": {
+      "title": "Suivi du temps",
+      "description": "Feuilles d'heures hebdomadaires personnelles avec soumission et approbation."
+    },
     "fieldTickets": {
       "title": "Bons de régie",
-      "description": "Feuilles d'heures d'équipe signées pour les travaux en régie : le contremaître saisit les heures de toute l'équipe plus l'équipement et les matériaux, le client signe, et les factures se construisent à partir des bons signés."
+      "description": "Feuilles d'équipe signées pour la régie : heures, équipement et matériaux signés par le client et facturés depuis les bons."
+    },
+    "inventory": {
+      "title": "Inventaire",
+      "description": "Stocks, emplacements, coût des articles et assemblages."
+    },
+    "equipment": {
+      "title": "Équipement et locations",
+      "description": "Unités d'équipement, barèmes et imputations d'utilisation aux chantiers."
+    },
+    "expenses": {
+      "title": "Notes de frais",
+      "description": "Saisie, approbation et remboursement des dépenses."
+    },
+    "banking": {
+      "title": "Banque",
+      "description": "Flux bancaires, rapprochement et règles."
+    },
+    "fixedAssets": {
+      "title": "Immobilisations",
+      "description": "Registres d'actifs, livres d'amortissement et amortissement fiscal."
+    },
+    "budgets": {
+      "title": "Budgets",
+      "description": "Budgets par compte et dimension avec comparaison dans les rapports."
+    },
+    "continuousClose": {
+      "title": "Clôture continue",
+      "description": "Contrôles de clôture permanents en plus de la clôture périodique."
+    },
+    "flows": {
+      "title": "Flux et approbations",
+      "description": "Automatisation : déclencheurs, conditions et validations."
+    },
+    "apps": {
+      "title": "Applications",
+      "description": "Extensions installables et la place de marché."
     }
   }
 }

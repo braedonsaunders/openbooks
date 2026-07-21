@@ -1998,7 +1998,13 @@
       "title": "Features",
       "description": "Switch optional modules on or off for your company. Turning a feature off hides it everywhere — its data is never deleted.",
       "enabled": "{name} enabled",
-      "disabled": "{name} disabled"
+      "disabled": "{name} disabled",
+      "categories": {
+        "sales": "Sales & customers",
+        "operations": "Operations",
+        "accounting": "Accounting",
+        "platform": "Platform"
+      }
     }
   },
   "flows": {
@@ -2254,9 +2260,65 @@
     }
   },
   "features": {
+    "crm": {
+      "title": "CRM",
+      "description": "Leads, prospects, opportunities, activities, and sales forecasts."
+    },
+    "orders": {
+      "title": "Quotes & orders",
+      "description": "Estimates, sales orders, and purchase orders with conversion to invoices and bills."
+    },
+    "revenueRecognition": {
+      "title": "Revenue recognition",
+      "description": "Recognition rules, schedules, and deferred revenue for contracts."
+    },
+    "projects": {
+      "title": "Projects & job costing",
+      "description": "Jobs with budgets, costing, billing, and profitability."
+    },
+    "timeTracking": {
+      "title": "Time tracking",
+      "description": "Personal weekly timesheets with submission and approval."
+    },
     "fieldTickets": {
-      "title": "Field Tickets",
-      "description": "Signed crew timesheets for T&M work: a foreman records the whole crew's hours plus equipment and materials, the customer signs, and invoices are built from the signed tickets."
+      "title": "Field tickets",
+      "description": "Signed crew timesheets for T&M work: the foreman records the whole crew's hours plus equipment and materials, the customer signs, and invoices are built from the signed tickets."
+    },
+    "inventory": {
+      "title": "Inventory",
+      "description": "Stock tracking, locations, item costing, and assemblies."
+    },
+    "equipment": {
+      "title": "Equipment & rentals",
+      "description": "Equipment units, rate ladders, and usage charges to jobs."
+    },
+    "expenses": {
+      "title": "Expense reports",
+      "description": "Employee expense capture, approval, and reimbursement."
+    },
+    "banking": {
+      "title": "Banking",
+      "description": "Bank feeds, statement matching, reconciliation, and rules."
+    },
+    "fixedAssets": {
+      "title": "Fixed assets",
+      "description": "Asset registers, depreciation books, and tax depreciation."
+    },
+    "budgets": {
+      "title": "Budgets",
+      "description": "Budgeting by account and dimension with report comparison."
+    },
+    "continuousClose": {
+      "title": "Continuous close",
+      "description": "Always-on close checks in addition to the period close."
+    },
+    "flows": {
+      "title": "Flows & approvals",
+      "description": "Workflow automation: triggers, conditions, approval gates."
+    },
+    "apps": {
+      "title": "Apps",
+      "description": "Installable extensions and the app marketplace."
     }
   }
 }
