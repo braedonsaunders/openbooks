@@ -1466,7 +1466,29 @@
         "step1d": "{count} categorías en la pestaña Categorías abajo; {unassigned} cuentas sin asignar. Agrupe cada cuenta de gasto indirecto para no omitir nada.",
         "step2t": "Revisar las tasas calculadas",
         "step2d": "La pestaña Matriz muestra la tasa de cada departamento según los reales — actualmente {rate} $/h compuesto. Solo una vista previa; nunca costea obras directamente.",
-        "step3t": "Publicar y aplicar"
+        "step3t": "Publicar y aplicar",
+        "application": {
+          "title": "Aplicación al libro mayor",
+          "hint": "Cómo llegan los gastos generales a los libros. Solo-informe los mantiene estadísticos. El par neto-cero contabiliza la parte de cada proyecto en la cuenta de gastos generales CON la etiqueta del proyecto y reversa el mismo importe sin ella — las vistas de costos por proyecto los incluyen y la cuenta y el estado de resultados quedan en cero.",
+          "modes": {
+            "report_only": "Solo informe",
+            "net_zero_pair": "Par neto-cero",
+            "off": "Apagado"
+          },
+          "account": "Cuenta de gastos generales aplicados",
+          "save": "Guardar",
+          "saved": "Aplicación de gastos generales guardada",
+          "periodStart": "Inicio del período",
+          "periodEnd": "Fin del período",
+          "apply": "Aplicar gastos generales del período",
+          "applyHint": "Usa las tarifas estándar publicadas. Reaplicar un período reversa primero el asiento anterior.",
+          "applied": "Aplicado ${total} en {projects} proyectos",
+          "entry": "Asiento",
+          "date": "Fecha",
+          "projects": "Proyectos",
+          "total": "Aplicado",
+          "status": "Estado"
+        }
       }
     },
     "fields": {

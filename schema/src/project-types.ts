@@ -54,12 +54,16 @@ export interface CostSource {
  * How a project type computes its OVERHEAD allocation — each job's share of the
  * company's cost of doing business, for a fully-burdened project margin.
  *
- * IMPORTANT: overhead is a STATISTICAL / managerial number, NOT a GL posting by
- * default — the real indirect costs are already period-expensed in the ledger,
- * so posting overhead onto jobs too would double-count (see the overhead-is-
- * statistical convention). The `rate_engine` method reuses the True Cost rate
- * engine (per-department composite $/hr = overhead pool ÷ billed hours) and
- * applies it to a project's labor: Σ_dept(project hours × dept rate).
+ * IMPORTANT: overhead must never change the company P&L — the real indirect
+ * costs are already period-expensed in the ledger, so a one-sided posting onto
+ * jobs would double-count. Two application modes exist (org setting
+ * `overheadApplication`): report_only (pure statistical, the default) and
+ * net_zero_pair (DR overhead account tagged with the project + CR the SAME
+ * account untagged — project-scoped ledger views carry burden, the account and
+ * P&L net to zero; see engine/src/overhead-apply.ts). The `rate_engine` method
+ * reuses the True Cost rate engine (per-department composite $/hr = overhead
+ * pool ÷ billed hours) and applies it to a project's labor:
+ * Σ_dept(project hours × dept rate).
  */
 export interface OverheadSource {
   method:
@@ -85,13 +89,6 @@ export interface OverheadSource {
   };
   /** For account_group_actual — the pool selection. */
   accountGroup?: { dimension: string; groupKeys?: string[] };
-  /**
-   * OPTIONAL GL absorption — off by default (overhead stays statistical). When
-   * enabled, posts Dr overhead-applied / Cr overhead-recovery contra with the
-   * over/under-recovered balance cleared to COGS, so it never double-counts.
-   * For manufacturing / gov-contracting tenants only.
-   */
-  glAbsorption?: { enabled: boolean; appliedAccount?: string; recoveryAccount?: string };
 }
 
 export interface FinancialProfile {

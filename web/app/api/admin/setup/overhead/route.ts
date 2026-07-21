@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile } from '@openbooks/schema'
+import { applyOverheadPairs } from '@openbooks/engine/src/overhead-apply.ts'
+import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 
@@ -85,6 +87,37 @@ export async function POST(req: Request) {
          where org_id = ${orgId} and id = ${id}`)
     }
     return NextResponse.json({ ok: true, applied: typeIds.length })
+  }
+
+  // How overhead reaches the ledger: report_only (statistical, default),
+  // net_zero_pair (DR overhead acct [project] / CR same acct untagged —
+  // P&L nets to zero), or off.
+  if (body.action === 'set-application') {
+    const mode = ['report_only', 'net_zero_pair', 'off'].includes(body.mode) ? body.mode : 'report_only'
+    const accountId = body.accountId ?? null
+    if (accountId !== null && !isUuid(accountId)) return NextResponse.json({ error: 'invalid accountId' }, { status: 422 })
+    if (mode === 'net_zero_pair' && !accountId) return NextResponse.json({ error: 'net_zero_pair requires an overhead applied account' }, { status: 422 })
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadApplication}',
+        ${JSON.stringify({ mode, accountId })}::jsonb)
+       where id = ${orgId}`)
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ overheadApplication: { mode, accountId } })}, ${gate.user.id})`)
+    return NextResponse.json({ ok: true })
+  }
+
+  if (body.action === 'apply-period') {
+    const { periodStart, periodEnd } = body
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(periodStart ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd ?? '') || periodEnd < periodStart) {
+      return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
+    }
+    try {
+      const result = await applyOverheadPairs({ orgId, actorId: gate.user.id, periodStart, periodEnd })
+      return NextResponse.json({ ok: true, ...result })
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+    }
   }
 
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })

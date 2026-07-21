@@ -1540,7 +1540,29 @@
         "step1d": "{count} categories on the Categories tab below; {unassigned} accounts unassigned. Group every indirect expense account so nothing is missed.",
         "step2t": "Review computed rates",
         "step2d": "The Matrix tab shows each department’s rate from actuals — currently ${rate}/hr composite. A preview only; it never costs jobs directly.",
-        "step3t": "Publish & apply"
+        "step3t": "Publish & apply",
+        "application": {
+          "title": "Ledger application",
+          "hint": "How overhead reaches the books. Report-only keeps it statistical. Net-zero pair posts each project's share to the overhead account WITH the project tag and reverses the same amount without it — job-cost views carry overhead, the account and company P&L net to zero.",
+          "modes": {
+            "report_only": "Report only",
+            "net_zero_pair": "Net-zero pair",
+            "off": "Off"
+          },
+          "account": "Overhead applied account",
+          "save": "Save",
+          "saved": "Overhead application saved",
+          "periodStart": "Period start",
+          "periodEnd": "Period end",
+          "apply": "Apply overhead for period",
+          "applyHint": "Uses the published standard rates. Re-applying a period reverses the prior entry first.",
+          "applied": "Applied ${total} across {projects} projects",
+          "entry": "Entry",
+          "date": "Date",
+          "projects": "Projects",
+          "total": "Applied",
+          "status": "Status"
+        }
       }
     },
     "fields": {

@@ -7,6 +7,8 @@ import { requirePermission } from '../../../../../lib/authz'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 import { TrueCostView } from '../../../../(app)/analytics/true-cost/TrueCostView'
 import { OverheadActions } from './OverheadActions'
+import { OverheadApplication } from './OverheadApplication'
+import { listOverheadApplications, overheadApplicationSettings } from '@openbooks/engine/src/overhead-apply.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +45,11 @@ export default async function OverheadModelSetup() {
     rows: { n: number; from_date: string | null }[]
   }
   const card = cardRes.rows[0] ?? { n: 0, from_date: null }
+  const [application, applications, accountsRes] = await Promise.all([
+    overheadApplicationSettings(authz.user.orgId),
+    listOverheadApplications(authz.user.orgId),
+    db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active order by number nulls last, name`),
+  ])
 
   const methodLabel = (oh: { method?: string; ratePercent?: number; ratePerHour?: number } | null) => {
     switch (oh?.method) {
@@ -143,6 +150,15 @@ export default async function OverheadModelSetup() {
           </span>
         ))}
       </div>
+      <OverheadApplication
+        mode={application.mode}
+        accountId={application.accountId}
+        accounts={(accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
+          id: String(r.id),
+          label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
+        }))}
+        applications={applications}
+      />
       <TrueCostView data={data} mode="setup" />
     </div>
   )
