@@ -11,6 +11,7 @@ import { dateTime } from '../../../lib/format'
 import { FilePreview } from './FilePreview'
 import { SharePanel } from './SharePanel'
 import { ActivityLog } from './ActivityLog'
+import { DrawerTabs, type DrawerTab } from './DrawerTabs'
 
 interface FileVersion {
   id: string
@@ -78,6 +79,15 @@ export function FileDrawer({
   const [deleting, setDeleting] = useState(false)
   const [replacing, setReplacing] = useState(false)
   const replaceInputRef = useRef<HTMLInputElement>(null)
+
+  const tabs: DrawerTab[] = [
+    { key: 'preview', label: t('tabs.preview') },
+    { key: 'details', label: t('tabs.details') },
+    ...(canManage ? [{ key: 'sharing', label: t('tabs.sharing') }] : []),
+    { key: 'activity', label: t('tabs.activity') },
+  ]
+  const initialTab = search.get('fileTab') ?? 'preview'
+  const [tab, setTab] = useState(tabs.some((x) => x.key === initialTab) ? initialTab : 'preview')
 
   function closeHref(): string {
     const params = new URLSearchParams(search.toString())
@@ -158,6 +168,7 @@ export function FileDrawer({
       title={file.name}
       description={file.folderName ?? undefined}
       size="2xl"
+      subtabs={<DrawerTabs tabs={tabs} active={tab} onSelect={setTab} />}
       headerActions={
         mode === 'edit' ? (
           <div className="flex items-center gap-2">
@@ -172,7 +183,13 @@ export function FileDrawer({
         ) : (
           <div className="flex items-center gap-2">
             {canEdit ? (
-              <Button variant="outline" onClick={() => setMode('edit')}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setMode('edit')
+                  setTab('preview')
+                }}
+              >
                 {tc('actions.edit')}
               </Button>
             ) : null}
@@ -196,30 +213,63 @@ export function FileDrawer({
       }
     >
       <div className="space-y-6">
-        {/* Rename (edit mode only) — the name lives in the drawer title otherwise */}
-        {mode === 'edit' ? (
-          <section className="space-y-1.5">
-            <Label className="text-xs text-slate-500 dark:text-slate-400">{t('name')}</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-          </section>
+        {/* PREVIEW TAB */}
+        {tab === 'preview' ? (
+          <>
+            {/* Rename (edit mode only) — name lives in the drawer title otherwise */}
+            {mode === 'edit' ? (
+              <section className="space-y-1.5">
+                <Label className="text-xs text-slate-500 dark:text-slate-400">{t('name')}</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+              </section>
+            ) : null}
+
+            <FilePreview
+              file={{
+                id: file.id,
+                name: file.name,
+                contentType: file.contentType,
+                fileType: file.fileType,
+                extension: file.extension,
+                sizeBytes: file.sizeBytes,
+                currentVersionId: file.currentVersionId,
+              }}
+              canManage={canEdit}
+            />
+
+            {/* Replace action */}
+            {canEdit ? (
+              <section className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={replacing}
+                  onClick={() => replaceInputRef.current?.click()}
+                >
+                  {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                  {tc('actions.replace')}
+                </Button>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('replaceBody')}</p>
+                <input
+                  ref={replaceInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) void handleReplace(f)
+                    e.target.value = ''
+                  }}
+                />
+              </section>
+            ) : null}
+          </>
         ) : null}
 
-        {/* Preview / edit pane — the star of the flyout */}
-        <FilePreview
-          file={{
-            id: file.id,
-            name: file.name,
-            contentType: file.contentType,
-            fileType: file.fileType,
-            extension: file.extension,
-            sizeBytes: file.sizeBytes,
-            currentVersionId: file.currentVersionId,
-          }}
-          canManage={canEdit}
-        />
-
-        {/* Metadata grid */}
-        <section className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
+        {/* DETAILS TAB */}
+        {tab === 'details' ? (
+          <>
+            {/* Metadata grid */}
+            <section className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
           <div>
             <Label className="text-xs text-slate-500 dark:text-slate-400">{t('type')}</Label>
             <p className="truncate text-slate-900 dark:text-slate-100" title={file.contentType}>
@@ -241,32 +291,6 @@ export function FileDrawer({
             <p className="text-slate-900 dark:text-slate-100">{dateTime(file.updatedAt)}</p>
           </div>
         </section>
-
-        {/* Replace action */}
-        {canEdit ? (
-          <section className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={replacing}
-              onClick={() => replaceInputRef.current?.click()}
-            >
-              {replacing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-              {tc('actions.replace')}
-            </Button>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('replaceBody')}</p>
-            <input
-              ref={replaceInputRef}
-              type="file"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void handleReplace(f)
-                e.target.value = ''
-              }}
-            />
-          </section>
-        ) : null}
 
         {/* Versions */}
         <section className="space-y-2">
@@ -324,13 +348,17 @@ export function FileDrawer({
               ))}
             </div>
           )}
-        </section>
+            </section>
+          </>
+        ) : null}
 
-        {/* Sharing — Manager access only */}
-        {canManage ? <SharePanel resourceType="file" resourceId={file.id} /> : null}
+        {/* SHARING TAB — Manager access only */}
+        {tab === 'sharing' && canManage ? (
+          <SharePanel resourceType="file" resourceId={file.id} />
+        ) : null}
 
-        {/* Activity */}
-        <ActivityLog resourceType="file" resourceId={file.id} />
+        {/* ACTIVITY TAB */}
+        {tab === 'activity' ? <ActivityLog resourceType="file" resourceId={file.id} /> : null}
       </div>
     </UrlDrawer>
   )

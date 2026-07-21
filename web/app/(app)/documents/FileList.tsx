@@ -19,8 +19,10 @@ import {
   Loader2,
   MoreVertical,
   Pencil,
+  Settings2,
   Trash2,
   UploadCloud,
+  Users,
   X,
 } from 'lucide-react'
 import {
@@ -218,6 +220,15 @@ export function FileList({
     return `/documents?${p.toString()}`
   }
 
+  /** Open a folder's properties/sharing drawer (keeps the current location). */
+  function folderPropsHref(id: string, folderTab?: string): string {
+    const p = new URLSearchParams()
+    if (activeFolderId) p.set('fid', activeFolderId)
+    p.set('folder', id)
+    if (folderTab) p.set('folderTab', folderTab)
+    return `/documents?${p.toString()}`
+  }
+
   async function copyLink(href: string) {
     try {
       await navigator.clipboard.writeText(new URL(href, window.location.origin).toString())
@@ -336,8 +347,17 @@ export function FileList({
       const manageable = canDelete && !row.isSystem
       const items: ContextMenuEntry[] = [
         { key: 'open', label: t('rowMenu.openFolder'), icon: FolderOpen, onSelect: () => router.push(folderHref(row.id)) },
+        { key: 'props', label: t('rowMenu.properties'), icon: Settings2, onSelect: () => router.push(folderPropsHref(row.id)) },
         { key: 'copy', label: t('rowMenu.copyLink'), icon: Link2, onSelect: () => void copyLink(folderHref(row.id)) },
       ]
+      if (canDelete) {
+        items.push({
+          key: 'share',
+          label: t('rowMenu.manageAccess'),
+          icon: Users,
+          onSelect: () => router.push(folderPropsHref(row.id, 'sharing')),
+        })
+      }
       if (manageable) {
         items.push(
           { key: 'sep', separator: true },
@@ -359,6 +379,17 @@ export function FileList({
       },
       { key: 'copy', label: t('rowMenu.copyLink'), icon: Link2, onSelect: () => void copyLink(fileHref(row.id)) },
     ]
+    if (canDelete) {
+      items.push({
+        key: 'share',
+        label: t('rowMenu.manageAccess'),
+        icon: Users,
+        onSelect: () =>
+          router.push(
+            `/documents?file=${row.id}${activeFolderId ? `&fid=${activeFolderId}` : ''}&fileTab=sharing`,
+          ),
+      })
+    }
     if (canEdit) {
       items.push(
         { key: 'sep1', separator: true },

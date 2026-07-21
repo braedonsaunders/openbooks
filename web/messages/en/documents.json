@@ -48,8 +48,13 @@
       "parentLabel": "Parent folder",
       "submit": "Create folder"
     },
+    "tabs": {
+      "details": "Details",
+      "sharing": "Sharing",
+      "activity": "Activity"
+    },
     "edit": {
-      "title": "Edit Folder",
+      "title": "Folder",
       "nameLabel": "Folder name",
       "parentLabel": "Parent folder",
       "private": "Private folder",
@@ -71,6 +76,12 @@
   "file": {
     "drawer": {
       "title": "File Details",
+      "tabs": {
+        "preview": "Preview",
+        "details": "Details",
+        "sharing": "Sharing",
+        "activity": "Activity"
+      },
       "name": "Name",
       "folder": "Folder",
       "type": "Type",
@@ -118,10 +129,10 @@
   },
   "share": {
     "title": "Sharing",
-    "subtitle": "Grant people or roles access to this {kind}.",
+    "subtitle": "Everyone in your company can view this {kind} by default. Grant people or roles extra access (edit or manage) here; make a folder Private in Details to restrict who can see it.",
     "kindFolder": "folder",
     "kindFile": "file",
-    "noGrants": "Not shared with anyone yet. Access follows your organization roles.",
+    "noGrants": "Visible to everyone in your company. Add people or roles below to grant Editor or Manager access.",
     "addPrincipal": "Add person or role",
     "selectPrincipal": "Choose a person or role…",
     "usersGroup": "People",
@@ -229,6 +240,8 @@
   "rowMenu": {
     "open": "Open",
     "openFolder": "Open folder",
+    "properties": "Properties",
+    "manageAccess": "Manage access",
     "copyLink": "Copy link"
   },
   "rename": {
