@@ -1510,7 +1510,29 @@
         "step1d": "{count} catégories dans l’onglet Catégories ci-dessous ; {unassigned} comptes non assignés. Groupez chaque compte de charges indirectes pour ne rien omettre.",
         "step2t": "Vérifier les taux calculés",
         "step2d": "L’onglet Matrice montre le taux de chaque département d’après les réels — actuellement {rate} $/h composite. Un aperçu seulement ; il ne coûte jamais les chantiers directement.",
-        "step3t": "Publier et appliquer"
+        "step3t": "Publier et appliquer",
+        "application": {
+          "title": "Application au grand livre",
+          "hint": "Comment les frais généraux atteignent les livres. « Rapport seulement » les garde statistiques. La paire à somme nulle comptabilise la part de chaque projet dans le compte de frais généraux AVEC l'étiquette projet et contrepasse le même montant sans elle — les vues par projet portent les frais généraux, le compte et le résultat restent à zéro.",
+          "modes": {
+            "report_only": "Rapport seulement",
+            "net_zero_pair": "Paire à somme nulle",
+            "off": "Désactivé"
+          },
+          "account": "Compte de frais généraux appliqués",
+          "save": "Enregistrer",
+          "saved": "Application des frais généraux enregistrée",
+          "periodStart": "Début de période",
+          "periodEnd": "Fin de période",
+          "apply": "Appliquer les frais généraux de la période",
+          "applyHint": "Utilise les taux standard publiés. Réappliquer une période contrepasse d'abord l'écriture précédente.",
+          "applied": "Appliqué ${total} sur {projects} projets",
+          "entry": "Écriture",
+          "date": "Date",
+          "projects": "Projets",
+          "total": "Appliqué",
+          "status": "Statut"
+        }
       }
     },
     "fields": {
