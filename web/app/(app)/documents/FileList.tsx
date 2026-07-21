@@ -16,15 +16,18 @@ import {
   FolderOpen,
   Image as ImageIcon,
   Link2,
+  Loader2,
   MoreVertical,
   Pencil,
   Trash2,
   UploadCloud,
+  X,
 } from 'lucide-react'
 import {
   Badge,
   ContextMenu,
   type ContextMenuEntry,
+  Button,
   Table,
   TableBody,
   TableCell,
@@ -100,6 +103,7 @@ export function FileList({
 }) {
   const t = useTranslations('documents')
   const tt = useTranslations('documents.toasts')
+  const tb = useTranslations('documents.bulk')
   const tc = useTranslations('common')
   const router = useRouter()
   const search = useSearchParams()
@@ -108,6 +112,97 @@ export function FileList({
   const [target, setTarget] = useState<Target | null>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
   const replaceTargetId = useRef<string | null>(null)
+
+  // --- multi-select ---------------------------------------------------------
+  // Selection is keyed by "file:<id>" / "folder:<id>". Only rows the caller can
+  // delete are selectable (canDelete gates both), matching the server checks.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const selectable = canDelete
+  const rowKeys = [
+    ...folders.map((f) => `folder:${f.id}`),
+    ...files.map((f) => `file:${f.id}`),
+  ]
+  const allSelected = rowKeys.length > 0 && rowKeys.every((k) => selected.has(k))
+
+  function toggle(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+  function toggleAll() {
+    setSelected((prev) => (prev.size === rowKeys.length ? new Set() : new Set(rowKeys)))
+  }
+  function clearSelection() {
+    setSelected(new Set())
+  }
+  const selectedFileIds = () =>
+    [...selected].filter((k) => k.startsWith('file:')).map((k) => k.slice(5))
+  const selectedFolderIds = () =>
+    [...selected].filter((k) => k.startsWith('folder:')).map((k) => k.slice(7))
+
+  async function bulkDownload() {
+    const ids = selectedFileIds()
+    if (ids.length === 0) {
+      toast.error(tb('nothingDownloadable'))
+      return
+    }
+    setBulkBusy(true)
+    try {
+      const res = await fetch('/api/file-cabinet/bulk-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileIds: ids }),
+      })
+      if (!res.ok) {
+        toast.error(tb('downloadFailed'))
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'files.zip'
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function bulkDelete() {
+    const ok = await confirmDialog({
+      title: tb('deleteConfirm.title'),
+      message: tb('deleteConfirm.body'),
+      tone: 'danger',
+    })
+    if (!ok) return
+    setBulkBusy(true)
+    try {
+      const res = await fetch('/api/file-cabinet/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          fileIds: selectedFileIds(),
+          folderIds: selectedFolderIds(),
+        }),
+      })
+      if (res.ok) {
+        const { done } = (await res.json()) as { done: number }
+        toast.success(tb('deleted', { count: done }))
+        clearSelection()
+        router.refresh()
+      } else {
+        toast.error(tb('deleteFailed'))
+      }
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   function fileHref(id: string): string {
     return `/documents?file=${id}${activeFolderId ? `&fid=${activeFolderId}` : ''}`
@@ -309,9 +404,47 @@ export function FileList({
 
   return (
     <>
+      {selectable && selected.size > 0 ? (
+        <div className="sticky top-0 z-20 mb-2 flex items-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm dark:border-teal-900 dark:bg-teal-950/40">
+          <span className="font-medium text-teal-800 dark:text-teal-200">
+            {tb('selected', { count: selected.size })}
+          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button variant="outline" size="sm" disabled={bulkBusy} onClick={() => void bulkDownload()}>
+              {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {tb('download')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkBusy}
+              className="text-rose-600 hover:text-rose-700"
+              onClick={() => void bulkDelete()}
+            >
+              <Trash2 className="h-4 w-4" />
+              {tb('delete')}
+            </Button>
+            <Button variant="ghost" size="sm" disabled={bulkBusy} onClick={clearSelection}>
+              <X className="h-4 w-4" />
+              {tb('clear')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <Table>
         <TableHeader>
           <TableRow>
+            {selectable ? (
+              <TableHead className="w-8">
+                <input
+                  type="checkbox"
+                  aria-label={tb('selectAll')}
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+              </TableHead>
+            ) : null}
             <SortTh basePath="/documents" currentParams={currentParams} column="name" sort={sort} dir={dir}>
               {t('columns.name')}
             </SortTh>
@@ -333,6 +466,17 @@ export function FileList({
           const tgt: Target = { kind: 'folder', row: folder }
           return (
             <TableRow key={`folder-${folder.id}`} className="group" onContextMenu={(e) => openMenuFor(tgt, e)}>
+              {selectable ? (
+                <TableCell className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label={folder.name}
+                    checked={selected.has(`folder:${folder.id}`)}
+                    onChange={() => toggle(`folder:${folder.id}`)}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                </TableCell>
+              ) : null}
               <TableCell className="font-medium">
                 <Link
                   href={folderHref(folder.id)}
@@ -357,6 +501,17 @@ export function FileList({
           const tgt: Target = { kind: 'file', row: f }
           return (
             <TableRow key={f.id} className="group" onContextMenu={(e) => openMenuFor(tgt, e)}>
+              {selectable ? (
+                <TableCell className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label={f.name}
+                    checked={selected.has(`file:${f.id}`)}
+                    onChange={() => toggle(`file:${f.id}`)}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                </TableCell>
+              ) : null}
               <TableCell className="font-medium">
                 <Link
                   href={fileHref(f.id)}
