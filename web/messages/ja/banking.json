@@ -109,7 +109,8 @@
       "noStatement": "{account}は明細書を一度も取り込んでいません",
       "staleStatement": "{account}は{days}日間明細書がありません",
       "openRecon": "{account}で消込が進行中です"
-    }
+    },
+    "subsidiary": "子会社"
   },
   "transactionsPage": {
     "title": "銀行取引",

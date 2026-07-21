@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
   Landmark,
@@ -52,7 +52,14 @@ export function CashCockpit({
 }) {
   const t = useTranslations('banking.cash')
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [showConfig, setShowConfig] = useState(false)
+  const pushHorizon = (h: number) => {
+    // Merge into the current query so the subsidiary view (?sub=) survives.
+    const next = new URLSearchParams(searchParams?.toString())
+    next.set('horizon', String(h))
+    router.push(`/banking/cash?${next.toString()}` as never)
+  }
 
   const lowestDate = new Date(data.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
   const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
@@ -72,7 +79,7 @@ export function CashCockpit({
             <button
               key={h}
               type="button"
-              onClick={() => router.push(`/banking/cash?horizon=${h}` as any)}
+              onClick={() => pushHorizon(h)}
               className={cn('rounded-md px-3 py-1 text-sm font-medium transition-colors', h === data.horizonWeeks ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100')}
             >
               {t('weeks', { n: h })}

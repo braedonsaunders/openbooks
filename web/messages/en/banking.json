@@ -109,11 +109,19 @@
       "noStatement": "{account} has never imported a statement",
       "staleStatement": "{account} has no statement in {days} days",
       "openRecon": "{account} has a reconciliation in progress"
-    }
+    },
+    "subsidiary": "Subsidiary"
   },
   "transactionsPage": {
     "title": "Banking transactions",
     "description": "Checks, deposits, transfers, and corporate-card activity."
+  },
+  "docStatus": {
+    "draft": "Draft",
+    "pending_approval": "Pending approval",
+    "approved": "Approved",
+    "posted": "Posted",
+    "voided": "Voided"
   },
   "imports": {
     "title": "Import history",

@@ -142,6 +142,9 @@ export interface CategoryContext {
   arWeekly: Record<string, number>;
   apWeekly: Record<string, number>;
   cashStart: number;
+  /** Active subsidiary view — SQL-backed strategies scope their history to it
+   * (manual/formula strategies are org-level models and ignore it). */
+  subIds?: string[];
 }
 
 /** A source item behind a category estimate (Gantry's breakdown rows). */
@@ -217,7 +220,16 @@ export function resolveAsOf(asOfDate?: string): string {
   return asOfDate && asOfDate < today ? asOfDate : today;
 }
 
-export async function openItems(side: Side, asOf: string): Promise<OpenItem[]> {
+/**
+ * Optional subsidiary scope — ` and <col> = any(ids)` when a subsidiary view
+ * is active (the statement-matrix filter pattern), empty otherwise so
+ * single-subsidiary orgs and unscoped callers run byte-identical SQL.
+ */
+function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
+  return subIds && subIds.length > 0 ? sql` and ${col} = any(${`{${subIds.join(",")}}`}::uuid[])` : sql``;
+}
+
+export async function openItems(side: Side, asOf: string, subIds?: string[]): Promise<OpenItem[]> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
   // The CASH cockpit deals in payable/receivable DOCUMENTS — the things a
@@ -242,7 +254,7 @@ export async function openItems(side: Side, asOf: string): Promise<OpenItem[]> {
         join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
         join accounts a on a.id = jl.account_id
        where jl.is_open_item and a.type = ${acctType} and ${signFilter}
-         and je.posting_date <= ${asOf}
+         and je.posting_date <= ${asOf}${subScope(sql`jl.subsidiary_id`, subIds)}
     )
     select oi.id, oi.entry_id, oi.doc_id, d.kind as doc_kind, d.document_number as doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
@@ -448,7 +460,7 @@ export async function categoryWeekly(
       join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
-        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}
+        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1, a.number, a.name
     `)) as any;
     const weeklyHistory: Record<string, number> = {};
@@ -497,7 +509,7 @@ export async function categoryWeekly(
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) > ${asOfIso}::date - (${historyMonths} || ' months')::interval
-        and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date
+        and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date${subScope(sql`d.subsidiary_id`, context.subIds)}
       group by 1
     `)) as any;
     const months = (r.rows as any[]).map((x) => Number(x.paid)).filter((v) => v > 0).sort((a, b) => a - b);
@@ -533,14 +545,14 @@ export async function categoryWeekly(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
       where l.org_id = ${orgId} and l.account_id in (${ids})
-        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}
+        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1
     `)) as any;
     const balR = (await db.execute(sql`
       select coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-      where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}
+      where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `)) as any;
     const totalCurrentBalance = Math.abs(Number(balR.rows[0]?.bal ?? 0));
 
@@ -728,7 +740,7 @@ export async function categoryWeekly(
       from documents d
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
-        and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval
+        and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds)}
       group by 1
     `)) as any;
     const events = (r.rows as any[])
@@ -800,7 +812,7 @@ export async function categoryWeekly(
       left join parties p on p.id = d.party_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}
-        and (${kindFilter})${memoFilter}
+        and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `)) as any;
     const weeklyHistory: Record<string, number> = {};
     const currentWeekKey = toISO(weekStart(asOf));
@@ -865,13 +877,14 @@ export async function categoryWeekly(
   };
 }
 
-export async function bankBalances(asOf: string) {
+export async function bankBalances(asOf: string, subIds?: string[]) {
   const r = (await db.execute(sql`
     select a.id, a.name, a.number, coalesce(sum(l.amount), 0) as balance
     from accounts a
     left join (journal_lines l join journal_entries e on e.id = l.entry_id)
-      on l.account_id = a.id and e.posting_date <= ${asOf}
+      on l.account_id = a.id and e.posting_date <= ${asOf}${subScope(sql`l.subsidiary_id`, subIds)}
     where a.type = 'asset_bank' and a.is_summary = false
+      ${subIds && subIds.length > 0 ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
     group by a.id, a.name, a.number
     order by coalesce(sum(l.amount), 0) desc
   `)) as any;

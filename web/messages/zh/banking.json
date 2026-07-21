@@ -109,7 +109,8 @@
       "noStatement": "{account} 从未导入对账单",
       "staleStatement": "{account} 已 {days} 天没有对账单",
       "openRecon": "{account} 有进行中的对账"
-    }
+    },
+    "subsidiary": "子公司"
   },
   "transactionsPage": {
     "title": "银行交易",

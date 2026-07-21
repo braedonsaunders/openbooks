@@ -11,8 +11,11 @@ import {
   type DirectoryItem,
 } from '../../../components/module-home/ui'
 import { TrendChart } from '../analytics/_ui/charts'
+import { SubsidiarySwitcher } from '../../../components/subsidiary-switcher'
 import { requirePermission, can } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
+import { reportSubsidiaryView } from '../../../lib/consolidation'
+import { resolveAsOf } from '../../../lib/cash/core'
 import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
 import { money, moneyCompact } from '../../../lib/format'
 
@@ -35,14 +38,23 @@ const STALE_STATEMENT_DAYS = 30
  * cockpit stays its own page and appears here as a sibling tab when the org's
  * nav shows it.
  */
-export default async function BankingHomePage() {
+export default async function BankingHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
   const tNav = await getTranslations('nav')
+  const sp = await searchParams
+
+  // Subsidiary context — multi-subsidiary orgs get a switcher; the whole page
+  // (roster, balances, trend, badges) scopes to the selected view.
+  const subView = await reportSubsidiaryView(sp.sub, resolveAsOf())
 
   const [data, navGroups] = await Promise.all([
-    bankingHome(authz.user.orgId),
+    bankingHome(authz.user.orgId, subView.subsidiary?.ids),
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),
@@ -61,9 +73,10 @@ export default async function BankingHomePage() {
   // resolved banking group, so hidden items vanish and custom labels hold.
   const groupItems = navGroups.find((g) => g.id === 'banking')?.items ?? []
   const cashItem = groupItems.find((i) => i.href === '/banking/cash')
+  const subQs = sp.sub ? `?sub=${sp.sub}` : ''
   const tabs = [
     { href: '/banking', label: t('home.tabs.overview'), active: true },
-    ...(cashItem ? [{ href: cashItem.href, label: cashItem.label }] : []),
+    ...(cashItem ? [{ href: `${cashItem.href}${subQs}`, label: cashItem.label }] : []),
   ]
 
   const lastImportAge = daysSince(data.badges.lastImportedAt)
@@ -118,6 +131,11 @@ export default async function BankingHomePage() {
           description={t('home.description')}
           actions={
             <div className="flex items-center gap-3">
+              <SubsidiarySwitcher
+                picker={subView.picker}
+                value={subView.picker.find((p) => p.id === sp.sub)?.id ?? subView.picker[0]?.id ?? ''}
+                label={t('home.subsidiary')}
+              />
               <ModuleHomeTabs tabs={tabs} />
               {canReconcile ? (
                 <Button variant={data.unmatchedLines > 0 ? 'default' : 'outline'} asChild>

@@ -2,9 +2,12 @@ import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
+import { SubsidiarySwitcher } from '../../../../components/subsidiary-switcher'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
 import { cashPosition } from '../../../../lib/cash/cash-position'
+import { resolveAsOf } from '../../../../lib/cash/core'
+import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { CashCockpit } from './CashCockpit'
 
 export const dynamic = 'force-dynamic'
@@ -33,9 +36,14 @@ export default async function BankingCashPage({
   const parsed = Number(sp.horizon)
   const horizon = parsed === 4 || parsed === 12 ? parsed : 8
 
+  // Subsidiary context (multi-subsidiary orgs): the whole cockpit — cash,
+  // open items, SQL-backed forecast categories — scopes to the selected view.
+  const asOfIso = resolveAsOf()
+  const subView = await reportSubsidiaryView(sp.sub, asOfIso)
+
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const data = await cashPosition(authz.user.orgId, horizon, apSettings)
+  const data = await cashPosition(authz.user.orgId, horizon, apSettings, undefined, subView.subsidiary?.ids)
 
   return (
     <ListPageLayout
@@ -45,13 +53,20 @@ export default async function BankingCashPage({
           title={t('title')}
           description={t('description')}
           actions={
-            // Sibling route-tabs back to the Banking module home (the /ap idiom).
-            <ModuleHomeTabs
-              tabs={[
-                { href: '/banking', label: tBanking('home.tabs.overview') },
-                { href: '/banking/cash', label: t('title'), active: true },
-              ]}
-            />
+            <div className="flex items-center gap-3">
+              <SubsidiarySwitcher
+                picker={subView.picker}
+                value={subView.picker.find((p) => p.id === sp.sub)?.id ?? subView.picker[0]?.id ?? ''}
+                label={tBanking('home.subsidiary')}
+              />
+              {/* Sibling route-tabs back to the Banking module home (the /ap idiom). */}
+              <ModuleHomeTabs
+                tabs={[
+                  { href: sp.sub ? `/banking?sub=${sp.sub}` : '/banking', label: tBanking('home.tabs.overview') },
+                  { href: '/banking/cash', label: t('title'), active: true },
+                ]}
+              />
+            </div>
           }
         />
       }
