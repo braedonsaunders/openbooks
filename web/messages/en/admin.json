@@ -1947,7 +1947,9 @@
           "post": "Yes — post standard cost at approval",
           "postHint": "DR labor WIP (by project) / CR labor clearing. Payroll actuals clear the same account later.",
           "wip": "Labor WIP / job cost account",
-          "clearing": "Labor clearing account"
+          "clearing": "Labor clearing account",
+          "variance": "Payroll variance account (optional — for the month-end true-up)",
+          "varianceLater": "Choose later"
         },
         "review": "Ready to apply:",
         "reviewBurden": "Burden estimate: {name} at {pct}%",
@@ -1961,7 +1963,10 @@
         "exReg": "Regular",
         "exOt": "OT ×1.5",
         "exDt": "DT ×2",
-        "reviewNote": "Everything here is editable in the workspace afterward — the guide just fills in the same settings."
+        "reviewNote": "Everything here is editable in the workspace afterward — the guide just fills in the same settings.",
+        "nextSteps": "After this: overhead",
+        "nextOverhead": "Labor costing covers wages and statutory burden. Your company's OVERHEAD (rent, admin, fleet…) is a separate layer with its own guided setup — classify costs, review computed rates, and apply them to project types.",
+        "nextOverheadLink": "Open the Overhead Model"
       }
     }
   },

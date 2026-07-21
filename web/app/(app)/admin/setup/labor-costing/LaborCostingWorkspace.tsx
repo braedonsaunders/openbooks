@@ -243,6 +243,7 @@ export function LaborCostingWorkspace(props: {
           setComponents(applied.components)
           if (applied.laborWip) setLaborWip(applied.laborWip)
           if (applied.laborClearing) setLaborClearing(applied.laborClearing)
+          if (applied.payrollVariance) setPayrollVariance(applied.payrollVariance)
         }}
         trades={props.trades}
         accounts={props.accounts}

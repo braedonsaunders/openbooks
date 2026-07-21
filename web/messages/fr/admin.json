@@ -1913,7 +1913,9 @@
           "post": "Oui — comptabiliser le coût standard à l'approbation",
           "postHint": "DR travaux en cours (par projet) / CR compte d'attente. La paie réelle solde ensuite le même compte.",
           "wip": "Compte travaux en cours / coût",
-          "clearing": "Compte d'attente main-d'œuvre"
+          "clearing": "Compte d'attente main-d'œuvre",
+          "variance": "Compte d'écart de paie (optionnel — pour le rapprochement de fin de mois)",
+          "varianceLater": "Choisir plus tard"
         },
         "review": "Prêt à appliquer :",
         "reviewBurden": "Estimation des charges : {name} à {pct} %",
@@ -1927,7 +1929,10 @@
         "exReg": "Normal",
         "exOt": "Supp. ×1,5",
         "exDt": "Double ×2",
-        "reviewNote": "Tout reste modifiable ensuite dans l'espace de travail — le guide remplit simplement les mêmes paramètres."
+        "reviewNote": "Tout reste modifiable ensuite dans l'espace de travail — le guide remplit simplement les mêmes paramètres.",
+        "nextSteps": "Ensuite : les frais généraux",
+        "nextOverhead": "Le coût de la main-d'œuvre couvre salaires et charges statutaires. Les FRAIS GÉNÉRAUX de votre entreprise (loyer, administration, flotte…) sont une couche distincte avec sa propre configuration guidée — classez les coûts, examinez les taux calculés et appliquez-les aux types de projet.",
+        "nextOverheadLink": "Ouvrir le Modèle de frais généraux"
       }
     }
   },

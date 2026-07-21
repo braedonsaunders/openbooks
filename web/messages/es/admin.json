@@ -1869,7 +1869,9 @@
           "post": "Sí — contabilizar el costo estándar al aprobar",
           "postHint": "DR obra en curso (por proyecto) / CR cuenta puente. La nómina real liquida la misma cuenta después.",
           "wip": "Cuenta de obra en curso / costo",
-          "clearing": "Cuenta puente de mano de obra"
+          "clearing": "Cuenta puente de mano de obra",
+          "variance": "Cuenta de variación de nómina (opcional — para la conciliación de fin de mes)",
+          "varianceLater": "Elegir después"
         },
         "review": "Listo para aplicar:",
         "reviewBurden": "Estimación de cargas: {name} al {pct}%",
@@ -1883,7 +1885,10 @@
         "exReg": "Normal",
         "exOt": "Extra ×1.5",
         "exDt": "Doble ×2",
-        "reviewNote": "Todo es editable después en el espacio de trabajo — la guía solo completa la misma configuración."
+        "reviewNote": "Todo es editable después en el espacio de trabajo — la guía solo completa la misma configuración.",
+        "nextSteps": "Después de esto: gastos generales",
+        "nextOverhead": "El costeo de mano de obra cubre salarios y cargas estatutarias. Los GASTOS GENERALES de su empresa (renta, administración, flota…) son una capa aparte con su propia configuración guiada — clasifique costos, revise tarifas calculadas y aplíquelas a los tipos de proyecto.",
+        "nextOverheadLink": "Abrir el Modelo de gastos generales"
       }
     }
   },
