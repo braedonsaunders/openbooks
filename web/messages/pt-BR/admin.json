@@ -988,6 +988,18 @@
   "setup": {
     "title": "Configuração",
     "description": "Configure impostos, dimensões, prazos e os dados de referência sobre os quais sua contabilidade opera.",
+    "laborCosting": {
+      "rates": {
+        "hint": "As taxas alternativas são resolvidas por cargo, ofício, departamento, subsidiária e padrão da organização. O histórico individual permanece no funcionário.",
+        "scopeJobTitle": "Cargo",
+        "scopeDepartment": "Departamento",
+        "scopeSubsidiary": "Subsidiária",
+        "currency": "Moeda",
+        "drawerNewDescription": "Adicione uma taxa salarial com vigência para um escopo da força de trabalho.",
+        "select": { "job_title": "Selecionar um cargo", "trade": "Selecionar um ofício", "department": "Selecionar um departamento", "subsidiary": "Selecionar uma subsidiária" }
+      },
+      "reconciliation": { "subsidiary": "Subsidiária" }
+    },
     "taxLibrary": {
       "title": "Biblioteca de declarações fiscais",
       "open": "Biblioteca",

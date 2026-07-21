@@ -11,6 +11,7 @@ import { PagedTable } from '../../../components/paged-table'
 interface RateRow {
   id: string
   rate: string
+  currency: string
   basis: 'hour' | 'year'
   annual_hours: string
   effective_from: string
@@ -21,7 +22,8 @@ interface RateRow {
 
 interface RatesResponse {
   rates: RateRow[]
-  currency: string
+  currencies: string[]
+  defaultCurrency: string
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -35,6 +37,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState(false)
   const [rate, setRate] = useState('')
+  const [currency, setCurrency] = useState('')
   const [basis, setBasis] = useState<'hour' | 'year'>('hour')
   const [annualHours, setAnnualHours] = useState('2080')
   const [effectiveFrom, setEffectiveFrom] = useState(today())
@@ -44,7 +47,9 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
     try {
       const response = await fetch(`/api/admin/setup/labor-costing?employee=${encodeURIComponent(partyId)}`, { signal })
       if (!response.ok) throw new Error('load failed')
-      setData((await response.json()) as RatesResponse)
+      const next = (await response.json()) as RatesResponse
+      setData(next)
+      setCurrency((current) => current && next.currencies.includes(current) ? current : next.defaultCurrency)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       setLoadError(true)
@@ -98,6 +103,10 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       action: 'save-rate',
       employeePartyId: partyId,
       tradeId: null,
+      jobTitle: null,
+      departmentId: null,
+      subsidiaryId: null,
+      currency: currency || data?.defaultCurrency,
       rate: amount,
       basis,
       annualHours: basis === 'year' ? hours : 2080,
@@ -141,6 +150,19 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
             onChange={(event) => setRate(event.target.value)}
           />
         </div>
+        {data && data.currencies.length > 1 ? (
+          <div>
+            <Label htmlFor="employee-wage-currency">{t('currency')}</Label>
+            <Select
+              id="employee-wage-currency"
+              className="w-28"
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value)}
+            >
+              {data.currencies.map((code) => <option key={code} value={code}>{code}</option>)}
+            </Select>
+          </div>
+        ) : null}
         <div>
           <Label htmlFor="employee-wage-basis">{t('basis')}</Label>
           <Select
@@ -177,7 +199,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
             onChange={(event) => setEffectiveFrom(event.target.value)}
           />
         </div>
-        <Button size="sm" onClick={() => void addRate()} disabled={busy}>
+        <Button size="sm" onClick={() => void addRate()} disabled={busy || data === null}>
           <Plus size={14} aria-hidden /> {t('add')}
         </Button>
       </div>
@@ -209,8 +231,8 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
                 <span className="inline-flex items-center gap-2 tabular-nums">
                   {format.number(Number(row.rate), {
                     style: 'currency',
-                    currency: data.currency,
-                    currencyDisplay: 'narrowSymbol',
+                    currency: row.currency,
+                    currencyDisplay: 'code',
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 4,
                   })}

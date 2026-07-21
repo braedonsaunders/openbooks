@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { auditColumns, id, money, orgRef } from "./helpers";
+import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
 /**
  * Labor cost rates — the ONE table behind labor costing (see the labor-vs-
@@ -10,7 +10,7 @@ import { auditColumns, id, money, orgRef } from "./helpers";
  *
  * A row is an effective-dated standard WAGE for a scope. Scope keys are
  * nullable and resolve most-specific-wins:
- *   employee > trade > org default (both null).
+ *   employee > job title > trade > department > subsidiary > org default.
  * Within a scope the latest effectiveFrom ≤ workedOn wins; effectiveTo is an
  * optional hard end. basis=year divides by annualHours (default 2080).
  *
@@ -24,7 +24,12 @@ export const laborCostRates = pgTable(
     id: id(),
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id"),
+    jobTitle: text("job_title"),
     tradeId: uuid("trade_id"),
+    departmentId: uuid("department_id"),
+    subsidiaryId: uuid("subsidiary_id"),
+    /** Denomination of the wage; converted to subsidiary functional currency. */
+    currency: currencyCode("currency").notNull(),
     rate: money("rate").notNull(),
     basis: text("basis", { enum: ["hour", "year"] }).notNull().default("hour"),
     /** Divisor for basis=year (2080 = 40h × 52w). */
@@ -37,14 +42,28 @@ export const laborCostRates = pgTable(
   },
   (t) => [
     index("labor_cost_rates_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
+    index("labor_cost_rates_job_title").on(t.orgId, t.jobTitle, t.effectiveFrom),
     index("labor_cost_rates_trade").on(t.orgId, t.tradeId, t.effectiveFrom),
+    index("labor_cost_rates_department").on(t.orgId, t.departmentId, t.effectiveFrom),
+    index("labor_cost_rates_subsidiary").on(t.orgId, t.subsidiaryId, t.effectiveFrom),
     // One row per scope per start date (coalesced scope keys in the SQL migration).
-    uniqueIndex("labor_cost_rates_scope_from").on(t.orgId, t.employeePartyId, t.tradeId, t.effectiveFrom),
+    uniqueIndex("labor_cost_rates_scope_from").on(
+      t.orgId,
+      t.employeePartyId,
+      t.jobTitle,
+      t.tradeId,
+      t.departmentId,
+      t.subsidiaryId,
+      t.effectiveFrom,
+    ),
     check("labor_cost_rates_nonnegative", sql`${t.rate} >= 0`),
     check("labor_cost_rates_annual_hours", sql`${t.annualHours} > 0`),
     check("labor_cost_rates_valid_range", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
-    // A row scopes to an employee OR a trade OR neither (org default) — never both.
-    check("labor_cost_rates_one_scope", sql`not (${t.employeePartyId} is not null and ${t.tradeId} is not null)`),
+    // Exactly zero or one scope key: zero is the organization default.
+    check(
+      "labor_cost_rates_one_scope",
+      sql`num_nonnulls(${t.employeePartyId}, ${t.jobTitle}, ${t.tradeId}, ${t.departmentId}, ${t.subsidiaryId}) <= 1`,
+    ),
   ],
 );
 

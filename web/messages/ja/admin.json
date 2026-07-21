@@ -988,6 +988,18 @@
   "setup": {
     "title": "セットアップ",
     "description": "税、ディメンション、条件、および帳簿の基礎となる参照データを設定します。",
+    "laborCosting": {
+      "rates": {
+        "hint": "代替賃金レートは役職、職種、部門、子会社、組織既定値の順に解決されます。個人の履歴は従業員レコードに保持されます。",
+        "scopeJobTitle": "役職",
+        "scopeDepartment": "部門",
+        "scopeSubsidiary": "子会社",
+        "currency": "通貨",
+        "drawerNewDescription": "従業員範囲に有効日付きの賃金レートを追加します。",
+        "select": { "job_title": "役職を選択", "trade": "職種を選択", "department": "部門を選択", "subsidiary": "子会社を選択" }
+      },
+      "reconciliation": { "subsidiary": "子会社" }
+    },
     "taxLibrary": {
       "title": "税務申告ライブラリ",
       "open": "ライブラリ",

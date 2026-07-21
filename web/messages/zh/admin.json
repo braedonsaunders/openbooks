@@ -988,6 +988,18 @@
   "setup": {
     "title": "设置",
     "description": "配置税务、维度、条款，以及你的账目运行所依赖的参考数据。",
+    "laborCosting": {
+      "rates": {
+        "hint": "后备工资率依次按职位、工种、部门、子公司和组织默认值解析。员工个人历史记录保留在员工档案中。",
+        "scopeJobTitle": "职位",
+        "scopeDepartment": "部门",
+        "scopeSubsidiary": "子公司",
+        "currency": "币种",
+        "drawerNewDescription": "为某个人员范围添加带生效日期的工资率。",
+        "select": { "job_title": "选择职位", "trade": "选择工种", "department": "选择部门", "subsidiary": "选择子公司" }
+      },
+      "reconciliation": { "subsidiary": "子公司" }
+    },
     "taxLibrary": {
       "title": "纳税申报库",
       "open": "申报库",

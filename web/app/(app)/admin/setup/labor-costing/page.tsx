@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Labor Costing — ONE workspace answering "what does an hour of labor cost?".
- * Wage rates (effective-dated, employee > trade > org default), the estimate
+ * Wage rates (effective-dated, employee > job title > trade > department >
+ * subsidiary > org default), the estimate
  * component calculator (statutory burden %, per-diem — inputs that die when
  * payroll actuals arrive), and the posting switch + control accounts.
  * Overhead is deliberately NOT here — that's the Overhead Model's job.
@@ -23,7 +24,7 @@ export type LaborCostingView = (typeof VIEWS)[number]
 
 const RATE_STATUSES = ['all', 'active', 'current', 'scheduled', 'ended'] as const
 type RateStatus = (typeof RATE_STATUSES)[number]
-const RATE_SCOPES = ['all', 'trade', 'org'] as const
+const RATE_SCOPES = ['all', 'job_title', 'trade', 'department', 'subsidiary', 'org'] as const
 type RateScope = (typeof RATE_SCOPES)[number]
 
 export default async function LaborCostingSetup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -56,43 +57,55 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
           : rateStatus === 'active'
             ? sql`and (r.effective_to is null or r.effective_to >= current_date)`
             : sql``
-  const scopeFilter = rateScope === 'trade' ? sql`and r.trade_id is not null` : rateScope === 'org' ? sql`and r.trade_id is null` : sql``
-  const searchFilter = list.q ? sql`and (coalesce(tr.name, '') ilike ${`%${list.q}%`} or cast(r.rate as text) ilike ${`%${list.q}%`} or coalesce(r.notes, '') ilike ${`%${list.q}%`})` : sql``
+  const scopeFilter = rateScope === 'job_title' ? sql`and r.job_title is not null`
+    : rateScope === 'trade' ? sql`and r.trade_id is not null`
+      : rateScope === 'department' ? sql`and r.department_id is not null`
+        : rateScope === 'subsidiary' ? sql`and r.subsidiary_id is not null`
+          : rateScope === 'org' ? sql`and num_nonnulls(r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0`
+            : sql``
+  const searchFilter = list.q ? sql`and (coalesce(r.job_title, '') ilike ${`%${list.q}%`} or coalesce(tr.name, '') ilike ${`%${list.q}%`} or coalesce(dep.name, '') ilike ${`%${list.q}%`} or coalesce(sub.name, '') ilike ${`%${list.q}%`} or cast(r.rate as text) ilike ${`%${list.q}%`} or r.currency ilike ${`%${list.q}%`} or coalesce(r.notes, '') ilike ${`%${list.q}%`})` : sql``
   const rateFilter = sql`
     where r.org_id = ${orgId} and r.is_active and r.employee_party_id is null
       ${statusFilter} ${scopeFilter} ${searchFilter}`
   const rateSelect = sql`
-    select r.id, r.employee_party_id, r.trade_id, r.rate, r.basis, r.annual_hours,
+    select r.id, r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id,
+           r.currency, r.rate, r.basis, r.annual_hours,
            r.effective_from::text as effective_from, r.effective_to::text as effective_to, r.notes,
-           null::text as employee_name, tr.name as trade_name
+           null::text as employee_name, tr.name as trade_name, dep.name as department_name, sub.name as subsidiary_name
       from labor_cost_rates r
-      left join trades tr on tr.id = r.trade_id`
+      left join trades tr on tr.id = r.trade_id
+      left join departments dep on dep.id = r.department_id
+      left join subsidiaries sub on sub.id = r.subsidiary_id`
 
-  const [settings, ratesRes, rateCountRes, selectedRateRes, tradesRes, accountsRes, orgRes, coverageRes] = await Promise.all([
+  const [settings, ratesRes, rateCountRes, selectedRateRes, tradesRes, departmentsRes, subsidiariesRes, jobTitlesRes, accountsRes, orgRes, coverageRes] = await Promise.all([
     laborCostingSettings(orgId),
     db.execute(sql`${rateSelect} ${rateFilter}
-      order by case when r.trade_id is not null then 0 else 1 end,
-               coalesce(tr.name, ''), r.effective_from desc
+      order by case when r.job_title is not null then 0 when r.trade_id is not null then 1
+                    when r.department_id is not null then 2 when r.subsidiary_id is not null then 3 else 4 end,
+               coalesce(r.job_title, tr.name, dep.name, sub.name, ''), r.effective_from desc
       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-    db.execute(sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id ${rateFilter}`),
+    db.execute(sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id left join departments dep on dep.id = r.department_id left join subsidiaries sub on sub.id = r.subsidiary_id ${rateFilter}`),
     rateParam && rateParam !== 'new' && isUuid(rateParam)
       ? db.execute(sql`${rateSelect}
           where r.org_id = ${orgId} and r.id = ${rateParam} and r.is_active and r.employee_party_id is null
           limit 1`)
       : Promise.resolve({ rows: [] }),
     db.execute(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`),
+    db.execute(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
+    db.execute(sql`select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by parent_id nulls first, name`),
+    db.execute(sql`select distinct job_title as name from employee_roles where org_id = ${orgId} and is_active and nullif(trim(job_title), '') is not null order by job_title`),
     db.execute(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
     db.execute(sql`select settings->'controlAccounts' as c, base_currency from orgs where id = ${orgId}`),
     db.execute(sql`
       with active_emp as (
-        select p.id, er.trade_id from parties p
+        select p.id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = ${orgId} and er.is_active
        where p.org_id = ${orgId} and p.is_active
       ),
       current_rates as (
-        select employee_party_id, trade_id from labor_cost_rates
+        select employee_party_id, job_title, trade_id, department_id, subsidiary_id from labor_cost_rates
          where org_id = ${orgId} and is_active and effective_from <= current_date
            and (effective_to is null or effective_to >= current_date)
       )
@@ -100,10 +113,13 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
         (select count(*) from active_emp) as employees,
         (select count(*) from active_emp e where
            exists (select 1 from current_rates r where r.employee_party_id = e.id)
+           or exists (select 1 from current_rates r where r.employee_party_id is null and lower(r.job_title) = lower(e.job_title) and r.job_title is not null)
            or exists (select 1 from current_rates r where r.employee_party_id is null and r.trade_id = e.trade_id and r.trade_id is not null)
-           or exists (select 1 from current_rates r where r.employee_party_id is null and r.trade_id is null)
+           or exists (select 1 from current_rates r where r.employee_party_id is null and r.department_id = e.department_id and r.department_id is not null)
+           or exists (select 1 from current_rates r where r.employee_party_id is null and r.subsidiary_id = e.subsidiary_id and r.subsidiary_id is not null)
+           or exists (select 1 from current_rates r where num_nonnulls(r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0)
         ) as covered,
-        exists (select 1 from current_rates where employee_party_id is null and trade_id is null) as has_org_default`),
+        exists (select 1 from current_rates where num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0) as has_org_default`),
   ])
 
   const org = (
@@ -124,6 +140,12 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
     id: String(r.id),
     name: String(r.name ?? ''),
   })
+  const subsidiaryOptions = (subsidiariesRes as unknown as { rows: Record<string, unknown>[] }).rows.map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    currency: String(row.currency),
+  }))
+  const currencies = Array.from(new Set([org.base_currency, ...subsidiaryOptions.map((row) => row.currency)])).sort()
   const basePath = '/admin/setup/labor-costing'
   const guideHref = mergeHref(basePath, sp, {
     guide: 'setup',
@@ -180,11 +202,15 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
         ratePage={list.page}
         ratePerPage={list.perPage}
         trades={(tradesRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt)}
+        departments={(departmentsRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt)}
+        subsidiaries={subsidiaryOptions}
+        jobTitles={(jobTitlesRes as unknown as { rows: { name: string }[] }).rows.map((row) => row.name)}
         accounts={(accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
           id: String(r.id),
           label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
         }))}
-        currency={org.base_currency}
+        currencies={currencies}
+        orgCurrency={org.base_currency}
         laborWip={control.laborWip ?? null}
         laborClearing={control.laborClearing ?? null}
         payrollVariance={control.payrollVariance ?? null}

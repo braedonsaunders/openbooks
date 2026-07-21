@@ -57,6 +57,8 @@ export async function postProjectGlEntry(opts: {
   postingDate: string;
   memo: string;
   subsidiaryId?: string | null;
+  /** Functional currency of line amounts when already resolved by the caller. */
+  currency?: string;
   lines: GlLine[];
 }): Promise<string | null> {
   const { orgId, actorId, origin, entryNumber, postingDate, memo, subsidiaryId, lines } = opts;
@@ -77,7 +79,7 @@ export async function postProjectGlEntry(opts: {
     const org = (await tx.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
       rows: { base_currency: string }[];
     };
-    const currency = org.rows[0]?.base_currency ?? "CAD";
+    const orgCurrency = org.rows[0]?.base_currency ?? "CAD";
     // journal_entries.subsidiary_id is NOT NULL — fall back to the org's default
     // (first non-elimination) subsidiary when the project/time carries none.
     let subId = subsidiaryId;
@@ -86,6 +88,19 @@ export async function postProjectGlEntry(opts: {
         select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
          order by name limit 1`)) as unknown as { rows: { id: string }[] };
       subId = s.rows[0]?.id ?? null;
+    }
+    let currency = orgCurrency;
+    if (subId) {
+      const subsidiary = (await tx.execute(sql`
+        select base_currency from subsidiaries where org_id = ${orgId} and id = ${subId}`)) as unknown as {
+        rows: { base_currency: string }[];
+      };
+      const functionalCurrency = subsidiary.rows[0]?.base_currency;
+      if (!functionalCurrency) throw new Error(`subsidiary ${subId} does not exist`);
+      if (opts.currency && opts.currency !== functionalCurrency) {
+        throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
+      }
+      currency = opts.currency ?? orgCurrency;
     }
     const [entry] = (await tx.execute(sql`
       insert into journal_entries
@@ -152,59 +167,97 @@ export async function reverseProjectGlEntry(orgId: string, actorId: string, entr
  * time_entries.cost_journal_entry_id so it is never re-posted. Call after time
  * transitions to approved.
  */
-export async function postProjectLaborCost(orgId: string, actorId: string, timeEntryIds: string[]): Promise<string | null> {
-  if (timeEntryIds.length === 0) return null;
+export interface LaborPostingSourceRow {
+  id: string;
+  project_id: string;
+  hours: string;
+  cost_rate: string | null;
+  worked_on: string;
+  subsidiary_id: string | null;
+  cost_rate_currency: string;
+}
+
+export interface LaborPostingGroup {
+  subsidiaryId: string | null;
+  currency: string;
+  postingDate: string;
+  timeEntryIds: string[];
+  projectCosts: Array<{ projectId: string; amount: string }>;
+  total: string;
+}
+
+/** Keep every labor journal inside one legal entity while aggregating projects. */
+export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingGroup[] {
+  const groups = new Map<string, { subsidiaryId: string | null; currency: string; postingDate: string; timeEntryIds: string[]; byProject: Map<string, string> }>();
+  for (const row of rows) {
+    const cost = mulRate(String(row.hours ?? "0"), String(row.cost_rate ?? "0"));
+    if (isZero(cost)) continue;
+    const key = `${row.subsidiary_id ?? "__default__"}|${row.cost_rate_currency}`;
+    const group = groups.get(key) ?? { subsidiaryId: row.subsidiary_id, currency: row.cost_rate_currency, postingDate: "", timeEntryIds: [], byProject: new Map<string, string>() };
+    group.byProject.set(row.project_id, add(group.byProject.get(row.project_id) ?? "0", cost));
+    group.timeEntryIds.push(row.id);
+    if (row.worked_on > group.postingDate) group.postingDate = row.worked_on;
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => {
+    const projectCosts = [...group.byProject].map(([projectId, amount]) => ({ projectId, amount }));
+    return {
+      subsidiaryId: group.subsidiaryId,
+      currency: group.currency,
+      postingDate: group.postingDate,
+      timeEntryIds: group.timeEntryIds,
+      projectCosts,
+      total: sum(projectCosts.map((project) => project.amount)),
+    };
+  });
+}
+
+export async function postProjectLaborCost(orgId: string, actorId: string, timeEntryIds: string[]): Promise<string[]> {
+  if (timeEntryIds.length === 0) return [];
   const accts = await recognitionAccounts(orgId);
-  if (!accts.laborWip || !accts.laborClearing) return null; // inert until mapped
+  if (!accts.laborWip || !accts.laborClearing) return []; // inert until mapped
   const idArr = `{${timeEntryIds.join(",")}}`;
   const rows = (await db.execute(sql`
-    select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on, p.subsidiary_id
+    select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on,
+           coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id,
+           coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency
       from time_entries te
       left join projects p on p.id = te.project_id
+      left join subsidiaries s on s.id = p.subsidiary_id
+      join orgs o on o.id = te.org_id
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
        and te.status = 'approved' and te.project_id is not null and te.cost_journal_entry_id is null`)) as unknown as {
-    rows: { id: string; project_id: string; hours: string; cost_rate: string | null; worked_on: string; subsidiary_id: string | null }[];
+    rows: LaborPostingSourceRow[];
   };
-  if (rows.rows.length === 0) return null;
+  if (rows.rows.length === 0) return [];
 
-  // Sum cost by project.
-  const byProject = new Map<string, string>();
-  const posted: string[] = [];
-  let subsidiaryId: string | null = null;
-  let maxDate = "";
-  for (const r of rows.rows) {
-    const cost = mulRate(String(r.hours ?? "0"), String(r.cost_rate ?? "0"));
-    if (isZero(cost)) continue;
-    byProject.set(r.project_id, add(byProject.get(r.project_id) ?? "0", cost));
-    posted.push(r.id);
-    subsidiaryId = subsidiaryId ?? r.subsidiary_id;
-    if (r.worked_on > maxDate) maxDate = r.worked_on;
+  const entryIds: string[] = [];
+  for (const group of groupLaborPostings(rows.rows)) {
+    const lines: GlLine[] = group.projectCosts.map((project) => ({
+      accountId: accts.laborWip!,
+      amount: project.amount,
+      projectId: project.projectId,
+      memo: "Labor cost",
+    }));
+    lines.push({ accountId: accts.laborClearing, amount: neg(group.total), memo: "Labor clearing" });
+    const postingDate = group.postingDate || new Date().toISOString().slice(0, 10);
+    const entryId = await postProjectGlEntry({
+      orgId,
+      actorId,
+      origin: "labor_burden",
+      entryNumber: `LAB-${postingDate}-${group.timeEntryIds[0].slice(0, 8)}`,
+      postingDate,
+      memo: "Approved labor cost → project WIP",
+      subsidiaryId: group.subsidiaryId,
+      currency: group.currency,
+      lines,
+    });
+    if (entryId) {
+      entryIds.push(entryId);
+      await db.execute(sql`update time_entries set cost_journal_entry_id = ${entryId} where org_id = ${orgId} and id = any(${`{${group.timeEntryIds.join(",")}}`}::uuid[])`);
+    }
   }
-  if (byProject.size === 0) return null;
-
-  const lines: GlLine[] = [];
-  let total = "0";
-  for (const [projectId, amt] of byProject) {
-    lines.push({ accountId: accts.laborWip, amount: amt, projectId, memo: "Labor cost" });
-    total = add(total, amt);
-  }
-  lines.push({ accountId: accts.laborClearing, amount: neg(total), memo: "Labor clearing" });
-
-  const postingDate = maxDate || new Date().toISOString().slice(0, 10);
-  const entryId = await postProjectGlEntry({
-    orgId,
-    actorId,
-    origin: "labor_burden",
-    entryNumber: `LAB-${postingDate}-${timeEntryIds[0].slice(0, 8)}`,
-    postingDate,
-    memo: "Approved labor cost → project WIP",
-    subsidiaryId,
-    lines,
-  });
-  if (entryId) {
-    await db.execute(sql`update time_entries set cost_journal_entry_id = ${entryId} where org_id = ${orgId} and id = any(${`{${posted.join(",")}}`}::uuid[])`);
-  }
-  return entryId;
+  return entryIds;
 }
 
 /** Release labor-cost entries for time (reverse + clear the linkage). */

@@ -12,6 +12,8 @@ export const laborCosting: DocArticle = {
     "labor",
     "labour",
     "wages",
+    "currency",
+    "foreign exchange",
     "cost rate",
     "bill rate",
     "overtime",
@@ -54,12 +56,30 @@ Rates are effective-dated and resolve most-specific-wins:
 | Scope | Wins when |
 |---|---|
 | **Employee** | A rate exists for the person on the work date |
-| **Trade** | No employee rate; the employee's trade has one |
-| **Org default** | Neither of the above |
+| **Job title** | No employee rate; the employee's job title has one |
+| **Trade** | No higher-priority rate; the employee's trade has one |
+| **Department** | No higher-priority rate; the employee's department has one |
+| **Subsidiary** | No higher-priority rate; the employee's primary subsidiary has one |
+| **Org default** | None of the above |
 
 Starting a new rate automatically closes the previous one the day before — no
 overlaps, ever. Salaried staff use the *per year* basis; the hourly wage is
 salary ÷ annual hours (2080 by default, configurable).
+
+Each rate keeps its own **Currency**. When the organization and its active
+subsidiaries use more than one configured base currency, the rate drawer and
+employee wage editor show a currency selector. A subsidiary-scoped rate
+defaults to that subsidiary's base currency; employee rates default to the
+employee's primary subsidiary currency. Single-currency organizations do not
+see a redundant selector.
+
+At approval, a wage is converted to the project's subsidiary functional
+currency using the latest **spot FX rate on or before the work date**. Entries
+without a project fall back to the employee's subsidiary, then the organization.
+Approval stops if no applicable rate exists; OpenBooks never silently treats
+unlike currencies as equal. The time entry retains the source hourly wage,
+wage currency, FX rate, resolved wage-rate ID, functional currency, and
+resulting cost rate, so the posting remains auditable after rates change.
 
 Use search plus the **Scope** and **Status** filters to narrow the company-wide
 wage-rate table. Choose **Add rate** to create a fallback in a drawer, or select
@@ -82,8 +102,11 @@ Components stack on top of the wage to form the standard cost rate:
 - **% of wage** — the typical statutory-burden estimate (Canadian shops often
   land near 12–15%; US construction 25–40%). Choose whether it scales with
   overtime.
-- **$ per hour** — flat hourly adders.
-- **$ per day** — per-diem style allowances, prorated by your hours-per-day.
+- **Amount per hour** — flat hourly adders configured in the organization base
+  currency and converted to the applicable subsidiary functional currency.
+- **Amount per day** — per-diem style allowances configured in the organization
+  base currency, converted to functional currency, and prorated by your
+  hours-per-day.
 
 The live example under the editor shows the resulting regular / overtime /
 double-time rates as you type, so the math is never a mystery:
@@ -101,6 +124,10 @@ With posting **on** and the two accounts mapped, approving a timesheet:
    already carry a rate are never touched).
 2. Posts **DR labor WIP (by project) / CR labor clearing** at the standard
    rate.
+
+Approvals containing more than one subsidiary produce separate balanced labor
+journals per subsidiary and functional currency. Amounts are never combined
+into a journal belonging to another legal entity or currency.
 
 Everything is inert until you configure it, and posting problems never block
 an approval — entries stay re-postable.
@@ -121,7 +148,9 @@ as an ordinary journal — imported through **Data → Import** or entered
 manually — debiting the **labor clearing** account (and the real statutory
 burden accounts) that the standard postings credited.
 
-The **Payroll reconciliation** card shows the wash for any period:
+The **Payroll reconciliation** card shows the wash for any period and
+subsidiary. Each subsidiary is reconciled and variance-posted in its own
+functional currency; unlike currencies are never summed together:
 
 - **Standard labor posted** — what approvals credited to clearing
 - **Payroll actuals matched** — what payroll debited

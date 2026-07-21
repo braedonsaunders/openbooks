@@ -80,6 +80,7 @@ interface VendorRoleInput {
 interface EmployeeRoleInput {
   enabled?: boolean
   employeeNumber?: string | null
+  jobTitle?: string | null
   departmentId?: string | null
   tradeId?: string | null
   workerCompGroupId?: string | null
@@ -376,12 +377,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const hiredOn = strOrNull(e.hiredOn)
       if (hiredOn && !DATE_RE.test(hiredOn)) return bad('Hired-on must be a date (YYYY-MM-DD)')
       await db.execute(sql`
-        insert into employee_roles (org_id, party_id, employee_number, department_id, trade_id,
+        insert into employee_roles (org_id, party_id, employee_number, job_title, department_id, trade_id,
                                     worker_comp_group_id, hired_on, created_by, updated_by)
-        values (${user.orgId}, ${id}, ${strOrNull(e.employeeNumber)}, ${departmentId}, ${tradeId},
+        values (${user.orgId}, ${id}, ${strOrNull(e.employeeNumber)}, ${strOrNull(e.jobTitle)?.slice(0, 160) ?? null}, ${departmentId}, ${tradeId},
                 ${workerCompGroupId}, ${hiredOn}, ${user.id}, ${user.id})
         on conflict (party_id) do update set
           employee_number = excluded.employee_number,
+          job_title = excluded.job_title,
           department_id = excluded.department_id,
           trade_id = excluded.trade_id,
           worker_comp_group_id = excluded.worker_comp_group_id,

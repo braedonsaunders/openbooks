@@ -402,6 +402,10 @@ alter table time_entries
   add foreign key (project_id) references projects(id),
   add foreign key (project_task_id) references project_tasks(id),
   add foreign key (department_id) references departments(id),
+  add foreign key (labor_cost_rate_id) references labor_cost_rates(id) on delete restrict,
+  add foreign key (wage_currency) references currencies(code),
+  add foreign key (cost_rate_currency) references currencies(code),
+  add foreign key (cost_rate_subsidiary_id) references subsidiaries(id) on delete restrict,
   add foreign key (cost_journal_entry_id) references journal_entries(id),
   add foreign key (invoiced_by_line_id) references document_lines(id);
 alter table project_tasks
@@ -620,5 +624,5 @@ alter table billing_requests add foreign key (org_id) references orgs(id) on del
 alter table billing_schedules add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (project_id) references projects(id) on delete cascade, add foreign key (billing_request_id) references billing_requests(id) on delete set null, add foreign key (created_by) references users(id) on delete set null, add foreign key (updated_by) references users(id) on delete set null;
 alter table invoice_backups add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (document_id) references documents(id) on delete cascade, add foreign key (billing_request_id) references billing_requests(id) on delete set null, add foreign key (file_id) references files(id) on delete restrict, add foreign key (created_by) references users(id) on delete set null, add foreign key (updated_by) references users(id) on delete set null;
 
--- Labor costing: effective-dated standard wage rates (employee/trade/org scope).
-alter table labor_cost_rates add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (employee_party_id) references parties(id) on delete cascade, add foreign key (trade_id) references trades(id) on delete cascade, add foreign key (created_by) references users(id) on delete set null, add foreign key (updated_by) references users(id) on delete set null;
+-- Labor costing: effective-dated standard wage rates across workforce scopes.
+alter table labor_cost_rates add foreign key (org_id) references orgs(id) on delete cascade, add foreign key (employee_party_id) references parties(id) on delete cascade, add foreign key (trade_id) references trades(id) on delete cascade, add foreign key (department_id) references departments(id) on delete cascade, add foreign key (subsidiary_id) references subsidiaries(id) on delete cascade, add foreign key (currency) references currencies(code), add foreign key (created_by) references users(id) on delete set null, add foreign key (updated_by) references users(id) on delete set null;

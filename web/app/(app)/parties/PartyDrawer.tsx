@@ -208,6 +208,7 @@ export function PartyDrawer({
   const [employee, setEmployee] = useState({
     enabled: !!payload.employee && payload.employee.is_active !== false,
     employeeNumber: payload.employee?.employee_number ?? '',
+    jobTitle: payload.employee?.job_title ?? '',
     departmentId: payload.employee?.department_id ?? '',
     tradeId: payload.employee?.trade_id ?? '',
     workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
@@ -288,6 +289,7 @@ export function PartyDrawer({
         employee: {
           enabled: role === 'employee' ? true : employee.enabled,
           employeeNumber: employee.employeeNumber || null,
+          jobTitle: employee.jobTitle || null,
           departmentId: employee.departmentId || null,
           tradeId: employee.tradeId || null,
           workerCompGroupId: employee.workerCompGroupId || null,
@@ -355,6 +357,7 @@ export function PartyDrawer({
     setEmployee({
       enabled: !!payload.employee && payload.employee.is_active !== false,
       employeeNumber: payload.employee?.employee_number ?? '',
+      jobTitle: payload.employee?.job_title ?? '',
       departmentId: payload.employee?.department_id ?? '',
       tradeId: payload.employee?.trade_id ?? '',
       workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
@@ -878,6 +881,15 @@ export function PartyDrawer({
                     value={employee.employeeNumber}
                     onChange={(e) => setEmployee({ ...employee, employeeNumber: e.target.value })}
                     disabled={ro}
+                  />
+                </div>
+                <div className={field}>
+                  <Label>{t('jobTitle')}</Label>
+                  <Input
+                    value={employee.jobTitle}
+                    onChange={(e) => setEmployee({ ...employee, jobTitle: e.target.value })}
+                    disabled={ro}
+                    placeholder={t('jobTitlePlaceholder')}
                   />
                 </div>
                 <div className={field}>

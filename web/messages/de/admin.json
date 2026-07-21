@@ -988,6 +988,18 @@
   "setup": {
     "title": "Einrichtung",
     "description": "Konfigurieren Sie Steuern, Dimensionen, Zahlungsbedingungen und die Referenzdaten, auf denen Ihre Buchhaltung basiert.",
+    "laborCosting": {
+      "rates": {
+        "hint": "Fallback-Sätze werden nach Stellenbezeichnung, Gewerk, Abteilung, Tochtergesellschaft und Organisationsstandard aufgelöst. Der individuelle Verlauf bleibt beim Mitarbeiter.",
+        "scopeJobTitle": "Stellenbezeichnung",
+        "scopeDepartment": "Abteilung",
+        "scopeSubsidiary": "Tochtergesellschaft",
+        "currency": "Währung",
+        "drawerNewDescription": "Fügen Sie einen datierten Lohnsatz für einen Personalbereich hinzu.",
+        "select": { "job_title": "Stellenbezeichnung auswählen", "trade": "Gewerk auswählen", "department": "Abteilung auswählen", "subsidiary": "Tochtergesellschaft auswählen" }
+      },
+      "reconciliation": { "subsidiary": "Tochtergesellschaft" }
+    },
     "taxLibrary": {
       "title": "Bibliothek für Steuererklärungen",
       "open": "Bibliothek",
