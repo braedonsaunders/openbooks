@@ -891,12 +891,14 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     columns: [
       { key: 'name', kind: 'text' },
       { key: 'costMultiplier', kind: 'number' },
+      { key: 'billMultiplier', kind: 'number' },
       { key: 'isBillableDefault', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'name', kind: 'text', required: true },
       { key: 'costMultiplier', kind: 'decimal', keepDefault: true },
+      { key: 'billMultiplier', kind: 'decimal', keepDefault: true },
       { key: 'isBillableDefault', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },
     ],

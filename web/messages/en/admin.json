@@ -1665,7 +1665,8 @@
       "rateBookId": "Rate book",
       "customerId": "Customer",
       "projectId": "Project",
-      "isDefault": "Default"
+      "isDefault": "Default",
+      "billMultiplier": "Bill multiplier"
     },
     "options": {
       "appliesTo": {

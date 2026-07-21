@@ -5,6 +5,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { postProjectLaborCost } from '@openbooks/engine/src/project-recognition.ts'
 import { laborCostingSettings, snapshotLaborCostRates } from '@openbooks/engine/src/labor-costing.ts'
+import { snapshotTimeBillRates } from '../../../../lib/item-rates'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -60,6 +61,7 @@ export async function POST(req: Request) {
     try {
       const settings = await laborCostingSettings(orgId)
       await snapshotLaborCostRates(orgId, ids)
+      await snapshotTimeBillRates(orgId, ids)
       if (settings.mode === 'post') await postProjectLaborCost(orgId, user.id, ids)
     } catch (e) {
       console.error('[timesheets/approve] labor cost snapshot/posting failed:', (e as Error).message)

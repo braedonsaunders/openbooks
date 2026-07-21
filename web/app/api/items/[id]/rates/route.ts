@@ -17,14 +17,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const item = (await db.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)) as any
   if (!item.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const [books, profile, versions] = await Promise.all([
+  const [books, profile, versions, timeTypes] = await Promise.all([
     db.execute(sql`select id, code, name, currency, is_default from item_rate_books where org_id = ${gate.user.orgId} and is_active order by is_default desc, name`) as any,
     db.execute(sql`select base_unit, pricing_policy, invoice_presentation from item_rate_profiles where org_id = ${gate.user.orgId} and item_id = ${id}`) as any,
     db.execute(sql`
       select v.id, v.rate_book_id, b.name as rate_book_name, v.effective_from, v.effective_to, v.status,
              coalesce(jsonb_agg(jsonb_build_object(
                'id', l.id, 'unitCode', l.unit_code, 'unitName', l.unit_name, 'baseQuantity', l.base_quantity,
-               'costRate', l.cost_rate, 'billRate', l.bill_rate, 'sortOrder', l.sort_order
+               'costRate', l.cost_rate, 'billRate', l.bill_rate, 'sortOrder', l.sort_order,
+               'timeTypeBillRates', l.time_type_bill_rates
              ) order by l.base_quantity) filter (where l.id is not null), '[]'::jsonb) as tiers
         from item_rate_versions v
         join item_rate_books b on b.id = v.rate_book_id
@@ -33,11 +34,24 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
        group by v.id, b.name
        order by v.effective_from desc
     `) as any,
+    db.execute(sql`select id, name, bill_multiplier from time_types where org_id = ${gate.user.orgId} and is_active order by bill_multiplier, name`) as any,
   ])
-  return NextResponse.json({ books: books.rows, profile: profile.rows[0] ?? null, versions: versions.rows })
+  return NextResponse.json({ books: books.rows, profile: profile.rows[0] ?? null, versions: versions.rows, timeTypes: timeTypes.rows })
 }
 
-interface TierInput { unitCode?: string; unitName?: string; baseQuantity?: string; costRate?: string; billRate?: string }
+interface TierInput { unitCode?: string; unitName?: string; baseQuantity?: string; costRate?: string; billRate?: string; timeTypeBillRates?: Record<string, string> }
+
+/** Keep only uuid → non-negative numeric entries (explicit per-time-type bill rates). */
+function cleanTierRates(input: Record<string, string> | undefined): string {
+  const out: Record<string, string> = {}
+  if (input && typeof input === 'object') {
+    for (const [k, v] of Object.entries(input)) {
+      if (isUuid(k) && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0) out[k] = String(v)
+    }
+  }
+  return JSON.stringify(out)
+}
+
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('items.manage')
@@ -116,9 +130,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       let sort = 0
       for (const tier of tiers) {
         await tx.execute(sql`
-          insert into item_rate_lines (org_id, version_id, item_id, unit_code, unit_name, base_quantity, cost_rate, bill_rate, sort_order, created_by, updated_by)
+          insert into item_rate_lines (org_id, version_id, item_id, unit_code, unit_name, base_quantity, cost_rate, bill_rate, time_type_bill_rates, sort_order, created_by, updated_by)
           values (${gate.user.orgId}, ${version.rows[0].id}, ${id}, ${tier.unitCode!.trim().toLowerCase()}, ${tier.unitName!.trim()},
-                  ${tier.baseQuantity}, ${tier.costRate}, ${tier.billRate}, ${sort++}, ${gate.user.id}, ${gate.user.id})
+                  ${tier.baseQuantity}, ${tier.costRate}, ${tier.billRate}, ${cleanTierRates(tier.timeTypeBillRates)}::jsonb, ${sort++}, ${gate.user.id}, ${gate.user.id})
         `)
       }
       await tx.execute(sql`

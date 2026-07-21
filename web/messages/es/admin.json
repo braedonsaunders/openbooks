@@ -1587,7 +1587,8 @@
       "rateBookId": "Libro de tarifas",
       "customerId": "Cliente",
       "projectId": "Proyecto",
-      "isDefault": "Predeterminado"
+      "isDefault": "Predeterminado",
+      "billMultiplier": "Multiplicador de facturación"
     },
     "options": {
       "appliesTo": {

@@ -68,9 +68,19 @@
     "baseUnit": "Unidad base",
     "policy": "Política de precios",
     "presentation": "Presentación en factura",
-    "defaults": { "day": "Día", "week": "Semana", "month": "Mes" },
-    "policies": { "capped_ladder": "Escala con topes", "lowest_cost": "Combinación de menor costo" },
-    "presentations": { "rate_components": "Mostrar componentes de tarifa", "summary": "Una sola línea resumida" },
+    "defaults": {
+      "day": "Día",
+      "week": "Semana",
+      "month": "Mes"
+    },
+    "policies": {
+      "capped_ladder": "Escala con topes",
+      "lowest_cost": "Combinación de menor costo"
+    },
+    "presentations": {
+      "rate_components": "Mostrar componentes de tarifa",
+      "summary": "Una sola línea resumida"
+    },
     "unitCode": "Código de unidad",
     "unitName": "Nombre de unidad",
     "baseQuantity": "Cantidad base",
@@ -80,7 +90,9 @@
     "saveFailed": "No se pudieron guardar las tarifas",
     "saved": "Versión de tarifas guardada",
     "empty": "Aún no hay versiones de tarifas.",
-    "rates": "Tarifas"
+    "rates": "Tarifas",
+    "tierOverrides": "Tarifas por tipo de hora:",
+    "tierAuto": "auto"
   },
   "revrec": {
     "title": "Reconocimiento de ingresos",

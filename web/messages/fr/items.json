@@ -68,9 +68,19 @@
     "baseUnit": "Unité de base",
     "policy": "Politique tarifaire",
     "presentation": "Présentation sur la facture",
-    "defaults": { "day": "Jour", "week": "Semaine", "month": "Mois" },
-    "policies": { "capped_ladder": "Paliers plafonnés", "lowest_cost": "Combinaison au coût minimal" },
-    "presentations": { "rate_components": "Afficher les composantes tarifaires", "summary": "Ligne récapitulative unique" },
+    "defaults": {
+      "day": "Jour",
+      "week": "Semaine",
+      "month": "Mois"
+    },
+    "policies": {
+      "capped_ladder": "Paliers plafonnés",
+      "lowest_cost": "Combinaison au coût minimal"
+    },
+    "presentations": {
+      "rate_components": "Afficher les composantes tarifaires",
+      "summary": "Ligne récapitulative unique"
+    },
     "unitCode": "Code d’unité",
     "unitName": "Nom de l’unité",
     "baseQuantity": "Quantité de base",
@@ -80,7 +90,9 @@
     "saveFailed": "Impossible d’enregistrer les tarifs",
     "saved": "Version tarifaire enregistrée",
     "empty": "Aucune version tarifaire.",
-    "rates": "Tarifs"
+    "rates": "Tarifs",
+    "tierOverrides": "Taux par type d'heure :",
+    "tierAuto": "auto"
   },
   "revrec": {
     "title": "Comptabilisation des produits",
