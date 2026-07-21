@@ -100,6 +100,12 @@ export default async function OverheadModelSetup() {
           >
             {t('setup.entities.overhead-model.viewAnalytics')} →
           </Link>
+          <Link
+            href="/admin/setup/labor-costing"
+            className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {t('setup.entities.overhead-model.laborCostingLink')} →
+          </Link>
           <OverheadActions
             departments={data.departments.map((d) => ({ id: d.id, name: d.name, composite: d.composite }))}
             projectTypes={typesRes.rows.map((r) => ({ id: r.id, name: r.name }))}

@@ -1586,7 +1586,8 @@
           "published": "Published $/h",
           "live": "Live $/h",
           "drift": "Drift"
-        }
+        },
+        "laborCostingLink": "Labor costing"
       }
     },
     "fields": {
@@ -1842,7 +1843,9 @@
         "empty": "No wage rates yet — add the first one above.",
         "delete": "Delete rate",
         "hr": "hr",
-        "yr": "yr"
+        "yr": "yr",
+        "search": "Search rates…",
+        "showHistory": "History ({count})"
       },
       "components": {
         "title": "Cost estimate components",
@@ -1967,6 +1970,16 @@
         "nextSteps": "After this: overhead",
         "nextOverhead": "Labor costing covers wages and statutory burden. Your company's OVERHEAD (rent, admin, fleet…) is a separate layer with its own guided setup — classify costs, review computed rates, and apply them to project types.",
         "nextOverheadLink": "Open the Overhead Model"
+      },
+      "unsaved": "Unsaved changes",
+      "discard": "Discard",
+      "related": {
+        "overhead": "Overhead Model",
+        "overheadHint": "The company-cost layer — pools, department rates, and how overhead reaches jobs.",
+        "rateBooks": "Item Rate Books",
+        "rateBooksHint": "What you charge — bill-out rates per item and customer, with reg/OT/DT tiers.",
+        "timeTypes": "Time Types",
+        "timeTypesHint": "Regular, overtime, double-time — the cost and bill multipliers this page uses."
       }
     }
   },

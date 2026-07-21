@@ -1556,7 +1556,8 @@
           "published": "Publié $/h",
           "live": "En direct $/h",
           "drift": "Dérive"
-        }
+        },
+        "laborCostingLink": "Coût de la main-d'œuvre"
       }
     },
     "fields": {
@@ -1808,7 +1809,9 @@
         "empty": "Aucun taux de salaire — ajoutez le premier ci-dessus.",
         "delete": "Supprimer le taux",
         "hr": "h",
-        "yr": "an"
+        "yr": "an",
+        "search": "Rechercher des taux…",
+        "showHistory": "Historique ({count})"
       },
       "components": {
         "title": "Composantes d'estimation du coût",
@@ -1933,6 +1936,16 @@
         "nextSteps": "Ensuite : les frais généraux",
         "nextOverhead": "Le coût de la main-d'œuvre couvre salaires et charges statutaires. Les FRAIS GÉNÉRAUX de votre entreprise (loyer, administration, flotte…) sont une couche distincte avec sa propre configuration guidée — classez les coûts, examinez les taux calculés et appliquez-les aux types de projet.",
         "nextOverheadLink": "Ouvrir le Modèle de frais généraux"
+      },
+      "unsaved": "Modifications non enregistrées",
+      "discard": "Annuler",
+      "related": {
+        "overhead": "Modèle de frais généraux",
+        "overheadHint": "La couche des coûts d'entreprise — pools, taux par département et leur application aux projets.",
+        "rateBooks": "Barèmes d'articles",
+        "rateBooksHint": "Ce que vous facturez — taux par article et client, avec paliers normal/supp./double.",
+        "timeTypes": "Types d'heures",
+        "timeTypesHint": "Normal, supplémentaire, double — les multiplicateurs de coût et de facturation utilisés ici."
       }
     }
   },
