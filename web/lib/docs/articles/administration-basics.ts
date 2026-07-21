@@ -31,8 +31,9 @@ The setup rail groups configuration by purpose:
 
 - **Company** — organization identity, subsidiaries, and intercompany structure.
 - **Accounting** — books, periods, policies, accounts, and close-related defaults.
-- **Taxes** — codes, rates, forms, and filing behavior. Return-box mappings live
-  in each **Tax Code** flyout instead of occupying a separate setup tab.
+- **Taxes** — codes, rates, forms, and filing behavior. Effective-dated rates
+  live in each **Tax Code** flyout, while return-box mappings live in each
+  **Tax Return** flyout instead of occupying separate setup tabs.
 - **Dimensions** — departments, locations, classes, account groups, and related
   analysis structures.
 - **Billing and revenue** — terms, sequences, recognition, pricing, and project

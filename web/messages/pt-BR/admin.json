@@ -1013,15 +1013,21 @@
       "none": "Nenhum PDF oficial enviado"
     },
     "taxBoxes": {
-      "description": "Caixas mapeadas para {code}, além das caixas calculadas e manuais compartilhadas.",
-      "calculatedNote": "As caixas calculadas e manuais se aplicam a toda a declaração e aparecem em cada código de imposto mapeado para ela.",
+      "description": "Caixas mapeadas, calculadas e manuais de {code}.",
+      "calculatedNote": "Cada caixa pertence a esta declaração; as caixas mapeadas selecionam o código de imposto cuja atividade resumem.",
       "new": "Nova caixa da declaração",
       "searchPlaceholder": "Pesquisar caixas da declaração…",
       "source": "Origem",
-      "empty": "Nenhuma caixa corresponde a este código de imposto e à pesquisa.",
+      "empty": "Nenhuma caixa corresponde a esta declaração e à pesquisa.",
       "mapped": "Mapeada",
       "calculated": "Calculada",
       "manual": "Manual"
+    },
+    "taxRates": {
+      "description": "Alíquotas com datas de vigência para {code}.",
+      "new": "Nova alíquota de imposto",
+      "searchPlaceholder": "Pesquisar alíquotas…",
+      "empty": "Nenhuma alíquota corresponde a este código e à pesquisa."
     },
     "new": "Novo",
     "learnMore": "Saiba mais.",
@@ -1333,6 +1339,7 @@
       },
       "tax-rates": {
         "title": "Alíquotas de Imposto",
+        "singularTitle": "Alíquota de Imposto",
         "description": "Histórico de alíquotas com datas de vigência para cada código de imposto."
       },
       "tax-groups": {

@@ -26,7 +26,7 @@ export interface TaxReturnBoxRow {
 }
 
 interface Props {
-  taxCode: string
+  returnCode: string
   rows: TaxReturnBoxRow[]
   total: number
   page: number
@@ -41,11 +41,9 @@ const BASIS_KEYS: Record<string, string> = {
   taxable_base: 'net',
 }
 
-/** The child collection owned by an open Tax Code drawer. Calculation-only
- * boxes are shared within a return and appear beside each code mapped to that
- * same return. */
+/** The box definitions owned by an open Tax Return drawer. */
 export async function TaxReturnBoxesTab({
-  taxCode,
+  returnCode,
   rows,
   total,
   page,
@@ -53,7 +51,7 @@ export async function TaxReturnBoxesTab({
   currentParams,
 }: Props) {
   const t = await getTranslations('admin.setup')
-  const createHref = mergeHref('/admin/setup/tax-codes', currentParams, {
+  const createHref = mergeHref('/admin/setup/tax-return-forms', currentParams, {
     setupTab: 'tax-return-boxes',
     boxRow: 'new',
   })
@@ -63,7 +61,7 @@ export async function TaxReturnBoxesTab({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            {t('taxBoxes.description', { code: taxCode })}
+            {t('taxBoxes.description', { code: returnCode })}
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             {t('taxBoxes.calculatedNote')}{' '}
@@ -94,7 +92,6 @@ export async function TaxReturnBoxesTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t('fields.reportCode')}</TableHead>
               <TableHead>{t('fields.lineCode')}</TableHead>
               <TableHead>{t('fields.label')}</TableHead>
               <TableHead>{t('taxBoxes.source')}</TableHead>
@@ -103,20 +100,19 @@ export async function TaxReturnBoxesTab({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-slate-500 dark:text-slate-400">
+                <TableCell colSpan={3} className="text-slate-500 dark:text-slate-400">
                   {t('taxBoxes.empty')}
                 </TableCell>
               </TableRow>
             ) : null}
             {rows.map((row) => {
-              const editHref = mergeHref('/admin/setup/tax-codes', currentParams, {
+              const editHref = mergeHref('/admin/setup/tax-return-forms', currentParams, {
                 setupTab: 'tax-return-boxes',
                 boxRow: row.id,
               })
               const basisKey = row.basis ? BASIS_KEYS[row.basis] : undefined
               return (
                 <TableRow key={row.id}>
-                  <TableCell className="font-mono text-xs">{row.report_code}</TableCell>
                   <TableCell>
                     <Link
                       href={editHref as any}
@@ -143,7 +139,7 @@ export async function TaxReturnBoxesTab({
           </TableBody>
         </Table>
         <Pagination
-          basePath="/admin/setup/tax-codes"
+          basePath="/admin/setup/tax-return-forms"
           currentParams={currentParams}
           total={total}
           page={page}

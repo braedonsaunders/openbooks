@@ -363,12 +363,15 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   {
     key: 'tax-rates',
     table: 'tax_rates',
+    singularTitleKey: 'entities.tax-rates.singularTitle',
     actorCols: true,
     groupKey: 'taxes',
     iconKey: 'percent',
     orgScoped: true,
     orderBy: 'effective_from desc',
     hasActive: false,
+    docSlug: 'tax-configuration',
+    nestedUnder: 'tax-codes',
     columns: [
       { key: 'taxCodeId', kind: 'ref', ref: 'tax-codes' },
       { key: 'ratePercent', kind: 'percent' },
@@ -446,7 +449,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orderBy: 'report_code, sequence, line_code',
     hasActive: false,
     docSlug: 'tax-configuration',
-    nestedUnder: 'tax-codes',
+    nestedUnder: 'tax-return-forms',
     columns: [
       { key: 'reportCode', kind: 'code' },
       { key: 'sequence', kind: 'number' },
