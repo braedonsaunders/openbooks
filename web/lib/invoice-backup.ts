@@ -28,14 +28,14 @@ export type BackupType =
   | 'purchases'
   | 'purchases_shop_time'
 
-type ComponentKind = 'invoice' | 'costed_timesheets' | 'shop_time' | 'attachments'
+type ComponentKind = 'invoice' | 'costed_timesheets' | 'shop_time' | 'attachments' | 'field_tickets'
 
 /** Ordered components per backup type — the configurable matrix. */
 const BACKUP_RECIPES: Record<BackupType, ComponentKind[]> = {
   none: ['invoice'],
-  costed_timesheets: ['invoice', 'costed_timesheets'],
+  costed_timesheets: ['invoice', 'field_tickets', 'costed_timesheets'],
   quote_only: ['invoice'],
-  timesheets_purchases: ['invoice', 'costed_timesheets', 'attachments'],
+  timesheets_purchases: ['invoice', 'field_tickets', 'costed_timesheets', 'attachments'],
   purchases: ['invoice', 'attachments'],
   purchases_shop_time: ['invoice', 'attachments', 'shop_time'],
 }
@@ -185,6 +185,29 @@ export async function assembleInvoiceBackup(
       if (buf) {
         const pages = await mergePdfInto(out, buf)
         manifest.push({ kind, pages })
+      }
+    } else if (kind === 'field_tickets') {
+      // Signed field tickets whose hours this invoice billed — the T&M
+      // substantiation packet. Each distinct ticket renders once via the org's
+      // ticket template (signature included when present).
+      const tickets = (await db.execute(sql`
+        select distinct te.field_ticket_id
+          from document_lines inv_line
+          join time_entries te on te.invoiced_by_line_id = inv_line.id
+         where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
+           and te.field_ticket_id is not null
+      `)) as unknown as { rows: { field_ticket_id: string }[] }
+      if (tickets.rows.length > 0) {
+        const tpl = await resolvePdfTemplate(orgId, 'field_ticket', null)
+        if (tpl) {
+          for (const tk of tickets.rows) {
+            const record = await loadPdfRecordValues('field_ticket', orgId, tk.field_ticket_id)
+            if (!record) continue
+            const buf = await mergeAndPrintPdf(tpl, record.values)
+            const pages = await mergePdfInto(out, buf)
+            if (pages > 0) manifest.push({ kind, sourceDocumentId: tk.field_ticket_id, pages })
+          }
+        }
       }
     } else if (kind === 'attachments') {
       // Source cost documents this invoice billed → their attachments.

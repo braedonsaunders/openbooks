@@ -7,6 +7,7 @@ import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
 import { laborCosting } from './articles/labor-costing'
+import { fieldTickets } from './articles/field-tickets'
 import { itemRates } from './articles/item-rates'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
@@ -176,7 +177,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   paymentsAndApplications,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting,
+  projectTypes, overheadCosting, laborCosting, fieldTickets,
   itemRates,
   financialReports,
   analyticsAndSavedViews,
