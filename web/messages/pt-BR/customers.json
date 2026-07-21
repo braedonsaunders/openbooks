@@ -16,7 +16,12 @@
       "closedQuarter": "Faturado neste trimestre",
       "dso": "Prazo médio de recebimento",
       "dsoSub": "Dias médios para receber",
-      "days": "{n} d"
+      "days": "{n} d",
+      "activeCustomers": "Clientes ativos",
+      "quotesOrders": "Orçamentos e pedidos abertos",
+      "quotesOrdersSub": "{quotes} orçamentos · {orders} pedidos",
+      "collectedWeek": "Recebido esta semana",
+      "collectedWeekSub": "{count} recebimentos · 7 dias"
     },
     "hero": {
       "title": "Principais relacionamentos",
@@ -47,6 +52,13 @@
       "title": "Requer atenção",
       "allClear": "Tudo certo — nada a cobrar.",
       "overdueCustomer": "{customer} está com {amount} vencido"
+    },
+    "pulse": {
+      "title": "Pulso de recebíveis",
+      "open": "Em aberto",
+      "overdue": "Vencido",
+      "dso": "DSO",
+      "cta": "Abrir contas a receber"
     }
   }
 }

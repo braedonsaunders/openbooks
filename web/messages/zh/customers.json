@@ -16,7 +16,12 @@
       "closedQuarter": "本季度已开票",
       "dso": "应收周转天数",
       "dsoSub": "平均回款天数",
-      "days": "{n} 天"
+      "days": "{n} 天",
+      "activeCustomers": "活跃客户",
+      "quotesOrders": "未结报价与订单",
+      "quotesOrdersSub": "{quotes} 个报价 · {orders} 个订单",
+      "collectedWeek": "本周回款",
+      "collectedWeekSub": "{count} 笔收款 · 7 天"
     },
     "hero": {
       "title": "重点客户",
@@ -47,6 +52,13 @@
       "title": "需要关注",
       "allClear": "一切正常 — 无需催收。",
       "overdueCustomer": "{customer} 逾期 {amount}"
+    },
+    "pulse": {
+      "title": "应收脉搏",
+      "open": "未结",
+      "overdue": "逾期",
+      "dso": "DSO",
+      "cta": "打开应收账款"
     }
   }
 }

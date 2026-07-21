@@ -5,6 +5,7 @@ import { Button, cn, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
 import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
+import { groupTabs } from '../../../components/module-home/group-tabs'
 import { AccountsRosterPanel } from './AccountsRoster'
 import { TrendChart } from '../analytics/_ui/charts'
 import { SubsidiarySwitcher } from '../../../components/subsidiary-switcher'
@@ -70,12 +71,8 @@ export default async function BankingHomePage({
   // The home reflects the org's OWN menu: tabs and directory come from the
   // resolved banking group, so hidden items vanish and custom labels hold.
   const groupItems = navGroups.find((g) => g.id === 'banking')?.items ?? []
-  const cashItem = groupItems.find((i) => i.href === '/banking/cash')
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
-  const tabs = [
-    { href: '/banking', label: t('home.tabs.overview'), active: true },
-    ...(cashItem ? [{ href: `${cashItem.href}${subQs}`, label: cashItem.label }] : []),
-  ]
+  const tabs = await groupTabs('banking', '/banking', { subQs })
 
   const lastImportAge = daysSince(data.badges.lastImportedAt)
   const badgeFor = (href: string): DirectoryItem['badge'] => {

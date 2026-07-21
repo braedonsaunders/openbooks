@@ -16,7 +16,12 @@
       "closedQuarter": "今四半期の請求額",
       "dso": "売掛回転日数",
       "dsoSub": "平均回収日数",
-      "days": "{n} 日"
+      "days": "{n} 日",
+      "activeCustomers": "アクティブな顧客",
+      "quotesOrders": "未処理の見積・受注",
+      "quotesOrdersSub": "見積 {quotes} 件 · 受注 {orders} 件",
+      "collectedWeek": "今週の回収額",
+      "collectedWeekSub": "入金 {count} 件 · 7日間"
     },
     "hero": {
       "title": "主要顧客",
@@ -47,6 +52,13 @@
       "title": "要対応",
       "allClear": "すべて順調 — 督促は不要です。",
       "overdueCustomer": "{customer} が {amount} 期限超過"
+    },
+    "pulse": {
+      "title": "売掛金パルス",
+      "open": "未回収",
+      "overdue": "期限超過",
+      "dso": "DSO",
+      "cta": "売掛金管理を開く"
     }
   }
 }

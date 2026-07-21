@@ -14,7 +14,12 @@
       "openPos": "未结采购订单",
       "openPosSub": "{count} 张订单",
       "spend30d": "近 30 天支出",
-      "spend30dSub": "已入账供应商账单"
+      "spend30dSub": "已入账供应商账单",
+      "activeVendors": "活跃供应商",
+      "paymentsWeek": "本周付款",
+      "paymentsWeekSub": "已过账 {count} 笔 · 近 7 天",
+      "unposted": "未过账费用",
+      "unpostedSub": "等待过账"
     },
     "hero": {
       "title": "供应商承诺",
@@ -45,6 +50,13 @@
       "allClear": "一切正常 — 无逾期。",
       "overdueVendor": "{vendor} 逾期 {amount}",
       "unpostedExpenses": "{count} 份费用报告待入账"
+    },
+    "pulse": {
+      "title": "应付脉搏",
+      "open": "未结",
+      "overdue": "逾期",
+      "due7": "7 天内到期",
+      "cta": "打开应付账款"
     }
   }
 }

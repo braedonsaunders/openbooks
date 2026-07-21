@@ -36,6 +36,7 @@ export interface PurchasingHome {
     openPos: number
     openBills: number
     payments7d: number
+    paid7dValue: number
     unpostedExpenses: number
     vendors: number
   }
@@ -129,13 +130,17 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= current_date - 7) as payments_7d,
+        (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
+          and d.status = 'posted' and d.voided_at is null${docScope}
+          and coalesce(d.document_date, d.posting_date) >= current_date - 7) as paid_7d_value,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
           and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope}) as unposted_expenses,
         (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'vendor_bill'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= current_date - 30) as spend_30d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
-          and p.custom->>'nsKind' = 'vendor'
+          and (p.custom->>'nsKind' = 'vendor'
+               or exists (select 1 from vendor_roles vr where vr.org_id = ${orgId} and vr.party_id = p.id))
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as vendors
     `),
   ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }, { rows: any[] }]
@@ -178,6 +183,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
       openPos: Number(badge.open_pos ?? 0),
       openBills: Number(ap.open_count ?? 0),
       payments7d: Number(badge.payments_7d ?? 0),
+      paid7dValue: Number(badge.paid_7d_value ?? 0),
       unpostedExpenses: Number(badge.unposted_expenses ?? 0),
       vendors: Number(badge.vendors ?? 0),
     },

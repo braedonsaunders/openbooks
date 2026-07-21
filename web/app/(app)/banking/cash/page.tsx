@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
+import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { SubsidiarySwitcher } from '../../../../components/subsidiary-switcher'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
@@ -63,13 +64,8 @@ export default async function BankingCashPage({
                 value={subView.picker.find((p) => p.id === sp.sub)?.id ?? subView.picker[0]?.id ?? ''}
                 label={tBanking('home.subsidiary')}
               />
-              {/* Sibling route-tabs back to the Banking module home (the /ap idiom). */}
-              <ModuleHomeTabs
-                tabs={[
-                  { href: sp.sub ? `/banking?sub=${sp.sub}` : '/banking', label: tBanking('home.tabs.overview') },
-                  { href: '/banking/cash', label: t('title'), active: true },
-                ]}
-              />
+              {/* The group's unified route-tab strip (shared with /banking). */}
+              <ModuleHomeTabs tabs={await groupTabs('banking', '/banking/cash', { subQs: sp.sub ? `?sub=${sp.sub}` : '' })} />
             </div>
           }
         />

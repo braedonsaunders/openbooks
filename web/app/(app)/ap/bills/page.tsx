@@ -1,8 +1,10 @@
 import { getTranslations } from 'next-intl/server'
 import Link from 'next/link'
 import { ScanLine } from 'lucide-react'
-import { Button, cn, PageHeader } from '@openbooks/ui'
+import { Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { ModuleHomeTabs } from '../../../../components/module-home/ui'
+import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { RecordListView } from '../../../../components/record-list-view'
 import { DocumentDrawer } from '../../../../components/document-drawer'
 import { DocumentRowActions } from '../../../../components/document-row-actions'
@@ -71,14 +73,7 @@ export default async function ApBills({
     </div>
   )
 
-  const tHome = await getTranslations('purchasing')
-  const tabs = (
-    <div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-      <Link href={'/purchasing' as any} className={tabCls(false)}>{tHome('home.title')}</Link>
-      <Link href="/ap" className={tabCls(false)}>{t('cockpit.tabs.overview')}</Link>
-      <Link href={'/ap/bills' as any} className={tabCls(true)}>{t('cockpit.tabs.bills')}</Link>
-    </div>
-  )
+  const tabs = <ModuleHomeTabs tabs={await groupTabs('purchasing', '/ap/bills')} />
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
@@ -173,14 +168,5 @@ export default async function ApBills({
         renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]} openHref={`/ap/bills?doc=${row.id}`} />}
       />
     </ListPageLayout>
-  )
-}
-
-function tabCls(active: boolean) {
-  return cn(
-    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-    active
-      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
   )
 }

@@ -14,7 +14,12 @@
       "openPos": "Open POs",
       "openPosSub": "{count} orders",
       "spend30d": "30-day spend",
-      "spend30dSub": "Posted vendor bills"
+      "spend30dSub": "Posted vendor bills",
+      "activeVendors": "Active vendors",
+      "paymentsWeek": "Payments this week",
+      "paymentsWeekSub": "{count} posted · last 7 days",
+      "unposted": "Unposted expenses",
+      "unpostedSub": "awaiting posting"
     },
     "hero": {
       "title": "Vendor commitments",
@@ -45,6 +50,13 @@
       "allClear": "All clear — nothing overdue.",
       "overdueVendor": "{vendor} is {amount} overdue",
       "unpostedExpenses": "{count} expense reports awaiting posting"
+    },
+    "pulse": {
+      "title": "Payables pulse",
+      "open": "Open",
+      "overdue": "Overdue",
+      "due7": "Due 7 days",
+      "cta": "Open Accounts Payable"
     }
   }
 }

@@ -14,7 +14,12 @@
       "openPos": "Offene Bestellungen",
       "openPosSub": "{count} Bestellungen",
       "spend30d": "Ausgaben 30 Tage",
-      "spend30dSub": "Gebuchte Lieferantenrechnungen"
+      "spend30dSub": "Gebuchte Lieferantenrechnungen",
+      "activeVendors": "Aktive Lieferanten",
+      "paymentsWeek": "Zahlungen diese Woche",
+      "paymentsWeekSub": "{count} gebucht · letzte 7 Tage",
+      "unposted": "Nicht gebuchte Ausgaben",
+      "unpostedSub": "warten auf Buchung"
     },
     "hero": {
       "title": "Lieferantenverpflichtungen",
@@ -45,6 +50,13 @@
       "allClear": "Alles klar — nichts überfällig.",
       "overdueVendor": "{vendor} ist mit {amount} überfällig",
       "unpostedExpenses": "{count} Spesenabrechnungen warten auf Buchung"
+    },
+    "pulse": {
+      "title": "Verbindlichkeits-Puls",
+      "open": "Offen",
+      "overdue": "Überfällig",
+      "due7": "Fällig in 7 Tagen",
+      "cta": "Kreditoren öffnen"
     }
   }
 }

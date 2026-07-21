@@ -1,8 +1,9 @@
 import { getTranslations } from 'next-intl/server'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { cn, PageHeader } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
+import { ModuleHomeTabs } from '../../../components/module-home/ui'
+import { groupTabs } from '../../../components/module-home/group-tabs'
 import { NewDocumentButton } from '../../../components/new-document-button'
 import { pickString } from '../../../lib/list-params'
 import { requirePermission, can } from '../../../lib/authz'
@@ -58,14 +59,7 @@ export default async function AR({
     />
   ) : undefined
 
-  const tHome = await getTranslations('customers')
-  const tabs = (
-    <div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-      <Link href={'/customers' as any} className={tabCls(false)}>{tHome('home.title')}</Link>
-      <Link href="/ar" className={tabCls(true)}>{t('cockpit.tabs.overview')}</Link>
-      <Link href={'/ar/invoices' as any} className={tabCls(false)}>{t('cockpit.tabs.invoices')}</Link>
-    </div>
-  )
+  const tabs = <ModuleHomeTabs tabs={await groupTabs('customers', '/ar')} />
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
@@ -84,14 +78,5 @@ export default async function AR({
     >
       <ArCockpit data={data} canCollect={can(authz, 'ar.pay')} />
     </ListPageLayout>
-  )
-}
-
-function tabCls(active: boolean) {
-  return cn(
-    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-    active
-      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
   )
 }
