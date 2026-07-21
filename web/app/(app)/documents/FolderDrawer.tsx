@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Download, Loader2, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { SharePanel } from './SharePanel'
@@ -281,6 +281,18 @@ export function FolderDrawer({
         {mode === 'edit' && folder && canManage ? (
           <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
             <SharePanel resourceType="folder" resourceId={folder.id} />
+          </div>
+        ) : null}
+
+        {/* Download the whole folder */}
+        {mode === 'edit' && folder ? (
+          <div>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/file-cabinet/folders/${folder.id}/download-zip`}>
+                <Download className="h-4 w-4" />
+                {t('downloadZip')}
+              </a>
+            </Button>
           </div>
         ) : null}
 
