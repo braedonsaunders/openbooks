@@ -1831,7 +1831,7 @@
       "orgDefault": "Organization default",
       "rates": {
         "title": "Wage rates",
-        "hint": "Most specific wins: employee, then trade, then the organization default. Starting a new rate closes the previous one automatically.",
+        "hint": "Company-wide fallbacks: a per-trade rate, then the org default. Each EMPLOYEE'S own wage and history is managed on their employee record — these defaults only cover anyone without one.",
         "scope": "Scope",
         "scopeEmployee": "Employee",
         "scopeTrade": "Trade",
@@ -1850,7 +1850,8 @@
         "yr": "yr",
         "search": "Search rates…",
         "showHistory": "History ({count})",
-        "confirmDelete": "Delete this rate? Time already costed keeps its snapshot; future approvals will resolve without it."
+        "confirmDelete": "Delete this rate? Time already costed keeps its snapshot; future approvals will resolve without it.",
+        "employeeNote": "{covered} of {total} employees resolve to a wage. Per-employee wages and raise history live on each employee's record (Operations → Employees)."
       },
       "components": {
         "title": "Cost estimate components",
@@ -1942,8 +1943,8 @@
           "skipHint": "Job costs will show raw wages only until you add components."
         },
         "customBurdenName": "Payroll burden (est.)",
-        "q2": "What do you pay per hour?",
-        "q2Hint": "Start broad — a company-wide default, and per-trade rates if they differ. These are wages, not billing rates.",
+        "q2": "What do you pay each person per hour?",
+        "q2Hint": "Every employee gets their own wage. Search and fill the crew — anyone left blank can use the optional fallback below, and salaried staff can be refined in the workspace afterward.",
         "orgRate": "Default hourly wage (everyone without a specific rate)",
         "tradeRates": "Per-trade rates (optional — beats the default)",
         "perEmployeeLater": "You can add exact per-employee rates in the workspace any time — they beat trade and default rates.",
@@ -1974,7 +1975,14 @@
         "reviewNote": "Everything here is editable in the workspace afterward — the guide just fills in the same settings.",
         "nextSteps": "After this: overhead",
         "nextOverhead": "Labor costing covers wages and statutory burden. Your company's OVERHEAD (rent, admin, fleet…) is a separate layer with its own guided setup — classify costs, review computed rates, and apply them to project types.",
-        "nextOverheadLink": "Open the Overhead Model"
+        "nextOverheadLink": "Open the Overhead Model",
+        "searchEmployees": "Search employees…",
+        "ratePlaceholder": "0.00",
+        "ratedCount": "{rated} of {total} employees have a wage",
+        "fallbackRate": "Fallback rate for anyone left blank (optional)",
+        "fallbackHint": "Only used when someone has no rate of their own — most companies leave this empty.",
+        "reviewEmployeeRates": "Wages for {count} employee(s).",
+        "reviewFallback": "Fallback ${rate}/h for anyone unrated."
       },
       "unsaved": "Unsaved changes",
       "discard": "Discard",

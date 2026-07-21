@@ -1753,7 +1753,7 @@
       "orgDefault": "Predeterminado de la organización",
       "rates": {
         "title": "Tarifas salariales",
-        "hint": "Gana la más específica: empleado, luego oficio, luego el valor predeterminado. Iniciar una nueva tarifa cierra la anterior automáticamente.",
+        "hint": "Respaldos de la empresa: tarifa por oficio y luego el valor predeterminado. El salario propio de cada EMPLEADO y su historial se gestionan en su ficha — estos valores solo cubren a quien no tenga uno.",
         "scope": "Ámbito",
         "scopeEmployee": "Empleado",
         "scopeTrade": "Oficio",
@@ -1772,7 +1772,8 @@
         "yr": "año",
         "search": "Buscar tarifas…",
         "showHistory": "Historial ({count})",
-        "confirmDelete": "¿Eliminar esta tarifa? El tiempo ya costeado conserva su captura; las aprobaciones futuras se resolverán sin ella."
+        "confirmDelete": "¿Eliminar esta tarifa? El tiempo ya costeado conserva su captura; las aprobaciones futuras se resolverán sin ella.",
+        "employeeNote": "{covered} de {total} empleados resuelven a un salario. Los salarios por empleado viven en la ficha de cada empleado (Operaciones → Empleados)."
       },
       "components": {
         "title": "Componentes de estimación de costo",
@@ -1864,8 +1865,8 @@
           "skipHint": "Los costos mostrarán solo salarios brutos hasta que agregue componentes."
         },
         "customBurdenName": "Cargas de nómina (est.)",
-        "q2": "¿Cuánto paga por hora?",
-        "q2Hint": "Empiece amplio — un valor predeterminado y tarifas por oficio si difieren. Son salarios, no tarifas de facturación.",
+        "q2": "¿Cuánto paga a cada persona por hora?",
+        "q2Hint": "Cada empleado tiene su propio salario. Busque y complete la cuadrilla — quien quede en blanco puede usar el respaldo opcional de abajo.",
         "orgRate": "Salario por hora predeterminado (quien no tenga tarifa específica)",
         "tradeRates": "Tarifas por oficio (opcional — gana al predeterminado)",
         "perEmployeeLater": "Puede agregar tarifas exactas por empleado en el espacio de trabajo — ganan a las de oficio y predeterminada.",
@@ -1896,7 +1897,14 @@
         "reviewNote": "Todo es editable después en el espacio de trabajo — la guía solo completa la misma configuración.",
         "nextSteps": "Después de esto: gastos generales",
         "nextOverhead": "El costeo de mano de obra cubre salarios y cargas estatutarias. Los GASTOS GENERALES de su empresa (renta, administración, flota…) son una capa aparte con su propia configuración guiada — clasifique costos, revise tarifas calculadas y aplíquelas a los tipos de proyecto.",
-        "nextOverheadLink": "Abrir el Modelo de gastos generales"
+        "nextOverheadLink": "Abrir el Modelo de gastos generales",
+        "searchEmployees": "Buscar empleados…",
+        "ratePlaceholder": "0.00",
+        "ratedCount": "{rated} de {total} empleados tienen salario",
+        "fallbackRate": "Tarifa de respaldo para quien quede en blanco (opcional)",
+        "fallbackHint": "Solo se usa cuando alguien no tiene tarifa propia — la mayoría lo deja vacío.",
+        "reviewEmployeeRates": "Salarios para {count} empleado(s).",
+        "reviewFallback": "Respaldo de ${rate}/h para quien no tenga tarifa."
       },
       "unsaved": "Cambios sin guardar",
       "discard": "Descartar",

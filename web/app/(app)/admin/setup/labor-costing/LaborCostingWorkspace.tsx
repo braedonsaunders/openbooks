@@ -4,8 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowRight, Plus, Sparkles, Trash2 } from 'lucide-react'
-import Link from 'next/link'
+import { Plus, Sparkles, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
@@ -117,7 +116,7 @@ export function LaborCostingWorkspace(props: {
   } | null>(null)
 
   // ---- new-rate form -------------------------------------------------------
-  const [scope, setScope] = useState<'employee' | 'trade' | 'org'>('employee')
+  const [scope, setScope] = useState<'trade' | 'org'>('trade')
   const [scopeId, setScopeId] = useState('')
   const [rate, setRate] = useState('')
   const [basis, setBasis] = useState<'hour' | 'year'>('hour')
@@ -182,10 +181,10 @@ export function LaborCostingWorkspace(props: {
 
   async function addRate() {
     if (!rate || Number(rate) < 0) return toast.error(t('rateRequired'))
-    if (scope !== 'org' && !scopeId) return toast.error(t('scopeRequired'))
+    if (scope === 'trade' && !scopeId) return toast.error(t('scopeRequired'))
     await post({
       action: 'save-rate',
-      employeePartyId: scope === 'employee' ? scopeId : null,
+      employeePartyId: null,
       tradeId: scope === 'trade' ? scopeId : null,
       rate: Number(rate),
       basis,
@@ -270,6 +269,7 @@ export function LaborCostingWorkspace(props: {
       <LaborCostingWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
+        employees={props.employees}
         onApplied={(applied) => {
           const next = {
             mode: applied.mode,
@@ -327,14 +327,13 @@ export function LaborCostingWorkspace(props: {
       <Card title={t('rates.title')} hint={t('rates.hint')}>
         <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-6">
           <Select aria-label={t('rates.scope')} value={scope} onChange={(e) => { setScope(e.target.value as typeof scope); setScopeId('') }}>
-            <option value="employee">{t('rates.scopeEmployee')}</option>
             <option value="trade">{t('rates.scopeTrade')}</option>
             <option value="org">{t('rates.scopeOrg')}</option>
           </Select>
-          {scope !== 'org' ? (
+          {scope === 'trade' ? (
             <Select aria-label={t('rates.who')} className="lg:col-span-2" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
               <option value="">—</option>
-              {(scope === 'employee' ? props.employees : props.trades).map((o) => (
+              {props.trades.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
             </Select>
@@ -356,11 +355,11 @@ export function LaborCostingWorkspace(props: {
         <div className="mb-2 flex justify-end">
           <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
             <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-            {t('rates.showHistory', { count: props.rates.filter((r) => r.effective_to).length })}
+            {t('rates.showHistory', { count: props.rates.filter((r) => !r.employee_party_id && r.effective_to).length })}
           </label>
         </div>
         <PagedTable
-          rows={props.rates.filter((r) => showHistory || !r.effective_to)}
+          rows={props.rates.filter((r) => !r.employee_party_id).filter((r) => showHistory || !r.effective_to)}
           rowKey={(r) => r.id}
           searchable
           pageSize={10}
@@ -407,6 +406,9 @@ export function LaborCostingWorkspace(props: {
             },
           ]}
         />
+        <p className="mt-3 rounded-md bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+          {t('rates.employeeNote', { covered: props.coverage.covered, total: props.coverage.employees })}
+        </p>
       </Card>
       )}
 
@@ -592,29 +594,6 @@ export function LaborCostingWorkspace(props: {
       </Card>
 
       )}
-
-      {/* ---- where the other pieces live ---- */}
-      <div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[
-            { href: '/admin/setup/overhead', key: 'overhead' },
-            { href: '/admin/setup/item-rate-books', key: 'rateBooks' },
-            { href: '/admin/setup/time-types', key: 'timeTypes' },
-          ].map((l) => (
-            <Link
-              key={l.key}
-              href={l.href}
-              className="group rounded-lg border border-slate-200 bg-white p-3 transition-colors hover:border-teal-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{t(`related.${l.key}`)}</span>
-                <ArrowRight size={14} className="text-slate-300 transition-colors group-hover:text-teal-600 dark:text-slate-600 dark:group-hover:text-teal-400" aria-hidden />
-              </div>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t(`related.${l.key}Hint`)}</p>
-            </Link>
-          ))}
-        </div>
-      </div>
 
       {/* ---- sticky unsaved-changes bar ---- */}
       {dirty && (

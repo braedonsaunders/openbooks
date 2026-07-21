@@ -16,7 +16,7 @@ export async function generateMetadata() {
   return { title: t('sftp.title') }
 }
 
-const VIEWS = ['servers', 'schedules'] as const
+const VIEWS = ['endpoint', 'servers', 'schedules'] as const
 type SftpView = (typeof VIEWS)[number]
 
 export default async function SetupSftpPage({
@@ -28,7 +28,7 @@ export default async function SetupSftpPage({
   const t = await getTranslations('banking')
   const sp = await searchParams
   const rawView = typeof sp.view === 'string' ? sp.view : ''
-  const view: SftpView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as SftpView) : 'servers'
+  const view: SftpView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as SftpView) : 'endpoint'
   const [r, cfg, hdrs, sched, accts] = await Promise.all([
     db.execute(sql`
       select id, name, username, backend, bucket, root_prefix, is_active, last_connected_at
@@ -74,10 +74,14 @@ export default async function SetupSftpPage({
           </Link>
         ))}
       </div>
+      {view === 'endpoint' && (
+        <SftpManager servers={r.rows} daemon={daemon} show="daemon" />
+      )}
       {view === 'servers' && (
         <SftpManager
           servers={r.rows}
           daemon={daemon}
+          show="servers"
           empty={<EmptyState title={t('sftp.emptyTitle')} description={t('sftp.emptyDescription')} />}
         />
       )}

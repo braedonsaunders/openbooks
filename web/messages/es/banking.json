@@ -423,7 +423,7 @@
     "title": "Servidores SFTP",
     "description": "Puntos SFTP integrados respaldados por almacenamiento de objetos — bancos y socios dejan extractos o recogen archivos de pago, y esos mismos objetos alimentan la importación y exportación.",
     "emptyTitle": "Aún no hay servidores SFTP",
-    "emptyDescription": "Crea un servidor SFTP para dar a un banco o socio un buzón seguro respaldado por almacenamiento de objetos.",
+    "emptyDescription": "El punto de conexión SFTP (vea la pestaña Conexión y acceso) está listo. Agregue un acceso para dar a un banco o socio su propia carpeta segura protegida por contraseña.",
     "newServer": "Nuevo servidor SFTP",
     "newServerHint": "Se generan un usuario y una contraseña; conecta cualquier cliente SFTP al host de la app.",
     "create": "Crear",
@@ -489,7 +489,8 @@
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... banco@host",
     "authorizedKeysHint": "Una clave pública OpenSSH por línea. Los clientes con la clave privada correspondiente pueden iniciar sesión sin contraseña.",
     "tabs": {
-      "servers": "Servidores y demonio",
+      "endpoint": "Conexión y acceso",
+      "servers": "Accesos de socios",
       "schedules": "Programas de importación"
     }
   }
