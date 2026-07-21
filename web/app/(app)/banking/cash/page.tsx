@@ -8,6 +8,7 @@ import { analyticsConfig } from '../../../../lib/analytics/config'
 import { cashPosition } from '../../../../lib/cash/cash-position'
 import { resolveAsOf } from '../../../../lib/cash/core'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { userPageLayout } from '../../../../lib/page-layout'
 import { CashCockpit } from './CashCockpit'
 
 export const dynamic = 'force-dynamic'
@@ -43,7 +44,10 @@ export default async function BankingCashPage({
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const data = await cashPosition(authz.user.orgId, horizon, apSettings, undefined, subView.subsidiary?.ids)
+  const [data, layoutPrefs] = await Promise.all([
+    cashPosition(authz.user.orgId, horizon, apSettings, undefined, subView.subsidiary?.ids),
+    userPageLayout(authz.user.id, 'banking-cash'),
+  ])
 
   return (
     <ListPageLayout
@@ -73,6 +77,7 @@ export default async function BankingCashPage({
     >
       <CashCockpit
         data={data}
+        layoutPrefs={layoutPrefs}
         canConfigure={can(authz, 'admin.setup.manage')}
         canPayRun={can(authz, 'ap.pay')}
         canCollectionRun={can(authz, 'ar.pay')}
