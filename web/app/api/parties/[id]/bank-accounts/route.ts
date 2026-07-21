@@ -6,6 +6,7 @@ import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { normalizeCountryCode } from '../../../../../lib/countries'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,7 @@ type Body = {
 function validateBody(body: Body, creating: boolean): string | null {
   if (body.bankName !== undefined && !body.bankName?.trim()) return 'bankName required'
   if (creating && !body.bankName?.trim()) return 'bankName required'
+  if (body.country && !normalizeCountryCode(body.country)) return 'country must be a valid ISO country code'
   if (body.currency && !/^[A-Za-z]{3}$/.test(body.currency.trim())) return 'currency must be a 3-letter code'
   if (body.routing !== undefined) {
     if (!body.routing || Array.isArray(body.routing) || typeof body.routing !== 'object') return 'routing must be an object'
@@ -65,13 +67,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!accountNumber || accountNumber.length < 4) {
     return NextResponse.json({ error: 'accountNumber required' }, { status: 400 })
   }
+  const country = normalizeCountryCode(body.country) ?? null
 
   const inserted = (await db.execute(sql`
     insert into party_bank_accounts
       (org_id, party_id, bank_name, country, currency, routing,
        account_number_encrypted, account_last_four, approval_status, is_active,
        approved_at, approved_by, created_by)
-    values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${body.country?.trim() || null},
+    values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${country},
             ${body.currency?.trim().toUpperCase() || null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
             ${encryptAccountNumber(accountNumber)}, ${accountNumber.slice(-4)},
             'pending', false, null, null, ${user.id})
@@ -114,12 +117,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const accountNumber = body.accountNumber?.trim()
+  const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
   // Any material edit re-enters approval: pending + inactive + approval
   // cleared (the NetSuite workflow's @OLDRECORD@ comparison, done natively).
   await db.execute(sql`
     update party_bank_accounts set
       bank_name = ${body.bankName !== undefined ? body.bankName?.trim() || null : sql`bank_name`},
-      country = ${body.country !== undefined ? body.country?.trim() || null : sql`country`},
+      country = ${body.country !== undefined ? country : sql`country`},
       currency = ${body.currency !== undefined ? body.currency?.trim().toUpperCase() || null : sql`currency`},
       routing = ${body.routing !== undefined ? sql`${JSON.stringify(body.routing)}::jsonb` : sql`routing`},
       account_number_encrypted = ${accountNumber ? encryptAccountNumber(accountNumber) : sql`account_number_encrypted`},

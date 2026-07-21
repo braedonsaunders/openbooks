@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
+import { normalizeCountryCode } from '../../../../lib/countries'
 import { loadParty } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -396,6 +397,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   // -- addresses: full replacement ------------------------------------------
   if (body.addresses) {
+    const invalidCountry = body.addresses.some((address) => {
+      const country = strOrNull(address.country)
+      return country !== null && normalizeCountryCode(country) === null
+    })
+    if (invalidCountry) return bad('Country must be a valid ISO country code')
     const rows = body.addresses
       .map((a) => ({
         label: strOrNull(a.label),
@@ -404,7 +410,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         city: strOrNull(a.city),
         region: strOrNull(a.region),
         postalCode: strOrNull(a.postalCode),
-        country: strOrNull(a.country),
+        country: normalizeCountryCode(a.country),
         isDefaultBilling: a.isDefaultBilling === true,
         isDefaultShipping: a.isDefaultShipping === true,
       }))

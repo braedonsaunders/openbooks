@@ -9,6 +9,7 @@ import {
 import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { normalizeCountryCode } from '../../../../../lib/countries'
 
 export const runtime = 'nodejs'
 
@@ -71,13 +72,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       if (!body.code?.trim() || !body.name?.trim() || !body.formatterScript?.trim()) {
         return NextResponse.json({ error: 'code, name, and formatterScript are required' }, { status: 400 })
       }
+      const country = optionalCountry(body.country)
+      if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
       const [row] = await db.insert(schema.paymentFormats).values({
         orgId: gate.user.orgId,
         code: body.code.trim().toUpperCase(),
         name: body.name.trim(),
         rail: 'custom',
         direction: body.direction === 'debit' || body.direction === 'both' ? body.direction : 'credit',
-        country: body.country?.trim().toUpperCase() || null,
+        country,
         currency: body.currency?.trim().toUpperCase() || null,
         fileExtension: body.fileExtension?.trim().replace(/^\./, '') || 'txt',
         contentType: body.contentType?.trim() || 'text/plain; charset=utf-8',
@@ -90,6 +93,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       return NextResponse.json(row, { status: 201 })
     }
     if (resource === 'profiles') {
+      const country = optionalCountry(body.country)
+      if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
+      body.country = country
       const input = body as unknown as PaymentBankProfileInput
       if (!input.name || !isUuid(input.bankAccountId) || !isUuid(input.paymentFormatId) || !input.currency) {
         return NextResponse.json({ error: 'name, bankAccountId, paymentFormatId, and currency are required' }, { status: 400 })
@@ -148,4 +154,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     const message = error instanceof Error ? error.message : 'request failed'
     return NextResponse.json({ error: message }, { status: 422 })
   }
+}
+
+function optionalCountry(value: unknown): string | null | undefined {
+  if (value == null || (typeof value === 'string' && value.trim() === '')) return null
+  return normalizeCountryCode(value) ?? undefined
 }

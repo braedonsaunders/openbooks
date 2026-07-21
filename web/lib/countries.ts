@@ -21,6 +21,22 @@ export const COUNTRY_CODES = [
   'VN', 'VU', 'WF', 'WS', 'YE', 'YT', 'ZA', 'ZM', 'ZW',
 ] as const
 
+export type CountryCode = (typeof COUNTRY_CODES)[number]
+
+const COUNTRY_CODE_SET: ReadonlySet<string> = new Set(COUNTRY_CODES)
+
+/** True only for a canonical uppercase ISO 3166-1 alpha-2 country code. */
+export function isCountryCode(value: unknown): value is CountryCode {
+  return typeof value === 'string' && COUNTRY_CODE_SET.has(value)
+}
+
+/** Normalize user/import input to an ISO code, or reject it. */
+export function normalizeCountryCode(value: unknown): CountryCode | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toUpperCase()
+  return isCountryCode(normalized) ? normalized : null
+}
+
 /**
  * Country options for a SearchSelect, labelled in the given UI locale and
  * sorted by localized name. The stored value stays the uppercase ISO code.

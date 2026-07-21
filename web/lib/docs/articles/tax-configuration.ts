@@ -32,6 +32,8 @@ before confirming the action.
 On a return's **Details** tab, **Filing method** is the single control for how
 the jurisdiction accepts the return. The compatible government format is
 derived automatically, preventing contradictory method and format settings.
+Choose **Country** from the searchable ISO country list; arbitrary country
+codes are rejected by both the editor and imports.
 
 ## Configure return boxes
 

@@ -5,6 +5,7 @@ import { updatePaymentBankProfile } from '@openbooks/engine/src/payment-operatio
 import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
+import { normalizeCountryCode } from '../../../../../../lib/countries'
 
 export const runtime = 'nodejs'
 
@@ -17,13 +18,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
   }
   const body = await req.json().catch(() => ({})) as Record<string, any>
   try {
+    if (body.country !== undefined) {
+      const country = optionalCountry(body.country)
+      if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
+      body.country = country
+    }
     if (resource === 'profiles') {
       await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body)
     } else if (resource === 'formats') {
       const updated = (await db.execute(sql`
         update payment_formats set
           name = coalesce(${body.name?.trim() ?? null}, name),
-          country = case when ${body.country === undefined} then country else ${body.country?.trim().toUpperCase() || null} end,
+          country = case when ${body.country === undefined} then country else ${body.country ?? null} end,
           currency = case when ${body.currency === undefined} then currency else ${body.currency?.trim().toUpperCase() || null} end,
           file_extension = coalesce(${body.fileExtension?.trim().replace(/^\./, '') ?? null}, file_extension),
           content_type = coalesce(${body.contentType?.trim() ?? null}, content_type),
@@ -69,4 +75,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'request failed' }, { status: 422 })
   }
+}
+
+function optionalCountry(value: unknown): string | null | undefined {
+  if (value == null || (typeof value === 'string' && value.trim() === '')) return null
+  return normalizeCountryCode(value) ?? undefined
 }

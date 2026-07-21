@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Trash2, Upload } from 'lucide-react'
 import {
@@ -18,6 +18,7 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
+import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
 
@@ -322,6 +323,8 @@ function FieldControl({
   refOptions: RefOption[]
   t: (k: string, params?: Record<string, any>) => string
 }) {
+  const locale = useLocale()
+  const countries = useMemo(() => countryOptions(locale), [locale])
   const label = t(`fields.${field.key}`)
   const locked = forceLocked || (!creating && field.lockedOnEdit)
   const full = field.kind === 'multiref' || field.kind === 'textarea'
@@ -399,6 +402,24 @@ function FieldControl({
           value={String(value ?? '')}
           onChange={onChange}
           options={options}
+          placeholder={t('selectPlaceholder')}
+          searchPlaceholder={t('searchPlaceholder')}
+          sheetTitle={label}
+          clearable={!field.required}
+          ariaLabel={label}
+        />
+      </div>
+    )
+  }
+
+  if (field.kind === 'country') {
+    return (
+      <div className={wrap}>
+        <Label>{label}</Label>
+        <SearchSelect
+          value={String(value ?? '')}
+          onChange={onChange}
+          options={countries}
           placeholder={t('selectPlaceholder')}
           searchPlaceholder={t('searchPlaceholder')}
           sheetTitle={label}
