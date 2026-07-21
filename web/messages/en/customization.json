@@ -16,7 +16,8 @@
     "quote": "Estimate",
     "sales_order": "Sales order",
     "purchase_order": "Purchase order",
-    "project": "Project"
+    "project": "Project",
+    "field_ticket": "Field ticket"
   },
   "views": {
     "defaultName": "Default view",

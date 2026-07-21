@@ -54,19 +54,35 @@
     "sending": "Envoi…"
   },
   "transactionTypes": {
-    "vendorBill": "Facture fournisseur", "bill": "Facture",
-    "vendorCredit": "Avoir fournisseur", "credit": "Avoir",
-    "purchaseOrder": "Bon de commande", "purchaseOrderShort": "BC",
-    "customerInvoice": "Facture client", "invoice": "Facture",
-    "customerCredit": "Avoir client", "customerCreditShort": "Avoir client",
-    "salesOrder": "Commande client", "salesOrderShort": "CC",
-    "estimate": "Devis", "expenseReport": "Note de frais", "expense": "Frais",
-    "journalEntry": "Écriture de journal", "journal": "Journal",
-    "vendorPayment": "Paiement fournisseur", "vendorPaymentShort": "Pmt fournisseur",
-    "customerPayment": "Paiement client", "customerPaymentShort": "Pmt client",
-    "check": "Chèque", "bankDeposit": "Dépôt bancaire", "deposit": "Dépôt",
-    "transfer": "Virement", "cardCharge": "Dépense par carte", "cardChargeShort": "Carte",
-    "cardRefund": "Remboursement par carte", "cardRefundShort": "Remb. carte"
+    "vendorBill": "Facture fournisseur",
+    "bill": "Facture",
+    "vendorCredit": "Avoir fournisseur",
+    "credit": "Avoir",
+    "purchaseOrder": "Bon de commande",
+    "purchaseOrderShort": "BC",
+    "customerInvoice": "Facture client",
+    "invoice": "Facture",
+    "customerCredit": "Avoir client",
+    "customerCreditShort": "Avoir client",
+    "salesOrder": "Commande client",
+    "salesOrderShort": "CC",
+    "estimate": "Devis",
+    "expenseReport": "Note de frais",
+    "expense": "Frais",
+    "journalEntry": "Écriture de journal",
+    "journal": "Journal",
+    "vendorPayment": "Paiement fournisseur",
+    "vendorPaymentShort": "Pmt fournisseur",
+    "customerPayment": "Paiement client",
+    "customerPaymentShort": "Pmt client",
+    "check": "Chèque",
+    "bankDeposit": "Dépôt bancaire",
+    "deposit": "Dépôt",
+    "transfer": "Virement",
+    "cardCharge": "Dépense par carte",
+    "cardChargeShort": "Carte",
+    "cardRefund": "Remboursement par carte",
+    "cardRefundShort": "Remb. carte"
   },
   "labels": {
     "name": "Nom",
@@ -148,7 +164,8 @@
     "active": "Actif",
     "inactive": "Inactif",
     "error": "Erreur",
-    "ok": "OK"
+    "ok": "OK",
+    "pending_approval": "Soumis"
   },
   "filters": {
     "showInactive": "Afficher les inactifs"
@@ -186,7 +203,11 @@
     "description": "Aucun enregistrement ne correspond aux filtres actuels."
   },
   "auditTrail": {
-    "tabs": { "details": "Détails", "attachments": "Pièces jointes", "audit": "Piste d’audit" },
+    "tabs": {
+      "details": "Détails",
+      "attachments": "Pièces jointes",
+      "audit": "Piste d’audit"
+    },
     "ariaLabel": "Sections de l’enregistrement",
     "searchPlaceholder": "Rechercher dans la piste d’audit",
     "actionFilter": "Filtrer par action",
@@ -207,7 +228,15 @@
     "loadFailedTitle": "Piste d’audit indisponible",
     "loadFailedDescription": "La piste d’audit n’a pas pu être chargée. Réessayez dans un instant.",
     "retry": "Réessayer",
-    "actions": { "insert": "Créé", "update": "Mis à jour", "delete": "Supprimé", "post": "Comptabilisé", "void": "Annulé", "approve": "Approuvé", "reject": "Rejeté" }
+    "actions": {
+      "insert": "Créé",
+      "update": "Mis à jour",
+      "delete": "Supprimé",
+      "post": "Comptabilisé",
+      "void": "Annulé",
+      "approve": "Approuvé",
+      "reject": "Rejeté"
+    }
   },
   "approvalFlow": {
     "pendingWith": "En attente de {names}",

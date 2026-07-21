@@ -16,7 +16,8 @@
     "quote": "Devis",
     "sales_order": "Commande client",
     "purchase_order": "Bon de commande",
-    "project": "Projet"
+    "project": "Projet",
+    "field_ticket": "Bon de régie"
   },
   "views": {
     "defaultName": "Vue par défaut",

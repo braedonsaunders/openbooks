@@ -16,7 +16,8 @@
     "quote": "Presupuesto",
     "sales_order": "Orden de venta",
     "purchase_order": "Orden de compra",
-    "project": "Proyecto"
+    "project": "Proyecto",
+    "field_ticket": "Parte de obra"
   },
   "views": {
     "defaultName": "Vista predeterminada",

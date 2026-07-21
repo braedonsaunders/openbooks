@@ -12,6 +12,7 @@ import {
   removeTicketLine,
   saveCrewGrid,
   submitFieldTicket,
+  updateTicketHeader,
 } from '../../../../lib/field-tickets'
 import { sendTicketForSignature } from '../../../../lib/field-ticket-signing'
 
@@ -29,6 +30,29 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
+    return NextResponse.json(await loadFieldTicket(gate.user.orgId, id))
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Standard-form header save (project/date/PO/memo/period/foreman). */
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('time.manage')
+  if (gate instanceof NextResponse) return gate
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const body = await req.json().catch(() => ({}))
+  try {
+    await updateTicketHeader(gate.user.orgId, gate.user.id, id, {
+      ...(('projectId' in body) ? { projectId: isUuid(body.projectId) ? body.projectId : null } : {}),
+      ...(/^\d{4}-\d{2}-\d{2}$/.test(body.documentDate ?? '') ? { documentDate: body.documentDate } : {}),
+      ...(('referenceNumber' in body) ? { referenceNumber: body.referenceNumber ? String(body.referenceNumber).slice(0, 100) : null } : {}),
+      ...(('memo' in body) ? { memo: body.memo ? String(body.memo).slice(0, 2000) : null } : {}),
+      ...(['shift', 'daily', 'weekly'].includes(body.period) ? { period: body.period } : {}),
+      ...(('foremanPartyId' in body) ? { foremanPartyId: isUuid(body.foremanPartyId) ? body.foremanPartyId : null } : {}),
+    })
     return NextResponse.json(await loadFieldTicket(gate.user.orgId, id))
   } catch (e) {
     return fail(e)

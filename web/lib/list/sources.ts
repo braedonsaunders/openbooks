@@ -128,6 +128,18 @@ const SOURCES: Record<string, DocListSource> = {
   // per page's URL param). Conversion progress lives in a report, not here.
   quote: documentSource({ recordType: 'quote', kinds: ['quote'], drawerParam: 'estimate', partyRole: 'customer' }),
   sales_order: documentSource({ recordType: 'sales_order', kinds: ['sales_order'], drawerParam: 'order', partyRole: 'customer' }),
+  field_ticket: documentSource({
+    recordType: 'field_ticket',
+    kinds: ['field_ticket'],
+    drawerParam: 'ticket',
+    partyRole: 'customer',
+    joins: sql`left join projects ftproj on ftproj.id = d.project_id`,
+    builtInExpr: {
+      ...DOCUMENT_BUILT_IN_EXPR,
+      project_name: sql`coalesce(ftproj.code || ' · ' || ftproj.name, ftproj.name)`,
+      period: sql`initcap(d.custom->'fieldTicket'->>'period')`,
+    },
+  }),
   purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),
 }
 

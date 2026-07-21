@@ -34,7 +34,8 @@
     "unsigned": "Not sent",
     "waiting": "Awaiting signature",
     "signed": "Signed",
-    "date": "Date"
+    "date": "Date",
+    "createFailed": "Could not create the ticket"
   },
   "editor": {
     "back": "Field tickets",

@@ -528,6 +528,56 @@ const PROJECT: RecordTypeMeta = {
   ],
 };
 
+
+/**
+ * Field ticket — the signed crew timesheet (feature-gated). Header rides the
+ * standard configurable form (project drives customer/PO derivation); the crew
+ * grid and item lines render in the bespoke flyout sections. Line custom
+ * fields target the ticket's document_lines like any transaction.
+ */
+const FIELD_TICKET: RecordTypeMeta = {
+  key: "field_ticket",
+  labelKey: "customization.recordTypes.field_ticket",
+  category: "transaction",
+  headerFields: [
+    { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension", required: true },
+    { key: "party_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref" },
+    { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+    { key: "reference_number", labelKey: "fieldTickets.editor.po", level: "header", kind: "text" },
+    { key: "memo", labelKey: "fieldTickets.editor.workDescription", level: "header", kind: "long_text" },
+  ],
+  lineFields: TRANSACTION_LINE_FIELDS.filter((field) =>
+    ["item_id", "description", "quantity", "unit_price", "amount"].includes(field.key),
+  ),
+  listColumns: [
+    { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "project_name", labelKey: "common.labels.project", kind: "text" },
+    { key: "party_name", labelKey: "common.labels.customer", kind: "text", sortable: true, sortKey: "party" },
+    { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+    { key: "period", labelKey: "fieldTickets.list.period", kind: "text", defaultWidth: 100 },
+    { key: "total", labelKey: "fieldTickets.list.itemsTotal", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 110 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 130 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "draft", labelKey: "common.status.draft" },
+        { value: "pending_approval", labelKey: "common.status.pending_approval" },
+        { value: "approved", labelKey: "common.status.approved" },
+        { value: "voided", labelKey: "common.status.voided" },
+      ],
+    },
+    { key: "party_id", labelKey: "common.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+    { key: "project_id", labelKey: "common.labels.project", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "project" },
+    DATE_FILTER,
+  ],
+};
+
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -545,6 +595,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   QUOTE,
   SALES_ORDER,
   PURCHASE_ORDER,
+  FIELD_TICKET,
   PROJECT,
 ];
 
