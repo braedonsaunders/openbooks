@@ -83,6 +83,43 @@ async function loadEntityOptions(source: string, orgId: string): Promise<RefOpti
         from projects where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
     return projects.rows as RefOption[]
   }
+  if (source === 'project-tasks') {
+    const tasks = (await db.execute(sql`
+      select pt.id as value,
+             coalesce(p.code || ' · ', '') || coalesce(pt.code || ' · ', '') || pt.name as label
+        from project_tasks pt join projects p on p.id = pt.project_id and p.org_id = pt.org_id
+       where pt.org_id = ${orgId} and pt.status = 'open' order by p.code nulls last, pt.code nulls last, pt.name`)) as any
+    return tasks.rows as RefOption[]
+  }
+  if (source === 'employees') {
+    const employees = (await db.execute(sql`
+      select p.id as value, p.display_name as label from parties p
+       join employee_roles e on e.party_id = p.id and e.org_id = p.org_id and e.is_active
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+    return employees.rows as RefOption[]
+  }
+  if (source === 'item-rate-versions') {
+    const versions = (await db.execute(sql`
+      select v.id as value,
+             b.code || ' · ' || v.effective_from::text || ' · ' || initcap(v.status) as label
+        from item_rate_versions v join item_rate_books b on b.id = v.rate_book_id and b.org_id = v.org_id
+       where v.org_id = ${orgId} order by b.code, v.effective_from desc`)) as any
+    return versions.rows as RefOption[]
+  }
+  if (source === 'payroll-cost-batches') {
+    const batches = (await db.execute(sql`
+      select id as value, code || ' · ' || period_start::text || ' – ' || period_end::text as label
+        from payroll_cost_batches where org_id = ${orgId} and status = 'draft'
+       order by period_end desc, code`)) as any
+    return batches.rows as RefOption[]
+  }
+  if (source === 'posted-payroll-journals') {
+    const journals = (await db.execute(sql`
+      select id as value, document_number || coalesce(' · ' || reference_number, '') || ' · ' || document_date::text as label
+        from documents where org_id = ${orgId} and kind = 'journal' and status = 'posted'
+       order by document_date desc, document_number desc limit 500`)) as any
+    return journals.rows as RefOption[]
+  }
   const target = SETUP_ENTITY_BY_KEY.get(source)
   if (!target) return []
   const orgFilter = target.orgScoped ? sql` where org_id = ${orgId}` : sql``

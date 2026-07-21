@@ -7,6 +7,12 @@
   "key": "Clé",
   "billingMethod": "Méthode de facturation",
   "sortOrder": "Ordre de tri",
+  "laborRateBook": "Grille de taux par défaut",
+  "laborRateBookHint": "Les projets de ce type héritent de cette grille, sauf remplacement par le projet ou une affectation ciblée.",
+  "laborRatePolicy": "Politique de taux par défaut",
+  "laborRatePolicyHint": "Contrôle la date d’effet et le verrouillage pour les projets qui héritent de ce type.",
+  "inheritCompany": "Hériter du paramètre de l’entreprise",
+  "laborPolicies": { "work_date": "Taux à la date du travail", "locked": "Verrouiller la version attribuée", "scheduled_escalation": "Augmentation planifiée", "manual_reprice": "Réévaluation manuelle seulement" },
   "saved": "Type de projet enregistré",
   "deleteConfirm": "Supprimer ou archiver « {name} » ?",
   "tabs": {

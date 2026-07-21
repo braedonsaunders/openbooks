@@ -216,6 +216,14 @@ export const projects = pgTable(
     // The configurable project type carrying the profitability/invoicing/backup
     // profiles. `billing_method` stays as a back-compat coarse classifier.
     projectTypeId: uuid("project_type_id"), // → project_types
+    /** Labor pricing can follow the work date, pin one awarded version, follow
+     * scheduled versions in a pinned book, or reprice only by explicit action. */
+    laborRateBookId: uuid("labor_rate_book_id"),
+    laborRatePolicy: text("labor_rate_policy", {
+      enum: ["work_date", "locked", "scheduled_escalation", "manual_reprice"],
+    }),
+    laborRateLockedVersionId: uuid("labor_rate_locked_version_id"),
+    laborRateLockDate: date("labor_rate_lock_date"),
     // Native invoicing/backup override for this project (cascades over the type
     // and customer). A first-class capability, not a user custom field.
     invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),

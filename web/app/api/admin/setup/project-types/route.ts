@@ -6,6 +6,20 @@ import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
+const LABOR_POLICIES = ['work_date', 'locked', 'scheduled_escalation', 'manual_reprice'] as const
+
+async function laborDefaults(body: any, orgId: string) {
+  const laborRateBookId = body.laborRateBookId || null
+  const laborRatePolicy = body.laborRatePolicy || null
+  if (laborRateBookId) {
+    if (!isUuid(laborRateBookId)) throw new Error('Invalid labor rate book')
+    const book = (await db.execute(sql`select 1 from item_rate_books where id = ${laborRateBookId} and org_id = ${orgId} and is_active`)) as unknown as { rows: unknown[] }
+    if (!book.rows[0]) throw new Error('Labor rate book not found')
+  }
+  if (laborRatePolicy && !LABOR_POLICIES.includes(laborRatePolicy)) throw new Error('Invalid labor rate policy')
+  return { laborRateBookId, laborRatePolicy }
+}
+
 /** Create / update / archive a project type. The three profile jsonb blobs are
  *  stored as-provided (shape is TS-typed at the edit surface). */
 export async function POST(req: Request) {
@@ -19,11 +33,12 @@ export async function POST(req: Request) {
   if (!b.financialProfile || !b.invoicingProfile || !b.backupProfile)
     return NextResponse.json({ error: 'Missing profile' }, { status: 422 })
   try {
+    const labor = await laborDefaults(b, orgId)
     const r = (await db.execute(sql`
       insert into project_types (org_id, key, name, description, is_built_in, is_active, sort_order,
-        billing_method, financial_profile, invoicing_profile, backup_profile, created_by, updated_by)
+        billing_method, labor_rate_book_id, labor_rate_policy, financial_profile, invoicing_profile, backup_profile, created_by, updated_by)
       values (${orgId}, ${key}, ${name}, ${b.description ?? null}, false, true, ${Number(b.sortOrder ?? 50)},
-        ${b.billingMethod ?? null}, ${JSON.stringify(b.financialProfile)}::jsonb,
+        ${b.billingMethod ?? null}, ${labor.laborRateBookId}, ${labor.laborRatePolicy}, ${JSON.stringify(b.financialProfile)}::jsonb,
         ${JSON.stringify(b.invoicingProfile)}::jsonb, ${JSON.stringify(b.backupProfile)}::jsonb,
         ${gate.user.id}, ${gate.user.id})
       returning id`)) as unknown as { rows: { id: string }[] }
@@ -41,12 +56,17 @@ export async function PATCH(req: Request) {
   const orgId = gate.user.orgId
   const b = (await req.json().catch(() => ({}))) as any
   if (!isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  let labor: Awaited<ReturnType<typeof laborDefaults>>
+  try { labor = await laborDefaults(b, orgId) }
+  catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 422 }) }
   const sets = [
     sql`name = ${String(b.name ?? '').trim()}`,
     sql`description = ${b.description ?? null}`,
     sql`is_active = ${b.isActive !== false}`,
     sql`sort_order = ${Number(b.sortOrder ?? 50)}`,
     sql`billing_method = ${b.billingMethod ?? null}`,
+    sql`labor_rate_book_id = ${labor.laborRateBookId}`,
+    sql`labor_rate_policy = ${labor.laborRatePolicy}`,
     sql`updated_at = now()`,
     sql`updated_by = ${gate.user.id}`,
   ]

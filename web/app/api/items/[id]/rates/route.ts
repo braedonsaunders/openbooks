@@ -111,7 +111,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         insert into item_rate_versions (org_id, rate_book_id, effective_from, effective_to, status, created_by, updated_by)
         values (${gate.user.orgId}, ${rateBookId}, ${body.effectiveFrom},
                 ${nextVersion.rows[0]?.effective_from ? sql`(${nextVersion.rows[0].effective_from}::date - interval '1 day')::date` : null},
-                'active', ${gate.user.id}, ${gate.user.id}) returning id
+                'draft', ${gate.user.id}, ${gate.user.id}) returning id
       `)) as any
       let sort = 0
       for (const tier of tiers) {
@@ -121,6 +121,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   ${tier.baseQuantity}, ${tier.costRate}, ${tier.billRate}, ${sort++}, ${gate.user.id}, ${gate.user.id})
         `)
       }
+      await tx.execute(sql`
+        update item_rate_versions set status = 'active', updated_at = now(), updated_by = ${gate.user.id}
+         where id = ${version.rows[0].id} and org_id = ${gate.user.orgId} and status = 'draft'`)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.user.orgId}, 'item_rate_versions', ${version.rows[0].id}, 'insert',

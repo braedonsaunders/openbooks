@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, jsonb, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { id, orgRef, auditColumns } from "./helpers";
 
 /**
@@ -184,6 +184,12 @@ export const projectTypes = pgTable(
     /** Coarse back-compat classifier mirroring projects.billing_method. */
     billingMethod: text("billing_method", {
       enum: ["time_and_materials", "fixed_price", "cost_plus"],
+    }),
+    /** Labor defaults inherited by projects of this type. Null means inherit
+     * the company default; individual projects can override either value. */
+    laborRateBookId: uuid("labor_rate_book_id"),
+    laborRatePolicy: text("labor_rate_policy", {
+      enum: ["work_date", "locked", "scheduled_escalation", "manual_reprice"],
     }),
     financialProfile: jsonb("financial_profile").$type<FinancialProfile>().notNull(),
     invoicingProfile: jsonb("invoicing_profile").$type<InvoicingProfile>().notNull(),

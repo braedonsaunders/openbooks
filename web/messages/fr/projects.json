@@ -13,6 +13,8 @@
     "code": "Code",
     "billing": "Facturation",
     "billingMethod": "Mode de facturation",
+    "laborRateBook": "Grille de taux de main-d’œuvre",
+    "laborRatePolicy": "Politique de taux de main-d’œuvre",
     "contractValue": "Valeur du contrat",
     "actualCost": "Coût réel",
     "foreman": "Contremaître",
@@ -24,6 +26,19 @@
     "estHours": "Heures est.",
     "estCost": "Coût est.",
     "kind": "Type"
+  },
+  "laborRates": {
+    "organizationDefault": "Valeur par défaut de l’organisation",
+    "inheritedDefault": "Hériter du type de projet / de l’entreprise",
+    "policies": {
+      "work_date": "Version en vigueur à la date du travail",
+      "locked": "Verrouiller à la première approbation",
+      "scheduled_escalation": "Progression planifiée par date d’effet",
+      "manual_reprice": "Verrouillé jusqu’à la réévaluation manuelle"
+    },
+    "resetLock": "Réinitialiser le verrou de taux",
+    "resetSuccess": "Verrou réinitialisé; {count, plural, one {# entrée non approuvée sera réévaluée} other {# entrées non approuvées seront réévaluées}}",
+    "resetFailed": "Impossible de réinitialiser le verrou de taux"
   },
   "status": {
     "quoted": "Soumissionné",

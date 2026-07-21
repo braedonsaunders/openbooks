@@ -46,6 +46,7 @@ interface GridRow {
   itemId: string
   timeTypeId: string
   departmentId: string
+  locationId: string
   isBillable: boolean
   memo: string
   hours: string[]
@@ -58,6 +59,7 @@ function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
     itemId: '',
     timeTypeId: def?.value ?? '',
     departmentId: '',
+    locationId: '',
     isBillable: def?.isBillableDefault ?? false,
     memo: '',
     hours: ['', '', '', '', '', '', ''],
@@ -71,6 +73,7 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[]): GridRow[] {
     itemId: r.itemId ?? '',
     timeTypeId: r.timeTypeId ?? '',
     departmentId: r.departmentId ?? '',
+    locationId: r.locationId ?? '',
     isBillable: r.isBillable,
     memo: r.memo ?? '',
     hours: r.hours.map((h) => (h === '' ? '' : String(Number(h)))),
@@ -246,6 +249,7 @@ export function WeeklyGrid({
         itemId: r.itemId || null,
         timeTypeId: r.timeTypeId || null,
         departmentId: r.departmentId || null,
+        locationId: r.locationId || null,
         isBillable: r.isBillable,
         memo: r.memo || null,
         hours: r.hours,
@@ -284,7 +288,7 @@ export function WeeklyGrid({
   const canDoApprove = canApprove && employeeId != null && status === 'submitted'
 
   // Column widths mirror LineGrid's data-driven track model.
-  const template = `minmax(160px,1.6fr) minmax(130px,1.2fr) 110px 120px 56px minmax(140px,1.4fr) ${'62px '.repeat(7)}72px 40px`
+  const template = `minmax(160px,1.6fr) minmax(130px,1.2fr) 110px 120px 120px 56px minmax(140px,1.4fr) ${'62px '.repeat(7)}72px 40px`
 
   const cellInput =
     'w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100'
@@ -366,6 +370,7 @@ export function WeeklyGrid({
               { id: 'item', label: t('labels.serviceItem') },
               { id: 'timeType', label: t('labels.timeType') },
               { id: 'department', label: tCommon('labels.department') },
+              { id: 'location', label: tCommon('labels.location') },
               { id: 'bill', label: t('labels.bill') },
               { id: 'memo', label: tCommon('labels.memo') },
             ].map((h) => (
@@ -406,6 +411,7 @@ export function WeeklyGrid({
                   onItem={(v) => setRow(i, { itemId: v })}
                   onTimeType={(v) => onTimeType(i, v)}
                   onDept={(v) => setRow(i, { departmentId: v })}
+                  onLocation={(v) => setRow(i, { locationId: v })}
                   onBillable={(v) => setRow(i, { isBillable: v })}
                   onMemo={(v) => setRow(i, { memo: v })}
                   onCell={(d, v) => setCell(i, d, v)}
@@ -415,7 +421,7 @@ export function WeeklyGrid({
             })}
 
             {/* footer totals */}
-            <div className="col-span-6 border-t border-slate-200 px-2.5 py-2 text-right text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <div className="col-span-7 border-t border-slate-200 px-2.5 py-2 text-right text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
               {t('labels.dailyTotals')}
             </div>
             {dayTotals.map((tot, d) => (
@@ -471,6 +477,7 @@ function RowFragment({
   onItem,
   onTimeType,
   onDept,
+  onLocation,
   onBillable,
   onMemo,
   onCell,
@@ -486,6 +493,7 @@ function RowFragment({
   onItem: (v: string) => void
   onTimeType: (v: string) => void
   onDept: (v: string) => void
+  onLocation: (v: string) => void
   onBillable: (v: boolean) => void
   onMemo: (v: string) => void
   onCell: (day: number, value: string) => void
@@ -558,6 +566,22 @@ function RowFragment({
               <option key={d.value} value={d.value}>
                 {d.label}
               </option>
+            ))}
+          </Select>
+        )}
+      </div>
+      <div className={cn(cell, 'justify-center')}>
+        {readOnly ? (
+          <span className="px-1.5 text-sm">{r.locationId ? label(pickers.locations, r.locationId) : '—'}</span>
+        ) : (
+          <Select
+            value={r.locationId}
+            onChange={(e) => onLocation(e.target.value)}
+            className="w-full border-0 bg-transparent shadow-none"
+          >
+            <option value="">—</option>
+            {pickers.locations.map((location) => (
+              <option key={location.value} value={location.value}>{location.label}</option>
             ))}
           </Select>
         )}

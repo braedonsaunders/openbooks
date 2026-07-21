@@ -13,6 +13,8 @@
     "code": "Code",
     "billing": "Billing",
     "billingMethod": "Billing method",
+    "laborRateBook": "Labor rate book",
+    "laborRatePolicy": "Labor rate policy",
     "contractValue": "Contract value",
     "actualCost": "Actual cost",
     "foreman": "Foreman",
@@ -24,6 +26,19 @@
     "estHours": "Est. hours",
     "estCost": "Est. cost",
     "kind": "Kind"
+  },
+  "laborRates": {
+    "organizationDefault": "Organization default",
+    "inheritedDefault": "Inherit project type / company default",
+    "policies": {
+      "work_date": "Version effective on work date",
+      "locked": "Lock on first approval",
+      "scheduled_escalation": "Scheduled effective-date escalation",
+      "manual_reprice": "Locked until manual reprice"
+    },
+    "resetLock": "Reset labor rate lock",
+    "resetSuccess": "Rate lock reset; {count, plural, one {# unapproved entry will be repriced} other {# unapproved entries will be repriced}}",
+    "resetFailed": "Could not reset the labor rate lock"
   },
   "status": {
     "quoted": "Quoted",

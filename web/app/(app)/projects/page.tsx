@@ -36,7 +36,7 @@ export default async function Projects({
 
   // party pickers + resolved form layout + cockpit data for the flyout
   // (only when a project is open).
-  const [parties, subsidiaries, cockpit, projectTypesRes] = openProject
+  const [parties, subsidiaries, cockpit, projectTypesRes, rateBooksRes] = openProject
     ? await Promise.all([
         db.execute(sql`
           select id, display_name from parties
@@ -45,9 +45,11 @@ export default async function Projects({
         subsidiaryOptions(),
         loadProjectCockpit(orgId, openProject.project.id as string),
         db.execute(sql`select id, name from project_types where org_id = ${orgId} and is_active order by sort_order, name`) as any,
+        db.execute(sql`select id, code, name from item_rate_books where org_id = ${orgId} and is_active order by code, name`) as any,
       ])
-    : [null, [], null, null]
+    : [null, [], null, null, null]
   const projectTypes = (projectTypesRes?.rows ?? []) as { id: string; name: string }[]
+  const rateBooks = (rateBooksRes?.rows ?? []) as { id: string; code: string; name: string }[]
 
   const resolvedForm = openProject
     ? await resolveFormLayout({
@@ -91,6 +93,7 @@ export default async function Projects({
                 layout={resolvedForm?.layout}
                 cockpit={cockpit}
                 projectTypes={projectTypes}
+                rateBooks={rateBooks}
               />
             ) : null}
           </>

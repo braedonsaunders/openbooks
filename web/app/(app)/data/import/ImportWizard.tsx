@@ -32,13 +32,13 @@ type Step = 'source' | 'mapping' | 'preview' | 'result'
 const FORMATS = ['csv', 'xlsx', 'json'] as const
 type Format = (typeof FORMATS)[number]
 
-export function ImportWizard() {
+export function ImportWizard({ initialResource = '', payrollTemplate }: { initialResource?: string; payrollTemplate?: Record<string, string> }) {
   const t = useTranslations('data')
   const router = useRouter()
 
   const [step, setStep] = useState<Step>('source')
   const [resources, setResources] = useState<ResourceDescriptor[]>([])
-  const [resource, setResource] = useState('')
+  const [resource, setResource] = useState(initialResource)
   const [format, setFormat] = useState<Format>('csv')
   const [fileName, setFileName] = useState('')
   const [text, setText] = useState('')
@@ -115,7 +115,13 @@ export function ImportWizard() {
       setHeaders(d.headers)
       setRows(d.rows ?? [])
       setFields(d.fields ?? [])
-      setMapping(d.mapping ?? {})
+      const nextMapping: Record<string, string> = { ...(d.mapping ?? {}) }
+      if (payrollTemplate) {
+        for (const [field, sourceHeader] of Object.entries(payrollTemplate)) {
+          if (d.headers?.includes(sourceHeader)) nextMapping[sourceHeader] = field
+        }
+      }
+      setMapping(nextMapping)
       setStep('mapping')
     } catch (e) {
       toast.error((e as Error).message)

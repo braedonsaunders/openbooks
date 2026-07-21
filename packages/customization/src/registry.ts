@@ -490,6 +490,8 @@ const PROJECT: RecordTypeMeta = {
     { key: "customer_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref" },
     { key: "status", labelKey: "common.labels.status", level: "header", kind: "select" },
     { key: "billing_method", labelKey: "projects.labels.billingMethod", level: "header", kind: "select" },
+    { key: "labor_rate_book_id", labelKey: "projects.labels.laborRateBook", level: "header", kind: "entity_ref" },
+    { key: "labor_rate_policy", labelKey: "projects.labels.laborRatePolicy", level: "header", kind: "select" },
     { key: "contract_value", labelKey: "projects.labels.contractValue", level: "header", kind: "currency" },
     { key: "customer_po_number", labelKey: "projects.labels.customerPo", level: "header", kind: "text" },
     { key: "foreman_id", labelKey: "projects.labels.foreman", level: "header", kind: "entity_ref" },

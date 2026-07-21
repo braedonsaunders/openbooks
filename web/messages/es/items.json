@@ -82,6 +82,15 @@
     "empty": "Aún no hay versiones de tarifas.",
     "rates": "Tarifas"
   },
+  "laborRates": {
+    "title": "Excepciones de tarifas laborales y de servicio",
+    "description": "Reglas específicas del artículo dentro del libro del proyecto. Reemplazan reglas generales sin cambiar el libro del proyecto.",
+    "documentation": "Documentación", "addRule": "Agregar excepción", "draftRequired": "Cree o instale una versión borrador antes de agregar una excepción.",
+    "version": "Versión borrador", "code": "Código de regla", "lane": "Tipo de tarifa", "method": "Método", "hourlyRate": "Tarifa por hora", "percent": "Porcentaje", "priority": "Prioridad",
+    "rule": "Regla", "book": "Libro de tarifas", "value": "Tarifa", "hour": "hora", "atCost": "Al costo", "empty": "No hay excepciones laborales o de servicio para este artículo.", "saved": "Excepción guardada", "saveFailed": "No se pudo guardar la excepción",
+    "lanes": { "direct_cost": "Costo directo", "bill": "Facturación al cliente", "transfer": "Transferencia interna", "planning_cost": "Costo planificado", "planning_bill": "Facturación planificada" },
+    "methods": { "fixed": "Tarifa fija por hora", "at_cost": "Al costo cargado", "markup_on_cost": "Recargo sobre costo", "margin_on_cost": "Margen objetivo sobre costo" }
+  },
   "revrec": {
     "title": "Reconocimiento de ingresos",
     "hint": "Diferir y reconocer los ingresos de este artículo a lo largo del tiempo (ASC 606)",
