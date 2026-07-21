@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { BookOpen } from 'lucide-react'
+import { cn } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
@@ -25,9 +26,19 @@ export const dynamic = 'force-dynamic'
  * Window: trailing 12 months — the same window the project-costing bridge uses,
  * so the rates previewed here are the rates projects get.
  */
-export default async function OverheadModelSetup() {
+const VIEWS = ['model', 'lifecycle', 'application'] as const
+type OverheadView = (typeof VIEWS)[number]
+
+export default async function OverheadModelSetup({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const authz = await requirePermission('admin.setup.manage')
   const t = await getTranslations('admin')
+  const sp = await searchParams
+  const rawView = typeof sp.view === 'string' ? sp.view : ''
+  const view: OverheadView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as OverheadView) : 'model'
 
   const to = new Date()
   const from = new Date(to)
@@ -115,6 +126,24 @@ export default async function OverheadModelSetup() {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
+        {VIEWS.map((item) => (
+          <Link
+            key={item}
+            href={`/admin/setup/overhead?view=${item}`}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
+              view === item
+                ? 'border-teal-600 text-teal-700 dark:text-teal-300'
+                : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
+            )}
+          >
+            {t(`setup.entities.overhead-model.tabs.${item}`)}
+          </Link>
+        ))}
+      </div>
+
+      {view === 'model' && (<>
       {/* Guided flow — the three steps of overhead setup, each showing its
           live state so it is always clear where you are and what is next. */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -173,7 +202,11 @@ export default async function OverheadModelSetup() {
           </span>
         ))}
       </div>
-      <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
+      </>)}
+      {view === 'lifecycle' && (
+        <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
+      )}
+      {view === 'application' && (
       <OverheadApplication
         mode={application.mode}
         accountId={application.accountId}
@@ -184,7 +217,8 @@ export default async function OverheadModelSetup() {
         applications={applications}
         unapplied={unapplied}
       />
-      <TrueCostView data={data} mode="setup" />
+      )}
+      {view === 'model' && <TrueCostView data={data} mode="setup" />}
     </div>
   )
 }

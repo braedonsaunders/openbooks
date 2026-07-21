@@ -1586,7 +1586,12 @@
           "live": "Live $/h",
           "drift": "Drift"
         },
-        "laborCostingLink": "Labor costing"
+        "laborCostingLink": "Labor costing",
+        "tabs": {
+          "model": "Model & rates",
+          "lifecycle": "Rate lifecycle",
+          "application": "Ledger application"
+        }
       }
     },
     "fields": {
@@ -1980,6 +1985,12 @@
         "rateBooksHint": "What you charge — bill-out rates per item and customer, with reg/OT/DT tiers.",
         "timeTypes": "Time Types",
         "timeTypesHint": "Regular, overtime, double-time — the cost and bill multipliers this page uses."
+      },
+      "tabs": {
+        "rates": "Wage rates",
+        "components": "Burden estimate",
+        "posting": "Posting",
+        "reconciliation": "Payroll reconciliation"
       }
     },
     "features": {

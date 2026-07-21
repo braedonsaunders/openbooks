@@ -56,6 +56,7 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
 }
 
 export function LaborCostingWorkspace(props: {
+  view: 'rates' | 'components' | 'posting' | 'reconciliation'
   settings: LaborCostingSettings
   rates: RateRow[]
   employees: Opt[]
@@ -263,8 +264,9 @@ export function LaborCostingWorkspace(props: {
     },
   ]
 
+  const view = props.view
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
+    <div className="space-y-4">
       <LaborCostingWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
@@ -292,7 +294,7 @@ export function LaborCostingWorkspace(props: {
       />
 
       {/* ---- guided status ---- */}
-      <div className="xl:col-span-2">
+      <div>
         <div className="flex flex-wrap items-stretch gap-3">
           {steps.map((st, i) => (
             <div key={st.key} className="min-w-48 flex-1 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
@@ -312,17 +314,16 @@ export function LaborCostingWorkspace(props: {
               <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{st.detail}</p>
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() => setWizardOpen(true)}
-            className="flex min-w-40 items-center justify-center gap-2 rounded-lg border border-dashed border-teal-400 px-4 text-sm font-medium text-teal-700 hover:bg-teal-50 dark:border-teal-600 dark:text-teal-300 dark:hover:bg-teal-950/40"
-          >
-            <Sparkles size={15} /> {t('checklist.launchWizard')}
-          </button>
+          <div className="flex items-center">
+            <Button variant="outline" onClick={() => setWizardOpen(true)}>
+              <Sparkles size={15} /> {t('checklist.launchWizard')}
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* ---- wage rates ---- */}
+      {view === 'rates' && (
       <Card title={t('rates.title')} hint={t('rates.hint')}>
         <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-6">
           <Select aria-label={t('rates.scope')} value={scope} onChange={(e) => { setScope(e.target.value as typeof scope); setScopeId('') }}>
@@ -407,8 +408,10 @@ export function LaborCostingWorkspace(props: {
           ]}
         />
       </Card>
+      )}
 
       {/* ---- estimate components ---- */}
+      {view === 'components' && (
       <Card title={t('components.title')} hint={t('components.hint')}>
         <div className="space-y-2">
           {components.map((c, i) => (
@@ -478,7 +481,10 @@ export function LaborCostingWorkspace(props: {
         </div>
       </Card>
 
+      )}
+
       {/* ---- posting ---- */}
+      {view === 'posting' && (
       <Card title={t('posting.title')} hint={t('posting.hint')}>
         <div className="space-y-3">
           <div className="flex gap-2">
@@ -531,7 +537,10 @@ export function LaborCostingWorkspace(props: {
         </div>
       </Card>
 
+      )}
+
       {/* ---- payroll reconciliation ---- */}
+      {view === 'reconciliation' && (
       <Card title={t('reconciliation.title')} hint={t('reconciliation.hint')}>
         <div className="flex flex-wrap items-end gap-2">
           <div>
@@ -582,8 +591,10 @@ export function LaborCostingWorkspace(props: {
         )}
       </Card>
 
+      )}
+
       {/* ---- where the other pieces live ---- */}
-      <div className="xl:col-span-2">
+      <div>
         <div className="grid gap-3 sm:grid-cols-3">
           {[
             { href: '/admin/setup/overhead', key: 'overhead' },

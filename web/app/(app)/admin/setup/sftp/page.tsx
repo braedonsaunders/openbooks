@@ -3,7 +3,8 @@ import { headers } from 'next/headers'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { loadDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp/manager.ts'
-import { EmptyState } from '@openbooks/ui'
+import Link from 'next/link'
+import { EmptyState, cn } from '@openbooks/ui'
 import { requirePermission } from '../../../../../lib/authz'
 import { SftpManager } from './SftpManager'
 import { ImportSchedules } from './ImportSchedules'
@@ -15,9 +16,19 @@ export async function generateMetadata() {
   return { title: t('sftp.title') }
 }
 
-export default async function SetupSftpPage() {
+const VIEWS = ['servers', 'schedules'] as const
+type SftpView = (typeof VIEWS)[number]
+
+export default async function SetupSftpPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const authz = await requirePermission('admin.setup.manage')
   const t = await getTranslations('banking')
+  const sp = await searchParams
+  const rawView = typeof sp.view === 'string' ? sp.view : ''
+  const view: SftpView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as SftpView) : 'servers'
   const [r, cfg, hdrs, sched, accts] = await Promise.all([
     db.execute(sql`
       select id, name, username, backend, bucket, root_prefix, is_active, last_connected_at
@@ -47,16 +58,36 @@ export default async function SetupSftpPage() {
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('sftp.title')}</h2>
         <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">{t('sftp.description')}</p>
       </div>
-      <SftpManager
-        servers={r.rows}
-        daemon={daemon}
-        empty={<EmptyState title={t('sftp.emptyTitle')} description={t('sftp.emptyDescription')} />}
-      />
-      <ImportSchedules
-        schedules={sched.rows}
-        servers={r.rows.map((s: any) => ({ id: s.id, name: s.name }))}
-        accounts={accts.rows.map((a: any) => ({ id: a.id, label: [a.number, a.name].filter(Boolean).join(' · ') }))}
-      />
+      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
+        {VIEWS.map((item) => (
+          <Link
+            key={item}
+            href={`/admin/setup/sftp?view=${item}`}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
+              view === item
+                ? 'border-teal-600 text-teal-700 dark:text-teal-300'
+                : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
+            )}
+          >
+            {t(`sftp.tabs.${item}`)}
+          </Link>
+        ))}
+      </div>
+      {view === 'servers' && (
+        <SftpManager
+          servers={r.rows}
+          daemon={daemon}
+          empty={<EmptyState title={t('sftp.emptyTitle')} description={t('sftp.emptyDescription')} />}
+        />
+      )}
+      {view === 'schedules' && (
+        <ImportSchedules
+          schedules={sched.rows}
+          servers={r.rows.map((s: any) => ({ id: s.id, name: s.name }))}
+          accounts={accts.rows.map((a: any) => ({ id: a.id, label: [a.number, a.name].filter(Boolean).join(' · ') }))}
+        />
+      )}
     </div>
   )
 }

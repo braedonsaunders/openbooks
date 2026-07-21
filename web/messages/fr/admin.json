@@ -1556,7 +1556,12 @@
           "live": "En direct $/h",
           "drift": "Dérive"
         },
-        "laborCostingLink": "Coût de la main-d'œuvre"
+        "laborCostingLink": "Coût de la main-d'œuvre",
+        "tabs": {
+          "model": "Modèle et taux",
+          "lifecycle": "Cycle de vie des taux",
+          "application": "Application au grand livre"
+        }
       }
     },
     "fields": {
@@ -1946,6 +1951,12 @@
         "rateBooksHint": "Ce que vous facturez — taux par article et client, avec paliers normal/supp./double.",
         "timeTypes": "Types d'heures",
         "timeTypesHint": "Normal, supplémentaire, double — les multiplicateurs de coût et de facturation utilisés ici."
+      },
+      "tabs": {
+        "rates": "Taux de salaire",
+        "components": "Estimation des charges",
+        "posting": "Comptabilisation",
+        "reconciliation": "Rapprochement de paie"
       }
     },
     "features": {

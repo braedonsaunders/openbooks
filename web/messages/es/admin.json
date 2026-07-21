@@ -1512,7 +1512,12 @@
           "live": "En vivo $/h",
           "drift": "Deriva"
         },
-        "laborCostingLink": "Costeo de mano de obra"
+        "laborCostingLink": "Costeo de mano de obra",
+        "tabs": {
+          "model": "Modelo y tarifas",
+          "lifecycle": "Ciclo de vida de tarifas",
+          "application": "Aplicación al libro mayor"
+        }
       }
     },
     "fields": {
@@ -1902,6 +1907,12 @@
         "rateBooksHint": "Lo que cobra — tarifas de facturación por artículo y cliente, con niveles normal/extra/doble.",
         "timeTypes": "Tipos de hora",
         "timeTypesHint": "Normal, extra, doble — los multiplicadores de costo y facturación que usa esta página."
+      },
+      "tabs": {
+        "rates": "Tarifas salariales",
+        "components": "Estimación de cargas",
+        "posting": "Contabilización",
+        "reconciliation": "Conciliación de nómina"
       }
     },
     "features": {
