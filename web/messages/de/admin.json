@@ -1013,15 +1013,21 @@
       "none": "Kein amtliches PDF hochgeladen"
     },
     "taxBoxes": {
-      "description": "{code} zugeordnete Felder sowie gemeinsame berechnete und manuelle Felder.",
-      "calculatedNote": "Berechnete und manuelle Felder gelten für die gesamte Erklärung und werden unter jedem ihr zugeordneten Steuercode angezeigt.",
+      "description": "Zugeordnete, berechnete und manuelle Felder für {code}.",
+      "calculatedNote": "Jedes Feld gehört zu dieser Erklärung; zugeordnete Felder wählen den Steuercode aus, dessen Aktivität sie zusammenfassen.",
       "new": "Neues Steuererklärungsfeld",
       "searchPlaceholder": "Erklärungsfelder durchsuchen…",
       "source": "Quelle",
-      "empty": "Keine Erklärungsfelder entsprechen diesem Steuercode und der Suche.",
+      "empty": "Keine Erklärungsfelder entsprechen dieser Erklärung und der Suche.",
       "mapped": "Zugeordnet",
       "calculated": "Berechnet",
       "manual": "Manuell"
+    },
+    "taxRates": {
+      "description": "Steuersätze mit Gültigkeitsdatum für {code}.",
+      "new": "Neuer Steuersatz",
+      "searchPlaceholder": "Steuersätze durchsuchen…",
+      "empty": "Keine Steuersätze entsprechen diesem Code und der Suche."
     },
     "new": "Neu",
     "learnMore": "Mehr erfahren.",
@@ -1333,6 +1339,7 @@
       },
       "tax-rates": {
         "title": "Steuersätze",
+        "singularTitle": "Steuersatz",
         "description": "Datierte Satzhistorie für jeden Steuercode."
       },
       "tax-groups": {

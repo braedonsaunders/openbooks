@@ -54,6 +54,7 @@ export function SetupDrawer({
   refOptions,
   closeHref: closeHrefProp,
   initialValues,
+  fixedValues,
   nestedTab,
   stacked = false,
 }: {
@@ -63,6 +64,7 @@ export function SetupDrawer({
   refOptions: Record<string, RefOption[]>
   closeHref?: string
   initialValues?: Record<string, unknown>
+  fixedValues?: Record<string, unknown>
   nestedTab?: { key: string; label: string; content: ReactNode }
   stacked?: boolean
 }) {
@@ -78,7 +80,7 @@ export function SetupDrawer({
   const [form, setForm] = useState<Record<string, any>>(() => {
     const init: Record<string, any> = {}
     for (const f of entity.fields) init[f.key] = f.kind === 'multiref' ? members : initialValue(f, row)
-    return { ...init, ...initialValues }
+    return { ...init, ...initialValues, ...fixedValues }
   })
   const [busy, setBusy] = useState(false)
   const [officialBusy, setOfficialBusy] = useState(false)
@@ -94,6 +96,7 @@ export function SetupDrawer({
     if (key === 'details') {
       next.delete('setupTab')
       next.delete('boxRow')
+      next.delete('rateRow')
     } else {
       next.set('setupTab', key)
     }
@@ -120,7 +123,7 @@ export function SetupDrawer({
       return
     }
     setBusy(true)
-    const body: Record<string, any> = { ...form }
+    const body: Record<string, any> = { ...form, ...fixedValues }
     if (!creating) body.id = row![idColumn]
     const res = await fetch(`/api/admin/setup/${entity.key}`, {
       method: creating ? 'POST' : 'PATCH',
@@ -229,6 +232,7 @@ export function SetupDrawer({
             value={form[field.key]}
             onChange={(v) => set(field.key, v)}
             creating={creating}
+            forceLocked={Object.hasOwn(fixedValues ?? {}, field.key)}
             refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
             t={t}
           />
@@ -306,6 +310,7 @@ function FieldControl({
   value,
   onChange,
   creating,
+  forceLocked,
   refOptions,
   t,
 }: {
@@ -313,13 +318,17 @@ function FieldControl({
   value: any
   onChange: (v: any) => void
   creating: boolean
+  forceLocked: boolean
   refOptions: RefOption[]
   t: (k: string, params?: Record<string, any>) => string
 }) {
   const label = t(`fields.${field.key}`)
-  const locked = !creating && field.lockedOnEdit
+  const locked = forceLocked || (!creating && field.lockedOnEdit)
   const full = field.kind === 'multiref' || field.kind === 'textarea'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
+  const lockedDisplay = field.kind === 'ref'
+    ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
+    : value
 
   // Locked natural keys are shown read-only when editing.
   if (locked) {
@@ -327,7 +336,7 @@ function FieldControl({
       <div className={wrap}>
         <Label>{label}</Label>
         <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 font-mono text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-          {String(value ?? '') || '—'}
+          {String(lockedDisplay ?? '') || '—'}
         </div>
       </div>
     )

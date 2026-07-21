@@ -1013,15 +1013,21 @@
       "none": "未上传官方 PDF"
     },
     "taxBoxes": {
-      "description": "映射到 {code} 的申报框，以及共享的计算框和手动框。",
-      "calculatedNote": "计算框和手动框适用于整份申报表，并显示在映射到该申报表的每个税码下。",
+      "description": "{code} 的映射、计算和手动申报框。",
+      "calculatedNote": "每个申报框均属于此申报表；映射框用于选择其汇总活动的税码。",
       "new": "新建纳税申报框",
       "searchPlaceholder": "搜索申报框…",
       "source": "来源",
-      "empty": "没有符合此税码和搜索条件的申报框。",
+      "empty": "没有符合此申报表和搜索条件的申报框。",
       "mapped": "已映射",
       "calculated": "已计算",
       "manual": "手动"
+    },
+    "taxRates": {
+      "description": "{code} 的按生效日期管理的税率。",
+      "new": "新建税率",
+      "searchPlaceholder": "搜索税率…",
+      "empty": "没有符合此税码和搜索条件的税率。"
     },
     "new": "新建",
     "learnMore": "了解更多。",
@@ -1333,6 +1339,7 @@
       },
       "tax-rates": {
         "title": "税率",
+        "singularTitle": "税率",
         "description": "每个税码的生效日期化税率历史。"
       },
       "tax-groups": {
