@@ -139,6 +139,21 @@
       "managerHint": "Full control, including delete and sharing"
     }
   },
+  "bulk": {
+    "selected": "{count, plural, one {# selected} other {# selected}}",
+    "download": "Download",
+    "delete": "Delete",
+    "clear": "Clear",
+    "selectAll": "Select all",
+    "deleteConfirm": {
+      "title": "Move selected items to Trash?",
+      "body": "The selected files and folders will be moved to Trash. You can restore them later."
+    },
+    "deleted": "Moved {count} to Trash",
+    "deleteFailed": "Could not delete selection",
+    "downloadFailed": "Could not download selection",
+    "nothingDownloadable": "Select files to download"
+  },
   "trash": {
     "title": "Trash",
     "link": "Trash",
