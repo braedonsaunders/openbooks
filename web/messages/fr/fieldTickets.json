@@ -93,6 +93,12 @@
       "signedBy": "Signé — {name}",
       "waiting": "Signature en attente",
       "notSent": "Pas encore envoyé"
-    }
+    },
+    "sendSignature": "Envoyer pour signature",
+    "sendTo": "Envoyer à",
+    "sendMessage": "Message (optionnel)",
+    "send": "Envoyer",
+    "signatureSent": "Lien de signature envoyé à {to}",
+    "pdf": "PDF"
   }
 }

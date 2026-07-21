@@ -13,6 +13,7 @@ import {
   saveCrewGrid,
   submitFieldTicket,
 } from '../../../../lib/field-tickets'
+import { sendTicketForSignature } from '../../../../lib/field-ticket-signing'
 
 export const runtime = 'nodejs'
 
@@ -76,6 +77,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await approveFieldTicket(orgId, userId, id)
     } else if (action === 'reject') {
       await rejectFieldTicket(orgId, userId, id, String(body.reason ?? ''))
+    } else if (action === 'send-signature') {
+      const base = process.env.OPENBOOKS_APP_URL || new URL(req.url).origin
+      await sendTicketForSignature({
+        orgId,
+        userId,
+        ticketId: id,
+        to: String(body.to ?? ''),
+        message: body.message ? String(body.message).slice(0, 1000) : null,
+        appBaseUrl: base,
+      })
     } else {
       return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
