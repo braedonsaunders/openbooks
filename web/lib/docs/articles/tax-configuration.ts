@@ -24,10 +24,12 @@ created or edited from this subtab.
 
 ## Install a maintained return
 
-Open **Tax Returns** and choose **Library**. Select a jurisdiction pack, then
-import it or reset an installed return to the maintained defaults. Resetting
-replaces that return's configured structure, so review local customizations
-before confirming the action.
+Open **Tax Returns** and choose **Library**. Search the maintained list, then
+select every available pack you want
+to install. **Install selected** imports the chosen packs together. Installed
+packs remain visible with an explicit **Reset** action;
+resetting replaces that return's configured structure, so review local
+customizations before confirming the action.
 
 On a return's **Details** tab, **Filing method** is the single control for how
 the jurisdiction accepts the return. The compatible government format is

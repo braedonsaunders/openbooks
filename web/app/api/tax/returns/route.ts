@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { installTaxReturnPack, taxReturnPack } from '@openbooks/engine/src/seed-tax-forms.ts'
+import { installTaxReturnPacks, TAX_RETURN_PACKS } from '@openbooks/engine/src/seed-tax-forms.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { planTaxReturnLibraryChange } from '../../../../lib/setup/tax-return-library'
 
 export const runtime = 'nodejs'
 
@@ -21,14 +22,29 @@ export async function GET() {
   return NextResponse.json({ forms: r.rows })
 }
 
-/** Install or reset a reference jurisdiction pack from Setup. */
+/** Atomically install or explicitly reset one or more reference jurisdiction packs. */
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as { pack?: string }
-  if (!body.pack || !taxReturnPack(body.pack)) {
-    return NextResponse.json({ error: 'unknown pack' }, { status: 422 })
+  const body = await req.json().catch(() => null)
+  const installedRows = (await db.execute(sql`
+    select code from tax_return_forms where org_id = ${gate.user.orgId}
+  `)) as unknown as { rows: { code: string }[] }
+  const plan = planTaxReturnLibraryChange(
+    body,
+    new Set(TAX_RETURN_PACKS.map((pack) => pack.code)),
+    new Set(installedRows.rows.map((row) => row.code)),
+  )
+  if ('error' in plan) {
+    return NextResponse.json({ error: plan.error }, { status: plan.status })
   }
-  const result = await installTaxReturnPack(gate.user.orgId, body.pack, gate.user.id)
-  return NextResponse.json(result)
+  const results = plan.targets.length > 0
+    ? await installTaxReturnPacks(gate.user.orgId, plan.targets, gate.user.id)
+    : []
+  return NextResponse.json({
+    installed: plan.mode === 'install' ? results.map((result) => result.code) : [],
+    reset: plan.mode === 'reset' ? results.map((result) => result.code) : [],
+    skipped: plan.skipped,
+    results,
+  })
 }
