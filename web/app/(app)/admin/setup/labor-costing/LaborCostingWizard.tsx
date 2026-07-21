@@ -1,17 +1,13 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react'
-import { Button, Input, Label, Select, cn } from '@openbooks/ui'
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import type { LaborCostComponent } from '@openbooks/engine/src/labor-costing.ts'
-
-interface Opt {
-  id: string
-  name: string
-}
 
 /**
  * Guided setup — four plain questions, then we do the configuration. Each
@@ -19,37 +15,16 @@ interface Opt {
  * presets are just component lists; trade rates are ordinary scoped rates), so
  * graduating from the wizard to hand-tuning never means re-learning.
  */
-/** Jurisdiction presets — the Knowify-style escape hatch. Values are honest
- * defaults the review step shows and the workspace can refine later. */
-const BURDEN_PRESETS: Record<string, { components: LaborCostComponent[] }> = {
-  canada: {
-    components: [
-      { key: 'burden', name: 'Statutory burden — CPP, EI, WSIB, EHT, vacation (est.)', kind: 'percent_of_wage', value: 13, scaleWithOvertime: true },
-    ],
-  },
-  us: {
-    components: [
-      { key: 'burden', name: 'Payroll burden — FICA, FUTA/SUTA, workers comp (est.)', kind: 'percent_of_wage', value: 30, scaleWithOvertime: true },
-    ],
-  },
-}
-
 export function LaborCostingWizard(props: {
   open: boolean
-  onClose: () => void
-  onApplied: (applied: {
-    mode: 'off' | 'post'
-    components: LaborCostComponent[]
-    laborWip: string | null
-    laborClearing: string | null
-    payrollVariance: string | null
-  }) => void
-  trades: Opt[]
+  closeHref: string
+  onApplied: (applied: { mode: 'off' | 'post'; components: LaborCostComponent[]; laborWip: string | null; laborClearing: string | null; payrollVariance: string | null }) => void
   accounts: { id: string; label: string }[]
   hoursPerDay: number
   annualHours: number
 }) {
   const t = useTranslations('admin.setup.laborCosting.wizard')
+  const tc = useTranslations('admin.setup.laborCosting.components')
   const router = useRouter()
   const [step, setStep] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -62,8 +37,7 @@ export function LaborCostingWizard(props: {
   const [fallbackRate, setFallbackRate] = useState('')
   // Q3 — posting.
   const [posting, setPosting] = useState<'off' | 'post'>('off')
-  const guessAccount = (patterns: RegExp[]) =>
-    props.accounts.find((a) => patterns.some((p) => p.test(a.label)))?.id ?? ''
+  const guessAccount = (patterns: RegExp[]) => props.accounts.find((a) => patterns.some((p) => p.test(a.label)))?.id ?? ''
   const [wipAcct, setWipAcct] = useState(() => guessAccount([/labou?r.*(wip|progress)/i, /\bwip\b/i, /work in progress/i]))
   const [clrAcct, setClrAcct] = useState(() => guessAccount([/labou?r.*clearing/i, /clearing/i, /accrued (wages|labou?r|payroll)/i]))
   const [varAcct, setVarAcct] = useState(() => guessAccount([/payroll.*variance/i, /labou?r.*variance/i, /variance/i]))
@@ -73,11 +47,27 @@ export function LaborCostingWizard(props: {
     if (burden === 'custom') {
       const v = Number(customPct)
       return Number.isFinite(v) && v > 0
-        ? [{ key: 'burden', name: t('customBurdenName'), kind: 'percent_of_wage', value: v, scaleWithOvertime: true }]
+        ? [
+            {
+              key: 'burden',
+              name: t('customBurdenName'),
+              kind: 'percent_of_wage',
+              value: v,
+              scaleWithOvertime: true,
+            },
+          ]
         : []
     }
-    return BURDEN_PRESETS[burden].components
-  }, [burden, customPct, t])
+    return [
+      {
+        key: 'burden',
+        name: burden === 'canada' ? tc('presetCaName') : tc('presetUsName'),
+        kind: 'percent_of_wage',
+        value: burden === 'canada' ? 13 : 30,
+        scaleWithOvertime: true,
+      },
+    ]
+  }, [burden, customPct, t, tc])
 
   const exampleWage = Number(fallbackRate) > 0 ? Number(fallbackRate) : 40
   const example = (mult: number) => {
@@ -90,11 +80,7 @@ export function LaborCostingWizard(props: {
 
   if (!props.open) return null
 
-  const canNext =
-    step === 0 ? burden !== 'custom' || Number(customPct) > 0
-    : step === 1 ? true
-    : step === 2 ? posting === 'off' || (wipAcct !== '' && clrAcct !== '')
-    : true
+  const canNext = step === 0 ? burden !== 'custom' || Number(customPct) > 0 : step === 1 ? true : step === 2 ? posting === 'off' || (wipAcct !== '' && clrAcct !== '') : true
 
   async function finish() {
     setBusy(true)
@@ -109,11 +95,29 @@ export function LaborCostingWizard(props: {
         if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
       }
       if (Number(fallbackRate) > 0) {
-        await call('POST', { action: 'save-rate', employeePartyId: null, tradeId: null, rate: Number(fallbackRate), basis: 'hour', effectiveFrom: today })
+        await call('POST', {
+          action: 'save-rate',
+          employeePartyId: null,
+          tradeId: null,
+          rate: Number(fallbackRate),
+          basis: 'hour',
+          effectiveFrom: today,
+        })
       }
       await call('PUT', {
-        settings: { mode: posting, hoursPerDay: props.hoursPerDay, annualHours: props.annualHours, components },
-        ...(posting === 'post' ? { laborWip: wipAcct, laborClearing: clrAcct, ...(varAcct ? { payrollVariance: varAcct } : {}) } : {}),
+        settings: {
+          mode: posting,
+          hoursPerDay: props.hoursPerDay,
+          annualHours: props.annualHours,
+          components,
+        },
+        ...(posting === 'post'
+          ? {
+              laborWip: wipAcct,
+              laborClearing: clrAcct,
+              ...(varAcct ? { payrollVariance: varAcct } : {}),
+            }
+          : {}),
       })
       toast.success(t('done'))
       props.onApplied({
@@ -123,7 +127,7 @@ export function LaborCostingWizard(props: {
         laborClearing: posting === 'post' ? clrAcct : null,
         payrollVariance: posting === 'post' && varAcct ? varAcct : null,
       })
-      props.onClose()
+      router.push(props.closeHref)
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -135,20 +139,34 @@ export function LaborCostingWizard(props: {
   const choice = (active: boolean) =>
     cn(
       'w-full rounded-lg border p-3 text-left transition-colors',
-      active
-        ? 'border-teal-600 bg-teal-50 dark:border-teal-400 dark:bg-teal-950/40'
-        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60',
+      active ? 'border-teal-600 bg-teal-50 dark:border-teal-400 dark:bg-teal-950/40' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60',
     )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true">
-      <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="mb-1 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-          <button type="button" onClick={props.onClose} aria-label={t('close')} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800">
-            <X size={16} />
-          </button>
+    <UrlDrawer
+      open
+      closeHref={props.closeHref}
+      size="lg"
+      title={t('title')}
+      description={t('description')}
+      footer={
+        <div className="flex w-full items-center justify-between">
+          <Button variant="outline" size="sm" disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}>
+            <ArrowLeft size={14} /> {t('back')}
+          </Button>
+          {step < 3 ? (
+            <Button size="sm" disabled={!canNext || busy} onClick={() => setStep((s) => s + 1)}>
+              {t('next')} <ArrowRight size={14} />
+            </Button>
+          ) : (
+            <Button size="sm" disabled={busy} onClick={finish}>
+              {busy ? t('applying') : t('apply')}
+            </Button>
+          )}
         </div>
+      }
+    >
+      <div className="p-1">
         {/* progress dots */}
         <div className="mb-4 flex items-center gap-1.5">
           {[0, 1, 2, 3].map((i) => (
@@ -180,9 +198,9 @@ export function LaborCostingWizard(props: {
             <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('q2')}</p>
             <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
               <p className="text-sm text-slate-700 dark:text-slate-200">{t('wagesOnRecord')}</p>
-              <a href="/employees" target="_blank" rel="noreferrer" className="mt-1.5 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+              <Link href="/entities/employees" className="mt-1.5 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
                 {t('openEmployees')} →
-              </a>
+              </Link>
             </div>
             <div>
               <Label htmlFor="wiz-fallback">{t('fallbackRate')}</Label>
@@ -211,7 +229,9 @@ export function LaborCostingWizard(props: {
                   <Select id="wiz-wip" value={wipAcct} onChange={(e) => setWipAcct(e.target.value)}>
                     <option value="">—</option>
                     {props.accounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.label}</option>
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                      </option>
                     ))}
                   </Select>
                 </div>
@@ -220,7 +240,9 @@ export function LaborCostingWizard(props: {
                   <Select id="wiz-clr" value={clrAcct} onChange={(e) => setClrAcct(e.target.value)}>
                     <option value="">—</option>
                     {props.accounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.label}</option>
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                      </option>
                     ))}
                   </Select>
                 </div>
@@ -229,7 +251,9 @@ export function LaborCostingWizard(props: {
                   <Select id="wiz-var" value={varAcct} onChange={(e) => setVarAcct(e.target.value)}>
                     <option value="">{t('posting.varianceLater')}</option>
                     {props.accounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.label}</option>
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                      </option>
                     ))}
                   </Select>
                 </div>
@@ -242,47 +266,53 @@ export function LaborCostingWizard(props: {
           <div className="space-y-3">
             <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('review')}</p>
             <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-200">
-              <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-                {burden === 'skip' ? t('reviewNoBurden') : t('reviewBurden', { name: components[0]?.name ?? '', pct: components[0]?.value ?? 0 })}</li>
-              <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-                {Number(fallbackRate) > 0 ? t('reviewFallback', { rate: Number(fallbackRate).toFixed(2) }) : t('reviewWagesOnRecord')}</li>
-              <li className="flex items-start gap-2"><Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-                {posting === 'post' ? t('reviewPosting') : t('reviewNoPosting')}</li>
+              <li className="flex items-start gap-2">
+                <Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
+                {burden === 'skip'
+                  ? t('reviewNoBurden')
+                  : t('reviewBurden', {
+                      name: components[0]?.name ?? '',
+                      pct: components[0]?.value ?? 0,
+                    })}
+              </li>
+              <li className="flex items-start gap-2">
+                <Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
+                {Number(fallbackRate) > 0
+                  ? t('reviewFallback', {
+                      rate: Number(fallbackRate).toFixed(2),
+                    })
+                  : t('reviewWagesOnRecord')}
+              </li>
+              <li className="flex items-start gap-2">
+                <Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
+                {posting === 'post' ? t('reviewPosting') : t('reviewNoPosting')}
+              </li>
             </ul>
             <div className="rounded-md bg-slate-50 p-3 text-xs dark:bg-slate-800/60">
               <span className="text-slate-500 dark:text-slate-400">{t('reviewExample', { wage: exampleWage.toFixed(2) })}</span>
               <div className="mt-1 flex gap-4 font-medium tabular-nums text-slate-900 dark:text-slate-100">
-                <span>{t('exReg')}: ${example(1).toFixed(2)}/h</span>
-                <span>{t('exOt')}: ${example(1.5).toFixed(2)}/h</span>
-                <span>{t('exDt')}: ${example(2).toFixed(2)}/h</span>
+                <span>
+                  {t('exReg')}: ${example(1).toFixed(2)}/h
+                </span>
+                <span>
+                  {t('exOt')}: ${example(1.5).toFixed(2)}/h
+                </span>
+                <span>
+                  {t('exDt')}: ${example(2).toFixed(2)}/h
+                </span>
               </div>
             </div>
             <p className="text-xs text-slate-400 dark:text-slate-500">{t('reviewNote')}</p>
             <div className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
               <p className="text-xs font-medium text-slate-700 dark:text-slate-200">{t('nextSteps')}</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('nextOverhead')}</p>
-              <a href="/admin/setup/overhead" className="mt-1.5 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+              <Link href="/admin/setup/overhead" className="mt-1.5 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
                 {t('nextOverheadLink')} →
-              </a>
+              </Link>
             </div>
           </div>
         )}
-
-        <div className="mt-5 flex items-center justify-between">
-          <Button variant="outline" size="sm" disabled={step === 0 || busy} onClick={() => setStep((s) => s - 1)}>
-            <ArrowLeft size={14} /> {t('back')}
-          </Button>
-          {step < 3 ? (
-            <Button size="sm" disabled={!canNext || busy} onClick={() => setStep((s) => s + 1)}>
-              {t('next')} <ArrowRight size={14} />
-            </Button>
-          ) : (
-            <Button size="sm" disabled={busy} onClick={finish}>
-              {busy ? t('applying') : t('apply')}
-            </Button>
-          )}
-        </div>
       </div>
-    </div>
+    </UrlDrawer>
   )
 }
