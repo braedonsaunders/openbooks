@@ -76,5 +76,14 @@ export async function POST(req: Request) {
     bytes,
     createdBy: gate.user.id,
   })
+  const { recordFileEvent } = await import('../../../../lib/file-audit')
+  await recordFileEvent({
+    orgId: gate.user.orgId,
+    actorId: gate.user.id,
+    table: 'files',
+    rowId: meta.id,
+    action: 'upload',
+    changes: { name: meta.name, folderId },
+  })
   return NextResponse.json({ file: meta }, { status: 201 })
 }

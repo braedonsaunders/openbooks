@@ -10,6 +10,7 @@ import { confirmDialog } from '../../../lib/confirm'
 import { dateTime } from '../../../lib/format'
 import { FilePreview } from './FilePreview'
 import { SharePanel } from './SharePanel'
+import { ActivityLog } from './ActivityLog'
 
 interface FileVersion {
   id: string
@@ -327,6 +328,9 @@ export function FileDrawer({
 
         {/* Sharing — Manager access only */}
         {canManage ? <SharePanel resourceType="file" resourceId={file.id} /> : null}
+
+        {/* Activity */}
+        <ActivityLog resourceType="file" resourceId={file.id} />
       </div>
     </UrlDrawer>
   )
