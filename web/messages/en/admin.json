@@ -1054,15 +1054,21 @@
       "none": "No official PDF uploaded"
     },
     "taxBoxes": {
-      "description": "Boxes mapped to {code}, plus shared calculated and manual boxes.",
-      "calculatedNote": "Calculated and manual boxes apply across the return and appear under each tax code mapped to it.",
+      "description": "Mapped, calculated, and manual boxes for {code}.",
+      "calculatedNote": "Each box belongs to this return; mapped boxes select the tax code whose activity they summarize.",
       "new": "New tax return box",
       "searchPlaceholder": "Search return boxes…",
       "source": "Source",
-      "empty": "No return boxes match this tax code and search.",
+      "empty": "No return boxes match this return and search.",
       "mapped": "Mapped",
       "calculated": "Calculated",
       "manual": "Manual"
+    },
+    "taxRates": {
+      "description": "Effective-dated rates for {code}.",
+      "new": "New tax rate",
+      "searchPlaceholder": "Search tax rates…",
+      "empty": "No tax rates match this code and search."
     },
     "new": "New",
     "learnMore": "Learn more.",
@@ -1375,6 +1381,7 @@
       },
       "tax-rates": {
         "title": "Tax Rates",
+        "singularTitle": "Tax Rate",
         "description": "Effective-dated rate history for each tax code."
       },
       "tax-groups": {
@@ -1912,7 +1919,11 @@
         "presetCa": "Canada ~13%",
         "presetCaName": "Statutory burden — CPP, EI, WSIB, EHT, vacation (est.)",
         "presetUs": "US ~30%",
-        "presetUsName": "Payroll burden — FICA, FUTA/SUTA, workers comp (est.)"
+        "presetUsName": "Payroll burden — FICA, FUTA/SUTA, workers comp (est.)",
+        "workerComp": "Worker comp (per group)",
+        "addWorkerComp": "Add worker comp",
+        "newWorkerComp": "Worker comp (WSIB)",
+        "workerCompHint": "Rate comes from each employee's assigned worker-comp group (Setup → Workforce → Worker Comp Groups; assign on the employee record). The value here is only the fallback % when an employee has no group."
       },
       "posting": {
         "title": "Posting",

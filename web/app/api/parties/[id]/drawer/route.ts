@@ -42,11 +42,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const [payload, paymentTerms, departments, trades, fieldDefs, subsidiaries, accounts, taxCodes, salesReps] = await Promise.all([
+  const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps] = await Promise.all([
     loadParty(id, gate.user.orgId),
     db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`) as any,
     db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`) as any,
     db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`) as any,
+    db.execute(sql`select id, name from worker_comp_groups where org_id = ${gate.user.orgId} and is_active order by name`) as any,
     loadFieldDefs('parties'),
     loadSubsidiaries(gate.user.orgId),
     db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${gate.user.orgId} and is_active and not is_summary order by number nulls last, name`) as any,
@@ -60,6 +61,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     paymentTerms: paymentTerms.rows,
     departments: departments.rows,
     trades: trades.rows,
+    workerCompGroups: workerCompGroups.rows,
     fieldDefs,
     subsidiaries,
     accounts: accounts.rows,

@@ -52,3 +52,28 @@ test("zero and missing values are ignored", () => {
   ];
   assert.equal(computeCostRate("40", "1", cfg(comps)), "40.0000");
 });
+
+test("worker_comp uses the employee's group rate, not the fallback", () => {
+  const comps: LaborCostComponent[] = [
+    { key: "wc", name: "WSIB", kind: "worker_comp", value: 3, scaleWithOvertime: true },
+  ];
+  // group rate 5% beats the 3% fallback: 40 + 5% of 40 = 42
+  assert.equal(computeCostRate("40", "1", cfg(comps), { workerCompPercent: 5 }), "42.0000");
+  // OT: 40×1.5 + 5% of 60 = 63
+  assert.equal(computeCostRate("40", "1.5", cfg(comps), { workerCompPercent: 5 }), "63.0000");
+});
+
+test("worker_comp falls back to component value when no group assigned", () => {
+  const comps: LaborCostComponent[] = [
+    { key: "wc", name: "WSIB", kind: "worker_comp", value: 3, scaleWithOvertime: false },
+  ];
+  // no override → 3% of base wage: 40 + 1.2 = 41.2
+  assert.equal(computeCostRate("40", "1", cfg(comps)), "41.2000");
+});
+
+test("worker_comp with a 0% group adds nothing", () => {
+  const comps: LaborCostComponent[] = [
+    { key: "wc", name: "WSIB", kind: "worker_comp", value: 3, scaleWithOvertime: true },
+  ];
+  assert.equal(computeCostRate("40", "1", cfg(comps), { workerCompPercent: 0 }), "40.0000");
+});

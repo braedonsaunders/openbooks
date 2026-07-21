@@ -170,6 +170,7 @@
       "customer": "Customer details",
       "vendor": "Vendor details",
       "employee": "Employee details"
-    }
+    },
+    "workerCompGroup": "Worker-comp group"
   }
 }

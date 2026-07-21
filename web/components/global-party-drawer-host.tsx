@@ -16,6 +16,7 @@ interface DrawerPayload {
   paymentTerms: Parameters<typeof PartyDrawer>[0]['paymentTerms']
   departments: Parameters<typeof PartyDrawer>[0]['departments']
   trades: Parameters<typeof PartyDrawer>[0]['trades']
+  workerCompGroups?: Parameters<typeof PartyDrawer>[0]['workerCompGroups']
   fieldDefs: Parameters<typeof PartyDrawer>[0]['fieldDefs']
   accounts: Parameters<typeof PartyDrawer>[0]['accounts']
   taxCodes: Parameters<typeof PartyDrawer>[0]['taxCodes']
@@ -158,6 +159,7 @@ export function GlobalPartyDrawerHost({
         paymentTerms={data.paymentTerms}
         departments={data.departments}
         trades={data.trades}
+        workerCompGroups={data.workerCompGroups}
         fieldDefs={data.fieldDefs}
         accounts={data.accounts}
         taxCodes={data.taxCodes}
