@@ -36,7 +36,8 @@
     "journal": "asiento contable",
     "purchase_order": "orden de compra",
     "sales_order": "orden de venta",
-    "quote": "cotización"
+    "quote": "cotización",
+    "close_run": "cierre de período"
   },
   "decide": {
     "rejectionReason": "Motivo del rechazo:",

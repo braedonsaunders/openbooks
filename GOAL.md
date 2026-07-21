@@ -94,8 +94,10 @@ accounts match NetSuite exactly**.
       policies, event automation, reporting packages, and controlled expiring
       reopen approvals; Banking owns the live readiness → execute → review →
       lock → publish wizard with evidence, continuous invalidation, independent
-      sign-off, and hash-addressed audit binders. The kernel enforces scoped
-      closed-period posting refusal *(2026-07-16)*
+      sign-off routed through tenant-configurable Flows (single or multi-stage),
+      direct task action links, and hash-addressed audit binders. Ledger changes
+      cancel stale approval gates and reopen review; the kernel enforces scoped
+      closed-period posting refusal *(2026-07-20)*
 - [ ] One full month closed in parallel, TB green the whole way
 
 ### Platform (NetSuite-parity foundations, built 2026-07-14)

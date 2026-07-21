@@ -49,6 +49,7 @@ const KIND_KEYS = [
   'purchase_order',
   'sales_order',
   'quote',
+  'close_run',
 ]
 
 interface SubmittedRow {
@@ -110,11 +111,11 @@ export default async function Approvals({
     return {
       key: `gate:${g.id}`,
       gateId: g.id,
-      documentNumber: g.document?.documentNumber ?? g.subjectId.slice(0, 8),
+      documentNumber: g.document?.documentNumber ?? g.subjectLabel ?? g.subjectId.slice(0, 8),
       kind,
       kindLabel: kindLabel(kind),
       href:
-        (g as WorklistGate & { href?: string | null }).href ??
+        g.href ??
         approvalRecordHref(kind, g.subjectId),
       party: g.document?.partyName ?? null,
       amount: g.document ? money(g.document.total) : null,
@@ -141,12 +142,14 @@ export default async function Approvals({
              g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
              u.name as "assigneeName", f.name as "flowName",
              d.document_number as "documentNumber", d.kind as "docKind", d.total,
-             p.display_name as "partyName"
+             p.display_name as "partyName", cp.name as "closePeriodName"
         from flow_gates g
         join flows f on f.id = g.flow_id
         left join users u on u.id = g.assignee_user_id
         left join documents d on d.id = g.subject_id
         left join parties p on p.id = d.party_id
+        left join close_runs cr on cr.id = g.subject_id and g.subject_kind = 'close_run'
+        left join accounting_periods cp on cp.id = cr.period_id
        where g.org_id = ${orgId} and g.status = 'pending'
        order by g.created_at
     `)) as unknown as { rows: Record<string, any>[] }
@@ -157,7 +160,11 @@ export default async function Approvals({
         return {
           key: `gate:${g.id}`,
           gateId: String(g.id),
-          documentNumber: g.documentNumber ? String(g.documentNumber) : String(g.subjectId).slice(0, 8),
+          documentNumber: g.documentNumber
+            ? String(g.documentNumber)
+            : g.closePeriodName
+              ? String(g.closePeriodName)
+              : String(g.subjectId).slice(0, 8),
           kind,
           kindLabel: kindLabel(kind),
           href: approvalRecordHref(kind, String(g.subjectId)),
@@ -178,19 +185,24 @@ export default async function Approvals({
   let submittedRows: SubmittedRow[] = []
   if (tab === 'submitted') {
     const flowRes = (await db.execute(sql`
-      select r.id as "runId", f.name as "flowName", d.id as "docId",
-             d.document_number as "documentNumber", d.kind, d.total,
-             d.status as "docStatus", p.display_name as "partyName",
+      select r.id as "runId", f.name as "flowName", r.subject_id as "subjectId",
+             coalesce(d.document_number, cp.name) as "documentNumber",
+             coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) as kind,
+             d.total, coalesce(d.status, cr.status) as "docStatus", p.display_name as "partyName",
              min(g.created_at) as "waitingSince",
              string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith"
         from flow_runs r
         join flows f on f.id = r.flow_id
         join flow_gates g on g.run_id = r.id and g.status = 'pending'
-        join documents d on d.id = r.subject_id
+        left join documents d on d.id = r.subject_id
         left join parties p on p.id = d.party_id
+        left join close_runs cr on cr.id = r.subject_id and r.subject_kind = 'close_run'
+        left join accounting_periods cp on cp.id = cr.period_id
         left join users u on u.id = g.assignee_user_id
-       where r.org_id = ${orgId} and r.status = 'waiting' and d.created_by = ${user.id}
-       group by r.id, f.name, d.id, p.display_name
+       where r.org_id = ${orgId} and r.status = 'waiting'
+         and coalesce(d.created_by, cr.started_by) = ${user.id}
+       group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
+                d.status, cr.id, cr.status, cp.name, p.display_name
        order by min(g.created_at)
     `)) as unknown as { rows: Record<string, any>[] }
 
@@ -200,7 +212,7 @@ export default async function Approvals({
           key: `run:${r.runId}`,
           documentNumber: String(r.documentNumber),
           kind: String(r.kind),
-          href: approvalRecordHref(String(r.kind), String(r.docId)),
+          href: approvalRecordHref(String(r.kind), String(r.subjectId)),
           party: r.partyName ?? null,
           amount: r.total != null ? money(r.total) : null,
           engineName: String(r.flowName),

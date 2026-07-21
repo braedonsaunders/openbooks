@@ -36,7 +36,8 @@
     "journal": "écriture de journal",
     "purchase_order": "bon de commande",
     "sales_order": "commande client",
-    "quote": "soumission"
+    "quote": "soumission",
+    "close_run": "clôture de période"
   },
   "decide": {
     "rejectionReason": "Motif du rejet :",

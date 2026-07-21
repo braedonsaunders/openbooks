@@ -344,11 +344,14 @@ async function createGate(
     values: evalCtx.values,
   });
 
-  // preventSelfApproval (NetSuite parity): the record's submitter may not sit
-  // on their own gate. Drop them; if that empties the gate, route to their
+  // preventSelfApproval (or an adapter-level accounting invariant): the
+  // record's submitter may not sit on their own gate. Drop them; if that
+  // empties the gate, route to their
   // supervisor instead; if THAT resolves nothing, fail the run loudly — a
   // silently self-approvable gate would be worse than a failed run.
-  if (gate.preventSelfApproval && args.submitterUserId) {
+  const preventSelfApproval =
+    gate.preventSelfApproval === true || adapter.selfApprovalPolicy === "forbidden";
+  if (preventSelfApproval && args.submitterUserId) {
     const hadSubmitter = assignees.some((u) => u.id === args.submitterUserId);
     assignees = assignees.filter((u) => u.id !== args.submitterUserId);
     if (hadSubmitter && assignees.length === 0) {

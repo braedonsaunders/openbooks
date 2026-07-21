@@ -9,6 +9,7 @@ const ORDER_HREF: Record<string, (id: string) => string> = {
   quote: (id) => `/estimates?estimate=${id}`,
   sales_order: (id) => `/sales-orders?order=${id}`,
   purchase_order: (id) => `/purchase-orders?order=${id}`,
+  close_run: (id) => `/close?run=${id}&stage=lock`,
 }
 
 /**

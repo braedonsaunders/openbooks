@@ -65,7 +65,11 @@
     "approve": "Genehmigen",
     "requestChanges": "Änderungen anfordern",
     "addEvidence": "Nachweis hinzufügen",
-    "finalApproval": "Endgültige Genehmigung erteilen",
+    "takeAction": "Maßnahme ergreifen",
+    "requestApproval": "Genehmigung anfordern",
+    "reviewApprovals": "Genehmigungen prüfen",
+    "configureApprovalFlow": "Genehmigungsablauf konfigurieren",
+    "documentation": "Dokumentation",
     "lockPeriod": "Periode sperren",
     "publish": "Paket veröffentlichen",
     "downloadBinder": "Unveränderlichen Prüfungsordner herunterladen"
@@ -73,7 +77,7 @@
   "errors": { "actionFailed": "Die Abschlussaktion konnte nicht abgeschlossen werden" },
   "messages": {
     "refresh": "Abschlussstatus aktualisiert",
-    "approve": "Abschluss genehmigt",
+    "request_approval": "Abschluss zur Genehmigung eingereicht",
     "close": "Periode gesperrt",
     "publish": "Abschlusspaket veröffentlicht",
     "taskUpdated": "Aufgabe aktualisiert",
@@ -197,7 +201,8 @@
     "package": "Abschluss-Berichtspaket",
     "description": "Prüfen Sie die konfigurierten Ausgaben, frieren Sie dann den Nachweisordner ein und veröffentlichen Sie das Paket.",
     "complete": "Paket veröffentlicht durch {name}",
-    "closeFirst": "Schließen und sperren Sie die Periode vor der Veröffentlichung."
+    "lockFirst": "Wenden Sie vor der Veröffentlichung die genehmigten Periodensperren an.",
+    "awaitingApproval": "Schließen Sie Prüfung und Genehmigungsablauf vor der Veröffentlichung ab."
   },
   "timeline": {
     "title": "Unveränderliche Abschlusschronik",
@@ -208,6 +213,8 @@
     "run": {
       "started": "Abschlusslauf gestartet",
       "data_changed": "Hauptbuchänderung machte frühere Arbeit ungültig",
+      "approval_requested": "Abschlussgenehmigung angefordert",
+      "approval_rejected": "Abschlussgenehmigung abgelehnt",
       "approved": "Abschluss hat endgültige Genehmigung erhalten",
       "closed": "Periodensperren angewendet",
       "published": "Abschlusspaket veröffentlicht"

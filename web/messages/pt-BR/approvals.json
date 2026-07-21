@@ -36,7 +36,8 @@
     "journal": "lançamento",
     "purchase_order": "pedido de compra",
     "sales_order": "pedido de venda",
-    "quote": "orçamento"
+    "quote": "orçamento",
+    "close_run": "fechamento de período"
   },
   "decide": {
     "rejectionReason": "Motivo da rejeição:",

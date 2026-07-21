@@ -36,7 +36,8 @@
     "journal": "journal",
     "purchase_order": "purchase order",
     "sales_order": "sales order",
-    "quote": "quote"
+    "quote": "quote",
+    "close_run": "period close"
   },
   "decide": {
     "rejectionReason": "Rejection reason:",

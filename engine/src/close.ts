@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withOrg } from "./db.ts";
 
 export class CloseError extends Error {}
 
@@ -605,6 +605,49 @@ export async function ensureCloseDefaults(
          'lock', ${JSON.stringify({ approvalRequired: true, defaultHours: 24 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
       on conflict (org_id, code) do nothing`);
 
+    const closeApprovalFlow = (await tx.execute(sql`
+      select id from flows where org_id = ${orgId} and subject_kind = 'close_run' limit 1
+    `)) as unknown as { rows: { id: string }[] };
+    if (!closeApprovalFlow.rows[0]) {
+      const graph = {
+        schemaVersion: 1,
+        nodes: [
+          {
+            id: "request",
+            position: { x: 60, y: 120 },
+            data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+          },
+          {
+            id: "independent-approval",
+            position: { x: 320, y: 120 },
+            data: {
+              kind: "gate",
+              gate: {
+                title: "Independent close approval",
+                assignees: [{ type: "role", role: "approver" }],
+                mode: "any",
+                preventSelfApproval: true,
+              },
+            },
+          },
+        ],
+        edges: [
+          {
+            id: "request-to-approval",
+            source: "request",
+            target: "independent-approval",
+            sourceHandle: "next",
+          },
+        ],
+      };
+      await tx.execute(sql`
+        insert into flows (org_id, name, description, subject_kind, enabled, graph, created_by, updated_by)
+        values (${orgId}, 'Close approval',
+                'Routes the final period-close review through the configurable approval worklist.',
+                'close_run', true, ${JSON.stringify(graph)}::jsonb, ${actorId ?? null}, ${actorId ?? null})
+      `);
+    }
+
     const existingPackage = (await tx.execute(sql`
       select id from close_reporting_packages where org_id = ${orgId} and is_active
        order by is_default desc, created_at limit 1`)) as unknown as {
@@ -1178,6 +1221,17 @@ export async function refreshCloseRun(
          returning id`)) as unknown as { rows: { id: string }[] };
       invalidated = changed.rows.length;
       await tx.execute(sql`
+        update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${actorId ?? null}
+         where org_id = ${orgId} and subject_kind = 'close_run' and subject_id = ${runId}
+           and status in ('pending','escalated')
+      `);
+      await tx.execute(sql`
+        update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now(),
+               updated_by = ${actorId ?? null}
+         where org_id = ${orgId} and subject_kind = 'close_run' and subject_id = ${runId}
+           and status in ('running','waiting')
+      `);
+      await tx.execute(sql`
         insert into close_events (org_id, run_id, event_type, actor_id, payload)
         values (${orgId}, ${runId}, 'run.data_changed', ${actorId ?? null},
                 ${JSON.stringify({ invalidated })}::jsonb)`);
@@ -1225,9 +1279,9 @@ export async function refreshCloseRun(
     await resolveTaskDependenciesTx(tx, orgId, runId);
     await tx.execute(sql`
       update close_runs set readiness_score = ${readinessScore}, data_fingerprint = ${fingerprint},
-             status = case when ${dataChanged} and status = 'approved' then 'in_progress' else status end,
-             approved_at = case when ${dataChanged} and status = 'approved' then null else approved_at end,
-             approved_by = case when ${dataChanged} and status = 'approved' then null else approved_by end,
+             status = case when ${dataChanged} and status in ('review','approved') then 'in_progress' else status end,
+             approved_at = case when ${dataChanged} and status in ('review','approved') then null else approved_at end,
+             approved_by = case when ${dataChanged} and status in ('review','approved') then null else approved_by end,
              current_stage = case
                when status in ('closed','published') then 'publish'
                when status = 'approved' and not ${dataChanged} then 'lock'
@@ -1456,58 +1510,209 @@ export async function addCloseEvidence(args: {
   return inserted.rows[0].id;
 }
 
-export async function approveCloseRun(
+async function assertCloseReadyForApproval(
+  executor: { execute: (query: any) => Promise<unknown> },
+  runId: string,
+): Promise<void> {
+  const blockers = (await executor.execute(sql`
+    select
+      (select count(*) from close_run_tasks where run_id = ${runId} and gate_type = 'hard'
+        and task_type <> 'approval'
+        and key not in ('lock-subledgers','lock-gl','publish-package')
+        and status not in ('complete','waived')) as tasks,
+      (select count(*) from close_exceptions where run_id = ${runId} and status = 'open'
+        and severity in ('error','critical')) as exceptions
+  `)) as unknown as { rows: { tasks: string; exceptions: string }[] };
+  if (
+    Number(blockers.rows[0]?.tasks ?? 0) > 0 ||
+    Number(blockers.rows[0]?.exceptions ?? 0) > 0
+  ) {
+    throw new CloseError(
+      "hard-gated tasks and critical exceptions must be resolved before approval",
+    );
+  }
+}
+
+export async function requestCloseApproval(
   orgId: string,
   runId: string,
   actorId: string,
-  comment?: string,
-): Promise<void> {
+): Promise<{ approvals: number }> {
   await refreshCloseRun(orgId, runId, actorId);
-  await db.transaction(async (tx) => {
-    const run = (await tx.execute(sql`
-      select r.started_by, r.data_fingerprint,
-             coalesce((select (p.rules->>'prohibitSelfApproval')::boolean from close_policies p
-               where p.org_id = r.org_id and p.code = 'independent-approval' and p.is_active limit 1), true) as prohibit_self_approval
-        from close_runs r where r.id = ${runId} and r.org_id = ${orgId} for update`)) as unknown as {
-      rows: {
-        started_by: string | null;
-        data_fingerprint: string | null;
-        prohibit_self_approval: boolean;
-      }[];
-    };
+  const outcome = await withOrg(orgId, async () => {
+    // Serialize the status check, gate creation, and transition to review so a
+    // double-click or concurrent request can never create duplicate approvals.
+    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`close-approval:${runId}`}))`);
+    const run = (await db.execute(sql`
+      select status, data_fingerprint from close_runs
+       where id = ${runId} and org_id = ${orgId} for update
+    `)) as unknown as { rows: { status: string; data_fingerprint: string | null }[] };
     if (!run.rows[0]) throw new CloseError("close run not found");
-    if (
-      run.rows[0].prohibit_self_approval &&
-      run.rows[0].started_by === actorId
-    ) {
-      throw new CloseError("the run initiator cannot provide final approval");
+    if (run.rows[0].status === "review") {
+      const pending = (await db.execute(sql`
+        select count(*)::int as count from flow_gates
+         where org_id = ${orgId} and subject_kind = 'close_run' and subject_id = ${runId}
+           and status in ('pending','escalated')
+      `)) as unknown as { rows: { count: number }[] };
+      if (Number(pending.rows[0]?.count ?? 0) > 0)
+        throw new CloseError("close approval is already in progress");
+    } else if (run.rows[0].status !== "in_progress") {
+      throw new CloseError("only an in-progress close run can be submitted for approval");
     }
-    const blockers = (await tx.execute(sql`
-      select
-        (select count(*) from close_run_tasks where run_id = ${runId} and gate_type = 'hard'
-          and key not in ('lock-subledgers','lock-gl','publish-package') and status not in ('complete','waived')) as tasks,
-        (select count(*) from close_exceptions where run_id = ${runId} and status = 'open' and severity in ('error','critical')) as exceptions`)) as unknown as {
-      rows: { tasks: string; exceptions: string }[];
-    };
-    if (
-      Number(blockers.rows[0].tasks) > 0 ||
-      Number(blockers.rows[0].exceptions) > 0
-    ) {
-      throw new CloseError(
-        "hard-gated tasks and critical exceptions must be resolved before approval",
-      );
+    await assertCloseReadyForApproval(db, runId);
+
+    const { runRecordFlows } = await import("./flows/index.ts");
+    const result = await runRecordFlows(
+      { kind: "on_submit", source: "ui" },
+      "close_run",
+      runId,
+      { orgId, userId: actorId },
+    );
+    if (result.failed || result.gatesCreated === 0) {
+      const flowRunIds = result.runs.map((item) => item.runId);
+      if (flowRunIds.length > 0) {
+        await db.execute(sql`
+          update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${actorId}
+           where run_id in (
+             select jsonb_array_elements_text(${JSON.stringify(flowRunIds)}::jsonb)::uuid
+           ) and status in ('pending','escalated')
+        `);
+        await db.execute(sql`
+          update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now(), updated_by = ${actorId}
+           where id in (
+             select jsonb_array_elements_text(${JSON.stringify(flowRunIds)}::jsonb)::uuid
+           ) and status in ('running','waiting')
+        `);
+      }
+      return {
+        approvals: 0,
+        error: result.failed
+          ? "close approval routing failed"
+          : "no enabled close approval flow produced an approval gate",
+      };
     }
-    await tx.execute(sql`
-      update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
-             approved_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${runId}`);
-    await tx.execute(sql`
-      insert into close_signoffs (org_id, run_id, signoff_type, decision, comment, data_fingerprint, signed_by)
-      values (${orgId}, ${runId}, 'approve', 'approved', ${comment ?? null}, ${run.rows[0].data_fingerprint}, ${actorId})`);
-    await tx.execute(sql`
+
+    await db.execute(sql`
+      update close_runs set status = 'review', current_stage = 'review',
+             approved_at = null, approved_by = null, updated_at = now(), updated_by = ${actorId}
+       where id = ${runId} and org_id = ${orgId}
+    `);
+    await db.execute(sql`
+      update close_run_tasks set status = 'submitted', data_fingerprint = ${run.rows[0].data_fingerprint},
+             completed_at = null, completed_by = null, reviewed_at = null, reviewed_by = null,
+             updated_at = now(), updated_by = ${actorId}
+       where run_id = ${runId} and org_id = ${orgId} and task_type = 'approval'
+         and status not in ('waived')
+    `);
+    await db.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
-      values (${orgId}, ${runId}, 'run.approved', ${actorId}, ${JSON.stringify({ comment: comment ?? null })}::jsonb)`);
+      values (${orgId}, ${runId}, 'run.approval_requested', ${actorId},
+              ${JSON.stringify({ approvals: result.gatesCreated, flowRuns: result.runs.map((item) => item.runId) })}::jsonb)
+    `);
+    return { approvals: result.gatesCreated, error: null };
   });
+  if (outcome.error) throw new CloseError(outcome.error);
+  return { approvals: outcome.approvals };
+}
+
+export async function finalizeCloseFlowApproval(args: {
+  orgId: string;
+  runId: string;
+  actorId: string | null;
+  outcome: "approved" | "rejected";
+}): Promise<void> {
+  if (!args.actorId) throw new CloseError("a signed-in approver is required");
+  // decideGate calls this inside its serialized, org-scoped transaction. Keep
+  // every statement on that transaction instead of opening a nested one.
+  const run = (await db.execute(sql`
+    select status, started_by, data_fingerprint, period_id, book_id from close_runs
+     where id = ${args.runId} and org_id = ${args.orgId} for update
+  `)) as unknown as {
+    rows: {
+      status: string;
+      started_by: string | null;
+      data_fingerprint: string | null;
+      period_id: string;
+      book_id: string;
+    }[];
+  };
+  const row = run.rows[0];
+  if (!row) throw new CloseError("close run not found");
+  if (row.status !== "review")
+    throw new CloseError("the close review changed and must be submitted again");
+  if (row.started_by === args.actorId)
+    throw new CloseError("the run initiator cannot provide final approval");
+
+  const currentFingerprint = await periodFingerprint(
+    args.orgId,
+    row.period_id,
+    row.book_id,
+  );
+  if (!row.data_fingerprint || row.data_fingerprint !== currentFingerprint) {
+    await db.execute(sql`
+      update close_run_tasks set status = 'invalidated', completed_at = null, completed_by = null,
+             reviewed_at = null, reviewed_by = null, updated_at = now(), updated_by = ${args.actorId}
+       where run_id = ${args.runId} and org_id = ${args.orgId}
+         and status in ('complete','submitted') and data_fingerprint is not null
+    `);
+    await db.execute(sql`
+      update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${args.actorId}
+       where org_id = ${args.orgId} and subject_kind = 'close_run' and subject_id = ${args.runId}
+         and status in ('pending','escalated')
+    `);
+    await db.execute(sql`
+      update close_runs set status = 'in_progress', current_stage = 'review',
+             data_fingerprint = ${currentFingerprint}, last_validated_at = now(),
+             approved_at = null, approved_by = null, updated_at = now(), updated_by = ${args.actorId}
+       where id = ${args.runId}
+    `);
+    await db.execute(sql`
+      insert into close_events (org_id, run_id, event_type, actor_id, payload)
+      values (${args.orgId}, ${args.runId}, 'run.data_changed', ${args.actorId},
+              ${JSON.stringify({ source: "approval" })}::jsonb)
+    `);
+    throw new CloseError("the ledger changed during approval; revalidate and submit the close again");
+  }
+
+  if (args.outcome === "rejected") {
+    await db.execute(sql`
+      update close_runs set status = 'in_progress', current_stage = 'review',
+             approved_at = null, approved_by = null, updated_at = now(), updated_by = ${args.actorId}
+       where id = ${args.runId}
+    `);
+    await db.execute(sql`
+      update close_run_tasks set status = 'changes_requested', completed_at = null, completed_by = null,
+             reviewed_at = now(), reviewed_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
+       where run_id = ${args.runId} and task_type = 'approval' and status <> 'waived'
+    `);
+    await db.execute(sql`
+      insert into close_events (org_id, run_id, event_type, actor_id, payload)
+      values (${args.orgId}, ${args.runId}, 'run.approval_rejected', ${args.actorId}, '{}'::jsonb)
+    `);
+    return;
+  }
+
+  await assertCloseReadyForApproval(db, args.runId);
+  await db.execute(sql`
+    update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
+           approved_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
+     where id = ${args.runId}
+  `);
+  await db.execute(sql`
+    update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${args.actorId},
+           reviewed_at = now(), reviewed_by = ${args.actorId}, data_fingerprint = ${row.data_fingerprint},
+           updated_at = now(), updated_by = ${args.actorId}
+     where run_id = ${args.runId} and task_type = 'approval' and status <> 'waived'
+  `);
+  await db.execute(sql`
+    insert into close_signoffs (org_id, run_id, signoff_type, decision, data_fingerprint, signed_by)
+    values (${args.orgId}, ${args.runId}, 'approve', 'approved', ${row.data_fingerprint}, ${args.actorId})
+  `);
+  await db.execute(sql`
+    insert into close_events (org_id, run_id, event_type, actor_id, payload)
+    values (${args.orgId}, ${args.runId}, 'run.approved', ${args.actorId},
+            ${JSON.stringify({ source: "flow" })}::jsonb)
+  `);
 }
 
 async function upsertLock(args: {

@@ -65,7 +65,11 @@
     "approve": "审批",
     "requestChanges": "要求修改",
     "addEvidence": "添加证据",
-    "finalApproval": "提供最终审批",
+    "takeAction": "采取行动",
+    "requestApproval": "请求审批",
+    "reviewApprovals": "查看审批",
+    "configureApprovalFlow": "配置审批流程",
+    "documentation": "文档",
     "lockPeriod": "锁定期间",
     "publish": "发布结账包",
     "downloadBinder": "下载不可变审计档案"
@@ -73,7 +77,7 @@
   "errors": { "actionFailed": "无法完成该结账操作" },
   "messages": {
     "refresh": "结账状态已刷新",
-    "approve": "结账已审批",
+    "request_approval": "结账已提交审批",
     "close": "期间已锁定",
     "publish": "结账包已发布",
     "taskUpdated": "任务已更新",
@@ -197,7 +201,8 @@
     "package": "结账报告包",
     "description": "审核已配置的输出，然后冻结证据档案并发布报告包。",
     "complete": "报告包已由 {name} 发布",
-    "closeFirst": "发布前请先完成期间的结账与锁定。"
+    "lockFirst": "发布前请应用已批准的期间锁定。",
+    "awaitingApproval": "发布前请完成结账审核和审批流程。"
   },
   "timeline": {
     "title": "不可变结账时间线",
@@ -208,6 +213,8 @@
     "run": {
       "started": "结账运行已开始",
       "data_changed": "总账变动使先前工作失效",
+      "approval_requested": "已请求结账审批",
+      "approval_rejected": "结账审批已拒绝",
       "approved": "结账已获得最终审批",
       "closed": "期间锁定已应用",
       "published": "结账包已发布"

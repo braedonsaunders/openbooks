@@ -54,6 +54,7 @@ type Props = {
   canRun: boolean;
   canApprove: boolean;
   canReopen: boolean;
+  canManageFlows: boolean;
 };
 
 const STAGES = [
@@ -498,6 +499,7 @@ function TaskCard(props: Props & { task: Row }) {
   const openException = props.exceptions.find(
     (item) => item.task_id === props.task.id && item.status === "open",
   );
+  const actionHref = closeTaskActionHref(props.task, props.run);
   async function action(actionName: string) {
     setBusy(true);
     try {
@@ -626,9 +628,20 @@ function TaskCard(props: Props & { task: Row }) {
             {t("actions.runRevaluation")}
           </Button>
         ) : null}
+        {actionHref &&
+        !["complete", "waived"].includes(props.task.status) &&
+        props.task.key !== "fx-revalued" ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={actionHref as any}>
+              <ExternalLink size={14} />
+              {t("actions.takeAction")}
+            </Link>
+          </Button>
+        ) : null}
         {props.canRun &&
         !["complete", "waived"].includes(props.task.status) &&
-        props.task.completion_mode === "manual" ? (
+        props.task.completion_mode === "manual" &&
+        props.task.task_type !== "approval" ? (
           <div className="flex flex-wrap items-center gap-2">
             <Input
               className="min-w-52 flex-1"
@@ -697,6 +710,38 @@ function TaskCard(props: Props & { task: Row }) {
   );
 }
 
+function closeTaskActionHref(task: Row, run: Row): string | null {
+  if (task.task_type === "approval") return "/approvals";
+  const exact: Record<string, string> = {
+    "drafts-cleared": "/journal",
+    "bank-reconciled": "/banking/reconciliations",
+    "ar-cutoff": "/ar",
+    "ap-cutoff": "/ap",
+    "depreciation-posted": "/assets",
+    "fx-ready": "/admin/setup/fx-rates",
+    "intercompany-balanced": "/reports/trial-balance",
+    consolidation: "/reports/trial-balance",
+    "variance-review": "/reports/pnl",
+    "controller-approval": "/approvals",
+    "publish-package": `/close?run=${run.id}&stage=publish`,
+  };
+  if (exact[task.key]) return exact[task.key];
+  const workstream: Record<string, string> = {
+    readiness: `/close?run=${run.id}&stage=readiness`,
+    banking: "/banking/reconciliations",
+    ar: "/ar",
+    ap: "/ap",
+    assets: "/assets",
+    tax: "/tax",
+    payroll: "/timesheets",
+    intercompany: "/journal",
+    gl: "/journal",
+    review: "/reports",
+    publish: `/close?run=${run.id}&stage=publish`,
+  };
+  return workstream[task.workstream] ?? null;
+}
+
 function StatusIcon({ status }: { status: string }) {
   if (status === "complete")
     return (
@@ -734,6 +779,7 @@ function LockStage(
   const blockers = props.tasks.filter(
     (task) =>
       task.gate_type === "hard" &&
+      task.task_type !== "approval" &&
       task.completion_mode !== "automatic" &&
       !["complete", "waived"].includes(task.status),
   );
@@ -789,14 +835,21 @@ function LockStage(
           <CardDescription>{t("lock.approvalDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {props.run.status === "in_progress" ||
-          props.run.status === "review" ? (
+          {props.run.status === "in_progress" ? (
             <Button
-              disabled={props.busy || blockers.length > 0 || !props.canApprove}
-              onClick={() => props.onAction("approve")}
+              disabled={props.busy || blockers.length > 0 || !props.canRun}
+              onClick={() => props.onAction("request_approval")}
             >
               <ShieldCheck size={15} />
-              {t("actions.finalApproval")}
+              {t("actions.requestApproval")}
+            </Button>
+          ) : null}
+          {props.run.status === "review" ? (
+            <Button variant="outline" asChild>
+              <Link href="/approvals">
+                <ShieldCheck size={15} />
+                {t("actions.reviewApprovals")}
+              </Link>
             </Button>
           ) : null}
           {props.run.status === "approved" ? (
@@ -814,6 +867,20 @@ function LockStage(
               {t("lock.complete", { name: props.run.closer_name ?? "" })}
             </div>
           ) : null}
+          {props.canManageFlows ? (
+            <Button variant="ghost" asChild>
+              <Link href="/admin/flows?subject=close_run">
+                <GitBranch size={15} />
+                {t("actions.configureApprovalFlow")}
+              </Link>
+            </Button>
+          ) : null}
+          <Button variant="ghost" asChild>
+            <Link href="/docs/period-close">
+              <FileCheck2 size={15} />
+              {t("actions.documentation")}
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>
@@ -860,15 +927,24 @@ function PublishStage(
             ))}
           </CardContent>
         </Card>
-        {props.run.status === "closed" ? (
-          <Button
-            disabled={props.busy || !props.canRun}
-            onClick={() => props.onAction("publish")}
-          >
-            <Send size={15} />
-            {t("actions.publish")}
-          </Button>
-        ) : props.run.status === "published" ? (
+        {props.run.status !== "published" ? (
+          <div className="space-y-2">
+            <Button
+              disabled={props.busy || !props.canRun || props.run.status !== "closed"}
+              onClick={() => props.onAction("publish")}
+            >
+              <Send size={15} />
+              {t("actions.publish")}
+            </Button>
+            {props.run.status !== "closed" ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {props.run.status === "approved"
+                  ? t("publish.lockFirst")
+                  : t("publish.awaitingApproval")}
+              </p>
+            ) : null}
+          </div>
+        ) : (
           <Card className="border-emerald-200 dark:border-emerald-900">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
@@ -891,11 +967,6 @@ function PublishStage(
               ) : null}
             </CardContent>
           </Card>
-        ) : (
-          <Alert>
-            <LockKeyhole size={16} />
-            {t("publish.closeFirst")}
-          </Alert>
         )}
       </div>
       <Card>

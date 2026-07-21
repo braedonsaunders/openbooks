@@ -12,6 +12,11 @@ import {
   budgetScenarioSubjectProfile,
   budgetScenariosFlowAdapter,
 } from "./budget-scenarios-adapter.ts";
+import {
+  CLOSE_RUN_SUBJECT_KIND,
+  closeRunSubjectProfile,
+  closeRunsFlowAdapter,
+} from "./close-runs-adapter.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 
@@ -29,6 +34,7 @@ const adapterCache = new Map<string, FlowSubjectAdapter>();
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
   if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
+  if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
   if (!DOCUMENT_FLOW_KINDS.includes(subjectKind)) return null;
   let adapter = adapterCache.get(subjectKind);
   if (!adapter) {
@@ -44,6 +50,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
     bankAccountSubjectProfile,
     budgetScenarioSubjectProfile,
+    closeRunSubjectProfile,
   ];
 }
 

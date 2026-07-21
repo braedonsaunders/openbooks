@@ -36,7 +36,8 @@
     "journal": "Buchung",
     "purchase_order": "Bestellung",
     "sales_order": "Kundenauftrag",
-    "quote": "Angebot"
+    "quote": "Angebot",
+    "close_run": "Periodenabschluss"
   },
   "decide": {
     "rejectionReason": "Ablehnungsgrund:",

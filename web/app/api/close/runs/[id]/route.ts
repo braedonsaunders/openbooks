@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  approveCloseRun,
   closeApprovedRun,
   CloseError,
   publishCloseRun,
+  requestCloseApproval,
   refreshCloseRun,
 } from "@openbooks/engine/src/close.ts";
 import { guardPermission } from "../../../../../lib/authz";
@@ -23,7 +23,7 @@ export async function POST(
     comment?: string;
   };
   const permission =
-    body.action === "approve" || body.action === "close"
+    body.action === "close"
       ? "close.approve"
       : "close.run";
   const gate = await guardPermission(permission);
@@ -35,15 +35,15 @@ export async function POST(
         ...(await refreshCloseRun(gate.user.orgId, id, gate.user.id)),
       });
     }
-    if (body.action === "approve")
-      await approveCloseRun(gate.user.orgId, id, gate.user.id, body.comment);
+    if (body.action === "request_approval")
+      await requestCloseApproval(gate.user.orgId, id, gate.user.id);
     else if (body.action === "close")
       await closeApprovedRun(gate.user.orgId, id, gate.user.id);
     else if (body.action === "publish")
       await publishCloseRun(gate.user.orgId, id, gate.user.id, body.comment);
     else
       return NextResponse.json(
-        { error: "action must be refresh, approve, close, or publish" },
+        { error: "action must be refresh, request_approval, close, or publish" },
         { status: 400 },
       );
     return NextResponse.json({ ok: true });

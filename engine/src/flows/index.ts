@@ -65,6 +65,11 @@ export {
   budgetScenariosFlowAdapter,
   budgetScenarioSubjectProfile,
 } from "./budget-scenarios-adapter.ts";
+export {
+  CLOSE_RUN_SUBJECT_KIND,
+  closeRunsFlowAdapter,
+  closeRunSubjectProfile,
+} from "./close-runs-adapter.ts";
 export { lintFlowGraphForSubject } from "./lint.ts";
 export {
   BUILT_IN_ROLE_NAMES,

@@ -65,7 +65,11 @@
     "approve": "Aprobar",
     "requestChanges": "Solicitar cambios",
     "addEvidence": "Agregar evidencia",
-    "finalApproval": "Dar aprobación final",
+    "takeAction": "Tomar acción",
+    "requestApproval": "Solicitar aprobación",
+    "reviewApprovals": "Revisar aprobaciones",
+    "configureApprovalFlow": "Configurar flujo de aprobación",
+    "documentation": "Documentación",
     "lockPeriod": "Bloquear período",
     "publish": "Publicar paquete",
     "downloadBinder": "Descargar expediente de auditoría inmutable"
@@ -73,7 +77,7 @@
   "errors": { "actionFailed": "No se pudo completar la acción de cierre" },
   "messages": {
     "refresh": "Estado del cierre actualizado",
-    "approve": "Cierre aprobado",
+    "request_approval": "Cierre enviado para aprobación",
     "close": "Período bloqueado",
     "publish": "Paquete de cierre publicado",
     "taskUpdated": "Tarea actualizada",
@@ -201,7 +205,8 @@
     "package": "Paquete de informes de cierre",
     "description": "Revise las salidas configuradas, congele la carpeta de evidencia y publique el paquete.",
     "complete": "Paquete publicado por {name}",
-    "closeFirst": "Cierre y bloquee el período antes de publicar."
+    "lockFirst": "Aplique los bloqueos de período aprobados antes de publicar.",
+    "awaitingApproval": "Complete la revisión y el flujo de aprobación antes de publicar."
   },
   "timeline": {
     "title": "Cronología inmutable",
@@ -212,6 +217,8 @@
     "run": {
       "started": "Ejecución iniciada",
       "data_changed": "Un cambio contable invalidó trabajo previo",
+      "approval_requested": "Aprobación de cierre solicitada",
+      "approval_rejected": "Aprobación de cierre rechazada",
       "approved": "Cierre con aprobación final",
       "closed": "Bloqueos de período aplicados",
       "published": "Paquete de cierre publicado"

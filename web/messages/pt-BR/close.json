@@ -65,7 +65,11 @@
     "approve": "Aprovar",
     "requestChanges": "Solicitar alterações",
     "addEvidence": "Adicionar evidência",
-    "finalApproval": "Fornecer aprovação final",
+    "takeAction": "Tomar ação",
+    "requestApproval": "Solicitar aprovação",
+    "reviewApprovals": "Revisar aprovações",
+    "configureApprovalFlow": "Configurar fluxo de aprovação",
+    "documentation": "Documentação",
     "lockPeriod": "Bloquear período",
     "publish": "Publicar pacote",
     "downloadBinder": "Baixar dossiê de auditoria imutável"
@@ -73,7 +77,7 @@
   "errors": { "actionFailed": "Não foi possível concluir a ação de fechamento" },
   "messages": {
     "refresh": "Estado do fechamento atualizado",
-    "approve": "Fechamento aprovado",
+    "request_approval": "Fechamento enviado para aprovação",
     "close": "Período bloqueado",
     "publish": "Pacote de fechamento publicado",
     "taskUpdated": "Tarefa atualizada",
@@ -197,7 +201,8 @@
     "package": "Pacote de relatórios do fechamento",
     "description": "Revise as saídas configuradas, depois congele o dossiê de evidências e publique o pacote.",
     "complete": "Pacote publicado por {name}",
-    "closeFirst": "Feche e bloqueie o período antes de publicar."
+    "lockFirst": "Aplique os bloqueios de período aprovados antes de publicar.",
+    "awaitingApproval": "Conclua a revisão e o fluxo de aprovação antes de publicar."
   },
   "timeline": {
     "title": "Linha do tempo imutável do fechamento",
@@ -208,6 +213,8 @@
     "run": {
       "started": "Execução de fechamento iniciada",
       "data_changed": "Alteração no razão invalidou o trabalho anterior",
+      "approval_requested": "Aprovação do fechamento solicitada",
+      "approval_rejected": "Aprovação do fechamento rejeitada",
       "approved": "Fechamento recebeu aprovação final",
       "closed": "Bloqueios de período aplicados",
       "published": "Pacote de fechamento publicado"

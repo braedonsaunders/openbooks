@@ -65,7 +65,11 @@
     "approve": "Approve",
     "requestChanges": "Request changes",
     "addEvidence": "Add evidence",
-    "finalApproval": "Provide final approval",
+    "takeAction": "Take action",
+    "requestApproval": "Request approval",
+    "reviewApprovals": "Review approvals",
+    "configureApprovalFlow": "Configure approval flow",
+    "documentation": "Documentation",
     "lockPeriod": "Lock period",
     "publish": "Publish package",
     "downloadBinder": "Download immutable audit binder"
@@ -73,7 +77,7 @@
   "errors": { "actionFailed": "The close action could not be completed" },
   "messages": {
     "refresh": "Close state refreshed",
-    "approve": "Close approved",
+    "request_approval": "Close submitted for approval",
     "close": "Period locked",
     "publish": "Close package published",
     "taskUpdated": "Task updated",
@@ -197,7 +201,8 @@
     "package": "Close reporting package",
     "description": "Review the configured outputs, then freeze the evidence binder and publish the package.",
     "complete": "Package published by {name}",
-    "closeFirst": "Close and lock the period before publishing."
+    "lockFirst": "Apply the approved period locks before publishing.",
+    "awaitingApproval": "Complete the close review and approval flow before publishing."
   },
   "timeline": {
     "title": "Immutable close timeline",
@@ -208,6 +213,8 @@
     "run": {
       "started": "Close run started",
       "data_changed": "Ledger change invalidated prior work",
+      "approval_requested": "Close approval requested",
+      "approval_rejected": "Close approval rejected",
       "approved": "Close received final approval",
       "closed": "Period locks applied",
       "published": "Close package published"
