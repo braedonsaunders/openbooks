@@ -11,6 +11,7 @@ import {
   Button,
   Input,
   Label,
+  SearchSelect,
   Select,
   Table,
   TableBody,
@@ -31,6 +32,7 @@ import { EmployeeWageRates } from './EmployeeWageRates'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { money } from '../../../lib/format'
+import { countryOptions } from '../../../lib/countries'
 
 interface Opt {
   id: string
@@ -157,6 +159,7 @@ export function PartyDrawer({
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
   const tInv = useTranslations('projects.invoicingPref')
+  const locale = useLocale()
   const router = useRouter()
   const allowedInitialTab = initialTab === 'wages' && (role !== 'employee' || !canManageWages) ? 'overview' : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
@@ -433,6 +436,7 @@ export function PartyDrawer({
     { value: 'false', label: tc('labels.no') },
     { value: 'true', label: tc('labels.yes') },
   ], [tc])
+  const countries = useMemo(() => countryOptions(locale), [locale])
   const addressColumns = useMemo<LineGridColumn<AddressRow>[]>(() => [
     { key: 'label', label: t('addressLabel'), type: 'text', width: '140px', placeholder: t('addressLabelPlaceholder') },
     { key: 'line1', label: t('line1'), type: 'text', width: 'minmax(190px, 2fr)' },
@@ -440,10 +444,10 @@ export function PartyDrawer({
     { key: 'city', label: t('city'), type: 'text', width: '130px' },
     { key: 'region', label: t('region'), type: 'text', width: '120px' },
     { key: 'postalCode', label: t('postalCode'), type: 'text', width: '110px' },
-    { key: 'country', label: t('country'), type: 'text', width: '110px' },
+    { key: 'country', label: t('country'), type: 'search-select', width: '170px', options: countries },
     { key: 'isDefaultBilling', label: t('defaultBilling'), type: 'select', width: '115px', options: yesNo },
     { key: 'isDefaultShipping', label: t('defaultShipping'), type: 'select', width: '125px', options: yesNo },
-  ], [t, yesNo])
+  ], [countries, t, yesNo])
   const contactColumns = useMemo<LineGridColumn<ContactRow>[]>(() => [
     { key: 'name', label: t('contactName'), type: 'text', width: 'minmax(170px, 1.4fr)', required: true },
     { key: 'title', label: t('contactTitle'), type: 'text', width: '140px' },
@@ -1129,6 +1133,7 @@ function BankAccountsPanel({
 }) {
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
+  const locale = useLocale()
   const router = useRouter()
   const [accounts, setAccounts] = useState(initialAccounts)
   const [draft, setDraft] = useState<BankAccountDraft | null>(null)
@@ -1136,6 +1141,7 @@ function BankAccountsPanel({
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState(false)
   const perPage = 10
+  const countries = useMemo(() => countryOptions(locale), [locale])
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLocaleLowerCase()
@@ -1235,7 +1241,7 @@ function BankAccountsPanel({
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}><Label>{t('bankName')}</Label><Input value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></div>
-            <div className={field}><Label>{t('country')}</Label><Input value={draft.country} onChange={(event) => setDraft({ ...draft, country: event.target.value })} /></div>
+            <div className={field}><Label>{t('country')}</Label><SearchSelect value={draft.country} onChange={(country) => setDraft({ ...draft, country })} options={countries} sheetTitle={t('country')} clearable ariaLabel={t('country')} /></div>
             <div className={field}><Label>{tc('labels.currency')}</Label><Input maxLength={3} className="font-mono uppercase" value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value.toUpperCase() })} /></div>
             <div className={field}><Label>{t('routingNumber')}</Label><Input className="font-mono" value={draft.routingNumber} onChange={(event) => setDraft({ ...draft, routingNumber: event.target.value })} /></div>
             <div className={field}><Label>{t('branchNumber')}</Label><Input className="font-mono" value={draft.branchNumber} onChange={(event) => setDraft({ ...draft, branchNumber: event.target.value })} /></div>

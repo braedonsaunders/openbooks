@@ -43,6 +43,9 @@ The setup rail groups configuration by purpose:
 - **Currency** — currencies, rate types, rates, and consolidation configuration.
 
 The exact tabs available depend on enabled capabilities and permissions.
+Country fields use the shared searchable ISO country list across organization,
+subsidiary, tax, and payment configuration. They do not accept arbitrary
+two-letter text.
 
 ## Change control
 

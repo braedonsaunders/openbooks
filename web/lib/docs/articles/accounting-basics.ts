@@ -214,6 +214,8 @@ both customer and vendor roles without duplicating its legal identity.
 
 Role views keep operational fields focused while preserving one source of truth
 for names, addresses, contacts, tax details, and external references.
+Address and bank-detail countries are selected from the shared ISO country list
+so the same country code is stored consistently across records.
 
 ## Items and services
 

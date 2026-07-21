@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { DEFAULT_LOCALE, isLocale } from "../../../../i18n/config";
+import { normalizeCountryCode } from "../../../../lib/countries";
 
 export const runtime = "nodejs";
 
@@ -43,8 +44,6 @@ const CONTROL_ACCOUNT_KEYS = [
   "projectRevenue",
 ] as const;
 type ControlAccountKey = (typeof CONTROL_ACCOUNT_KEYS)[number];
-
-const COUNTRY_RE = /^[A-Z]{2}$/;
 
 async function audit(args: {
   orgId: string;
@@ -183,13 +182,13 @@ export async function PUT(req: Request) {
 
   // --- country (ISO 3166-1 alpha-2) ---
   if (body.country !== undefined) {
-    if (typeof body.country !== "string" || !COUNTRY_RE.test(body.country.trim().toUpperCase())) {
+    const country = normalizeCountryCode(body.country);
+    if (!country) {
       return NextResponse.json(
-        { error: "country must be a 2-letter ISO code" },
+        { error: "country must be a valid ISO country code" },
         { status: 400 },
       );
     }
-    const country = body.country.trim().toUpperCase();
     if (country !== cur.country) {
       sets.push(sql`country = ${country}`);
       changes.country = [cur.country, country];

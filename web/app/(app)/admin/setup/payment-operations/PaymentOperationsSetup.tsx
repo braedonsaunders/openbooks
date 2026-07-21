@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -11,6 +11,7 @@ import {
   Button,
   Input,
   Label,
+  SearchSelect,
   Select,
   Table,
   TableBody,
@@ -25,6 +26,7 @@ import {
 import { SearchInput } from '../../../../../components/search-input'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { Pagination } from '../../../../../components/pagination'
+import { countryOptions } from '../../../../../lib/countries'
 
 export type PaymentSetupView = 'profiles' | 'formats' | 'schedules' | 'mandates'
 
@@ -59,6 +61,24 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (val
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>
+}
+
+function CountryField({ value, onChange, label, placeholder }: { value: string; onChange: (value: string) => void; label: string; placeholder: string }) {
+  const locale = useLocale()
+  const options = useMemo(() => countryOptions(locale), [locale])
+  return (
+    <Field label={label}>
+      <SearchSelect
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder={placeholder}
+        sheetTitle={label}
+        clearable
+        ariaLabel={label}
+      />
+    </Field>
+  )
 }
 
 export function PaymentOperationsSetup({
@@ -259,7 +279,7 @@ function ProfileFields({ form, set, options, t, creating }: { form: Record<strin
     <Field label={t('fields.bankAccount')}><Select value={form.bank_account_id ?? form.bankAccountId ?? ''} onChange={(e) => set('bankAccountId', e.target.value)}><option value="">{t('select')}</option>{options.bankAccounts.map((a) => <option key={a.id} value={a.id}>{[a.number, a.name].filter(Boolean).join(' · ')}</option>)}</Select></Field>
     <Field label={t('fields.format')}><Select value={formatId} onChange={(e) => set('paymentFormatId', e.target.value)}><option value="">{t('select')}</option>{options.formats.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</Select></Field>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.subsidiary')}><Select value={form.subsidiary_id ?? form.subsidiaryId ?? ''} onChange={(e) => set('subsidiaryId', e.target.value || null)}><option value="">{t('allSubsidiaries')}</option>{options.subsidiaries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
-      <Field label={t('fields.country')}><Input maxLength={2} value={form.country ?? ''} onChange={(e) => set('country', e.target.value.toUpperCase())} /></Field></div>
+      <CountryField label={t('fields.country')} placeholder={t('select')} value={form.country ?? ''} onChange={(value) => set('country', value)} /></div>
     {secretFields.length ? <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800"><div><h3 className="text-sm font-semibold">{t('originator.title')}</h3><p className="text-xs text-slate-500">{creating ? t('originator.newHint') : t('originator.editHint')}</p></div><div className="grid gap-4 sm:grid-cols-2">{secretFields.map((key) => <Field key={key} label={t(`secretFields.${key}`)}><Input type="password" autoComplete="new-password" value={secrets[key] ?? ''} onChange={(e) => secretSet(key, e.target.value)} /></Field>)}</div></div> : null}
     <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="text-sm font-semibold">{t('accounting.title')}</h3><Field label={t('fields.discountAccount')}><Select value={settings.discountAccountId ?? ''} onChange={(e) => settingSet('discountAccountId', e.target.value || null)}><option value="">{t('accounting.noDiscountAccount')}</option>{options.accountingAccounts.map((a) => <option key={a.id} value={a.id}>{[a.number, a.name].filter(Boolean).join(' · ')}</option>)}</Select></Field>{format?.rail === 'positive_pay' ? <Field label={t('fields.positivePayAccountReference')}><Input value={settings.positivePayAccountReference ?? ''} onChange={(e) => settingSet('positivePayAccountReference', e.target.value)} /></Field> : null}<p className="text-xs text-slate-500">{t('accounting.hint')}</p></div>
     <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="mb-3 text-sm font-semibold">{t('delivery.title')}</h3><div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.sftpServer')}><Select value={form.sftp_server_id ?? form.sftpServerId ?? ''} onChange={(e) => set('sftpServerId', e.target.value || null)}><option value="">{t('delivery.manual')}</option>{options.sftpServers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field><Field label={t('fields.sftpFolder')}><Input value={form.sftp_folder ?? form.sftpFolder ?? ''} onChange={(e) => set('sftpFolder', e.target.value)} placeholder="outbound" /></Field></div><p className="mt-2 text-xs text-slate-500">{t('delivery.existingSftpHint')}</p></div>
@@ -271,7 +291,7 @@ function FormatFields({ form, set, t, creating }: { form: Record<string, any>; s
   const custom = creating || form.rail === 'custom'
   return <><div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.code')}><Input disabled={!creating} value={form.code ?? ''} onChange={(e) => set('code', e.target.value.toUpperCase())} /></Field><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field></div>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.direction')}><Select disabled={!custom} value={form.direction ?? 'credit'} onChange={(e) => set('direction', e.target.value)}><option value="credit">{t('directions.credit')}</option><option value="debit">{t('directions.debit')}</option><option value="both">{t('directions.both')}</option></Select></Field><Field label={t('fields.currency')}><Input value={form.currency ?? ''} onChange={(e) => set('currency', e.target.value.toUpperCase())} /></Field></div>
-    <div className="grid gap-4 sm:grid-cols-3"><Field label={t('fields.country')}><Input value={form.country ?? ''} onChange={(e) => set('country', e.target.value.toUpperCase())} /></Field><Field label={t('fields.extension')}><Input value={form.file_extension ?? form.fileExtension ?? 'txt'} onChange={(e) => set('fileExtension', e.target.value)} /></Field><Field label={t('fields.contentType')}><Input value={form.content_type ?? form.contentType ?? 'text/plain; charset=utf-8'} onChange={(e) => set('contentType', e.target.value)} /></Field></div>
+    <div className="grid gap-4 sm:grid-cols-3"><CountryField label={t('fields.country')} placeholder={t('select')} value={form.country ?? ''} onChange={(value) => set('country', value)} /><Field label={t('fields.extension')}><Input value={form.file_extension ?? form.fileExtension ?? 'txt'} onChange={(e) => set('fileExtension', e.target.value)} /></Field><Field label={t('fields.contentType')}><Input value={form.content_type ?? form.contentType ?? 'text/plain; charset=utf-8'} onChange={(e) => set('contentType', e.target.value)} /></Field></div>
     {custom ? <Field label={t('fields.formatterScript')}><Textarea rows={16} className="font-mono text-xs" spellCheck={false} value={form.formatter_script ?? form.formatterScript ?? 'function main(ctx) {\n  return {\n    filename: `PAY-${ctx.request.run.run_number}.txt`,\n    content: "",\n    contentType: "text/plain"\n  };\n}'} onChange={(e) => set('formatterScript', e.target.value)} /></Field> : <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t('builtInFormatHint')}</p>}
     <Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('isActive', v)} label={t('fields.active')} /></>
 }

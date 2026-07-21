@@ -9,6 +9,7 @@
  */
 
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupField } from './registry'
+import { normalizeCountryCode } from '../countries'
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -67,6 +68,12 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
       const ok = field.options?.some((o) => o.value === String(raw))
       if (!ok) return { error: `${field.key} has an invalid value` }
       return { column, value: String(raw) }
+    }
+    case 'country': {
+      if (!present) return { column, value: null }
+      const country = normalizeCountryCode(raw)
+      if (!country) return { error: `${field.key} must be a valid ISO country code` }
+      return { column, value: country }
     }
     case 'ref': {
       if (!present) return { column, value: null }

@@ -17,6 +17,7 @@
 
 export type SetupFieldKind =
   | 'text'
+  | 'country'
   | 'textarea'
   | 'integer'
   | 'decimal'
@@ -272,7 +273,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'legalName', kind: 'text' },
       { key: 'parentId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'baseCurrency', kind: 'text', required: true, lockedOnEdit: true },
-      { key: 'country', kind: 'text', required: true },
+      { key: 'country', kind: 'country', required: true },
       { key: 'isElimination', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },
     ],
@@ -355,7 +356,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
-      { key: 'country', kind: 'text' },
+      { key: 'country', kind: 'country' },
       { key: 'region', kind: 'text' },
       { key: 'appliesTo', kind: 'select', options: APPLIES_TO, keepDefault: true },
       { key: 'collectedAccountId', kind: 'ref', ref: 'accounts' },
@@ -432,7 +433,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
-      { key: 'country', kind: 'text' },
+      { key: 'country', kind: 'country' },
       { key: 'region', kind: 'text' },
       { key: 'submissionChannel', kind: 'select', options: SUBMISSION_CHANNELS, keepDefault: true },
       { key: 'governmentFormat', kind: 'select', options: GOVERNMENT_FORMATS, keepDefault: true, hidden: true },
