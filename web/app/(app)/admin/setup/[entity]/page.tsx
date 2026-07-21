@@ -128,6 +128,8 @@ function renderCell(
   t: (k: string) => string,
 ) {
   const raw = row[toSnake(col.key)]
+  const option = col.options?.find((candidate) => candidate.value === String(raw))
+  if (option) return t(option.labelKey)
   switch (col.kind) {
     case 'badge-active':
       return (

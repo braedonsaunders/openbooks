@@ -1610,7 +1610,7 @@
       "label": "Label",
       "basis": "Basis",
       "sign": "Sign",
-      "submissionChannel": "Canal de dépôt",
+      "submissionChannel": "Mode de dépôt",
       "governmentFormat": "Format gouvernemental",
       "submissionUrl": "URL de dépôt gouvernemental",
       "officialPdfFileId": "PDF officiel",

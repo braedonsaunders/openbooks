@@ -1493,7 +1493,7 @@
       "label": "Bezeichnung",
       "basis": "Basis",
       "sign": "Vorzeichen",
-      "submissionChannel": "Einreichungskanal",
+      "submissionChannel": "Einreichungsmethode",
       "governmentFormat": "Behördenformat",
       "submissionUrl": "URL für behördliche Meldung",
       "officialPdfFileId": "Amtliches PDF",

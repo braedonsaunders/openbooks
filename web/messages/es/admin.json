@@ -1566,7 +1566,7 @@
       "label": "Label",
       "basis": "Basis",
       "sign": "Sign",
-      "submissionChannel": "Canal de presentación",
+      "submissionChannel": "Método de presentación",
       "governmentFormat": "Formato gubernamental",
       "submissionUrl": "URL de presentación gubernamental",
       "officialPdfFileId": "PDF oficial",

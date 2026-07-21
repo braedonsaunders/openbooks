@@ -1640,7 +1640,7 @@
       "label": "Label",
       "basis": "Basis",
       "sign": "Sign",
-      "submissionChannel": "Submission channel",
+      "submissionChannel": "Filing method",
       "governmentFormat": "Government format",
       "submissionUrl": "Government filing URL",
       "officialPdfFileId": "Official PDF",
