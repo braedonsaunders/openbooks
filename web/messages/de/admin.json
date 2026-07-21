@@ -990,6 +990,7 @@
     "description": "Konfigurieren Sie Steuern, Dimensionen, Zahlungsbedingungen und die Referenzdaten, auf denen Ihre Buchhaltung basiert.",
     "taxLibrary": {
       "title": "Bibliothek für Steuererklärungen",
+      "open": "Bibliothek",
       "description": "Importieren Sie gepflegte Erklärungsstrukturen für Kanada, das Vereinigte Königreich, Australien, Neuseeland sowie ein Arbeitsblatt für US-Bundesstaaten/Kommunen.",
       "pack": "Zuständigkeitspaket",
       "optionInstalled": "{country} · {name} · installiert",

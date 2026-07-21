@@ -1,11 +1,12 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Library } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label, Select } from '@openbooks/ui'
+import { Button, Label, Select, UrlDrawer } from '@openbooks/ui'
 
 export interface TaxPackOption {
   code: string
@@ -13,7 +14,19 @@ export interface TaxPackOption {
   country: string
 }
 
-export function TaxReturnLibrary({ packs, installedCodes }: { packs: TaxPackOption[]; installedCodes: string[] }) {
+export function TaxReturnLibrary({
+  packs,
+  installedCodes,
+  open,
+  openHref,
+  closeHref,
+}: {
+  packs: TaxPackOption[]
+  installedCodes: string[]
+  open: boolean
+  openHref: string
+  closeHref: string
+}) {
   const t = useTranslations('admin.setup.taxLibrary')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -42,36 +55,45 @@ export function TaxReturnLibrary({ packs, installedCodes }: { packs: TaxPackOpti
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start gap-3">
-          <Library className="mt-0.5 text-teal-600 dark:text-teal-400" size={20} />
-          <div>
-            <CardTitle>{t('title')}</CardTitle>
-            <CardDescription>{t('description')}</CardDescription>
+    <>
+      <Button asChild variant="outline" size="sm">
+        <Link href={openHref as any}>
+          <Library size={14} />
+          {t('open')}
+        </Link>
+      </Button>
+      {open ? (
+        <UrlDrawer
+          open
+          closeHref={closeHref}
+          size="md"
+          title={t('title')}
+          description={t('description')}
+          footer={
+            <Button onClick={install} disabled={busy || !selected}>
+              {busy ? t('working') : installed.has(code) ? t('reset') : t('import')}
+            </Button>
+          }
+        >
+          <div className="space-y-4 p-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="tax-pack">{t('pack')}</Label>
+              <Select id="tax-pack" value={code} onChange={(event) => setCode(event.target.value)}>
+                {packs.map((pack) => (
+                  <option key={pack.code} value={pack.code}>
+                    {installed.has(pack.code)
+                      ? t('optionInstalled', { country: pack.country, name: pack.name })
+                      : t('optionAvailable', { country: pack.country, name: pack.name })}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {code === 'US_SALES_TAX_WORKPAPER' ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300">{t('usNotice')}</p>
+            ) : null}
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-end gap-3">
-        <div className="min-w-64 flex-1 space-y-1.5">
-          <Label htmlFor="tax-pack">{t('pack')}</Label>
-          <Select id="tax-pack" value={code} onChange={(event) => setCode(event.target.value)}>
-            {packs.map((pack) => (
-              <option key={pack.code} value={pack.code}>
-                {installed.has(pack.code)
-                  ? t('optionInstalled', { country: pack.country, name: pack.name })
-                  : t('optionAvailable', { country: pack.country, name: pack.name })}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <Button onClick={install} disabled={busy || !selected}>
-          {busy ? t('working') : installed.has(code) ? t('reset') : t('import')}
-        </Button>
-        {code === 'US_SALES_TAX_WORKPAPER' ? (
-          <p className="w-full text-xs text-amber-700 dark:text-amber-300">{t('usNotice')}</p>
-        ) : null}
-      </CardContent>
-    </Card>
+        </UrlDrawer>
+      ) : null}
+    </>
   )
 }

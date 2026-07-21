@@ -990,6 +990,7 @@
     "description": "Configure impostos, dimensões, prazos e os dados de referência sobre os quais sua contabilidade opera.",
     "taxLibrary": {
       "title": "Biblioteca de declarações fiscais",
+      "open": "Biblioteca",
       "description": "Importe estruturas de declaração mantidas para Canadá, Reino Unido, Austrália, Nova Zelândia e um papel de trabalho estadual/local dos Estados Unidos.",
       "pack": "Pacote de jurisdição",
       "optionInstalled": "{country} · {name} · instalado",

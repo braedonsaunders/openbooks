@@ -1012,6 +1012,7 @@
     "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
     "taxLibrary": {
       "title": "Bibliothèque de déclarations fiscales",
+      "open": "Bibliothèque",
       "description": "Importez les structures maintenues pour le Canada, le Royaume-Uni, l’Australie, la Nouvelle-Zélande et une feuille de travail américaine pour les taxes locales.",
       "pack": "Module de juridiction",
       "optionInstalled": "{country} · {name} · installé",

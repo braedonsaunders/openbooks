@@ -968,6 +968,7 @@
     "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
     "taxLibrary": {
       "title": "Biblioteca de declaraciones fiscales",
+      "open": "Biblioteca",
       "description": "Importe estructuras mantenidas para Canadá, Reino Unido, Australia, Nueva Zelanda y una hoja de trabajo estadounidense para impuestos estatales y locales.",
       "pack": "Paquete de jurisdicción",
       "optionInstalled": "{country} · {name} · instalado",

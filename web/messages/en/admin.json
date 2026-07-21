@@ -1031,6 +1031,7 @@
     "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
     "taxLibrary": {
       "title": "Tax return library",
+      "open": "Library",
       "description": "Import maintained return structures for Canada, the United Kingdom, Australia, New Zealand, and a United States state/local workpaper.",
       "pack": "Jurisdiction pack",
       "optionInstalled": "{country} · {name} · installed",
