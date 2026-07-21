@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, cn } from '@openbooks/ui'
+import { PagedTable } from '../../../../../components/paged-table'
 
 export interface DriftRow {
   id: string
@@ -88,40 +89,31 @@ export function OverheadLifecycle(props: {
       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t(`modeHints.${mode}`)}</p>
 
       {props.drift.length > 0 && (
-        <table className="mt-3 w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-              <th className="py-1 pr-2 font-medium">{t('department')}</th>
-              <th className="py-1 pr-2 text-right font-medium">{t('published')}</th>
-              <th className="py-1 pr-2 text-right font-medium">{t('live')}</th>
-              <th className="py-1 pr-2 text-right font-medium">{t('drift')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {props.drift.map((r) => {
-              const pct = driftPct(r)
-              return (
-                <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="py-1.5 pr-2">{r.name}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">
-                    {r.published != null ? `$${r.published.toFixed(2)}` : '—'}
-                  </td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">${r.live.toFixed(2)}</td>
-                  <td
-                    className={cn(
-                      'py-1.5 pr-2 text-right tabular-nums',
-                      pct != null && Math.abs(pct) >= 10
-                        ? 'font-medium text-amber-600 dark:text-amber-400'
-                        : 'text-slate-500 dark:text-slate-400',
-                    )}
-                  >
-                    {pct != null ? `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%` : '—'}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <div className="mt-3">
+          <PagedTable
+            rows={props.drift}
+            rowKey={(r) => r.id}
+            pageSize={10}
+            empty={null}
+            columns={[
+              { key: 'dept', header: t('department'), cell: (r) => r.name, search: (r) => r.name },
+              { key: 'published', header: t('published'), cell: (r) => <span className="tabular-nums">{r.published != null ? `$${r.published.toFixed(2)}` : '—'}</span> },
+              { key: 'live', header: t('live'), cell: (r) => <span className="tabular-nums">${r.live.toFixed(2)}</span> },
+              {
+                key: 'drift',
+                header: t('drift'),
+                cell: (r) => {
+                  const pct = driftPct(r)
+                  return (
+                    <span className={cn('tabular-nums', pct != null && Math.abs(pct) >= 10 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>
+                      {pct != null ? `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%` : '—'}
+                    </span>
+                  )
+                },
+              },
+            ]}
+          />
+        </div>
       )}
     </section>
   )

@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Input, Label, cn } from '@openbooks/ui'
+import { Button, Input, Label, Select, cn } from '@openbooks/ui'
+import { PagedTable } from '../../../../../components/paged-table'
 
 export interface ApplicationRow {
   id: string
@@ -14,9 +15,6 @@ export interface ApplicationRow {
   applied_total: string
   projects: number
 }
-
-const selectCls =
-  'h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
 
 function monthWindow(offset: number): { start: string; end: string } {
   const now = new Date()
@@ -108,12 +106,12 @@ export function OverheadApplication(props: {
         {mode === 'net_zero_pair' && (
           <div className="min-w-64">
             <Label htmlFor="ovh-acct">{t('account')}</Label>
-            <select id="ovh-acct" className={cn(selectCls)} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <Select id="ovh-acct" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               <option value="">—</option>
               {props.accounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.label}</option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
         <Button size="sm" onClick={saveMode} disabled={busy}>{t('save')}</Button>
@@ -136,28 +134,21 @@ export function OverheadApplication(props: {
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('applyHint')}</p>
           </div>
           {props.applications.length > 0 && (
-            <table className="mt-3 w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-                  <th className="py-1 pr-2 font-medium">{t('entry')}</th>
-                  <th className="py-1 pr-2 font-medium">{t('date')}</th>
-                  <th className="py-1 pr-2 font-medium">{t('projects')}</th>
-                  <th className="py-1 pr-2 text-right font-medium">{t('total')}</th>
-                  <th className="py-1 pr-2 font-medium">{t('status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {props.applications.map((a) => (
-                  <tr key={a.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="py-1.5 pr-2 font-mono text-xs">{a.entry_number}</td>
-                    <td className="py-1.5 pr-2 tabular-nums">{a.posting_date}</td>
-                    <td className="py-1.5 pr-2 tabular-nums">{a.projects}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">${Number(a.applied_total).toFixed(2)}</td>
-                    <td className="py-1.5 pr-2">{a.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="mt-3">
+              <PagedTable
+                rows={props.applications}
+                rowKey={(a) => a.id}
+                pageSize={8}
+                empty={null}
+                columns={[
+                  { key: 'entry', header: t('entry'), cell: (a) => <span className="font-mono text-xs">{a.entry_number}</span> },
+                  { key: 'date', header: t('date'), cell: (a) => <span className="tabular-nums">{a.posting_date}</span> },
+                  { key: 'projects', header: t('projects'), cell: (a) => <span className="tabular-nums">{a.projects}</span> },
+                  { key: 'total', header: t('total'), cell: (a) => <span className="tabular-nums">${Number(a.applied_total).toFixed(2)}</span> },
+                  { key: 'status', header: t('status'), cell: (a) => a.status },
+                ]}
+              />
+            </div>
           )}
         </div>
       )}

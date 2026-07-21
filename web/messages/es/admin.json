@@ -1767,7 +1767,8 @@
         "hr": "h",
         "yr": "año",
         "search": "Buscar tarifas…",
-        "showHistory": "Historial ({count})"
+        "showHistory": "Historial ({count})",
+        "confirmDelete": "¿Eliminar esta tarifa? El tiempo ya costeado conserva su captura; las aprobaciones futuras se resolverán sin ella."
       },
       "components": {
         "title": "Componentes de estimación de costo",

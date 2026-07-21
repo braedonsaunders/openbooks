@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react'
-import { Button, Input, Label, cn } from '@openbooks/ui'
+import { Button, Input, Label, Select, cn } from '@openbooks/ui'
 import type { LaborCostComponent } from '@openbooks/engine/src/labor-costing.ts'
 
 interface Opt {
@@ -19,9 +19,6 @@ interface Opt {
  * presets are just component lists; trade rates are ordinary scoped rates), so
  * graduating from the wizard to hand-tuning never means re-learning.
  */
-const selectCls =
-  'h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
-
 /** Jurisdiction presets — the Knowify-style escape hatch. Values are honest
  * defaults the review step shows and the workspace can refine later. */
 const BURDEN_PRESETS: Record<string, { components: LaborCostComponent[] }> = {
@@ -233,30 +230,30 @@ export function LaborCostingWizard(props: {
               <div className="grid gap-2 pt-1 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="wiz-wip">{t('posting.wip')}</Label>
-                  <select id="wiz-wip" className={cn(selectCls)} value={wipAcct} onChange={(e) => setWipAcct(e.target.value)}>
+                  <Select id="wiz-wip" value={wipAcct} onChange={(e) => setWipAcct(e.target.value)}>
                     <option value="">—</option>
                     {props.accounts.map((a) => (
                       <option key={a.id} value={a.id}>{a.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <Label htmlFor="wiz-clr">{t('posting.clearing')}</Label>
-                  <select id="wiz-clr" className={cn(selectCls)} value={clrAcct} onChange={(e) => setClrAcct(e.target.value)}>
+                  <Select id="wiz-clr" value={clrAcct} onChange={(e) => setClrAcct(e.target.value)}>
                     <option value="">—</option>
                     {props.accounts.map((a) => (
                       <option key={a.id} value={a.id}>{a.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="sm:col-span-2">
                   <Label htmlFor="wiz-var">{t('posting.variance')}</Label>
-                  <select id="wiz-var" className={cn(selectCls)} value={varAcct} onChange={(e) => setVarAcct(e.target.value)}>
+                  <Select id="wiz-var" value={varAcct} onChange={(e) => setVarAcct(e.target.value)}>
                     <option value="">{t('posting.varianceLater')}</option>
                     {props.accounts.map((a) => (
                       <option key={a.id} value={a.id}>{a.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
             )}
