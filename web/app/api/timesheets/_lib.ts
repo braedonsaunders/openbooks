@@ -66,7 +66,6 @@ export interface WeekRow {
   itemId: string | null
   timeTypeId: string | null
   departmentId: string | null
-  locationId: string | null
   isBillable: boolean
   memo: string | null
   /** hours[0]=Sunday … hours[6]=Saturday, as decimal strings ('' = none). */
@@ -116,7 +115,7 @@ export async function loadWeek(
 
   const res = (await db.execute(sql`
     select id, worked_on, hours, time_type_id, item_id, project_id,
-           department_id, location_id, memo, is_billable, status
+           department_id, memo, is_billable, status
       from time_entries
      where org_id = ${orgId}
        and employee_party_id = ${employeeId}
@@ -130,7 +129,6 @@ export async function loadWeek(
       item_id: string | null
       project_id: string | null
       department_id: string | null
-      location_id: string | null
       memo: string | null
       is_billable: boolean
       status: string
@@ -146,7 +144,6 @@ export async function loadWeek(
       r.item_id ?? '',
       r.time_type_id ?? '',
       r.department_id ?? '',
-      r.location_id ?? '',
       r.is_billable ? '1' : '0',
       r.memo ?? '',
     ].join('|')
@@ -157,7 +154,6 @@ export async function loadWeek(
         itemId: r.item_id,
         timeTypeId: r.time_type_id,
         departmentId: r.department_id,
-        locationId: r.location_id,
         isBillable: r.is_billable,
         memo: r.memo,
         hours: ['', '', '', '', '', '', ''],
@@ -198,12 +194,11 @@ export interface TimesheetPickers {
   items: PickerOption[]
   timeTypes: TimeTypeOption[]
   departments: PickerOption[]
-  locations: PickerOption[]
 }
 
 /** Load every picker the weekly editor needs, for one org. */
 export async function loadPickers(orgId: string): Promise<TimesheetPickers> {
-  const [employees, projects, items, timeTypes, departments, locations] = (await Promise.all([
+  const [employees, projects, items, timeTypes, departments] = (await Promise.all([
     db.execute(sql`
       select p.id, coalesce(p.display_name, '') as label
         from parties p
@@ -231,9 +226,6 @@ export async function loadPickers(orgId: string): Promise<TimesheetPickers> {
     db.execute(sql`
       select id, code, name from departments
        where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`
-      select id, code, name from locations
-       where org_id = ${orgId} and is_active order by name`),
   ])) as unknown as { rows: Record<string, unknown>[] }[]
 
   const withCode = (r: Record<string, unknown>): PickerOption => ({
@@ -252,7 +244,6 @@ export async function loadPickers(orgId: string): Promise<TimesheetPickers> {
       isBillableDefault: r.is_billable_default === true,
     })),
     departments: departments.rows.map(withCode),
-    locations: locations.rows.map(withCode),
   }
 }
 

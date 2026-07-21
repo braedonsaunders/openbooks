@@ -538,13 +538,6 @@
       "november": "Noviembre",
       "december": "Diciembre"
     },
-    "laborCosting": {
-      "title": "Costeo y facturación de mano de obra",
-      "description": "Valores de empresa heredados por tipos de proyecto y proyectos. Las reglas del artículo especializan el libro seleccionado.",
-      "openGuide": "Abrir configuración guiada.", "defaultBook": "Libro de tarifas predeterminado", "selectBook": "Seleccionar un libro…", "defaultBookHint": "Último valor cuando no aplica un proyecto, asignación o tipo de proyecto.",
-      "defaultPolicy": "Política de tarifas predeterminada", "defaultPolicyHint": "Los proyectos pueden heredar o reemplazar este comportamiento de fecha efectiva.",
-      "policies": { "work_date": "Tarifa en la fecha de trabajo", "locked": "Bloquear versión adjudicada", "scheduled_escalation": "Escalamiento programado", "manual_reprice": "Revalorar solo manualmente" }
-    },
     "controlAccounts": {
       "title": "Cuentas de control",
       "description": "Las cuentas del libro mayor a través de las cuales contabilizan los auxiliares y los impuestos. Solo aparecen las cuentas imputables (no de resumen).",
@@ -1284,57 +1277,6 @@
       "cancel": "Cancelar",
       "saveFailed": "No se pudo guardar la configuración."
     },
-    "laborWizard": {
-      "navTitle": "Guía de costos laborales", "title": "Configuración guiada de costos laborales", "description": "Elija un modelo, conecte la contabilidad, aplique valores de proyecto y defina la conciliación de nómina externa.", "docs": "Documentación",
-      "steps": { "template": "Modelo inicial", "company": "Contabilidad", "projects": "Proyectos", "payroll": "Nómina externa" },
-      "templateTitle": "Partir de un patrón probado", "templateHint": "Las plantillas crean libros, reglas, cargas, clases y primas editables, sin comportamiento oculto.",
-      "templates": { "construction-union": "Construcción y trabajo sindical", "professional-services": "Servicios profesionales", "field-service-equipment": "Servicio de campo y equipos", "blended-crew": "Cuadrilla combinada costo más margen" },
-      "templateDescriptions": { "construction-union": "Oficios, horas extra, impuestos, beneficios, pensión y compensación laboral.", "professional-services": "Costos y tarifas por función con carga de servicios compartidos.", "field-service-equipment": "Operador, técnico, emergencia, herramientas y transferencia interna.", "blended-crew": "Costo estándar simple con gastos generales y facturación por margen objetivo." },
-      "useExisting": "Usar un libro existente", "createStarter": "Crear modelo editable", "templateCreated": "Modelo editable creado", "templateFailed": "No se pudo crear el modelo",
-      "companyTitle": "Definir valores de empresa", "companyHint": "Se aplican después de asignaciones, excepciones del proyecto y valores del tipo de proyecto.", "defaultBook": "Libro predeterminado", "policy": "Política predeterminada", "laborWip": "Cuenta de trabajo en curso / costo", "laborClearing": "Cuenta de compensación laboral",
-      "policies": { "work_date": "Tarifa en la fecha de trabajo", "locked": "Bloquear versión adjudicada", "scheduled_escalation": "Escalamiento programado", "manual_reprice": "Revalorar solo manualmente" },
-      "projectsTitle": "Aplicar a tipos de proyecto", "projectsHint": "Los tipos seleccionados heredan el modelo; un proyecto puede reemplazarlo.", "next": "Siguiente",
-      "payrollTitle": "Elegir cómo llegan los costos reales", "payrollHint": "OpenBooks aún no calcula nómina. Importe el diario y el detalle de costos del empleador desde el sistema externo.",
-      "modes": { "costingOnly": "Solo costos de proyecto", "costingOnlyHint": "Distribuir costos reales sin publicar un diario de variación.", "variance": "Conciliar real con estándar mediante compensación", "varianceHint": "Exigir el diario publicado, comprobar la compensación y publicar solo la variación de costo del proyecto." },
-      "createSource": "Crear origen genérico de nómina externa", "finish": "Guardar configuración", "saveFailed": "No se pudo guardar", "saved": "Costos laborales configurados", "completeTitle": "Los costos laborales están conectados", "completeHint": "Revise las reglas borrador, pruebe una tarifa e importe el diario y detalle de nómina.", "testRate": "Probar una tarifa", "payrollWorkspace": "Costos de nómina externa"
-    },
-    "templates": {
-      "title": "Plantillas iniciales de tarifas laborales",
-      "navTitle": "Plantillas de tarifas laborales",
-      "description": "Comience con un ejemplo sectorial editable, revise cada regla y actívelo cuando coincida con su política.",
-      "professionalServices": { "title": "Servicios profesionales", "description": "Costos estándar y tarifas de facturación por rol para consultores, consultores sénior y principales." },
-      "constructionUnion": { "title": "Construcción y mano de obra sindical", "description": "Salarios de aprendices, oficiales y capataces con horas extra, impuestos de nómina, beneficios, pensión y compensación laboral." },
-      "fieldServiceEquipment": { "title": "Servicio de campo y operadores de equipos", "description": "Tarifas de operadores y técnicos con primas de llamada, gastos de campo, EPP, herramientas menores y costo de transferencia interna." },
-      "blendedCrew": { "title": "Cuadrilla combinada con costo adicional", "description": "Costo simple de cuadrilla combinada con gastos generales, facturación por margen objetivo y tarifas de planificación separadas." },
-      "draftBadge": "Borrador editable",
-      "classCount": "{count, plural, one {# clase laboral} other {# clases laborales}}",
-      "rateCount": "{count, plural, one {# regla de tarifa} other {# reglas de tarifa}}",
-      "componentCount": "{count, plural, one {# componente} other {# componentes}}",
-      "useTemplate": "Usar plantilla",
-      "selected": "Seleccionada",
-      "createTitle": "Crear desde {template}",
-      "createDescription": "Estos valores identifican el nuevo libro de tarifas del inquilino. Todas las reglas generadas siguen editables hasta su activación.",
-      "reviewHint": "La plantilla crea una versión borrador. Revise clases, tarifas, cargas, multiplicadores de tiempo y configuración contable antes de cambiarla a Activa.",
-      "createDraft": "Crear borrador editable",
-      "installing": "Creando…",
-      "installed": "Borrador de tarifas creado",
-      "installError": "No se pudo crear el borrador de tarifas"
-    },
-    "payrollOperations": {
-      "title": "Costos de nómina externa", "navTitle": "Costos de nómina externa",
-      "description": "Importe costos patronales calculados por un sistema de nómina externo, concílielos con el tiempo de proyecto aprobado y actualice el costo del trabajo de forma segura.",
-      "newBatch": "Nuevo lote de nómina externa", "manageLines": "Gestionar líneas de costo", "manageSources": "Fuentes de nómina", "manageTemplates": "Mapeos guardados", "importJournal": "Importar diario de nómina", "importCosts": "Importar costos patronales", "search": "Buscar lote, fuente, ID externo o subsidiaria…", "statusFilter": "Estado", "documentation": "Documentación",
-      "examples": { "generic": "Ejemplo genérico", "constructionUnion": "Ejemplo construcción / sindicato", "professionalServices": "Ejemplo servicios profesionales" }, "useTemplate": "Importar con {name}",
-      "columns": { "batch": "Lote", "source": "Fuente", "subsidiary": "Subsidiaria", "period": "Período de nómina", "lines": "Líneas", "journal": "Diario de origen", "actual": "Costo real (base)", "variance": "Variación", "status": "Estado", "action": "Acción" },
-      "statuses": { "draft": "Borrador", "validated": "Validado", "reconciled": "Conciliado", "posted": "Completo" },
-      "validate": "Validar", "reconcile": "Conciliar", "postVariance": "Contabilizar variación", "completeCosting": "Completar costeo", "complete": "Completo", "validated": "Lote de nómina externa validado", "reconciled": "Costos de nómina externa conciliados", "posted": "Contabilidad de nómina externa completada", "exceptionsFound": "{count, plural, one {# excepción requiere atención} other {# excepciones requieren atención}}", "exceptionCount": "{count, plural, one {# excepción} other {# excepciones}}", "notLinked": "Sin vincular", "failed": "Falló la operación de nómina externa"
-    },
-    "rateTest": {
-      "title": "Probar una tarifa laboral", "navTitle": "Probar una tarifa", "description": "Previsualice la pila exacta de reglas vigentes sin guardar ni contabilizar nada.",
-      "employee": "Empleado", "project": "Proyecto", "item": "Artículo de servicio", "timeType": "Tipo de tiempo", "department": "Departamento", "location": "Ubicación", "workDate": "Fecha de trabajo", "hours": "Horas", "billable": "Facturable", "selectEmployee": "Seleccionar empleado", "selectProject": "Seleccionar proyecto", "optional": "Opcional", "test": "Probar tarifa", "testing": "Probando…", "failed": "No se pudo resolver la tarifa",
-      "directCostRate": "Costo directo / hora", "burdenRate": "Carga / hora", "costRate": "Costo estándar / hora", "billRate": "Tarifa facturada / hora", "transferRate": "Tarifa de transferencia / hora",
-      "explanation": "Explicación de tarifa", "lane": "Carril", "component": "Regla o componente", "method": "Método", "ratePerHour": "Tarifa / hora", "amount": "Importe", "why": "Explicación"
-    },
     "entities": {
       "company": {
         "title": "Company & Accounting",
@@ -1389,18 +1331,9 @@
         "description": "Document numbering prefixes and counters."
       },
       "time-types": {
-        "title": "Tipos de tiempo",
-        "description": "Multiplicadores de costo y facturación para tiempo regular, horas extra, primas y permisos."
+        "title": "Time Types",
+        "description": "Cost multipliers and billable defaults for timesheets."
       },
-      "labor-classes": { "title": "Clases laborales", "description": "Roles y oficios definidos por el inquilino para tarifas de costo, facturación, planificación y transferencia." },
-      "employee-labor-class-assignments": { "title": "Clases laborales de empleados", "description": "Historial con vigencia de los roles y oficios de cada empleado usado en la fecha del trabajo." },
-      "employee-compensation-rates": { "title": "Costo estándar del empleado", "description": "Compensación horaria o anual confidencial y con vigencia usada como costo directo alternativo." },
-      "labor-rate-lines": { "title": "Reglas de tarifas laborales", "description": "Reglas dimensionales de costo directo, facturación, transferencia y planificación dentro de versiones borrador." },
-      "labor-rate-components": { "title": "Componentes de carga laboral", "description": "Impuestos, beneficios, seguros, gastos generales y otras adiciones ordenadas a las tarifas." },
-      "external-payroll-sources": { "title": "Fuentes de nómina externa", "description": "Configure cómo cada fuente demuestra su diario y actualiza el costo de los proyectos." },
-      "external-payroll-import-templates": { "title": "Mapeos de importación de nómina externa", "description": "Guarde correspondencias de columnas reutilizables para archivos recurrentes de costos patronales." },
-      "payroll-cost-batches": { "title": "Lotes de costos de nómina externa", "description": "Períodos por fuente y subsidiaria que concilian costos patronales importados con mano de obra estándar aprobada." },
-      "payroll-cost-lines": { "title": "Líneas de costos de nómina externa", "description": "Pago bruto, impuestos patronales, beneficios, compensación y otros costos patronales importados." },
       "worker-comp-groups": {
         "title": "Worker Comp Groups",
         "description": "Workers' compensation rate groups for labor costing."
@@ -1455,11 +1388,7 @@
       },
       "item-rate-book-assignments": {
         "title": "Asignaciones de libros de tarifas",
-        "description": "Elija el libro con vigencia por cliente, proyecto, tarea, subsidiaria, departamento o ubicación."
-      },
-      "item-rate-versions": {
-        "title": "Versiones de libros de tarifas",
-        "description": "Prepare, active y retire versiones inmutables con vigencia."
+        "description": "Elija el libro con vigencia aplicable a un cliente o proyecto."
       },
       "recognition-rules": {
         "title": "Reglas de reconocimiento",
@@ -1579,7 +1508,6 @@
       "padding": "Padding",
       "gapless": "Gapless",
       "costMultiplier": "Cost multiplier",
-      "billMultiplier": "Multiplicador de facturación",
       "isBillableDefault": "Billable by default",
       "category": "Category",
       "method": "Method",
@@ -1657,20 +1585,6 @@
       "quantityPer": "Cantidad por",
       "rateKind": "Tipo de tasa",
       "rateBookId": "Libro de tarifas",
-      "versionId": "Versión de tarifa",
-      "status": "Estado",
-      "employeePartyId": "Empleado",
-      "laborClassId": "Clase laboral",
-      "projectTaskId": "Tarea del proyecto",
-      "workerCompGroupId": "Grupo de compensación laboral",
-      "lane": "Carril de tarifa",
-      "amount": "Importe",
-      "percent": "Porcentaje",
-      "annualHours": "Horas anuales",
-      "priority": "Prioridad",
-      "value": "Valor",
-      "sourceId": "Fuente de nómina externa", "accountingMode": "Modo contable", "payrollClearingAccountId": "Cuenta puente de nómina", "requirePostedJournal": "Exigir un diario de origen contabilizado", "externalLineIdColumn": "Columna ID de línea externa", "employeeCodeColumn": "Columna código de empleado", "componentColumn": "Columna componente", "amountColumn": "Columna importe", "payCodeColumn": "Columna código de pago", "hoursColumn": "Columna horas", "memoColumn": "Columna nota",
-      "batchId": "Lote de nómina externa", "externalBatchId": "ID de lote externo", "sourceJournalDocumentId": "Diario de origen contabilizado", "externalLineId": "ID de línea externa", "payCode": "Código de pago", "hours": "Horas", "periodStart": "Inicio del período", "periodEnd": "Fin del período", "postingDate": "Fecha de contabilización", "component": "Componente de nómina", "memo": "Nota", "actualTotal": "Total real", "varianceTotal": "Variación total",
       "customerId": "Cliente",
       "projectId": "Proyecto",
       "isDefault": "Predeterminado"
@@ -1772,16 +1686,8 @@
       "overheadRateKind": {
         "per_hour": "$/hora",
         "percent": "% de mano de obra"
-      },
-      "rateVersionStatus": { "draft": "Borrador", "active": "Activa", "retired": "Retirada" },
-      "compensationBasis": { "hour": "Por hora", "year": "Por año" },
-      "laborRateLane": { "directCost": "Costo directo", "bill": "Facturación al cliente", "transfer": "Transferencia interna", "planningCost": "Costo de planificación", "planningBill": "Facturación planificada" },
-      "laborRateMethod": { "fixed": "Tarifa horaria fija", "atCost": "Al costo cargado", "markupOnCost": "Recargo sobre costo cargado", "marginOnCost": "Margen objetivo sobre costo cargado" },
-      "laborComponentLane": { "cost": "Carga de costo", "bill": "Adición de facturación", "transfer": "Adición de transferencia" },
-      "laborComponentMethod": { "fixedPerHour": "Fijo por hora", "percentOfBaseDirect": "% del directo base", "percentOfDirect": "% del directo ajustado", "percentOfSubtotal": "% del subtotal acumulado" }
-      ,"payrollComponent": { "grossPay": "Pago bruto", "employerTax": "Impuesto patronal", "benefit": "Beneficio", "workerComp": "Compensación laboral", "other": "Otro" }
-      ,"externalPayrollAccountingMode": { "costingOnly": "Solo costos de proyecto (sin contabilización en el mayor)", "varianceToClearing": "Actualizar costos de proyecto mediante la cuenta puente" }
       }
+    }
   },
   "flows": {
     "title": "Flujos",

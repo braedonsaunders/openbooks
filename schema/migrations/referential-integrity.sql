@@ -302,11 +302,7 @@ alter table item_rate_book_assignments
   add foreign key (org_id) references orgs(id),
   add foreign key (rate_book_id) references item_rate_books(id),
   add foreign key (customer_id) references parties(id),
-  add foreign key (project_id) references projects(id),
-  add foreign key (project_task_id) references project_tasks(id),
-  add foreign key (subsidiary_id) references subsidiaries(id),
-  add foreign key (department_id) references departments(id),
-  add foreign key (location_id) references locations(id);
+  add foreign key (project_id) references projects(id);
 alter table charge_rate_components
   add foreign key (org_id) references orgs(id),
   add foreign key (document_line_id) references document_lines(id),
@@ -406,110 +402,13 @@ alter table time_entries
   add foreign key (project_id) references projects(id),
   add foreign key (project_task_id) references project_tasks(id),
   add foreign key (department_id) references departments(id),
-  add foreign key (location_id) references locations(id),
-  add foreign key (cost_rate_version_id) references item_rate_versions(id),
-  add foreign key (bill_rate_version_id) references item_rate_versions(id),
   add foreign key (cost_journal_entry_id) references journal_entries(id),
   add foreign key (invoiced_by_line_id) references document_lines(id);
 alter table project_tasks
   add foreign key (project_id) references projects(id),
   add foreign key (parent_id) references project_tasks(id);
-alter table project_types
-  add foreign key (labor_rate_book_id) references item_rate_books(id);
 alter table recurring_schedules
   add foreign key (template_document_id) references documents(id);
-
--- labor rates, employee standard cost, and payroll-actual reconciliation
-alter table labor_classes
-  add foreign key (org_id) references orgs(id),
-  add foreign key (parent_id) references labor_classes(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table employee_labor_class_assignments
-  add foreign key (org_id) references orgs(id),
-  add foreign key (employee_party_id) references parties(id),
-  add foreign key (labor_class_id) references labor_classes(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table employee_compensation_rates
-  add foreign key (org_id) references orgs(id),
-  add foreign key (employee_party_id) references parties(id),
-  add foreign key (currency) references currencies(code),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table labor_rate_lines
-  add foreign key (org_id) references orgs(id),
-  add foreign key (version_id) references item_rate_versions(id),
-  add foreign key (currency) references currencies(code),
-  add foreign key (employee_party_id) references parties(id),
-  add foreign key (labor_class_id) references labor_classes(id),
-  add foreign key (item_id) references items(id),
-  add foreign key (time_type_id) references time_types(id),
-  add foreign key (subsidiary_id) references subsidiaries(id),
-  add foreign key (department_id) references departments(id),
-  add foreign key (location_id) references locations(id),
-  add foreign key (worker_comp_group_id) references worker_comp_groups(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table labor_rate_components
-  add foreign key (org_id) references orgs(id),
-  add foreign key (version_id) references item_rate_versions(id),
-  add foreign key (currency) references currencies(code),
-  add foreign key (employee_party_id) references parties(id),
-  add foreign key (labor_class_id) references labor_classes(id),
-  add foreign key (item_id) references items(id),
-  add foreign key (time_type_id) references time_types(id),
-  add foreign key (subsidiary_id) references subsidiaries(id),
-  add foreign key (department_id) references departments(id),
-  add foreign key (location_id) references locations(id),
-  add foreign key (worker_comp_group_id) references worker_comp_groups(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table time_entry_rate_components
-  add foreign key (org_id) references orgs(id),
-  add foreign key (time_entry_id) references time_entries(id),
-  add foreign key (source_line_id) references labor_rate_lines(id),
-  add foreign key (source_component_id) references labor_rate_components(id),
-  add foreign key (source_currency) references currencies(code),
-  add foreign key (created_by) references users(id) on delete set null;
-alter table external_payroll_sources
-  add foreign key (org_id) references orgs(id),
-  add foreign key (payroll_clearing_account_id) references accounts(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table external_payroll_import_templates
-  add foreign key (org_id) references orgs(id),
-  add foreign key (source_id) references external_payroll_sources(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table payroll_cost_batches
-  add foreign key (org_id) references orgs(id),
-  add foreign key (source_id) references external_payroll_sources(id),
-  add foreign key (subsidiary_id) references subsidiaries(id),
-  add foreign key (currency) references currencies(code),
-  add foreign key (source_journal_document_id) references documents(id),
-  add foreign key (variance_journal_entry_id) references journal_entries(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table payroll_cost_lines
-  add foreign key (org_id) references orgs(id),
-  add foreign key (batch_id) references payroll_cost_batches(id),
-  add foreign key (employee_party_id) references parties(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table payroll_time_allocations
-  add foreign key (org_id) references orgs(id),
-  add foreign key (payroll_line_id) references payroll_cost_lines(id),
-  add foreign key (time_entry_id) references time_entries(id),
-  add foreign key (project_id) references projects(id),
-  add foreign key (project_task_id) references project_tasks(id),
-  add foreign key (department_id) references departments(id),
-  add foreign key (location_id) references locations(id),
-  add foreign key (created_by) references users(id) on delete set null,
-  add foreign key (updated_by) references users(id) on delete set null;
-alter table projects
-  add foreign key (labor_rate_book_id) references item_rate_books(id),
-  add foreign key (labor_rate_locked_version_id) references item_rate_versions(id);
 
 -- inventory movements share the ledger's immutability discipline
 create or replace function inv_move_guard() returns trigger

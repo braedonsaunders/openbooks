@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ChevronDown, Plus, Receipt, RotateCcw, Trash2, TrendingUp } from 'lucide-react'
+import { ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Popover, SearchSelect, Select, Textarea, UrlDrawer, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
@@ -92,7 +92,6 @@ export function ProjectDrawer({
   layout,
   cockpit,
   projectTypes = [],
-  rateBooks = [],
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
@@ -105,8 +104,6 @@ export function ProjectDrawer({
   cockpit: ProjectCockpitData
   /** Configurable project types (Setup → Project Types) for the selector. */
   projectTypes?: { id: string; name: string }[]
-  /** Active tenant rate books used by labor-cost and billing resolution. */
-  rateBooks?: { id: string; code: string; name: string }[]
 }) {
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
@@ -140,8 +137,6 @@ export function ProjectDrawer({
   const [managerId, setManagerId] = useState<string>(pr.manager_id ?? '')
   const [status, setStatus] = useState<string>(pr.status ?? 'active')
   const [billingMethod, setBillingMethod] = useState<string>(pr.billing_method ?? '')
-  const [laborRateBookId, setLaborRateBookId] = useState<string>(pr.labor_rate_book_id ?? '')
-  const [laborRatePolicy, setLaborRatePolicy] = useState<string>(pr.labor_rate_policy ?? '')
   const [projectTypeId, setProjectTypeId] = useState<string>(pr.project_type_id ?? '')
   const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((pr.invoicing_preference as InvoicingPref) ?? {})
   const [customerPoNumber, setCustomerPoNumber] = useState<string>(pr.customer_po_number ?? '')
@@ -204,8 +199,6 @@ export function ProjectDrawer({
       managerId: managerId || null,
       status,
       billingMethod: billingMethod || null,
-      laborRateBookId: laborRateBookId || null,
-      laborRatePolicy: laborRatePolicy || null,
       projectTypeId: projectTypeId || null,
       invoicingPreference: invoicingPref,
       customerPoNumber: customerPoNumber || null,
@@ -227,7 +220,7 @@ export function ProjectDrawer({
           estimatedCost: task.estimatedCost || null,
         })),
     }),
-    [name, code, customerId, foremanId, managerId, status, billingMethod, laborRateBookId, laborRatePolicy, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
+    [name, code, customerId, foremanId, managerId, status, billingMethod, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
   )
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
@@ -248,8 +241,6 @@ export function ProjectDrawer({
     setManagerId(pr.manager_id ?? '')
     setStatus(pr.status ?? 'active')
     setBillingMethod(pr.billing_method ?? '')
-    setLaborRateBookId(pr.labor_rate_book_id ?? '')
-    setLaborRatePolicy(pr.labor_rate_policy ?? 'work_date')
     setProjectTypeId(pr.project_type_id ?? '')
     setInvoicingPref((pr.invoicing_preference as InvoicingPref) ?? {})
     setCustomerPoNumber(pr.customer_po_number ?? '')
@@ -316,16 +307,6 @@ export function ProjectDrawer({
     router.refresh()
   }
 
-  async function resetLaborRateLock() {
-    setBusy(true)
-    const response = await fetch(`/api/projects/${pr.id}/labor-rates`, { method: 'POST' })
-    const data = await response.json()
-    if (!response.ok) toast.error(data.error ?? t('laborRates.resetFailed'))
-    else toast.success(t('laborRates.resetSuccess', { count: data.unapprovedEntries }))
-    setBusy(false)
-    router.refresh()
-  }
-
   const ro = !editable
   const effectiveLayout = layout ?? defaultFormLayout('project')
   const cfByKey = useMemo(
@@ -384,28 +365,6 @@ export function ProjectDrawer({
             <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)} disabled={ro}>
               <option value="">—</option>
               {billingOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-            </Select>
-          </>
-        )
-      case 'labor_rate_book_id':
-        return (
-          <>
-            <Label>{lbl || t('labels.laborRateBook')}</Label>
-            <Select value={laborRateBookId} onChange={(e) => setLaborRateBookId(e.target.value)} disabled={ro}>
-              <option value="">{t('laborRates.inheritedDefault')}</option>
-              {rateBooks.map((book) => <option key={book.id} value={book.id}>{book.code} · {book.name}</option>)}
-            </Select>
-          </>
-        )
-      case 'labor_rate_policy':
-        return (
-          <>
-            <Label>{lbl || t('labels.laborRatePolicy')}</Label>
-            <Select value={laborRatePolicy} onChange={(e) => setLaborRatePolicy(e.target.value)} disabled={ro}>
-              <option value="">{t('laborRates.inheritedDefault')}</option>
-              {['work_date', 'locked', 'scheduled_escalation', 'manual_reprice'].map((policy) => (
-                <option key={policy} value={policy}>{t(`laborRates.policies.${policy}`)}</option>
-              ))}
             </Select>
           </>
         )
@@ -583,7 +542,6 @@ export function ProjectDrawer({
               {billingMethod === 'fixed_price'
                 ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('cockpit.recognizeRevenue'), () => setTab('financials'))
                 : null}
-              {menuItem(<RotateCcw className="h-3.5 w-3.5" aria-hidden />, t('laborRates.resetLock'), resetLaborRateLock)}
               <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
               {isActive
                 ? menuItem(<Trash2 className="h-3.5 w-3.5" aria-hidden />, t('drawer.deactivate'), () => setActiveState(false))

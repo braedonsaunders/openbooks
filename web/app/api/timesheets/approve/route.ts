@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { approveProjectLaborTime } from '@openbooks/engine/src/project-recognition.ts'
-import { LaborRateError } from '@openbooks/engine/src/labor-rates.ts'
+import { postProjectLaborCost } from '@openbooks/engine/src/project-recognition.ts'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -33,20 +34,30 @@ export async function POST(req: Request) {
   const week = weekStart(body.week)
   const days = weekWindow(week)
 
-  try {
-    await approveProjectLaborTime({
-      orgId,
-      actorId: user.id,
-      employeePartyId: body.employee,
-      from: days[0],
-      to: days[6],
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Labor rate resolution failed'
-    return NextResponse.json(
-      { error: message, code: error instanceof LaborRateError ? error.code : 'posting' },
-      { status: 422 },
-    )
+  const approved = (await db.execute(sql`
+    update time_entries
+       set status = 'approved',
+           approved_by = ${user.id},
+           approved_at = now(),
+           updated_at = now(),
+           updated_by = ${user.id}
+     where org_id = ${orgId}
+       and employee_party_id = ${body.employee}
+       and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+       and status = 'submitted'
+     returning id
+  `)) as unknown as { rows: { id: string }[] }
+
+  // Post approved labor cost to project WIP (DR labor WIP / CR labor clearing).
+  // Inert unless the labor accounts are mapped in Settings; non-blocking so a
+  // GL hiccup never strands the approval (the entries stay re-postable).
+  const ids = approved.rows.map((r) => r.id)
+  if (ids.length > 0) {
+    try {
+      await postProjectLaborCost(orgId, user.id, ids)
+    } catch (e) {
+      console.error('[timesheets/approve] labor cost posting failed:', (e as Error).message)
+    }
   }
 
   const payload = await loadWeek(orgId, body.employee, week)

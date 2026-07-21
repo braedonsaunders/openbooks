@@ -103,14 +103,8 @@ export const itemRateBookAssignments = pgTable(
     id: id(),
     orgId: orgRef(),
     rateBookId: uuid("rate_book_id").notNull(),
-    name: text("name"),
     customerId: uuid("customer_id"),
     projectId: uuid("project_id"),
-    projectTaskId: uuid("project_task_id"),
-    subsidiaryId: uuid("subsidiary_id"),
-    departmentId: uuid("department_id"),
-    locationId: uuid("location_id"),
-    priority: integer("priority").notNull().default(0),
     effectiveFrom: date("effective_from"),
     effectiveTo: date("effective_to"),
     isActive: boolean("is_active").notNull().default(true),
@@ -119,6 +113,7 @@ export const itemRateBookAssignments = pgTable(
   (t) => [
     index("item_rate_assignments_customer").on(t.orgId, t.customerId),
     index("item_rate_assignments_project").on(t.orgId, t.projectId),
+    check("item_rate_assignment_one_scope", sql`not (${t.customerId} is not null and ${t.projectId} is not null)`),
     check("item_rate_assignment_valid_range", sql`${t.effectiveTo} is null or ${t.effectiveFrom} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
   ],
 );

@@ -7,7 +7,6 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { ItemRatesEditor } from './ItemRatesEditor'
-import { ItemLaborRatesEditor } from './ItemLaborRatesEditor'
 
 interface AccountOpt {
   id: string
@@ -390,9 +389,6 @@ export function ItemDrawer({
         </section>
 
         <ItemRatesEditor itemId={String(it.id)} canManage={canManage} />
-        {['service', 'labor', 'equipment_charge'].includes(kind) ? (
-          <ItemLaborRatesEditor itemId={String(it.id)} canManage={canManage} />
-        ) : null}
 
         {/* -- accounting ---------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

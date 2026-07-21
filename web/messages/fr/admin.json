@@ -582,13 +582,6 @@
       "november": "Novembre",
       "december": "Décembre"
     },
-    "laborCosting": {
-      "title": "Coût et facturation de la main-d’œuvre",
-      "description": "Valeurs d’entreprise héritées par les types de projet et les projets. Les règles d’article précisent ensuite la grille choisie.",
-      "openGuide": "Ouvrir la configuration guidée.", "defaultBook": "Grille de taux par défaut", "selectBook": "Choisir une grille…", "defaultBookHint": "Dernier recours lorsqu’aucun projet, affectation ou type de projet ne s’applique.",
-      "defaultPolicy": "Politique de taux par défaut", "defaultPolicyHint": "Les projets peuvent hériter ou remplacer ce comportement de date d’effet.",
-      "policies": { "work_date": "Taux à la date du travail", "locked": "Verrouiller la version attribuée", "scheduled_escalation": "Augmentation planifiée", "manual_reprice": "Réévaluation manuelle seulement" }
-    },
     "controlAccounts": {
       "title": "Comptes de contrôle",
       "description": "Les comptes du grand livre par lesquels les grands livres auxiliaires et les taxes sont comptabilisés. Seuls les comptes imputables (non sommaires) apparaissent.",
@@ -1328,57 +1321,6 @@
       "cancel": "Annuler",
       "saveFailed": "Impossible d’enregistrer la configuration."
     },
-    "laborWizard": {
-      "navTitle": "Guide du coût de main-d’œuvre", "title": "Configuration guidée du coût de main-d’œuvre", "description": "Choisissez un modèle, reliez la comptabilité, appliquez les valeurs de projet et définissez le rapprochement de la paie externe.", "docs": "Documentation",
-      "steps": { "template": "Modèle de départ", "company": "Comptabilité", "projects": "Projets", "payroll": "Paie externe" },
-      "templateTitle": "Partir d’un modèle éprouvé", "templateHint": "Les modèles créent des grilles, règles, charges, classes et primes modifiables, sans comportement caché.",
-      "templates": { "construction-union": "Construction et main-d’œuvre syndiquée", "professional-services": "Services professionnels", "field-service-equipment": "Service terrain et équipement", "blended-crew": "Équipe mixte à coût majoré" },
-      "templateDescriptions": { "construction-union": "Métiers, heures supplémentaires, charges sociales, avantages, retraite et indemnisation.", "professional-services": "Taux de coût et de facturation par rôle avec charge partagée.", "field-service-equipment": "Taux opérateur, technicien, appel d’urgence, outillage et transfert interne.", "blended-crew": "Coût standard simple avec frais généraux et facturation à marge cible." },
-      "useExisting": "Utiliser une grille existante", "createStarter": "Créer un modèle modifiable", "templateCreated": "Modèle modifiable créé", "templateFailed": "Impossible de créer le modèle",
-      "companyTitle": "Définir les valeurs d’entreprise", "companyHint": "Elles s’appliquent après les affectations, remplacements de projet et valeurs du type de projet.", "defaultBook": "Grille par défaut", "policy": "Politique par défaut", "laborWip": "Compte TEC / coût de main-d’œuvre", "laborClearing": "Compte transitoire de main-d’œuvre",
-      "policies": { "work_date": "Taux à la date du travail", "locked": "Verrouiller la version attribuée", "scheduled_escalation": "Augmentation planifiée", "manual_reprice": "Réévaluation manuelle seulement" },
-      "projectsTitle": "Appliquer aux types de projet", "projectsHint": "Les types sélectionnés héritent automatiquement du modèle; un projet peut le remplacer.", "next": "Suivant",
-      "payrollTitle": "Choisir l’arrivée des coûts réels", "payrollHint": "OpenBooks ne calcule pas encore la paie. Importez le journal et le détail des coûts employeur du système externe.",
-      "modes": { "costingOnly": "Coût de projet seulement", "costingOnlyHint": "Répartir les coûts réels sans journal d’écart.", "variance": "Rapprocher le réel au standard via le compte transitoire", "varianceHint": "Exiger le journal publié, prouver le montant transitoire et publier seulement l’écart de coût du projet." },
-      "createSource": "Créer une source générique de paie externe", "finish": "Enregistrer", "saveFailed": "Impossible d’enregistrer", "saved": "Coût de main-d’œuvre configuré", "completeTitle": "Le coût de main-d’œuvre est relié", "completeHint": "Vérifiez les règles provisoires, testez un taux, puis importez le journal et les détails de paie.", "testRate": "Tester un taux", "payrollWorkspace": "Coûts de paie externe"
-    },
-    "templates": {
-      "title": "Modèles de départ pour les taux de main-d’œuvre",
-      "navTitle": "Modèles de taux de main-d’œuvre",
-      "description": "Commencez avec un exemple sectoriel modifiable, vérifiez chaque règle, puis activez-le lorsqu’il correspond à votre politique.",
-      "professionalServices": { "title": "Services professionnels", "description": "Coûts standards et taux de facturation par rôle pour les consultants, consultants principaux et directeurs." },
-      "constructionUnion": { "title": "Construction et main-d’œuvre syndiquée", "description": "Salaires des apprentis, ouvriers qualifiés et contremaîtres avec heures supplémentaires, charges sociales, avantages, retraite et indemnisation." },
-      "fieldServiceEquipment": { "title": "Service sur le terrain et opérateurs d’équipement", "description": "Taux des opérateurs et techniciens avec primes d’appel, frais de terrain, EPI, petits outils et coût de transfert interne." },
-      "blendedCrew": { "title": "Équipe mixte à coût majoré", "description": "Un coût d’équipe mixte simple avec frais généraux, facturation à marge cible et taux de planification distincts." },
-      "draftBadge": "Brouillon modifiable",
-      "classCount": "{count, plural, one {# classe de main-d’œuvre} other {# classes de main-d’œuvre}}",
-      "rateCount": "{count, plural, one {# règle de taux} other {# règles de taux}}",
-      "componentCount": "{count, plural, one {# composante} other {# composantes}}",
-      "useTemplate": "Utiliser le modèle",
-      "selected": "Sélectionné",
-      "createTitle": "Créer à partir de {template}",
-      "createDescription": "Ces valeurs identifient le nouveau tarif du locataire. Toutes les règles générées restent modifiables jusqu’à l’activation.",
-      "reviewHint": "Le modèle crée une version brouillon. Vérifiez les classes, taux, charges, multiplicateurs de temps et paramètres comptables avant de passer la version à Actif.",
-      "createDraft": "Créer un brouillon modifiable",
-      "installing": "Création…",
-      "installed": "Brouillon de taux créé",
-      "installError": "Impossible de créer le brouillon de taux"
-    },
-    "payrollOperations": {
-      "title": "Coûts de paie externe", "navTitle": "Coûts de paie externe",
-      "description": "Importez les coûts employeur calculés par un système de paie externe, rapprochez-les du temps de projet approuvé et actualisez le coût des travaux en toute sécurité.",
-      "newBatch": "Nouveau lot de paie externe", "manageLines": "Gérer les lignes de coût", "manageSources": "Sources de paie", "manageTemplates": "Mappages enregistrés", "importJournal": "Importer le journal de paie", "importCosts": "Importer les coûts employeur", "search": "Rechercher un lot, une source, un ID externe ou une filiale…", "statusFilter": "Statut", "documentation": "Documentation",
-      "examples": { "generic": "Exemple générique", "constructionUnion": "Exemple construction / syndicat", "professionalServices": "Exemple services professionnels" }, "useTemplate": "Importer avec {name}",
-      "columns": { "batch": "Lot", "source": "Source", "subsidiary": "Filiale", "period": "Période de paie", "lines": "Lignes", "journal": "Journal source", "actual": "Coût réel (base)", "variance": "Écart", "status": "Statut", "action": "Action" },
-      "statuses": { "draft": "Brouillon", "validated": "Validé", "reconciled": "Rapproché", "posted": "Terminé" },
-      "validate": "Valider", "reconcile": "Rapprocher", "postVariance": "Comptabiliser l’écart", "completeCosting": "Terminer le calcul des coûts", "complete": "Terminé", "validated": "Lot de paie externe validé", "reconciled": "Coûts de paie externe rapprochés", "posted": "Comptabilisation de la paie externe terminée", "exceptionsFound": "{count, plural, one {# exception exige une intervention} other {# exceptions exigent une intervention}}", "exceptionCount": "{count, plural, one {# exception} other {# exceptions}}", "notLinked": "Non lié", "failed": "L’opération de paie externe a échoué"
-    },
-    "rateTest": {
-      "title": "Tester un taux de main-d’œuvre", "navTitle": "Tester un taux", "description": "Prévisualisez la pile exacte de règles en vigueur sans enregistrer ni comptabiliser.",
-      "employee": "Employé", "project": "Projet", "item": "Article de service", "timeType": "Type de temps", "department": "Service", "location": "Lieu", "workDate": "Date du travail", "hours": "Heures", "billable": "Facturable", "selectEmployee": "Sélectionner un employé", "selectProject": "Sélectionner un projet", "optional": "Facultatif", "test": "Tester le taux", "testing": "Test…", "failed": "Impossible de résoudre le taux",
-      "directCostRate": "Coût direct / heure", "burdenRate": "Charges / heure", "costRate": "Coût standard / heure", "billRate": "Taux facturé / heure", "transferRate": "Taux de transfert / heure",
-      "explanation": "Explication du taux", "lane": "Volet", "component": "Règle ou composante", "method": "Méthode", "ratePerHour": "Taux / heure", "amount": "Montant", "why": "Explication"
-    },
     "entities": {
       "company": {
         "title": "Company & Accounting",
@@ -1433,18 +1375,9 @@
         "description": "Document numbering prefixes and counters."
       },
       "time-types": {
-        "title": "Types de temps",
-        "description": "Multiplicateurs de coût et de facturation pour le temps normal, les heures supplémentaires, les primes et les congés."
+        "title": "Time Types",
+        "description": "Cost multipliers and billable defaults for timesheets."
       },
-      "labor-classes": { "title": "Classes de main-d’œuvre", "description": "Rôles et métiers définis par le locataire pour les taux de coût, de facturation, de planification et de transfert." },
-      "employee-labor-class-assignments": { "title": "Classes des employés", "description": "Historique daté des rôles et métiers des employés utilisé à la date du travail." },
-      "employee-compensation-rates": { "title": "Coût standard des employés", "description": "Rémunération horaire ou annuelle confidentielle et datée utilisée comme coût direct de repli." },
-      "labor-rate-lines": { "title": "Règles de taux de main-d’œuvre", "description": "Règles dimensionnelles de coût direct, facturation, transfert et planification dans les versions brouillon." },
-      "labor-rate-components": { "title": "Composantes des charges de main-d’œuvre", "description": "Taxes, avantages, assurance, frais généraux et autres ajouts ordonnés aux taux." },
-      "external-payroll-sources": { "title": "Sources de paie externe", "description": "Configurez comment chaque source justifie son journal et actualise le coût des projets." },
-      "external-payroll-import-templates": { "title": "Mappages d’importation de paie externe", "description": "Enregistrez les correspondances de colonnes réutilisables pour les fichiers de coûts employeur." },
-      "payroll-cost-batches": { "title": "Lots de coûts de paie externe", "description": "Périodes par source et filiale rapprochant les coûts employeur importés avec la main-d’œuvre standard approuvée." },
-      "payroll-cost-lines": { "title": "Lignes de coûts de paie externe", "description": "Salaire brut, taxes patronales, avantages, indemnisation et autres coûts employeur importés." },
       "worker-comp-groups": {
         "title": "Worker Comp Groups",
         "description": "Workers' compensation rate groups for labor costing."
@@ -1499,11 +1432,7 @@
       },
       "item-rate-book-assignments": {
         "title": "Affectations des grilles tarifaires",
-        "description": "Choisissez la grille datée selon le client, le projet, la tâche, la filiale, le service ou le lieu."
-      },
-      "item-rate-versions": {
-        "title": "Versions de grilles tarifaires",
-        "description": "Préparez, activez et retirez des versions datées immuables."
+        "description": "Choisissez la grille datée applicable à un client ou à un projet."
       },
       "recognition-rules": {
         "title": "Règles de comptabilisation",
@@ -1623,7 +1552,6 @@
       "padding": "Padding",
       "gapless": "Gapless",
       "costMultiplier": "Cost multiplier",
-      "billMultiplier": "Multiplicateur de facturation",
       "isBillableDefault": "Billable by default",
       "category": "Category",
       "method": "Method",
@@ -1701,20 +1629,6 @@
       "quantityPer": "Quantité par",
       "rateKind": "Type de taux",
       "rateBookId": "Grille tarifaire",
-      "versionId": "Version de taux",
-      "status": "Statut",
-      "employeePartyId": "Employé",
-      "laborClassId": "Classe de main-d’œuvre",
-      "projectTaskId": "Tâche du projet",
-      "workerCompGroupId": "Groupe d’indemnisation des travailleurs",
-      "lane": "Volet de taux",
-      "amount": "Montant",
-      "percent": "Pourcentage",
-      "annualHours": "Heures annuelles",
-      "priority": "Priorité",
-      "value": "Valeur",
-      "sourceId": "Source de paie externe", "accountingMode": "Mode de comptabilisation", "payrollClearingAccountId": "Compte de compensation de paie", "requirePostedJournal": "Exiger un journal source comptabilisé", "externalLineIdColumn": "Colonne ID de ligne externe", "employeeCodeColumn": "Colonne code employé", "componentColumn": "Colonne composante", "amountColumn": "Colonne montant", "payCodeColumn": "Colonne code de paie", "hoursColumn": "Colonne heures", "memoColumn": "Colonne note",
-      "batchId": "Lot de paie externe", "externalBatchId": "ID de lot externe", "sourceJournalDocumentId": "Journal source comptabilisé", "externalLineId": "ID de ligne externe", "payCode": "Code de paie", "hours": "Heures", "periodStart": "Début de période", "periodEnd": "Fin de période", "postingDate": "Date de comptabilisation", "component": "Composante de paie", "memo": "Note", "actualTotal": "Total réel", "varianceTotal": "Écart total",
       "customerId": "Client",
       "projectId": "Projet",
       "isDefault": "Par défaut"
@@ -1816,16 +1730,8 @@
       "overheadRateKind": {
         "per_hour": "$/heure",
         "percent": "% de la main-d’œuvre"
-      },
-      "rateVersionStatus": { "draft": "Brouillon", "active": "Actif", "retired": "Retiré" },
-      "compensationBasis": { "hour": "Par heure", "year": "Par année" },
-      "laborRateLane": { "directCost": "Coût direct", "bill": "Facturation client", "transfer": "Transfert interne", "planningCost": "Coût de planification", "planningBill": "Facturation planifiée" },
-      "laborRateMethod": { "fixed": "Taux horaire fixe", "atCost": "Au coût chargé", "markupOnCost": "Majoration du coût chargé", "marginOnCost": "Marge cible sur le coût chargé" },
-      "laborComponentLane": { "cost": "Charge de coût", "bill": "Ajout de facturation", "transfer": "Ajout de transfert" },
-      "laborComponentMethod": { "fixedPerHour": "Fixe par heure", "percentOfBaseDirect": "% du direct de base", "percentOfDirect": "% du direct ajusté", "percentOfSubtotal": "% du sous-total courant" }
-      ,"payrollComponent": { "grossPay": "Salaire brut", "employerTax": "Taxe patronale", "benefit": "Avantage", "workerComp": "Indemnisation des travailleurs", "other": "Autre" }
-      ,"externalPayrollAccountingMode": { "costingOnly": "Coûts de projet seulement (aucune écriture au GL)", "varianceToClearing": "Actualiser les coûts de projet par le compte de compensation" }
       }
+    }
   },
   "flows": {
     "title": "Flux",

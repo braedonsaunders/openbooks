@@ -7,12 +7,6 @@
   "key": "Key",
   "billingMethod": "Billing method",
   "sortOrder": "Sort order",
-  "laborRateBook": "Labor rate book default",
-  "laborRateBookHint": "Projects of this type inherit this book unless the project or a targeted assignment overrides it.",
-  "laborRatePolicy": "Labor rate policy default",
-  "laborRatePolicyHint": "Controls effective-date and lock behavior for projects that inherit this type.",
-  "inheritCompany": "Inherit company default",
-  "laborPolicies": { "work_date": "Rate on work date", "locked": "Lock awarded version", "scheduled_escalation": "Scheduled escalation", "manual_reprice": "Manual reprice only" },
   "saved": "Project type saved",
   "deleteConfirm": "Delete or archive “{name}”?",
   "tabs": {
