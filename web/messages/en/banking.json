@@ -601,7 +601,11 @@
     },
     "authorizedKeys": "Authorized SSH keys (optional)",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
-    "authorizedKeysHint": "One OpenSSH public key per line. Clients with a matching private key can log in without a password."
+    "authorizedKeysHint": "One OpenSSH public key per line. Clients with a matching private key can log in without a password.",
+    "tabs": {
+      "servers": "Servers & daemon",
+      "schedules": "Import schedules"
+    }
   },
   "cash": {
     "title": "Cash",

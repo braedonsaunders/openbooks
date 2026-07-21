@@ -487,6 +487,10 @@
     },
     "authorizedKeys": "Clés SSH autorisées (facultatif)",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... banque@hote",
-    "authorizedKeysHint": "Une clé publique OpenSSH par ligne. Les clients disposant de la clé privée correspondante peuvent se connecter sans mot de passe."
+    "authorizedKeysHint": "Une clé publique OpenSSH par ligne. Les clients disposant de la clé privée correspondante peuvent se connecter sans mot de passe.",
+    "tabs": {
+      "servers": "Serveurs et démon",
+      "schedules": "Programmes d'importation"
+    }
   }
 }

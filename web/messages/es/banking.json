@@ -487,6 +487,10 @@
     },
     "authorizedKeys": "Claves SSH autorizadas (opcional)",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... banco@host",
-    "authorizedKeysHint": "Una clave pública OpenSSH por línea. Los clientes con la clave privada correspondiente pueden iniciar sesión sin contraseña."
+    "authorizedKeysHint": "Una clave pública OpenSSH por línea. Los clientes con la clave privada correspondiente pueden iniciar sesión sin contraseña.",
+    "tabs": {
+      "servers": "Servidores y demonio",
+      "schedules": "Programas de importación"
+    }
   }
 }

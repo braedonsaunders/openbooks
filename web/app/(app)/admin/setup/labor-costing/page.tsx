@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { BookOpen } from 'lucide-react'
+import { cn } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { laborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
@@ -16,10 +17,20 @@ export const dynamic = 'force-dynamic'
  * payroll actuals arrive), and the posting switch + control accounts.
  * Overhead is deliberately NOT here — that's the Overhead Model's job.
  */
-export default async function LaborCostingSetup() {
+const VIEWS = ['rates', 'components', 'posting', 'reconciliation'] as const
+export type LaborCostingView = (typeof VIEWS)[number]
+
+export default async function LaborCostingSetup({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
   const t = await getTranslations('admin')
+  const sp = await searchParams
+  const rawView = typeof sp.view === 'string' ? sp.view : ''
+  const view: LaborCostingView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as LaborCostingView) : 'rates'
 
   const [settings, ratesRes, employeesRes, tradesRes, accountsRes, orgRes] = await Promise.all([
     laborCostingSettings(orgId),
@@ -81,14 +92,40 @@ export default async function LaborCostingSetup() {
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t('setup.laborCosting.title')}</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('setup.laborCosting.description')}</p>
         </div>
-        <Link
-          href="/docs/labor-costing"
-          className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-        >
-          <BookOpen size={13} aria-hidden /> {t('setup.laborCosting.docs')}
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/docs/labor-costing"
+            className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            <BookOpen size={13} aria-hidden /> {t('setup.laborCosting.docs')}
+          </Link>
+          <Link
+            href="/admin/setup/overhead"
+            className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {t('setup.entities.overhead-model.title')} →
+          </Link>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
+        {VIEWS.map((item) => (
+          <Link
+            key={item}
+            href={`/admin/setup/labor-costing?view=${item}`}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
+              view === item
+                ? 'border-teal-600 text-teal-700 dark:text-teal-300'
+                : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
+            )}
+          >
+            {t(`setup.laborCosting.tabs.${item}`)}
+          </Link>
+        ))}
       </div>
       <LaborCostingWorkspace
+        view={view}
         settings={settings}
         rates={(ratesRes as unknown as { rows: RateRow[] }).rows}
         employees={(employeesRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt)}
