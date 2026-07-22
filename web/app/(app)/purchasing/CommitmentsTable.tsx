@@ -1,9 +1,9 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { EntityDrawer } from '../analytics/_ui/EntityDrawer'
-import { money, moneyCompact } from '../../../lib/format'
 import type { VendorExposureRow } from '../../../lib/module-home/purchasing'
 
 /**
@@ -13,6 +13,7 @@ import type { VendorExposureRow } from '../../../lib/module-home/purchasing'
  * use, so the drill feels identical everywhere.
  */
 export function CommitmentsTable({ rows }: { rows: VendorExposureRow[] }) {
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations('purchasing')
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
 

@@ -12,7 +12,7 @@ interface Body {
   kind?: unknown
   value?: unknown
   memo?: unknown
-  evidenceReference?: unknown
+  evidenceFileId?: unknown
   bookId?: unknown
 }
 
@@ -26,13 +26,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const kind = body.kind === 'manual' || body.kind === 'production_usage' ? body.kind : null
   const value = typeof body.value === 'string' || typeof body.value === 'number' ? String(body.value) : ''
   const memo = typeof body.memo === 'string' ? body.memo : ''
-  const evidenceReference = typeof body.evidenceReference === 'string' ? body.evidenceReference : ''
+  const evidenceFileId = typeof body.evidenceFileId === 'string' ? body.evidenceFileId : ''
   if (body.bookId !== undefined && (typeof body.bookId !== 'string' || !isUuid(body.bookId))) {
     return NextResponse.json({ error: 'book id is invalid' }, { status: 422 })
   }
   const bookId = typeof body.bookId === 'string' ? body.bookId : undefined
-  if (!kind || !effectiveDate || !value) {
-    return NextResponse.json({ error: 'method, effective date, and value are required' }, { status: 422 })
+  if (!kind || !effectiveDate || !value || !isUuid(evidenceFileId)) {
+    return NextResponse.json({ error: 'method, effective date, value, and attached evidence file are required' }, { status: 422 })
   }
 
   const visible = (await db.execute(sql`
@@ -51,7 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       kind,
       value,
       memo,
-      evidenceReference,
+      evidenceFileId,
       actorId: gate.user.id,
     })
     return NextResponse.json(result)

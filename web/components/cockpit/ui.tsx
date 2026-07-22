@@ -1,17 +1,15 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@openbooks/ui'
-import { moneyCompact } from '../../lib/format'
 
 /**
  * Cockpit UI kit — the shared visual language of the domain control centers
  * (AP / AR / Cash). Kept self-contained so the cockpits read as one bespoke
  * system, independent of the analytics dashboards.
  */
-
-export const compactMoney = moneyCompact
 
 export type Accent = 'teal' | 'sky' | 'violet' | 'amber' | 'emerald' | 'red' | 'slate' | 'indigo'
 
@@ -105,6 +103,7 @@ const BUCKET_COLOR: Record<string, string> = {
 
 /** Aging bucket bars (Current → 90+). */
 export function AgingBars({ buckets, accent }: { buckets: { label: string; amount: number }[]; accent: string }) {
+  const { moneyCompact } = useMoney()
   const total = buckets.reduce((a, b) => a + b.amount, 0) || 1
   return (
     <div className="space-y-2.5">
@@ -115,7 +114,7 @@ export function AgingBars({ buckets, accent }: { buckets: { label: string; amoun
               <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: BUCKET_COLOR[b.label] }} />
               {b.label}
             </span>
-            <span className={cn('tabular-nums', accent)}>{compactMoney(b.amount)}</span>
+            <span className={cn('tabular-nums', accent)}>{moneyCompact(b.amount)}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
             <div className="h-full rounded-full" style={{ width: `${Math.max(0, (b.amount / total) * 100)}%`, backgroundColor: BUCKET_COLOR[b.label] }} />
@@ -137,6 +136,7 @@ export function ScheduleBars({
   barClass?: string
   onSelect?: (index: number) => void
 }) {
+  const { moneyCompact } = useMoney()
   const max = Math.max(1, ...weeks.map((w) => w.amount))
   return (
     <div className="space-y-1">
@@ -147,7 +147,7 @@ export function ScheduleBars({
             <div className="h-4 min-w-0 flex-1 overflow-hidden rounded bg-slate-50 dark:bg-slate-800/50">
               <div className={cn('h-full rounded transition-all', barClass)} style={{ width: `${(w.amount / max) * 100}%` }} />
             </div>
-            <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">{w.amount > 0 ? compactMoney(w.amount) : '—'}</span>
+            <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-600 dark:text-slate-300">{w.amount > 0 ? moneyCompact(w.amount) : '—'}</span>
           </>
         )
         return onSelect ? (

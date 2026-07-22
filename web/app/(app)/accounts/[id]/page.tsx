@@ -1,10 +1,10 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { DetailHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { PageContainer } from '../../../../components/page-layout'
 import { Pagination } from '../../../../components/pagination'
 import { accountRegister } from '../../../../lib/reports'
-import { money } from '../../../../lib/format'
 import { requirePermission } from '../../../../lib/authz'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +18,7 @@ export default async function Register({
   params: Promise<{ id: string }>
   searchParams: Promise<{ page?: string; from?: string; to?: string }>
 }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('gl.read')
   const t = await getTranslations('accounts')
   const tc = await getTranslations('common')

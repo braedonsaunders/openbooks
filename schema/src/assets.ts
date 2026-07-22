@@ -18,7 +18,8 @@ import { auditColumns, id, money, orgRef } from "./helpers";
  * User-authored depreciation methods — the "formula builder". A method is a
  * formula over the depreciation variable set (engine/src/depreciation-formula.ts:
  * NB, OC, RV, AL, CP, …) evaluated each period. Together with the built-ins these
- * make depreciation methods DATA. A category/asset references one by `code`.
+ * make depreciation methods DATA. Category, asset, and book policy rows hold a
+ * typed reference to the immutable formula definition.
  */
 export const depreciationMethods = pgTable(
   "depreciation_methods",
@@ -53,6 +54,8 @@ export const assetCategories = pgTable("asset_categories", {
   defaultMethod: text("default_method", {
     enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
   }).notNull().default("straight_line"),
+  /** When set, this active tenant formula overrides defaultMethod. */
+  defaultDepreciationMethodId: uuid("default_depreciation_method_id"),
   defaultLifeMonths: integer("default_life_months"),
   /** First-period convention: full_month (default), mid_month, half_year. */
   defaultConvention: text("default_convention", {
@@ -94,6 +97,8 @@ export const fixedAssets = pgTable(
     depreciationMethod: text("depreciation_method", {
       enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
     }),
+    /** Active tenant formula override; built-in depreciationMethod is the fallback. */
+    depreciationMethodId: uuid("depreciation_method_id"),
     usefulLifeMonths: integer("useful_life_months"),
     depreciationRatePercent: money("depreciation_rate_percent"),
     depreciationConvention: text("depreciation_convention", {
@@ -101,6 +106,10 @@ export const fixedAssets = pgTable(
     }),
     /** Expected lifetime output for units-of-production depreciation. */
     depreciationUnitsTotal: money("depreciation_units_total"),
+    /** Native per-asset GL overrides. Null means inherit from the category. */
+    assetAccountId: uuid("asset_account_id"),
+    accumulatedDepreciationAccountId: uuid("accumulated_depreciation_account_id"),
+    depreciationExpenseAccountId: uuid("depreciation_expense_account_id"),
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
@@ -156,6 +165,8 @@ export const depreciationSchedules = pgTable(
     method: text("method", {
       enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
     }).notNull(),
+    /** Immutable formula-definition reference used to materialize the schedule. */
+    depreciationMethodId: uuid("depreciation_method_id"),
     lifeMonths: integer("life_months"),
     ratePercent: money("rate_percent"), // declining-balance / CCA
     unitsTotal: money("units_total"), // units-of-production
@@ -224,8 +235,8 @@ export const depreciationInputs = pgTable(
     manualAmount: money("manual_amount"),
     productionUnits: money("production_units"),
     memo: text("memo").notNull(),
-    /** File-cabinet attachment, meter reading id, work order, or other source reference. */
-    evidenceReference: text("evidence_reference").notNull(),
+    /** Required file-cabinet evidence, attached to the owning fixed asset. */
+    evidenceFileId: uuid("evidence_file_id").notNull(),
     supersedesInputId: uuid("supersedes_input_id"),
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     voidedBy: uuid("voided_by"),
@@ -239,7 +250,7 @@ export const depreciationInputs = pgTable(
       sql`(${t.kind} = 'manual' and ${t.manualAmount} is not null and ${t.manualAmount} <> 0 and ${t.productionUnits} is null)
           or (${t.kind} = 'production_usage' and ${t.productionUnits} is not null and ${t.productionUnits} <> 0 and ${t.manualAmount} is null)`,
     ),
-    check("depr_inputs_evidence_required", sql`length(btrim(${t.memo})) > 0 and length(btrim(${t.evidenceReference})) > 0`),
+    check("depr_inputs_evidence_required", sql`length(btrim(${t.memo})) > 0`),
   ],
 );
 
@@ -278,6 +289,8 @@ export const depreciationBookPolicies = pgTable(
     method: text("method", {
       enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
     }).notNull().default("straight_line"),
+    /** Active tenant formula override for this book/category policy. */
+    depreciationMethodId: uuid("depreciation_method_id"),
     lifeMonths: integer("life_months"),
     ratePercent: money("rate_percent"),
     unitsTotal: money("units_total"),

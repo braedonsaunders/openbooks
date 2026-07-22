@@ -350,7 +350,8 @@
       "columns": {
         "trigger": "Déclencheur",
         "rows": "Lignes",
-        "finished": "Terminée"
+        "finished": "Terminée",
+        "delivery": "Envoi"
       },
       "status": {
         "succeeded": "Réussie",
@@ -362,6 +363,8 @@
         "manual": "Manuelle",
         "scheduled": "Planifiée"
       },
+      "deliveryEvidence": "{sent}/{total} envoyés · {failed} en échec · {suppressed} bloqués",
+      "pdf": "Justificatif PDF",
       "csv": "CSV"
     }
   },

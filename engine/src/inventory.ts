@@ -40,6 +40,9 @@ export interface InventoryProfile extends InventoryAccounts {
   costingMethod: "fifo" | "moving_average" | "standard";
   standardCost: string | null;
   baseUnit: string;
+  allowNegativeInventory: boolean;
+  negativeCostBasis: "last_receipt" | "standard" | "configured";
+  provisionalUnitCost: string | null;
 }
 
 export class InventoryError extends Error {}
@@ -47,12 +50,14 @@ export class InventoryError extends Error {}
 async function resolveProfile(orgId: string, itemId: string): Promise<InventoryProfile> {
   const r = (await db.execute(sql`
     select item_id, costing_method, asset_account_id, cogs_account_id, adjustment_account_id,
-           variance_account_id, standard_cost, base_unit
+           variance_account_id, standard_cost, base_unit, allow_negative_inventory,
+           negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`)) as unknown as {
     rows: {
       item_id: string; costing_method: InventoryProfile["costingMethod"]; asset_account_id: string;
       cogs_account_id: string; adjustment_account_id: string | null; variance_account_id: string | null;
-      standard_cost: string | null; base_unit: string;
+      standard_cost: string | null; base_unit: string; allow_negative_inventory: boolean;
+      negative_cost_basis: InventoryProfile["negativeCostBasis"]; provisional_unit_cost: string | null;
     }[];
   };
   const p = r.rows[0];
@@ -66,6 +71,9 @@ async function resolveProfile(orgId: string, itemId: string): Promise<InventoryP
     varianceAccountId: p.variance_account_id,
     standardCost: p.standard_cost,
     baseUnit: p.base_unit,
+    allowNegativeInventory: p.allow_negative_inventory,
+    negativeCostBasis: p.negative_cost_basis,
+    provisionalUnitCost: p.provisional_unit_cost,
   };
 }
 
@@ -102,16 +110,34 @@ export async function getOnHand(
   itemId: string,
   stockLocationId: string,
 ): Promise<{ quantity: string; value: string; unitCost: string }> {
-  const r = (await db.execute(sql`
-    select coalesce(sum(remaining_quantity), 0) as quantity,
-           coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0) as value
-      from cost_layers where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}`)) as unknown as {
+  return getOnHandWith(db, orgId, itemId, stockLocationId);
+}
+
+async function getOnHandWith(
+  runner: Runner,
+  orgId: string,
+  itemId: string,
+  stockLocationId: string,
+): Promise<{ quantity: string; value: string; unitCost: string }> {
+  const r = (await runner.execute(sql`
+    select (coalesce((select sum(remaining_quantity) from cost_layers
+                       where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}),0)
+            - coalesce((select sum(remaining_quantity) from inventory_provisional_costs
+                         where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}),0))::text as quantity,
+           (coalesce((select sum(round(remaining_quantity * unit_cost,4)) from cost_layers
+                       where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}),0)
+            - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs
+                         where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}),0))::text as value`)) as unknown as {
     rows: { quantity: string; value: string }[];
   };
   const quantity = r.rows[0]?.quantity ?? "0";
   const value = r.rows[0]?.value ?? "0";
   const unitCost = isZero(quantity) ? "0" : fromUnits((toUnits(value) * 10_000n) / toUnits(quantity));
   return { quantity: fromUnits(toUnits(quantity)), value: fromUnits(toUnits(value)), unitCost };
+}
+
+async function lockInventoryPosition(tx: Runner, itemId: string, stockLocationId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`inventory:${itemId}:${stockLocationId}`},0))`);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,29 +266,63 @@ export async function receiveInventory(orgId: string, actorId: string | null, in
   if (!postJournal && !isZero(variance)) {
     throw new InventoryError("standard-cost receipts require a received-not-billed account to book purchase variance");
   }
+  if (!postJournal && !input.linkEntryId) {
+    throw new InventoryError("a non-posting receipt requires its source journal entry");
+  }
   if (postJournal && !input.offsetAccountId) {
     throw new InventoryError("receipt requires an offset account");
   }
 
-  const lines: JournalLineInput[] = [
-    { accountId: profile.assetAccountId, amount: inventoryValue, ...dims, memo: input.memo },
-    ...(!isZero(variance)
-      ? [{ accountId: profile.varianceAccountId ?? profile.assetAccountId, amount: variance, ...dims, memo: "PPV" }]
-      : []),
-    { accountId: input.offsetAccountId ?? profile.assetAccountId, amount: neg(offsetTotal), ...dims, memo: input.memo },
-  ];
-
-  if (postJournal) {
-    await validateSubsidiaryRestrictions(db, {
-      orgId,
-      ctx,
-      docSubsidiaryId: input.subsidiaryId,
-      lines: lines.map((l) => ({ ...l, subsidiaryId: input.subsidiaryId })),
-    });
-  }
-
   return await db.transaction(async (tx) => {
-    const entryId = postJournal
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    const deficits = (await tx.execute(sql`
+      select id,remaining_quantity,provisional_unit_cost
+        from inventory_provisional_costs
+       where org_id=${orgId} and item_id=${input.itemId} and stock_location_id=${input.stockLocationId}
+         and remaining_quantity>0 order by created_at,id for update
+    `)) as unknown as { rows: { id: string; remaining_quantity: string; provisional_unit_cost: string }[] };
+    let receiptUnits = toUnits(input.quantity);
+    let provisionalValueUnits = 0n;
+    const settlements: { id: string; quantity: string; provisionalUnitCost: string; correction: string }[] = [];
+    for (const deficit of deficits.rows) {
+      if (receiptUnits === 0n) break;
+      const available = toUnits(deficit.remaining_quantity);
+      const take = available < receiptUnits ? available : receiptUnits;
+      const quantity = fromUnits(take);
+      const provisionalValue = extendCost(quantity, deficit.provisional_unit_cost);
+      const receiptValue = extendCost(quantity, layerUnitCost);
+      settlements.push({
+        id: deficit.id,
+        quantity,
+        provisionalUnitCost: deficit.provisional_unit_cost,
+        correction: fromUnits(toUnits(receiptValue) - toUnits(provisionalValue)),
+      });
+      provisionalValueUnits += toUnits(provisionalValue);
+      receiptUnits -= take;
+    }
+    const excessQuantity = fromUnits(receiptUnits);
+    const assetDelta = fromUnits(provisionalValueUnits + toUnits(extendCost(excessQuantity, layerUnitCost)));
+    const correction = fromUnits(toUnits(inventoryValue) - toUnits(assetDelta));
+    const lines: JournalLineInput[] = postJournal
+      ? [
+          { accountId: profile.assetAccountId, amount: assetDelta, ...dims, memo: input.memo },
+          ...(!isZero(correction) ? [{ accountId: profile.cogsAccountId, amount: correction, ...dims, memo: "Negative inventory receipt cost true-up" }] : []),
+          ...(!isZero(variance) ? [{ accountId: profile.varianceAccountId ?? profile.assetAccountId, amount: variance, ...dims, memo: "PPV" }] : []),
+          { accountId: input.offsetAccountId!, amount: neg(offsetTotal), ...dims, memo: input.memo },
+        ]
+      : !isZero(correction)
+        ? [
+            { accountId: profile.cogsAccountId, amount: correction, ...dims, memo: "Negative inventory receipt cost true-up" },
+            { accountId: profile.assetAccountId, amount: neg(correction), ...dims, memo: "Negative inventory receipt cost true-up" },
+          ]
+        : [];
+    if (lines.length) {
+      await validateSubsidiaryRestrictions(tx, {
+        orgId, ctx, docSubsidiaryId: input.subsidiaryId,
+        lines: lines.map((line) => ({ ...line, subsidiaryId: input.subsidiaryId })),
+      });
+    }
+    const entryId = lines.length
       ? await postInventoryEntry(tx, {
           orgId,
           bookId,
@@ -281,12 +341,27 @@ export async function receiveInventory(orgId: string, actorId: string | null, in
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
          document_line_id, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.itemId}, 'receipt', ${input.date}, ${input.stockLocationId}, ${input.lotId ?? null},
-              ${input.serialId ?? null}, ${input.quantity}, ${layerUnitCost}, ${inventoryValue},
+              ${input.serialId ?? null}, ${input.quantity}, ${layerUnitCost}, ${assetDelta},
               ${input.documentLineId ?? null}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`)) as unknown as { rows: { id: string }[] };
     const movementId = mv.rows[0].id;
 
-    if (profile.costingMethod === "moving_average") {
+    for (const settlement of settlements) {
+      await tx.execute(sql`
+        update inventory_provisional_costs
+           set remaining_quantity=remaining_quantity-${settlement.quantity},updated_at=now(),updated_by=${actorId}
+         where id=${settlement.id}
+      `);
+      await tx.execute(sql`
+        insert into inventory_provisional_settlements
+          (org_id,provisional_cost_id,receipt_movement_id,quantity,provisional_unit_cost,receipt_unit_cost,
+           correction_amount,correction_journal_entry_id,created_by,updated_by)
+        values (${orgId},${settlement.id},${movementId},${settlement.quantity},${settlement.provisionalUnitCost},
+                ${layerUnitCost},${settlement.correction},${entryId ?? input.linkEntryId},${actorId},${actorId})
+      `);
+    }
+
+    if (receiptUnits > 0n && profile.costingMethod === "moving_average") {
       // Blend into the single running layer for this item+location.
       const existing = (await tx.execute(sql`
         select id, remaining_quantity, unit_cost from cost_layers
@@ -296,20 +371,20 @@ export async function receiveInventory(orgId: string, actorId: string | null, in
       };
       if (existing.rows[0]) {
         const cur = existing.rows[0];
-        const newQty = add(cur.remaining_quantity, input.quantity);
-        const newValue = add(extendCost(cur.remaining_quantity, cur.unit_cost), inventoryValue);
+        const newQty = add(cur.remaining_quantity, excessQuantity);
+        const newValue = add(extendCost(cur.remaining_quantity, cur.unit_cost), extendCost(excessQuantity, layerUnitCost));
         const newCost = isZero(newQty) ? layerUnitCost : fromUnits((toUnits(newValue) * 10_000n) / toUnits(newQty));
         await tx.execute(sql`
-          update cost_layers set remaining_quantity = ${newQty}, original_quantity = original_quantity + ${input.quantity},
+          update cost_layers set remaining_quantity = ${newQty}, original_quantity = original_quantity + ${excessQuantity},
              unit_cost = ${newCost}, updated_at = now() where id = ${cur.id}`);
       } else {
-        await insertLayer(tx, orgId, input, movementId, layerUnitCost);
+        await insertLayer(tx, orgId, input, movementId, layerUnitCost, excessQuantity);
       }
-    } else {
-      await insertLayer(tx, orgId, input, movementId, layerUnitCost);
+    } else if (receiptUnits > 0n) {
+      await insertLayer(tx, orgId, input, movementId, layerUnitCost, excessQuantity);
     }
 
-    return { movementId, entryId, value: inventoryValue };
+    return { movementId, entryId, value: assetDelta };
   });
 }
 
@@ -319,12 +394,13 @@ async function insertLayer(
   input: ReceiveInput,
   movementId: string,
   unitCost: string,
+  quantity = input.quantity,
 ): Promise<void> {
   await tx.execute(sql`
     insert into cost_layers
       (org_id, item_id, stock_location_id, source_movement_id, received_at, original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
     values (${orgId}, ${input.itemId}, ${input.stockLocationId}, ${movementId}, ${input.date},
-            ${input.quantity}, ${input.quantity}, ${unitCost}, null, null)`);
+            ${quantity}, ${quantity}, ${unitCost}, null, null)`);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,13 +436,6 @@ export async function issueInventory(orgId: string, actorId: string | null, inpu
   const bookId = await primaryBookId(orgId);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
   const ctx = await loadSubsidiaryContext(db, orgId);
-  const onHand = await getOnHand(orgId, input.itemId, input.stockLocationId);
-  if (cmp(input.quantity, onHand.quantity) > 0) {
-    throw new InventoryError(
-      `insufficient stock: need ${input.quantity}, on hand ${onHand.quantity} (negative inventory is disabled)`,
-    );
-  }
-
   const offset = input.offsetAccountId ?? profile.cogsAccountId;
   const dims = {
     departmentId: input.departmentId ?? null,
@@ -375,8 +444,19 @@ export async function issueInventory(orgId: string, actorId: string | null, inpu
   };
 
   return await db.transaction(async (tx) => {
-    const { cost, unitCost, consumptions } = await consumeLayers(
-      tx, orgId, profile, input.itemId, input.stockLocationId, input.quantity, onHand,
+    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    const onHand = await getOnHandWith(tx, orgId, input.itemId, input.stockLocationId);
+    const shortage = toUnits(input.quantity) - (toUnits(onHand.quantity) > 0n ? toUnits(onHand.quantity) : 0n);
+    if (shortage > 0n && !profile.allowNegativeInventory) {
+      throw new InventoryError(
+        `insufficient stock: need ${input.quantity}, on hand ${onHand.quantity} (negative inventory is disabled for this item)`,
+      );
+    }
+    const provisionalUnitCost = shortage > 0n
+      ? await resolveProvisionalUnitCost(tx, orgId, profile, input.itemId)
+      : onHand.unitCost;
+    const { cost, unitCost, consumptions, shortfallQuantity } = await consumeLayers(
+      tx, orgId, profile, input.itemId, input.stockLocationId, input.quantity, onHand, provisionalUnitCost,
     );
 
     const lines: JournalLineInput[] = [
@@ -412,8 +492,41 @@ export async function issueInventory(orgId: string, actorId: string | null, inpu
       returning id`)) as unknown as { rows: { id: string }[] };
     const movementId = mv.rows[0].id;
     await recordConsumptions(tx, orgId, consumptions, movementId, actorId);
+    if (!isZero(shortfallQuantity)) {
+      await tx.execute(sql`
+        insert into inventory_provisional_costs
+          (org_id,item_id,stock_location_id,issue_movement_id,original_quantity,remaining_quantity,
+           provisional_unit_cost,cost_basis,created_by,updated_by)
+        values (${orgId},${input.itemId},${input.stockLocationId},${movementId},${shortfallQuantity},
+                ${shortfallQuantity},${provisionalUnitCost},${profile.negativeCostBasis},${actorId},${actorId})
+      `);
+    }
     return { movementId, entryId, value: neg(cost) };
   });
+}
+
+async function resolveProvisionalUnitCost(
+  tx: Runner,
+  orgId: string,
+  profile: InventoryProfile,
+  itemId: string,
+): Promise<string> {
+  if (profile.negativeCostBasis === "configured") {
+    if (profile.provisionalUnitCost == null) throw new InventoryError("configured negative costing requires a provisional unit cost");
+    return profile.provisionalUnitCost;
+  }
+  if (profile.negativeCostBasis === "standard") {
+    if (profile.standardCost == null) throw new InventoryError("standard negative costing requires a standard cost");
+    return profile.standardCost;
+  }
+  const last = (await tx.execute(sql`
+    select unit_cost from inventory_movements
+     where org_id=${orgId} and item_id=${itemId} and kind in ('receipt','return','assembly_build','transfer_in')
+       and status='posted' and unit_cost is not null
+     order by moved_at desc,created_at desc,id desc limit 1
+  `)) as unknown as { rows: { unit_cost: string }[] };
+  if (!last.rows[0]) throw new InventoryError("negative inventory has no prior receipt cost; configure a provisional or standard cost");
+  return last.rows[0].unit_cost;
 }
 
 /** Draw `quantity` off layers oldest-first for QUANTITY bookkeeping (standard cost). */
@@ -453,7 +566,8 @@ async function consumeLayers(
   stockLocationId: string,
   quantity: string,
   onHand: { quantity: string; value: string; unitCost: string },
-): Promise<{ cost: string; unitCost: string; consumptions: Consumption[] }> {
+  provisionalUnitCost = onHand.unitCost,
+): Promise<{ cost: string; unitCost: string; consumptions: Consumption[]; shortfallQuantity: string }> {
   const layersRes = (await tx.execute(sql`
     select id, remaining_quantity as remaining, unit_cost from cost_layers
      where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}
@@ -463,23 +577,29 @@ async function consumeLayers(
 
   let cost: string;
   let consumptions: Consumption[] = [];
+  const requestedUnits = toUnits(quantity);
+  const availableUnits = layers.reduce((total, layer) => total + toUnits(layer.remaining), 0n);
+  const coveredUnits = availableUnits < requestedUnits ? availableUnits : requestedUnits;
+  const shortfallQuantity = fromUnits(requestedUnits - coveredUnits);
   if (profile.costingMethod === "standard") {
     cost = issueStandard(quantity, profile.standardCost ?? onHand.unitCost);
-    consumptions = planQuantityConsumption(layers, quantity);
+    consumptions = planQuantityConsumption(layers, fromUnits(coveredUnits));
   } else if (profile.costingMethod === "moving_average") {
-    cost = issueMovingAverage({ quantity: onHand.quantity, value: onHand.value }, quantity).cost;
-    if (layers[0]) consumptions = [{ layerId: layers[0].id, quantity, unitCost: layers[0].unit_cost }];
+    const positiveValue = toUnits(onHand.value) > 0n ? onHand.value : "0";
+    const coveredCost = issueMovingAverage({ quantity: fromUnits(availableUnits), value: positiveValue }, fromUnits(coveredUnits)).cost;
+    cost = add(coveredCost, extendCost(shortfallQuantity, provisionalUnitCost));
+    if (layers[0] && coveredUnits > 0n) consumptions = [{ layerId: layers[0].id, quantity: fromUnits(coveredUnits), unitCost: layers[0].unit_cost }];
   } else {
     const r = consumeFifo(
       layers.map((l) => ({ id: l.id, remaining: l.remaining, unitCost: l.unit_cost })) as CostLayer[],
       quantity,
-      onHand.unitCost,
+      provisionalUnitCost,
     );
     cost = r.totalCost;
     consumptions = r.consumptions.map((c) => ({ layerId: c.layerId, quantity: c.quantity, unitCost: c.unitCost }));
   }
   const unitCost = isZero(quantity) ? "0" : fromUnits((toUnits(cost) * 10_000n) / toUnits(quantity));
-  return { cost, unitCost, consumptions };
+  return { cost, unitCost, consumptions, shortfallQuantity };
 }
 
 /** Draw down consumed layers and record the consumptions against a movement. */

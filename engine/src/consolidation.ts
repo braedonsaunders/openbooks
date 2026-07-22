@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
-import { isZero, neg, sum } from "./money.ts";
+import { fromUnits, isZero, mulPercent, mulRate, neg, sum, toUnits } from "./money.ts";
 import { assertFinalKernelBalance } from "./posting.ts";
 import { loadSubsidiaryContext } from "./subsidiaries.ts";
 
@@ -24,6 +24,180 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  */
 
 export class ConsolidationError extends Error {}
+
+type OwnershipInterest = {
+  id: string; subsidiary_id: string; method: "full" | "proportionate" | "equity";
+  ownership_percent: string; acquisition_date: string; acquisition_cost: string;
+  fair_value_net_assets: string; acquisition_rate: string; nci_measurement: "proportionate" | "fair_value";
+  nci_fair_value: string | null; investment_account_id: string; equity_income_account_id: string;
+  distribution_account_id: string | null; distribution_income_account_id: string | null;
+  nci_equity_account_id: string | null; nci_income_account_id: string | null;
+  goodwill_account_id: string | null; fair_value_adjustment_account_id: string | null;
+};
+
+type AdjustmentLine = { accountId: string; amount: string; memo: string };
+
+/**
+ * Post acquisition, NCI, and equity-method consolidation adjustments. Every
+ * adjustment lives in the elimination subsidiary, is exact to ledger scale,
+ * and is append-only on rerun (prior effective entries are reversed first).
+ */
+export async function runOwnershipConsolidation(
+  orgId: string,
+  periodId: string,
+  userId?: string,
+): Promise<{ runId: string; entryIds: string[] }> {
+  try {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
+      const context = await loadSubsidiaryContext(tx as any, orgId);
+      const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
+      if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments");
+      const periodResult = (await tx.execute(sql`
+        select id, starts_on, ends_on, name from accounting_periods where id=${periodId} and org_id=${orgId}
+      `)) as unknown as { rows: { id: string; starts_on: string; ends_on: string; name: string }[] };
+      const period = periodResult.rows[0];
+      if (!period) throw new ConsolidationError(`period ${periodId} not found`);
+      const bookResult = (await tx.execute(sql`
+        select id from accounting_books where org_id=${orgId} and is_primary and is_active limit 1
+      `)) as unknown as { rows: { id: string }[] };
+      const bookId = bookResult.rows[0]?.id;
+      if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
+      const interests = (await tx.execute(sql`
+        select * from subsidiary_ownership_interests
+         where org_id=${orgId} and is_active and effective_from <= ${period.ends_on}
+           and (effective_to is null or effective_to >= ${period.starts_on})
+         order by subsidiary_id, effective_from
+      `)) as unknown as { rows: OwnershipInterest[] };
+      const run = (await tx.execute(sql`
+        insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)
+        values (${orgId},${periodId},'running',${userId ?? null},${userId ?? null}) returning id
+      `)) as unknown as { rows: { id: string }[] };
+      const runId = run.rows[0]!.id;
+      const entryIds: string[] = [];
+      let sequence = 0;
+
+      const post = async (interestId: string, kind: "acquisition" | "nci_income" | "equity_income" | "reversal", lines: AdjustmentLine[], reverses?: string) => {
+        const material = lines.filter((line) => !isZero(line.amount));
+        if (material.length === 0) return null;
+        assertFinalKernelBalance(material.map((line) => ({ amount: line.amount, subsidiaryId: elimination.id })));
+        sequence++;
+        const inserted = (await tx.execute(sql`
+          insert into journal_entries
+            (org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by)
+          values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId.slice(0,8)}-${sequence}`},
+                  ${period.ends_on},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
+          returning id
+        `)) as unknown as { rows: { id: string }[] };
+        const entryId = inserted.rows[0]!.id;
+        for (let index = 0; index < material.length; index++) {
+          const line = material[index]!;
+          await tx.execute(sql`
+            insert into journal_lines
+              (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo)
+            values (${orgId},${entryId},${index + 1},${line.accountId},${elimination.id},${line.amount},
+                    ${elimination.baseCurrency},${line.amount},1,${line.memo})
+          `);
+        }
+        await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId ?? null} where id=${entryId}`);
+        await tx.execute(sql`
+          insert into ownership_consolidation_entries (org_id,run_id,interest_id,kind,journal_entry_id,created_by,updated_by)
+          values (${orgId},${runId},${interestId},${kind},${entryId},${userId ?? null},${userId ?? null})
+        `);
+        entryIds.push(entryId);
+        return entryId;
+      };
+
+      const prior = (await tx.execute(sql`
+        select oce.interest_id, je.id, je.entry_number
+          from ownership_consolidation_entries oce
+          join ownership_consolidation_runs r on r.id=oce.run_id and r.period_id=${periodId}
+          join journal_entries je on je.id=oce.journal_entry_id and je.status='posted'
+         where oce.org_id=${orgId} and oce.kind<>'reversal' and je.reverses_entry_id is null
+           and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted')
+      `)) as unknown as { rows: { interest_id: string; id: string; entry_number: string }[] };
+      for (const old of prior.rows) {
+        const oldLines = (await tx.execute(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} order by line_number`)) as unknown as { rows: { account_id: string; amount: string; memo: string | null }[] };
+        await post(old.interest_id, "reversal", oldLines.rows.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), memo: `Reversal of ${old.entry_number}` })), old.id);
+      }
+
+      for (const interest of interests.rows) {
+        const periodActivity = (await tx.execute(sql`
+          select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
+                 coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
+            from journal_lines l join journal_entries e on e.id=l.entry_id
+            join accounts a on a.id=l.account_id
+           where e.org_id=${orgId} and e.status='posted' and l.subsidiary_id=${interest.subsidiary_id}
+             and e.posting_date between ${period.starts_on} and ${period.ends_on}
+        `)) as unknown as { rows: { profit: string; distributions: string }[] };
+        const profit = periodActivity.rows[0]!.profit;
+        const distributions = periodActivity.rows[0]!.distributions;
+
+        if (interest.method === "full") {
+          const acquisitionExists = (await tx.execute(sql`
+            select 1 from ownership_consolidation_entries oce
+             join journal_entries je on je.id=oce.journal_entry_id and je.status='posted'
+            where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
+              and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted') limit 1
+          `)) as unknown as { rows: unknown[] };
+          if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
+            const equity = (await tx.execute(sql`
+              select l.account_id,coalesce(sum(l.amount),0)::text as amount
+                from journal_lines l join journal_entries e on e.id=l.entry_id
+                join accounts a on a.id=l.account_id and a.type='equity'
+               where e.org_id=${orgId} and e.status='posted' and l.subsidiary_id=${interest.subsidiary_id}
+                 and e.posting_date <= ${interest.acquisition_date}
+               group by l.account_id having sum(l.amount)<>0
+            `)) as unknown as { rows: { account_id: string; amount: string }[] };
+            const translatedEquity = equity.rows.map((line) => ({ accountId: line.account_id, balance: mulRate(line.amount, interest.acquisition_rate) }));
+            const bookNetAssets = sum(translatedEquity.map((line) => neg(line.balance)));
+            const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
+            const nci = interest.nci_measurement === "fair_value"
+              ? interest.nci_fair_value!
+              : mulPercent(interest.fair_value_net_assets, nciPercent);
+            const fairValueAdjustment = fromUnits(toUnits(interest.fair_value_net_assets) - toUnits(bookNetAssets));
+            const goodwill = fromUnits(toUnits(interest.acquisition_cost) + toUnits(nci) - toUnits(interest.fair_value_net_assets));
+            await post(interest.id, "acquisition", [
+              ...translatedEquity.map((line) => ({ accountId: line.accountId, amount: neg(line.balance), memo: "Eliminate acquisition-date equity" })),
+              { accountId: interest.fair_value_adjustment_account_id!, amount: fairValueAdjustment, memo: "Fair-value net asset adjustment" },
+              { accountId: interest.goodwill_account_id!, amount: goodwill, memo: "Acquisition goodwill or bargain purchase" },
+              { accountId: interest.investment_account_id, amount: neg(interest.acquisition_cost), memo: "Eliminate parent investment" },
+              ...(interest.nci_equity_account_id ? [{ accountId: interest.nci_equity_account_id, amount: neg(nci), memo: "Recognize non-controlling interest" }] : []),
+            ]);
+          }
+          const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
+          const nciIncome = mulPercent(profit, nciPercent);
+          if (interest.nci_income_account_id && interest.nci_equity_account_id) {
+            await post(interest.id, "nci_income", [
+              { accountId: interest.nci_income_account_id!, amount: nciIncome, memo: "Allocate profit to non-controlling interests" },
+              { accountId: interest.nci_equity_account_id!, amount: neg(nciIncome), memo: "Accumulate non-controlling interest" },
+            ]);
+          }
+        } else if (interest.method === "equity") {
+          const shareProfit = mulPercent(profit, interest.ownership_percent);
+          const shareDistribution = mulPercent(distributions, interest.ownership_percent);
+          await post(interest.id, "equity_income", [
+            { accountId: interest.investment_account_id, amount: shareProfit, memo: "Equity-method share of profit" },
+            { accountId: interest.equity_income_account_id, amount: neg(shareProfit), memo: "Equity-method income" },
+            ...(interest.distribution_income_account_id ? [
+              { accountId: interest.investment_account_id, amount: neg(shareDistribution), memo: "Equity-method distribution reduces investment" },
+              { accountId: interest.distribution_income_account_id, amount: shareDistribution, memo: "Eliminate distribution income" },
+            ] : []),
+          ]);
+        }
+      }
+      await tx.execute(sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId}`);
+      return { runId, entryIds };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await db.execute(sql`
+      insert into ownership_consolidation_runs (org_id,period_id,status,error,finished_at,created_by,updated_by)
+      values (${orgId},${periodId},'failed',${message.slice(0,1000)},now(),${userId ?? null},${userId ?? null})
+    `).catch(() => undefined);
+    throw error;
+  }
+}
 
 /** Currency pairs needed to translate every subsidiary into every ancestor. */
 async function neededPairs(orgId: string): Promise<{ from: string; to: string }[]> {

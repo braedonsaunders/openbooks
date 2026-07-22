@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -11,8 +12,6 @@ import { SortTh } from '../../../../components/sortable-th'
 import { requirePermission } from '../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import { parseListParams, pickString } from '../../../../lib/list-params'
-import { money } from '../../../../lib/format'
-
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata() {
@@ -33,6 +32,7 @@ export default async function BankingImports({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')

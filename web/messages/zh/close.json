@@ -59,6 +59,7 @@
     "backToPeriods": "返回会计期间",
     "revalidate": "重新校验",
     "runRevaluation": "运行外币重估",
+    "runConsolidation": "运行合并",
     "startTask": "开始",
     "complete": "完成",
     "submitReview": "提交审核",
@@ -82,6 +83,7 @@
     "publish": "结账包已发布",
     "taskUpdated": "任务已更新",
     "revaluationPosted": "外币余额已重估",
+    "consolidationPosted": "所有权调整、汇率和抵销已过账",
     "evidenceAdded": "证据已附加",
     "automationComplete": "结账自动化已完成"
   },

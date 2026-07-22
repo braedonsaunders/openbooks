@@ -1,11 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  defaultListView,
   defaultFormLayout,
   lintFormLayout,
   mergeRegisteredFieldsIntoLayout,
   refreshDefaultFormLayout,
 } from './schema.ts'
+import { getRecordType } from './registry.ts'
 
 test('the default project form composes complete four-column rows', () => {
   const layout = defaultFormLayout('project')
@@ -48,6 +50,20 @@ test('the default project form composes complete four-column rows', () => {
   assert.deepEqual(lintFormLayout(layout), [])
 })
 
+test('fixed assets expose the universal record form contract', () => {
+  const meta = getRecordType('fixed_asset')
+  assert.ok(meta)
+  assert.equal(meta.supportsForms, true)
+  assert.equal(meta.customFieldTable, 'fixed_assets')
+
+  const layout = defaultFormLayout('fixed_asset')
+  const keys = layout.header.groups.flatMap((group) => group.fields.map((field) => field.key))
+  assert.deepEqual(keys, meta.headerFields.map((field) => field.key))
+  assert.equal(keys.includes('depreciation_method'), true)
+  assert.equal(keys.includes('depreciation_expense_account_id'), true)
+  assert.deepEqual(lintFormLayout(layout), [])
+})
+
 test('party role forms expose the complete native record without leaking related-list governance', () => {
   const customer = defaultFormLayout('customer')
   const vendor = defaultFormLayout('vendor')
@@ -70,6 +86,21 @@ test('party role forms expose the complete native record without leaking related
   const employeeKeys = employee.header.groups.flatMap((group) => group.fields.map((field) => field.key))
   assert.equal(employeeKeys.includes('department_id'), true)
   assert.equal(employeeKeys.includes('trade_id'), true)
+})
+
+test('customer list customization exposes lifecycle status choices', () => {
+  const customer = getRecordType('customer')!
+  const status = customer.listFilters.find((filter) => filter.key === 'status')
+
+  assert.deepEqual(status?.options?.map((option) => option.value), ['customer', 'prospect'])
+  assert.equal(customer.listColumns.find((column) => column.key === 'status')?.sortable, true)
+  assert.deepEqual(defaultListView('customer').columns.map((column) => column.key), [
+    'display_name',
+    'short_code',
+    'email',
+    'phone',
+    'status',
+  ])
 })
 
 test('saved forms gain newly registered built-in fields in registry order', () => {

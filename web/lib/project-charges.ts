@@ -6,6 +6,7 @@ import { cmp, divRate, isZero, mul, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
 import { controlDeps } from './documents'
 import { resolveItemRate } from './item-rates'
+import type { RatePrice } from '@openbooks/engine/src/item-rate-pricing.ts'
 
 /**
  * Project charges / resource usage — the native replacement for source platform's
@@ -30,6 +31,18 @@ export interface ChargeLineInput {
   /** Target project-COGS account (debit). Defaults to the item's expense account. */
   accountId?: string | null
   isBillable?: boolean
+  /** Previously resolved immutable rate snapshot (for example from a field
+   * ticket). Keeps its package-tier decomposition through approval. */
+  rateSnapshot?: {
+    rateVersionId: string | null
+    baseUnit: string
+    /** Normalized usage and the package unit entered on the source line. */
+    baseQuantity?: string
+    transactionUnitCode?: string | null
+    invoicePresentation: 'summary' | 'rate_components'
+    cost: RatePrice
+    bill: RatePrice
+  } | null
 }
 
 export interface ChargeInput {
@@ -92,12 +105,12 @@ export async function createProjectCharge(
         if (unit.rows[0].subsidiary_id !== subsidiaryId) throw new ChargeError('Equipment and project must use the same subsidiary')
       }
 
-      const resolved = line.costRate == null && line.billRate == null
+      const resolved = line.rateSnapshot ?? (line.costRate == null && line.billRate == null
         ? await resolveItemRate({
             orgId, projectId: input.projectId, itemId: line.itemId,
             equipmentUnitId: line.equipmentUnitId, onDate: docDate, baseQuantity: String(line.quantity),
           })
-        : null
+        : null)
       const costAmount = resolved?.cost.amount ?? mul(String(line.quantity), String(line.costRate ?? it.default_cost ?? '0'))
       const billAmount = resolved?.bill.amount ?? mul(String(line.quantity), String(line.billRate ?? it.default_rate ?? line.costRate ?? it.default_cost ?? '0'))
       const costRate = resolved ? divRate(costAmount, String(line.quantity)) : String(line.costRate ?? it.default_cost ?? '0')
@@ -116,9 +129,9 @@ export async function createProjectCharge(
               quantity, unit, unit_price, amount, is_billable, project_id, equipment_unit_id, rate_version_id,
               rate_presentation, base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount, recovery_account_id, created_by)
         values (${orgId}, ${docId}, ${lineNo}, ${line.itemId}, ${accountId}, ${line.description ?? it.name},
-              ${line.quantity}, ${resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
+              ${line.quantity}, ${resolved?.transactionUnitCode ?? resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
               ${line.equipmentUnitId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'},
-              ${line.quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
+              ${resolved?.baseQuantity ?? line.quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
               ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null}, ${userId})
         returning id
       `)).rows as { id: string }[]

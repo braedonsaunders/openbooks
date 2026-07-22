@@ -85,6 +85,17 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
       if (!naturalKeyed && !UUID_RE.test(s)) return { error: `${field.key} must reference a valid record` }
       return { column, value: s }
     }
+    case 'json': {
+      if (!present) return { column, value: null }
+      if (typeof raw === 'object') return { column, value: raw }
+      try {
+        const value = JSON.parse(String(raw))
+        if (value == null || typeof value !== 'object') return { error: `${field.key} must be a JSON object or array` }
+        return { column, value }
+      } catch {
+        return { error: `${field.key} must be valid JSON` }
+      }
+    }
     case 'text':
     case 'textarea':
     default: {

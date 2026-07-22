@@ -1,12 +1,12 @@
 "use client";
 
+import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { ArrowRight, TriangleAlert, CalendarClock } from "lucide-react";
 import { Badge, Button, cn } from "@openbooks/ui";
-import { money } from "../../../../lib/format";
-import { compactMoney } from "../../../../components/cockpit/ui";
+
 import { SearchInput } from "../../../../components/search-input";
 import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
@@ -44,6 +44,7 @@ export function CollectionsWorklist({
   /** ar.pay — gates the collection-run handoff. */
   canCollect: boolean;
 }) {
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations("ar.cockpit.worklist");
   const format = useFormatter();
   const router = useRouter();
@@ -116,7 +117,7 @@ export function CollectionsWorklist({
                 : "text-slate-900 dark:text-slate-100",
             )}
           >
-            {compactMoney(overdueTotal)}
+            {moneyCompact(overdueTotal)}
           </p>
         </div>
         <div className="px-4 py-2.5">
@@ -124,7 +125,7 @@ export function CollectionsWorklist({
             <CalendarClock size={11} /> {t("expectedThisWeek")}
           </p>
           <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-            {compactMoney(expectedThisWeek)}
+            {moneyCompact(expectedThisWeek)}
           </p>
         </div>
       </div>

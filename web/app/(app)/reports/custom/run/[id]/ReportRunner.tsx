@@ -22,6 +22,11 @@ type RunRow = {
   row_count: number | null
   started_at: string | null
   finished_at: string | null
+  artifact_available: boolean
+  delivery_total: number
+  delivery_sent: number
+  delivery_failed: number
+  delivery_suppressed: number
 }
 
 const RUN_VARIANT: Record<string, 'success' | 'warning' | 'secondary' | 'outline'> = {
@@ -181,6 +186,7 @@ export function ReportRunner({
                     <th className="px-3 py-2 font-medium">{t('columns.trigger')}</th>
                     <th className="px-3 py-2 font-medium">{t('columns.rows')}</th>
                     <th className="px-3 py-2 font-medium">{t('columns.finished')}</th>
+                    <th className="px-3 py-2 font-medium">{t('columns.delivery')}</th>
                     <th className="px-3 py-2 font-medium">{tc('actions.download')}</th>
                   </tr>
                 </thead>
@@ -204,8 +210,23 @@ export function ReportRunner({
                       <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
                         {run.finished_at ? String(run.finished_at).slice(0, 19).replace('T', ' ') : '—'}
                       </td>
+                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
+                        {run.trigger !== 'scheduled' ? '—' : t('deliveryEvidence', {
+                          sent: run.delivery_sent,
+                          total: run.delivery_total,
+                          failed: run.delivery_failed,
+                          suppressed: run.delivery_suppressed,
+                        })}
+                      </td>
                       <td className="px-3 py-2">
-                        {run.status === 'succeeded' ? (
+                        {run.artifact_available ? (
+                          <a
+                            href={`/api/reports/runs/${run.id}/artifact`}
+                            className="text-teal-700 hover:underline dark:text-teal-300"
+                          >
+                            {t('pdf')}
+                          </a>
+                        ) : run.status === 'succeeded' && run.row_count != null ? (
                           <a
                             href={`/api/reports/runs/${run.id}/csv`}
                             className="text-teal-700 hover:underline dark:text-teal-300"

@@ -5,7 +5,6 @@ import { dimensionOptions, projectProfitability, projectProfitabilityCustomerOpt
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
-import { currencySymbol } from '../../../../lib/statement-format'
 import { orgBranding } from '../../../../lib/report-pdf'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
@@ -37,7 +36,7 @@ export default async function ProjectProfitabilityPage({
     orgInfo(authz.user.orgId),
     orgBranding(authz.user.orgId),
   ])
-  const sym = currencySymbol(org?.base_currency)
+  if (!org?.base_currency) throw new Error('Organization base currency is not configured')
 
   // Each project drills into the P&L filtered on that project (period + basis +
   // other dims preserved). Link only the project-name cell.
@@ -124,7 +123,7 @@ export default async function ProjectProfitabilityPage({
         company={branding.orgName}
         title={t('projectProfitability.title')}
         periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
-        currency={sym}
+        currency={org.base_currency}
         emptyLabel={t('projectProfitability.empty')}
         columns={[
           t('projectProfitability.columns.customerJob'),

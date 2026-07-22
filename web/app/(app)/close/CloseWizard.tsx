@@ -549,6 +549,21 @@ function TaskCard(props: Props & { task: Row }) {
       setBusy(false);
     }
   }
+  async function runConsolidation() {
+    setBusy(true);
+    try {
+      await call("/api/consolidation", {
+        action: "consolidate",
+        periodId: props.run.period_id,
+      });
+      toast.success(t("messages.consolidationPosted"));
+      router.refresh();
+    } catch {
+      toast.error(t("errors.actionFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <Card
       className={cn(
@@ -628,9 +643,17 @@ function TaskCard(props: Props & { task: Row }) {
             {t("actions.runRevaluation")}
           </Button>
         ) : null}
+        {props.canRun &&
+        props.task.key === "consolidation" &&
+        !["complete", "waived"].includes(props.task.status) ? (
+          <Button size="sm" disabled={busy} onClick={runConsolidation}>
+            <Play size={14} />
+            {t("actions.runConsolidation")}
+          </Button>
+        ) : null}
         {actionHref &&
         !["complete", "waived"].includes(props.task.status) &&
-        props.task.key !== "fx-revalued" ? (
+        !["fx-revalued", "consolidation"].includes(props.task.key) ? (
           <Button variant="outline" size="sm" asChild>
             <Link href={actionHref as any}>
               <ExternalLink size={14} />

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -15,8 +16,6 @@ import {
   Scale,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
-import { money } from '@/lib/format'
-import { currencySymbol } from '@/lib/statement-format'
 import type { DashboardMetrics } from './_metrics'
 
 export function WidgetCard({
@@ -26,8 +25,8 @@ export function WidgetCard({
   widgetId: string
   data: DashboardMetrics
 }) {
+  const { money } = useMoney()
   const t = useTranslations('dashboard')
-  const symbol = currencySymbol(data.baseCurrency)
 
   switch (widgetId) {
     case 'kpi-journal-lines':
@@ -39,17 +38,17 @@ export function WidgetCard({
     case 'kpi-pending-approvals':
       return <MetricTile icon={<ClipboardList size={15} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/approvals?tab=all" tone="amber" hint={t('metricContext.awaitingDecision')} />
     case 'kpi-ledger-balance':
-      return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, symbol)} href="/journal" tone="slate" />
+      return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, { currency: data.baseCurrency })} href="/journal" tone="slate" />
     case 'kpi-cash-balance':
-      return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, symbol)} href="/banking" tone="emerald" hint={t('metricContext.baseCurrency', { currency: data.baseCurrency })} />
+      return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={t('metricContext.baseCurrency', { currency: data.baseCurrency })} />
     case 'kpi-open-receivables':
-      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, symbol)} href="/ar" tone="sky" hint={t('metricContext.outstanding')} />
+      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={t('metricContext.outstanding')} />
     case 'kpi-overdue-receivables':
-      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, symbol)} href="/ar" tone="rose" hint={t('metricContext.pastDue')} />
+      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={t('metricContext.pastDue')} />
     case 'kpi-open-payables':
-      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, symbol)} href="/ap" tone="violet" hint={t('metricContext.outstanding')} />
+      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={t('metricContext.outstanding')} />
     case 'kpi-overdue-payables':
-      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, symbol)} href="/ap" tone="orange" hint={t('metricContext.pastDue')} />
+      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={t('metricContext.pastDue')} />
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':
@@ -170,6 +169,7 @@ function RecentEntriesList({
 }: {
   entries: DashboardMetrics['recentEntries']
 }) {
+  const { money } = useMoney()
   const t = useTranslations('dashboard')
   if (entries.length === 0) {
     return (
@@ -225,6 +225,7 @@ function PendingApprovalsList({
   title?: string
   href?: string
 }) {
+  const { money } = useMoney()
   const t = useTranslations('dashboard')
   const ta = useTranslations('approvals')
   const kindLabel = (kind: string) =>
@@ -274,6 +275,7 @@ function InProgressList({
 }: {
   documents: DashboardMetrics['draftDocuments']
 }) {
+  const { money } = useMoney()
   const t = useTranslations('dashboard')
   const ta = useTranslations('approvals')
   const kindLabel = (kind: string) =>

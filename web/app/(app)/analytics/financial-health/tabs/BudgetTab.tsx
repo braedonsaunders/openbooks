@@ -9,7 +9,7 @@ import type { HealthData, BudgetRow } from '../../../../../lib/analytics/health-
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { exportCsv } from '../../_ui/exportCsv'
-import { fmtMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
 
 const STATUS_STYLE: Record<BudgetRow['status'], string> = {
   'on-track': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
@@ -33,6 +33,7 @@ type Filter = 'all' | 'over' | 'watch' | 'on-track' | 'no-budget'
 const PAGE = 30
 
 function RealBudget({ data }: { data: HealthData }) {
+  const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth.budget')
   const tb = useTranslations('budgets')
   const b = data.budget

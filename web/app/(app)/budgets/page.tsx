@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -9,7 +10,7 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
-import { dateTime, money } from '../../../lib/format'
+import { dateTime } from '../../../lib/format'
 import { isUuid, mergeHref, parseListParams, parsePrefixedListParams, pickString } from '../../../lib/list-params'
 import { BUDGET_KINDS, BUDGET_STATUSES, loadBudgetBooksAndYears, loadBudgetWorkspace, type BudgetDimensions } from '../../../lib/budgets'
 import { NewBudgetButton } from './NewBudgetButton'
@@ -25,6 +26,7 @@ const SORTS = {
 } as const
 
 export default async function BudgetsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('budgets')
   const authz = await requirePermission('budgets.read')
   const orgId = authz.user.orgId

@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { ListChecks } from 'lucide-react'
@@ -15,8 +16,6 @@ import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
 import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
 import { userPageLayout } from '../../../lib/page-layout'
-import { moneyCompact } from '../../../lib/format'
-
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata() {
@@ -41,6 +40,7 @@ export default async function BankingHomePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { moneyCompact } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')

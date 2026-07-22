@@ -6,7 +6,7 @@ import { EmptyState, Select } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { ForecastChart } from '../../_ui/charts'
-import { fmtMoney } from '../../_ui/format'
+import { useAnalyticsMoney } from '../../_ui/format'
 import { applyForecastMethod, applyForecastAdjustment, diagnostics, type ForecastMethod, type Seasonality } from '../../_ui/forecast'
 
 type Metric = 'revenue' | 'gm' | 'opinc'
@@ -29,6 +29,7 @@ function futureLabels(lastMonth: string, horizon: number): string[] {
 const SELECT = 'h-8 w-full text-sm'
 
 export function ForecastTab({ data }: { data: HealthData }) {
+  const fmtMoney = useAnalyticsMoney()
   const [metric, setMetric] = useState<Metric>('revenue')
   const [method, setMethod] = useState<ForecastMethod>('ets')
   const [horizon, setHorizon] = useState(6)

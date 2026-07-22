@@ -16,7 +16,8 @@
     "quote": "Orçamento",
     "sales_order": "Pedido de venda",
     "purchase_order": "Pedido de compra",
-    "project": "Projeto"
+    "project": "Projeto",
+    "fixed_asset": "Ativo imobilizado"
   },
   "views": {
     "defaultName": "Visualização padrão",

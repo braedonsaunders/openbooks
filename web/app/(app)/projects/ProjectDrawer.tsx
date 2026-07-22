@@ -20,6 +20,7 @@ import { WorkBreakdownTab, type WorkBreakdownTask } from './tabs/WorkBreakdownTa
 import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquipmentOption } from './tabs/ChargesSection'
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
+import { useMoney } from '@/components/money-provider'
 
 interface PartyOpt {
   id: string
@@ -107,6 +108,7 @@ export function ProjectDrawer({
   /** Configurable project types (Setup → Project Types) for the selector. */
   projectTypes?: { id: string; name: string }[]
 }) {
+  const { currency } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -375,7 +377,7 @@ export function ProjectDrawer({
           <>
             <Label>{lbl || t('labels.contractValue')}</Label>
             <div className="flex items-center">
-              <span className="mr-1 text-slate-500">$</span>
+              <span className="mr-1 text-slate-500">{currency}</span>
               <Input inputMode="decimal" className="text-right tabular-nums" value={contractValue} onChange={(e) => setContractValue(e.target.value)} disabled={ro} />
             </div>
           </>
@@ -508,11 +510,11 @@ export function ProjectDrawer({
       headerActions={
         mode === 'edit' ? (
           <div className="flex items-center gap-1.5">
-            <Button size="sm" disabled={busy} onClick={save}>
-              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-            </Button>
             <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>
               {tCommon('actions.cancel')}
+            </Button>
+            <Button size="sm" disabled={busy} onClick={save}>
+              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </div>
         ) : canManage ? (

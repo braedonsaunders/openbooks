@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -6,8 +7,6 @@ import { dimensionOptions, journalReport } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { currencySymbol } from '../../../../lib/statement-format'
-import { money } from '../../../../lib/format'
 import { TxnLink } from '../TxnLink'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
@@ -22,6 +21,7 @@ export default async function JournalPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
@@ -33,8 +33,7 @@ export default async function JournalPage({
     dimensionOptions(),
     orgInfo(),
   ])
-  const sym = currencySymbol(org?.base_currency)
-  const m = (v: number) => money(v, sym)
+  const m = (v: number) => money(v, { currency: org?.base_currency })
 
   return (
     <ListPageLayout

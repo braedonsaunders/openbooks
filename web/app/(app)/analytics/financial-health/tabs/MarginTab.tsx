@@ -6,9 +6,10 @@ import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { Waterfall, TrendChart, Donut } from '../../_ui/charts'
-import { fmtMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
 
 export function MarginTab({ data }: { data: HealthData }) {
+  const fmtMoney = useAnalyticsMoney()
   const f = data.figures
   const rev = f.revenue || 1
   const gmPct = f.grossProfit / rev

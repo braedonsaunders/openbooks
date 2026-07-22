@@ -56,7 +56,8 @@
     "reasonLabel": "Rejection reason (applied to every selected item)",
     "approvedCount": "{count} approved",
     "rejectedCount": "{count} rejected",
-    "failedCount": "{count} failed ({error})"
+    "failedCount": "{count} failed ({error})",
+    "signatureBlocked": "Some selected approvals require a signature — approve those one at a time."
   },
   "ooo": {
     "button": "Out of office",
@@ -75,12 +76,15 @@
   },
   "gates": {
     "rejectTitle": "Reject this approval?",
+    "signTitle": "Sign to approve",
+    "signLabel": "Type your full name to sign this approval",
     "waitingOthers": "Recorded — waiting on the other approvers",
     "delegate": "Delegate",
     "delegatePlaceholder": "Delegate to…",
     "delegated": "Approval delegated",
     "badges": {
       "quorumAll": "All approvers",
+      "signature": "Signature required",
       "reminder": "Reminder {date}",
       "escalates": "Escalates {date}"
     }

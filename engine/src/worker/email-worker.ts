@@ -8,6 +8,12 @@ import {
   resolveOrgEmailTransport,
 } from "../email-config.ts";
 import { isSandboxOrg } from "../sandbox/guard.ts";
+import {
+  markReportDeliveryFailed,
+  markReportDeliverySent,
+  markReportDeliveryStarted,
+  markReportDeliverySuppressed,
+} from "../report-delivery.ts";
 
 /**
  * Consumes the `emails` queue: one job = one recipient. Resolves the org's
@@ -20,10 +26,12 @@ export function createEmailWorker(): Worker<EmailJobData> {
     EMAIL_QUEUE,
     async (job) => {
       const d = job.data;
+      const reportDeliveryId = d.meta?.reportDeliveryId;
+      if (reportDeliveryId) await markReportDeliveryStarted(d.orgId, reportDeliveryId, job.id ?? null);
       // Hard sandbox block: a sandbox never sends email, regardless of any
       // provider config that survived the clone. Recorded as suppressed + acked.
       if (await isSandboxOrg(d.orgId)) {
-        await insertEmailLog({
+        const logId = await insertEmailLog({
           orgId: d.orgId,
           jobId: job.id ?? null,
           recipients: [d.to],
@@ -32,11 +40,14 @@ export function createEmailWorker(): Worker<EmailJobData> {
           categoryKey: d.meta?.category ?? null,
           meta: { ...d.meta, reason: "sandbox environment — email egress blocked" },
         });
+        if (reportDeliveryId) {
+          await markReportDeliverySuppressed(d.orgId, reportDeliveryId, logId, "sandbox environment — email egress blocked");
+        }
         return { suppressed: true, sandbox: true };
       }
       const transport = await resolveOrgEmailTransport(d.orgId);
       if (!transport) {
-        await insertEmailLog({
+        const logId = await insertEmailLog({
           orgId: d.orgId,
           jobId: job.id ?? null,
           recipients: [d.to],
@@ -45,6 +56,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
           categoryKey: d.meta?.category ?? null,
           meta: { ...d.meta, reason: "email provider not configured" },
         });
+        if (reportDeliveryId) {
+          await markReportDeliverySuppressed(d.orgId, reportDeliveryId, logId, "email provider not configured");
+        }
         return { suppressed: true };
       }
       const logId = await insertEmailLog({
@@ -68,9 +82,15 @@ export function createEmailWorker(): Worker<EmailJobData> {
           attachments: d.attachments,
         });
         await markEmailSent(logId, id);
+        if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, logId, id);
         return { id };
       } catch (e) {
-        await markEmailFailed(logId, e instanceof Error ? e.message : String(e));
+        const message = e instanceof Error ? e.message : String(e);
+        await markEmailFailed(logId, message);
+        if (reportDeliveryId) {
+          const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+          await markReportDeliveryFailed(d.orgId, reportDeliveryId, logId, message, finalQueueAttempt);
+        }
         throw e;
       }
     },

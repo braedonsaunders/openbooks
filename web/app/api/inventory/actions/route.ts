@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
 import {
   adjustInventory,
   allocateLandedCost,
@@ -33,8 +34,11 @@ interface Body {
 
 function num(v: unknown): string | null {
   if (typeof v !== 'string' && typeof v !== 'number') return null
-  const n = Number(v)
-  return Number.isFinite(n) ? String(v) : null
+  try {
+    return fromUnits(toUnits(v))
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -56,7 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'stock location required' }, { status: 422 })
   }
   const quantity = num(body.quantity)
-  if (quantity === null || Number(quantity) === 0) {
+  if (quantity === null || toUnits(quantity) === 0n) {
     return NextResponse.json({ error: 'quantity required' }, { status: 422 })
   }
   const date = body.date && DATE_RE.test(body.date) ? body.date : new Date().toISOString().slice(0, 10)

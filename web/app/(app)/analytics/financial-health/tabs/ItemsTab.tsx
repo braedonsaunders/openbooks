@@ -7,11 +7,12 @@ import type { HealthData, ItemRow } from '../../../../../lib/analytics/health-da
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
-import { fmtMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
 
 type SortKey = 'current' | 'change' | 'changePct' | 'contribution'
 
 export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
+  const fmtMoney = useAnalyticsMoney()
   const [sort, setSort] = useState<SortKey>('current')
   const { rows, gainers, decliners, totalCurrent, totalChange } = data.items
 
@@ -91,6 +92,7 @@ function Th({ label, onClick, active }: { label: string; onClick: () => void; ac
 }
 
 function MoversPanel({ title, icon: Icon, accent, rows }: { title: string; icon: typeof ArrowUp; accent: 'emerald' | 'red'; rows: ItemRow[] }) {
+  const fmtMoney = useAnalyticsMoney()
   return (
     <Panel title={title} icon={Icon} bodyClassName="p-0">
       {rows.length === 0 ? (

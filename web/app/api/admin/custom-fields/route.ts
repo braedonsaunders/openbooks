@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
  *  transaction document kinds mirror the customization registry's RECORD_TYPES
  *  so the Forms designer can create header/line fields for any transaction
  *  form (bills, credits, card charges/refunds, checks) inline. */
-export const FIELD_TARGETS = [
+const FIELD_TARGETS = [
   {
     table: 'documents',
     kinds: [

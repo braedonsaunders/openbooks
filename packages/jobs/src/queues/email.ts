@@ -16,7 +16,7 @@ export type EmailJobData = {
   html: string
   text: string
   attachments?: EmailAttachment[]
-  meta?: { userId?: string; category?: string; reportRunId?: string }
+  meta?: { userId?: string; category?: string; reportRunId?: string; reportDeliveryId?: string }
 }
 
 export type EnqueueEmailData = Omit<EmailJobData, 'to'> & { to: string | string[] }

@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { validateCustomQuery } from '@openbooks/reports'
+import { validateCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
 import {
   agingByParty,
   cashFlow,
@@ -33,7 +33,7 @@ import {
   type ExportData,
   type Translator,
 } from './report-pdf'
-import { executeReport } from './custom-reports'
+import { executeReport, mergeReportFilters } from './custom-reports'
 import type { ReportQuery } from './report-filters'
 
 /**
@@ -282,6 +282,7 @@ export async function resolveDefinitionToExportData(
   id: string,
   p: URLSearchParams,
   ctx: ResolveReportCtx,
+  options: { extraFilters?: ReportRuleGroup | null } = {},
 ): Promise<ExportData> {
   const r = (await db.execute(sql`
     select report_type, name, description, query, statement
@@ -318,7 +319,7 @@ export async function resolveDefinitionToExportData(
 
   // query-type definition → entity engine → ExportData
   if (!row.query) throw new Error('report has no query')
-  const query = validateCustomQuery(row.query)
+  const query = mergeReportFilters(validateCustomQuery(row.query), options.extraFilters)
   const result = await executeReport(orgId, query)
   return runResultToExportData(result, { title: row.name, dateRangeLabel: ctx.period.label ?? '' })
 }

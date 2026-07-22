@@ -350,7 +350,8 @@
       "columns": {
         "trigger": "トリガー",
         "rows": "行数",
-        "finished": "完了"
+        "finished": "完了",
+        "delivery": "配信"
       },
       "status": {
         "succeeded": "成功",
@@ -362,6 +363,8 @@
         "manual": "手動",
         "scheduled": "スケジュール"
       },
+      "deliveryEvidence": "{sent}/{total} 送信済み · {failed} 失敗 · {suppressed} 抑止",
+      "pdf": "PDF証跡",
       "csv": "CSV"
     }
   },

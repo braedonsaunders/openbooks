@@ -1,11 +1,11 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { mulRate, add, sum } from '@openbooks/engine/src/money.ts'
+import { mul, divRate, add, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
 import { createProjectCharge } from './project-charges'
 import { runTimeApprovalEffects } from './time-approval'
-import { snapshotTimeBillRates } from './item-rates'
+import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 
 /**
  * Field tickets — the signed crew timesheet for T&M work (the industry's
@@ -51,8 +51,8 @@ const iso = (d: Date) => d.toISOString().slice(0, 10)
 
 /** Sunday-start week window (matches timesheets), or the single day. */
 export function ticketWindow(period: TicketPeriod, anchorIso: string): { start: string; end: string } {
-  if (period !== 'weekly') return { start: anchorIso, end: anchorIso }
   const [y, m, d] = anchorIso.split('-').map(Number)
+  if (period !== 'weekly') return { start: anchorIso, end: anchorIso }
   const date = new Date(Date.UTC(y, m - 1, d, 12))
   date.setUTCDate(date.getUTCDate() - date.getUTCDay())
   const start = iso(date)
@@ -207,7 +207,7 @@ export async function updateTicketHeader(
      where id = ${ticketId} and org_id = ${orgId}`)
   // Re-home any existing draft hours/lines onto the new project.
   if (projChange) {
-    await db.execute(sql`update time_entries set project_id = ${projChange.id} where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
+    await db.execute(sql`update time_entries set project_id = ${projChange.id}, project_task_id = null where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
     await db.execute(sql`update document_lines set project_id = ${projChange.id} where document_id = ${ticketId} and org_id = ${orgId}`)
   }
 }
@@ -216,6 +216,7 @@ export interface CrewRowInput {
   employeePartyId: string
   /** Billable labor/service item shown on the ticket (optional). */
   itemId: string | null
+  projectTaskId?: string | null
   timeTypeId: string
   /** hours keyed by ISO date within the ticket window ('' / 0 = none). */
   hours: Record<string, number>
@@ -231,19 +232,48 @@ export async function saveCrewGrid(orgId: string, userId: string, ticketId: stri
   const ft = doc.custom.fieldTicket
 
   const existing = (await db.execute(sql`
-    select id, employee_party_id, item_id, time_type_id, worked_on::text as worked_on, hours
+    select id, employee_party_id, item_id, project_task_id, time_type_id, worked_on::text as worked_on, hours
       from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`)) as unknown as {
-    rows: { id: string; employee_party_id: string; item_id: string | null; time_type_id: string; worked_on: string; hours: string }[]
+    rows: { id: string; employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string; hours: string }[]
   }
-  const key = (e: { employee_party_id: string; item_id: string | null; time_type_id: string; worked_on: string }) =>
-    `${e.employee_party_id}|${e.item_id ?? ''}|${e.time_type_id}|${e.worked_on}`
+  const key = (e: { employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string }) =>
+    `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}|${e.time_type_id}|${e.worked_on}`
   const byKey = new Map(existing.rows.map((e) => [key(e), e]))
   const seen = new Set<string>()
+
+  // The field-ticket switch is independent of whether a type is usable in
+  // ordinary timesheets. Existing ticket types remain legal so changing setup
+  // never makes an older draft impossible to save.
+  const requestedTypeIds = [...new Set(rows.map((row) => row.timeTypeId).filter(Boolean))]
+  if (requestedTypeIds.length) {
+    if (requestedTypeIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+      throw new FieldTicketError('Choose a valid time type')
+    }
+    const existingTypeIds = new Set(existing.rows.map((entry) => entry.time_type_id))
+    const selectable = (await db.execute(sql`
+      select id from time_types
+       where org_id = ${orgId} and is_active and show_on_field_ticket
+         and id = any(${`{${requestedTypeIds.join(',')}}`}::uuid[])`)) as unknown as { rows: { id: string }[] }
+    const allowed = new Set([...existingTypeIds, ...selectable.rows.map((type) => type.id)])
+    if (requestedTypeIds.some((id) => !allowed.has(id))) {
+      throw new FieldTicketError('Choose a time type enabled for field tickets')
+    }
+  }
+  const requestedTaskIds = [...new Set(rows.map((row) => row.projectTaskId).filter((id): id is string => Boolean(id)))]
+  if (requestedTaskIds.length) {
+    if (requestedTaskIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+      throw new FieldTicketError('Choose a valid project task')
+    }
+    const validTasks = (await db.execute(sql`
+      select id from project_tasks where org_id = ${orgId} and project_id = ${doc.project_id}
+        and id = any(${`{${requestedTaskIds.join(',')}}`}::uuid[])`)) as unknown as { rows: { id: string }[] }
+    if (validTasks.rows.length !== requestedTaskIds.length) throw new FieldTicketError('Choose a task from this project')
+  }
 
   for (const row of rows) {
     for (const [day, hours] of Object.entries(row.hours)) {
       if (day < ft.periodStart || day > ft.periodEnd) continue
-      const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.timeTypeId}|${day}`
+      const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
       const h = Number(hours)
       if (!Number.isFinite(h) || h <= 0) continue
       seen.add(k)
@@ -257,9 +287,9 @@ export async function saveCrewGrid(orgId: string, userId: string, ticketId: stri
       } else {
         await db.execute(sql`
           insert into time_entries (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
-                                    project_id, is_billable, status, field_ticket_id, created_by, updated_by)
+                                    project_id, project_task_id, is_billable, status, field_ticket_id, created_by, updated_by)
           values (${orgId}, ${row.employeePartyId}, ${day}, ${h}, ${row.timeTypeId}, ${row.itemId},
-                  ${doc.project_id}, true, 'draft', ${ticketId}, ${userId}, ${userId})`)
+                  ${doc.project_id}, ${row.projectTaskId ?? null}, true, 'draft', ${ticketId}, ${userId}, ${userId})`)
       }
     }
   }
@@ -272,48 +302,93 @@ export async function saveCrewGrid(orgId: string, userId: string, ticketId: stri
   }
 }
 
-/** Add an item/equipment/consumable line, priced from the rate books (falls
- * back to the item's default rates). */
+/** Add an item/equipment line using the same project/customer/unit rate-book
+ * assignment and package-tier engine as project charges. */
 export async function addTicketLine(
   orgId: string,
   userId: string,
   ticketId: string,
-  input: { itemId: string; quantity: number; description?: string | null; billRate?: number | null },
+  input: { itemId: string; quantity: number; rateUnitCode?: string | null; equipmentUnitId?: string | null; description?: string | null },
 ): Promise<void> {
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
   const item = (await db.execute(sql`
-    select id, name, default_rate, default_cost from items where id = ${input.itemId} and org_id = ${orgId}`)) as unknown as {
-    rows: { id: string; name: string; default_rate: string | null; default_cost: string | null }[]
+    select id, name, unit, default_rate, default_cost from items where id = ${input.itemId} and org_id = ${orgId}`)) as unknown as {
+    rows: { id: string; name: string; unit: string | null; default_rate: string | null; default_cost: string | null }[]
   }
   if (!item.rows[0]) throw new FieldTicketError('Item not found')
   const qty = Number(input.quantity)
-  if (!Number.isFinite(qty) || qty <= 0) throw new FieldTicketError('Quantity must be positive')
+  if (!Number.isInteger(qty) || qty <= 0) throw new FieldTicketError('Quantity must be a positive whole number')
 
-  const billRate =
-    input.billRate != null && Number.isFinite(Number(input.billRate))
-      ? String(input.billRate)
-      : String(item.rows[0].default_rate ?? '0')
-  const costRate = String(item.rows[0].default_cost ?? '0')
-  const amount = mulRate(String(qty), billRate)
+  if (!doc.project_id) throw new FieldTicketError('Choose a project before adding items')
+  if (input.equipmentUnitId) {
+    const equipment = (await db.execute(sql`
+      select charge_item_id, status from equipment_units
+       where id = ${input.equipmentUnitId} and org_id = ${orgId}`)) as unknown as {
+      rows: { charge_item_id: string | null; status: string }[]
+    }
+    if (!equipment.rows[0] || equipment.rows[0].status !== 'active' || equipment.rows[0].charge_item_id !== input.itemId) {
+      throw new FieldTicketError('Choose active equipment linked to this item')
+    }
+  }
+
+  const quantity = String(qty)
+  let resolved: Awaited<ReturnType<typeof resolveItemRate>>
+  try {
+    resolved = await resolveItemRate({
+      orgId,
+      projectId: doc.project_id,
+      itemId: input.itemId,
+      equipmentUnitId: input.equipmentUnitId,
+      onDate: doc.custom.fieldTicket.periodEnd,
+      baseQuantity: quantity,
+      rateUnitCode: input.rateUnitCode,
+    })
+  } catch (error) {
+    throw new FieldTicketError(error instanceof Error ? error.message : 'Could not resolve item rate')
+  }
+  const costAmount = resolved?.cost.amount ?? mul(quantity, String(item.rows[0].default_cost ?? '0'))
+  const billAmount = resolved?.bill.amount ?? mul(quantity, String(item.rows[0].default_rate ?? item.rows[0].default_cost ?? '0'))
+  const costRate = divRate(costAmount, quantity)
+  const billRate = divRate(billAmount, quantity)
+  const baseUnit = resolved?.baseUnit ?? item.rows[0].unit ?? 'unit'
+  const baseQuantity = resolved?.baseQuantity ?? quantity
+  const transactionUnit = resolved?.transactionUnitCode ?? item.rows[0].unit ?? 'unit'
 
   const next = (await db.execute(sql`
     select coalesce(max(line_number), 0) + 1 as n from document_lines where document_id = ${ticketId}`)) as unknown as {
     rows: { n: number }[]
   }
-  await db.execute(sql`
-    insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit_price, amount,
-                                project_id, is_billable, cost_rate, bill_rate,
-                                cost_amount, bill_amount, created_by, updated_by)
+  const inserted = (await db.execute(sql`
+    insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
+                                project_id, is_billable, equipment_unit_id, rate_version_id, rate_presentation,
+                                base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount, created_by, updated_by)
     values (${orgId}, ${ticketId}, ${next.rows[0].n}, ${input.itemId}, ${input.description ?? item.rows[0].name},
-            ${qty}, ${billRate}, ${amount}, ${doc.project_id}, true, ${costRate}, ${billRate},
-            ${mulRate(String(qty), costRate)}, ${amount}, ${userId}, ${userId})`)
+            ${quantity}, ${transactionUnit}, ${billRate}, ${billAmount}, ${doc.project_id}, true, ${input.equipmentUnitId ?? null},
+            ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'}, ${baseQuantity}, ${baseUnit},
+            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${userId}, ${userId}) returning id`)) as unknown as {
+    rows: { id: string }[]
+  }
+  const components = [
+    ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),
+    ...(resolved?.bill.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: billRate, amount: billAmount }]).map((c) => ({ ...c, role: 'bill' })),
+  ]
+  let sequence = 1
+  for (const component of components) {
+    await db.execute(sql`
+      insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
+                                           quantity, rate, amount, sequence, created_by, updated_by)
+      values (${orgId}, ${inserted.rows[0].id}, ${component.role}, ${component.rateLineId}, ${component.unitCode},
+              ${component.unitName}, ${component.quantity}, ${component.rate}, ${component.amount}, ${sequence++},
+              ${userId}, ${userId})`)
+  }
   await recomputeTotals(orgId, ticketId)
 }
 
 export async function removeTicketLine(orgId: string, ticketId: string, lineId: string): Promise<void> {
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
+  await db.execute(sql`delete from charge_rate_components where document_line_id = ${lineId} and org_id = ${orgId}`)
   await db.execute(sql`delete from document_lines where id = ${lineId} and document_id = ${ticketId} and org_id = ${orgId}`)
   await recomputeTotals(orgId, ticketId)
 }
@@ -405,11 +480,29 @@ export async function approveFieldTicket(orgId: string, userId: string, ticketId
 
   // Materialize item lines as a project charge so job cost + T&M billing see them.
   const lines = (await db.execute(sql`
-    select item_id, description, quantity, cost_rate, bill_rate from document_lines
+    select id, item_id, description, quantity, unit, cost_rate, bill_rate, cost_amount, bill_amount,
+           equipment_unit_id, rate_version_id, rate_presentation, base_quantity, base_unit
+      from document_lines
      where document_id = ${ticketId} and org_id = ${orgId} and item_id is not null`)) as unknown as {
-    rows: { item_id: string; description: string | null; quantity: string; cost_rate: string | null; bill_rate: string | null }[]
+    rows: { id: string; item_id: string; description: string | null; quantity: string; unit: string | null; cost_rate: string | null;
+      bill_rate: string | null; cost_amount: string | null; bill_amount: string | null; equipment_unit_id: string | null;
+      rate_version_id: string | null; rate_presentation: 'summary' | 'rate_components' | null;
+      base_quantity: string | null; base_unit: string | null }[]
   }
   if (lines.rows.length > 0 && doc.project_id) {
+    const lineIds = `{${lines.rows.map((line) => line.id).join(',')}}`
+    const componentRows = (await db.execute(sql`
+      select document_line_id, role, rate_line_id, unit_code, unit_name, quantity, rate, amount
+        from charge_rate_components
+       where org_id = ${orgId} and document_line_id = any(${lineIds}::uuid[])
+       order by document_line_id, role, sequence`)) as unknown as {
+      rows: { document_line_id: string; role: 'cost' | 'bill'; rate_line_id: string | null; unit_code: string;
+        unit_name: string; quantity: string; rate: string; amount: string }[]
+    }
+    const componentsFor = (lineId: string, role: 'cost' | 'bill') => componentRows.rows
+      .filter((component) => component.document_line_id === lineId && component.role === role)
+      .map((component) => ({ rateLineId: component.rate_line_id, unitCode: component.unit_code,
+        unitName: component.unit_name, quantity: component.quantity, rate: component.rate, amount: component.amount }))
     const charge = await createProjectCharge(
       orgId,
       userId,
@@ -417,14 +510,29 @@ export async function approveFieldTicket(orgId: string, userId: string, ticketId
         projectId: doc.project_id,
         referenceNumber: doc.document_number,
         documentDate: doc.custom.fieldTicket.periodEnd,
-        lines: lines.rows.map((l) => ({
-          itemId: l.item_id,
-          quantity: String(l.quantity),
-          costRate: l.cost_rate,
-          billRate: l.bill_rate,
-          description: l.description,
-          isBillable: true,
-        })),
+        lines: lines.rows.map((l) => {
+          const costComponents = componentsFor(l.id, 'cost')
+          const billComponents = componentsFor(l.id, 'bill')
+          const hasSnapshot = costComponents.length > 0 && billComponents.length > 0
+          return {
+            itemId: l.item_id,
+            quantity: String(l.quantity),
+            equipmentUnitId: l.equipment_unit_id,
+            costRate: hasSnapshot ? null : l.cost_rate,
+            billRate: hasSnapshot ? null : l.bill_rate,
+            rateSnapshot: hasSnapshot ? {
+              rateVersionId: l.rate_version_id,
+              baseUnit: l.base_unit ?? 'unit',
+              baseQuantity: l.base_quantity ?? l.quantity,
+              transactionUnitCode: l.unit,
+              invoicePresentation: l.rate_presentation ?? 'summary',
+              cost: { amount: l.cost_amount ?? mul(l.quantity, l.cost_rate ?? '0'), components: costComponents },
+              bill: { amount: l.bill_amount ?? mul(l.quantity, l.bill_rate ?? '0'), components: billComponents },
+            } : null,
+            description: l.description,
+            isBillable: true,
+          }
+        }),
       },
       { post: true },
     )
@@ -456,24 +564,37 @@ export async function rejectFieldTicket(orgId: string, userId: string, ticketId:
 export async function loadFieldTicket(orgId: string, ticketId: string) {
   const doc = await loadHeader(orgId, ticketId)
   const [customer, project, foreman, entries, lines] = await Promise.all([
-    db.execute(sql`select display_name, email from parties where id = ${doc.party_id}`) as unknown as Promise<{ rows: { display_name: string; email: string | null }[] }>,
+    db.execute(sql`
+      select display_name, email from parties
+       where id = coalesce(${doc.party_id}, (select customer_id from projects where id = ${doc.project_id} and org_id = ${orgId}))
+         and org_id = ${orgId}`) as unknown as Promise<{ rows: { display_name: string; email: string | null }[] }>,
     db.execute(sql`select code, name from projects where id = ${doc.project_id}`) as unknown as Promise<{ rows: { code: string | null; name: string }[] }>,
     db.execute(sql`select display_name from parties where id = ${doc.custom.fieldTicket.foremanPartyId}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
     db.execute(sql`
       select te.id, te.employee_party_id, p.display_name as employee_name, te.item_id, i.name as item_name,
              te.time_type_id, tt.name as time_type_name, coalesce(tt.bill_multiplier, '1') as bill_multiplier,
+             te.project_task_id, pt.name as project_task_name,
              te.worked_on::text as worked_on, te.hours, te.bill_rate, te.status
         from time_entries te
         join parties p on p.id = te.employee_party_id
         left join items i on i.id = te.item_id
         left join time_types tt on tt.id = te.time_type_id
+        left join project_tasks pt on pt.id = te.project_task_id
        where te.org_id = ${orgId} and te.field_ticket_id = ${ticketId}
        order by p.display_name, i.name nulls first, tt.bill_multiplier, te.worked_on`) as unknown as Promise<{ rows: TicketEntryRow[] }>,
     db.execute(sql`
-      select dl.id, dl.item_id, i.name as item_name, dl.description, dl.quantity, dl.unit_price, dl.amount,
-             dl.cost_rate, dl.bill_rate
+      select dl.id, dl.item_id, i.name as item_name, dl.description, dl.quantity, dl.unit, dl.unit_price, dl.amount,
+             dl.cost_rate, dl.bill_rate, dl.cost_amount, dl.bill_amount, dl.base_unit, dl.rate_version_id,
+             dl.rate_presentation, dl.equipment_unit_id,
+             case when eu.id is null then null else eu.unit_number || ' · ' || eu.name end as equipment_name,
+             coalesce((select jsonb_agg(jsonb_build_object(
+               'rateLineId', c.rate_line_id, 'unitCode', c.unit_code, 'unitName', c.unit_name,
+               'quantity', c.quantity, 'rate', c.rate, 'amount', c.amount
+             ) order by c.sequence) from charge_rate_components c
+               where c.document_line_id = dl.id and c.role = 'bill'), '[]'::jsonb) as rate_components
         from document_lines dl
         left join items i on i.id = dl.item_id
+        left join equipment_units eu on eu.id = dl.equipment_unit_id
        where dl.document_id = ${ticketId} and dl.org_id = ${orgId}
        order by dl.line_number`) as unknown as Promise<{ rows: TicketLineRow[] }>,
   ])
@@ -483,9 +604,9 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
   const preview = unpriced.length ? await snapshotTimeBillRates(orgId, unpriced, { dryRun: true }) : new Map<string, string>()
   for (const e of entries.rows) if (e.bill_rate == null && preview.has(e.id)) e.bill_rate = preview.get(e.id)!
   const laborTotal = sum(
-    entries.rows.map((e) => (e.bill_rate != null ? mulRate(String(e.hours), String(e.bill_rate)) : '0')),
+    entries.rows.map((e) => (e.bill_rate != null ? mul(String(e.hours), String(e.bill_rate)) : '0')),
   )
-  const linesTotal = sum(lines.rows.map((l) => String(l.amount)))
+  const linesTotal = sum(lines.rows.map((l) => String(l.bill_amount ?? l.amount)))
   return {
     id: doc.id,
     documentNumber: doc.document_number,
@@ -517,6 +638,8 @@ export interface TicketEntryRow {
   time_type_id: string
   time_type_name: string
   bill_multiplier: string
+  project_task_id: string | null
+  project_task_name: string | null
   worked_on: string
   hours: string
   bill_rate: string | null
@@ -529,8 +652,17 @@ export interface TicketLineRow {
   item_name: string | null
   description: string | null
   quantity: string
+  unit: string | null
   unit_price: string
   amount: string
   cost_rate: string | null
   bill_rate: string | null
+  cost_amount: string | null
+  bill_amount: string | null
+  base_unit: string | null
+  rate_version_id: string | null
+  rate_presentation: 'summary' | 'rate_components' | null
+  equipment_unit_id: string | null
+  equipment_name: string | null
+  rate_components: { rateLineId: string | null; unitCode: string; unitName: string; quantity: string; rate: string; amount: string }[]
 }

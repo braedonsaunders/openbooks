@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
@@ -12,7 +13,6 @@ import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
-import { money } from '../../../lib/format'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { NarrativeDrawer } from './NarrativeDrawer'
 import { WorkItemDrawer, type ContinuousCloseWorkItem } from './WorkItemDrawer'
@@ -35,6 +35,7 @@ const SEVERITY_VARIANT = { info: 'secondary', warning: 'warning', critical: 'des
 const STATUS_VARIANT = { open: 'warning', in_review: 'secondary', resolved: 'success', dismissed: 'outline' } as const
 
 export default async function ContinuousClosePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('assistant.use')
   const readable = readableContinuousCloseAgents(authz)
   if (readable.length === 0) redirect('/assistant')

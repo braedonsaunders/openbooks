@@ -1020,7 +1020,7 @@ async function readinessChecks(
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id
        where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
-         and s.book_id = ${ctx.book_id} and l.journal_entry_id is null and l.planned_amount <> 0`),
+         and s.book_id = ${ctx.book_id} and l.posted_amount is null and l.planned_amount <> 0`),
       db.execute(sql`
       select count(*) as count
         from (

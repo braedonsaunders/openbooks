@@ -1,12 +1,12 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
-import { money } from '../../../lib/format'
 import { TxnLink } from './TxnLink'
 
 type EntryData = {
@@ -46,6 +46,7 @@ type EntryData = {
  * journal) it offers "Open full transaction" → that record's editable drawer.
  */
 export function EntryFlyout() {
+  const { money } = useMoney()
   const params = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()

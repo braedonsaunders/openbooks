@@ -16,7 +16,8 @@
     "quote": "見積",
     "sales_order": "受注",
     "purchase_order": "発注書",
-    "project": "プロジェクト"
+    "project": "プロジェクト",
+    "fixed_asset": "固定資産"
   },
   "views": {
     "defaultName": "既定ビュー",

@@ -1134,6 +1134,43 @@
       "confirmReset": "{name}を保守されたライブラリの既定値にリセットしますか？設定済みの申告ボックスが置き換えられます。",
       "usNotice": "米国には連邦の売上税申告書がありません。このワークペーパーは、州および地方の申告管轄区域ごとにカスタマイズする必要があります。"
     },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": { "methods": "Methods", "books": "Book policies" }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class for each asset category.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "links": {
+        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
+        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, methods and conventions." },
+        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and eligibility." },
+        "assignments": { "title": "Asset-category assignments", "description": "Assign categories to regime classes in Tax attributes." }
+      }
+    },
     "taxOfficial": {
       "title": "公式申告フォーム",
       "description": "管轄区域がそのフォームを受け付ける、または要求する場合にのみ、公式の入力可能なPDFをアップロードしてください。各フィールドは「税務申告ボックス」でマッピングします。",
@@ -1190,7 +1227,8 @@
       "primaryRequired": "このレコードから主要ステータスを外す前に、別の会計帳簿を主要に設定してください。",
       "primaryActiveRequired": "主要な会計帳簿は有効なままにする必要があります。",
       "archiveOnly": "会計帳簿は元帳履歴のために保持され、アーカイブのみ可能です。",
-      "invalidUrl": "有効なhttp://またはhttps://の政府提出URLを入力してください。"
+      "invalidUrl": "有効なhttp://またはhttps://の政府提出URLを入力してください。",
+      "invalidDepreciationFormula": "文書化された変数と演算子を使用した有効な減価償却式を入力してください。"
     },
     "groups": {
       "company": "会社",
@@ -1605,6 +1643,24 @@
       }
     },
     "fields": {
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "Rate",
+      "method": "Method",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
       "code": "コード",
       "name": "名称",
       "appliesTo": "適用対象",
@@ -1734,6 +1790,11 @@
       "isDefault": "既定"
     },
     "options": {
+      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
+      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
+      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
+      "poolMethod": { "declining": "Declining balance", "straightLine": "Straight line" },
       "appliesTo": {
         "sales": "販売",
         "purchases": "購買",

@@ -6,9 +6,10 @@ import type { HealthData, DriverRow } from '../../../../../lib/analytics/health-
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
-import { fmtMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
 
 export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
+  const fmtMoney = useAnalyticsMoney()
   const rev = data.drivers.revenue
   const cost = data.drivers.cost
   const revNet = rev.reduce((a, d) => a + d.change, 0)
@@ -32,6 +33,7 @@ export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: 
 }
 
 function DriverPanel({ title, icon: Icon, rows, onDrill }: { title: string; icon: typeof Search; rows: DriverRow[]; onDrill: (id: string, name: string) => void }) {
+  const fmtMoney = useAnalyticsMoney()
   const top = rows.slice(0, 8)
   return (
     <Panel title={title} icon={Icon}>

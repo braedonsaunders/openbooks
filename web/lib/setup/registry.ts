@@ -19,6 +19,7 @@ export type SetupFieldKind =
   | 'text'
   | 'country'
   | 'textarea'
+  | 'json'
   | 'integer'
   | 'decimal'
   | 'percent'
@@ -217,6 +218,28 @@ const POOL_METHODS = [
   { value: 'straight_line', labelKey: 'options.poolMethod.straightLine' },
 ]
 
+const TAX_DEPRECIATION_MODELS = [
+  { value: 'pool', labelKey: 'options.taxDepreciationModel.pool' },
+  { value: 'macrs', labelKey: 'options.taxDepreciationModel.macrs' },
+]
+
+const MACRS_SYSTEMS = [
+  { value: 'gds', labelKey: 'options.macrsSystem.gds' },
+  { value: 'ads', labelKey: 'options.macrsSystem.ads' },
+]
+
+const MACRS_METHODS = [
+  { value: '200_db', labelKey: 'options.macrsMethod.200db' },
+  { value: '150_db', labelKey: 'options.macrsMethod.150db' },
+  { value: 'straight_line', labelKey: 'options.macrsMethod.straightLine' },
+]
+
+const TAX_DEPRECIATION_CONVENTIONS = [
+  { value: 'half_year', labelKey: 'options.taxDepreciationConvention.halfYear' },
+  { value: 'mid_quarter', labelKey: 'options.taxDepreciationConvention.midQuarter' },
+  { value: 'mid_month', labelKey: 'options.taxDepreciationConvention.midMonth' },
+]
+
 const DEPRECIATION_METHODS = [
   { value: 'straight_line', labelKey: 'options.method.straightLine' },
   { value: 'declining_balance', labelKey: 'options.method.decliningBalance' },
@@ -299,6 +322,17 @@ const STOCK_LOCATION_KINDS = [
   { value: 'quarantine', labelKey: 'options.stockLocationKind.quarantine' },
 ]
 
+const CONSOLIDATION_METHODS = [
+  { value: 'full', labelKey: 'options.consolidationMethod.full' },
+  { value: 'proportionate', labelKey: 'options.consolidationMethod.proportionate' },
+  { value: 'equity', labelKey: 'options.consolidationMethod.equity' },
+]
+
+const NCI_MEASUREMENTS = [
+  { value: 'proportionate', labelKey: 'options.nciMeasurement.proportionate' },
+  { value: 'fair_value', labelKey: 'options.nciMeasurement.fairValue' },
+]
+
 export const SETUP_ENTITIES: SetupEntity[] = [
   // --- Company -------------------------------------------------------------
   {
@@ -359,6 +393,49 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'isActive', kind: 'boolean' },
     ],
   },
+  {
+    key: 'subsidiary-ownership-interests',
+    table: 'subsidiary_ownership_interests',
+    actorCols: true,
+    groupKey: 'company',
+    iconKey: 'percent',
+    featureKey: 'multiSubsidiary',
+    orgScoped: true,
+    orderBy: 'subsidiary_id, effective_from desc',
+    hasActive: true,
+    docSlug: 'company-setup',
+    columns: [
+      { key: 'parentSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'method', kind: 'badge', options: CONSOLIDATION_METHODS },
+      { key: 'ownershipPercent', kind: 'percent' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'parentSubsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true, lockedOnEdit: true },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true, lockedOnEdit: true },
+      { key: 'effectiveFrom', kind: 'date', required: true, lockedOnEdit: true },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'ownershipPercent', kind: 'percent', required: true },
+      { key: 'method', kind: 'select', options: CONSOLIDATION_METHODS, required: true, keepDefault: true },
+      { key: 'acquisitionDate', kind: 'date', required: true },
+      { key: 'acquisitionCost', kind: 'decimal', required: true, keepDefault: true },
+      { key: 'fairValueNetAssets', kind: 'decimal', required: true, keepDefault: true },
+      { key: 'acquisitionRate', kind: 'decimal', required: true, keepDefault: true },
+      { key: 'nciMeasurement', kind: 'select', options: NCI_MEASUREMENTS, required: true, keepDefault: true },
+      { key: 'nciFairValue', kind: 'decimal' },
+      { key: 'investmentAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'equityIncomeAccountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'distributionAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'distributionIncomeAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'nciEquityAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'nciIncomeAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'goodwillAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'fairValueAdjustmentAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
 
   // --- Accounting --------------------------------------------------------
   {
@@ -400,7 +477,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     naturalKey: 'code',
     hasActive: true,
-    docSlug: 'tax-configuration',
+    docSlug: 'tax-jurisdictions-and-nexus',
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
@@ -429,7 +506,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     iconKey: 'badge-check',
     orgScoped: true,
     hasActive: true,
-    docSlug: 'tax-configuration',
+    docSlug: 'tax-jurisdictions-and-nexus',
     columns: [
       { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions' },
       { key: 'registrationNumber', kind: 'text' },
@@ -518,6 +595,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     naturalKey: 'code',
     hasActive: true,
+    docSlug: 'tax-configuration',
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
@@ -544,6 +622,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     naturalKey: 'code',
     hasActive: true,
+    docSlug: 'tax-returns-and-boxes',
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
@@ -574,7 +653,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'report_code, sequence, line_code',
     hasActive: false,
-    docSlug: 'tax-configuration',
+    docSlug: 'tax-returns-and-boxes',
     nestedUnder: 'tax-return-forms',
     columns: [
       { key: 'reportCode', kind: 'code' },
@@ -1052,6 +1131,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'costMultiplier', kind: 'number' },
       { key: 'billMultiplier', kind: 'number' },
       { key: 'isBillableDefault', kind: 'boolean' },
+      { key: 'showOnFieldTicket', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
@@ -1059,6 +1139,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'costMultiplier', kind: 'decimal', keepDefault: true },
       { key: 'billMultiplier', kind: 'decimal', keepDefault: true },
       { key: 'isBillableDefault', kind: 'boolean' },
+      { key: 'showOnFieldTicket', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -1133,8 +1214,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'depreciationExpenseAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'gainLossAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'defaultMethod', kind: 'select', options: DEPRECIATION_METHODS },
+      { key: 'defaultDepreciationMethodId', kind: 'ref', ref: 'depreciation-methods' },
       { key: 'defaultConvention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
       { key: 'defaultLifeMonths', kind: 'integer' },
+      { key: 'taxAttributes', kind: 'json', keepDefault: true },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -1142,6 +1225,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Configurable tax depreciation regimes (built-ins: ca_cca, uk_wda, au_pool,
     // nz_pool). Add a jurisdiction the engine doesn't ship, or shadow a built-in.
     key: 'tax-regimes',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
     table: 'tax_regimes',
     singularTitleKey: 'entities.tax-regimes.singularTitle',
     actorCols: true,
@@ -1150,16 +1234,20 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     naturalKey: 'code',
     hasActive: true,
-    docSlug: 'tax-configuration',
+    docSlug: 'setup-assets-group',
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
+      { key: 'countryCode', kind: 'text' },
+      { key: 'calculationModel', kind: 'text' },
       { key: 'classAttribute', kind: 'text' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
+      { key: 'countryCode', kind: 'country' },
+      { key: 'calculationModel', kind: 'select', options: TAX_DEPRECIATION_MODELS, keepDefault: true },
       { key: 'classAttribute', kind: 'text', keepDefault: true },
       { key: 'isActive', kind: 'boolean' },
     ],
@@ -1168,6 +1256,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Configurable pool CLASSES per regime (rate, method, first-year fraction,
     // recapture/terminal behavior). Org rows override the built-in class table.
     key: 'tax-pool-classes',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
     table: 'tax_pool_classes',
     singularTitleKey: 'entities.tax-pool-classes.singularTitle',
     actorCols: true,
@@ -1176,7 +1265,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'regime, class_code',
     hasActive: true,
-    docSlug: 'tax-configuration',
+    docSlug: 'setup-assets-group',
     columns: [
       { key: 'regime', kind: 'text' },
       { key: 'classCode', kind: 'code' },
@@ -1195,6 +1284,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'allowRecapture', kind: 'boolean', keepDefault: true },
       { key: 'allowTerminalLoss', kind: 'boolean', keepDefault: true },
       { key: 'costCap', kind: 'decimal' },
+      { key: 'depreciationSystem', kind: 'select', options: MACRS_SYSTEMS },
+      { key: 'macrsMethod', kind: 'select', options: MACRS_METHODS },
+      { key: 'recoveryPeriodYears', kind: 'decimal' },
+      { key: 'convention', kind: 'select', options: TAX_DEPRECIATION_CONVENTIONS },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -1202,6 +1295,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Dated first-year rules per regime/class (half-year rule, AII, immediate
     // expensing) — legislatively volatile, so config not code.
     key: 'tax-first-year-rules',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
     table: 'tax_first_year_rules',
     singularTitleKey: 'entities.tax-first-year-rules.singularTitle',
     actorCols: true,
@@ -1210,7 +1304,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'regime, class_code',
     hasActive: false,
-    docSlug: 'tax-configuration',
+    docSlug: 'setup-assets-group',
     columns: [
       { key: 'regime', kind: 'text' },
       { key: 'classCode', kind: 'code' },
@@ -1231,6 +1325,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // depreciation variable set: NB, OC, RV, AL, CP, …). Referenced by code from
     // an asset category's Default method.
     key: 'depreciation-methods',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
     table: 'depreciation_methods',
     actorCols: true,
     groupKey: 'assets',
@@ -1257,6 +1352,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Multi-book: per-book, per-category depreciation policy (a tax/alternate book
     // runs a different method than the primary posting book).
     key: 'depreciation-book-policies',
+    rehomed: true, // subtab of Fixed Assets & Depreciation setup
     table: 'depreciation_book_policies',
     actorCols: true,
     groupKey: 'assets',
@@ -1275,6 +1371,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'bookId', kind: 'ref', ref: 'accounting-books', required: true },
       { key: 'categoryId', kind: 'ref', ref: 'asset-categories', required: true },
       { key: 'method', kind: 'select', options: DEPRECIATION_METHODS, keepDefault: true },
+      { key: 'depreciationMethodId', kind: 'ref', ref: 'depreciation-methods' },
       { key: 'lifeMonths', kind: 'integer' },
       { key: 'ratePercent', kind: 'percent' },
       { key: 'unitsTotal', kind: 'decimal' },

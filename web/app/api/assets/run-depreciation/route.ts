@@ -10,6 +10,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 interface Body {
   asOfDate?: string
   assetId?: string
+  bookId?: string
 }
 
 /**
@@ -27,6 +28,9 @@ export async function POST(req: Request) {
   if (body.assetId !== undefined && !isUuid(body.assetId)) {
     return NextResponse.json({ error: 'invalid asset' }, { status: 422 })
   }
+  if (body.bookId !== undefined && !isUuid(body.bookId)) {
+    return NextResponse.json({ error: 'invalid accounting book' }, { status: 422 })
+  }
 
   try {
     const result = await runDepreciation(
@@ -35,6 +39,7 @@ export async function POST(req: Request) {
       user.id,
       body.assetId,
       gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
+      body.bookId,
     )
     return NextResponse.json(result)
   } catch (e: unknown) {

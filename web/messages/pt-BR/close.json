@@ -59,6 +59,7 @@
     "backToPeriods": "Voltar aos períodos",
     "revalidate": "Revalidar",
     "runRevaluation": "Executar reavaliação cambial",
+    "runConsolidation": "Executar consolidação",
     "startTask": "Iniciar",
     "complete": "Concluir",
     "submitReview": "Enviar para revisão",
@@ -82,6 +83,7 @@
     "publish": "Pacote de fechamento publicado",
     "taskUpdated": "Tarefa atualizada",
     "revaluationPosted": "Saldos em moeda estrangeira reavaliados",
+    "consolidationPosted": "Ajustes societários, taxas e eliminações contabilizados",
     "evidenceAdded": "Evidência anexada",
     "automationComplete": "Automação de fechamento concluída"
   },

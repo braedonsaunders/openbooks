@@ -19,6 +19,74 @@ export interface EntityAdhoc {
 }
 
 /* ------------------------------------------------------------------ */
+/* Customers                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Customer role and CRM lifecycle data for the canonical party row. */
+export const CUSTOMER_BASE_JOINS = sql`
+  join customer_roles cr on cr.party_id = p.id and cr.is_active
+  left join crm_account_profiles cap on cap.party_id = p.id and cap.is_active`
+
+export const CUSTOMER_STATUS_EXPR = sql`coalesce(cap.lifecycle_stage, 'customer')`
+
+export const CUSTOMER_BUILT_IN_EXPR: Record<string, SQL> = {
+  display_name: sql`p.display_name`,
+  short_code: sql`p.short_code`,
+  email: sql`p.email`,
+  phone: sql`p.phone`,
+  status: CUSTOMER_STATUS_EXPR,
+}
+
+export const CUSTOMER_SORTS: Record<string, SQL> = {
+  name: sql`p.display_name`,
+  code: sql`p.short_code`,
+  status: CUSTOMER_STATUS_EXPR,
+}
+
+function customerFilterPredicate(clause: FilterClause): SQL | null {
+  const { key, operator } = clause
+  const value = clause.value
+  const single = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? '') : String(v ?? ''))
+  const inList = (col: SQL): SQL | null => {
+    const values = (Array.isArray(value) ? value : [String(value ?? '')]).map(String)
+    if (values.length === 0) return operator === 'in' ? sql`false` : sql`true`
+    const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
+    return operator === 'in' ? sql`${col} in (${list})` : sql`${col} not in (${list})`
+  }
+
+  if (key !== 'status') return null
+  if (operator === 'eq') return sql`${CUSTOMER_STATUS_EXPR} = ${single(value)}`
+  if (operator === 'ne') return sql`${CUSTOMER_STATUS_EXPR} <> ${single(value)}`
+  if (operator === 'in' || operator === 'not_in') return inList(CUSTOMER_STATUS_EXPR)
+  return null
+}
+
+/** Canonical customer-list scope. Importers enforce one party per source id. */
+export function customerWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+  allowedSubsidiaryIds?: Set<string> | null,
+): SQL {
+  const parts: SQL[] = [sql`p.org_id = ${orgId}`]
+  if (!adhoc.showInactive) parts.push(sql`and p.is_active`)
+  if (allowedSubsidiaryIds) {
+    const ids = [...allowedSubsidiaryIds]
+    parts.push(ids.length ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
+  }
+  for (const filter of view.filters) {
+    const predicate = customerFilterPredicate(filter)
+    if (predicate) parts.push(sql`and ${predicate}`)
+  }
+  if (adhoc.status) parts.push(sql`and ${CUSTOMER_STATUS_EXPR} = ${adhoc.status}`)
+  if (adhoc.q) {
+    const query = `%${adhoc.q}%`
+    parts.push(sql`and (p.display_name ilike ${query} or p.short_code ilike ${query} or p.email ilike ${query})`)
+  }
+  return sql.join(parts, sql` `)
+}
+
+/* ------------------------------------------------------------------ */
 /* Projects                                                            */
 /* ------------------------------------------------------------------ */
 

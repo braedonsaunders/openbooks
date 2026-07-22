@@ -346,6 +346,11 @@ const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
     subsidiary_id: 4,
     notes: 4,
   },
+  fixed_asset: {
+    name: 2,
+    description: 4,
+    subsidiary_id: 2,
+  },
 }
 
 /**

@@ -1,6 +1,7 @@
 'use client'
 
 import { InsightChart } from '@openbooks/analytics/viz'
+import { useAnalyticsMoney } from './format'
 
 /** Loose ECharts option shape — mirrors the analytics package's own alias. */
 type EChartsOption = Record<string, unknown>
@@ -17,13 +18,11 @@ export const PALETTE = ['#0d9488', '#6366f1', '#f59e0b', '#ec4899', '#14b8a6', '
 const POS = '#10b981'
 const NEG = '#ef4444'
 
-const money = (n: number) => {
-  const a = Math.abs(n)
-  const s = n < 0 ? '-' : ''
-  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(1)}B`
-  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`
-  if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`
-  return `${s}$${a.toFixed(0)}`
+type MoneyLabel = (value: number) => string
+
+function useChartMoney(): MoneyLabel {
+  const formatMoney = useAnalyticsMoney()
+  return (value) => formatMoney(value, { compact: true })
 }
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 
@@ -33,7 +32,7 @@ const tooltip = { trigger: 'axis' as const, backgroundColor: 'rgba(15,23,42,0.92
 function catAxis(data: string[]): EChartsOption {
   return { type: 'category', data, axisLine: { lineStyle: { color: SPLIT } }, axisTick: { show: false }, axisLabel: { color: AXIS, fontSize: 10 } }
 }
-function valAxis(fmt: 'money' | 'pct' | 'raw' = 'money'): EChartsOption {
+function valAxis(money: MoneyLabel, fmt: 'money' | 'pct' | 'raw' = 'money'): EChartsOption {
   return {
     type: 'value',
     axisLine: { show: false },
@@ -60,6 +59,7 @@ export function TrendChart({
   area?: boolean
   pctAxis?: boolean
 }) {
+  const money = useChartMoney()
   const option: EChartsOption = {
     grid: baseGrid,
     tooltip: {
@@ -70,7 +70,7 @@ export function TrendChart({
     },
     legend: series.length > 1 ? { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 } : undefined,
     xAxis: catAxis(labels),
-    yAxis: valAxis(pctAxis ? 'pct' : 'money'),
+    yAxis: valAxis(money, pctAxis ? 'pct' : 'money'),
     series: series.map((s, i) => ({
       name: s.name,
       type: 'line',
@@ -101,6 +101,7 @@ export function ForecastChart({
   high: (number | null)[]
   height?: number
 }) {
+  const money = useChartMoney()
   const bandBase = low.map((v) => (v == null ? null : v))
   const bandSpan = low.map((v, i) => (v == null || high[i] == null ? null : (high[i] as number) - v))
   const option: EChartsOption = {
@@ -108,7 +109,7 @@ export function ForecastChart({
     tooltip: { ...tooltip, formatter: (ps: any[]) => [ps[0]?.axisValue, ...ps.filter((p) => p.value != null && p.seriesName !== '_base' && p.seriesName !== '_band').map((p) => `${p.marker} ${p.seriesName}: ${money(p.value)}`)].join('<br/>') },
     legend: { top: 0, right: 0, data: ['History', 'Forecast'], textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 },
     xAxis: catAxis(labels),
-    yAxis: valAxis('money'),
+    yAxis: valAxis(money),
     series: [
       { name: '_base', type: 'line', stack: 'band', data: bandBase, lineStyle: { opacity: 0 }, symbol: 'none', silent: true },
       { name: '_band', type: 'line', stack: 'band', data: bandSpan, lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(13,148,136,0.12)' }, symbol: 'none', silent: true },
@@ -129,10 +130,11 @@ export function DivergingBar({
   values: number[]
   height?: number
 }) {
+  const money = useChartMoney()
   const option: EChartsOption = {
     grid: { ...baseGrid, left: 4 },
     tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.name}: ${money(ps[0]?.value)}` },
-    xAxis: valAxis('money'),
+    xAxis: valAxis(money),
     yAxis: { ...catAxis(labels), inverse: true },
     series: [
       {
@@ -156,12 +158,13 @@ export function GroupedBar({
   series: { name: string; data: number[]; color?: string }[]
   height?: number
 }) {
+  const money = useChartMoney()
   const option: EChartsOption = {
     grid: baseGrid,
     tooltip: { ...tooltip, valueFormatter: (v: number) => money(v) },
     legend: { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 },
     xAxis: catAxis(labels),
-    yAxis: valAxis('money'),
+    yAxis: valAxis(money),
     series: series.map((s, i) => ({
       name: s.name,
       type: 'bar',
@@ -181,6 +184,7 @@ export function Waterfall({
   steps: { label: string; amount: number; kind: 'start' | 'deduct' | 'subtotal' | 'total' }[]
   height?: number
 }) {
+  const money = useChartMoney()
   // Compute running base for floating bars.
   let running = 0
   const base: number[] = []
@@ -206,7 +210,7 @@ export function Waterfall({
     grid: baseGrid,
     tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money(steps[ps[0]?.dataIndex]?.amount ?? 0)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
-    yAxis: valAxis('money'),
+    yAxis: valAxis(money),
     series: [
       { type: 'bar', stack: 'wf', data: base.map((v) => ({ value: v, itemStyle: { color: 'transparent' } })), silent: true },
       {
@@ -235,6 +239,7 @@ export function Donut({
   /** Per-slice color override (positional); falls back to the shared palette. */
   colors?: string[]
 }) {
+  const money = useChartMoney()
   const fmt = valueFormat ?? money
   const option: EChartsOption = {
     tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: any) => `${p.name}: ${fmt(p.value)} (${p.percent}%)` },
@@ -257,7 +262,7 @@ export function Donut({
 /** Waterfall bridge: Start → +Inflows → −Outflows → Projected End (the
  * cashflow dashboard's signature chart, shared by analytics and the Cash
  * cockpit — moved verbatim from CashflowView). */
-export function cashBridgeOption(startCash: number, inflows: number, outflows: number, end: number): EChartsOption {
+export function cashBridgeOption(startCash: number, inflows: number, outflows: number, end: number, money: MoneyLabel): EChartsOption {
   const afterIn = startCash + inflows
   const steps = [
     { label: 'Start', from: 0, to: startCash, color: '#94a3b8' },
@@ -271,7 +276,7 @@ export function cashBridgeOption(startCash: number, inflows: number, outflows: n
     grid: baseGrid,
     tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex])}` },
     xAxis: catAxis(steps.map((s) => s.label)),
-    yAxis: valAxis('money'),
+    yAxis: valAxis(money),
     series: [
       { type: 'bar', stack: 'b', data: base.map(() => ({ value: 0, itemStyle: { color: 'transparent' } })), silent: true },
       { type: 'bar', stack: 'b', data: base.map((b) => ({ value: b, itemStyle: { color: 'transparent' } })), silent: true },
@@ -285,6 +290,7 @@ export function cashBridgeOption(startCash: number, inflows: number, outflows: n
  * in / out / net / ending. */
 export function cashForecastOption(
   weeks: { label: string; inflow: number; outflow: number; net: number; endingCash: number }[],
+  money: MoneyLabel,
 ): EChartsOption {
   const ending = weeks.map((w) => w.endingCash)
   const min = Math.min(0, ...ending)
@@ -306,7 +312,7 @@ export function cashForecastOption(
       },
     },
     xAxis: catAxis(weeks.map((w) => w.label.split(' – ')[0]!)),
-    yAxis: { ...valAxis('money'), min },
+    yAxis: { ...valAxis(money), min },
     series: [
       {
         name: 'Ending cash',

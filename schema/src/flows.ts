@@ -152,6 +152,8 @@ export const flowGates = pgTable(
     quorum: text("quorum", { enum: FLOW_GATE_QUORUMS }).notNull().default("any"),
     status: text("status", { enum: FLOW_GATE_STATUSES }).notNull().default("pending"),
     signatureRequired: boolean("signature_required").notNull().default(false),
+    /** Typed e-signature captured when a signature-required gate is approved. */
+    signature: text("signature"),
     comment: text("comment"),
     decidedBy: uuid("decided_by"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),

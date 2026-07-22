@@ -1,12 +1,11 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { cn } from '@openbooks/ui'
 import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
-import { money } from '../../../../lib/format'
-
 interface TimeRow {
   key: string | null
   label: string
@@ -25,6 +24,7 @@ export interface CostTimeData {
 const fmtHours = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
 export function CostTimeTab({ data }: { data: CostTimeData }) {
+  const { money } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
   const [inner, setInner] = useState<'task' | 'employee'>('task')

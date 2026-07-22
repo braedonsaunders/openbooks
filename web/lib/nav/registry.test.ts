@@ -53,6 +53,22 @@ test('default workspaces follow the approved journey-oriented information archit
     'equipment',
     'employees',
   ])
+  assert.deepEqual(
+    DEFAULT_NAV_ORDER.accounting.slice(2, 5),
+    ['revenue', 'assets', 'tax-depreciation'],
+  )
+  assert.deepEqual(
+    NAV_MODULES.find((module) => module.key === 'tax-depreciation'),
+    {
+      key: 'tax-depreciation',
+      href: '/assets?tab=tax-depreciation',
+      label: 'Tax Depreciation',
+      iconKey: 'journal',
+      group: 'accounting',
+      subgroup: 'assets',
+      requiredPermission: 'assets.read',
+    },
+  )
 })
 
 test('default mobile navigation pins exactly four high-frequency destinations', () => {

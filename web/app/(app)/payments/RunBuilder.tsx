@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -7,8 +8,6 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { SortTh } from '../../../components/sortable-th'
-import { money } from '../../../lib/format'
-
 /**
  * Payment-run builder: select posted vendor bills with an open balance
  * (across vendors), pick the paying bank account, create the run. Selection
@@ -24,6 +23,7 @@ export interface RunBill {
   due_date: string | null
   reference_number: string | null
   open: string
+  currency: string
   has_bank: boolean
 }
 
@@ -61,6 +61,7 @@ export function RunBuilder({
    */
   preselected?: RunBill[]
 }) {
+  const { money } = useMoney()
   const t = useTranslations('payments.runBuilder')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -75,7 +76,13 @@ export function RunBuilder({
   const [busy, setBusy] = useState(false)
 
   const selectedList = Object.values(selected)
-  const totalSelected = selectedList.reduce((acc, b) => acc + Number(b.open), 0)
+  const selectedTotals = selectedList.reduce((totals, bill) => {
+    totals.set(bill.currency, (totals.get(bill.currency) ?? 0) + Number(bill.open))
+    return totals
+  }, new Map<string, number>())
+  const selectedAmount = [...selectedTotals].map(([currency, total]) => money(total, { currency })).join(' + ')
+  const selectedProfile = bankProfiles.find((profile) => profile.id === paymentBankProfileId)
+  const currencyMismatch = !!selectedProfile && selectedList.some((bill) => bill.currency !== selectedProfile.currency)
   const allOnPage = bills.length > 0 && bills.every((b) => selected[b.id])
 
   function toggle(bill: RunBill) {
@@ -161,12 +168,12 @@ export function RunBuilder({
               <p className="text-sm text-slate-700 tabular-nums dark:text-slate-200">
                 {t.rich(mode === 'collections' ? 'collectionSummary' : 'selectionSummary', {
                   count: selectedList.length,
-                  amount: money(totalSelected),
+                  amount: selectedAmount,
                   total: (chunks) => <strong className="text-slate-950 dark:text-white">{chunks}</strong>,
                 })}
               </p>
             </div>
-            <Button disabled={busy || selectedList.length === 0 || !paymentBankProfileId} onClick={createRun}>
+            <Button disabled={busy || selectedList.length === 0 || !paymentBankProfileId || currencyMismatch} onClick={createRun}>
               {busy ? tCommon('actions.creating') : t(mode === 'collections' ? 'createCollectionRun' : 'createRun')}
             </Button>
           </div>
@@ -229,7 +236,7 @@ export function RunBuilder({
                       <Badge variant="warning">{t(mode === 'collections' ? 'mandateMissing' : 'bankMissing')}</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{money(b.open)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(b.open, { currency: b.currency })}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

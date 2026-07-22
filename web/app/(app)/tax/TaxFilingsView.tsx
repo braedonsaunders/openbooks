@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download, ExternalLink, FileCheck2, Play, Settings } from 'lucide-react'
+import { ChevronDown, Download, ExternalLink, FileCheck2, Play } from 'lucide-react'
 import {
   Button,
   Card,
@@ -15,6 +15,7 @@ import {
   CardTitle,
   Input,
   Label,
+  Popover,
   Select,
 } from '@openbooks/ui'
 
@@ -77,6 +78,7 @@ export function TaxFilingsView({
   const [adjustments, setAdjustments] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const selectedForm = forms.find((form) => form.code === code)
   const governmentUrl = safeGovernmentUrl(selectedForm?.submission_url)
 
@@ -127,21 +129,6 @@ export function TaxFilingsView({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
-        </div>
-        {canManageSetup ? (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/setup/tax-return-forms">
-              <Settings size={14} />
-              {t('setup')}
-            </Link>
-          </Button>
-        ) : null}
-      </div>
-
       {forms.length === 0 ? (
         <Card>
           <CardHeader>
@@ -235,20 +222,44 @@ export function TaxFilingsView({
                     <CardTitle>{result.formName}</CardTitle>
                     <CardDescription>{t('period', { from: result.from, to: result.to })}</CardDescription>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <a href={exportHref('pdf')}><Button variant="outline" size="sm"><Download size={14} />{t('export.pdf')}</Button></a>
-                    <a href={exportHref('xlsx')}><Button variant="outline" size="sm"><Download size={14} />{t('export.xlsx')}</Button></a>
-                    <a href={exportHref('csv')}><Button variant="outline" size="sm"><Download size={14} />{t('export.csv')}</Button></a>
-                    {selectedForm?.has_official ? (
-                      <a href={exportHref('official')}><Button variant="outline" size="sm"><Download size={14} />{t('official.download')}</Button></a>
-                    ) : null}
-                    {canSave ? (
-                      <Button size="sm" onClick={saveSnapshot} disabled={saving}>
-                        <FileCheck2 size={14} />
-                        {saving ? t('history.saving') : t('history.save')}
+                  <Popover
+                    open={exportOpen}
+                    onOpenChange={setExportOpen}
+                    align="end"
+                    className="w-56 p-1"
+                    trigger={
+                      <Button size="sm" onClick={() => setExportOpen((o) => !o)}>
+                        <Download size={14} />
+                        {t('export.menu')}
+                        <ChevronDown size={14} className="opacity-70" />
                       </Button>
+                    }
+                  >
+                    <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('export.groupForm')}</div>
+                    <ExportItem href={exportHref('facsimile')} onNavigate={() => setExportOpen(false)}>{t('export.facsimile')}</ExportItem>
+                    {selectedForm?.has_official ? (
+                      <ExportItem href={exportHref('official')} onNavigate={() => setExportOpen(false)}>{t('official.download')}</ExportItem>
                     ) : null}
-                  </div>
+                    <div className="mt-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('export.groupData')}</div>
+                    <ExportItem href={exportHref('pdf')} onNavigate={() => setExportOpen(false)}>{t('export.pdf')}</ExportItem>
+                    <ExportItem href={exportHref('xlsx')} onNavigate={() => setExportOpen(false)}>{t('export.xlsx')}</ExportItem>
+                    <ExportItem href={exportHref('csv')} onNavigate={() => setExportOpen(false)}>{t('export.csv')}</ExportItem>
+                    <ExportItem href={exportHref('json')} onNavigate={() => setExportOpen(false)}>{t('export.json')}</ExportItem>
+                    {canSave ? (
+                      <>
+                        <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                        <button
+                          type="button"
+                          onClick={() => { setExportOpen(false); void saveSnapshot() }}
+                          disabled={saving}
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <FileCheck2 size={14} className="text-slate-400" />
+                          {saving ? t('history.saving') : t('history.save')}
+                        </button>
+                      </>
+                    ) : null}
+                  </Popover>
                 </div>
               </CardHeader>
               <CardContent>
@@ -295,5 +306,20 @@ export function TaxFilingsView({
         </>
       )}
     </div>
+  )
+}
+
+/** A download row inside the Export dropdown: a plain browser navigation to the
+ *  export URL, closing the menu on click. */
+function ExportItem({ href, onNavigate, children }: { href: string; onNavigate: () => void; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      onClick={onNavigate}
+      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+    >
+      <Download size={14} className="text-slate-400" />
+      {children}
+    </a>
   )
 }

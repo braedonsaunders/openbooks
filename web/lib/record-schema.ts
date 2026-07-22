@@ -357,8 +357,13 @@ export type EntityLabelMaps = {
   accounts?: ReadonlyMap<string, string>
 }
 
-function formatAmount(n: number, decimals: number): string {
-  return n.toLocaleString('en-CA', {
+export type FieldDisplayFormat = {
+  locale: string
+  money: (value: string | number) => string
+}
+
+function formatAmount(n: number, decimals: number, locale = 'en-CA'): string {
+  return n.toLocaleString(locale, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
@@ -368,10 +373,10 @@ function formatDateValue(v: string): string {
   return v // yyyy-mm-dd is already the canonical, sortable display
 }
 
-function formatDateTimeValue(v: string): string {
+function formatDateTimeValue(v: string, locale = 'en-CA'): string {
   const d = new Date(v)
   if (Number.isNaN(d.getTime())) return v
-  return d.toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })
+  return d.toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 function choiceLabel(field: FormField, value: string): string {
@@ -388,16 +393,17 @@ export function formatFieldValue(
   field: FormField,
   value: unknown,
   labels: EntityLabelMaps = {},
+  display?: FieldDisplayFormat,
 ): string {
   if (value === null || value === undefined || value === '') return ''
   switch (field.type) {
     case 'currency':
-      return formatAmount(Number(value), 2)
+      return display?.money(String(value)) ?? formatAmount(Number(value), 2)
     case 'percentage':
-      return `${formatAmount(Number(value), 2).replace(/\.00$/, '')}%`
+      return `${formatAmount(Number(value), 2, display?.locale).replace(/[.,]00$/, '')}%`
     case 'number': {
       const unit = typeof field.config?.unit === 'string' ? field.config.unit : ''
-      const text = Number(value).toLocaleString('en-CA', { maximumFractionDigits: 6 })
+      const text = Number(value).toLocaleString(display?.locale ?? 'en-CA', { maximumFractionDigits: 6 })
       return unit ? `${text} ${unit}` : text
     }
     case 'rating': {
@@ -410,7 +416,7 @@ export function formatFieldValue(
     case 'date':
       return typeof value === 'string' ? formatDateValue(value) : String(value)
     case 'datetime':
-      return typeof value === 'string' ? formatDateTimeValue(value) : String(value)
+      return typeof value === 'string' ? formatDateTimeValue(value, display?.locale) : String(value)
     case 'select':
     case 'radio':
       return typeof value === 'string' ? choiceLabel(field, value) : String(value)
@@ -425,9 +431,9 @@ export function formatFieldValue(
     case 'formula': {
       const format = typeof field.config?.format === 'string' ? field.config.format : 'number'
       if (typeof value === 'number') {
-        if (format === 'currency') return formatAmount(value, 2)
-        if (format === 'percentage') return `${formatAmount(value, 2).replace(/\.00$/, '')}%`
-        return value.toLocaleString('en-CA', { maximumFractionDigits: 6 })
+        if (format === 'currency') return display?.money(value) ?? formatAmount(value, 2)
+        if (format === 'percentage') return `${formatAmount(value, 2, display?.locale).replace(/[.,]00$/, '')}%`
+        return value.toLocaleString(display?.locale ?? 'en-CA', { maximumFractionDigits: 6 })
       }
       return String(value)
     }

@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { add, mulRate, sum } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, isZero, mulRate, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
 import { loadProjectType } from './project-type'
 import { nextDocumentNumber } from './bills'
@@ -26,9 +26,13 @@ interface GenerateResult {
 
 /** Month/percent → multiplier string. markupPercent 15 → '1.15'. */
 function markupMultiplier(markupPercent: unknown): string {
-  const pct = Number(markupPercent)
-  if (!Number.isFinite(pct) || pct <= 0) return '1'
-  return String(1 + pct / 100)
+  try {
+    const percentUnits = toUnits(String(markupPercent ?? '0'))
+    if (percentUnits <= 0n) return '1.0000'
+    return fromUnits(10_000n + roundDiv(percentUnits, 100n))
+  } catch {
+    return '1.0000'
+  }
 }
 
 export async function generateInvoiceFromBillingRequest(
@@ -103,7 +107,7 @@ export async function generateInvoiceFromBillingRequest(
 
     if (billingMethod === 'draw_amount' || req.basis === 'draw_amount') {
       const amt = String(req.draw_amount ?? '0')
-      if (!amt || Number(amt) === 0) throw new BillingError('Enter a draw amount to bill')
+      if (!amt || isZero(amt)) throw new BillingError('Enter a draw amount to bill')
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post the draw to')
       built.push({
         itemId: null,
@@ -129,7 +133,7 @@ export async function generateInvoiceFromBillingRequest(
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post milestones to')
       for (const m of scheds.rows) {
         const amt = String(m.amount_billed ?? '0')
-        if (Number(amt) === 0) continue
+        if (isZero(amt)) continue
         built.push({
           itemId: null,
           accountId: fixedPriceCreditAcct,
@@ -220,7 +224,7 @@ export async function generateInvoiceFromBillingRequest(
 
       for (const cl of costRows.rows) {
         const isProjectCharge = cl.kind === 'project_charge'
-        const mult = cl.cost_multiplier && Number(cl.cost_multiplier) > 0 ? String(cl.cost_multiplier) : markup
+        const mult = cl.cost_multiplier && cmp(String(cl.cost_multiplier), '0') > 0 ? String(cl.cost_multiplier) : markup
         const amount = isProjectCharge ? String(cl.bill_amount ?? '0') : mulRate(String(cl.amount ?? '0'), mult)
         const components = isProjectCharge && cl.rate_presentation === 'rate_components' && Array.isArray(cl.bill_components)
           ? cl.bill_components

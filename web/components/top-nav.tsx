@@ -16,7 +16,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
@@ -37,8 +37,10 @@ function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | nu
 export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   const t = useTranslations('shell.topNav')
   const pathname = usePathname() ?? ''
+  const searchParams = useSearchParams()
   const navGroups = useNavGroups(groups)
-  const activeHref = findActiveNavHref(pathname, navGroups)
+  const query = searchParams.toString()
+  const activeHref = findActiveNavHref(query ? `${pathname}?${query}` : pathname, navGroups)
   const moreLabel = t('more')
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   const [visibleCount, setVisibleCount] = useState(navGroups.length)

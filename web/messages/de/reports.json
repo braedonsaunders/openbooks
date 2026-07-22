@@ -350,7 +350,8 @@
       "columns": {
         "trigger": "Auslöser",
         "rows": "Zeilen",
-        "finished": "Abgeschlossen"
+        "finished": "Abgeschlossen",
+        "delivery": "Zustellung"
       },
       "status": {
         "succeeded": "Erfolgreich",
@@ -362,6 +363,8 @@
         "manual": "Manuell",
         "scheduled": "Geplant"
       },
+      "deliveryEvidence": "{sent}/{total} gesendet · {failed} fehlgeschlagen · {suppressed} unterdrückt",
+      "pdf": "PDF-Nachweis",
       "csv": "CSV"
     }
   },

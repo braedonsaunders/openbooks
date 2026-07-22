@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { runTaxPool } from '@openbooks/engine/src/tax-pool-run.ts'
+import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-pool-run.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -42,7 +42,11 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     regime?: string; taxYear?: number; yearStart?: string; yearEnd?: string; bookId?: string; subsidiaryId?: string
   }
-  const regime = body.regime || 'ca_cca'
+  const availableRegimes = await listTaxRegimes(gate.user.orgId)
+  const regime = body.regime || availableRegimes[0]?.code
+  if (!regime || !availableRegimes.some((item) => item.code === regime)) {
+    return NextResponse.json({ error: 'tax depreciation regime is not enabled for this company country' }, { status: 422 })
+  }
   const taxYear = Number(body.taxYear)
   if (!Number.isInteger(taxYear)) return NextResponse.json({ error: 'taxYear required' }, { status: 422 })
   const yearStart = body.yearStart && DATE_RE.test(body.yearStart) ? body.yearStart : `${taxYear}-01-01`

@@ -30,13 +30,25 @@ create unique index if not exists labor_rate_adjustment_targets_unique
   nulls not distinct;
 
 -- Preserve any pre-generalization item applicability as an explicit target.
-insert into labor_rate_adjustment_targets
-  (org_id, adjustment_id, target_type, target_value_id, include_children,
-   created_by, updated_by)
-select org_id, id, 'item', item_id, false, created_by, updated_by
-  from labor_rate_adjustments
- where item_id is not null
-on conflict do nothing;
+-- Some legacy databases already dropped item_id while receiving the target
+-- table out of band, so the copy must be conditional as well as the DROP.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema='public' and table_name='labor_rate_adjustments' and column_name='item_id'
+  ) then
+    execute $copy$
+      insert into labor_rate_adjustment_targets
+        (org_id, adjustment_id, target_type, target_value_id, include_children,
+         created_by, updated_by)
+      select org_id, id, 'item', item_id, false, created_by, updated_by
+        from labor_rate_adjustments
+       where item_id is not null
+      on conflict do nothing
+    $copy$;
+  end if;
+end $$;
 
 alter table labor_rate_adjustments
   drop constraint if exists labor_rate_adjustments_item_id_items_id_fk;

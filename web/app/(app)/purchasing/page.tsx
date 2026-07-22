@@ -13,7 +13,7 @@ import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
 import { purchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
-import { moneyCompact } from '../../../lib/format'
+import { getMoneyFormatter } from '@/lib/money-server'
 import { CommitmentsTable } from './CommitmentsTable'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +36,7 @@ export default async function PurchasingHomePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   if (!['ap.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ap.read')
@@ -92,7 +93,7 @@ export default async function PurchasingHomePage({
     .filter((i) => i.href !== '/purchasing' && i.href !== '/ap')
     .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }))
 
-  const attention = needsAttention(data.topExposure, data.badges.unpostedExpenses, t)
+  const attention = needsAttention(data.topExposure, data.badges.unpostedExpenses, t, moneyCompact)
   const trendLabels = data.trend.map((w) => weekLabel(w.weekStart))
 
   return (
@@ -253,7 +254,7 @@ export default async function PurchasingHomePage({
 
 type T = Awaited<ReturnType<typeof getTranslations<'purchasing'>>>
 
-function needsAttention(exposure: VendorExposureRow[], unpostedExpenses: number, t: T) {
+function needsAttention(exposure: VendorExposureRow[], unpostedExpenses: number, t: T, moneyCompact: (value: number) => string) {
   const items: { tone: 'negative' | 'warning'; text: string; href: string }[] = []
   for (const r of exposure) {
     if (r.overdue > 0) {

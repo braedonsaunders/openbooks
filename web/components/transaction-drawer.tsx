@@ -17,15 +17,14 @@ interface TransactionDrawerProps {
   primaryAction?: ReactNode
   actions?: ReactNode
   actionsMenuHeader?: ReactNode
+  /** Record-specific work areas inserted between Details and Attachments. */
+  detailTabs?: { key: string; label: ReactNode; content?: ReactNode }[]
   footer?: ReactNode
   children: ReactNode
   canEditAttachments?: boolean
   /** Persistence table for attachments and audit rows. Defaults to documents. */
   targetTable?: 'documents' | 'parties' | 'item_rate_versions'
 }
-
-type TransactionTab = 'details' | 'attachments' | 'audit'
-const TRANSACTION_TABS: TransactionTab[] = ['details', 'attachments', 'audit']
 
 /**
  * The shared shell for every editable business transaction flyout.
@@ -44,6 +43,7 @@ export function TransactionDrawer({
   primaryAction,
   actions,
   actionsMenuHeader,
+  detailTabs = [],
   footer,
   children,
   canEditAttachments = false,
@@ -54,10 +54,14 @@ export function TransactionDrawer({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [actionsOpen, setActionsOpen] = useState(false)
+  const tabs = [
+    { key: 'details', label: t('auditTrail.tabs.details') },
+    ...detailTabs.map((tab) => ({ key: tab.key, label: tab.label })),
+    { key: 'attachments', label: t('auditTrail.tabs.attachments') },
+    { key: 'audit', label: t('auditTrail.tabs.audit') },
+  ]
   const requestedTab = searchParams.get('transactionTab')
-  const activeTab: TransactionTab = TRANSACTION_TABS.includes(requestedTab as TransactionTab)
-    ? requestedTab as TransactionTab
-    : 'details'
+  const activeTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab! : 'details'
   const hasActions = actions != null || actionsMenuHeader != null
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
@@ -75,26 +79,26 @@ export function TransactionDrawer({
       description={description}
       subtabs={
         <nav className="-mb-px flex gap-1" aria-label={t('auditTrail.ariaLabel')}>
-          {TRANSACTION_TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
-              key={tab}
+              key={tab.key}
               type="button"
               role="tab"
-              aria-selected={activeTab === tab}
+              aria-selected={activeTab === tab.key}
               onClick={() => {
                 const next = new URLSearchParams(searchParams.toString())
-                if (tab === 'details') next.delete('transactionTab')
-                else next.set('transactionTab', tab)
+                if (tab.key === 'details') next.delete('transactionTab')
+                else next.set('transactionTab', tab.key)
                 const query = next.toString()
                 router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
               }}
               className={`border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
-                activeTab === tab
+                activeTab === tab.key
                   ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
                   : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
               }`}
             >
-              {t(`auditTrail.tabs.${tab}`)}
+              {tab.label}
             </button>
           ))}
         </nav>
@@ -132,12 +136,14 @@ export function TransactionDrawer({
           ) : null}
         </div>
       ) : undefined}
-      footer={activeTab === 'details' ? footer : undefined}
+      footer={activeTab !== 'attachments' && activeTab !== 'audit' ? footer : undefined}
     >
       {activeTab === 'details' ? children : activeTab === 'attachments' ? (
         <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} />
-      ) : (
+      ) : activeTab === 'audit' ? (
         <AuditTrailPanel table={targetTable} recordId={recordId} />
+      ) : (
+        detailTabs.find((tab) => tab.key === activeTab)?.content ?? children
       )}
     </UrlDrawer>
   )

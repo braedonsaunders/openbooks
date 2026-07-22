@@ -1,20 +1,38 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { attachExisting, getFile, listAttachments, uploadAndAttach } from '../../../../lib/file-cabinet'
 import { isUuid } from '../../../../lib/list-params'
-import { guardPermission } from '../../../../lib/authz'
+import { can, getAuthz } from '../../../../lib/authz'
 import { canMutateFiles, fileViewer, isAllowedContentType, MAX_BYTES, requireSession } from '../lib'
 
 export const runtime = 'nodejs'
 
+async function fixedAssetVisible(authz: Awaited<ReturnType<typeof getAuthz>>, targetTable: string, targetId: string): Promise<boolean> {
+  if (!authz || targetTable !== 'fixed_assets') return targetTable !== 'fixed_assets'
+  const visible = (await db.execute(sql`
+    select 1 from fixed_assets where id=${targetId} and org_id=${authz.user.orgId}
+    ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`)) as unknown as { rows: unknown[] }
+  return Boolean(visible.rows[0])
+}
+
 /** List files attached to a record (metadata only). */
 export async function GET(req: Request) {
-  const gate = await guardPermission('documents.read')
-  if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
   const targetTable = url.searchParams.get('targetTable') ?? ''
   const targetId = url.searchParams.get('targetId') ?? ''
   if (!targetTable || !isUuid(targetId)) {
     return NextResponse.json({ error: 'targetTable and targetId are required' }, { status: 400 })
+  }
+  const gate = await getAuthz()
+  if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const allowed = targetTable === 'fixed_assets' ? can(gate, 'assets.read') : can(gate, 'documents.read')
+  if (!allowed) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  if (targetTable === 'fixed_assets') {
+    const visible = (await db.execute(sql`
+      select 1 from fixed_assets where id=${targetId} and org_id=${gate.user.orgId}
+      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`)) as unknown as { rows: unknown[] }
+    if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   const items = await listAttachments(gate.user.orgId, targetTable, targetId)
   return NextResponse.json({ attachments: items })
@@ -45,6 +63,7 @@ export async function POST(req: Request) {
     if (!canMutateFiles(gate, targetTable)) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
+    if (!(await fixedAssetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (!isAllowedContentType(file.type)) {
       return NextResponse.json({ error: `unsupported file type: ${file.type || 'unknown'}` }, { status: 415 })
     }
@@ -74,6 +93,7 @@ export async function POST(req: Request) {
   if (!canMutateFiles(gate, body.targetTable)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
+  if (!(await fixedAssetVisible(gate, body.targetTable, body.targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // The file must belong to the caller's org and be visible to them —
   // blocks cross-org links and attaching out of someone else's private folder.
   if (!(await getFile(gate.user.orgId, body.fileId, fileViewer(gate)))) {

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import {
+  applyChangeSetAction,
   createSandboxAction,
   deleteSandboxAction,
   promoteSandboxAction,
@@ -11,6 +12,11 @@ import {
   setScheduleAction,
 } from "./actions";
 import { enterOrg } from "../../../../lib/sandbox-session";
+
+export interface PeriodOption {
+  id: string;
+  name: string;
+}
 
 export interface SandboxRow {
   id: string;
@@ -34,10 +40,19 @@ const STATUS_VARIANT: Record<string, "default" | "warning" | "destructive" | "su
   failed: "destructive",
 };
 
-export function SandboxManager({ sandboxes }: { sandboxes: SandboxRow[] }) {
+export function SandboxManager({
+  sandboxes,
+  periods,
+}: {
+  sandboxes: SandboxRow[];
+  periods: PeriodOption[];
+}) {
   const [name, setName] = useState("");
   const [tier, setTier] = useState("masked");
+  const [asOfPeriodId, setAsOfPeriodId] = useState("");
   const [pending, start] = useTransition();
+  // An as-of clone needs a period cutoff; block create until one is chosen.
+  const needsPeriod = tier === "as_of" && !asOfPeriodId;
 
   return (
     <div className="space-y-6">
@@ -66,18 +81,45 @@ export function SandboxManager({ sandboxes }: { sandboxes: SandboxRow[] }) {
               <option value="as_of">As-of (books at a period close)</option>
             </Select>
           </div>
+          {tier === "as_of" && (
+            <div>
+              <Label htmlFor="sbx-period">As-of period</Label>
+              <Select
+                id="sbx-period"
+                value={asOfPeriodId}
+                onChange={(e) => setAsOfPeriodId(e.target.value)}
+              >
+                <option value="">Choose a period…</option>
+                {periods.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <Button
-            disabled={pending}
+            disabled={pending || needsPeriod}
             onClick={() =>
               start(async () => {
-                await createSandboxAction({ name, tier: tier as any });
+                await createSandboxAction({
+                  name,
+                  tier: tier as any,
+                  asOfPeriodId: tier === "as_of" ? asOfPeriodId : null,
+                });
                 setName("");
+                setAsOfPeriodId("");
               })
             }
           >
             Create sandbox
           </Button>
         </div>
+        {tier === "as_of" && (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            The clone includes ledger entries in the chosen period and every period before it.
+          </p>
+        )}
       </Card>
 
       <div className="space-y-3">
@@ -169,7 +211,39 @@ export function SandboxManager({ sandboxes }: { sandboxes: SandboxRow[] }) {
 
 function PromoteButton({ sandboxId, disabled }: { sandboxId: string; disabled: boolean }) {
   const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
+  const [captured, setCaptured] = useState<{ changeSetId: string; itemCount: number } | null>(null);
+  const [applied, setApplied] = useState(false);
+
+  if (captured && !applied) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {captured.itemCount} change(s) captured
+        </span>
+        {captured.itemCount > 0 ? (
+          <Button
+            variant="default"
+            size="sm"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                if (!confirm(`Apply ${captured.itemCount} configuration change(s) to production?`)) return;
+                await applyChangeSetAction(captured.changeSetId);
+                setApplied(true);
+              })
+            }
+            title="Apply the captured configuration changes to production"
+          >
+            Apply to production
+          </Button>
+        ) : null}
+        <Button variant="ghost" size="sm" disabled={pending} onClick={() => setCaptured(null)}>
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-1">
       <Button
@@ -181,14 +255,15 @@ function PromoteButton({ sandboxId, disabled }: { sandboxId: string; disabled: b
             const name = prompt("Change set name", "Sandbox changes");
             if (!name) return;
             const r = await promoteSandboxAction(sandboxId, name);
-            setMsg(`${r.itemCount} change(s) captured`);
+            setApplied(false);
+            setCaptured(r);
           })
         }
         title="Capture the sandbox's customization changes as a reviewable change set"
       >
         Promote
       </Button>
-      {msg && <span className="text-xs text-slate-500 dark:text-slate-400">{msg}</span>}
+      {applied && <span className="text-xs text-emerald-600 dark:text-emerald-400">Applied to production</span>}
     </div>
   );
 }

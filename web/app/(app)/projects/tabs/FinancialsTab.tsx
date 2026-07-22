@@ -1,11 +1,11 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { Card, CardContent, cn } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
-import { money } from '../../../../lib/format'
 import { RecognitionCard, type RecognitionStatus } from './RecognitionCard'
 import { add, cmp, neg } from '@openbooks/engine/src/money.ts'
 
@@ -54,6 +54,7 @@ export function FinancialsTab({ data, projectId, billingMethod, recognition, can
   recognition: RecognitionStatus | null
   canManage: boolean
 }) {
+  const { money } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
   const [inner, setInner] = useState<'category' | 'account'>('category')

@@ -15,6 +15,7 @@ export type KeyRow = {
   key_prefix: string
   key_preview: string
   scopes: string[]
+  rate_limit_per_min: number | null
   is_active: boolean
   expires_at: string | null
   last_used_at: string | null
@@ -42,6 +43,10 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
   const [name, setName] = useState(keyRow?.name ?? '')
   const [description, setDescription] = useState(keyRow?.description ?? '')
   const [selected, setSelected] = useState<Set<string>>(new Set(keyRow?.scopes ?? []))
+  // Blank = unlimited; new keys default to 120/min.
+  const [rateLimit, setRateLimit] = useState(
+    creating ? '120' : keyRow?.rate_limit_per_min == null ? '' : String(keyRow.rate_limit_per_min),
+  )
   const [busy, setBusy] = useState(false)
   const [createdKey, setCreatedKey] = useState<string | null>(null)
 
@@ -88,6 +93,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
         name: name.trim(),
         description: description.trim(),
         scopes: [...selected],
+        rateLimitPerMin: rateLimit.trim() === '' ? null : Number(rateLimit),
       }),
     })
     const data = await res.json()
@@ -112,6 +118,7 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
         name: name.trim(),
         description: description.trim(),
         scopes: [...selected],
+        rateLimitPerMin: rateLimit.trim() === '' ? null : Number(rateLimit),
       }),
     })
     const data = await res.json()
@@ -241,6 +248,21 @@ export function KeyDrawer({ keyRow }: { keyRow: KeyRow | null }) {
               rows={2}
               placeholder={t('drawer.descriptionPlaceholder')}
             />
+          </div>
+
+          <div className="space-y-1.5 sm:max-w-xs">
+            <Label htmlFor="key-rate">{t('drawer.rateLimitLabel')}</Label>
+            <Input
+              id="key-rate"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={rateLimit}
+              onChange={(e) => setRateLimit(e.target.value)}
+              disabled={!creating && !keyRow?.is_active}
+              placeholder={t('drawer.rateLimitPlaceholder')}
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.rateLimitHint')}</p>
           </div>
 
           <div className="space-y-4">

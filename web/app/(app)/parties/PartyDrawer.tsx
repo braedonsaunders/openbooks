@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -41,7 +42,6 @@ import { EmployeeWageRates } from './EmployeeWageRates'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
-import { money } from '../../../lib/format'
 import { countryOptions } from '../../../lib/countries'
 
 interface Opt {
@@ -564,7 +564,7 @@ export function PartyDrawer({
         </span>
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
-      primaryAction={mode === 'view' && canManage ? <Button variant="outline" size="sm" onClick={() => setMode('edit')}>{tc('actions.edit')}</Button> : undefined}
+      primaryAction={canManage ? <Button variant="outline" size="sm" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>{mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}</Button> : undefined}
       actionsMenuHeader={forms.length > 0 ? (
         <div className="border-b border-slate-200 p-2 dark:border-slate-800">
           <Label className="mb-1 block text-xs">{t('customForm')}</Label>
@@ -605,7 +605,6 @@ export function PartyDrawer({
           </span>
           {mode === 'edit' ? (
             <div className="ml-auto flex items-center gap-2">
-              <Button variant="outline" disabled={busy} onClick={cancel}>{tc('actions.cancel')}</Button>
               <Button disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
             </div>
           ) : null}
@@ -1103,6 +1102,7 @@ export function PartyDrawer({
 }
 
 function PartySummary({ payload }: { payload: PartyPayload }) {
+  const { money } = useMoney()
   const t = useTranslations('parties.drawer')
   const summary = payload.transactionSummary
   const primaryCurrency = summary.currencies.length === 1 ? summary.currencies[0] : null
@@ -1111,7 +1111,7 @@ function PartySummary({ payload }: { payload: PartyPayload }) {
     { label: t('summary.openTransactions'), value: String(summary.openCount), icon: <CircleDollarSign size={17} /> },
     {
       label: t('summary.openBalance'),
-      value: primaryCurrency ? `${money(primaryCurrency.openBalance)} ${primaryCurrency.currency}` : t('summary.multipleCurrencies'),
+      value: primaryCurrency ? money(primaryCurrency.openBalance, { currency: primaryCurrency.currency }) : t('summary.multipleCurrencies'),
       icon: <CircleDollarSign size={17} />,
     },
     {
@@ -1540,6 +1540,7 @@ function transactionTarget(row: TransactionRow): { path: string; param: string }
 }
 
 function TransactionSublist({ partyId, role }: { partyId: string; role?: 'customer' | 'vendor' | 'employee' }) {
+  const { money } = useMoney()
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
   const pathname = usePathname() ?? '/parties'
@@ -1656,8 +1657,8 @@ function TransactionSublist({ partyId, role }: { partyId: string; role?: 'custom
                   <TableCell>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(`${row.document_date}T00:00:00`))}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{row.reference_number || '—'}</TableCell>
                   <TableCell><Badge variant={row.status === 'posted' ? 'success' : row.status === 'pending_approval' ? 'warning' : 'secondary'}>{statusLabel(row.status)}</Badge></TableCell>
-                  <TableCell className="text-right tabular-nums">{money(row.total)} <span className="text-xs text-slate-400">{row.currency}</span></TableCell>
-                  <TableCell className="text-right tabular-nums">{row.open_balance == null ? '—' : money(row.open_balance)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(row.total, { currency: row.currency })}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.open_balance == null ? '—' : money(row.open_balance, { currency: row.currency })}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

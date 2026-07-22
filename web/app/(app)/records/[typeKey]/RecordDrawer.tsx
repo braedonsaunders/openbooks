@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Trash2 } from 'lucide-react'
+import { ChevronDown, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
-import { Badge, Button, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Popover, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { runClientScripts } from '@/lib/client-scripts'
 import { RecordFields } from '../../../../components/record-fields'
@@ -48,6 +48,7 @@ export function RecordDrawer({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
   const [busy, setBusy] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
 
   const canEditStatus = canEdit && status !== 'inactive'
   const [mode, setMode] = useState<'view' | 'edit'>('view')
@@ -187,41 +188,28 @@ export function RecordDrawer({
         <>
           {mode === 'edit' ? (
             <>
-              <Button disabled={busy} onClick={save}>
-                {busy ? tc('actions.saving') : tc('actions.save')}
-              </Button>
               <Button variant="outline" disabled={busy} onClick={cancel}>
                 {tc('actions.cancel')}
               </Button>
+              <Button disabled={busy} onClick={save}>
+                {busy ? tc('actions.saving') : tc('actions.save')}
+              </Button>
             </>
           ) : (
-            <>
+            <div className="flex items-center gap-1.5">
               {canEditStatus ? (
                 <Button variant="outline" onClick={() => setMode('edit')}>
                   {tc('actions.edit')}
                 </Button>
               ) : null}
-              {canEdit && status === 'draft' ? (
-                <>
-                  <Button variant="ghost" disabled={busy} onClick={destroy}>
-                    <Trash2 size={14} /> {t('deleteDraft')}
-                  </Button>
-                  <Button disabled={busy || saveState === 'saving'} onClick={() => transition('active')}>
-                    {t('activate')}
-                  </Button>
-                </>
-              ) : null}
-              {canEdit && status === 'active' ? (
-                <Button variant="outline" disabled={busy} onClick={() => transition('inactive')}>
-                  {t('deactivate')}
-                </Button>
-              ) : null}
-              {canEdit && status === 'inactive' ? (
-                <Button disabled={busy} onClick={() => transition('active')}>
-                  {t('reactivate')}
-                </Button>
-              ) : null}
-            </>
+              {canEdit ? <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tc('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
+                <div className="space-y-0.5 [&_button]:w-full [&_button]:justify-start">
+                  {status === 'draft' ? <><Button variant="ghost" disabled={busy || saveState === 'saving'} onClick={() => { setActionsOpen(false); void transition('active') }}>{t('activate')}</Button><Button variant="ghost" className="text-red-600" disabled={busy} onClick={() => { setActionsOpen(false); void destroy() }}><Trash2 size={14} /> {t('deleteDraft')}</Button></> : null}
+                  {status === 'active' ? <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void transition('inactive') }}>{t('deactivate')}</Button> : null}
+                  {status === 'inactive' ? <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void transition('active') }}>{t('reactivate')}</Button> : null}
+                </div>
+              </Popover> : null}
+            </div>
           )}
         </>
       }

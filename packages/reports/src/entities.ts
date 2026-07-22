@@ -380,7 +380,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'cost_recovery', label: 'Cost recovery', kind: 'number', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
       { key: 'billable_value', label: 'Billable value', kind: 'number', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
       { key: 'billed_revenue', label: 'Billed revenue', kind: 'number', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='customer_invoice' and d.status='posted')` },
-      { key: 'depreciation', label: 'Posted depreciation', kind: 'number', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id where ds.asset_id=eu.fixed_asset_id and dsl.journal_entry_id is not null)` },
+      { key: 'depreciation', label: 'Posted depreciation', kind: 'number', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id where ds.asset_id=eu.fixed_asset_id and dsl.posted_amount is not null)` },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'eu.created_at' },
       { key: 'id', label: 'Equipment (id)', kind: 'uuid', expr: 'eu.id' },
     ],

@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import type { LaborCostComponent } from '@openbooks/engine/src/labor-costing.ts'
+import { useMoney } from '@/components/money-provider'
 
 /**
  * Guided setup — four plain questions, then we do the configuration. Each
@@ -23,6 +24,7 @@ export function LaborCostingWizard(props: {
   hoursPerDay: number
   annualHours: number
 }) {
+  const { money } = useMoney()
   const t = useTranslations('admin.setup.laborCosting.wizard')
   const tc = useTranslations('admin.setup.laborCosting.components')
   const router = useRouter()
@@ -279,7 +281,7 @@ export function LaborCostingWizard(props: {
                 <Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
                 {Number(fallbackRate) > 0
                   ? t('reviewFallback', {
-                      rate: Number(fallbackRate).toFixed(2),
+                      rate: money(Number(fallbackRate)),
                     })
                   : t('reviewWagesOnRecord')}
               </li>
@@ -289,16 +291,16 @@ export function LaborCostingWizard(props: {
               </li>
             </ul>
             <div className="rounded-md bg-slate-50 p-3 text-xs dark:bg-slate-800/60">
-              <span className="text-slate-500 dark:text-slate-400">{t('reviewExample', { wage: exampleWage.toFixed(2) })}</span>
+              <span className="text-slate-500 dark:text-slate-400">{t('reviewExample', { wage: money(exampleWage) })}</span>
               <div className="mt-1 flex gap-4 font-medium tabular-nums text-slate-900 dark:text-slate-100">
                 <span>
-                  {t('exReg')}: ${example(1).toFixed(2)}/h
+                  {t('exReg')}: {money(example(1))}/h
                 </span>
                 <span>
-                  {t('exOt')}: ${example(1.5).toFixed(2)}/h
+                  {t('exOt')}: {money(example(1.5))}/h
                 </span>
                 <span>
-                  {t('exDt')}: ${example(2).toFixed(2)}/h
+                  {t('exDt')}: {money(example(2))}/h
                 </span>
               </div>
             </div>

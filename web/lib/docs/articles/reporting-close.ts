@@ -6,7 +6,7 @@ export const financialReports: DocArticle = {
   category: 'reporting',
   order: 1,
   summary: 'Run financial statements, aging, registers, ledger detail, budget, order, and project reports.',
-  updated: '2026-07-20',
+  updated: '2026-07-21',
   keywords: [
     'reports',
     'profit and loss',
@@ -101,6 +101,28 @@ Save frequently used report parameters as a reusable view. Export formats are
 intended for distribution and analysis, but the in-app report and underlying
 ledger remain the authoritative source. Record the exact filters and run date in
 close evidence so another reviewer can reproduce the result.
+
+## Scheduled delivery and evidence
+
+An active custom-report schedule requires at least one validated recipient. The
+cadence is interpreted in the selected IANA time zone. When an occurrence is
+due, OpenBooks first commits a unique scheduled run and advances the schedule in
+the same database transaction. The background queue is only a dispatcher: if it
+is unavailable after that commit, the worker rebuilds it from the durable run
+outbox instead of losing or duplicating the occurrence.
+
+The worker applies the schedule's saved filter override, renders the report once,
+and retains the exact PDF bytes, filename, size, and SHA-256 hash as immutable run
+evidence. It then creates one delivery record per normalized recipient. Email
+attempts use bounded exponential retries and record queue job ids, attempts,
+provider message ids, suppression reasons, errors, and final sent times. Sandbox
+organizations and tenants without configured email are recorded as **Suppressed**
+rather than reported as successful sends.
+
+In **Recent runs**, use **PDF evidence** to retrieve the exact rendered artifact.
+The delivery column distinguishes sent, failed, and suppressed recipients; a
+successfully rendered report is not presented as proof that every recipient
+received it. Formulaic queue retries do not create new report runs or artifacts.
 
 ## Report review
 

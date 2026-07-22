@@ -9,7 +9,7 @@ import type { RatioDef } from '../_ui/RatioCard'
 import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
-import { fmtMoney, fmtPct } from '../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../_ui/format'
 import { OverviewTab } from './tabs/OverviewTab'
 import { MarginTab } from './tabs/MarginTab'
 import { ItemsTab } from './tabs/ItemsTab'
@@ -31,6 +31,7 @@ export function FinancialHealthView({
   data: HealthData
   defs: Record<string, RatioDef>
 }) {
+  const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth')
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)

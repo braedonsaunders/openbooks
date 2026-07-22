@@ -1,13 +1,12 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Label } from '@openbooks/ui'
-import { money } from '../../../../lib/format'
-
 export interface RecognitionStatus {
   contractId: string | null
   contractValue: string
@@ -32,6 +31,7 @@ export function RecognitionCard({ projectId, status, canManage }: {
   status: RecognitionStatus
   canManage: boolean
 }) {
+  const { money } = useMoney()
   const t = useTranslations('projects.recognition')
   const tCommon = useTranslations('common')
   const router = useRouter()

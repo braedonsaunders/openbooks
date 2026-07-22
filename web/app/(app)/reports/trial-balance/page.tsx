@@ -6,7 +6,6 @@ import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
-import { currencySymbol } from '../../../../lib/statement-format'
 import { orgBranding } from '../../../../lib/report-pdf'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
@@ -29,7 +28,6 @@ export default async function TrialBalance({
   const subView = await reportSubsidiaryView(q.subsidiaryId, date)
   const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [rows, opts, org, branding] = await Promise.all([trialBalance(date, dims), dimensionOptions(), orgInfo(), orgBranding()])
-  const sym = currencySymbol(org?.base_currency)
   const totalDebits = rows.reduce((a, r) => a + Number(r.debits), 0)
   const totalCredits = rows.reduce((a, r) => a + Number(r.credits), 0)
 
@@ -70,7 +68,7 @@ export default async function TrialBalance({
     >
       <PaperView
         company={branding.orgName}
-        currency={sym}
+        currency={org?.base_currency}
         emptyLabel={t('generalLedger.empty')}
         data={{
           title: t('trialBalance.title'),

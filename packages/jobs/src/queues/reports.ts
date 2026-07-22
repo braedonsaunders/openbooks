@@ -9,10 +9,12 @@ export const REPORTS_QUEUE = 'reports'
  * ad-hoc "run now" deliveries.
  */
 export type ReportJobData = {
+  /** Durable database outbox row. Scheduled jobs always carry this id. */
+  runId: string
   orgId: string
   definitionId: string
   scheduleId?: string
-  recipients: string[]
+  recipients?: string[]
   /** Extra query params for the render (period preset override, side, etc.). */
   params?: Record<string, string>
 }

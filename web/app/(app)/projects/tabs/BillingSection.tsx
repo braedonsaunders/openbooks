@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -7,8 +8,6 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
-import { money } from '../../../../lib/format'
-
 export interface UnbilledClient {
   revenue: string
   cost: string
@@ -72,6 +71,7 @@ export function BillingSection({
   formOpen: boolean
   onFormOpenChange: (open: boolean) => void
 }) {
+  const { money } = useMoney()
   const t = useTranslations('projects.billing')
   const tCommon = useTranslations('common')
   const router = useRouter()

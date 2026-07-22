@@ -350,7 +350,8 @@
       "columns": {
         "trigger": "触发方式",
         "rows": "行数",
-        "finished": "完成时间"
+        "finished": "完成时间",
+        "delivery": "投递"
       },
       "status": {
         "succeeded": "成功",
@@ -362,6 +363,8 @@
         "manual": "手动",
         "scheduled": "定时"
       },
+      "deliveryEvidence": "已发送 {sent}/{total} · 失败 {failed} · 已阻止 {suppressed}",
+      "pdf": "PDF 凭证",
       "csv": "CSV"
     }
   },

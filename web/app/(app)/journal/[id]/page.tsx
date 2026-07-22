@@ -1,8 +1,8 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import { Badge, DetailHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { PageContainer } from '../../../../components/page-layout'
 import { entryDetail } from '../../../../lib/data'
-import { money } from '../../../../lib/format'
 import { requirePermission } from '../../../../lib/authz'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +30,7 @@ const STATUS_KEYS: Record<string, string> = {
 }
 
 export default async function Entry({ params }: { params: Promise<{ id: string }> }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('gl.read')
   const t = await getTranslations('journal')
   const tc = await getTranslations('common')

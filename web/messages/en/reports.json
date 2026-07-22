@@ -350,7 +350,8 @@
       "columns": {
         "trigger": "Trigger",
         "rows": "Rows",
-        "finished": "Finished"
+        "finished": "Finished",
+        "delivery": "Delivery"
       },
       "status": {
         "succeeded": "Succeeded",
@@ -362,6 +363,8 @@
         "manual": "Manual",
         "scheduled": "Scheduled"
       },
+      "deliveryEvidence": "{sent}/{total} sent · {failed} failed · {suppressed} suppressed",
+      "pdf": "PDF evidence",
       "csv": "CSV"
     }
   },

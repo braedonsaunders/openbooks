@@ -75,6 +75,10 @@ export const taxRegimes = pgTable(
     orgId: orgRef(),
     code: text("code").notNull(), // "ca_cca", "uk_wda", or a tenant's own
     name: text("name").notNull(),
+    /** ISO country whose company/subsidiary setup makes this regime available. Null = tenant-global. */
+    countryCode: text("country_code"),
+    /** Pool waterfall or per-asset U.S.-style MACRS schedule calculation. */
+    calculationModel: text("calculation_model", { enum: ["pool", "macrs"] }).notNull().default("pool"),
     classAttribute: text("class_attribute").notNull().default("tax_pool_class"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
@@ -102,6 +106,11 @@ export const taxPoolClasses = pgTable(
     allowRecapture: boolean("allow_recapture").notNull().default(true),
     allowTerminalLoss: boolean("allow_terminal_loss").notNull().default(true),
     costCap: money("cost_cap"),
+    /** MACRS configuration. Null for ordinary pooled regimes. */
+    depreciationSystem: text("depreciation_system", { enum: ["gds", "ads"] }),
+    macrsMethod: text("macrs_method", { enum: ["200_db", "150_db", "straight_line"] }),
+    recoveryPeriodYears: fxRate("recovery_period_years"),
+    convention: text("convention", { enum: ["half_year", "mid_quarter", "mid_month"] }),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },

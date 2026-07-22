@@ -52,7 +52,10 @@ export type StatementDimFilter = {
  */
 export type StatementSubsidiaryContext = {
   ids: string[]
-  rates?: { subsidiaryId: string; averageRate: number; currentRate: number; historicalRate: number }[]
+  rates?: { subsidiaryId: string; averageRate: string; currentRate: string; historicalRate: string }[]
+  /** Exact ownership multiplier. Equity-method entities are excluded upstream;
+   * proportionately consolidated entities carry a factor below one. */
+  weights?: { subsidiaryId: string; factor: string }[]
 }
 
 export type StatementColumnKind = 'amount' | 'variance_abs' | 'variance_pct'
@@ -162,15 +165,24 @@ function dimFilterSql(dims: StatementDimFilter | undefined, subsidiary?: Stateme
  */
 function amountExpr(mode: StatementMode, subsidiary?: StatementSubsidiaryContext): SQL {
   const rates = subsidiary?.rates
-  if (!rates || rates.length === 0) return sql`l.amount`
+  const weights = subsidiary?.weights
   const pick = (r: NonNullable<StatementSubsidiaryContext['rates']>[number]) =>
     mode === 'flow'
       ? sql`${r.averageRate}::numeric`
       : sql`case when a.type = 'equity' then ${r.historicalRate}::numeric else ${r.currentRate}::numeric end`
-  let expr = sql`case l.subsidiary_id`
-  for (const r of rates) expr = sql`${expr} when ${r.subsidiaryId}::uuid then ${pick(r)}`
-  expr = sql`${expr} else 1 end`
-  return sql`l.amount * (${expr})`
+  let rateExpr = sql`1::numeric`
+  if (rates?.length) {
+    rateExpr = sql`case l.subsidiary_id`
+    for (const r of rates) rateExpr = sql`${rateExpr} when ${r.subsidiaryId}::uuid then ${pick(r)}`
+    rateExpr = sql`${rateExpr} else 1 end`
+  }
+  let weightExpr = sql`1::numeric`
+  if (weights?.length) {
+    weightExpr = sql`case l.subsidiary_id`
+    for (const weight of weights) weightExpr = sql`${weightExpr} when ${weight.subsidiaryId}::uuid then ${weight.factor}::numeric`
+    weightExpr = sql`${weightExpr} else 1 end`
+  }
+  return sql`l.amount * (${rateExpr}) * (${weightExpr})`
 }
 
 /** One column's FILTER predicate: its date window + optional dimension slice. */

@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -6,13 +7,15 @@ import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, 
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
+import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
-import { money } from '../../../lib/format'
+import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
+import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { loadItem } from '../../api/items/_lib'
 import { NewItemButton } from './NewItemButton'
 import { NewItemRedirect } from './NewItemRedirect'
@@ -44,16 +47,51 @@ export default async function Items({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const [t, tCommon] = await Promise.all([getTranslations('items'), getTranslations('common')])
   const kindLabel = (k: string) =>
     (ITEM_KINDS as readonly string[]).includes(k) ? t(`kinds.${k}`) : k
 
   const authz = await requirePermission('items.read')
   const canManage = can(authz, 'items.manage')
+  // Rate Books are shared billing configuration re-homed onto the catalog module
+  // as a tab; managing them keeps the admin.setup.manage gate.
+  const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
 
   const sp = await searchParams
   const itemId = typeof sp.item === 'string' ? sp.item : undefined
+  const view = canSetup && pickString(sp.view) === 'rate-books' ? 'rate-books' : 'catalog'
+  const rateBooksEntity = view === 'rate-books' ? SETUP_ENTITY_BY_KEY.get('item-rate-books') ?? null : null
+
+  // Catalog ↔ Rate Books switcher — visible tabs shown on both views when the
+  // user can manage configuration, defined once and reused.
+  const viewChips = canSetup ? (
+    <ModuleHomeTabs
+      tabs={[
+        { href: '/items', label: t('list.viewCatalog'), active: view === 'catalog' },
+        { href: '/items?view=rate-books', label: t('list.viewRateBooks'), active: view === 'rate-books' },
+      ]}
+    />
+  ) : null
+
+  if (rateBooksEntity) {
+    return (
+      <ListPageLayout
+        header={
+          <PageHeader title={t('list.title')} description={t('list.description')} actions={viewChips} />
+        }
+      >
+        <SetupEntitySection
+          entity={rateBooksEntity}
+          orgId={orgId}
+          searchParams={sp}
+          basePath="/items"
+          canManage={canSetup}
+        />
+      </ListPageLayout>
+    )
+  }
   const params = parseListParams(sp, {
     sort: 'name',
     dir: 'asc',
@@ -134,7 +172,12 @@ export default async function Items({
           <PageHeader
             title={t('list.title')}
             description={t('list.description')}
-            actions={canManage ? <NewItemButton /> : undefined}
+            actions={
+              <div className="flex items-center gap-3">
+                {viewChips}
+                {canManage ? <NewItemButton /> : null}
+              </div>
+            }
           />
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput placeholder={t('list.searchPlaceholder')} />

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowRight, BookMarked, Wand2, X } from 'lucide-react'
 import { Button, Input, Label, cn } from '@openbooks/ui'
+import { useMoney } from '@/components/money-provider'
 
 export interface DeptRate {
   id: string
@@ -42,6 +43,7 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
  *  • Wizard — guided one-pass setup: approach → rates → apply to types.
  */
 export function OverheadActions({ departments, projectTypes, autoOpen }: { departments: DeptRate[]; projectTypes: TypeOpt[]; autoOpen?: boolean }) {
+  const { currency, money } = useMoney()
   const t = useTranslations('admin.setup.entities.overhead-model')
   const router = useRouter()
   const [open, setOpen] = useState<'publish' | 'wizard' | null>(autoOpen ? 'wizard' : null)
@@ -107,9 +109,9 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
             <Label>{d.name}</Label>
             <div className="flex items-center gap-1.5">
               <Input type="number" step="0.01" value={rates[d.id] ?? ''} onChange={(e) => setRates({ ...rates, [d.id]: e.target.value })} />
-              <span className="text-xs text-slate-400">$/hr</span>
+              <span className="text-xs text-slate-400">{currency}/hr</span>
             </div>
-            <p className="text-[11px] text-slate-400">{t('liveNow', { rate: d.composite.toFixed(2) })}</p>
+            <p className="text-[11px] text-slate-400">{t('liveNow', { rate: money(d.composite) })}</p>
           </div>
         ))}
       </div>

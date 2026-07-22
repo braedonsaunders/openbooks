@@ -1,8 +1,10 @@
+import { sql } from "drizzle-orm";
 import { PageHeader } from "@openbooks/ui";
+import { db } from "@openbooks/engine/src/db.ts";
 import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
 import { ListPageLayout } from "../../../../components/page-layout";
 import { requirePermission } from "../../../../lib/authz";
-import { SandboxManager, type SandboxRow } from "./SandboxManager";
+import { SandboxManager, type SandboxRow, type PeriodOption } from "./SandboxManager";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,13 @@ export default async function SandboxesPage() {
   const authz = await requirePermission("admin.sandboxes.manage");
   // Always manage sandboxes against the home production org.
   const rows = (await listSandboxes(authz.user.productionOrgId)) as unknown as SandboxRow[];
+
+  // Accounting periods for the as-of clone cutoff (most recent first).
+  const periodsRes = (await db.execute(sql`
+    select id, name from accounting_periods
+     where org_id = ${authz.user.productionOrgId}
+     order by fiscal_year desc, period_number desc
+     limit 240`)) as unknown as { rows: PeriodOption[] };
 
   return (
     <ListPageLayout
@@ -25,7 +34,7 @@ export default async function SandboxesPage() {
           You are currently inside a sandbox. Exit to production to manage environments.
         </p>
       ) : (
-        <SandboxManager sandboxes={rows} />
+        <SandboxManager sandboxes={rows} periods={periodsRes.rows} />
       )}
     </ListPageLayout>
   );

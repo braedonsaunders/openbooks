@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { sum } from '@openbooks/engine/src/money.ts'
+import { fromUnits, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
@@ -142,10 +142,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let totalDebits: string | null = null
   let preparedLines: { accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
-    const valid = body.lines.filter(
-      (l) => l.accountId && !Number.isNaN(Number(l.amount)) && Number(l.amount) !== 0,
-    )
-    totalDebits = sum(valid.map((l) => (Number(l.amount) > 0 ? l.amount : '0')))
+    const valid: typeof body.lines = []
+    try {
+      for (const line of body.lines) {
+        const units = toUnits(line.amount)
+        if (line.accountId && units !== 0n) valid.push({ ...line, amount: fromUnits(units) })
+      }
+    } catch {
+      return NextResponse.json({ error: 'Journal lines contain an invalid monetary amount' }, { status: 422 })
+    }
+    totalDebits = sum(valid.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
     preparedLines = []
     for (let i = 0; i < valid.length; i++) {
       const l = valid[i]!

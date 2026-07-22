@@ -1,4 +1,5 @@
 import "server-only";
+import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
@@ -162,7 +163,7 @@ export const RATIO_DEFS: Record<
     label: "Revenue per Employee",
     formula: "Revenue / Headcount",
     desc: "Top-line productivity of the workforce.",
-    interpret: "Benchmarks vary by industry; $200K+ is a common target.",
+    interpret: "Benchmarks vary materially by industry, geography, and reporting currency.",
   },
   gp_per_employee: {
     label: "Gross Profit per Employee",
@@ -275,6 +276,7 @@ export async function financialHealth(
   benchmarks: HealthBenchmarks = DEFAULT_BENCHMARKS,
   orgId?: string,
 ): Promise<FinancialHealth> {
+  const { moneyCompact } = await getMoneyFormatter(orgId)
   const resolvedOrgId = await resolveOrgId(orgId);
   const { from, to, label } = period;
   const b = benchmarks;
@@ -337,7 +339,7 @@ export async function financialHealth(
   const targetGM = Math.min(0.6, Math.max(0.05, grossMarginPct > 0.05 ? grossMarginPct : 0.2));
   const breakevenMonthly = opex > 0 ? opex / months / targetGM : null;
 
-  const M = (n: number) => (n < 0 ? `-$${fmtCompact(Math.abs(n))}` : `$${fmtCompact(n)}`);
+  const M = (n: number) => moneyCompact(n);
 
   // ---- Ratio grids ---------------------------------------------------------
   const profitability: RatioResult[] = [
@@ -422,15 +424,6 @@ function mk(
     score: scoreOf(v, benchmark, inverse),
     grade: grade(v, benchmark, inverse),
   };
-}
-
-// Compact money used only inside `calc` strings ("$6.2M / $24.8M").
-function fmtCompact(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 1e9) return (n / 1e9).toFixed(1) + "B";
-  if (abs >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (abs >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return n.toFixed(0);
 }
 
 function fmtPct(n: number): string {

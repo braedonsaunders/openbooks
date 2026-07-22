@@ -34,6 +34,7 @@ export default async function FieldTicketsPage({
   if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) notFound()
   const canManage = can(authz, 'time.manage')
   const canApprove = can(authz, 'time.approve')
+  const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
   const t = await getTranslations('fieldTickets')
   const sp = await searchParams
   const openId = pickString(sp[PARAM])
@@ -43,8 +44,10 @@ export default async function FieldTicketsPage({
     employees: { id: string; name: string }[]
     laborItems: { id: string; name: string }[]
     timeTypes: { id: string; name: string; bill_multiplier: string }[]
-    catalogItems: { id: string; name: string; default_rate: string | null }[]
-    projects: { id: string; name: string }[]
+    catalogItems: { id: string; name: string; kind: string; default_rate: string | null }[]
+    projects: { id: string; name: string; customerName: string | null; period: string }[]
+    projectTasks: { id: string; code: string | null; name: string; status: string; estimatedHours: string | null }[]
+    equipmentUnits: { id: string; name: string; unitNumber: string; chargeItemId: string }[]
   } | null = null
   if (openId) {
     try {
@@ -53,7 +56,7 @@ export default async function FieldTicketsPage({
       if (!(e instanceof FieldTicketError)) throw e
     }
     if (openTicket) {
-      const [employees, laborItems, timeTypes, catalogItems, projects] = (await Promise.all([
+      const [employees, laborItems, timeTypes, catalogItems, projects, projectTasks, equipmentUnits] = (await Promise.all([
         db.execute(sql`
           select p.id, p.display_name as name from parties p
            where p.org_id = ${orgId} and p.is_active
@@ -62,15 +65,50 @@ export default async function FieldTicketsPage({
         db.execute(sql`
           select id, name from items where org_id = ${orgId} and is_active and kind in ('labor', 'service') order by name`),
         db.execute(sql`
-          select id, name, bill_multiplier from time_types where org_id = ${orgId} and is_active order by bill_multiplier, name`),
+          select tt.id, tt.name, tt.bill_multiplier
+            from time_types tt
+           where tt.org_id = ${orgId}
+             and (
+               (tt.is_active and tt.show_on_field_ticket)
+               or exists (
+                 select 1 from time_entries te
+                  where te.org_id = ${orgId}
+                    and te.field_ticket_id = ${openTicket.id}
+                    and te.time_type_id = tt.id
+               )
+             )
+           order by tt.bill_multiplier, tt.name`),
         db.execute(sql`
-          select id, name, default_rate from items
+          select id, name, kind, default_rate from items
            where org_id = ${orgId} and is_active
              and kind in ('equipment_charge', 'non_inventory', 'other_charge', 'inventory', 'service')
            order by kind, name`),
         db.execute(sql`
-          select id, coalesce(code || ' · ' || name, name) as name from projects
-           where org_id = ${orgId} and is_active order by name limit 2000`),
+          select p.id, coalesce(p.code || ' · ' || p.name, p.name) as name,
+                 cust.display_name as "customerName",
+                 coalesce(
+                   case when p.custom->>'fieldTicketPeriod' in ('shift','daily','weekly') then p.custom->>'fieldTicketPeriod' end,
+                   case when cust.custom->>'fieldTicketPeriod' in ('shift','daily','weekly') then cust.custom->>'fieldTicketPeriod' end,
+                   case when o.settings->'fieldTickets'->>'defaultPeriod' in ('shift','daily','weekly') then o.settings->'fieldTickets'->>'defaultPeriod' end,
+                   'weekly'
+                 ) as period
+            from projects p
+            left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
+            join orgs o on o.id = p.org_id
+           where p.org_id = ${orgId} and p.is_active order by p.name limit 2000`),
+        openTicket.projectId
+          ? db.execute(sql`
+              select id, code, name, status, estimated_hours as "estimatedHours"
+                from project_tasks where org_id = ${orgId} and project_id = ${openTicket.projectId}
+               order by code nulls last, name`)
+          : Promise.resolve({ rows: [] }),
+        equipmentEnabled
+          ? db.execute(sql`
+              select id, name, unit_number as "unitNumber", charge_item_id as "chargeItemId"
+                from equipment_units
+               where org_id = ${orgId} and status = 'active' and charge_item_id is not null
+               order by unit_number, name`)
+          : Promise.resolve({ rows: [] }),
       ])) as unknown as { rows: Record<string, unknown>[] }[]
       pickers = {
         employees: employees.rows as never,
@@ -78,6 +116,8 @@ export default async function FieldTicketsPage({
         timeTypes: timeTypes.rows as never,
         catalogItems: catalogItems.rows as never,
         projects: projects.rows as never,
+        projectTasks: projectTasks.rows as never,
+        equipmentUnits: equipmentUnits.rows as never,
       }
     }
   }
@@ -107,6 +147,9 @@ export default async function FieldTicketsPage({
         timeTypes={pickers.timeTypes}
         catalogItems={pickers.catalogItems}
         projects={pickers.projects}
+        projectTasks={pickers.projectTasks}
+        equipmentUnits={pickers.equipmentUnits}
+        equipmentEnabled={equipmentEnabled}
         layout={resolvedForm?.layout}
         canApprove={canApprove}
         canManage={canManage}

@@ -16,7 +16,8 @@
     "quote": "报价单",
     "sales_order": "销售订单",
     "purchase_order": "采购订单",
-    "project": "项目"
+    "project": "项目",
+    "fixed_asset": "固定资产"
   },
   "views": {
     "defaultName": "默认视图",

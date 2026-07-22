@@ -8,6 +8,7 @@ import {
   postPayrollVariance,
   type LaborCostComponent,
 } from '@openbooks/engine/src/labor-costing.ts'
+import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,8 +48,8 @@ function cleanComponents(input: unknown): LaborCostComponent[] {
   for (const c of input.slice(0, 20)) {
     if (!c || typeof c !== 'object') continue
     const kind = String((c as Record<string, unknown>).kind)
-    const value = Number((c as Record<string, unknown>).value)
-    if (!COMPONENT_KINDS.has(kind) || !Number.isFinite(value) || value < 0) continue
+    const value = canonicalDecimal((c as Record<string, unknown>).value, 4)
+    if (!COMPONENT_KINDS.has(kind) || value === null || compareDecimal(value, '0') < 0) continue
     out.push({
       key: String((c as Record<string, unknown>).key ?? '').slice(0, 40) || `c${out.length}`,
       name: String((c as Record<string, unknown>).name ?? '').slice(0, 120) || 'Component',
@@ -164,8 +165,8 @@ export async function POST(req: Request) {
     const currencies = await configuredCurrencies(orgId)
     const currency = typeof body.currency === 'string' ? body.currency.toUpperCase() : ''
     if (!currencies.includes(currency)) return NextResponse.json({ error: 'currency is not configured for this organization' }, { status: 422 })
-    const rate = Number(body.rate)
-    if (!Number.isFinite(rate) || rate < 0) return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
+    const rate = canonicalDecimal(body.rate, 4)
+    if (rate === null || compareDecimal(rate, '0') < 0) return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
     const basis = body.basis === 'year' ? 'year' : 'hour'
     const annualHours = Number(body.annualHours) > 0 ? Number(body.annualHours) : 2080
     const effectiveFrom = body.effectiveFrom

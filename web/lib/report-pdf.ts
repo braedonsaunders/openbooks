@@ -26,8 +26,8 @@ import type {
   ReportSummaryItem,
 } from '@openbooks/reports'
 import { resolveReportLayout } from '@openbooks/reports'
-import { money } from './format'
 import { resolveOrgId } from './org-scope'
+import { resolveLocale } from './locale'
 
 /**
  * Export pipeline for reports: a single intermediate shape (ExportData) feeds
@@ -49,20 +49,21 @@ export type ExportData = {
 
 // --- branding ---------------------------------------------------------------
 
-export async function orgBranding(orgId?: string): Promise<PdfBranding & { reportPdfStyle: StatementPdfStyle }> {
+export async function orgBranding(orgId?: string): Promise<PdfBranding & { reportPdfStyle: StatementPdfStyle; baseCurrency: string }> {
   const activeOrgId = await resolveOrgId(orgId)
   const r = (await db.execute(sql`
-    select name,
+    select name, base_currency,
            settings ->> 'brandPrimary' as brand_primary,
            settings ->> 'reportPdfStyle' as report_pdf_style
       from orgs
      where id = ${activeOrgId}
-  `)) as unknown as { rows: { name: string; brand_primary: string | null; report_pdf_style: string | null }[] }
+  `)) as unknown as { rows: { name: string; base_currency: string; brand_primary: string | null; report_pdf_style: string | null }[] }
   const row = r.rows[0]
   return {
     orgName: row?.name ?? 'openbooks',
     primaryColor: row?.brand_primary || null,
     reportPdfStyle: row?.report_pdf_style === 'formal' ? 'formal' : 'modern',
+    baseCurrency: row?.base_currency ?? 'USD',
   }
 }
 
@@ -87,20 +88,20 @@ export function resolveLayout(layout?: Partial<ReportLayoutConfig> | null): {
 // --- shared converters ------------------------------------------------------
 
 /** Format a number for the PDF: counts stay clean, money gets 2 decimals. */
-export function pdfNum(v: number): string {
-  return Number.isInteger(v) ? v.toLocaleString('en-CA') : money(v)
+export function pdfNum(v: number, locale = 'en'): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 }).format(v)
 }
 
-function pdfCell(v: string | number | null | undefined): string {
+function pdfCell(v: string | number | null | undefined, locale: string): string {
   if (v === null || v === undefined) return ''
-  if (typeof v === 'number') return pdfNum(v)
+  if (typeof v === 'number') return pdfNum(v, locale)
   return String(v)
 }
 
-function pdfSummary(s: ReportSummaryItem): { label: string; value: string } {
+function pdfSummary(s: ReportSummaryItem, locale: string): { label: string; value: string } {
   return {
     label: s.label,
-    value: typeof s.value === 'number' ? pdfNum(s.value) : String(s.value),
+    value: typeof s.value === 'number' ? pdfNum(s.value, locale) : String(s.value),
   }
 }
 
@@ -144,14 +145,15 @@ export function exportDataToPdfInput(
   data: ExportData,
   branding: PdfBranding,
   page: PdfPageSetup,
-  opts: { showSummary?: boolean; generatedAt?: Date; footerLeft?: string } = {},
+  opts: { showSummary?: boolean; generatedAt?: Date; footerLeft?: string; locale?: string } = {},
 ): PdfDocumentInput {
+  const locale = opts.locale ?? 'en'
   const groups: PdfTableGroup[] = data.groups.map((g) => ({
     kind: g.kind,
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows.map((row) => row.map(pdfCell)),
+    rows: g.rows.map((row) => row.map((cell) => pdfCell(cell, locale))),
     align: g.align,
     isEmpty: g.isEmpty,
   }))
@@ -160,7 +162,7 @@ export function exportDataToPdfInput(
     dateRangeLabel: data.dateRangeLabel,
     generatedAt: opts.generatedAt ?? new Date(),
     branding,
-    summary: opts.showSummary === false ? undefined : data.summary.map(pdfSummary),
+    summary: opts.showSummary === false ? undefined : data.summary.map((item) => pdfSummary(item, locale)),
     groups,
     layout: page,
     footerLeft: opts.footerLeft,
@@ -168,7 +170,8 @@ export function exportDataToPdfInput(
 }
 
 export async function exportDataToPdf(data: ExportData, branding: PdfBranding, page: PdfPageSetup, opts?: { showSummary?: boolean }): Promise<Buffer> {
-  return renderPdfDocument(exportDataToPdfInput(data, branding, page, opts))
+  const locale = await resolveLocale()
+  return renderPdfDocument(exportDataToPdfInput(data, branding, page, { ...opts, locale }))
 }
 
 export async function exportDataToXlsx(data: ExportData, opts: { reportName: string; dateRangeLabel?: string }): Promise<Buffer> {
@@ -508,7 +511,7 @@ function scaleForExport(scale: 'actual' | 'thousands' | 'millions'): { divisor: 
 /** Render a StatementView to a professional statement PDF Buffer. */
 export async function renderStatementViewPdf(
   view: StatementView,
-  branding: PdfBranding & { reportPdfStyle: StatementPdfStyle },
+  branding: PdfBranding & { reportPdfStyle: StatementPdfStyle; baseCurrency: string },
   page: PdfPageSetup,
   opts: {
     title: string
@@ -518,12 +521,15 @@ export async function renderStatementViewPdf(
   },
 ): Promise<Buffer> {
   const { divisor, note } = scaleForExport(opts.scale)
+  const locale = await resolveLocale()
   return renderStatementPdf({
     companyName: branding.orgName,
     title: opts.title,
     periodPhrase: opts.periodPhrase,
     scaleNote: note || undefined,
-    decimals: divisor === 1 ? 2 : 0,
+    decimals: divisor === 1 ? undefined : 0,
+    locale,
+    currency: branding.baseCurrency,
     columns: view.columns.map((c) => ({ label: c.group ? `${c.group} · ${c.label}` : c.label, kind: c.kind })),
     rows: view.lines.map((l) => ({
       kind: l.kind,

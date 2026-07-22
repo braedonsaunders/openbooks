@@ -1,10 +1,12 @@
 'use client'
 
 import { Fragment, useEffect, useState } from 'react'
+import { useFormatter } from 'next-intl'
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import { formatAmount, isNegative } from '../../../../lib/statement-format'
+import { isNegative } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { ReportDrillLink } from '../ReportDrillLink'
 import { ReportPaper } from '../ReportPaper'
@@ -51,18 +53,18 @@ export type ProjectProfitabilityGroup = {
 
 const metricKeys: (keyof Values)[] = ['revenue', 'cogs', 'grossProfit', 'expenses', 'net', 'margin', 'hours']
 
-function valueText(key: keyof Values, value: number | null, currency: string): string {
-  if (key === 'margin') return value === null ? '—' : `${(value * 100).toFixed(1)}%`
-  if (key === 'hours') return Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
-  return formatAmount(Number(value ?? 0), 'actual', currency)
-}
-
 function ValueCells({ values, drills, currency, weight }: { values: Values; drills: Drills; currency: string; weight?: string }) {
+  const format = useFormatter()
+  const { money } = useMoney()
   return metricKeys.map((key) => {
     const value = values[key]
     const target = drills[key]
     const negative = value !== null && isNegative(value, key === 'margin' ? 'variance_pct' : 'amount')
-    const text = valueText(key, value, currency)
+    const text = key === 'margin'
+      ? value === null ? '—' : format.number(value, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
+      : key === 'hours'
+        ? format.number(Number(value ?? 0), { maximumFractionDigits: 2 })
+        : money(Number(value ?? 0), { currency: currency || undefined, accounting: true })
     return (
       <TableCell key={key} className={cn('text-right whitespace-nowrap tabular-nums', weight, negative && 'text-red-600 dark:text-red-400')}>
         {target ? (

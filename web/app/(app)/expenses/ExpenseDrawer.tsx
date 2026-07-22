@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -13,7 +14,6 @@ import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
-import { money } from '../../../lib/format'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../../../lib/confirm'
@@ -133,6 +133,7 @@ export function ExpenseDrawer({
   canPost: boolean
   layout?: FormLayoutConfig
 }) {
+  const { money } = useMoney()
   const t = useTranslations('expenses')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -412,9 +413,9 @@ export function ExpenseDrawer({
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.employee_name ?? undefined)}
       primaryAction={
-        mode === 'view' && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
-            {tCommon('actions.edit')}
+        canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null
       }
@@ -424,9 +425,6 @@ export function ExpenseDrawer({
             <>
               <Button disabled={busy} onClick={save}>
                 {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={cancel}>
-                {tCommon('actions.cancel')}
               </Button>
             </>
           ) : (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 
@@ -49,7 +50,7 @@ interface Plan {
 interface Subscription {
   id: string; customerId: string; customerName: string | null; planId: string; planName: string;
   quantity: string; priceOverride: string | null; status: string; startOn: string; nextBillOn: string;
-  autoPost: boolean; runCount: number; lastError: string | null; mrr: number;
+  autoPost: boolean; runCount: number; lastError: string | null; mrr: string; planCurrency: string | null;
 }
 
 export function CollectionsClient({
@@ -84,12 +85,11 @@ export function CollectionsClient({
   );
 }
 
-const money = (v: unknown) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; incomeAccounts: Opt[] }) {
+  const { money } = useMoney()
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
-  const [mrr, setMrr] = useState(0);
+  const [mrr, setMrr] = useState("0.0000");
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [planForm, setPlanForm] = useState({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" });
@@ -99,7 +99,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
 
   const load = async () => {
     const r = await fetch("/api/subscriptions");
-    if (r.ok) { const d = await r.json(); setPlans(d.plans ?? []); setSubs(d.subscriptions ?? []); setMrr(d.mrr ?? 0); }
+    if (r.ok) { const d = await r.json(); setPlans(d.plans ?? []); setSubs(d.subscriptions ?? []); setMrr(d.mrr ?? "0.0000"); }
   };
   useEffect(() => { void load(); }, []);
 
@@ -132,7 +132,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
               {plans.map((p) => (
                 <tr key={p.id} className="border-t">
                   <td className="py-1 font-medium">{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">(archived)</span>}</td>
-                  <td className="text-right tabular-nums">{money(p.amount)} {p.currency ?? ""}</td>
+                  <td className="text-right tabular-nums">{money(p.amount, { currency: p.currency ?? undefined })}</td>
                   <td>every {p.intervalCount > 1 ? `${p.intervalCount} ` : ""}{p.interval.replace("ly", p.intervalCount > 1 ? "s" : "")}</td>
                   <td className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>Delete</Button></td>
                 </tr>
@@ -170,7 +170,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                   <td className="py-1 font-medium">{s.customerName ?? "—"}</td>
                   <td>{s.planName}</td>
                   <td className="text-right tabular-nums">{s.quantity}</td>
-                  <td className="text-right tabular-nums">{s.status === "active" ? money(s.mrr) : "—"}</td>
+                  <td className="text-right tabular-nums">{s.status === "active" ? money(s.mrr, { currency: s.planCurrency ?? undefined }) : "—"}</td>
                   <td>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</td>
                   <td><Badge variant={s.status === "active" ? "default" : "secondary"}>{s.status}</Badge></td>
                   <td className="whitespace-nowrap text-right">

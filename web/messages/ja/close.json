@@ -59,6 +59,7 @@
     "backToPeriods": "期間一覧に戻る",
     "revalidate": "再検証",
     "runRevaluation": "為替評価替えを実行",
+    "runConsolidation": "連結処理を実行",
     "startTask": "開始",
     "complete": "完了",
     "submitReview": "レビューに提出",
@@ -82,6 +83,7 @@
     "publish": "決算パッケージを公表しました",
     "taskUpdated": "タスクを更新しました",
     "revaluationPosted": "外貨建残高を評価替えしました",
+    "consolidationPosted": "持分調整、為替レート、消去仕訳を転記しました",
     "evidenceAdded": "証跡を添付しました",
     "automationComplete": "決算の自動処理が完了しました"
   },

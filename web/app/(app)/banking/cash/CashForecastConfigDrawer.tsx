@@ -1,13 +1,12 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { Drawer } from '@openbooks/ui'
 import { SlidersHorizontal, Landmark, ArrowUpRight } from 'lucide-react'
 import { Panel } from '../../analytics/_ui/Panel'
 import { CategoryManager, type CatOption, type AccountOption } from '../../analytics/_ui/CategoryManager'
 import type { ForecastCategory } from '../../../../lib/cash/core'
-import { money } from '../../../../lib/format'
-
 /**
  * Cash forecast configuration — the model behind the liquidity timeline. This
  * is the Cash cockpit's config: the recurring forecast categories (payroll,
@@ -43,6 +42,7 @@ export function CashForecastConfigDrawer({
   accountOptions: AccountOption[]
   initialCategories?: ForecastCategory[]
 }) {
+  const { money } = useMoney()
   const items: { label: string; value: string; note: string }[] = [
     { label: 'Forecast horizon', value: `${horizonWeeks} weeks`, note: 'Weeks of cash projected forward from today' },
     { label: 'As-of date', value: asOf, note: 'Anchor for open balances and predictions' },

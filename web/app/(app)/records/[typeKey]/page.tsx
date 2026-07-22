@@ -39,6 +39,7 @@ import {
 } from '../../../../lib/record-schema'
 import { NewRecordButton } from './NewRecordButton'
 import { RecordDrawer } from './RecordDrawer'
+import { getMoneyFormatter } from '../../../../lib/money-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,7 @@ export default async function RecordModule({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('records.read')
+  const display = await getMoneyFormatter(authz.user.orgId)
   const t = await getTranslations('records')
   const tc = await getTranslations('common')
   const { typeKey } = await params
@@ -267,7 +269,7 @@ export default async function RecordModule({
                     </Link>
                   </TableCell>
                   {columns.map((f) => {
-                    const text = formatFieldValue(f, r.data?.[f.id], labels)
+                    const text = formatFieldValue(f, r.data?.[f.id], labels, display)
                     return (
                       <TableCell
                         key={f.id}

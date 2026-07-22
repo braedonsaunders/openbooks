@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -11,7 +12,6 @@ import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { requirePermission, can } from '../../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../../lib/list-params'
-import { money } from '../../../../lib/format'
 import {
   BANK_KINDS,
   DOC_KINDS,
@@ -22,6 +22,7 @@ import {
   itemOptions,
   loadDocument,
   taxCodeOptions,
+  taxGroupOptions,
 } from '../../../../lib/documents'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
@@ -66,6 +67,7 @@ export default async function BankingTransactions({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const canCreate = can(authz, 'ap.create') || can(authz, 'gl.post')
   const t = await getTranslations('banking')
@@ -168,6 +170,7 @@ export default async function BankingTransactions({
     ? await Promise.all([
         accountOptions(DOC_KINDS[openKind! as 'card_charge']!),
         taxCodeOptions(),
+        taxGroupOptions(),
         dimensionOptions(),
         itemOptions(),
         cardOptions(),
@@ -190,8 +193,8 @@ export default async function BankingTransactions({
         userId: authz.user.id,
         recordType: openKind!,
         userRoles: [authz.user.role],
-        headerDefs: pickers[6] as any,
-        lineDefs: pickers[7] as any,
+        headerDefs: pickers[7] as any,
+        lineDefs: pickers[8] as any,
         explicitLayoutId: pickString(sp.form),
       })
     : null
@@ -281,18 +284,19 @@ export default async function BankingTransactions({
           basePath={basePath}
           accounts={pickers[0] as any}
           taxCodes={pickers[1] as any}
-          departments={(pickers[2] as any).departments}
-          projects={(pickers[2] as any).projects}
-          locations={(pickers[2] as any).locations}
-          classes={(pickers[2] as any).classes}
-          segments={(pickers[2] as any).segments}
-          builtinSegments={(pickers[2] as any).builtinSegments}
-          items={pickers[3] as any}
-          cards={pickers[4] as any}
-          bankAccounts={pickers[5] as any}
-          subsidiaries={(pickers[8] as any) ?? undefined}
-          headerDefs={pickers[6] as any}
-          lineDefs={pickers[7] as any}
+          taxGroups={pickers[2] as any}
+          departments={(pickers[3] as any).departments}
+          projects={(pickers[3] as any).projects}
+          locations={(pickers[3] as any).locations}
+          classes={(pickers[3] as any).classes}
+          segments={(pickers[3] as any).segments}
+          builtinSegments={(pickers[3] as any).builtinSegments}
+          items={pickers[4] as any}
+          cards={pickers[5] as any}
+          bankAccounts={pickers[6] as any}
+          subsidiaries={(pickers[9] as any) ?? undefined}
+          headerDefs={pickers[7] as any}
+          lineDefs={pickers[8] as any}
           canCreate={canCreate}
           canPost={can(authz, 'ap.post') || can(authz, 'gl.post')}
           layout={resolvedForm?.layout}

@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader, cn } from '@openbooks/ui'
@@ -7,8 +8,6 @@ import { dimensionOptions, generalLedger } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { currencySymbol } from '../../../../lib/statement-format'
-import { money } from '../../../../lib/format'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { TxnLink } from '../TxnLink'
@@ -24,6 +23,7 @@ export default async function GeneralLedgerPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
@@ -35,8 +35,7 @@ export default async function GeneralLedgerPage({
     dimensionOptions(),
     orgInfo(),
   ])
-  const sym = currencySymbol(org?.base_currency)
-  const m = (v: number) => money(v, sym)
+  const m = (v: number) => money(v, { currency: org?.base_currency })
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
   const openingDate = openingTo.toISOString().slice(0, 10)

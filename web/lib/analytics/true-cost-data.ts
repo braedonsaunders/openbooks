@@ -1,4 +1,5 @@
 import "server-only";
+import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { resolveAccountGroups } from "../account-groups";
@@ -82,7 +83,7 @@ export interface BurdenCategory {
   allocationMethod: AllocationMethod;
   rateFormat: RateFormat;
   includeInComposite: boolean;
-  /** Formatted display string, e.g. "$33.38/hr" or "12.4%". */
+  /** Locale- and currency-aware display string, or a percentage. */
   rateDisplay: string;
   accounts: BurdenAccount[];
   /** deptId → { amount, rate } (allocated where untagged). */
@@ -233,6 +234,7 @@ export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfile
 }
 
 export async function trueCostData(orgId: string, period: { from: string; to: string; label: string }): Promise<TrueCostData> {
+  const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const start = new Date(from + "T00:00:00Z");
   const end = new Date(to + "T00:00:00Z");
@@ -552,7 +554,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     const rawRate = allocationMethod === "weighted"
       ? calculateRate({ id, allocationMethod, allocationWeights: s.allocationWeights, allocationTiers: s.allocationTiers }, expenseByDept, baseByDept, allocationMethod)
       : calculateRate({ id, allocationMethod, allocationTiers: s.allocationTiers }, total, getAllocationBaseValue(allocationBase, bases, "Overall"), allocationMethod);
-    const formatted = formatRate(rawRate, rateFormat, periodData, { totalExpense: total });
+    const formatted = formatRate(rawRate, rateFormat, periodData, { totalExpense: total }, (value, options) => money(value, options));
     return {
       id, key, name, color, categoryType, match,
       totalAmount: total, rawRate, rate: formatted.value, rateDisplay: formatted.display,

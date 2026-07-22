@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -17,7 +18,6 @@ import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
 import { ApprovalHistory } from './approval-history'
 import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
-import { money } from '../lib/format'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../lib/confirm'
@@ -214,6 +214,7 @@ export function DocumentDrawer({
   recordType,
   canCustomize,
 }: DocumentDrawerProps) {
+  const { money } = useMoney()
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -1020,9 +1021,9 @@ export function DocumentDrawer({
       }
       description={mode === 'edit' ? t('drawer.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
-        mode === 'view' && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
-            {tCommon('actions.edit')}
+        canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null
       }
@@ -1059,9 +1060,6 @@ export function DocumentDrawer({
             <Button disabled={busy} onClick={save}>
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
-            <Button variant="outline" disabled={busy} onClick={cancel}>
-              {tCommon('actions.cancel')}
-            </Button>
           </>
         ) : (
           <>
@@ -1091,17 +1089,17 @@ export function DocumentDrawer({
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t('drawer.subtotalAmount', { amount: money(totals.subtotal) })}
-            {config.hasTax ? <> · {t('drawer.taxTotalAmount', { amount: money(totals.taxTotal) })}</> : null}
+            {t('drawer.subtotalAmount', { amount: money(totals.subtotal, { currency: doc.currency }) })}
+            {config.hasTax ? <> · {t('drawer.taxTotalAmount', { amount: money(totals.taxTotal, { currency: doc.currency }) })}</> : null}
             {' · '}
             <strong className="text-slate-900 dark:text-slate-100">
-              {t('drawer.totalAmount', { amount: money(totals.total) })}
+              {t('drawer.totalAmount', { amount: money(totals.total, { currency: doc.currency }) })}
             </strong>
             {isPosted && config.showsBalance ? (
               <>
                 {' · '}
                 <strong className="text-slate-900 dark:text-slate-100">
-                  {t('drawer.balanceDueAmount', { amount: money(doc.balance_due) })}
+                  {t('drawer.balanceDueAmount', { amount: money(doc.balance_due, { currency: doc.currency }) })}
                 </strong>
               </>
             ) : null}
@@ -1114,7 +1112,7 @@ export function DocumentDrawer({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}>
               <Label>{t('drawer.transferAmount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-              {editable ? <Input type="number" step="0.01" value={transfer?.amount ?? ''} onChange={(e) => setTransfer((p) => ({ ...p!, amount: e.target.value }))} /> : <p className="text-sm tabular-nums">{money(payload.lines[0]?.amount)}</p>}
+              {editable ? <Input type="number" step="0.01" value={transfer?.amount ?? ''} onChange={(e) => setTransfer((p) => ({ ...p!, amount: e.target.value }))} /> : <p className="text-sm tabular-nums">{money(payload.lines[0]?.amount, { currency: doc.currency })}</p>}
             </div>
             <div className={field}>
               <Label>{t('drawer.toAccount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>

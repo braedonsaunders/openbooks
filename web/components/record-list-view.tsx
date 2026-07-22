@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Eye } from 'lucide-react'
@@ -14,7 +15,6 @@ import { ViewsMenu } from './views-menu'
 import { DocTypeBadge } from './doc-type-badge'
 import { docTypeMeta } from './doc-type-badge'
 import { parseListParams, pickString } from '../lib/list-params'
-import { money } from '../lib/format'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
@@ -84,6 +84,7 @@ export async function RecordListView({
   /** Per-row actions for the `_actions` column, if the view includes it. */
   renderRowActions?: (row: any) => ReactNode
 }) {
+  const { money } = await getMoneyFormatter()
   const source = listSource(recordType)
   const meta = getRecordType(recordType)
   if (!source || !meta) throw new Error(`no list source registered for record type "${recordType}"`)
@@ -151,7 +152,7 @@ export async function RecordListView({
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
     db.execute(sql`
-      select d.id, d.kind${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
+      select d.id, d.kind, d.currency${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from documents d
         left join parties p on p.id = d.party_id
         ${joins}
@@ -239,7 +240,7 @@ export async function RecordListView({
       case 'amount':
         return (
           <TableCell key={c.key} className="text-right tabular-nums">
-            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(v)}
+            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(v, { currency: row.currency })}
           </TableCell>
         )
       case 'status':

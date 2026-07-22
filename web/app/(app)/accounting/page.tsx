@@ -13,7 +13,7 @@ import { resolveNav } from '../../../lib/nav/resolve'
 import { resolvePeriod } from '../../../lib/periods'
 import { financialHealth, RATIO_DEFS, type RatioResult } from '../../../lib/analytics/financial-health'
 import { accountingHome } from '../../../lib/module-home/accounting'
-import { moneyCompact } from '../../../lib/format'
+import { getMoneyFormatter } from '@/lib/money-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +30,7 @@ export async function generateMetadata() {
  * The rail carries close progress, the live directory, and ledger hygiene.
  */
 export default async function AccountingHomePage() {
+  const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   if (!['gl.read', 'close.read', 'reports.read'].some((p) => can(authz, p))) assertCan(authz, 'gl.read')
@@ -217,8 +218,8 @@ export default async function AccountingHomePage() {
                       <span className="font-medium text-slate-700 dark:text-slate-200">{RATIO_DEFS[r.id]?.label ?? r.id}</span>
                       <span className="ml-2 hidden text-xs text-slate-400 sm:inline dark:text-slate-500">{r.calc}</span>
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmtRatio(r.value, r.format)}</td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{fmtRatio(r.benchmark, r.format)}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmtRatio(r.value, r.format, moneyCompact)}</td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{fmtRatio(r.benchmark, r.format, moneyCompact)}</td>
                     <td className="px-4 py-2 text-center">
                       <span className={cn('inline-block w-8 rounded-full py-0.5 text-[11px] font-bold', r.score >= 60 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : r.score >= 40 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300')}>
                         {r.grade ?? '—'}
@@ -281,7 +282,7 @@ export default async function AccountingHomePage() {
   )
 }
 
-function fmtRatio(value: number, format: RatioResult['format']): string {
+function fmtRatio(value: number, format: RatioResult['format'], moneyCompact: (value: number) => string): string {
   switch (format) {
     case 'pct':
       return `${(value * 100).toFixed(1)}%`

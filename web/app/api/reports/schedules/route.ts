@@ -70,6 +70,9 @@ export async function POST(req: Request) {
       { status: 422 },
     )
   }
+  if (body.active !== false && recipients.length === 0) {
+    return NextResponse.json({ error: 'At least one recipient is required for an active schedule' }, { status: 422 })
+  }
   const nextRunAt = computeNextRunAt(cadence)
 
   const inserted = (await db.execute(sql`

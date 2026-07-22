@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -24,7 +25,6 @@ import { SearchInput } from '../../../../../../components/search-input'
 import { Pagination } from '../../../../../../components/pagination'
 import { SortableTh } from '../../../../../../components/sortable-th'
 import { confirmDialog } from '../../../../../../lib/confirm'
-import { money } from '../../../../../../lib/format'
 import { isZeroAmount } from './DifferenceBadge'
 
 type Search = Record<string, string | string[] | undefined>
@@ -108,6 +108,7 @@ export function ReconcileWorkspace({
   matchedTotal: number
   mParams: PaneParams
 }) {
+  const { money } = useMoney()
   const t = useTranslations('banking.workspace')
   const tBanking = useTranslations('banking')
   const tCommon = useTranslations('common')

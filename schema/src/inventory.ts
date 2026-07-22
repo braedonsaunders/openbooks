@@ -65,6 +65,11 @@ export const itemInventoryProfiles = pgTable("item_inventory_profiles", {
   unitConversions: jsonb("unit_conversions").$type<Record<string, number>>().notNull().default({}),
   reorderPoint: money("reorder_point"),
   preferredStockLevel: money("preferred_stock_level"),
+  /** Negative stock is opt-in and must have a defensible provisional cost. */
+  allowNegativeInventory: boolean("allow_negative_inventory").notNull().default(false),
+  negativeCostBasis: text("negative_cost_basis", { enum: ["last_receipt", "standard", "configured"] })
+    .notNull().default("last_receipt"),
+  provisionalUnitCost: money("provisional_unit_cost"),
   ...auditColumns,
 });
 
@@ -176,6 +181,50 @@ export const costLayerConsumptions = pgTable(
     index("layer_consumptions_layer").on(t.costLayerId),
     index("layer_consumptions_movement").on(t.issueMovementId),
     check("layer_consumptions_positive", sql`${t.quantity} > 0`),
+  ],
+);
+
+/** Quantity issued before it was received, carried at an evidenced provisional
+ * cost until a later receipt settles it and posts any true-up to COGS. */
+export const inventoryProvisionalCosts = pgTable(
+  "inventory_provisional_costs",
+  {
+    id: id(),
+    orgId: orgRef(),
+    itemId: uuid("item_id").notNull(),
+    stockLocationId: uuid("stock_location_id").notNull(),
+    issueMovementId: uuid("issue_movement_id").notNull(),
+    originalQuantity: money("original_quantity").notNull(),
+    remainingQuantity: money("remaining_quantity").notNull(),
+    provisionalUnitCost: money("provisional_unit_cost").notNull(),
+    costBasis: text("cost_basis", { enum: ["last_receipt", "standard", "configured"] }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    index("inventory_provisional_fifo").on(t.itemId, t.stockLocationId, t.createdAt),
+    check("inventory_provisional_quantity", sql`${t.originalQuantity} > 0 AND ${t.remainingQuantity} >= 0 AND ${t.remainingQuantity} <= ${t.originalQuantity}`),
+    check("inventory_provisional_cost", sql`${t.provisionalUnitCost} >= 0`),
+  ],
+);
+
+/** Immutable receipt-to-shortfall matching and cost-correction evidence. */
+export const inventoryProvisionalSettlements = pgTable(
+  "inventory_provisional_settlements",
+  {
+    id: id(),
+    orgId: orgRef(),
+    provisionalCostId: uuid("provisional_cost_id").notNull(),
+    receiptMovementId: uuid("receipt_movement_id").notNull(),
+    quantity: money("quantity").notNull(),
+    provisionalUnitCost: money("provisional_unit_cost").notNull(),
+    receiptUnitCost: money("receipt_unit_cost").notNull(),
+    correctionAmount: money("correction_amount").notNull(),
+    correctionJournalEntryId: uuid("correction_journal_entry_id").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    index("inventory_provisional_settlement_receipt").on(t.receiptMovementId),
+    check("inventory_provisional_settlement_quantity", sql`${t.quantity} > 0`),
   ],
 );
 

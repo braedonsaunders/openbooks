@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { toUnits } from '@openbooks/engine/src/money.ts'
+import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity } from '../../../../../lib/setup/registry'
 import {
@@ -68,6 +69,19 @@ async function validateEntityIntegrity(
   orgId: string,
   rowId?: string,
 ): Promise<string | null> {
+  if (entity.key === 'depreciation-methods') {
+    const current = rowId
+      ? ((await db.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const formula = String(body.formula ?? current?.formula ?? '').trim()
+    if (!formula || formula.length > 2048) return 'invalid-depreciation-formula'
+    try {
+      compileFormula(formula)
+    } catch {
+      return 'invalid-depreciation-formula'
+    }
+  }
   if (entity.key === 'tax-return-forms' && body.submissionUrl) {
     try {
       const url = new URL(String(body.submissionUrl))
@@ -136,6 +150,26 @@ async function validateEntityIntegrity(
     if (inclusive && rows.rows.some((row: any) => row.calculation_type !== 'standard')) {
       return 'inclusive-tax-group-standard-only'
     }
+  }
+  if (entity.key === 'tax-pool-classes') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from tax_pool_classes where id=${rowId} and org_id=${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const value = (camel: string, snake: string) => body[camel] !== undefined ? body[camel] : current?.[snake]
+    const regimeCode = String(value('regime', 'regime') ?? '')
+    const regime = (await db.execute(sql`
+      select calculation_model from tax_regimes where org_id=${orgId} and code=${regimeCode} and is_active limit 1`)) as any
+    if (!regime.rows[0]) return 'install-or-create-tax-depreciation-regime-first'
+    const recovery = Number(value('recoveryPeriodYears', 'recovery_period_years'))
+    if (regime.rows[0].calculation_model === 'macrs') {
+      if (!['gds', 'ads'].includes(String(value('depreciationSystem', 'depreciation_system') ?? ''))) return 'macrs-system-required'
+      if (!['200_db', '150_db', 'straight_line'].includes(String(value('macrsMethod', 'macrs_method') ?? ''))) return 'macrs-method-required'
+      if (!Number.isFinite(recovery) || recovery <= 0) return 'macrs-recovery-period-required'
+      if (!['half_year', 'mid_quarter', 'mid_month'].includes(String(value('convention', 'convention') ?? ''))) return 'macrs-convention-required'
+    }
+    const fraction = Number(value('firstYearFraction', 'first_year_fraction') ?? 1)
+    if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) return 'first-year-fraction-out-of-range'
   }
   if (entity.key === 'accounting-books') {
     if (coerceBoolean(body.isPrimary) && body.isActive !== undefined && !coerceBoolean(body.isActive)) {
@@ -251,6 +285,45 @@ async function validateEntityIntegrity(
          or (from_subsidiary_id = ${toId} and to_subsidiary_id = ${fromId})) limit 1`)) as any
     if (duplicate.rows.length) return 'An intercompany pair already exists for these subsidiaries'
   }
+  if (entity.key === 'subsidiary-ownership-interests') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`)) as any).rows[0]
+      : null
+    const value = (key: string, column: string) => body[key] ?? current?.[column] ?? null
+    const method = String(value('method', 'method') ?? 'full')
+    const ownership = String(value('ownershipPercent', 'ownership_percent') ?? '')
+    if (!/^(?:100(?:\.0+)?|(?:\d{1,2})(?:\.\d{1,10})?)$/.test(ownership) || ownership === '0') {
+      return 'Ownership must be greater than 0% and no more than 100%'
+    }
+    const fullyOwned = /^100(?:\.0+)?$/.test(ownership)
+    const accountRules: [string, string, (type: string) => boolean, string][] = [
+      ['investmentAccountId', 'investment_account_id', (type) => type.startsWith('asset_'), 'Investment must use an asset account'],
+      ['equityIncomeAccountId', 'equity_income_account_id', (type) => type.startsWith('income'), 'Equity income must use an income account'],
+      ['distributionAccountId', 'distribution_account_id', (type) => type === 'equity', 'Distribution must use an equity account'],
+      ['distributionIncomeAccountId', 'distribution_income_account_id', (type) => type.startsWith('income'), 'Distribution income must use an income account'],
+      ['nciEquityAccountId', 'nci_equity_account_id', (type) => type === 'equity', 'NCI equity must use an equity account'],
+      ['nciIncomeAccountId', 'nci_income_account_id', (type) => type.startsWith('expense'), 'NCI profit allocation must use an expense account'],
+      ['goodwillAccountId', 'goodwill_account_id', (type) => type.startsWith('asset_'), 'Goodwill must use an asset account'],
+      ['fairValueAdjustmentAccountId', 'fair_value_adjustment_account_id', (type) => type.startsWith('asset_'), 'Fair-value adjustment must use an asset account'],
+    ]
+    const ids = [...new Set(accountRules.map(([key, column]) => value(key, column)).filter(Boolean).map(String))]
+    const rows = ids.length
+      ? ((await db.execute(sql`
+          select id,type from accounts where org_id=${orgId} and is_active and not is_summary
+            and id=any(${`{${ids.join(',')}}`}::uuid[])
+        `)) as any).rows as { id: string; type: string }[]
+      : []
+    const typeById = new Map(rows.map((account) => [account.id, account.type]))
+    for (const [key, column, accepts, message] of accountRules) {
+      const id = value(key, column)
+      if (!id) continue
+      const type = typeById.get(String(id))
+      if (!type || !accepts(type)) return message
+    }
+    if (method === 'full' && !fullyOwned && (!value('nciEquityAccountId', 'nci_equity_account_id') || !value('nciIncomeAccountId', 'nci_income_account_id'))) {
+      return 'Full consolidation below 100% requires both NCI equity and NCI profit-allocation accounts'
+    }
+  }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     const from = String(body.fromCurrency ?? '')
     const to = String(body.toCurrency ?? '')
@@ -263,7 +336,11 @@ async function validateEntityIntegrity(
     const rateFields = entity.key === 'fx-rates'
       ? ['rate']
       : ['currentRate', 'averageRate', 'historicalRate']
-    if (rateFields.some((key) => body[key] !== undefined && Number(body[key]) <= 0)) {
+    if (rateFields.some((key) => {
+      if (body[key] === undefined) return false
+      const value = String(body[key]).trim()
+      return !/^(?:\d+)(?:\.\d{1,10})?$/.test(value) || /^0(?:\.0+)?$/.test(value)
+    })) {
       return 'Exchange rates must be greater than zero'
     }
     if (entity.key === 'consolidated-fx-rates') {

@@ -26,9 +26,7 @@ import type { CategoryWeekly, ForecastEntry, WeekRow } from '../../../../lib/cas
 import { TxnLink } from '../../reports/TxnLink'
 import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
-import { fmtMoney } from './format'
-
-const money = (n: number) => fmtMoney(n, { compact: true })
+import { useAnalyticsMoney } from './format'
 const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const PAGE_SIZE = 25
 
@@ -91,6 +89,8 @@ export function CashWeekFlyout({
   canCollectionRun?: boolean
   onClose: () => void
 }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>(initialSide)
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
@@ -352,6 +352,8 @@ export function CashWeekFlyout({
  * columns and pagination.
  */
 function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: number }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState<'name' | 'date' | 'amount' | 'type'>('amount')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -528,6 +530,8 @@ function ActionBar({
   entries: ForecastEntry[]
   onBuild: (docIds: string[]) => void
 }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const runnable = entries.filter((e) => e.docId)
   const total = runnable.reduce((a, e) => a + e.amount, 0)
   if (runnable.length === 0) return null

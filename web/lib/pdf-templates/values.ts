@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { money } from '../format'
-import { currencySymbol } from '../statement-format'
+import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
+import { resolveLocale } from '../locale'
 import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
 import { loadFieldTicket } from '../field-tickets'
 
@@ -19,14 +19,14 @@ export type PdfRecordValues = {
   reference: string
 }
 
-function fmtDate(v: unknown): string {
+function fmtDate(v: unknown, locale: string): string {
   if (!v) return ''
   const s = String(v)
   // date columns arrive as 'YYYY-MM-DD' — parse as local so the day never shifts.
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
   const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s)
   if (Number.isNaN(d.getTime())) return s
-  return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' })
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 function fmtStatus(v: unknown): string {
@@ -34,11 +34,11 @@ function fmtStatus(v: unknown): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''
 }
 
-function fmtQty(v: unknown): string {
+function fmtQty(v: unknown, locale: string): string {
   if (v === null || v === undefined || v === '') return ''
   const n = Number(v)
   if (Number.isNaN(n)) return String(v)
-  return n.toLocaleString('en-CA', { maximumFractionDigits: 4 })
+  return n.toLocaleString(locale, { maximumFractionDigits: 4 })
 }
 
 type OrgRow = { name: string; base_currency: string; brand_primary: string | null }
@@ -56,7 +56,7 @@ async function customFieldValues(
   targetTable: string,
   targetKind: string | null,
   custom: Record<string, unknown>,
-  symbol: string,
+  format: MoneyFormatter,
 ): Promise<Record<string, string>> {
   const r = (await db.execute(sql`
     select key, field_type from custom_field_defs
@@ -69,9 +69,9 @@ async function customFieldValues(
     if (v === null || v === undefined || v === '') {
       out[`cf_${def.key}`] = ''
     } else if (def.field_type === 'currency') {
-      out[`cf_${def.key}`] = money(v as number, symbol)
+      out[`cf_${def.key}`] = format.money(v as number)
     } else if (def.field_type === 'date') {
-      out[`cf_${def.key}`] = fmtDate(v)
+      out[`cf_${def.key}`] = fmtDate(v, format.locale)
     } else if (def.field_type === 'boolean') {
       out[`cf_${def.key}`] = v ? 'Yes' : 'No'
     } else {
@@ -107,8 +107,9 @@ async function loadDocumentValues(
   const doc = r.rows[0]
   if (!doc) return null
 
-  const org = await orgRow(orgId)
-  const symbol = currencySymbol(String(doc.currency ?? org.base_currency))
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
+  const format = createMoneyFormatter(locale, String(doc.currency ?? 'USD'))
+  const { money } = format
 
   const lines = (await db.execute(sql`
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
@@ -136,8 +137,8 @@ async function loadDocumentValues(
 
   const values: Record<string, unknown> = {
     document_number: doc.document_number ?? '',
-    document_date: fmtDate(doc.document_date),
-    due_date: fmtDate(doc.due_date),
+    document_date: fmtDate(doc.document_date, locale),
+    due_date: fmtDate(doc.due_date, locale),
     reference_number: doc.reference_number ?? '',
     status: fmtStatus(doc.status),
     memo: doc.memo ?? '',
@@ -146,24 +147,24 @@ async function loadDocumentValues(
     party_email: doc.party_email ?? '',
     party_phone: doc.party_phone ?? '',
     party_address: address,
-    subtotal: money(subtotal, symbol),
-    tax_total: money(taxTotal, symbol),
-    total: money(total, symbol),
-    balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(Number(doc.balance_due), symbol),
+    subtotal: money(subtotal),
+    tax_total: money(taxTotal),
+    total: money(total),
+    balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(Number(doc.balance_due)),
     org_name: org.name,
-    printed_date: new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' }),
+    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
     lines: lines.rows.map((l) => ({
       line_number: String(l.line_number ?? ''),
       item_name: l.item_name ?? '',
       account_name: l.account_name ?? '',
       description: l.description ?? '',
-      quantity: fmtQty(l.quantity),
+      quantity: fmtQty(l.quantity, locale),
       unit: l.unit ?? '',
-      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : money(Number(l.unit_price), symbol),
-      tax_amount: l.tax_amount === null || l.tax_amount === undefined || Number(l.tax_amount) === 0 ? '' : money(Number(l.tax_amount), symbol),
-      amount: money(Number(l.amount ?? 0), symbol),
+      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : money(Number(l.unit_price)),
+      tax_amount: l.tax_amount === null || l.tax_amount === undefined || Number(l.tax_amount) === 0 ? '' : money(Number(l.tax_amount)),
+      amount: money(Number(l.amount ?? 0)),
     })),
-    ...(await customFieldValues(orgId, 'documents', meta.docKind, (doc.custom ?? {}) as Record<string, unknown>, symbol)),
+    ...(await customFieldValues(orgId, 'documents', meta.docKind, (doc.custom ?? {}) as Record<string, unknown>, format)),
   }
 
   return { values, reference: String(doc.document_number ?? meta.docTitle) }
@@ -176,8 +177,8 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
   const entry = r.rows[0]
   if (!entry) return null
 
-  const org = await orgRow(orgId)
-  const symbol = currencySymbol(org.base_currency)
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
+  const { money } = createMoneyFormatter(locale, org.base_currency)
 
   const lines = (await db.execute(sql`
     select l.line_number, l.amount, l.memo,
@@ -199,21 +200,21 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
       account_number: l.account_number ?? '',
       account_name: l.account_name ?? '',
       memo: l.memo ?? '',
-      debit: amount >= 0 ? money(amount, symbol) : '',
-      credit: amount < 0 ? money(-amount, symbol) : '',
+      debit: amount >= 0 ? money(amount) : '',
+      credit: amount < 0 ? money(-amount) : '',
     }
   })
 
   const values: Record<string, unknown> = {
     entry_number: entry.entry_number ?? '',
-    posting_date: fmtDate(entry.posting_date),
+    posting_date: fmtDate(entry.posting_date, locale),
     status: fmtStatus(entry.status),
     origin: fmtStatus(entry.origin),
     memo: entry.memo ?? '',
-    total_debits: money(debits, symbol),
-    total_credits: money(credits, symbol),
+    total_debits: money(debits),
+    total_credits: money(credits),
     org_name: org.name,
-    printed_date: new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' }),
+    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
     lines: lineRows,
   }
 
@@ -247,9 +248,9 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
   } catch {
     return null
   }
-  const org = await orgRow(orgId)
-  const symbol = currencySymbol(org.base_currency)
-  const m = (v: unknown) => (v === null || v === undefined || v === '' ? '' : money(Number(v), symbol))
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
+  const { money } = createMoneyFormatter(locale, org.base_currency)
+  const m = (v: unknown) => (v === null || v === undefined || v === '' ? '' : money(Number(v)))
 
   const ft = ticket.fieldTicket
   // Day axis: up to 7 days from periodStart.
@@ -338,11 +339,11 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
   }
   const values: Record<string, unknown> = {
     document_number: ticket.documentNumber,
-    document_date: fmtDate(ticket.documentDate),
+    document_date: fmtDate(ticket.documentDate, locale),
     status: fmtStatus(ticket.status),
     period: fmtStatus(ft.period),
-    period_start: fmtDate(ft.periodStart),
-    period_end: fmtDate(ft.periodEnd),
+    period_start: fmtDate(ft.periodStart, locale),
+    period_end: fmtDate(ft.periodEnd, locale),
     project_name: ticket.projectName,
     po_number: ticket.referenceNumber ?? '',
     foreman_name: ticket.foremanName,
@@ -357,16 +358,16 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
     total_hours: totalHours.toFixed(1),
     customer_signature_image: ft.signatures?.customer?.image ?? '',
     customer_signature_name: ft.signatures?.customer?.name ?? '',
-    customer_signed_at: ft.signatures?.customer?.at ? fmtDate(ft.signatures.customer.at.slice(0, 10)) : '',
+    customer_signed_at: ft.signatures?.customer?.at ? fmtDate(ft.signatures.customer.at.slice(0, 10), locale) : '',
     customer_comment: ft.signatures?.customer?.comment ?? '',
     foreman_signature_image: ft.signatures?.foreman?.image ?? '',
     org_name: org.name,
-    printed_date: fmtDate(new Date().toISOString().slice(0, 10)),
+    printed_date: fmtDate(new Date().toISOString().slice(0, 10), locale),
     crew,
     lines: ticket.lines.map((l) => ({
       item_name: l.item_name ?? '',
       description: l.description ?? '',
-      quantity: fmtQty(l.quantity),
+      quantity: fmtQty(l.quantity, locale),
       unit_price: m(l.unit_price),
       amount: m(l.amount),
     })),

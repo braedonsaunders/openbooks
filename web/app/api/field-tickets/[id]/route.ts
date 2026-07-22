@@ -89,8 +89,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await addTicketLine(orgId, userId, id, {
         itemId: body.itemId,
         quantity: Number(body.quantity),
+        rateUnitCode: typeof body.rateUnitCode === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(body.rateUnitCode)
+          ? body.rateUnitCode
+          : null,
+        equipmentUnitId: isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null,
         description: body.description ?? null,
-        billRate: body.billRate != null && body.billRate !== '' ? Number(body.billRate) : null,
       })
     } else if (action === 'remove-line') {
       if (!isUuid(body.lineId)) return NextResponse.json({ error: 'invalid lineId' }, { status: 422 })

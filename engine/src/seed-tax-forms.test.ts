@@ -34,7 +34,9 @@ test("Canada GST34 library pack balances collected tax, adjustments and ITCs", (
   const value = (code: string) => result.find((box) => box.lineCode === code)?.value;
   assert.equal(value("101"), "100000.0000");
   assert.equal(value("109"), "9300.0000");
-  assert.equal(value("113"), "9300.0000");
+  assert.equal(value("113A"), "9300.0000");
+  assert.equal(value("113C"), "9300.0000");
+  assert.equal(value("115"), "9300.0000");
 });
 
 test("UK and New Zealand packs report unsigned payable-or-refund differences", () => {

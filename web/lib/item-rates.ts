@@ -1,9 +1,17 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { mulRate } from '@openbooks/engine/src/money.ts'
-import { priceItemRate, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/item-rate-pricing.ts'
+import { cmp, mul, mulRate } from '@openbooks/engine/src/money.ts'
+import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/item-rate-pricing.ts'
 import { convertBillRate } from './item-rate-currency'
+
+export interface ResolvedRateUnit {
+  unitCode: string
+  unitName: string
+  baseQuantity: string
+  costRate: string
+  billRate: string
+}
 
 export interface ResolvedItemRate {
   rateBookId: string
@@ -14,6 +22,12 @@ export interface ResolvedItemRate {
   sourceCurrency: string
   targetCurrency: string
   fxRate: string
+  /** Quantity normalized to the profile's base unit. */
+  baseQuantity: string
+  /** Unit entered by the user; differs from baseUnit for explicit packages. */
+  transactionUnitCode: string
+  transactionUnitName: string
+  rateUnits: ResolvedRateUnit[]
   cost: RatePrice
   bill: RatePrice
 }
@@ -28,7 +42,19 @@ export async function resolveItemRate(input: {
   equipmentUnitId?: string | null
   onDate: string
   baseQuantity: string
+  /** Explicit package choice (for example day, week, or month). */
+  rateUnitCode?: string | null
 }): Promise<ResolvedItemRate | null> {
+  // Ordinary consumables/materials use the simple item Cost + Price. Only
+  // items explicitly configured with a rate profile participate in dated,
+  // customer/project/equipment rate books and package-tier pricing.
+  const profile = (await db.execute(sql`
+    select base_unit, pricing_policy, invoice_presentation from item_rate_profiles
+     where org_id = ${input.orgId} and item_id = ${input.itemId} and is_active
+  `)) as unknown as { rows: { base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }[] }
+  const p = profile.rows[0]
+  if (!p) return null
+
   const context = (await db.execute(sql`
     select p.customer_id, p.starts_on,coalesce(s.base_currency,o.base_currency) as target_currency,
            (select rate_book_id from equipment_units
@@ -45,21 +71,21 @@ export async function resolveItemRate(input: {
       select a.rate_book_id,a.rate_version_id, 1 as priority, a.effective_from
         from item_rate_book_assignments a
        where a.org_id = ${input.orgId} and a.is_active and a.project_id = ${input.projectId}
-         and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then ${projectStart} else ${input.onDate} end)
-         and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then ${projectStart} else ${input.onDate} end)
+         and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
+         and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
       union all
       select a.rate_book_id,a.rate_version_id, 2, a.effective_from
         from item_rate_book_assignments a
        where a.org_id = ${input.orgId} and a.is_active and a.customer_id = ${ctx.customer_id}
-         and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then ${projectStart} else ${input.onDate} end)
-         and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then ${projectStart} else ${input.onDate} end)
+         and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
+         and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
       union all select ${ctx.unit_rate_book_id}::uuid,null::uuid, 3, null::date where ${ctx.unit_rate_book_id}::uuid is not null
       union all
       select a.rate_book_id,a.rate_version_id, 4, a.effective_from
         from item_rate_book_assignments a
        where a.org_id = ${input.orgId} and a.is_active and a.project_id is null and a.customer_id is null
-         and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then ${projectStart} else ${input.onDate} end)
-         and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then ${projectStart} else ${input.onDate} end)
+         and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
+         and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
       union all select b.id,null::uuid, 5, null::date from item_rate_books b
        where b.org_id = ${input.orgId} and b.is_default and b.is_active
     )
@@ -67,13 +93,6 @@ export async function resolveItemRate(input: {
       from candidates where rate_book_id is not null
      order by priority, effective_from desc nulls last, rate_book_id
   `)) as unknown as { rows: { rate_book_id: string;rate_version_id:string|null; priority: number }[] }
-
-  const profile = (await db.execute(sql`
-    select base_unit, pricing_policy, invoice_presentation from item_rate_profiles
-     where org_id = ${input.orgId} and item_id = ${input.itemId} and is_active
-  `)) as unknown as { rows: { base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }[] }
-  const p = profile.rows[0]
-  if (!p) return null
 
   for (const candidate of candidates.rows) {
     const version = (await db.execute(sql`
@@ -102,6 +121,20 @@ export async function resolveItemRate(input: {
       baseQuantity: String(r.base_quantity), costRate: r.cost_rate == null ? null : convertBillRate(String(r.cost_rate),fxRate),
       billRate: r.bill_rate == null ? null : convertBillRate(String(r.bill_rate),fxRate),
     }))
+    const rateUnits: ResolvedRateUnit[] = tiers
+      .filter((tier): tier is RateTier & { costRate: string; billRate: string } => tier.costRate != null && tier.billRate != null)
+      .map((tier) => ({ unitCode: tier.unitCode, unitName: tier.unitName, baseQuantity: tier.baseQuantity,
+        costRate: tier.costRate, billRate: tier.billRate }))
+    const requestedUnit = input.rateUnitCode?.trim().toLowerCase() || null
+    const selectedTier = requestedUnit
+      ? tiers.find((tier) => tier.unitCode.toLowerCase() === requestedUnit)
+      : null
+    if (requestedUnit && (!selectedTier || selectedTier.costRate == null || selectedTier.billRate == null)) {
+      throw new Error('The selected rate unit is not available for this item and date')
+    }
+    const normalizedBaseQuantity = selectedTier
+      ? mul(input.baseQuantity, selectedTier.baseQuantity)
+      : input.baseQuantity
     return {
       rateBookId: candidate.rate_book_id,
       rateVersionId,
@@ -111,8 +144,16 @@ export async function resolveItemRate(input: {
       sourceCurrency,
       targetCurrency:ctx.target_currency,
       fxRate,
-      cost: priceItemRate(input.baseQuantity, tiers, 'cost', p.pricing_policy),
-      bill: priceItemRate(input.baseQuantity, tiers, 'bill', p.pricing_policy),
+      baseQuantity: normalizedBaseQuantity,
+      transactionUnitCode: selectedTier?.unitCode ?? p.base_unit,
+      transactionUnitName: selectedTier?.unitName ?? p.base_unit,
+      rateUnits,
+      cost: selectedTier
+        ? priceSelectedRateUnit(input.baseQuantity, selectedTier, 'cost')
+        : priceItemRate(input.baseQuantity, tiers, 'cost', p.pricing_policy),
+      bill: selectedTier
+        ? priceSelectedRateUnit(input.baseQuantity, selectedTier, 'bill')
+        : priceItemRate(input.baseQuantity, tiers, 'bill', p.pricing_policy),
     }
   }
   return null
@@ -200,7 +241,13 @@ export async function snapshotTimeBillRates(
     const hit = line.rows[0]
     const explicit = te.time_type_id ? hit?.time_type_bill_rates?.[te.time_type_id] : undefined
     let sourceRate: string | null = null
-    if (explicit != null && Number(explicit) >= 0) sourceRate = String(explicit)
+    if (explicit != null) {
+      try {
+        if (cmp(String(explicit), '0') >= 0) sourceRate = String(explicit)
+      } catch {
+        sourceRate = null
+      }
+    }
     else if (hit?.bill_rate != null) sourceRate = mulRate(String(hit.bill_rate), String(te.bill_multiplier))
     const sourceCurrency = hit?.source_currency ?? te.target_currency
     if (sourceRate == null && te.default_rate != null) sourceRate = mulRate(String(te.default_rate), String(te.bill_multiplier))

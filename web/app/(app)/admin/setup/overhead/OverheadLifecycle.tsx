@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
+import { useMoney } from '@/components/money-provider'
 
 export interface DriftRow {
   id: string
@@ -35,6 +36,7 @@ export function OverheadLifecycle(props: {
   cadence: 'monthly' | 'quarterly'
   drift: DriftRow[]
 }) {
+  const { money } = useMoney()
   const t = useTranslations('admin.setup.entities.overhead-model.lifecycle')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -97,8 +99,8 @@ export function OverheadLifecycle(props: {
             empty={null}
             columns={[
               { key: 'dept', header: t('department'), cell: (r) => r.name, search: (r) => r.name },
-              { key: 'published', header: t('published'), cell: (r) => <span className="tabular-nums">{r.published != null ? `$${r.published.toFixed(2)}` : '—'}</span> },
-              { key: 'live', header: t('live'), cell: (r) => <span className="tabular-nums">${r.live.toFixed(2)}</span> },
+              { key: 'published', header: t('published'), cell: (r) => <span className="tabular-nums">{r.published != null ? money(r.published) : '—'}</span> },
+              { key: 'live', header: t('live'), cell: (r) => <span className="tabular-nums">{money(r.live)}</span> },
               {
                 key: 'drift',
                 header: t('drift'),

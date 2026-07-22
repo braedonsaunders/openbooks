@@ -485,6 +485,21 @@ const PARTY_LIST_COLUMNS: RecordTypeMeta["listColumns"] = [
   { key: "status", labelKey: "common.labels.status", kind: "status" },
 ];
 
+const CUSTOMER_LIST_COLUMNS: RecordTypeMeta["listColumns"] = PARTY_LIST_COLUMNS.map((column) =>
+  column.key === "status" ? { ...column, sortable: true, sortKey: "status" } : column,
+);
+
+const CUSTOMER_STATUS_FILTER: RecordTypeMeta["listFilters"][number] = {
+  key: "status",
+  labelKey: "common.labels.status",
+  kind: "select",
+  operators: OPERATORS_BY_KIND.select,
+  options: [
+    { value: "customer", labelKey: "entities.list.customerStatuses.existing" },
+    { value: "prospect", labelKey: "entities.list.customerStatuses.potential" },
+  ],
+};
+
 const CUSTOMER: RecordTypeMeta = {
   key: "customer",
   labelKey: "customization.recordTypes.customer",
@@ -504,8 +519,8 @@ const CUSTOMER: RecordTypeMeta = {
     { key: "labor_pricing", labelKey: "parties.rateBookAssignments.title", level: "header", kind: "entity_ref" },
   ],
   lineFields: [],
-  listColumns: PARTY_LIST_COLUMNS,
-  listFilters: [],
+  listColumns: CUSTOMER_LIST_COLUMNS,
+  listFilters: [CUSTOMER_STATUS_FILTER],
 };
 
 const VENDOR: RecordTypeMeta = {
@@ -619,6 +634,41 @@ const PROJECT: RecordTypeMeta = {
   ],
 };
 
+/** Fixed assets use the same tenant-owned universal form renderer as other
+ * entity records. Depreciation history remains a purpose-built record subtab. */
+const FIXED_ASSET: RecordTypeMeta = {
+  key: "fixed_asset",
+  labelKey: "customization.recordTypes.fixed_asset",
+  category: "entity",
+  supportsForms: true,
+  customFieldTable: "fixed_assets",
+  customFieldLineTable: null,
+  headerFields: [
+    { key: "name", labelKey: "common.labels.name", level: "header", kind: "text", required: true, locked: true },
+    { key: "asset_number", labelKey: "assets.labels.number", level: "header", kind: "text", required: true, locked: true },
+    { key: "status", labelKey: "common.labels.status", level: "header", kind: "status", locked: true },
+    { key: "category_id", labelKey: "assets.labels.category", level: "header", kind: "entity_ref", required: true },
+    { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref", required: true },
+    { key: "serial_number", labelKey: "assets.labels.serialNumber", level: "header", kind: "text" },
+    { key: "description", labelKey: "assets.labels.description", level: "header", kind: "long_text" },
+    { key: "acquisition_cost", labelKey: "assets.labels.cost", level: "header", kind: "currency", required: true },
+    { key: "salvage_value", labelKey: "assets.labels.salvage", level: "header", kind: "currency" },
+    { key: "acquired_on", labelKey: "assets.labels.acquiredOn", level: "header", kind: "date" },
+    { key: "in_service_on", labelKey: "assets.labels.inServiceOn", level: "header", kind: "date" },
+    { key: "depreciation_method", labelKey: "assets.labels.method", level: "header", kind: "select" },
+    { key: "useful_life_months", labelKey: "assets.labels.lifeMonths", level: "header", kind: "number" },
+    { key: "depreciation_rate_percent", labelKey: "assets.labels.ratePercent", level: "header", kind: "number" },
+    { key: "depreciation_units_total", labelKey: "assets.labels.unitsTotal", level: "header", kind: "number" },
+    { key: "depreciation_convention", labelKey: "assets.labels.convention", level: "header", kind: "select" },
+    { key: "asset_account_id", labelKey: "assets.labels.assetAccount", level: "header", kind: "entity_ref" },
+    { key: "accumulated_depreciation_account_id", labelKey: "assets.labels.accumulatedAccount", level: "header", kind: "entity_ref" },
+    { key: "depreciation_expense_account_id", labelKey: "assets.labels.expenseAccount", level: "header", kind: "entity_ref" },
+  ],
+  lineFields: [],
+  listColumns: [],
+  listFilters: [],
+};
+
 /** Labor Pricing rate cards use the same configurable form-layout system as
  * transaction drawers. Custom header fields persist on the effective-dated
  * version; the native item-rate table remains the editable line surface. */
@@ -718,6 +768,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   EMPLOYEE,
   FIELD_TICKET,
   PROJECT,
+  FIXED_ASSET,
   LABOR_RATE_CARD,
 ];
 

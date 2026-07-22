@@ -31,8 +31,11 @@ export type StatementPdfInput = {
   periodPhrase: string
   /** e.g. "In thousands" — printed under the header. */
   scaleNote?: string
-  /** Decimal places for amount columns (0 when scaled, else 2). */
+  /** Decimal places for amount columns (0 when scaled; omitted uses the currency's ISO minor units). */
   decimals?: number
+  /** BCP 47 display locale and ISO 4217 statement currency. */
+  locale: string
+  currency: string
   columns: StatementPdfColumn[]
   rows: StatementPdfRow[]
   style: StatementPdfStyle
@@ -89,16 +92,36 @@ function decodeDataUrl(url: string): Buffer | null {
   }
 }
 
-function formatValue(v: number | null | undefined, kind: StatementPdfColumnKind, decimals: number): string {
+function formatValue(
+  v: number | null | undefined,
+  kind: StatementPdfColumnKind,
+  decimals: number | undefined,
+  locale: string,
+  currency: string,
+  showCurrency: boolean,
+): string {
   if (v === null || v === undefined) return ''
   if (kind === 'variance_pct') {
     if (!Number.isFinite(v)) return DASH
-    const s = `${Math.abs(v).toFixed(1)}%`
+    const s = new Intl.NumberFormat(locale, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(v) / 100)
     return v < 0 ? `(${s})` : s
   }
-  const eps = decimals === 0 ? 0.5 : 0.005
+  const currencyOptions: Intl.NumberFormatOptions = {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'symbol',
+    currencySign: 'accounting',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }
+  const resolvedDigits = new Intl.NumberFormat(locale, currencyOptions).resolvedOptions().maximumFractionDigits ?? 2
+  const eps = 0.5 * 10 ** -resolvedDigits
   if (Math.abs(v) < eps) return DASH
-  const abs = Math.abs(v).toLocaleString('en-CA', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+  if (showCurrency) return new Intl.NumberFormat(locale, currencyOptions).format(v)
+  const abs = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: decimals ?? resolvedDigits,
+    maximumFractionDigits: decimals ?? resolvedDigits,
+  }).format(Math.abs(v))
   return v < 0 ? `(${abs})` : abs
 }
 
@@ -107,7 +130,9 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
   const page = resolvePage(input.page)
   const primary = input.branding.primaryColor || DEFAULT_PRIMARY_COLOR
   const theme = themeFor(input.style, primary)
-  const decimals = input.decimals ?? 2
+  const decimals = input.decimals
+  const locale = input.locale
+  const currency = input.currency
   const dense = input.page.density === 'compact'
   const sz = { title: dense ? 15 : 18, company: dense ? 11 : 13, meta: dense ? 8.5 : 9.5, body: dense ? 8.5 : 9.5 }
   const rowPadY = dense ? 3 : 4.5
@@ -210,9 +235,7 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
     const showCurrency = isTotalish || !firstAmountRowDone
     for (let i = 0; i < nCols; i++) {
       const kind = input.columns[i]!.kind
-      const text = formatValue(row.values?.[i], kind, decimals)
-      let cell = text
-      if (text && text !== DASH && kind !== 'variance_pct' && showCurrency) cell = `$ ${text}`
+      const cell = formatValue(row.values?.[i], kind, decimals, locale, currency, showCurrency)
       const neg = typeof row.values?.[i] === 'number' && (row.values![i] as number) < 0
       doc.fillColor(input.style === 'formal' ? theme.text : neg ? '#b91c1c' : theme.text)
       doc.text(cell, valX(i), y, { width: valW - cellPad, align: 'right', lineBreak: false })

@@ -31,7 +31,7 @@ export async function loadEquipment(id: string, orgId: string) {
       coalesce((select sum(dsl.posted_amount) from equipment_units eu
         join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id
         join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id
-        where eu.id = ${id} and eu.org_id = ${orgId} and dsl.journal_entry_id is not null), 0) as depreciation
+        where eu.id = ${id} and eu.org_id = ${orgId} and dsl.posted_amount is not null), 0) as depreciation
   `)) as any
   return { unit: unit.rows[0], metrics: metrics.rows[0] }
 }

@@ -102,13 +102,23 @@ export async function decideGate(args: {
   decision: "approved" | "rejected";
   userId: string;
   comment?: string | null;
+  /** Typed attestation — required to approve a signature-required gate. */
+  signature?: string | null;
 }): Promise<DecideGateResult> {
   const { gateId, decision, userId } = args;
+  const signature = args.signature?.trim() || null;
 
   // -- Pre-flight (existence, authorization, separation of duties) -----------
   const pre = await loadGate(gateId);
   if (!pre) throw new GateError("approval not found");
   if (pre.status !== "pending") throw new GateError("this approval was already resolved");
+
+  // E-signature: a signature-required gate cannot be APPROVED without a typed
+  // attestation. Enforced here (not just in the UI) so it holds for the bulk,
+  // one-click email, and API paths alike. Rejection needs only a reason.
+  if (pre.signatureRequired && decision === "approved" && !signature) {
+    throw new GateError("this approval requires your signature");
+  }
 
   let onBehalfOf: ResolvedUser | null = null;
   if (!(await canActOnGate(pre, userId))) {
@@ -156,6 +166,8 @@ export async function decideGate(args: {
         decidedBy: userId,
         decidedAt: new Date(),
         comment,
+        // Attestation stored with the decision (only meaningful on approve).
+        signature: decision === "approved" ? signature : null,
         // Structured provenance: whose gate this was, when a delegate decided it.
         onBehalfOfUserId: onBehalfOf?.id ?? null,
         updatedAt: new Date(),

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -7,8 +8,6 @@ import { useState } from 'react'
 import { Check, ExternalLink, RotateCcw, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Textarea, UrlDrawer } from '@openbooks/ui'
-import { money } from '../../../lib/format'
-
 type Evidence = {
   id: string
   kind: string
@@ -49,6 +48,7 @@ export function WorkItemDrawer({
   closeHref: string
   canWrite: boolean
 }) {
+  const { money } = useMoney()
   const t = useTranslations('continuousClose')
   const locale = useLocale()
   const router = useRouter()

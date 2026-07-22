@@ -1,5 +1,6 @@
 "use client";
 
+import { useMoney } from '@/components/money-provider'
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 
@@ -19,13 +20,12 @@ interface Data {
   contractSum: string; retainageHeld: string; committedCost: number; retainageConfigured: boolean;
 }
 
-const money = (v: unknown) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 export function ConstructionClient({
   projects, incomeAccounts, initialProjectId,
 }: {
   projects: Project[]; incomeAccounts: Account[]; initialProjectId: string | null;
 }) {
+  const { money } = useMoney()
   const [projectId, setProjectId] = useState(initialProjectId ?? projects[0]?.id ?? "");
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +88,7 @@ function SovSection({ projectId, lines, incomeAccounts, onChange }: {
   projectId: string; lines: SovLine[]; incomeAccounts: Account[];
   onChange: (p: Record<string, unknown>) => Promise<unknown>;
 }) {
+  const { money } = useMoney()
   const [f, setF] = useState({ itemNo: "", description: "", scheduledValue: "", retainagePercent: "", incomeAccountId: "" });
   return (
     <Card className="p-4">
@@ -138,6 +139,7 @@ function SovSection({ projectId, lines, incomeAccounts, onChange }: {
 function ChangeOrderSection({ projectId, orders, onChange }: {
   projectId: string; orders: ChangeOrder[]; onChange: (p: Record<string, unknown>) => Promise<unknown>;
 }) {
+  const { money } = useMoney()
   const [f, setF] = useState({ number: "", description: "", amount: "" });
   return (
     <Card className="p-4">
@@ -173,6 +175,7 @@ function PayAppSection({ projectId, apps, sov, onChange, setMsg, onReload }: {
   onChange: (p: Record<string, unknown>) => Promise<unknown>;
   setMsg: (m: string | null) => void; onReload: () => Promise<void>;
 }) {
+  const { money } = useMoney()
   const [periodEnd, setPeriodEnd] = useState("");
   const [openApp, setOpenApp] = useState<string | null>(null);
   const [lines, setLines] = useState<Record<string, { thisPeriodCompleted: string; materialsStored: string }>>({});
@@ -246,6 +249,7 @@ function RetainageReleaseSection({ projectId, held, onChange, setMsg }: {
   projectId: string; held: string; onChange: (p: Record<string, unknown>) => Promise<unknown>;
   setMsg: (m: string | null) => void;
 }) {
+  const { money } = useMoney()
   const [amount, setAmount] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   return (

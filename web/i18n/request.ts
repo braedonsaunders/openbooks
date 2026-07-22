@@ -44,8 +44,8 @@ export default getRequestConfig(async () => {
   return {
     locale,
     messages: messages as any,
-    // Stable server/client timezone; date/number rendering stays in the
-    // app's own formatters (web/lib/format.ts) for now.
+    // Stable server/client timezone. Monetary rendering uses the same resolved
+    // locale through the shared client and server money formatters.
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 });

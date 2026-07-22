@@ -91,6 +91,9 @@ export interface NetSuiteAccountMappings {
  * maps the stable accounting fields into the OpenBooks register.
  */
 export interface NetSuiteFixedAssetSnapshot {
+  extractedAt: string;
+  sourceAccount: string;
+  bridgeVersion: string;
   assets: Record<string, unknown>[];
   assetTypes: Record<string, unknown>[];
   depreciationHistory: Record<string, unknown>[];
@@ -318,6 +321,7 @@ export class NetSuiteSource implements MigrationSource {
    */
   async fixedAssets(): Promise<NetSuiteFixedAssetSnapshot> {
     const [
+      health,
       assets,
       assetTypes,
       depreciationHistory,
@@ -328,9 +332,20 @@ export class NetSuiteSource implements MigrationSource {
       alternateDefinitions,
       assetLifetimes,
     ] = await Promise.all([
-      this.q("SELECT * FROM customrecord_ncfar_asset ORDER BY id"),
-      this.q("SELECT * FROM customrecord_ncfar_assettype ORDER BY id"),
-      this.q("SELECT * FROM customrecord_ncfar_deprhistory ORDER BY id"),
+      this.bridge.health(),
+      this.q(`SELECT a.*,
+                     BUILTIN.DF(a.custrecord_assetstatus) AS fam_status_label,
+                     BUILTIN.DF(a.custrecord_assetaccmethod) AS fam_method_label,
+                     BUILTIN.DF(a.custrecord_assetconvention) AS fam_convention_label,
+                     BUILTIN.DF(a.custrecord_assetdeprperiod) AS fam_period_label
+                FROM customrecord_ncfar_asset a ORDER BY a.id`),
+      this.q(`SELECT t.*,
+                     BUILTIN.DF(t.custrecord_assettypeaccmethod) AS fam_method_label,
+                     BUILTIN.DF(t.custrecord_assettypeconvention) AS fam_convention_label
+                FROM customrecord_ncfar_assettype t ORDER BY t.id`),
+      this.q(`SELECT h.*,
+                     BUILTIN.DF(h.custrecord_deprhisttype) AS fam_history_type_label
+                FROM customrecord_ncfar_deprhistory h ORDER BY h.id`),
       this.q("SELECT * FROM customrecord_fam_assetvalues ORDER BY id"),
       this.q("SELECT * FROM customrecord_ncfar_deprmethod ORDER BY id"),
       this.q("SELECT * FROM customrecord_ncfar_altmethods ORDER BY id"),
@@ -339,6 +354,9 @@ export class NetSuiteSource implements MigrationSource {
       this.q("SELECT * FROM customrecord_assetlifetimes ORDER BY id"),
     ]);
     return {
+      extractedAt: health.serverTime,
+      sourceAccount: health.accountId,
+      bridgeVersion: health.bridgeVersion,
       assets,
       assetTypes,
       depreciationHistory,
@@ -558,8 +576,24 @@ export class NetSuiteSource implements MigrationSource {
     const category = this.mappings.itemCategoryField
       ? `BUILTIN.DF(${this.mappings.itemCategoryField}) AS category`
       : "NULL AS category";
-    const rows = await this.qSince<{ id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string; category?: string }>(
-      `SELECT id, itemid, displayname, itemtype, isinactive, ${category} FROM item`,
+    // NetSuite exposes the ordinary base selling price through `pricing`, not
+    // the item row. Quantity = 1 is the simple item Price used when no
+    // OpenBooks rate-book override applies. Keep item sync usable for roles or
+    // accounts that cannot expose the pricing workbook.
+    let pricingRows: { item: string; unitprice: string | null }[] = [];
+    try {
+      pricingRows = await this.q("SELECT item, unitprice FROM pricing WHERE quantity = 1");
+    } catch {
+      pricingRows = [];
+    }
+    const priceByItem = new Map(pricingRows.map((row) => [String(row.item), moneyValue(row.unitprice)]));
+    const rows = await this.qSince<{
+      id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string; category?: string;
+      cost?: string; averagecost?: string; lastpurchaseprice?: string; costestimate?: string; saleunit?: string;
+    }>(
+      `SELECT id, itemid, displayname, itemtype, isinactive, cost, averagecost,
+              lastpurchaseprice, costestimate, BUILTIN.DF(saleunit) AS saleunit, ${category}
+         FROM item`,
       since,
     );
     const out: SourceEntity[] = [];
@@ -574,6 +608,9 @@ export class NetSuiteSource implements MigrationSource {
           name: String(i.displayname ?? i.itemid ?? `Item ${i.id}`).slice(0, 500),
           kind,
           category: s(i.category),
+          defaultCost: moneyValue(i.cost ?? i.averagecost ?? i.lastpurchaseprice ?? i.costestimate),
+          defaultRate: priceByItem.get(String(i.id)) ?? null,
+          unit: s(i.saleunit),
           isActive: !isT(i.isinactive),
         },
       });
@@ -797,6 +834,83 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   // --- native transactions -------------------------------------------------------
+
+  /** Source transaction ids whose posted GL touches the supplied FAM accounts. */
+  async fixedAssetTransactionIds(accountRefs: string[]): Promise<string[]> {
+    const refs = [...new Set(accountRefs)].filter((ref) => /^\d+$/.test(ref));
+    if (!refs.length) return [];
+    const rows = await this.q<{ id: string }>(`
+      SELECT DISTINCT t.id
+        FROM transaction t
+        JOIN transactionaccountingline tal ON tal.transaction = t.id
+       WHERE tal.posting = 'T' AND tal.account IN (${refs.join(",")})
+       ORDER BY t.id`);
+    return rows.map((row) => String(row.id));
+  }
+
+  /** Exact live GL balances for the supplied FAM accounts. */
+  async fixedAssetAccountBalances(accountRefs: string[]): Promise<Map<string, string>> {
+    const refs = [...new Set(accountRefs)].filter((ref) => /^\d+$/.test(ref));
+    if (!refs.length) return new Map();
+    const rows = await this.q<{ account: string; debit: string; credit: string }>(`
+      SELECT tal.account,
+             SUM(COALESCE(tal.debit, 0)) AS debit,
+             SUM(COALESCE(tal.credit, 0)) AS credit
+        FROM transactionaccountingline tal
+       WHERE tal.posting = 'T' AND tal.account IN (${refs.join(",")})
+       GROUP BY tal.account`);
+    return new Map(rows.map((row) => [
+      String(row.account),
+      fromUnits(toUnits(row.debit ?? "0") - toUnits(row.credit ?? "0")),
+    ]));
+  }
+
+  /**
+   * Build native documents for an explicit id set.  Used by focused module
+   * mirrors (FAM here) so they reuse the normal NetSuite builder without
+   * enumerating the account's entire transaction universe.
+   */
+  async nativeTransactionsByIds(transactionIds: string[], ctx: NativeContext): Promise<NativeChanges> {
+    const ids = [...new Set(transactionIds)];
+    if (ids.some((id) => !/^\d+$/.test(id))) throw new Error("NetSuite transaction ids must be numeric");
+    const nowRows = await this.q<{ now: string }>(NETSUITE_TRANSACTION_WATERMARK_QUERY);
+    if (!nowRows[0]?.now) throw new Error("NetSuite has no transaction watermark");
+    const syncedThrough = new Date(nowRows[0]!.now.replace(" ", "T") + "Z");
+    if (!ids.length) return { documents: [], applications: [], deletedRefs: [], syncedThrough, unbuildable: [], nonLedgerRefs: [] };
+
+    const headers: NsHeader[] = [];
+    const linesByTxn = new Map<string, NsLine[]>();
+    for (let index = 0; index < ids.length; index += 150) {
+      const chunk = ids.slice(index, index + 150);
+      headers.push(...await this.q<NsHeader>(
+        `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id IN (${chunk.join(",")}) ORDER BY t.id`,
+      ));
+      for (const line of await this.q<NsLine>(
+        `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
+      )) {
+        const key = String(line.transaction);
+        linesByTxn.set(key, [...(linesByTxn.get(key) ?? []), line]);
+      }
+    }
+    for (const [transactionId, rows] of linesByTxn) {
+      linesByTxn.set(transactionId, uniqueNetSuiteTransactionLines(rows).sort((a, b) => Number(a.id) - Number(b.id)));
+    }
+    const documents: NativeDocument[] = [];
+    const unbuildable: { ref: string; reason: string }[] = [];
+    const nonLedgerRefs: string[] = [];
+    for (const header of headers) {
+      const raw = linesByTxn.get(String(header.id));
+      if (!raw?.length) continue;
+      const built = buildNativeFromNetSuite(ctx, { ...header, id: String(header.id) }, raw);
+      if ("skip" in built) {
+        if (built.skip.startsWith("non-ledger source transaction")) nonLedgerRefs.push(String(header.id));
+        else unbuildable.push({ ref: String(header.id), reason: built.skip });
+      } else {
+        documents.push(built.doc);
+      }
+    }
+    return { documents, applications: [], deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
+  }
 
   async nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges> {
     // High-water mark from NetSuite's clock, not ours.

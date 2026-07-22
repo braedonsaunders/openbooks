@@ -1,11 +1,10 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Badge, EmptyState } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
-import { money } from '../../../../lib/format'
-
 interface TxnRow {
   id: string
   kind: string
@@ -36,6 +35,7 @@ const DOC_STATUS_KEYS: Record<string, string> = {
 }
 
 export function TransactionsTab({ transactions }: { transactions: TxnRow[] }) {
+  const { money } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
   const docStatusLabel = (s: string) => (DOC_STATUS_KEYS[s] ? tCommon(`status.${DOC_STATUS_KEYS[s]}`) : s)

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { priceCappedLadder, priceLowestCost, type RateTier } from "./item-rate-pricing.ts";
+import { priceCappedLadder, priceLowestCost, priceSelectedRateUnit, type RateTier } from "./item-rate-pricing.ts";
 
 const legacy: RateTier[] = [
   { id: "day", unitCode: "day", unitName: "Day", baseQuantity: "1", costRate: "0", billRate: "100" },
@@ -46,4 +46,10 @@ test("lowest-cost pricing supports arbitrary N package units", () => {
   const result = priceLowestCost("45", tiers, "bill");
   assert.equal(result.amount, "550.0000");
   assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity]), [["week", "1.0000"], ["hour", "5.0000"]]);
+});
+
+test("an explicitly selected package is not promoted or decomposed", () => {
+  const result = priceSelectedRateUnit("2", legacy[1]!, "bill");
+  assert.equal(result.amount, "500.0000");
+  assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity, c.rate]), [["week", "2.0000", "250"]]);
 });

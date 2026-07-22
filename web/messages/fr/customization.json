@@ -20,7 +20,8 @@
     "vendor": "Fournisseur",
     "employee": "Employé",
     "project": "Projet",
-    "field_ticket": "Bon de régie"
+    "field_ticket": "Bon de régie",
+    "fixed_asset": "Immobilisation"
   },
   "views": {
     "defaultName": "Vue par défaut",

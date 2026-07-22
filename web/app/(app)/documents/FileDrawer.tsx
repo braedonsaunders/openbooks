@@ -4,8 +4,8 @@ import { useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download, History, Link2, Loader2, Trash2, UploadCloud } from 'lucide-react'
-import { Badge, Button, Input, Label, UrlDrawer } from '@openbooks/ui'
+import { ChevronDown, Download, History, Link2, Loader2, Trash2, UploadCloud } from 'lucide-react'
+import { Badge, Button, Input, Label, Popover, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { dateTime } from '../../../lib/format'
 import { FilePreview } from './FilePreview'
@@ -77,6 +77,7 @@ export function FileDrawer({
   const [name, setName] = useState(file.name)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
   const [replacing, setReplacing] = useState(false)
   const replaceInputRef = useRef<HTMLInputElement>(null)
 
@@ -172,12 +173,12 @@ export function FileDrawer({
       headerActions={
         mode === 'edit' ? (
           <div className="flex items-center gap-2">
+            <Button variant="outline" disabled={saving} onClick={cancelEdit}>
+              {tc('actions.cancel')}
+            </Button>
             <Button disabled={saving} onClick={saveRename}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {tc('actions.save')}
-            </Button>
-            <Button variant="outline" disabled={saving} onClick={cancelEdit}>
-              {tc('actions.cancel')}
             </Button>
           </div>
         ) : (
@@ -193,21 +194,12 @@ export function FileDrawer({
                 {tc('actions.edit')}
               </Button>
             ) : null}
-            <Button variant="ghost" size="icon" asChild>
-              <a
-                href={`/api/file-cabinet/files/${file.id}/download`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={tc('actions.download')}
-              >
-                <Download className="h-4 w-4" />
-              </a>
-            </Button>
-            {canManage ? (
-              <Button variant="ghost" size="icon" disabled={deleting} onClick={handleDelete}>
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </Button>
-            ) : null}
+            <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-48 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tc('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
+              <div className="space-y-0.5 [&_a]:w-full [&_a]:justify-start [&_button]:w-full [&_button]:justify-start">
+                <Button variant="ghost" asChild><a href={`/api/file-cabinet/files/${file.id}/download`} target="_blank" rel="noopener noreferrer"><Download className="h-4 w-4" />{tc('actions.download')}</a></Button>
+                {canManage ? <Button variant="ghost" className="text-red-600" disabled={deleting} onClick={() => { setActionsOpen(false); void handleDelete() }}>{deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{tc('actions.delete')}</Button> : null}
+              </div>
+            </Popover>
           </div>
         )
       }

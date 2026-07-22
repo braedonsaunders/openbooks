@@ -62,6 +62,7 @@
     "backToPeriods": "Back to periods",
     "revalidate": "Revalidate",
     "runRevaluation": "Run FX revaluation",
+    "runConsolidation": "Run consolidation",
     "startTask": "Start",
     "complete": "Complete",
     "submitReview": "Submit for review",
@@ -87,6 +88,7 @@
     "publish": "Close package published",
     "taskUpdated": "Task updated",
     "revaluationPosted": "Foreign-currency balances revalued",
+    "consolidationPosted": "Ownership adjustments, rates, and eliminations posted",
     "evidenceAdded": "Evidence attached",
     "automationComplete": "Close automation completed"
   },

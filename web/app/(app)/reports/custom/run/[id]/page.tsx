@@ -33,10 +33,17 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
        order by next_run_at
     `) as unknown as Promise<{ rows: any[] }>,
     db.execute(sql`
-      select id, trigger, status, error, row_count, started_at, finished_at
-        from report_runs
-       where org_id = ${authz.user.orgId} and definition_id = ${id}
-       order by created_at desc limit 10
+      select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
+             exists(select 1 from report_run_artifacts a where a.run_id=r.id) as artifact_available,
+             count(d.id)::int as delivery_total,
+             count(d.id) filter (where d.status='sent')::int as delivery_sent,
+             count(d.id) filter (where d.status='failed')::int as delivery_failed,
+             count(d.id) filter (where d.status='suppressed')::int as delivery_suppressed
+        from report_runs r
+        left join report_delivery_outbox d on d.run_id=r.id
+       where r.org_id = ${authz.user.orgId} and r.definition_id = ${id}
+       group by r.id
+       order by r.created_at desc limit 10
     `) as unknown as Promise<{ rows: any[] }>,
     orgBranding(authz.user.orgId),
   ])

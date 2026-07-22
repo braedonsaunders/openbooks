@@ -29,6 +29,9 @@ export function NewSetupButton({
 }: {
   entityKey: string
   label: string
+  /** Host path to open the create drawer under. Defaults to the setup workspace.
+   *  When mounted elsewhere (e.g. /inventory), existing query params such as the
+   *  active `view` are preserved so the section stays selected. */
   basePath?: string
 }) {
   const router = useRouter()
@@ -39,9 +42,9 @@ export function NewSetupButton({
       const next = new URLSearchParams(searchParams.toString())
       next.set('row', 'new')
       router.push(`${pathname}?${next.toString()}`)
-      return
+    } else {
+      router.push(`/admin/setup/${entityKey}?row=new`)
     }
-    router.push(`/admin/setup/${entityKey}?row=new`)
   }
   return (
     <Button onClick={open}>
@@ -62,6 +65,8 @@ function initialValue(field: SetupField, row: Record<string, any> | null): any {
       return raw ? String(raw).slice(0, 10) : ''
     case 'multiref':
       return [] as string[]
+    case 'json':
+      return raw == null ? '' : JSON.stringify(raw, null, 2)
     default:
       return raw == null ? '' : String(raw)
   }
@@ -117,6 +122,7 @@ export function SetupDrawer({
       next.delete('setupTab')
       next.delete('boxRow')
       next.delete('rateRow')
+      next.delete('valueRow')
     } else {
       next.set('setupTab', key)
     }
@@ -186,6 +192,7 @@ export function SetupDrawer({
     if (code === 'primary-active-required') return t('errors.primaryActiveRequired')
     if (code === 'archive-only') return t('errors.archiveOnly')
     if (code === 'invalid-url') return t('errors.invalidUrl')
+    if (code === 'invalid-depreciation-formula') return t('errors.invalidDepreciationFormula')
     if (typeof code === 'string' && code) return code
     return tCommon('feedback.saveFailed')
   }
@@ -346,7 +353,7 @@ function FieldControl({
   const countries = useMemo(() => countryOptions(locale), [locale])
   const label = t(`fields.${field.key}`)
   const locked = forceLocked || (!creating && field.lockedOnEdit)
-  const full = field.kind === 'multiref' || field.kind === 'textarea'
+  const full = field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
   const lockedDisplay = field.kind === 'ref'
     ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
@@ -465,11 +472,11 @@ function FieldControl({
     )
   }
 
-  if (field.kind === 'textarea') {
+  if (field.kind === 'textarea' || field.kind === 'json') {
     return (
       <div className={wrap}>
         <Label>{label}</Label>
-        <Textarea value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
+        <Textarea className={field.kind === 'json' ? 'min-h-40 font-mono text-xs' : undefined} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
       </div>
     )
   }

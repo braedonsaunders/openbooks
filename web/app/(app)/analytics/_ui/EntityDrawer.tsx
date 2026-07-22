@@ -4,9 +4,7 @@ import { useEffect, useState } from 'react'
 import { Drawer, cn } from '@openbooks/ui'
 import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { TxnLink } from '../../reports/TxnLink'
-import { fmtMoney } from './format'
-
-const money = (n: number) => fmtMoney(n, { compact: true })
+import { useAnalyticsMoney } from './format'
 const PER_PAGE = 25
 
 /**
@@ -18,6 +16,8 @@ const PER_PAGE = 25
  * cash flyout).
  */
 export function EntityDrawer({ party, name, side, onClose }: { party: string; name: string; side: 'ar' | 'ap'; onClose: () => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState(false)
   const [tab, setTab] = useState<'open' | 'payments'>('open')

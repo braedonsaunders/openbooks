@@ -59,6 +59,7 @@
     "backToPeriods": "Retour aux périodes",
     "revalidate": "Revalider",
     "runRevaluation": "Réévaluer les devises",
+    "runConsolidation": "Exécuter la consolidation",
     "startTask": "Démarrer",
     "complete": "Terminer",
     "submitReview": "Soumettre à révision",
@@ -82,6 +83,7 @@
     "publish": "Dossier de clôture publié",
     "taskUpdated": "Tâche mise à jour",
     "revaluationPosted": "Soldes en devises réévalués",
+    "consolidationPosted": "Ajustements de détention, taux et éliminations comptabilisés",
     "evidenceAdded": "Preuve jointe",
     "automationComplete": "Automatisation terminée"
   },

@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { evaluateFormula } from "./formula";
+import { getMoneyFormatter } from '../money-server'
 
 /**
  * Shared cash-engine core — the primitives behind BOTH the read-only analytics
@@ -411,6 +412,7 @@ export async function categoryWeekly(
   weekStarts: string[],
   context: CategoryContext,
 ): Promise<CategoryWeekly> {
+  const { money } = await getMoneyFormatter(orgId)
   const n = weekStarts.length;
   const weekly = new Array<number>(n).fill(0);
   const asOf = parseISO(asOfIso);
@@ -440,7 +442,7 @@ export async function categoryWeekly(
       else if (freq === "biweekly") curr = addDays(curr, 14);
       else curr = addDays(curr, 7);
     }
-    logic = `$${Math.round(amount).toLocaleString()} ${freq}`;
+    logic = `${money(amount, { maximumFractionDigits: 0 })} ${freq}`;
     meta = { method: "Manual Recurring", amount: Math.round(amount), frequency: freq };
     breakdown = weekStarts
       .map((w, i) => ({ name: `Manual (${freq})`, date: w, amount: round2(weekly[i] ?? 0), type: "Scheduled" }))
