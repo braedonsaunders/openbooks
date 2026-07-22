@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { PageHeader } from "@openbooks/ui";
 import { requirePermission } from "../../../lib/authz";
+import { isFeatureEnabled } from "../../../lib/features";
 import { ConstructionClient } from "./ConstructionClient";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function ConstructionPage({
 }) {
   const authz = await requirePermission("ar.read").catch(() => null);
   if (!authz) redirect("/dashboard");
+  if (!(await isFeatureEnabled(authz.user.orgId, "constructionBilling"))) redirect("/admin/setup/features");
   const sp = await searchParams;
   const projectId = typeof sp.projectId === "string" ? sp.projectId : null;
 

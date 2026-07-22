@@ -38,20 +38,172 @@ interface Policy {
 }
 
 const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"];
+const INTERVALS = ["weekly", "monthly", "quarterly", "annually"];
 
-export function CollectionsClient() {
-  const [tab, setTab] = useState<"recurring" | "dunning">("recurring");
+interface Opt { id: string; name?: string; label?: string }
+
+interface Plan {
+  id: string; name: string; description: string | null; amount: string; currency: string | null;
+  interval: string; intervalCount: number; incomeAccountId: string | null; isActive: boolean;
+}
+interface Subscription {
+  id: string; customerId: string; customerName: string | null; planId: string; planName: string;
+  quantity: string; priceOverride: string | null; status: string; startOn: string; nextBillOn: string;
+  autoPost: boolean; runCount: number; lastError: string | null; mrr: number;
+}
+
+export function CollectionsClient({
+  subscriptionsEnabled = false,
+  customers = [],
+  incomeAccounts = [],
+}: {
+  subscriptionsEnabled?: boolean;
+  customers?: Opt[];
+  incomeAccounts?: Opt[];
+}) {
+  const [tab, setTab] = useState<"recurring" | "subscriptions" | "dunning">("recurring");
   return (
     <div className="mt-6">
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         <Button variant={tab === "recurring" ? "default" : "ghost"} onClick={() => setTab("recurring")}>
           Recurring invoices
         </Button>
+        {subscriptionsEnabled && (
+          <Button variant={tab === "subscriptions" ? "default" : "ghost"} onClick={() => setTab("subscriptions")}>
+            Subscriptions
+          </Button>
+        )}
         <Button variant={tab === "dunning" ? "default" : "ghost"} onClick={() => setTab("dunning")}>
           Dunning ladders
         </Button>
       </div>
-      {tab === "recurring" ? <RecurringPanel /> : <DunningPanel />}
+      {tab === "recurring" && <RecurringPanel />}
+      {tab === "subscriptions" && subscriptionsEnabled && <SubscriptionsPanel customers={customers} incomeAccounts={incomeAccounts} />}
+      {tab === "dunning" && <DunningPanel />}
+    </div>
+  );
+}
+
+const money = (v: unknown) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; incomeAccounts: Opt[] }) {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [subs, setSubs] = useState<Subscription[]>([]);
+  const [mrr, setMrr] = useState(0);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [planForm, setPlanForm] = useState({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" });
+  const [subForm, setSubForm] = useState({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", autoPost: false });
+
+  const load = async () => {
+    const r = await fetch("/api/subscriptions");
+    if (r.ok) { const d = await r.json(); setPlans(d.plans ?? []); setSubs(d.subscriptions ?? []); setMrr(d.mrr ?? 0); }
+  };
+  useEffect(() => { void load(); }, []);
+
+  const post = async (payload: Record<string, unknown>) => {
+    setError(null); setMsg(null);
+    const r = await fetch("/api/subscriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    const b = await r.json().catch(() => ({}));
+    if (!r.ok) { setError(b.error ?? "Action failed"); return null; }
+    await load();
+    return b;
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="flex items-center justify-between p-4">
+        <div><div className="text-xs text-muted-foreground">Monthly recurring revenue</div><div className="text-2xl font-semibold">{money(mrr)}</div></div>
+        <div className="text-sm text-muted-foreground">{subs.filter((s) => s.status === "active").length} active · {plans.length} plan{plans.length === 1 ? "" : "s"}</div>
+      </Card>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {msg && <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>}
+
+      {/* Plans */}
+      <Card className="p-4">
+        <h3 className="mb-3 text-sm font-semibold">Plans</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted-foreground"><tr><th className="py-1">Plan</th><th className="text-right">Price</th><th>Billing</th><th></th></tr></thead>
+            <tbody>
+              {plans.map((p) => (
+                <tr key={p.id} className="border-t">
+                  <td className="py-1 font-medium">{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">(archived)</span>}</td>
+                  <td className="text-right tabular-nums">{money(p.amount)} {p.currency ?? ""}</td>
+                  <td>every {p.intervalCount > 1 ? `${p.intervalCount} ` : ""}{p.interval.replace("ly", p.intervalCount > 1 ? "s" : "")}</td>
+                  <td className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>Delete</Button></td>
+                </tr>
+              ))}
+              {plans.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-muted-foreground">No plans yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-5">
+          <Input placeholder="Plan name" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} className="sm:col-span-2" />
+          <Input placeholder="Price" type="number" value={planForm.amount} onChange={(e) => setPlanForm({ ...planForm, amount: e.target.value })} />
+          <Select value={planForm.interval} onChange={(e) => setPlanForm({ ...planForm, interval: e.target.value })}>
+            {INTERVALS.map((i) => <option key={i} value={i}>{i}</option>)}
+          </Select>
+          <Input placeholder="every N" type="number" value={planForm.intervalCount} onChange={(e) => setPlanForm({ ...planForm, intervalCount: e.target.value })} />
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Select value={planForm.incomeAccountId} onChange={(e) => setPlanForm({ ...planForm, incomeAccountId: e.target.value })} className="max-w-xs">
+            <option value="">Default income account</option>
+            {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+          </Select>
+          <Button size="sm" disabled={!planForm.name || !planForm.amount} onClick={async () => { await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>Add plan</Button>
+        </div>
+      </Card>
+
+      {/* Subscriptions */}
+      <Card className="p-4">
+        <h3 className="mb-3 text-sm font-semibold">Subscriptions</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted-foreground"><tr><th className="py-1">Customer</th><th>Plan</th><th className="text-right">Qty</th><th className="text-right">MRR</th><th>Next bill</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {subs.map((s) => (
+                <tr key={s.id} className="border-t align-top">
+                  <td className="py-1 font-medium">{s.customerName ?? "—"}</td>
+                  <td>{s.planName}</td>
+                  <td className="text-right tabular-nums">{s.quantity}</td>
+                  <td className="text-right tabular-nums">{s.status === "active" ? money(s.mrr) : "—"}</td>
+                  <td>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</td>
+                  <td><Badge variant={s.status === "active" ? "default" : "secondary"}>{s.status}</Badge></td>
+                  <td className="whitespace-nowrap text-right">
+                    <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId) setMsg(`Billed ${r.documentNumber}`); }}>Bill now</Button>
+                    {s.status === "active"
+                      ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>Pause</Button>
+                      : s.status === "paused"
+                        ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>Resume</Button>
+                        : null}
+                    {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "canceled" })}>Cancel</Button>}
+                  </td>
+                </tr>
+              ))}
+              {subs.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-muted-foreground">No subscriptions yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-6">
+          <Select value={subForm.customerId} onChange={(e) => setSubForm({ ...subForm, customerId: e.target.value })} className="sm:col-span-2">
+            <option value="">Customer…</option>
+            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+          <Select value={subForm.planId} onChange={(e) => setSubForm({ ...subForm, planId: e.target.value })} className="sm:col-span-2">
+            <option value="">Plan…</option>
+            {plans.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+          <Input placeholder="Qty" type="number" value={subForm.quantity} onChange={(e) => setSubForm({ ...subForm, quantity: e.target.value })} />
+          <Input type="date" value={subForm.startOn} onChange={(e) => setSubForm({ ...subForm, startOn: e.target.value })} />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <Input placeholder="Price override (optional)" type="number" value={subForm.priceOverride} onChange={(e) => setSubForm({ ...subForm, priceOverride: e.target.value })} className="max-w-48" />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.autoPost} onChange={(e) => setSubForm({ ...subForm, autoPost: e.target.checked })} /> Auto-post invoices</label>
+          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", autoPost: false }); }}>Add subscription</Button>
+        </div>
+      </Card>
     </div>
   );
 }

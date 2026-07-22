@@ -593,6 +593,10 @@
           "label": "未实现汇兑损益",
           "hint": "外币余额期末重估的入账科目"
         },
+        "fxRealizedGainLoss": {
+          "label": "已实现汇兑损益",
+          "hint": "用于记录外币付款核销时的结算汇率差额"
+        },
         "laborWip": {
           "label": "人工在制品 / 成本",
           "hint": "已批准的人工成本在此借记（按项目）"
@@ -1605,6 +1609,11 @@
       "name": "名称",
       "appliesTo": "适用于",
       "recoverablePercent": "可抵扣 %",
+      "calculationType": "计算类型",
+      "withholdingAccountId": "预扣税科目",
+      "priceIncludesTax": "价格含税",
+      "compoundOnPrevious": "基于前序税项复合计算",
+      "roundingScale": "税额舍入小数位",
       "isActive": "启用",
       "isPrimary": "主账簿",
       "country": "国家/地区",
@@ -1728,6 +1737,11 @@
         "sales": "销售",
         "purchases": "采购",
         "both": "两者"
+      },
+      "taxCalculationType": {
+        "standard": "标准税",
+        "withholding": "预扣税",
+        "reverseCharge": "反向征税"
       },
       "rateDateBasis": {
         "usageDate": "使用日期",
@@ -2082,6 +2096,14 @@
     "bankFeeds": {
       "title": "Bank Feeds",
       "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "constructionBilling": {
+      "title": "Construction Progress Billing",
+      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

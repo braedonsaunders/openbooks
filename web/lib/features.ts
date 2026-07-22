@@ -30,8 +30,16 @@ export const FEATURES: FeatureDef[] = [
   { key: 'crm', defaultEnabled: true, category: 'sales', navModules: ['crm-leads', 'crm-prospects', 'crm-opportunities', 'crm-activities', 'crm-forecasts'] },
   { key: 'orders', defaultEnabled: true, category: 'sales', navModules: ['estimates', 'sales-orders', 'purchase-orders'] },
   { key: 'revenueRecognition', defaultEnabled: true, category: 'sales', navModules: ['revenue'] },
+  // Subscription billing: plans + subscriptions that auto-generate recurring
+  // invoices (SaaS/retainer style). Off by default — recurring document
+  // schedules + dunning work without it; this adds the plan/subscription model.
+  { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales' },
   // Operations
   { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects'] },
+  // Construction progress billing (AIA G702/G703): schedule of values,
+  // applications for payment, retainage. Off by default; complements the
+  // project-type billing profiles for contractors.
+  { key: 'constructionBilling', defaultEnabled: false, category: 'operations', navModules: ['construction-billing'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'] },
   { key: 'inventory', defaultEnabled: true, category: 'operations', navModules: ['inventory'] },
@@ -50,7 +58,7 @@ export const FEATURES: FeatureDef[] = [
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.
   { key: 'bankFeeds', defaultEnabled: false, category: 'accounting' },
-  { key: 'fixedAssets', defaultEnabled: true, category: 'accounting', navModules: ['assets', 'tax-depreciation'] },
+  { key: 'fixedAssets', defaultEnabled: true, category: 'accounting', navModules: ['assets'] },
   { key: 'budgets', defaultEnabled: true, category: 'accounting', navModules: ['budgets'] },
   { key: 'continuousClose', defaultEnabled: true, category: 'accounting', navModules: ['continuous-close'] },
   // Platform

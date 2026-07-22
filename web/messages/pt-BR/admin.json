@@ -593,6 +593,10 @@
           "label": "Ganho/perda cambial não realizado",
           "hint": "Onde a reavaliação de fim de período de saldos em moeda estrangeira é registrada"
         },
+        "fxRealizedGainLoss": {
+          "label": "Ganho/perda cambial realizado",
+          "hint": "Conta das diferenças cambiais na liquidação de pagamentos em moeda estrangeira"
+        },
         "laborWip": {
           "label": "Mão de obra em WIP / custo",
           "hint": "Custos de mão de obra aprovados são debitados aqui (por projeto)"
@@ -1605,6 +1609,11 @@
       "name": "Nome",
       "appliesTo": "Aplica-se a",
       "recoverablePercent": "% recuperável",
+      "calculationType": "Tipo de cálculo",
+      "withholdingAccountId": "Conta de retenção",
+      "priceIncludesTax": "Preço inclui imposto",
+      "compoundOnPrevious": "Compor sobre componentes anteriores",
+      "roundingScale": "Casas de arredondamento do imposto",
       "isActive": "Ativo",
       "isPrimary": "Livro principal",
       "country": "País",
@@ -1728,6 +1737,11 @@
         "sales": "Vendas",
         "purchases": "Compras",
         "both": "Ambos"
+      },
+      "taxCalculationType": {
+        "standard": "Imposto padrão",
+        "withholding": "Imposto retido",
+        "reverseCharge": "Autoliquidação"
       },
       "rateDateBasis": {
         "usageDate": "Data de uso",
@@ -2082,6 +2096,14 @@
     "bankFeeds": {
       "title": "Bank Feeds",
       "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "constructionBilling": {
+      "title": "Construction Progress Billing",
+      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

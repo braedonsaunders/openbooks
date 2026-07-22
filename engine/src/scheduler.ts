@@ -119,6 +119,15 @@ export async function tick(): Promise<void> {
       console.error("[scheduler] dunning scan failed:", e);
     }
 
+    // Subscription billing: invoice each due subscription (only for orgs with
+    // the subscriptionBilling feature on) and advance its next bill date.
+    try {
+      const { runDueSubscriptions } = await import("./subscription-billing.ts");
+      await runDueSubscriptions();
+    } catch (e) {
+      console.error("[scheduler] subscription billing scan failed:", e);
+    }
+
     // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
     try {
       const { runDueScheduledFlows } = await import("./flows/scheduled.ts");

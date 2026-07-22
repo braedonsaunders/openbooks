@@ -400,15 +400,6 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'assets.read',
   },
   {
-    key: 'tax-depreciation',
-    href: '/assets/tax-pools',
-    label: 'Tax Depreciation',
-    iconKey: 'receipt',
-    group: 'accounting',
-    subgroup: 'assets',
-    requiredPermission: 'assets.read',
-  },
-  {
     key: 'budgets',
     href: '/budgets',
     label: 'Budgets',
@@ -466,6 +457,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'operations',
     subgroup: 'delivery',
     requiredPermission: 'ar.read',
+    featureKey: 'constructionBilling',
   },
   {
     key: 'employees',
@@ -738,7 +730,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'journal',
     'revenue',
     'assets',
-    'tax-depreciation',
     'budgets',
     'tax-filings',
     'continuous-close',
