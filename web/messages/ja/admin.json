@@ -593,6 +593,10 @@
           "label": "為替未実現損益",
           "hint": "外貨建残高の期末再評価が計上される場所"
         },
+        "fxRealizedGainLoss": {
+          "label": "実現為替差損益",
+          "hint": "外貨建て支払消込時の決済レート差額を計上する勘定"
+        },
         "laborWip": {
           "label": "労務仕掛品／原価",
           "hint": "承認された労務原価がここに借方計上されます（プロジェクトごと）"
@@ -1605,6 +1609,11 @@
       "name": "名称",
       "appliesTo": "適用対象",
       "recoverablePercent": "還付可能 %",
+      "calculationType": "計算種別",
+      "withholdingAccountId": "源泉徴収勘定",
+      "priceIncludesTax": "税込価格",
+      "compoundOnPrevious": "前の税要素に複利適用",
+      "roundingScale": "税額の丸め桁数",
       "isActive": "有効",
       "isPrimary": "主要帳簿",
       "country": "国",
@@ -1728,6 +1737,11 @@
         "sales": "販売",
         "purchases": "購買",
         "both": "両方"
+      },
+      "taxCalculationType": {
+        "standard": "標準税",
+        "withholding": "源泉徴収税",
+        "reverseCharge": "リバースチャージ"
       },
       "rateDateBasis": {
         "usageDate": "利用日",
@@ -2082,6 +2096,14 @@
     "bankFeeds": {
       "title": "Bank Feeds",
       "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "constructionBilling": {
+      "title": "Construction Progress Billing",
+      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

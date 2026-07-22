@@ -637,6 +637,10 @@
           "label": "Unrealized FX gain/loss",
           "hint": "Where period-end revaluation of foreign-currency balances is booked"
         },
+        "fxRealizedGainLoss": {
+          "label": "Realized FX gain/loss",
+          "hint": "Where settlement-rate differences from foreign-currency payment applications are booked"
+        },
         "laborWip": {
           "label": "Labor WIP / cost",
           "hint": "Approved labor cost debits here (per project)"
@@ -1457,6 +1461,21 @@
         "singularTitle": "Tax Return Box",
         "description": "Map tax codes onto the boxes of a tax return, or compute a box from other boxes."
       },
+      "tax-regimes": {
+        "title": "Tax Depreciation Regimes",
+        "singularTitle": "Tax Depreciation Regime",
+        "description": "Configurable pooled tax-depreciation regimes. Built-ins ship for Canada (CCA), the UK, Australia and New Zealand; add your own or override a built-in."
+      },
+      "tax-pool-classes": {
+        "title": "Tax Depreciation Classes",
+        "singularTitle": "Tax Depreciation Class",
+        "description": "Per-regime pool classes: rate, method, first-year fraction and recapture behavior. Overrides the built-in class table."
+      },
+      "tax-first-year-rules": {
+        "title": "First-Year Rules",
+        "singularTitle": "First-Year Rule",
+        "description": "Dated first-year rules per regime/class (half-year rule, accelerated investment incentive, immediate expensing)."
+      },
       "classes": {
         "title": "Classes",
         "description": "A reporting dimension for slicing transactions."
@@ -1691,7 +1710,24 @@
       "filingFrequency": "Filing frequency",
       "registrationNumber": "Registration number",
       "returnFormCode": "Return form",
+      "classAttribute": "Asset class attribute",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "Rate",
+      "method": "Method",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
       "recoverablePercent": "Recoverable %",
+      "calculationType": "Calculation type",
+      "withholdingAccountId": "Withholding account",
+      "priceIncludesTax": "Price includes tax",
+      "compoundOnPrevious": "Compound on previous components",
+      "roundingScale": "Tax rounding decimals",
       "isActive": "Active",
       "isPrimary": "Primary book",
       "country": "Country",
@@ -1728,7 +1764,6 @@
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
       "category": "Category",
-      "method": "Method",
       "postsGl": "Posts to GL",
       "bookId": "Book",
       "categoryId": "Asset category",
@@ -1759,7 +1794,6 @@
       "fromCurrency": "From currency",
       "toCurrency": "To currency",
       "rateType": "Rate type",
-      "rate": "Rate",
       "source": "Source",
       "periodId": "Accounting period",
       "currentRate": "Current rate",
@@ -1822,6 +1856,11 @@
         "purchases": "Purchases",
         "both": "Both"
       },
+      "taxCalculationType": {
+        "standard": "Standard tax",
+        "withholding": "Withholding tax",
+        "reverseCharge": "Reverse charge"
+      },
       "jurisdictionLevel": {
         "country": "Country",
         "state": "State / Province",
@@ -1846,6 +1885,10 @@
         "quarterly": "Quarterly",
         "semiannual": "Semi-annual",
         "annual": "Annual"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
       },
       "rateDateBasis": {
         "usageDate": "Usage date",
@@ -2619,6 +2662,14 @@
     "bankFeeds": {
       "title": "Bank Feeds",
       "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "constructionBilling": {
+      "title": "Construction Progress Billing",
+      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }
