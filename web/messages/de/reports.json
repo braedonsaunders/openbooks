@@ -898,6 +898,6 @@
       "sales_order": "Kundenaufträge",
       "purchase_order": "Bestellungen"
     },
-    "note": "Die Konversion wird über Belegverknüpfungen verfolgt; historische NetSuite-Verknüpfungen sind noch nicht importiert."
+    "note": "Die Konversion wird über Transaktionsverknüpfungen verfolgt; historische Quellverknüpfungen müssen möglicherweise migriert werden."
   }
 }

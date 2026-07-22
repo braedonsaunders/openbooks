@@ -24,7 +24,7 @@ export interface PagedColumn<T> {
 
 /**
  * A client-side searched + paginated table for data already loaded into the
- * flyout/page (AGENTS.md: ALL tables are paginated). For server-driven lists
+ * flyout/page (repository conventions: ALL tables are paginated). For server-driven lists
  * use RecordListView / EntityListView instead.
  */
 export function PagedTable<T>({

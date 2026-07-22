@@ -65,7 +65,7 @@
       },
       "sync": {
         "title": "Migraciones y réplica",
-        "description": "Migre desde NetSuite, QuickBooks y más — y replique para ejecutar ambos sistemas en paralelo"
+        "description": "Migre desde un sistema contable de origen y replique ambos sistemas durante la validación"
       },
       "ai": {
         "title": "IA",

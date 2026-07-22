@@ -22,7 +22,7 @@ Documentation is grouped into categories you can browse from the sidebar:
 
 - **Getting Started** — orientation and core concepts.
 - **Switching to OpenBooks** — familiarization guides for teams moving from
-  NetSuite, QuickBooks, Odoo, Xero, or Sage Intacct.
+  small-business or enterprise accounting systems.
 - **Accounting Foundations** — the ledger model, transaction lifecycle, accounts,
   dimensions, and master data.
 - **Sales & Purchases** — customer and vendor workflows, payments, and credits.

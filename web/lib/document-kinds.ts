@@ -78,7 +78,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
   },
-  // Deposit (NetSuite "Make Deposits"): money IN to a chosen bank account,
+  // Deposit (source platform "Make Deposits"): money IN to a chosen bank account,
   // crediting one or more source accounts (income, undeposited funds, clearing).
   // The destination bank is stored on doc.custom.controlAccountId and read by
   // the posting rule's controlOverride; falls back to the org default bank.

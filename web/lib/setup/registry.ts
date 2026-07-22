@@ -208,7 +208,7 @@ const CONSOLIDATED_RATE_SOURCES = [
   { value: 'manual', labelKey: 'options.rateSource.manual' },
 ]
 
-// Revenue recognition (ASC 606 / IFRS 15) — mirrors NetSuite ARM rule methods.
+// Revenue recognition methods governed by ASC 606 and IFRS 15.
 const RECOGNITION_METHODS = [
   { value: 'point_in_time', labelKey: 'options.recognitionMethod.pointInTime' },
   { value: 'straight_line_even', labelKey: 'options.recognitionMethod.straightLineEven' },
@@ -258,7 +258,7 @@ const STOCK_LOCATION_KINDS = [
 export const SETUP_ENTITIES: SetupEntity[] = [
   // --- Company -------------------------------------------------------------
   {
-    // Subsidiaries — the org's legal-entity tree (NetSuite OneWorld model).
+    // Subsidiaries form the organization's legal-entity tree.
     // baseCurrency is the entity's functional currency: locked after create so
     // it cannot drift once books exist.
     key: 'subsidiaries',

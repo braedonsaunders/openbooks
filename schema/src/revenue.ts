@@ -11,7 +11,7 @@ import {
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
- * Revenue recognition, shaped by ASC 606 / IFRS 15 and NetSuite's Advanced
+ * Revenue recognition, shaped by ASC 606 / IFRS 15 and source platform's Advanced
  * Revenue Management (ARM):
  *
  *   contract → performance obligations → allocated price (by SSP) →
@@ -26,7 +26,7 @@ import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
  * How a rule spreads an obligation's allocated amount across periods.
- * Mirrors NetSuite ARM recognition methods.
+ * Mirrors source platform ARM recognition methods.
  */
 export const RECOGNITION_METHODS = [
   "point_in_time", // recognize the whole amount on the start date
@@ -61,7 +61,7 @@ export const recognitionRules = pgTable(
     /** Term boundaries. `document`/`fulfillment`/`event` resolve at plan time. */
     startDateSource: text("start_date_source", { enum: START_DATE_SOURCES }).notNull().default("obligation"),
     endDateSource: text("end_date_source", { enum: END_DATE_SOURCES }).notNull().default("term"),
-    /** Shift the whole schedule by N periods (deferral) — NetSuite "period offset". */
+    /** Shift the whole schedule by N periods (deferral) — source platform "period offset". */
     periodOffset: integer("period_offset").notNull().default(0),
     /** Shift the start date by N days before spreading. */
     startOffsetDays: integer("start_offset_days").notNull().default(0),
@@ -81,7 +81,7 @@ export const recognitionRules = pgTable(
  * Standalone selling price (fair value) for an item, used to allocate a bundle's
  * transaction price across obligations (relative-SSP method). Dated + currency
  * scoped; low/high bound the acceptable range for allocation review.
- * NetSuite's "Fair Value Price" list, native.
+ * source platform's "Fair Value Price" list, native.
  */
 export const fairValuePrices = pgTable(
   "fair_value_prices",

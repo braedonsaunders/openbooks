@@ -11,7 +11,7 @@ import {
 import { auditColumns, currencyCode, fxRate, id, orgRef } from "./helpers";
 
 /**
- * Subsidiaries — legal entities INSIDE a tenant (NetSuite OneWorld model).
+ * Subsidiaries are legal entities inside a tenant.
  *
  * The org stays the sealed tenant boundary (RLS, sandboxes, login realm);
  * a subsidiary is a first-class FIELD inside it: every transaction belongs to
@@ -54,7 +54,7 @@ export const subsidiaries = pgTable(
 
 /**
  * Additional subsidiaries an entity can transact with, beyond its primary
- * (`parties.subsidiary_id`) — NetSuite's Multi-Subsidiary Customer/Vendor.
+ * (`parties.subsidiary_id`) without duplicating the party.
  * Balances stay per (party, subsidiary) naturally: open items are journal
  * lines, and every journal line carries its subsidiary.
  */
@@ -75,7 +75,7 @@ export const partySubsidiaries = pgTable(
 
 /**
  * Consolidated exchange rates — one row per (period, currency pair) with the
- * three translation rates (NetSuite's Consolidated Exchange Rates table):
+ * three translation rates used by consolidation:
  *   current    → balance-sheet accounts (period-end spot)
  *   average    → P&L accounts
  *   historical → equity / historical-cost accounts

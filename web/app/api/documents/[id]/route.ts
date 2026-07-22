@@ -79,7 +79,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 409 },
     )
   }
-  // Flow-managed lock (the lock_record action — NetSuite "Lock Record" with
+  // Flow-managed lock (the lock_record action with
   // role exemptions). Independent of document status.
   {
     const roles = await userRoleKeys(user.orgId, user.id)

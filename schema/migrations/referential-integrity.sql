@@ -84,7 +84,7 @@ alter table payment_cards
   add foreign key (holder_party_id) references parties(id),
   add foreign key (liability_account_id) references accounts(id);
 
--- external connections and QuickBooks Desktop Web Connector bridge
+-- external connections and desktop connector bridge
 alter table connections
   add foreign key (org_id) references orgs(id) on delete cascade;
 alter table sync_runs
@@ -471,7 +471,7 @@ alter table insight_cards add foreign key (org_id) references orgs(id);
 alter table insight_dashboards add foreign key (org_id) references orgs(id);
 alter table insight_dashboard_pins add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (dashboard_id) references insight_dashboards(id) on delete cascade;
 
--- views (NetSuite Saved Search analogue — Knowledge menu)
+-- reusable views in the Knowledge menu
 alter table saved_views add foreign key (org_id) references orgs(id);
 alter table saved_views add foreign key (owner_id) references users(id) on delete cascade;
 alter table saved_views add foreign key (created_by) references users(id);

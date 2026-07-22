@@ -1,7 +1,7 @@
 // The Insights query model — a pragmatic, serializable JSON query compiled to
 // parameterized Postgres against the authored catalog (./catalog.ts).
 //
-// Design: NetSuite SuiteAnalytics / Metabase-class card builder, narrowed to a
+// Design: an enterprise card builder narrowed to a
 // single-stage aggregate-or-detail query. Persisted as jsonb on
 // `insight_cards.query`; compiled by ./compile.ts; executed by ./execute.ts.
 //

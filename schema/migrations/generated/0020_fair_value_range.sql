@@ -1,4 +1,4 @@
--- Fair value range review (NetSuite fair-value range policy, ASC 606 SSP
+-- Fair value range review (source platform fair-value range policy, ASC 606 SSP
 -- allocation review): when an obligation's allocated per-unit price falls
 -- outside the matched fair value price's low/high range, the obligation is
 -- flagged for review — a warning surfaced on the revenue contract, never a

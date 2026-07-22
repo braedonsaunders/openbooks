@@ -153,7 +153,7 @@ function RuleRow({
   const opMeta = ops.find((o) => o.key === rule.op) ?? ops[0]
   const needsValue = opMeta?.needsValue ?? 'none'
   // Enum columns with a known value set get pickers instead of free text —
-  // the NetSuite "Type is any of Bill, Expense Report…" experience.
+  // the source platform "Type is any of Bill, Expense Report…" experience.
   const options = column?.options
   const enumLabel = (v: string) =>
     tReports.has(`catalog.enumValues.${v}`) ? tReports(`catalog.enumValues.${v}`) : v.replace(/_/g, ' ')

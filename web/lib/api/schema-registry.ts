@@ -27,7 +27,7 @@ import {
  *
  * The schema is always in sync with the real DB, never stale, and feeds the
  * OpenAPI spec, the docs browser, AND the write validators from one source of
- * truth. This mirrors NetSuite's OpenAPI metadata but goes further: it's
+ * truth. This mirrors source platform's OpenAPI metadata but goes further: it's
  * per-tenant and includes that org's custom records and fields.
  */
 
@@ -59,7 +59,7 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
 
   // Custom fields on built-in tables (custom_field_defs), keyed by table and
   // optional kind. Surfaced as `cf_<key>` so bills/parties/etc. advertise and
-  // accept their org custom fields — like NetSuite's `custentity_*`.
+  // accept their org custom fields — like source platform's `custentity_*`.
   const cfDefs = (await db.execute(sql`
     select target_table, target_kind, key, label, field_type, is_required
       from custom_field_defs

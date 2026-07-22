@@ -1,6 +1,6 @@
 // Fiscal-aware relative-period presets — the ~50 named date ranges the report
 // filter bar and the custom-report studio both draw from (modelled on
-// NetSuite's footer Date/Period dropdown). The list here is the shared enum;
+// source platform's footer Date/Period dropdown). The list here is the shared enum;
 // `resolvePreset` turns a preset id + org fiscal config into a concrete range.
 //
 // This module is pure (no DB, no clock of its own): callers pass `today` and

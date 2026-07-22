@@ -12,7 +12,7 @@ import { auditColumns, id, orgRef } from "./helpers";
 
 /**
  * Custom record types — the app-builder's "define your own master data"
- * subsystem (the NetSuite custom-record equivalent). Lifecycle:
+ * subsystem (the source platform custom-record equivalent). Lifecycle:
  *
  *   custom_record_types (org-scoped definition: key slug + FormSection[] jsonb)
  *     └─ custom_records (instances: per-type numbered rows with a data jsonb

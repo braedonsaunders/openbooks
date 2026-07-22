@@ -144,7 +144,7 @@ export function FinancialsTab({ data, projectId, billingMethod, recognition, can
         <RecognitionCard projectId={projectId} status={recognition} canManage={canManage} />
       ) : null}
 
-      {/* Cost breakdown — subtabs, never side-by-side (AGENTS.md). */}
+      {/* Cost breakdown — subtabs, never side-by-side (repository conventions). */}
       <div className="space-y-3">
         <nav className="-mb-px flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={t('cockpit.costBreakdownAria')}>
           {innerTabs.map((tab) => (

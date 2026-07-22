@@ -11,7 +11,7 @@ import { auditColumns, currencyCode, id, orgRef } from "./helpers";
 
 /**
  * Account types carry their normal balance and statement placement — no
- * separate lookup, no NetSuite 18-way stringly-typed enum leaking into
+ * separate lookup, no source platform 18-way stringly-typed enum leaking into
  * report logic. `Stat` (statistical/non-monetary) and `NonPosting` are
  * intentionally NOT account types here: statistical tracking uses
  * quantity fields on journal lines; non-posting documents simply don't post.
@@ -47,7 +47,7 @@ export const accounts = pgTable(
     description: text("description"),
     /**
      * Summary accounts group children on statements and REFUSE postings
-     * (enforced by trigger). NetSuite lets you post to parents, silently
+     * (enforced by trigger). source platform lets you post to parents, silently
      * corrupting roll-ups — a top complaint found in the extraction's COA.
      */
     isSummary: boolean("is_summary").notNull().default(false),

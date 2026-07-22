@@ -14,7 +14,7 @@ import type { PermissionKey } from "./iam";
 
 /**
  * API keys — bearer/X-API-Key credentials for the versioned REST API
- * (`/api/v1/*`). NetSuite binds a token to a single role and inherits the
+ * (`/api/v1/*`). source platform binds a token to a single role and inherits the
  * whole role; openbooks does better with SCOPED tokens: each key carries a
  * subset of permission keys (the same `module.action` catalogue roles use),
  * and a request is allowed only when the key's scopes AND the owner's
@@ -26,7 +26,7 @@ import type { PermissionKey } from "./iam";
  * (for constant-time lookup) and a 4-char tail preview for the UI. Revocation
  * is `is_active = false` (keeps the audit trail); optional `expires_at` for
  * rotation policies. Every authenticated request records a row in
- * `api_key_events` for observability (NetSuite's per-surface execution log,
+ * `api_key_events` for observability (source platform's per-surface execution log,
  * baked in from day one).
  */
 
@@ -55,7 +55,7 @@ export const apiKeys = pgTable(
     /**
      * Scoped permission keys (a subset of the catalogue). Empty array =
      * inherit the owner's full effective permission set (a "full-scope" key,
-     * closest to NetSuite's role-bound token).
+     * closest to source platform's role-bound token).
      */
     scopes: jsonb("scopes").$type<PermissionKey[]>().notNull().default([]),
     isActive: boolean("is_active").notNull().default(true),
@@ -73,7 +73,7 @@ export const apiKeys = pgTable(
 );
 
 /**
- * API key event log — the per-surface execution log (the NetSuite Integration
+ * API key event log — the per-surface execution log (the source platform Integration
  * record's execution-log subtab, but built in). One row per authenticated
  * `/api/v1/*` request: method, path, status, latency, and the key that made
  * it. Append-only (no updates); kept for audit + observability. Null `key_id`

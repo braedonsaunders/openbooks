@@ -54,7 +54,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
 }
 
 // The banking transaction kinds that can be created from this page — the
-// NetSuite "Write Checks / Make Deposits / Transfer Funds / Issue Credit Card"
+// source platform "Write Checks / Make Deposits / Transfer Funds / Issue Credit Card"
 // shortcuts, surfaced as one New menu.
 const NEW_KINDS = ['check', 'deposit', 'card_charge', 'card_refund', 'transfer'] as const
 

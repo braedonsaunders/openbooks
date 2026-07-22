@@ -115,12 +115,12 @@ export async function runRecordFlows(
         rows: subject.rows ?? {},
       };
       // Where the mutation came from — conditions can auto-approve
-      // system-generated records (NetSuite execution-context filters).
+      // system-generated records (source platform execution-context filters).
       evalCtx.values.event_source = event.source ?? "api";
       // on_update carries edit-shape data ON THE EVENT (the caller knows what
       // changed; the adapter only sees the post-edit record). Surface it as
       // eval-context values so condition nodes / templates can implement the
-      // NetSuite "needs re-approval on material edit" pattern (see
+      // source platform "needs re-approval on material edit" pattern (see
       // DOCUMENT_FIELDS in subject-profiles.ts). `changedFields` /
       // `changedLineFields` are arrays — LogicRule `in` over them is
       // ANY-OVERLAP, so {op:'in', field:'changedFields',
@@ -137,7 +137,7 @@ export async function runRecordFlows(
       let plan = planAutomation(graph, event, evalCtx);
       if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {
         // on_field_value fires ALONGSIDE lifecycle events when its rule
-        // matches (docs/flows-design.md); merged so converging nodes dedupe.
+        // matches (the flow execution contract); merged so converging nodes dedupe.
         plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
       }
       if (planIsEmpty(plan)) continue;

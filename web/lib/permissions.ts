@@ -96,7 +96,7 @@ export const PERMISSION_CATALOGUE = [
   // endpoint scripts (the RESTlet-style HTTP-invokable kind)
   "scripts.manage",
   "scripts.execute",
-  // Flows — visual approval/automation graphs (docs/flows-design.md).
+  // Flows — visual approval/automation graphs (the flow execution contract).
   // manage = author/enable flows; approve = act on flow approval gates
   // (assignees can always act on their OWN gates regardless of this key).
   "flows.manage",

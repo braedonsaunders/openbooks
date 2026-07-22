@@ -59,13 +59,13 @@ export interface HeaderFieldPlacement {
    */
   required?: boolean | null
   /**
-   * Width in a 4-column header grid (1–4). null/undefined = 1. NetSuite custom
+   * Width in a 4-column header grid (1–4). null/undefined = 1. source platform custom
    * forms control field width/positioning; this reproduces the existing layout.
    */
   colSpan?: number | null
 }
 
-/** An ordered, optionally-labelled group of header fields (NetSuite "tab"). */
+/** An ordered, optionally-labelled group of header fields (source platform "tab"). */
 export interface HeaderGroup {
   /** Stable id within this layout. */
   id: string

@@ -215,7 +215,7 @@ export function DocumentDrawer({
 
   const canEditStatus =
     (doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted') && canCreate
-  // Record flyouts ALWAYS open read-only (NetSuite view-mode model); editing
+  // Record flyouts ALWAYS open read-only (source platform view-mode model); editing
   // is an explicit Edit → Save/Cancel cycle from the header.
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canEditStatus
@@ -1254,7 +1254,7 @@ export function DocumentDrawer({
         ) : null}
 
         {mode === 'view' ? (
-          // NetSuite "Workflow History" parity: the record's approval timeline
+          // source platform "Workflow History" parity: the record's approval timeline
           // (flows + legacy policy engine). Renders nothing when empty.
           <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
         ) : null}

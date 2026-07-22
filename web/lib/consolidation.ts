@@ -7,7 +7,7 @@ import { allowedSubsidiaryIds, subsidiaryOptions, subtreeIds, type SubsidiaryOpt
 
 /**
  * Resolves a report's subsidiary picker value into the statement engine's
- * subsidiary context (NetSuite semantics):
+ * subsidiary context (source platform semantics):
  *   - no subsidiaries beyond the root  → no context (unchanged single-entity org)
  *   - a leaf                            → standalone view of that entity
  *   - a parent (or nothing = the root)  → CONSOLIDATED subtree: children plus

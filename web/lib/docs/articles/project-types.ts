@@ -21,7 +21,7 @@ export const projectTypes: DocArticle = {
     'not to exceed',
     'P&L',
     'markup',
-    'NetSuite',
+    'source platform',
   ],
   body: `# Project Types
 

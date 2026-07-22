@@ -3,7 +3,7 @@ import { auditColumns, id, orgRef } from "./helpers";
 
 /**
  * Per-tenant + per-user transaction-form and record-list customization — the
- * NetSuite "Custom Form" + "Preferred Form" model and the saved-list-view
+ * source platform "Custom Form" + "Preferred Form" model and the saved-list-view
  * model. The config blobs (FormLayoutConfig / ListViewConfig) are validated by
  * @openbooks/customization; this module only stores them.
  *

@@ -43,7 +43,7 @@ async function availableButtons(
 
   const subject = await adapter.loadContext(subjectId)
   if (!subject) return NextResponse.json({ error: 'record not found' }, { status: 404 })
-  // Viewer-aware showIf (NetSuite button conditions like "Next Approver =
+  // Viewer-aware showIf (source platform button conditions like "Next Approver =
   // Current User" / "Requestor = Current User"): inject who is LOOKING before
   // evaluating each button's rule.
   const [pendingGate] = await db

@@ -120,7 +120,7 @@ export const analyticsAndSavedViews: DocArticle = {
     'Choose between financial reports, operational analytics, dashboard cards, custom reports, and reusable record views.',
   updated: '2026-07-19',
   keywords: ['analytics', 'dashboard', 'insights', 'saved search', 'saved view', 'custom report', 'KPI', 'query'],
-  related: ['financial-reports', 'coming-from-netsuite', 'apps'],
+  related: ['financial-reports', 'switching-from-enterprise-systems', 'apps'],
   body: `# Analytics, Dashboards, and Saved Views
 
 OpenBooks offers several reporting surfaces because financial statements,

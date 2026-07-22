@@ -1,6 +1,6 @@
 'use client'
 
-// Contextual approval controls for the record flyout (NetSuite-parity):
+// Contextual approval controls for the record flyout (source platform-parity):
 // when a document is pending_approval, the viewer sees green Approve + Reject
 // buttons if the record-state API says they can decide the flow gate, or a
 // subtle "Pending with {names}" chip when they cannot. Reject always collects a

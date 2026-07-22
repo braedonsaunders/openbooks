@@ -13,7 +13,7 @@ import {
 import { reportRunLabels } from './report-labels'
 
 /**
- * Views (the NetSuite Saved Search analogue, Knowledge menu). A view stores a
+ * Views (the source platform Saved Search analogue, Knowledge menu). A view stores a
  * ReportCustomQuery plan — the SAME shape + engine as custom report_definitions
  * — plus owner/scope metadata. Execution reuses executeReport (runCustomQuery
  * over the shared pool), so there is one injection-safe query engine for both

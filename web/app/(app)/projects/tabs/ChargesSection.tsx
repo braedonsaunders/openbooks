@@ -43,7 +43,7 @@ export function ChargesSection({
   items: ChargeItemOption[]
   equipment: ChargeEquipmentOption[]
   absorption: { recovered: string; billValue: string }
-  /** The add-charge form is driven by the flyout Actions menu (AGENTS.md:
+  /** The add-charge form is driven by the flyout Actions menu (repository conventions:
    *  secondary creates live behind the Actions menu, not a bolted-on section). */
   formOpen: boolean
   onFormOpenChange: (open: boolean) => void

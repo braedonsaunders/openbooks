@@ -4,7 +4,7 @@ import { add, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
- * Revenue recognition (ASC 606 / IFRS 15), NetSuite ARM-shaped.
+ * Revenue recognition (ASC 606 / IFRS 15), source platform ARM-shaped.
  *
  * An obligation carries an allocated amount to recognize over a term. A rule
  * (method + date sources + offsets + accounts) spreads that amount into a
@@ -146,7 +146,7 @@ export function allocateByRelativeSSP(
 }
 
 /**
- * Fair-value range review (NetSuite fair-value range policy): compare an
+ * Fair-value range review (source platform fair-value range policy): compare an
  * obligation's allocated PER-UNIT price against the matched fair value price's
  * [low, high] bounds. Either bound may be absent (open-ended range). Returns
  * null when in range or when no bound is configured. Comparison only — never

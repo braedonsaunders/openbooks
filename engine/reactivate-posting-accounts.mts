@@ -3,7 +3,7 @@
  *
  * The native cutover posts real documents through the kernel, which refuses to
  * post to inactive accounts (jl_check_account). These 37 accounts hold genuine
- * balances in the NetSuite ledger we are reproducing, so on a live openbooks
+ * balances in the source platform ledger we are reproducing, so on a live openbooks
  * COA they must be active/postable. Marking them active is the correct,
  * reversible master-data change (we tag each with custom.reactivatedForCutover
  * so it can be identified/rolled back).

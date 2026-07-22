@@ -2,7 +2,7 @@ import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, 
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * Insights — the card/dashboard builder (NetSuite SuiteAnalytics-class). Users
+ * Insights — the enterprise card and dashboard builder. Users
  * build chart/table CARDS from a query over the ledger (the query model lives in
  * @openbooks/analytics; the plan is stored as jsonb on `query`), then arrange
  * PUBLISHED cards on DASHBOARDS.

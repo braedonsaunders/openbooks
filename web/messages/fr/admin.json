@@ -65,7 +65,7 @@
       },
       "sync": {
         "title": "Migrations et miroir",
-        "description": "Migrez depuis NetSuite, QuickBooks et plus — puis créez un miroir pour exécuter les deux systèmes en parallèle"
+        "description": "Migrez depuis un système comptable source, puis répliquez les deux systèmes pendant la validation"
       },
       "ai": {
         "title": "IA",
