@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
+import {
+  BANK_COUNTRIES,
+  BANK_DIRECTORY,
+  PROVIDER_CREDENTIALS,
+  PROVIDER_LABEL,
+  type BankDirectoryEntry,
+  type FeedProvider,
+} from "../../../../../lib/bank-directory";
 
 interface Connection {
   id: string;
@@ -15,226 +23,565 @@ interface Connection {
   lastSyncAt: string | null;
   lastError: string | null;
   isActive: boolean;
-  hasCredentials: boolean;
   accountNumber: string | null;
   accountName: string | null;
 }
-
-interface Account {
+interface SftpServer {
   id: string;
-  label: string;
+  name: string;
+  username: string;
+  rootPrefix: string;
+  isActive: boolean;
+  lastConnectedAt: string | null;
+}
+interface SftpSchedule {
+  id: string;
+  sftpServerId: string;
+  accountId: string;
+  folder: string;
+  format: string;
+  isActive: boolean;
+  lastRunAt: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
+}
+interface Account { id: string; label: string }
+interface Daemon { enabled: boolean; port: number; host: string; fingerprint: string }
+
+const API_PROVIDERS = new Set<FeedProvider>(["plaid", "gocardless", "truelayer"]);
+
+// --- little visual atoms -----------------------------------------------------
+
+function initials(name: string): string {
+  return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
-const PROVIDERS = [
-  { value: "manual", label: "Manual upload" },
-  { value: "sftp", label: "SFTP file drop" },
-  { value: "gocardless", label: "GoCardless / Nordigen" },
-  { value: "plaid", label: "Plaid" },
-  { value: "truelayer", label: "TrueLayer" },
-];
+function BankAvatar({ name, color, size = 40 }: { name: string; color: string; size?: number }) {
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-xl font-semibold text-white"
+      style={{ background: color, width: size, height: size, fontSize: size * 0.35 }}
+    >
+      {initials(name)}
+    </div>
+  );
+}
 
-// Which credential fields each API provider needs.
-const CRED_FIELDS: Record<string, { key: string; label: string; secret?: boolean }[]> = {
-  gocardless: [
-    { key: "secretId", label: "Secret ID" },
-    { key: "secretKey", label: "Secret key", secret: true },
-  ],
-  plaid: [
-    { key: "clientId", label: "Client ID" },
-    { key: "secret", label: "Secret", secret: true },
-    { key: "accessToken", label: "Access token", secret: true },
-    { key: "env", label: "Environment (production/sandbox)" },
-  ],
-  truelayer: [{ key: "accessToken", label: "Access token", secret: true }],
+function StatusDot({ status }: { status: string }) {
+  const tone =
+    status === "connected"
+      ? "bg-emerald-500"
+      : status === "error"
+        ? "bg-red-500"
+        : status === "pending"
+          ? "bg-amber-400"
+          : "bg-slate-300";
+  return <span className={`inline-block h-2 w-2 rounded-full ${tone}`} />;
+}
+
+const PROVIDER_COLOR: Record<string, string> = {
+  plaid: "#111111",
+  gocardless: "#F1F252",
+  truelayer: "#1B0B34",
+  sftp: "#0F766E",
+  manual: "#64748B",
 };
 
-const API_PROVIDERS = new Set(["gocardless", "plaid", "truelayer"]);
+// --- main --------------------------------------------------------------------
 
-const STATUS_TONE: Record<string, "default" | "secondary"> = {
-  connected: "default",
-  pending: "secondary",
-  error: "secondary",
-  disconnected: "secondary",
-};
-
-export function BankFeedsClient({ connections, accounts }: { connections: Connection[]; accounts: Account[] }) {
+export function BankFeedsClient({
+  connections,
+  sftpServers,
+  sftpSchedules,
+  accounts,
+  daemon,
+}: {
+  connections: Connection[];
+  sftpServers: SftpServer[];
+  sftpSchedules: SftpSchedule[];
+  accounts: Account[];
+  daemon: Daemon;
+}) {
   const router = useRouter();
-  const [provider, setProvider] = useState("gocardless");
-  const [name, setName] = useState("");
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [externalAccountId, setExternalAccountId] = useState("");
-  const [cadence, setCadence] = useState("daily");
-  const [creds, setCreds] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const isApi = API_PROVIDERS.has(provider);
+  const schedulesByServer = useMemo(() => {
+    const m = new Map<string, SftpSchedule[]>();
+    for (const s of sftpSchedules) (m.get(s.sftpServerId) ?? m.set(s.sftpServerId, []).get(s.sftpServerId)!).push(s);
+    return m;
+  }, [sftpSchedules]);
 
-  const create = async () => {
-    setError(null);
-    setMsg(null);
+  const totalConnections = connections.length + sftpServers.length;
+
+  const refresh = () => router.refresh();
+
+  const feedAction = async (id: string, action: "test" | "sync") => {
     setBusy(true);
-    const r = await fetch("/api/banking/bank-feeds", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name,
-        provider,
-        accountId,
-        externalAccountId: isApi ? externalAccountId : null,
-        syncCadence: cadence,
-        credentials: isApi ? creds : null,
-      }),
-    });
-    setBusy(false);
-    if (!r.ok) {
-      setError((await r.json().catch(() => ({}))).error ?? "Could not create connection");
-      return;
-    }
-    setName("");
-    setExternalAccountId("");
-    setCreds({});
-    router.refresh();
-  };
-
-  const act = async (id: string, action: "test" | "sync") => {
     setMsg(null);
-    setError(null);
-    setBusy(true);
     const r = await fetch(`/api/banking/bank-feeds/${id}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action }),
     });
-    const body = await r.json().catch(() => ({}));
+    const b = await r.json().catch(() => ({}));
     setBusy(false);
-    if (action === "test") {
-      setMsg(body.ok ? "Connection OK" : `Test failed: ${body.detail ?? "unknown error"}`);
-    } else {
-      setMsg(body.error ? `Sync failed: ${body.error}` : `Imported ${body.imported} new, ${body.duplicates} duplicate`);
-    }
-    router.refresh();
-  };
-
-  const patch = async (id: string, patchBody: Record<string, unknown>) => {
-    await fetch(`/api/banking/bank-feeds/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(patchBody),
-    });
-    router.refresh();
-  };
-
-  const remove = async (id: string) => {
-    await fetch(`/api/banking/bank-feeds/${id}`, { method: "DELETE" });
-    router.refresh();
+    setMsg(
+      action === "test"
+        ? b.ok
+          ? "Connection verified."
+          : `Test failed: ${b.detail ?? "unknown error"}`
+        : b.error
+          ? `Sync failed: ${b.error}`
+          : `Imported ${b.imported} new, ${b.duplicates} duplicate.`,
+    );
+    refresh();
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">New bank feed connection</h3>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <Label>Provider</Label>
-            <Select value={provider} onChange={(e) => setProvider(e.target.value)}>
-              {PROVIDERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </Select>
-          </div>
-          <div>
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="RBC operating — daily" />
-          </div>
-          <div>
-            <Label>Bank account</Label>
-            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-            </Select>
-          </div>
-          {isApi && (
-            <>
-              <div>
-                <Label>Provider account id</Label>
-                <Input value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} placeholder="account id at the provider" />
-              </div>
-              <div>
-                <Label>Sync cadence</Label>
-                <Select value={cadence} onChange={(e) => setCadence(e.target.value)}>
-                  <option value="daily">Daily</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="manual">Manual only</option>
-                </Select>
-              </div>
-              {(CRED_FIELDS[provider] ?? []).map((f) => (
-                <div key={f.key}>
-                  <Label>{f.label}</Label>
-                  <Input
-                    type={f.secret ? "password" : "text"}
-                    value={creds[f.key] ?? ""}
-                    onChange={(e) => setCreds({ ...creds, [f.key]: e.target.value })}
-                  />
+    <div className="mx-auto w-full max-w-4xl space-y-6 p-1">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Bank Feeds</h2>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+            Connect each bank account for automated statement import — live feeds, SFTP file drops, or manual upload.
+            Everything imports through the same reconciliation pipeline.
+          </p>
+        </div>
+        {!adding && (
+          <Button onClick={() => { setAdding(true); setMsg(null); }} className="shrink-0">+ Add connection</Button>
+        )}
+      </div>
+
+      {msg && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300">
+          {msg}
+        </div>
+      )}
+
+      {adding && (
+        <AddConnectionFlow
+          accounts={accounts}
+          daemon={daemon}
+          onClose={() => setAdding(false)}
+          onDone={(m) => { setAdding(false); setMsg(m); refresh(); }}
+        />
+      )}
+
+      {/* Unified connection list */}
+      {totalConnections === 0 && !adding ? (
+        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+          <div className="text-sm text-slate-500 dark:text-slate-400">No bank connections yet.</div>
+          <Button onClick={() => setAdding(true)}>Connect your first bank</Button>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {connections.map((c) => {
+            const dirColor = PROVIDER_COLOR[c.provider] ?? "#64748B";
+            return (
+              <Card key={c.id} className="flex items-center gap-4 p-4">
+                <BankAvatar name={c.name} color={dirColor} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium text-slate-900 dark:text-slate-100">{c.name}</span>
+                    <Badge variant="secondary">{PROVIDER_LABEL[c.provider as FeedProvider] ?? c.provider}</Badge>
+                    {!c.isActive && <span className="text-xs text-slate-400">paused</span>}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <StatusDot status={c.status} />
+                    <span className="capitalize">{c.status}</span>
+                    <span>·</span>
+                    <span className="font-mono">{c.accountNumber}</span>
+                    <span className="truncate">{c.accountName}</span>
+                    {c.lastSyncAt && <><span>·</span><span>synced {new Date(c.lastSyncAt).toLocaleDateString("en-CA")}</span></>}
+                  </div>
+                  {c.lastError && <div className="mt-1 truncate text-xs text-red-600" title={c.lastError}>⚠ {c.lastError}</div>}
                 </div>
-              ))}
-            </>
-          )}
-          {provider === "sftp" && (
-            <p className="self-end text-xs text-muted-foreground sm:col-span-2">
-              Configure the file endpoint and import folders on the SFTP tabs above.
-            </p>
-          )}
-        </div>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        <div className="mt-3">
-          <Button onClick={create} disabled={busy || !name || !accountId}>Add connection</Button>
-        </div>
-      </Card>
-
-      {msg && <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>}
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted-foreground">
-            <tr>
-              <th className="py-2">Connection</th><th>Provider</th><th>Account</th>
-              <th>Cadence</th><th>Last sync</th><th>Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {connections.map((c) => (
-              <tr key={c.id} className="border-t align-top">
-                <td className="py-2 font-medium">{c.name}</td>
-                <td>{c.provider}</td>
-                <td>{[c.accountNumber, c.accountName].filter(Boolean).join(" · ")}</td>
-                <td>{c.syncCadence}</td>
-                <td>
-                  {c.lastSyncAt ? new Date(c.lastSyncAt).toLocaleDateString() : "—"}
-                  {c.lastError && <span className="ml-1 text-red-600" title={c.lastError}>⚠</span>}
-                </td>
-                <td>
-                  <Badge variant={STATUS_TONE[c.status] ?? "secondary"}>{c.status}</Badge>
-                  {!c.isActive && <span className="ml-1 text-xs text-muted-foreground">(paused)</span>}
-                </td>
-                <td className="whitespace-nowrap text-right">
-                  {API_PROVIDERS.has(c.provider) && (
+                <div className="flex shrink-0 items-center gap-1">
+                  {API_PROVIDERS.has(c.provider as FeedProvider) && (
                     <>
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(c.id, "test")}>Test</Button>
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(c.id, "sync")}>Sync now</Button>
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => feedAction(c.id, "test")}>Test</Button>
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => feedAction(c.id, "sync")}>Sync</Button>
                     </>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => patch(c.id, { isActive: !c.isActive })}>
+                  <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ isActive: !c.isActive }) }); refresh(); }}>
                     {c.isActive ? "Pause" : "Resume"}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove(c.id)}>Delete</Button>
-                </td>
-              </tr>
-            ))}
-            {connections.length === 0 && (
-              <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">No bank feed connections yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "DELETE" }); refresh(); }}>Remove</Button>
+                </div>
+              </Card>
+            );
+          })}
+
+          {sftpServers.map((s) => (
+            <SftpConnectionCard
+              key={s.id}
+              server={s}
+              schedules={schedulesByServer.get(s.id) ?? []}
+              accounts={accounts}
+              onChange={refresh}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Shared SFTP receiving endpoint */}
+      {(sftpServers.length > 0 || adding) && <SftpEndpointCard daemon={daemon} />}
     </div>
+  );
+}
+
+// --- SFTP connection card (server + its routing) -----------------------------
+
+function SftpConnectionCard({
+  server,
+  schedules,
+  accounts,
+  onChange,
+}: {
+  server: SftpServer;
+  schedules: SftpSchedule[];
+  accounts: Account[];
+  onChange: () => void;
+}) {
+  const [routing, setRouting] = useState(false);
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [folder, setFolder] = useState("inbound");
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-4">
+        <BankAvatar name={server.name} color={PROVIDER_COLOR.sftp} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium text-slate-900 dark:text-slate-100">{server.name}</span>
+            <Badge variant="secondary">SFTP file drop</Badge>
+            {!server.isActive && <span className="text-xs text-slate-400">paused</span>}
+          </div>
+          <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            login <span className="font-mono">{server.username}</span>
+            {schedules.length > 0 && <> · routes to {schedules.length} account{schedules.length === 1 ? "" : "s"}</>}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={() => setRouting(!routing)}>{routing ? "Done" : "Routing"}</Button>
+          <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/banking/sftp/${server.id}`, { method: "DELETE" }); onChange(); }}>Remove</Button>
+        </div>
+      </div>
+
+      {(routing || schedules.length > 0) && (
+        <div className="mt-3 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
+          <div className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Import routing — which folder feeds which account</div>
+          <ul className="space-y-1 text-sm">
+            {schedules.map((sc) => (
+              <li key={sc.id} className="flex items-center gap-2">
+                <span className="font-mono text-xs">/{sc.folder}</span>
+                <span className="text-slate-400">→</span>
+                <span className="font-mono text-xs">{sc.accountNumber}</span>
+                <span className="text-slate-500">{sc.accountName}</span>
+                <Badge variant="outline">{sc.format}</Badge>
+                <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { await fetch(`/api/banking/sftp/schedules/${sc.id}`, { method: "DELETE" }); onChange(); }}>Remove</Button>
+              </li>
+            ))}
+            {schedules.length === 0 && <li className="text-xs text-slate-400">No routing yet — add one below.</li>}
+          </ul>
+          {routing && (
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <Input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="folder" className="h-8 w-28" />
+              <Select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="h-8 max-w-xs">
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+              </Select>
+              <Button size="sm" disabled={!accountId} onClick={async () => {
+                await fetch("/api/banking/sftp/schedules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto" }) });
+                onChange();
+              }}>Add route</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SftpEndpointCard({ daemon }: { daemon: Daemon }) {
+  return (
+    <Card className="p-4">
+      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">SFTP receiving endpoint</div>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Point your bank's file delivery here. Each SFTP connection above is a login on this endpoint.</p>
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dt className="text-slate-400">Host</dt><dd className="font-mono">{daemon.host}</dd>
+        <dt className="text-slate-400">Port</dt><dd className="font-mono">{daemon.port}</dd>
+        <dt className="text-slate-400">Status</dt><dd>{daemon.enabled ? <span className="text-emerald-600">enabled</span> : <span className="text-slate-400">disabled</span>}</dd>
+        <dt className="text-slate-400">Host key</dt><dd className="truncate font-mono text-xs">{daemon.fingerprint}</dd>
+      </dl>
+    </Card>
+  );
+}
+
+// --- Add connection flow -----------------------------------------------------
+
+function AddConnectionFlow({
+  accounts,
+  daemon,
+  onClose,
+  onDone,
+}: {
+  accounts: Account[];
+  daemon: Daemon;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [country, setCountry] = useState("");
+  const [selected, setSelected] = useState<
+    | { kind: "bank"; bank: BankDirectoryEntry }
+    | { kind: "sftp" }
+    | { kind: "manual" }
+    | { kind: "other" }
+    | null
+  >(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return BANK_DIRECTORY.filter(
+      (b) => (!country || b.country === country) && (!q || b.name.toLowerCase().includes(q)),
+    );
+  }, [query, country]);
+
+  if (selected) {
+    return (
+      <ConfigureConnection
+        selection={selected}
+        accounts={accounts}
+        daemon={daemon}
+        onBack={() => setSelected(null)}
+        onCancel={onClose}
+        onDone={onDone}
+      />
+    );
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Choose your bank</h3>
+        <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+      </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search banks…" className="max-w-xs" />
+        <Select value={country} onChange={(e) => setCountry(e.target.value)} className="max-w-[12rem]">
+          <option value="">All countries</option>
+          {BANK_COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {filtered.map((b) => (
+          <button
+            key={b.id}
+            onClick={() => setSelected({ kind: "bank", bank: b })}
+            className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40 dark:border-slate-800 dark:hover:border-teal-600 dark:hover:bg-teal-950/30"
+          >
+            <BankAvatar name={b.name} color={b.brandColor} size={32} />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{b.name}</div>
+              <div className="text-xs text-slate-400">{PROVIDER_LABEL[b.provider]}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div className="mb-2 text-xs font-medium text-slate-400">Not listed? Choose how statements arrive</div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <FallbackTile label="Other bank (live feed)" hint="Plaid / GoCardless / TrueLayer" onClick={() => setSelected({ kind: "other" })} />
+          <FallbackTile label="SFTP file drop" hint="Bank pushes statement files" onClick={() => setSelected({ kind: "sftp" })} />
+          <FallbackTile label="Manual upload" hint="Upload OFX / CSV by hand" onClick={() => setSelected({ kind: "manual" })} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function FallbackTile({ label, hint, onClick }: { label: string; hint: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="rounded-lg border border-slate-200 p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40 dark:border-slate-800 dark:hover:border-teal-600 dark:hover:bg-teal-950/30">
+      <div className="text-sm font-medium">{label}</div>
+      <div className="text-xs text-slate-400">{hint}</div>
+    </button>
+  );
+}
+
+function ConfigureConnection({
+  selection,
+  accounts,
+  daemon,
+  onBack,
+  onCancel,
+  onDone,
+}: {
+  selection: { kind: "bank"; bank: BankDirectoryEntry } | { kind: "sftp" } | { kind: "manual" } | { kind: "other" };
+  accounts: Account[];
+  daemon: Daemon;
+  onBack: () => void;
+  onCancel: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const bank = selection.kind === "bank" ? selection.bank : null;
+  const [provider, setProvider] = useState<FeedProvider>(
+    selection.kind === "bank" ? selection.bank.provider
+      : selection.kind === "sftp" ? "sftp"
+        : selection.kind === "manual" ? "manual"
+          : "gocardless",
+  );
+  const [name, setName] = useState(bank?.name ?? "");
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [externalAccountId, setExternalAccountId] = useState("");
+  const [cadence, setCadence] = useState("daily");
+  const [creds, setCreds] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sftpSecret, setSftpSecret] = useState<{ username: string; password: string } | null>(null);
+
+  const isApi = API_PROVIDERS.has(provider);
+  const color = bank?.brandColor ?? PROVIDER_COLOR[provider] ?? "#64748B";
+
+  const save = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      if (provider === "sftp") {
+        const r = await fetch("/api/banking/sftp", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: name || "SFTP feed" }),
+        });
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) { setError(b.error ?? "Could not create SFTP login"); setBusy(false); return; }
+        // Optionally route to the chosen account immediately.
+        if (accountId) {
+          await fetch("/api/banking/sftp/schedules", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sftpServerId: b.id, accountId, folder: "inbound", format: "auto" }),
+          });
+        }
+        setBusy(false);
+        setSftpSecret({ username: b.username, password: b.password });
+        return; // keep the panel open to show the one-time password
+      }
+      const r = await fetch("/api/banking/bank-feeds", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: name || bank?.name || "Bank feed",
+          provider,
+          accountId,
+          externalAccountId: isApi ? externalAccountId : null,
+          syncCadence: cadence,
+          credentials: isApi ? creds : null,
+        }),
+      });
+      const b = await r.json().catch(() => ({}));
+      setBusy(false);
+      if (!r.ok) { setError(b.error ?? "Could not create connection"); return; }
+      onDone(`${name || bank?.name || "Connection"} added.`);
+    } catch (e) {
+      setBusy(false);
+      setError(e instanceof Error ? e.message : "Failed");
+    }
+  };
+
+  if (sftpSecret) {
+    return (
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold">SFTP login created</h3>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Give these to your bank. The password is shown once — copy it now.</p>
+        <div className="mt-3 space-y-1 rounded-lg bg-slate-50 p-3 font-mono text-sm dark:bg-slate-900">
+          <div>host: {daemon.host}</div>
+          <div>port: {daemon.port}</div>
+          <div>username: {sftpSecret.username}</div>
+          <div>password: {sftpSecret.password}</div>
+        </div>
+        <div className="mt-4"><Button onClick={() => onDone("SFTP connection created.")}>Done</Button></div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center gap-3">
+        <Button size="sm" variant="ghost" onClick={onBack}>← Back</Button>
+        <BankAvatar name={name || "Bank"} color={color} size={32} />
+        <div className="text-sm font-semibold">{bank?.name ?? "New connection"}</div>
+        <Badge variant="secondary" className="ml-auto">{PROVIDER_LABEL[provider]}</Badge>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label>Connection name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Operating account — daily" />
+        </div>
+        <div>
+          <Label>Bank / GL account</Label>
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+          </Select>
+        </div>
+
+        {selection.kind === "other" && (
+          <div>
+            <Label>Provider</Label>
+            <Select value={provider} onChange={(e) => setProvider(e.target.value as FeedProvider)}>
+              <option value="gocardless">GoCardless</option>
+              <option value="plaid">Plaid</option>
+              <option value="truelayer">TrueLayer</option>
+            </Select>
+          </div>
+        )}
+
+        {isApi && (
+          <>
+            <div>
+              <Label>Provider account id</Label>
+              <Input value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} placeholder="account id at the provider" />
+            </div>
+            <div>
+              <Label>Sync cadence</Label>
+              <Select value={cadence} onChange={(e) => setCadence(e.target.value)}>
+                <option value="daily">Daily</option>
+                <option value="hourly">Hourly</option>
+                <option value="manual">Manual only</option>
+              </Select>
+            </div>
+            {(PROVIDER_CREDENTIALS[provider] ?? []).map((f) => (
+              <div key={f.key}>
+                <Label>{f.label}</Label>
+                <Input type={f.secret ? "password" : "text"} value={creds[f.key] ?? ""} onChange={(e) => setCreds({ ...creds, [f.key]: e.target.value })} />
+              </div>
+            ))}
+          </>
+        )}
+
+        {provider === "sftp" && (
+          <p className="text-xs text-slate-500 sm:col-span-2 dark:text-slate-400">
+            We'll create a dedicated SFTP login and route its <span className="font-mono">/inbound</span> folder to the account above.
+            You'll get the host, username, and a one-time password to hand to your bank.
+          </p>
+        )}
+        {provider === "manual" && (
+          <p className="text-xs text-slate-500 sm:col-span-2 dark:text-slate-400">
+            Records that this account is fed by manual OFX/CSV upload. Import files from the account's page in Banking.
+          </p>
+        )}
+      </div>
+
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      <div className="mt-4 flex gap-2">
+        <Button onClick={save} disabled={busy || !accountId || (!name && !bank)}>Add connection</Button>
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+      </div>
+    </Card>
   );
 }
