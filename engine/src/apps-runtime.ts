@@ -1,4 +1,4 @@
-import { newAsyncContext } from "quickjs-emscripten";
+import { newAsyncContext } from "./quickjs.ts";
 
 /**
  * App backend runtime — the server-side half of an App. Endpoint scripts run in
@@ -44,7 +44,10 @@ export interface AppRequest {
 export interface AppStorageAdapter {
   get(key: string, namespace: string): Promise<unknown>;
   set(key: string, value: unknown, namespace: string): Promise<void>;
-  list(prefix: string, namespace: string): Promise<{ key: string; value: unknown }[]>;
+  list(
+    prefix: string,
+    namespace: string,
+  ): Promise<{ key: string; value: unknown }[]>;
   delete(key: string, namespace: string): Promise<void>;
 }
 
@@ -77,7 +80,17 @@ export interface AppEndpointResult {
 }
 
 /** Governance unit costs per host operation. */
-const COST = { log: 1, storageGet: 5, storageList: 5, storageSet: 10, storageDelete: 10, recordsList: 10, recordsGet: 5, journalDraft: 100, journalPost: 200 };
+const COST = {
+  log: 1,
+  storageGet: 5,
+  storageList: 5,
+  storageSet: 10,
+  storageDelete: 10,
+  recordsList: 10,
+  recordsGet: 5,
+  journalDraft: 100,
+  journalPost: 200,
+};
 const DEFAULT_BUDGET = 1000;
 const DEFAULT_TIMEOUT_MS = 3000;
 
@@ -107,9 +120,16 @@ export async function runAppEndpoint(opts: {
   const started = Date.now();
 
   /** Charge units; throw a governance error handle when over budget. */
-  const charge = (cost: number): { error: ReturnType<typeof vm.newError> } | null => {
+  const charge = (
+    cost: number,
+  ): { error: ReturnType<typeof vm.newError> } | null => {
     units += cost;
-    if (units > budget) return { error: vm.newError(`${GOVERNANCE}governance budget exceeded (${units}/${budget} units)`) };
+    if (units > budget)
+      return {
+        error: vm.newError(
+          `${GOVERNANCE}governance budget exceeded (${units}/${budget} units)`,
+        ),
+      };
     return null;
   };
 
@@ -121,55 +141,119 @@ export async function runAppEndpoint(opts: {
       logs.push(args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
     });
 
-    const storageGet = vm.newAsyncifiedFunction("__storage_get", async (keyH, nsH) => {
-      const over = charge(COST.storageGet); if (over) return over;
-      const value = await adapters.storage.get(String(vm.dump(keyH)), String(vm.dump(nsH) ?? "default"));
-      return vm.newString(JSON.stringify(value ?? null));
-    });
-    const storageSet = vm.newAsyncifiedFunction("__storage_set", async (keyH, valH, nsH) => {
-      const over = charge(COST.storageSet); if (over) return over;
-      const raw = vm.dump(valH);
-      await adapters.storage.set(String(vm.dump(keyH)), raw === undefined ? null : JSON.parse(String(raw)), String(vm.dump(nsH) ?? "default"));
-      return vm.undefined;
-    });
-    const storageList = vm.newAsyncifiedFunction("__storage_list", async (prefixH, nsH) => {
-      const over = charge(COST.storageList); if (over) return over;
-      const rows = await adapters.storage.list(String(vm.dump(prefixH) ?? ""), String(vm.dump(nsH) ?? "default"));
-      return vm.newString(JSON.stringify(rows));
-    });
-    const storageDelete = vm.newAsyncifiedFunction("__storage_delete", async (keyH, nsH) => {
-      const over = charge(COST.storageDelete); if (over) return over;
-      await adapters.storage.delete(String(vm.dump(keyH)), String(vm.dump(nsH) ?? "default"));
-      return vm.undefined;
-    });
+    const storageGet = vm.newAsyncifiedFunction(
+      "__storage_get",
+      async (keyH, nsH) => {
+        const over = charge(COST.storageGet);
+        if (over) return over;
+        const value = await adapters.storage.get(
+          String(vm.dump(keyH)),
+          String(vm.dump(nsH) ?? "default"),
+        );
+        return vm.newString(JSON.stringify(value ?? null));
+      },
+    );
+    const storageSet = vm.newAsyncifiedFunction(
+      "__storage_set",
+      async (keyH, valH, nsH) => {
+        const over = charge(COST.storageSet);
+        if (over) return over;
+        const raw = vm.dump(valH);
+        await adapters.storage.set(
+          String(vm.dump(keyH)),
+          raw === undefined ? null : JSON.parse(String(raw)),
+          String(vm.dump(nsH) ?? "default"),
+        );
+        return vm.undefined;
+      },
+    );
+    const storageList = vm.newAsyncifiedFunction(
+      "__storage_list",
+      async (prefixH, nsH) => {
+        const over = charge(COST.storageList);
+        if (over) return over;
+        const rows = await adapters.storage.list(
+          String(vm.dump(prefixH) ?? ""),
+          String(vm.dump(nsH) ?? "default"),
+        );
+        return vm.newString(JSON.stringify(rows));
+      },
+    );
+    const storageDelete = vm.newAsyncifiedFunction(
+      "__storage_delete",
+      async (keyH, nsH) => {
+        const over = charge(COST.storageDelete);
+        if (over) return over;
+        await adapters.storage.delete(
+          String(vm.dump(keyH)),
+          String(vm.dump(nsH) ?? "default"),
+        );
+        return vm.undefined;
+      },
+    );
 
-    const recordsList = vm.newAsyncifiedFunction("__records_list", async (typeH, filtersH) => {
-      if (!adapters.records) return { error: vm.newError(`${FORBIDDEN}records.read not granted to this app`) };
-      const over = charge(COST.recordsList); if (over) return over;
-      const filtersRaw = vm.dump(filtersH);
-      const filters = filtersRaw ? JSON.parse(String(filtersRaw)) : {};
-      const rows = await adapters.records.list(String(vm.dump(typeH)), filters);
-      return vm.newString(JSON.stringify(rows));
-    });
-    const recordsGet = vm.newAsyncifiedFunction("__records_get", async (typeH, idH) => {
-      if (!adapters.records) return { error: vm.newError(`${FORBIDDEN}records.read not granted to this app`) };
-      const over = charge(COST.recordsGet); if (over) return over;
-      const row = await adapters.records.get(String(vm.dump(typeH)), String(vm.dump(idH)));
-      return vm.newString(JSON.stringify(row ?? null));
-    });
+    const recordsList = vm.newAsyncifiedFunction(
+      "__records_list",
+      async (typeH, filtersH) => {
+        if (!adapters.records)
+          return {
+            error: vm.newError(
+              `${FORBIDDEN}records.read not granted to this app`,
+            ),
+          };
+        const over = charge(COST.recordsList);
+        if (over) return over;
+        const filtersRaw = vm.dump(filtersH);
+        const filters = filtersRaw ? JSON.parse(String(filtersRaw)) : {};
+        const rows = await adapters.records.list(
+          String(vm.dump(typeH)),
+          filters,
+        );
+        return vm.newString(JSON.stringify(rows));
+      },
+    );
+    const recordsGet = vm.newAsyncifiedFunction(
+      "__records_get",
+      async (typeH, idH) => {
+        if (!adapters.records)
+          return {
+            error: vm.newError(
+              `${FORBIDDEN}records.read not granted to this app`,
+            ),
+          };
+        const over = charge(COST.recordsGet);
+        if (over) return over;
+        const row = await adapters.records.get(
+          String(vm.dump(typeH)),
+          String(vm.dump(idH)),
+        );
+        return vm.newString(JSON.stringify(row ?? null));
+      },
+    );
 
-    const journalCreate = vm.newAsyncifiedFunction("__journal_create", async (inputH, postH) => {
-      if (!adapters.journal) return { error: vm.newError(`${FORBIDDEN}gl.post not granted to this app`) };
-      const post = vm.dump(postH) === true;
-      const over = charge(post ? COST.journalPost : COST.journalDraft); if (over) return over;
-      try {
-        const input = JSON.parse(String(vm.dump(inputH)));
-        const result = await adapters.journal.create(input, post);
-        return vm.newString(JSON.stringify(result));
-      } catch (e) {
-        return { error: vm.newError(`journal.create failed: ${(e as Error).message}`) };
-      }
-    });
+    const journalCreate = vm.newAsyncifiedFunction(
+      "__journal_create",
+      async (inputH, postH) => {
+        if (!adapters.journal)
+          return {
+            error: vm.newError(`${FORBIDDEN}gl.post not granted to this app`),
+          };
+        const post = vm.dump(postH) === true;
+        const over = charge(post ? COST.journalPost : COST.journalDraft);
+        if (over) return over;
+        try {
+          const input = JSON.parse(String(vm.dump(inputH)));
+          const result = await adapters.journal.create(input, post);
+          return vm.newString(JSON.stringify(result));
+        } catch (e) {
+          return {
+            error: vm.newError(
+              `journal.create failed: ${(e as Error).message}`,
+            ),
+          };
+        }
+      },
+    );
 
     vm.setProp(obHandle, "log", logFn);
     vm.setProp(obHandle, "__storage_get", storageGet);
@@ -180,7 +264,18 @@ export async function runAppEndpoint(opts: {
     vm.setProp(obHandle, "__records_get", recordsGet);
     vm.setProp(obHandle, "__journal_create", journalCreate);
     vm.setProp(vm.global, "ob", obHandle);
-    for (const h of [logFn, storageGet, storageSet, storageList, storageDelete, recordsList, recordsGet, journalCreate, obHandle]) h.dispose();
+    for (const h of [
+      logFn,
+      storageGet,
+      storageSet,
+      storageList,
+      storageDelete,
+      recordsList,
+      recordsGet,
+      journalCreate,
+      obHandle,
+    ])
+      h.dispose();
 
     const program = `
       ${opts.source}
@@ -216,23 +311,57 @@ export async function runAppEndpoint(opts: {
     if (result.error) {
       const err = vm.dump(result.error);
       result.error.dispose();
-      const msg = typeof err === "object" && err && "message" in err ? String((err as any).message) : String(err);
+      const msg =
+        typeof err === "object" && err && "message" in err
+          ? String((err as any).message)
+          : String(err);
       if (msg.startsWith(FORBIDDEN)) {
-        return { status: "forbidden", error: msg.slice(FORBIDDEN.length), logs, units, durationMs: Date.now() - started };
+        return {
+          status: "forbidden",
+          error: msg.slice(FORBIDDEN.length),
+          logs,
+          units,
+          durationMs: Date.now() - started,
+        };
       }
       if (Date.now() > deadline) {
-        return { status: "timeout", error: "execution timed out", logs, units, durationMs: Date.now() - started };
+        return {
+          status: "timeout",
+          error: "execution timed out",
+          logs,
+          units,
+          durationMs: Date.now() - started,
+        };
       }
-      return { status: "error", error: msg.startsWith(GOVERNANCE) ? msg.slice(GOVERNANCE.length) : msg, logs, units, durationMs: Date.now() - started };
+      return {
+        status: "error",
+        error: msg.startsWith(GOVERNANCE) ? msg.slice(GOVERNANCE.length) : msg,
+        logs,
+        units,
+        durationMs: Date.now() - started,
+      };
     }
 
     const raw = vm.dump(result.value);
     result.value.dispose();
-    const parsed = typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
+    const parsed =
+      typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
     const response = normalizeResponse(parsed);
-    return { status: "ok", response, logs, units, durationMs: Date.now() - started };
+    return {
+      status: "ok",
+      response,
+      logs,
+      units,
+      durationMs: Date.now() - started,
+    };
   } catch (e) {
-    return { status: "error", error: (e as Error).message, logs, units, durationMs: Date.now() - started };
+    return {
+      status: "error",
+      error: (e as Error).message,
+      logs,
+      units,
+      durationMs: Date.now() - started,
+    };
   } finally {
     vm.dispose();
     runtime.dispose();
@@ -241,7 +370,12 @@ export async function runAppEndpoint(opts: {
 
 /** A handler may return `{ status, body }` or a bare value (→ 200 with body). */
 function normalizeResponse(out: unknown): { status: number; body: unknown } {
-  if (out && typeof out === "object" && "status" in (out as any) && typeof (out as any).status === "number") {
+  if (
+    out &&
+    typeof out === "object" &&
+    "status" in (out as any) &&
+    typeof (out as any).status === "number"
+  ) {
     const o = out as { status: number; body?: unknown };
     return { status: o.status, body: "body" in o ? o.body : null };
   }

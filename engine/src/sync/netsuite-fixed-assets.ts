@@ -233,13 +233,13 @@ export async function syncNetSuiteFixedAssets(
       select id from accounting_books where org_id = ${options.orgId} and is_primary order by id limit 1
     `)) as unknown as { rows: { id: string }[] };
     const bookId = books.rows[0]?.id;
-    if (!bookId) throw new Error("Rassaun has no primary accounting book");
+    if (!bookId) throw new Error("the organization has no primary accounting book");
     const periodResult = (await db.execute(sql`
       select id, starts_on::text, ends_on::text, is_adjustment
         from accounting_periods where org_id = ${options.orgId} order by starts_on, ends_on
     `)) as unknown as { rows: { id: string; starts_on: string; ends_on: string; is_adjustment: boolean }[] };
     const asOfPeriod = periodForDate(periodResult.rows, asOf);
-    if (!asOfPeriod) throw new Error(`Rassaun has no accounting period for the FAM snapshot ${asOf}`);
+    if (!asOfPeriod) throw new Error(`the organization has no accounting period for the FAM snapshot ${asOf}`);
 
     let createdCategories = 0;
     let updatedCategories = 0;
