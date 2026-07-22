@@ -1,7 +1,9 @@
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import Link from 'next/link'
 import { PageHeader } from '@openbooks/ui'
+import { isFeatureEnabled } from '../../../lib/features'
 import { ListPageLayout } from '../../../components/page-layout'
 import { EntityListView } from '../../../components/entity-list-view'
 import { can, requirePermission } from '../../../lib/authz'
@@ -27,6 +29,9 @@ export default async function Projects({
   const authz = await requirePermission('projects.read')
   const canManage = can(authz, 'projects.manage')
   const orgId = authz.user.orgId
+  // Coherence with construction progress billing: when that feature is on, offer
+  // a direct route to a project's AIA schedule of values / applications.
+  const progressBillingOn = can(authz, 'ar.read') && (await isFeatureEnabled(orgId, 'constructionBilling'))
 
   const sp = await searchParams
   const projectId = typeof sp.project === 'string' ? sp.project : undefined
@@ -67,7 +72,19 @@ export default async function Projects({
         <PageHeader
           title={t('list.title')}
           description={t('list.description')}
-          actions={canManage ? <NewProjectButton /> : undefined}
+          actions={
+            <div className="flex items-center gap-2">
+              {progressBillingOn && (
+                <Link
+                  href={(openProject ? `/construction?projectId=${openProject.project.id}` : '/construction') as never}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Progress Billing
+                </Link>
+              )}
+              {canManage ? <NewProjectButton /> : null}
+            </div>
+          }
         />
       }
     >

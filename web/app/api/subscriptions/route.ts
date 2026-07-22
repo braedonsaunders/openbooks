@@ -4,7 +4,9 @@ import { db } from "@openbooks/engine/src/db.ts";
 import {
   SubscriptionError,
   billSubscriptionNow,
+  changeSubscription,
   monthlyRecurringRevenue,
+  prorateFirstInvoice,
   type Interval,
 } from "@openbooks/engine/src/subscription-billing.ts";
 import { requirePermission } from "../../../lib/authz";
@@ -103,15 +105,32 @@ export async function POST(req: Request) {
       case "addSubscription": {
         if (!body.customerId || !body.planId) return NextResponse.json({ error: "customer and plan required" }, { status: 400 });
         const startOn = body.startOn || new Date().toISOString().slice(0, 10);
+        // firstBillOn is when the first FULL cycle bills; if it's after the start
+        // and proration is requested, we bill the partial [start, firstBillOn] now.
+        const firstBillOn = body.firstBillOn || startOn;
         const r = (await db.execute(sql`
           insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
-                                     next_bill_on, auto_post, memo, created_by, updated_by)
+                                     next_bill_on, current_period_start, auto_post, memo, created_by, updated_by)
           values (${orgId}, ${body.customerId}, ${body.planId}, ${String(body.quantity ?? "1")},
                   ${body.priceOverride != null && body.priceOverride !== "" ? String(body.priceOverride) : null},
-                  ${startOn}, ${body.nextBillOn || startOn}, ${body.autoPost ?? false}, ${body.memo ?? null}, ${userId}, ${userId})
+                  ${startOn}, ${firstBillOn}, ${startOn}, ${body.autoPost ?? false}, ${body.memo ?? null}, ${userId}, ${userId})
           returning id
         `)) as unknown as { rows: { id: string }[] };
-        return NextResponse.json({ id: r.rows[0]!.id }, { status: 201 });
+        const id = r.rows[0]!.id;
+        let proration: unknown = null;
+        if (body.prorateFirstPeriod && firstBillOn > startOn) {
+          proration = await prorateFirstInvoice(id, firstBillOn);
+        }
+        return NextResponse.json({ id, proration }, { status: 201 });
+      }
+      case "changeSubscription": {
+        const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`)) as unknown as { rows: unknown[] };
+        if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
+        const result = await changeSubscription(body.id, {
+          quantity: body.quantity != null ? String(body.quantity) : undefined,
+          priceOverride: "priceOverride" in body ? (body.priceOverride != null && body.priceOverride !== "" ? String(body.priceOverride) : null) : undefined,
+        });
+        return NextResponse.json(result);
       }
       case "updateSubscription": {
         const sets = [];
