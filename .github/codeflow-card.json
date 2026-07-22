@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-07-17T13:47:33.470Z",
-      "sha": "3184c308ffef9abe34feaca401554670fa22681f",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 1317,
-      "functions": 3519,
-      "loc": 480048,
-      "languages": 13,
-      "topLanguages": [
-        {
-          "ext": "json",
-          "pct": 61,
-          "lines": 290631
-        },
-        {
-          "ext": "ts",
-          "pct": 21,
-          "lines": 99708
-        },
-        {
-          "ext": "tsx",
-          "pct": 16,
-          "lines": 75017
-        },
-        {
-          "ext": "sql",
-          "pct": 1,
-          "lines": 6939
-        },
-        {
-          "ext": "txt",
-          "pct": 1,
-          "lines": 4237
-        }
-      ],
-      "dead": 64,
-      "deadPct": 1.8,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 4.5,
-      "securityIssues": 134,
-      "patterns": 9,
-      "duplicates": 47,
-      "layerViolations": 1262,
-      "connections": 5986,
-      "avgFnLines": 15.4,
-      "longestFn": 16,
-      "testFiles": 39,
-      "testRatio": 3,
-      "topFolders": [
-        {
-          "name": "web",
-          "count": 911
-        },
-        {
-          "name": "engine",
-          "count": 140
-        },
-        {
-          "name": "schema",
-          "count": 122
-        },
-        {
-          "name": "packages",
-          "count": 106
-        },
-        {
-          "name": "extraction",
-          "count": 20
-        }
-      ],
-      "folders": 5,
-      "grade": "D",
-      "score": 67,
-      "topBlast": {
-        "path": "web/lib/customization/resolve.ts",
-        "direct": 336,
-        "transitive": 988,
-        "total": 1324
-      },
-      "fragility": [
-        {
-          "path": "web/lib/customization/resolve.ts",
-          "direct": 336,
-          "transitive": 988,
-          "total": 1324
-        },
-        {
-          "path": "web/lib/authz.ts",
-          "direct": 318,
-          "transitive": 832,
-          "total": 1150
-        },
-        {
-          "path": "web/app/(app)/admin/customization/FormDesigner.tsx",
-          "direct": 106,
-          "transitive": 931,
-          "total": 1037
-        }
-      ]
-    },
-    {
       "at": "2026-07-17T14:10:10.978Z",
       "sha": "28fa77774c7403f4dac6c9e87c7d06388c2f918e",
       "pr": null,
@@ -3046,6 +2944,108 @@
           "direct": 403,
           "transitive": 1268,
           "total": 1671
+        },
+        {
+          "path": "engine/src/sandbox/verify-rls.ts",
+          "direct": 310,
+          "transitive": 1150,
+          "total": 1460
+        },
+        {
+          "path": "web/app/api/qbd/web-connector/[id]/route.ts",
+          "direct": 227,
+          "transitive": 1232,
+          "total": 1459
+        }
+      ]
+    },
+    {
+      "at": "2026-07-20T20:24:24.541Z",
+      "sha": "c15d1e4c58e9b2ed1565f58d00def4c9f3aa8c54",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1684,
+      "functions": 4047,
+      "loc": 596443,
+      "languages": 14,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 60,
+          "lines": 359928
+        },
+        {
+          "ext": "ts",
+          "pct": 21,
+          "lines": 122905
+        },
+        {
+          "ext": "tsx",
+          "pct": 14,
+          "lines": 83833
+        },
+        {
+          "ext": "sql",
+          "pct": 4,
+          "lines": 21215
+        },
+        {
+          "ext": "txt",
+          "pct": 1,
+          "lines": 4237
+        }
+      ],
+      "dead": 67,
+      "deadPct": 1.7,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 5,
+      "securityIssues": 156,
+      "patterns": 8,
+      "duplicates": 53,
+      "layerViolations": 1579,
+      "connections": 8346,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 75,
+      "testRatio": 4.5,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 1252
+        },
+        {
+          "name": "engine",
+          "count": 186
+        },
+        {
+          "name": "packages",
+          "count": 107
+        },
+        {
+          "name": "schema",
+          "count": 88
+        },
+        {
+          "name": "extraction",
+          "count": 20
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 66,
+      "topBlast": {
+        "path": "web/lib/customization/resolve.ts",
+        "direct": 403,
+        "transitive": 1269,
+        "total": 1672
+      },
+      "fragility": [
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 403,
+          "transitive": 1269,
+          "total": 1672
         },
         {
           "path": "engine/src/sandbox/verify-rls.ts",
