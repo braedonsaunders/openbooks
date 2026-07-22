@@ -20,6 +20,8 @@ interface TransactionDrawerProps {
   footer?: ReactNode
   children: ReactNode
   canEditAttachments?: boolean
+  /** Persistence table for attachments and audit rows. Defaults to documents. */
+  targetTable?: 'documents' | 'parties' | 'item_rate_versions'
 }
 
 type TransactionTab = 'details' | 'attachments' | 'audit'
@@ -45,6 +47,7 @@ export function TransactionDrawer({
   footer,
   children,
   canEditAttachments = false,
+  targetTable = 'documents',
 }: TransactionDrawerProps) {
   const t = useTranslations('common')
   const pathname = usePathname()
@@ -132,9 +135,9 @@ export function TransactionDrawer({
       footer={activeTab === 'details' ? footer : undefined}
     >
       {activeTab === 'details' ? children : activeTab === 'attachments' ? (
-        <AttachmentPanel targetTable="documents" targetId={recordId} canEdit={canEditAttachments} />
+        <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} />
       ) : (
-        <AuditTrailPanel table="documents" recordId={recordId} />
+        <AuditTrailPanel table={targetTable} recordId={recordId} />
       )}
     </UrlDrawer>
   )

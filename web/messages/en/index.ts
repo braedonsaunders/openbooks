@@ -53,9 +53,11 @@ import sync from './sync.json'
 import tax from './tax.json'
 import fieldTickets from './fieldTickets.json'
 import timesheets from './timesheets.json'
+import laborPricing from './labor-pricing.json'
 
 export default {
   common,
+  laborPricing,
   data: dataIo,
   ui,
   nav,

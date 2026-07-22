@@ -14,7 +14,6 @@ import { Pagination } from '../../../../../components/pagination'
 import { mergeHref } from '../../../../../lib/list-params'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { LaborCostingWizard } from './LaborCostingWizard'
-import { LaborBillRateCards, type BillCardDetail, type BillCardRow } from './LaborBillRateCards'
 
 export interface RateRow {
   id: string
@@ -100,7 +99,7 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
 }
 
 export function LaborCostingWorkspace(props: {
-  view: 'rates' | 'billing' | 'components' | 'posting' | 'reconciliation'
+  view: 'rates' | 'components' | 'posting' | 'reconciliation'
   settings: LaborCostingSettings
   rates: RateRow[]
   selectedRate: RateRow | null
@@ -121,12 +120,6 @@ export function LaborCostingWorkspace(props: {
   laborClearing: string | null
   payrollVariance: string | null
   coverage: { employees: number; covered: number; hasOrgDefault: boolean }
-  billCards: BillCardRow[]
-  selectedBillCard: BillCardDetail | null
-  creatingBillCard: boolean
-  totalBillCards: number
-  laborItems: { id:string; name:string }[]
-  timeTypes: { id:string; name:string; bill_multiplier:string }[]
 }) {
   const t = useTranslations('admin.setup.laborCosting')
   const router = useRouter()
@@ -511,10 +504,6 @@ export function LaborCostingWorkspace(props: {
           closeHref={rateCloseHref}
         />
       ) : null}
-
-      {view === 'billing' && (
-        <LaborBillRateCards cards={props.billCards} selected={props.selectedBillCard} creating={props.creatingBillCard} total={props.totalBillCards} page={props.ratePage} perPage={props.ratePerPage} currentParams={props.currentParams} laborItems={props.laborItems} timeTypes={props.timeTypes}/>
-      )}
 
       {/* ---- estimate components ---- */}
       {view === 'components' && (

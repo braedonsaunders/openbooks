@@ -312,8 +312,10 @@ alter table labor_rate_version_scopes
   add foreign key (version_id) references item_rate_versions(id);
 alter table labor_rate_adjustments
   add foreign key (org_id) references orgs(id),
-  add foreign key (version_id) references item_rate_versions(id),
-  add foreign key (item_id) references items(id);
+  add foreign key (version_id) references item_rate_versions(id);
+alter table labor_rate_adjustment_targets
+  add foreign key (org_id) references orgs(id),
+  add foreign key (adjustment_id) references labor_rate_adjustments(id) on delete cascade;
 alter table labor_rate_terms
   add foreign key (org_id) references orgs(id),
   add foreign key (version_id) references item_rate_versions(id);

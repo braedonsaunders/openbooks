@@ -39,7 +39,7 @@ function changeCount(changes: Record<string, unknown>): number {
   return Object.keys(changes).filter((key) => !['source', 'mode', 'reason'].includes(key)).length
 }
 
-export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties'; recordId: string }) {
+export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties' | 'item_rate_versions'; recordId: string }) {
   const t = useTranslations('common.auditTrail')
   const [q, setQ] = useState('')
   const [action, setAction] = useState('')

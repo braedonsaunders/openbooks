@@ -94,8 +94,6 @@ export const laborRateAdjustments = pgTable(
     id: id(),
     orgId: orgRef(),
     versionId: uuid("version_id").notNull(),
-    /** Null applies to the whole card; set for an item-specific adjustment. */
-    itemId: uuid("item_id"),
     code: text("code").notNull(),
     name: text("name").notNull(),
     category: text("category", {
@@ -131,14 +129,8 @@ export const laborRateAdjustments = pgTable(
     ...auditColumns,
   },
   (t) => [
-    unique("labor_rate_adjustments_version_item_code")
-      .on(t.versionId, t.itemId, t.code)
-      .nullsNotDistinct(),
-    index("labor_rate_adjustments_version").on(
-      t.versionId,
-      t.itemId,
-      t.sortOrder,
-    ),
+    unique("labor_rate_adjustments_version_code").on(t.versionId, t.code),
+    index("labor_rate_adjustments_version").on(t.versionId, t.sortOrder),
     check(
       "labor_rate_adjustments_nonnegative_value",
       sql`${t.value} is null or ${t.value} >= 0`,
@@ -147,6 +139,25 @@ export const laborRateAdjustments = pgTable(
       "labor_rate_adjustments_nonnegative_threshold",
       sql`${t.threshold} is null or ${t.threshold} >= 0`,
     ),
+  ],
+);
+
+/** Reusable applicability predicates for a commercial adjustment. No rows
+ * means the whole card. Multiple rows are inclusive alternatives, allowing a
+ * markup or surcharge to target materials, transaction types, named items,
+ * or any standard accounting dimension without adding one-off columns. */
+export const laborRateAdjustmentTargets = pgTable(
+  "labor_rate_adjustment_targets",
+  {
+    id: id(), orgId: orgRef(), adjustmentId: uuid("adjustment_id").notNull(),
+    targetType: text("target_type", { enum: ["item", "item_kind", "item_category", "transaction_type", "department", "subsidiary", "location", "class", "trade", "job_title", "project", "customer", "other"] }).notNull(),
+    targetValueId: uuid("target_value_id"), targetValueText: text("target_value_text"),
+    includeChildren: boolean("include_children").notNull().default(false), ...auditColumns,
+  },
+  (t) => [
+    index("labor_rate_adjustment_targets_adjustment").on(t.adjustmentId),
+    unique("labor_rate_adjustment_targets_unique").on(t.adjustmentId, t.targetType, t.targetValueId, t.targetValueText).nullsNotDistinct(),
+    check("labor_rate_adjustment_targets_one_value", sql`num_nonnulls(${t.targetValueId}, ${t.targetValueText}) = 1`),
   ],
 );
 
@@ -173,8 +184,9 @@ export const laborRateTerms = pgTable(
   ],
 );
 
-/** Activated versions are immutable in the application; charges retain the
- * exact version used so later price changes never rewrite history. */
+/** Effective-dated price configuration. Posted/approved charges retain the
+ * exact snapshotted rate evidence; configuration edits are audited in place
+ * and therefore never rewrite transaction history. */
 export const itemRateVersions = pgTable(
   "item_rate_versions",
   {
@@ -186,6 +198,7 @@ export const itemRateVersions = pgTable(
     status: text("status", { enum: ["draft", "active", "retired"] })
       .notNull()
       .default("draft"),
+    custom: jsonb("custom").$type<Record<string, unknown>>().notNull().default({}),
     ...auditColumns,
   },
   (t) => [

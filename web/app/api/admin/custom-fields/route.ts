@@ -28,6 +28,7 @@ export const FIELD_TARGETS = [
   },
   { table: 'parties', kinds: [] },
   { table: 'projects', kinds: [] },
+  { table: 'item_rate_versions', kinds: [] },
   { table: 'accounts', kinds: [] },
   { table: 'items', kinds: [] },
   { table: 'crm_account_profiles', kinds: [] },

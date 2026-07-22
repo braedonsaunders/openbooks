@@ -528,6 +528,33 @@ const PROJECT: RecordTypeMeta = {
   ],
 };
 
+/** Labor Pricing rate cards use the same configurable form-layout system as
+ * transaction drawers. Custom header fields persist on the effective-dated
+ * version; the native item-rate table remains the editable line surface. */
+const LABOR_RATE_CARD: RecordTypeMeta = {
+  key: "labor_rate_card",
+  labelKey: "laborPricing.recordType",
+  category: "entity",
+  supportsForms: true,
+  customFieldTable: "item_rate_versions",
+  customFieldLineTable: null,
+  headerFields: [
+    { key: "name", labelKey: "common.labels.name", level: "header", kind: "text", required: true, locked: true },
+    { key: "code", labelKey: "laborPricing.adjustmentCode", level: "header", kind: "text", required: true },
+    { key: "currency", labelKey: "common.labels.currency", level: "header", kind: "select", required: true },
+    { key: "effective_from", labelKey: "laborPricing.effectiveFrom", level: "header", kind: "date", required: true },
+    { key: "effective_to", labelKey: "laborPricing.effectiveTo", level: "header", kind: "date" },
+    { key: "status", labelKey: "common.labels.status", level: "header", kind: "select", required: true },
+    { key: "derivation_policy", labelKey: "laborPricing.derivation", level: "header", kind: "select", required: true },
+  ],
+  lineFields: [
+    { key: "item_id", labelKey: "common.labels.item", level: "line", kind: "entity_ref", required: true },
+    { key: "bill_rate", labelKey: "laborPricing.regular", level: "line", kind: "currency" },
+  ],
+  listColumns: [],
+  listFilters: [],
+};
+
 
 /**
  * Field ticket — the signed crew timesheet (feature-gated). Header rides the
@@ -597,6 +624,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   PURCHASE_ORDER,
   FIELD_TICKET,
   PROJECT,
+  LABOR_RATE_CARD,
 ];
 
 export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = Object.fromEntries(

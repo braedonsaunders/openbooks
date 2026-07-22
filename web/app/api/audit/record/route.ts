@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   const table = request.nextUrl.searchParams.get('table')
   const recordId = request.nextUrl.searchParams.get('id')
-  if ((table !== 'documents' && table !== 'parties') || !recordId || !isUuid(recordId)) {
+  if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions') || !recordId || !isUuid(recordId)) {
     return NextResponse.json({ error: 'invalid record' }, { status: 400 })
   }
 
@@ -28,12 +28,15 @@ export async function GET(request: NextRequest) {
     ? await db.execute(sql`
         select org_id, kind, created_at, created_by, updated_at, updated_by
           from documents where id = ${recordId} and org_id = ${authz.user.orgId}`) as any
-    : await db.execute(sql`
+    : table === 'parties' ? await db.execute(sql`
         select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by
           from parties where id = ${recordId} and org_id = ${authz.user.orgId}`) as any
+    : await db.execute(sql`
+        select org_id, 'labor_rate_card' as kind, created_at, created_by, updated_at, updated_by
+          from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`) as any
   const metadata = record.rows[0]
   if (!metadata) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const permission = table === 'parties' ? 'parties.read' : documentReadPermission(String(metadata.kind))
+  const permission = table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
   if (!can(authz, permission)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const q = request.nextUrl.searchParams.get('q')?.trim().slice(0, 120) ?? ''
