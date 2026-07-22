@@ -16,6 +16,7 @@ import { apps } from './articles/apps'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
 import { netSuiteBridge } from './articles/netsuite-bridge'
 import { auditLog } from './articles/audit-log'
+import { recordCustomization } from './articles/record-customization'
 import { quickStart, navigationAndRecords, glossary } from './articles/getting-started'
 import {
   accountingModel,
@@ -158,6 +159,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'data-imports': 'administration-data',
   'audit-log': 'administration-data',
   'file-cabinet': 'administration-data',
+  'record-customization': 'administration-organization',
 }
 
 const RAW_DOC_ARTICLES: DocArticle[] = [
@@ -188,6 +190,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   companySettings,
   taxConfiguration,
   rolesAndPermissions,
+  recordCustomization,
   dataImports,
   auditLog,
   fileCabinet,

@@ -16,6 +16,8 @@
     "ar": "Accounts Receivable",
     "ar-invoices": "Invoices",
     "receipts": "Customer Payments",
+    "collections": "Collections",
+    "construction-billing": "Construction Billing",
     "customers": "Customers",
     "vendors": "Vendors",
     "employees": "Employees",

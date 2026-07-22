@@ -16,6 +16,9 @@
     "quote": "Estimate",
     "sales_order": "Sales order",
     "purchase_order": "Purchase order",
+    "customer": "Customer",
+    "vendor": "Vendor",
+    "employee": "Employee",
     "project": "Project",
     "field_ticket": "Field ticket"
   },
@@ -36,6 +39,7 @@
   "designer": {
     "title": "Forms & Views",
     "description": "Customize how each transaction form and record list looks for this organization and for yourself.",
+    "documentation": "Documentation",
     "allRecordTypes": "All record types",
     "searchPlaceholder": "Search forms and views…",
     "tabs": {

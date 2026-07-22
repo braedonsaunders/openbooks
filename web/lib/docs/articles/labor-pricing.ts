@@ -93,7 +93,20 @@ avoids adding a database column for each future commercial condition.
 
 ## Search and history
 
-The card list supports URL-backed search and pagination. The drawer’s **Audit**
+The list opens to **Active now**, meaning cards whose active effective period
+includes today. Change the period filter to **Scheduled**, **Expired**, or
+**All time frames**. The dimension filter narrows cards to **Department**,
+**Subsidiary**, **Location**, **Class**, **Trade**, **Job title**, flexible
+**Other**, or the unscoped **Organization default**. Search, filters, and
+pagination are URL-backed.
+
+When Projects is enabled, each customer record can show its effective-dated
+**Labor Pricing** assignments. Users with project-management access can add,
+edit, deactivate, and remove assignments there. Users with setup access can
+open the linked rate card without leaving the customer drawer context. The
+customer form designer controls where this related list appears.
+
+The drawer’s **Audit**
 tab shows in-place updates, and **Attachments** stores customer schedules and
 supporting rate sheets against the card. Imported source identifiers remain in
 the migration provenance tables; day-to-day users see resolved names.

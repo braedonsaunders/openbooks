@@ -16,6 +16,9 @@
     "quote": "Presupuesto",
     "sales_order": "Orden de venta",
     "purchase_order": "Orden de compra",
+    "customer": "Cliente",
+    "vendor": "Proveedor",
+    "employee": "Empleado",
     "project": "Proyecto",
     "field_ticket": "Parte de obra"
   },
@@ -36,6 +39,7 @@
   "designer": {
     "title": "Formularios y vistas",
     "description": "Personaliza el aspecto de cada formulario de transacción y de cada lista de registros para esta organización y para ti.",
+    "documentation": "Documentación",
     "allRecordTypes": "Todos los tipos de registro",
     "searchPlaceholder": "Buscar formularios y vistas…",
     "tabs": {

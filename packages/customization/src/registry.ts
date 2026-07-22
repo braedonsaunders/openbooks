@@ -461,6 +461,97 @@ const QUOTE = orderRecordType("quote", "common.labels.customer", "customer");
 const SALES_ORDER = orderRecordType("sales_order", "common.labels.customer", "customer");
 const PURCHASE_ORDER = orderRecordType("purchase_order", "common.labels.vendor", "vendor");
 
+/** Party-role records share one native parties row, but each role owns a
+ * distinct customizable form so customer, vendor, and employee teams can
+ * arrange the fields they actually use without exposing the internal
+ * multi-role model. Related lists remain standard drawer tabs. */
+const PARTY_IDENTITY_FIELDS: RecordTypeMeta["headerFields"] = [
+  { key: "kind", labelKey: "parties.drawer.kind", level: "header", kind: "select" },
+  { key: "display_name", labelKey: "parties.drawer.displayName", level: "header", kind: "text", required: true, locked: true },
+  { key: "short_code", labelKey: "parties.drawer.shortCode", level: "header", kind: "text" },
+  { key: "legal_name", labelKey: "parties.drawer.legalName", level: "header", kind: "text" },
+  { key: "email", labelKey: "common.labels.email", level: "header", kind: "text" },
+  { key: "phone", labelKey: "parties.drawer.phone", level: "header", kind: "text" },
+  { key: "website", labelKey: "parties.drawer.website", level: "header", kind: "text" },
+  { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref" },
+  { key: "additional_subsidiaries", labelKey: "parties.drawer.additionalSubsidiaries", level: "header", kind: "multi_select" },
+];
+
+const PARTY_LIST_COLUMNS: RecordTypeMeta["listColumns"] = [
+  { key: "display_name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+  { key: "short_code", labelKey: "parties.list.shortCode", kind: "text", sortable: true, sortKey: "code" },
+  { key: "email", labelKey: "common.labels.email", kind: "text" },
+  { key: "phone", labelKey: "parties.drawer.phone", kind: "text" },
+  { key: "status", labelKey: "common.labels.status", kind: "status" },
+];
+
+const CUSTOMER: RecordTypeMeta = {
+  key: "customer",
+  labelKey: "customization.recordTypes.customer",
+  category: "entity",
+  supportsForms: true,
+  customFieldTable: "parties",
+  customFieldLineTable: null,
+  headerFields: [
+    ...PARTY_IDENTITY_FIELDS,
+    { key: "payment_terms_id", labelKey: "parties.drawer.paymentTerms", level: "header", kind: "entity_ref" },
+    { key: "credit_limit", labelKey: "parties.drawer.creditLimit", level: "header", kind: "currency" },
+    { key: "currency", labelKey: "common.labels.currency", level: "header", kind: "select" },
+    { key: "ar_account_id", labelKey: "parties.drawer.receivableAccount", level: "header", kind: "entity_ref" },
+    { key: "sales_rep_id", labelKey: "parties.drawer.salesRepresentative", level: "header", kind: "entity_ref" },
+    { key: "tax_code_id", labelKey: "parties.drawer.taxCode", level: "header", kind: "entity_ref" },
+    { key: "invoicing_preference", labelKey: "projects.invoicingPref.heading", level: "header", kind: "entity_ref" },
+    { key: "labor_pricing", labelKey: "parties.rateBookAssignments.title", level: "header", kind: "entity_ref" },
+  ],
+  lineFields: [],
+  listColumns: PARTY_LIST_COLUMNS,
+  listFilters: [],
+};
+
+const VENDOR: RecordTypeMeta = {
+  key: "vendor",
+  labelKey: "customization.recordTypes.vendor",
+  category: "entity",
+  supportsForms: true,
+  customFieldTable: "parties",
+  customFieldLineTable: null,
+  headerFields: [
+    ...PARTY_IDENTITY_FIELDS,
+    { key: "payment_method", labelKey: "parties.drawer.paymentMethod", level: "header", kind: "select" },
+    { key: "eft_notification_email", labelKey: "parties.drawer.eftNotificationEmail", level: "header", kind: "text" },
+    { key: "payment_terms_id", labelKey: "parties.drawer.paymentTerms", level: "header", kind: "entity_ref" },
+    { key: "currency", labelKey: "common.labels.currency", level: "header", kind: "select" },
+    { key: "is_1099_or_t4a", labelKey: "parties.drawer.t4aReportable", level: "header", kind: "boolean" },
+    { key: "ap_account_id", labelKey: "parties.drawer.payableAccount", level: "header", kind: "entity_ref" },
+    { key: "default_expense_account_id", labelKey: "parties.drawer.defaultExpenseAccount", level: "header", kind: "entity_ref" },
+    { key: "tax_code_id", labelKey: "parties.drawer.taxCode", level: "header", kind: "entity_ref" },
+  ],
+  lineFields: [],
+  listColumns: PARTY_LIST_COLUMNS,
+  listFilters: [],
+};
+
+const EMPLOYEE: RecordTypeMeta = {
+  key: "employee",
+  labelKey: "customization.recordTypes.employee",
+  category: "entity",
+  supportsForms: true,
+  customFieldTable: "parties",
+  customFieldLineTable: null,
+  headerFields: [
+    ...PARTY_IDENTITY_FIELDS,
+    { key: "employee_number", labelKey: "parties.drawer.employeeNumber", level: "header", kind: "text" },
+    { key: "job_title", labelKey: "parties.drawer.jobTitle", level: "header", kind: "text" },
+    { key: "department_id", labelKey: "common.labels.department", level: "header", kind: "entity_ref" },
+    { key: "trade_id", labelKey: "parties.drawer.trade", level: "header", kind: "entity_ref" },
+    { key: "worker_comp_group_id", labelKey: "parties.drawer.workerCompGroup", level: "header", kind: "entity_ref" },
+    { key: "hired_on", labelKey: "parties.drawer.hiredOn", level: "header", kind: "date" },
+  ],
+  lineFields: [],
+  listColumns: PARTY_LIST_COLUMNS,
+  listFilters: [],
+};
+
 /**
  * Projects — the first `entity` record type: a header-only configurable form
  * (no line grid) whose custom fields live in projects.custom, and whose list
@@ -622,6 +713,9 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   QUOTE,
   SALES_ORDER,
   PURCHASE_ORDER,
+  CUSTOMER,
+  VENDOR,
+  EMPLOYEE,
   FIELD_TICKET,
   PROJECT,
   LABOR_RATE_CARD,

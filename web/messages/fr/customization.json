@@ -16,6 +16,9 @@
     "quote": "Devis",
     "sales_order": "Commande client",
     "purchase_order": "Bon de commande",
+    "customer": "Client",
+    "vendor": "Fournisseur",
+    "employee": "Employé",
     "project": "Projet",
     "field_ticket": "Bon de régie"
   },
@@ -36,6 +39,7 @@
   "designer": {
     "title": "Formulaires & vues",
     "description": "Personnalisez l’apparence de chaque formulaire de transaction et de chaque liste d’enregistrements pour cette organisation et pour vous-même.",
+    "documentation": "Documentation",
     "allRecordTypes": "Tous les types d’enregistrements",
     "searchPlaceholder": "Rechercher des formulaires et des vues…",
     "tabs": {

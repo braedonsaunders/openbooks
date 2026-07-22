@@ -16,6 +16,8 @@
     "ar": "Comptes clients",
     "ar-invoices": "Factures clients",
     "receipts": "Paiements clients",
+    "collections": "Recouvrement",
+    "construction-billing": "Facturation de construction",
     "customers": "Clients",
     "vendors": "Fournisseurs",
     "employees": "Employés",

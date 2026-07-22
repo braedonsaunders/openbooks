@@ -28,6 +28,11 @@ interface DrawerPayload {
     isElimination: boolean
     depth: number
   }>
+  layout: Parameters<typeof PartyDrawer>[0]['layout']
+  forms: Parameters<typeof PartyDrawer>[0]['forms']
+  currentFormId: string | null
+  recordType: 'customer' | 'vendor' | 'employee'
+  canCustomize: boolean
 }
 
 function isRole(value: string | null): value is RelatedPartyRole {
@@ -36,7 +41,7 @@ function isRole(value: string | null): value is RelatedPartyRole {
 
 function isPartyTab(value: string | null): value is PartyTab {
   return value === 'overview' || value === 'transactions' || value === 'activities' || value === 'contacts'
-    || value === 'addresses' || value === 'accounting' || value === 'wages' || value === 'audit'
+    || value === 'addresses' || value === 'accounting' || value === 'wages'
 }
 
 /** Shell-level related-party overlay. Its close URL is the exact page beneath it. */
@@ -58,6 +63,7 @@ export function GlobalPartyDrawerHost({
   const requestedRole = searchParams.get('relatedPartyRole')
   const role = isRole(requestedRole) ? requestedRole : undefined
   const requestedTab = searchParams.get('relatedPartyTab')
+  const partyForm = searchParams.get('partyForm')
   const transactionId = searchParams.get('partyTxn')
   const transactionKind = searchParams.get('partyTxnKind')
   const initialTab = isPartyTab(requestedTab) ? requestedTab : 'overview'
@@ -74,6 +80,7 @@ export function GlobalPartyDrawerHost({
     params.delete('partyTxn')
     params.delete('partyTxnKind')
     params.delete('drawerReturn')
+    params.delete('partyForm')
     const query = params.toString()
     return query ? `${pathname}?${query}` : pathname
   }, [pathname, queryString])
@@ -87,7 +94,10 @@ export function GlobalPartyDrawerHost({
     const controller = new AbortController()
     setData(null)
     setLoadedId(null)
-    fetch(`/api/parties/${encodeURIComponent(partyId)}/drawer`, { signal: controller.signal })
+    const params = new URLSearchParams()
+    if (role) params.set('role', role)
+    if (partyForm) params.set('form', partyForm)
+    fetch(`/api/parties/${encodeURIComponent(partyId)}/drawer?${params}`, { signal: controller.signal })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : t('loadFailed'))
@@ -103,7 +113,7 @@ export function GlobalPartyDrawerHost({
         router.replace(closeHref as never, { scroll: false })
       })
     return () => controller.abort()
-  }, [closeHref, partyId, router, t])
+  }, [closeHref, partyForm, partyId, role, router, t])
 
   const transactionCloseHref = useMemo(() => {
     const params = new URLSearchParams(queryString)
@@ -170,6 +180,11 @@ export function GlobalPartyDrawerHost({
         role={role}
         initialTab={initialTab}
         basePath={closeHref}
+        layout={data.layout}
+        forms={data.forms}
+        currentFormId={data.currentFormId}
+        recordType={data.recordType}
+        canCustomize={data.canCustomize}
       />
       {transactionData && loadedTransaction === transactionSelection ? (
         <RelatedTransactionDrawerClient data={transactionData} />

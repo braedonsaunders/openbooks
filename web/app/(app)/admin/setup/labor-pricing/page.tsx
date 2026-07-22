@@ -41,6 +41,23 @@ export default async function LaborPricingPage({
   const cardParam = pickString(sp.card);
   const selectedId =
     cardParam && cardParam !== "new" && isUuid(cardParam) ? cardParam : null;
+  const timeParam = pickString(sp.time);
+  const timeFilter = timeParam === "scheduled" || timeParam === "expired" || timeParam === "all" ? timeParam : "active";
+  const dimensionParam = pickString(sp.dimension);
+  const dimensionTypes = ["department", "subsidiary", "location", "class", "trade", "job_title", "other"] as const;
+  const dimensionFilter = dimensionParam === "unscoped" || (dimensionTypes as readonly string[]).includes(dimensionParam ?? "") ? dimensionParam! : "all";
+  const effectiveFilter = timeFilter === "active"
+    ? sql`and v.status = 'active' and v.effective_from <= current_date and (v.effective_to is null or v.effective_to >= current_date)`
+    : timeFilter === "scheduled"
+      ? sql`and v.status <> 'retired' and v.effective_from > current_date`
+      : timeFilter === "expired"
+        ? sql`and (v.status = 'retired' or v.effective_to < current_date)`
+        : sql``;
+  const scopeFilter = dimensionFilter === "all"
+    ? sql``
+    : dimensionFilter === "unscoped"
+      ? sql`and not exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id)`
+      : sql`and exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.scope_type = ${dimensionFilter})`;
 
   const [
     cardsRes,
@@ -70,6 +87,7 @@ export default async function LaborPricingPage({
         join item_rate_books b on b.id=v.rate_book_id
         join labor_rate_version_policies p on p.version_id=v.id
        where v.org_id=${orgId}
+         ${effectiveFilter} ${scopeFilter}
          ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}
        order by v.effective_from desc,b.name
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
@@ -78,6 +96,7 @@ export default async function LaborPricingPage({
       join item_rate_books b on b.id=v.rate_book_id
       join labor_rate_version_policies p on p.version_id=v.id
       where v.org_id=${orgId}
+        ${effectiveFilter} ${scopeFilter}
         ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}`),
     selectedId
       ? db.execute(sql`
@@ -230,6 +249,8 @@ export default async function LaborPricingPage({
         page={list.page}
         perPage={list.perPage}
         currentParams={sp}
+        timeFilter={timeFilter}
+        dimensionFilter={dimensionFilter}
         items={
           (
             itemsRes as unknown as {

@@ -5,6 +5,16 @@
   "description": "Precios de venta multidivisa para mano de obra y proyectos: tarifas, horas extra, márgenes, alcance, condiciones y asignaciones.",
   "docs": "Documentación",
   "search": "Buscar tarjetas de tarifas…",
+  "filters": {
+    "time": "Período de vigencia",
+    "active": "Activas ahora",
+    "scheduled": "Programadas",
+    "expired": "Vencidas",
+    "allTime": "Todos los períodos",
+    "dimension": "Dimensión",
+    "allDimensions": "Todas las dimensiones",
+    "unscoped": "Valor predeterminado de la organización"
+  },
   "add": "Nueva tarjeta",
   "card": "Tarjeta de tarifas",
   "name": "Nombre",

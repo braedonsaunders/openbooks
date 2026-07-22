@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 
-interface RateBook { id: string; name: string; currency: string; is_default: boolean }
+interface RateBook { id: string; name: string; currency: string; is_default: boolean; latest_version_id: string | null }
 interface Assignment {
   id: string
   rate_book_id: string
@@ -15,9 +17,9 @@ interface Assignment {
   effective_to: string | null
   date_basis: 'usage_date'|'project_start'
   is_active: boolean
+  rate_version_id: string | null
 }
 
-const ENTITY = 'item-rate-book-assignments'
 const field = 'space-y-1.5'
 
 /**
@@ -36,30 +38,49 @@ export function RateBookAssignmentSection({
 }) {
   const t = useTranslations('parties.rateBookAssignments')
   const common = useTranslations('common')
-  const [visible, setVisible] = useState(true)
+  const pathname = usePathname() ?? '/parties'
+  const searchParams = useSearchParams()
+  const [visible, setVisible] = useState(false)
   const [rateBooks, setRateBooks] = useState<RateBook[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [busy, setBusy] = useState(false)
+  const [canManage, setCanManage] = useState(false)
+  const [canOpenPricing, setCanOpenPricing] = useState(false)
+  const [q, setQ] = useState('')
+  const [status, setStatus] = useState<'active' | 'inactive' | 'all'>('active')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [perPage, setPerPage] = useState(5)
   const [form, setForm] = useState<{ id: string | null; rateBookId: string; effectiveFrom: string; effectiveTo: string; dateBasis:'usage_date'|'project_start'; isActive: boolean } | null>(null)
 
   const scopeParam = scope === 'customer' ? `customerId=${scopeId}` : `projectId=${scopeId}`
   const scopeBody = scope === 'customer' ? { customerId: scopeId } : { projectId: scopeId }
 
   async function load() {
-    const res = await fetch(`/api/rate-book-assignments?${scopeParam}`)
-    if (res.status === 403) {
+    const params = new URLSearchParams(scopeParam)
+    if (q.trim()) params.set('q', q.trim())
+    params.set('status', status)
+    params.set('page', String(page))
+    const res = await fetch(`/api/rate-book-assignments?${params}`)
+    if (res.status === 403 || res.status === 404) {
       setVisible(false)
       return
     }
     if (!res.ok) return
-    const data = (await res.json()) as { rateBooks: RateBook[]; assignments: Assignment[] }
+    const data = (await res.json()) as { rateBooks: RateBook[]; assignments: Assignment[]; total: number; page: number; perPage: number; canManage: boolean; canOpenPricing: boolean }
     setRateBooks(data.rateBooks)
     setAssignments(data.assignments)
+    setTotal(data.total)
+    setPerPage(data.perPage)
+    setCanManage(data.canManage)
+    setCanOpenPricing(data.canOpenPricing)
+    setVisible(true)
   }
   useEffect(() => {
-    void load()
+    const timer = window.setTimeout(() => void load(), q ? 200 : 0)
+    return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeId])
+  }, [scopeId, q, status, page])
 
   function startNew() {
     setForm({
@@ -98,7 +119,7 @@ export function RateBookAssignmentSection({
       isActive: form.isActive,
     }
     if (form.id) body.id = form.id
-    const res = await fetch(`/api/admin/setup/${ENTITY}`, {
+    const res = await fetch('/api/rate-book-assignments', {
       method: form.id ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -106,7 +127,7 @@ export function RateBookAssignmentSection({
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) {
-      toast.error(typeof data.error === 'string' ? data.error : common('feedback.saveFailed'))
+      toast.error(t(`errors.${typeof data.errorCode === 'string' ? data.errorCode : 'save'}`))
       return
     }
     toast.success(form.id ? common('feedback.saved') : t('created'))
@@ -117,11 +138,11 @@ export function RateBookAssignmentSection({
   async function remove(id: string) {
     if (!confirm(t('confirmDelete'))) return
     setBusy(true)
-    const res = await fetch(`/api/admin/setup/${ENTITY}?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const res = await fetch(`/api/rate-book-assignments?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) {
-      toast.error(typeof data.error === 'string' ? data.error : common('feedback.saveFailed'))
+      toast.error(t(`errors.${typeof data.errorCode === 'string' ? data.errorCode : 'save'}`))
       return
     }
     toast.success(common('feedback.deleted'))
@@ -129,6 +150,12 @@ export function RateBookAssignmentSection({
   }
 
   if (!visible) return null
+  const pages = Math.max(1, Math.ceil(total / perPage))
+  const pricingHref = (versionId: string) => {
+    const returnQuery = searchParams.toString()
+    const returnHref = returnQuery ? `${pathname}?${returnQuery}` : pathname
+    return `/admin/setup/labor-pricing?card=${versionId}&drawerReturn=${encodeURIComponent(returnHref)}`
+  }
 
   return (
     <section className="mt-4 space-y-3">
@@ -137,7 +164,7 @@ export function RateBookAssignmentSection({
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h4>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t(`hint.${scope}`)}</p>
         </div>
-        {!form ? (
+        {!form && canManage ? (
           <Button variant="outline" size="sm" onClick={startNew} disabled={rateBooks.length === 0}>
             {t('new')}
           </Button>
@@ -147,6 +174,20 @@ export function RateBookAssignmentSection({
       {rateBooks.length === 0 ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('noBooks')}</p>
       ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Input
+          value={q}
+          onChange={(event) => { setQ(event.target.value); setPage(1) }}
+          placeholder={t('search')}
+          className="min-w-56 flex-1"
+        />
+        <Select value={status} onChange={(event) => { setStatus(event.target.value as 'active' | 'inactive' | 'all'); setPage(1) }} className="w-auto min-w-40" aria-label={t('statusFilter')}>
+          <option value="active">{t('status.active')}</option>
+          <option value="inactive">{t('status.inactive')}</option>
+          <option value="all">{t('status.all')}</option>
+        </Select>
+      </div>
 
       {form ? (
         <Card>
@@ -213,12 +254,9 @@ export function RateBookAssignmentSection({
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <button type="button" onClick={() => startEdit(a)} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
-                      {common('actions.edit')}
-                    </button>
-                    <button type="button" onClick={() => remove(a.id)} disabled={busy} className="ml-3 text-xs font-medium text-red-600 hover:underline dark:text-red-400">
-                      {common('actions.delete')}
-                    </button>
+                    {a.rate_version_id && canOpenPricing ? <Link href={pricingHref(a.rate_version_id) as never} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('openPricing')}</Link> : null}
+                    {canManage ? <button type="button" onClick={() => startEdit(a)} className="ml-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{common('actions.edit')}</button> : null}
+                    {canManage ? <button type="button" onClick={() => remove(a.id)} disabled={busy} className="ml-3 text-xs font-medium text-red-600 hover:underline dark:text-red-400">{common('actions.delete')}</button> : null}
                   </td>
                 </tr>
               ))}
@@ -227,6 +265,16 @@ export function RateBookAssignmentSection({
         </div>
       ) : !form ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('empty')}</p>
+      ) : null}
+      {total > 0 ? (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-slate-500 dark:text-slate-400">{t('count', { count: total })}</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1 || busy} onClick={() => setPage((value) => value - 1)}>{common('actions.previous')}</Button>
+            <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
+            <Button variant="outline" size="sm" disabled={page >= pages || busy} onClick={() => setPage((value) => value + 1)}>{common('actions.next')}</Button>
+          </div>
+        </div>
       ) : null}
     </section>
   )

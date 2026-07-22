@@ -48,6 +48,30 @@ test('the default project form composes complete four-column rows', () => {
   assert.deepEqual(lintFormLayout(layout), [])
 })
 
+test('party role forms expose the complete native record without leaking related-list governance', () => {
+  const customer = defaultFormLayout('customer')
+  const vendor = defaultFormLayout('vendor')
+  const employee = defaultFormLayout('employee')
+
+  assert.deepEqual(lintFormLayout(customer), [])
+  assert.deepEqual(lintFormLayout(vendor), [])
+  assert.deepEqual(lintFormLayout(employee), [])
+
+  const customerFields = customer.header.groups.flatMap((group) => group.fields)
+  assert.equal(customerFields.find((field) => field.key === 'display_name')?.visible, true)
+  assert.equal(customerFields.find((field) => field.key === 'labor_pricing')?.colSpan, 4)
+  assert.equal(customerFields.find((field) => field.key === 'invoicing_preference')?.colSpan, 4)
+
+  const vendorKeys = vendor.header.groups.flatMap((group) => group.fields.map((field) => field.key))
+  assert.equal(vendorKeys.includes('payment_method'), true)
+  assert.equal(vendorKeys.includes('ap_account_id'), true)
+  assert.equal(vendorKeys.includes('bank_account'), false)
+
+  const employeeKeys = employee.header.groups.flatMap((group) => group.fields.map((field) => field.key))
+  assert.equal(employeeKeys.includes('department_id'), true)
+  assert.equal(employeeKeys.includes('trade_id'), true)
+})
+
 test('saved forms gain newly registered built-in fields in registry order', () => {
   const legacy = defaultFormLayout('project')
   legacy.header.groups[0]!.fields = legacy.header.groups[0]!.fields.filter((field) => field.key !== 'project_type_id')

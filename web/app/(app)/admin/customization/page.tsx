@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { BookOpen } from 'lucide-react'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
@@ -126,7 +127,14 @@ export default async function CustomizationPage({
             back={{ href: '/admin', label: tHub('title') }}
             title={t('designer.title')}
             description={t('designer.description')}
-            actions={recordType ? (tab === 'forms' ? <NewFormButton recordType={recordType} /> : <NewViewButton recordType={recordType} />) : undefined}
+            actions={(
+              <>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/docs/record-customization"><BookOpen size={14} aria-hidden />{t('designer.documentation')}</Link>
+                </Button>
+                {recordType ? (tab === 'forms' ? <NewFormButton recordType={recordType} /> : <NewViewButton recordType={recordType} />) : null}
+              </>
+            )}
           />
           <div className="flex flex-wrap items-center gap-1.5">
             <Link
