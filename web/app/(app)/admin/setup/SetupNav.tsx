@@ -75,12 +75,16 @@ export function SetupNav({
   canManageSetup,
   hiddenEntityKeys = [],
   projectsEnabled = true,
+  currencyEnabled = true,
+  bankFeedsEnabled = false,
 }: {
   canExport: boolean
   canImport: boolean
   canManageSetup: boolean
   hiddenEntityKeys?: string[]
   projectsEnabled?: boolean
+  currencyEnabled?: boolean
+  bankFeedsEnabled?: boolean
 }) {
   const t = useTranslations('admin.setup')
   const tClose = useTranslations('close.setup')
@@ -128,13 +132,17 @@ export function SetupNav({
                     label: t(`entities.${e.key}.title`),
                     iconKey: e.iconKey,
                   })),
-                  { href: '/admin/setup/sftp', label: t('entities.sftp.title'), iconKey: 'server' },
+                  ...(bankFeedsEnabled
+                    ? [{ href: '/admin/setup/bank-feeds', label: t('bankFeeds.navTitle'), iconKey: 'landmark' }]
+                    : []),
                   { href: '/admin/setup/payment-operations', label: t('entities.payment-operations.title'), iconKey: 'payments' },
                   { href: '/admin/setup/crm', label: tCrm('setup.title'), iconKey: 'users' },
                 ]
               : group.key === 'currency'
               ? [
-                  { href: '/admin/setup/fx-provider', label: t('fxProvider.title'), iconKey: 'coins' },
+                  ...(currencyEnabled
+                    ? [{ href: '/admin/setup/fx-provider', label: t('fxProvider.title'), iconKey: 'coins' }]
+                    : []),
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),
@@ -159,6 +167,15 @@ export function SetupNav({
                     })),
                 ]
                 : []
+              : group.key === 'taxes'
+              ? [
+                  { href: '/admin/setup/tax-setup', label: t('taxSetup.navTitle'), iconKey: 'landmark' },
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
+                ]
               : (byGroup.get(group.key) ?? []).map((e) => ({
                   href: `/admin/setup/${e.key}`,
                   label: t(`entities.${e.key}.title`),

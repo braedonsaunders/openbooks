@@ -562,7 +562,7 @@
     "organization": {
       "title": "Organization",
       "description": "How this company is identified across the app.",
-      "perEntityNote": "Legal name, country, and functional currency belong to each legal entity. With multiple subsidiaries, set them per entity on the Subsidiaries tab — the values below apply to the top (consolidation) entity.",
+      "perEntityNote": "This company is your top-level entity — its legal name, country, and currency live here. Add subsidiaries beneath it, each with its own.",
       "subsidiariesLink": "Open Subsidiaries",
       "displayName": "Display name",
       "displayNamePlaceholder": "Acme Manufacturing",
@@ -1053,6 +1053,36 @@
       "confirmReset": "Reset {name} to the maintained library defaults? This replaces its configured return boxes.",
       "usNotice": "The United States has no federal sales-tax return. This workpaper must be customized for every state and local filing jurisdiction."
     },
+    "taxSetup": {
+      "navTitle": "Tax Setup",
+      "title": "Tax Setup",
+      "subtitle": "Pick the countries you do business in — and, where supported, their states and provinces. We create every jurisdiction, tax code, return form and nexus registration automatically.",
+      "searchPlaceholder": "Search countries…",
+      "provisioning": "Setting up…",
+      "provisionSelected": "{count, plural, =0 {Set up} one {Set up # jurisdiction} other {Set up # jurisdictions}}",
+      "provisionSuccess": "Created {jurisdictions} jurisdictions, {codes} tax codes, {groups} tax groups and {nexus} nexus registrations",
+      "provisionHint": "Selecting a country provisions its jurisdiction, standard tax code and rate, return form, and nexus registration. Expand a country to choose states or provinces.",
+      "installed": "Set up",
+      "statesAvailable": "{count, plural, one {# state/province available} other {# states/provinces available}}",
+      "statesSelected": "{count, plural, one {# state selected} other {# states selected}}",
+      "toggleStates": "Show states for {country}",
+      "step1": {
+        "title": "Choose where you do business",
+        "description": "Pick countries (and states/provinces). Each selection creates its jurisdiction, tax code, return form and nexus."
+      },
+      "step2": {
+        "title": "Review jurisdictions",
+        "description": "The countries, states and localities your packs created. Add or nest more by hand.",
+        "stat": "{count, plural, =0 {No jurisdictions yet} one {# jurisdiction} other {# jurisdictions}}",
+        "cta": "Open jurisdictions"
+      },
+      "step3": {
+        "title": "Declare your nexus",
+        "description": "Record where the business is registered to collect and remit, its filing frequency, and the return it files.",
+        "stat": "{count, plural, =0 {No registrations yet} one {# registration} other {# registrations}}",
+        "cta": "Set up nexus"
+      }
+    },
     "taxOfficial": {
       "title": "Official filing form",
       "description": "Upload an official fillable PDF only when the jurisdiction accepts or requires that form. Map its fields under Tax Return Boxes.",
@@ -1394,6 +1424,16 @@
         "title": "Company & Accounting",
         "description": "Organization identity, base currency, fiscal year, and control accounts."
       },
+      "tax-jurisdictions": {
+        "title": "Tax Jurisdictions",
+        "singularTitle": "Tax Jurisdiction",
+        "description": "The countries, states and localities that levy indirect tax — the spine of your nexus."
+      },
+      "tax-registrations": {
+        "title": "Tax Nexus",
+        "singularTitle": "Tax Registration",
+        "description": "Where the business is registered to collect and remit, its filing frequency, and the return it files."
+      },
       "tax-codes": {
         "title": "Tax Codes",
         "singularTitle": "Tax Code",
@@ -1645,6 +1685,12 @@
       "code": "Code",
       "name": "Name",
       "appliesTo": "Applies to",
+      "jurisdictionId": "Jurisdiction",
+      "level": "Level",
+      "taxType": "Tax type",
+      "filingFrequency": "Filing frequency",
+      "registrationNumber": "Registration number",
+      "returnFormCode": "Return form",
       "recoverablePercent": "Recoverable %",
       "isActive": "Active",
       "isPrimary": "Primary book",
@@ -1776,7 +1822,35 @@
         "purchases": "Purchases",
         "both": "Both"
       },
-      "rateDateBasis": { "usageDate": "Usage date", "projectStart": "Project start date" },
+      "jurisdictionLevel": {
+        "country": "Country",
+        "state": "State / Province",
+        "county": "County",
+        "city": "City",
+        "special": "Special district",
+        "federal": "Federal"
+      },
+      "taxType": {
+        "vat": "VAT",
+        "gst": "GST",
+        "hst": "HST",
+        "pst": "PST",
+        "qst": "QST",
+        "salesUse": "Sales & use tax",
+        "consumption": "Consumption tax",
+        "other": "Other"
+      },
+      "filingFrequency": {
+        "monthly": "Monthly",
+        "bimonthly": "Bi-monthly",
+        "quarterly": "Quarterly",
+        "semiannual": "Semi-annual",
+        "annual": "Annual"
+      },
+      "rateDateBasis": {
+        "usageDate": "Usage date",
+        "projectStart": "Project start date"
+      },
       "basis": {
         "collected": "Tax collected (output)",
         "paid": "Tax paid / ITCs (input)",
@@ -2034,14 +2108,58 @@
         "addAdjustment": "Add adjustment",
         "saveRevision": "Save revision",
         "revisionSaved": "Rate-card revision saved",
-        "categories": { "markup": "Markup", "travel": "Travel", "allowance": "Allowance", "minimum": "Minimum", "surcharge": "Surcharge", "other": "Other" },
-        "calculations": { "percent": "Percentage", "fixed": "Fixed amount", "per_hour": "Per hour", "per_day": "Per day", "distance": "Distance", "time": "Time", "text": "Informational text" },
-        "presentations": { "included": "Included in rate", "separate": "Separate line", "informational": "Informational" },
-        "errors": { "notFound": "Rate card not found.", "effectiveDate": "Choose an effective date.", "adjustments": "Adjustment data is invalid.", "item": "Choose a valid active item.", "name": "Every adjustment needs a name and code.", "duplicateCode": "Adjustment codes must be unique for each item.", "category": "Choose a valid category.", "calculation": "Choose a valid calculation.", "presentation": "Choose a valid invoice presentation.", "value": "Enter a non-negative adjustment value.", "latestOnly": "Open the latest version before creating a revision.", "afterLatest": "The new effective date must be after the latest version.", "save": "Could not save the rate-card revision." },
+        "categories": {
+          "markup": "Markup",
+          "travel": "Travel",
+          "allowance": "Allowance",
+          "minimum": "Minimum",
+          "surcharge": "Surcharge",
+          "other": "Other"
+        },
+        "calculations": {
+          "percent": "Percentage",
+          "fixed": "Fixed amount",
+          "per_hour": "Per hour",
+          "per_day": "Per day",
+          "distance": "Distance",
+          "time": "Time",
+          "text": "Informational text"
+        },
+        "presentations": {
+          "included": "Included in rate",
+          "separate": "Separate line",
+          "informational": "Informational"
+        },
+        "errors": {
+          "notFound": "Rate card not found.",
+          "effectiveDate": "Choose an effective date.",
+          "adjustments": "Adjustment data is invalid.",
+          "item": "Choose a valid active item.",
+          "name": "Every adjustment needs a name and code.",
+          "duplicateCode": "Adjustment codes must be unique for each item.",
+          "category": "Choose a valid category.",
+          "calculation": "Choose a valid calculation.",
+          "presentation": "Choose a valid invoice presentation.",
+          "value": "Enter a non-negative adjustment value.",
+          "latestOnly": "Open the latest version before creating a revision.",
+          "afterLatest": "The new effective date must be after the latest version.",
+          "save": "Could not save the rate-card revision."
+        },
         "terms": "Negotiated terms",
         "none": "None",
-        "derivations": { "explicit": "Explicit rates", "time_type_multipliers": "Time-type multipliers" },
-        "scopeTypes": { "department": "Department", "subsidiary": "Subsidiary", "location": "Location", "class": "Class", "trade": "Trade", "job_title": "Job title", "other": "Other" }
+        "derivations": {
+          "explicit": "Explicit rates",
+          "time_type_multipliers": "Time-type multipliers"
+        },
+        "scopeTypes": {
+          "department": "Department",
+          "subsidiary": "Subsidiary",
+          "location": "Location",
+          "class": "Class",
+          "trade": "Trade",
+          "job_title": "Job title",
+          "other": "Other"
+        }
       },
       "docs": "Documentation",
       "checklist": {
@@ -2150,9 +2268,21 @@
       "enabled": "{name} enabled",
       "disabled": "{name} disabled",
       "countOn": "{n} of {total} on",
-      "lockedMultiSubsidiary": "In use — archive the extra subsidiaries before turning this off.",
+      "blockedReason": "Can't turn off — {items}.",
+      "affectsNote": "Turning off hides {items} — the data is kept and returns if you re-enable.",
+      "confirmDisable": "Turn off {name}?\n\nThis hides {items}. The data is kept and comes back if you re-enable.",
+      "impacts": {
+        "subsidiaryTxns": "{count, plural, one {# subsidiary has} other {# subsidiaries have}} posted transactions",
+        "foreignTxns": "{count, plural, one {# foreign-currency posting} other {# foreign-currency postings}}",
+        "reconciliations": "{count, plural, one {# reconciliation} other {# reconciliations}}",
+        "bankStatements": "{count, plural, one {# bank statement} other {# bank statements}}",
+        "assets": "{count, plural, one {# fixed asset} other {# fixed assets}}",
+        "inventoryMovements": "{count, plural, one {# inventory movement} other {# inventory movements}}",
+        "projects": "{count, plural, one {# project} other {# projects}}",
+        "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}"
+      },
       "errors": {
-        "hasSubsidiaries": "Can't turn off multi-subsidiary while more than one subsidiary is active. Archive the extras first."
+        "blocked": "This feature can't be turned off — its data is load-bearing for the ledger."
       },
       "categories": {
         "sales": "Sales & customers",
@@ -2160,6 +2290,9 @@
         "accounting": "Accounting",
         "platform": "Platform"
       }
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
     }
   },
   "flows": {
@@ -2455,6 +2588,10 @@
       "title": "Multi-subsidiary",
       "description": "Run more than one legal entity with its own currency and books, then consolidate. Turns on subsidiaries, intercompany, and consolidated exchange rates."
     },
+    "multiCurrency": {
+      "title": "Multi-currency",
+      "description": "Transact in currencies other than your base currency, with exchange rates, revaluation, and realized/unrealized FX gain and loss. Turns on the exchange-rate feed and rate tables."
+    },
     "banking": {
       "title": "Banking",
       "description": "Bank feeds, statement matching, reconciliation, and rules."
@@ -2478,6 +2615,10 @@
     "apps": {
       "title": "Apps",
       "description": "Installable extensions and the app marketplace."
+    },
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
     }
   }
 }

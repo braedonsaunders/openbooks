@@ -493,5 +493,23 @@
       "servers": "Accesos de socios",
       "schedules": "Programas de importación"
     }
+  },
+  "bankFeeds": {
+    "title": "Bank Feeds",
+    "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",
+    "navTitle": "Bank Feeds",
+    "tabs": {
+      "connections": "Connections",
+      "sftp-endpoint": "SFTP endpoint",
+      "sftp-servers": "Partner logins",
+      "sftp-schedules": "Import schedules"
+    },
+    "operational": {
+      "title": "Bank feed connections",
+      "manage": "Manage feeds",
+      "none": "No live bank feed connections. Configure one in Company Settings → Bank Feeds.",
+      "lastSync": "Last sync",
+      "never": "Never"
+    }
   }
 }
