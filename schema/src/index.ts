@@ -15,6 +15,7 @@ export * from "./assets";
 export * from "./item-rates";
 export * from "./labor-costing";
 export * from "./banking";
+export * from "./bank-feeds";
 export * from "./payment-operations";
 export * from "./planning";
 export * from "./time";

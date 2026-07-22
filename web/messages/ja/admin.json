@@ -996,11 +996,118 @@
         "scopeSubsidiary": "子会社",
         "currency": "通貨",
         "drawerNewDescription": "従業員範囲に有効日付きの賃金レートを追加します。",
-        "select": { "job_title": "役職を選択", "trade": "職種を選択", "department": "部門を選択", "subsidiary": "子会社を選択" }
+        "select": {
+          "job_title": "役職を選択",
+          "trade": "職種を選択",
+          "department": "部門を選択",
+          "subsidiary": "子会社を選択"
+        }
       },
-      "reconciliation": { "subsidiary": "子会社" },
-      "billing": { "title": "請求用労務レート表", "hint": "顧客・プロジェクト別の有効日付き多通貨労務価格です。品目ごとの通常・残業・倍額レート、汎用調整、契約条件、割当履歴を保持します。", "search": "レート表を検索…", "add": "新しいレート表", "card": "レート表", "currency": "通貨", "period": "有効期間", "items": "品目", "assignments": "割当", "status": "ステータス", "empty": "条件に一致するレート表はありません。", "newTitle": "新しい請求用労務レート表", "newDescription": "まず共有レートブックを作成し、有効日付きの品目レートを追加します。", "createInItemHint": "労務・サービス・設備を同じ価格エンジンで扱うため、作成は共有レートブック画面で行います。条件と割当はここで確認できます。", "openRateBooks": "レートブックを開く", "effectiveFrom": "開始日", "effectiveTo": "終了日", "derivation": "不足階層の処理", "scopes": "ディメンション範囲", "allScopes": "ディメンション制限なし", "itemRates": "品目・時間種別レート", "item": "品目", "regular": "通常", "adjustments": "調整", "appliesTo": "適用対象", "wholeCard": "レート表全体", "revise": "改訂版を作成", "reviseHint": "現在の版を保持し、新しい有効日のコピーを作成します。", "historicalHint": "これは履歴版です。最新版を開いて改訂版を作成してください。", "revisionTitle": "新しいレート表改訂版", "revisionDescription": "基本レート、範囲、条件をコピーします。調整はレート表全体または特定の品目に適用できます。", "revisionEffectiveFrom": "新しい版の開始日", "adjustmentNumber": "調整 {number}", "removeAdjustment": "調整を削除", "adjustmentName": "名前", "adjustmentCode": "コード", "category": "カテゴリ", "calculation": "計算方法", "presentation": "請求書表示", "adjustmentValue": "値", "adjustmentUnit": "単位", "referenceText": "説明または契約参照", "addAdjustment": "調整を追加", "saveRevision": "改訂版を保存", "revisionSaved": "レート表の改訂版を保存しました", "categories": { "markup": "上乗せ", "travel": "出張", "allowance": "手当", "minimum": "最低額", "surcharge": "追加料金", "other": "その他" }, "calculations": { "percent": "割合", "fixed": "固定額", "per_hour": "時間単位", "per_day": "日単位", "distance": "距離", "time": "時間", "text": "案内文" }, "presentations": { "included": "レートに含む", "separate": "別明細", "informational": "参考表示" }, "errors": { "notFound": "レート表が見つかりません。", "effectiveDate": "開始日を選択してください。", "adjustments": "調整データが無効です。", "item": "有効な品目を選択してください。", "name": "各調整に名前とコードが必要です。", "duplicateCode": "品目ごとのコードは一意である必要があります。", "category": "有効なカテゴリを選択してください。", "calculation": "有効な計算方法を選択してください。", "presentation": "有効な表示方法を選択してください。", "value": "0以上の値を入力してください。", "latestOnly": "最新版を開いてください。", "afterLatest": "新しい日付は最新版より後である必要があります。", "save": "レート表の改訂版を保存できませんでした。" }, "terms": "合意条件", "none": "なし", "derivations": { "explicit": "明示レート", "time_type_multipliers": "時間種別の倍率" }, "scopeTypes": { "department": "部門", "subsidiary": "子会社", "location": "ロケーション", "class": "クラス", "trade": "職種", "job_title": "役職", "other": "その他" } },
-      "tabs": { "billing": "請求レート表" }
+      "reconciliation": {
+        "subsidiary": "子会社"
+      },
+      "billing": {
+        "title": "請求用労務レート表",
+        "hint": "顧客・プロジェクト別の有効日付き多通貨労務価格です。品目ごとの通常・残業・倍額レート、汎用調整、契約条件、割当履歴を保持します。",
+        "search": "レート表を検索…",
+        "add": "新しいレート表",
+        "card": "レート表",
+        "currency": "通貨",
+        "period": "有効期間",
+        "items": "品目",
+        "assignments": "割当",
+        "status": "ステータス",
+        "empty": "条件に一致するレート表はありません。",
+        "newTitle": "新しい請求用労務レート表",
+        "newDescription": "まず共有レートブックを作成し、有効日付きの品目レートを追加します。",
+        "createInItemHint": "労務・サービス・設備を同じ価格エンジンで扱うため、作成は共有レートブック画面で行います。条件と割当はここで確認できます。",
+        "openRateBooks": "レートブックを開く",
+        "effectiveFrom": "開始日",
+        "effectiveTo": "終了日",
+        "derivation": "不足階層の処理",
+        "scopes": "ディメンション範囲",
+        "allScopes": "ディメンション制限なし",
+        "itemRates": "品目・時間種別レート",
+        "item": "品目",
+        "regular": "通常",
+        "adjustments": "調整",
+        "appliesTo": "適用対象",
+        "wholeCard": "レート表全体",
+        "revise": "改訂版を作成",
+        "reviseHint": "現在の版を保持し、新しい有効日のコピーを作成します。",
+        "historicalHint": "これは履歴版です。最新版を開いて改訂版を作成してください。",
+        "revisionTitle": "新しいレート表改訂版",
+        "revisionDescription": "基本レート、範囲、条件をコピーします。調整はレート表全体または特定の品目に適用できます。",
+        "revisionEffectiveFrom": "新しい版の開始日",
+        "adjustmentNumber": "調整 {number}",
+        "removeAdjustment": "調整を削除",
+        "adjustmentName": "名前",
+        "adjustmentCode": "コード",
+        "category": "カテゴリ",
+        "calculation": "計算方法",
+        "presentation": "請求書表示",
+        "adjustmentValue": "値",
+        "adjustmentUnit": "単位",
+        "referenceText": "説明または契約参照",
+        "addAdjustment": "調整を追加",
+        "saveRevision": "改訂版を保存",
+        "revisionSaved": "レート表の改訂版を保存しました",
+        "categories": {
+          "markup": "上乗せ",
+          "travel": "出張",
+          "allowance": "手当",
+          "minimum": "最低額",
+          "surcharge": "追加料金",
+          "other": "その他"
+        },
+        "calculations": {
+          "percent": "割合",
+          "fixed": "固定額",
+          "per_hour": "時間単位",
+          "per_day": "日単位",
+          "distance": "距離",
+          "time": "時間",
+          "text": "案内文"
+        },
+        "presentations": {
+          "included": "レートに含む",
+          "separate": "別明細",
+          "informational": "参考表示"
+        },
+        "errors": {
+          "notFound": "レート表が見つかりません。",
+          "effectiveDate": "開始日を選択してください。",
+          "adjustments": "調整データが無効です。",
+          "item": "有効な品目を選択してください。",
+          "name": "各調整に名前とコードが必要です。",
+          "duplicateCode": "品目ごとのコードは一意である必要があります。",
+          "category": "有効なカテゴリを選択してください。",
+          "calculation": "有効な計算方法を選択してください。",
+          "presentation": "有効な表示方法を選択してください。",
+          "value": "0以上の値を入力してください。",
+          "latestOnly": "最新版を開いてください。",
+          "afterLatest": "新しい日付は最新版より後である必要があります。",
+          "save": "レート表の改訂版を保存できませんでした。"
+        },
+        "terms": "合意条件",
+        "none": "なし",
+        "derivations": {
+          "explicit": "明示レート",
+          "time_type_multipliers": "時間種別の倍率"
+        },
+        "scopeTypes": {
+          "department": "部門",
+          "subsidiary": "子会社",
+          "location": "ロケーション",
+          "class": "クラス",
+          "trade": "職種",
+          "job_title": "役職",
+          "other": "その他"
+        }
+      },
+      "tabs": {
+        "billing": "請求レート表"
+      }
     },
     "taxLibrary": {
       "title": "税務申告ライブラリ",
@@ -1622,7 +1729,10 @@
         "purchases": "購買",
         "both": "両方"
       },
-      "rateDateBasis": { "usageDate": "利用日", "projectStart": "プロジェクト開始日" },
+      "rateDateBasis": {
+        "usageDate": "利用日",
+        "projectStart": "プロジェクト開始日"
+      },
       "basis": {
         "collected": "税収受（アウトプット）",
         "paid": "税支払／仕入税額控除（インプット）",
@@ -1711,6 +1821,9 @@
         "transit": "輸送中",
         "quarantine": "検疫"
       }
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
     }
   },
   "flows": {
@@ -1963,6 +2076,12 @@
         "finished": "終了",
         "error": "エラー"
       }
+    }
+  },
+  "features": {
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
     }
   }
 }

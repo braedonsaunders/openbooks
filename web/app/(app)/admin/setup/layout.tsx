@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { can, getAuthz } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { resolvedFeatureState, featureEnabled } from '../../../../lib/features'
+import { SETUP_ENTITIES } from '../../../../lib/setup/registry'
 import { SetupNav } from './SetupNav'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,10 @@ export default async function SetupLayout({ children }: { children: ReactNode })
   const t = await getTranslations('admin')
   const canExport = can(authz, 'data.export')
   const canImport = can(authz, 'data.import')
-  const projectsEnabled = canManageSetup ? await isFeatureEnabled(authz.user.orgId, 'projects') : false
+  const features = canManageSetup ? await resolvedFeatureState(authz.user.orgId) : {}
+  const hiddenEntityKeys = SETUP_ENTITIES.filter(
+    (entity) => entity.featureKey && !featureEnabled(features, entity.featureKey),
+  ).map((entity) => entity.key)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -41,7 +45,10 @@ export default async function SetupLayout({ children }: { children: ReactNode })
             canExport={canExport}
             canImport={canImport}
             canManageSetup={canManageSetup}
-            projectsEnabled={projectsEnabled}
+            hiddenEntityKeys={hiddenEntityKeys}
+            projectsEnabled={featureEnabled(features, 'projects')}
+            currencyEnabled={featureEnabled(features, 'multiCurrency')}
+            bankFeedsEnabled={featureEnabled(features, 'bankFeeds')}
           />
         </aside>
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">

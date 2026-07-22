@@ -996,11 +996,118 @@
         "scopeSubsidiary": "Tochtergesellschaft",
         "currency": "Währung",
         "drawerNewDescription": "Fügen Sie einen datierten Lohnsatz für einen Personalbereich hinzu.",
-        "select": { "job_title": "Stellenbezeichnung auswählen", "trade": "Gewerk auswählen", "department": "Abteilung auswählen", "subsidiary": "Tochtergesellschaft auswählen" }
+        "select": {
+          "job_title": "Stellenbezeichnung auswählen",
+          "trade": "Gewerk auswählen",
+          "department": "Abteilung auswählen",
+          "subsidiary": "Tochtergesellschaft auswählen"
+        }
       },
-      "reconciliation": { "subsidiary": "Tochtergesellschaft" },
-      "billing": { "title": "Abrechnungssatzkarten", "hint": "Datierte, mehrwährungsfähige Arbeitspreise je Kunde und Projekt mit Artikel-/Zeitart-Sätzen, allgemeinen Anpassungen, Vertragsbedingungen und Zuordnungshistorie.", "search": "Satzkarten suchen…", "add": "Neue Satzkarte", "card": "Satzkarte", "currency": "Währung", "period": "Gültigkeitszeitraum", "items": "Artikel", "assignments": "Zuordnungen", "status": "Status", "empty": "Keine passende Satzkarte.", "newTitle": "Neue Abrechnungssatzkarte", "newDescription": "Erstellen Sie zuerst das gemeinsame Satzbuch und danach datierte Artikelsätze.", "createInItemHint": "Die Erstellung erfolgt im gemeinsamen Satzbuch-Arbeitsbereich, damit Arbeit, Dienstleistungen und Geräte dieselbe Preislogik verwenden. Bedingungen und Zuordnungen sehen Sie anschließend hier.", "openRateBooks": "Satzbücher öffnen", "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "derivation": "Fehlende Stufe", "scopes": "Dimensionsbereiche", "allScopes": "Keine Dimensionseinschränkung", "itemRates": "Artikel- und Zeitartensätze", "item": "Artikel", "regular": "Regulär", "adjustments": "Anpassungen", "appliesTo": "Gilt für", "wholeCard": "Gesamte Satzkarte", "revise": "Revision erstellen", "reviseHint": "Eine Revision bewahrt diese Version und startet eine neue datierte Kopie.", "historicalHint": "Dies ist eine historische Version. Öffnen Sie für eine Revision die neueste Version.", "revisionTitle": "Neue Satzkartenrevision", "revisionDescription": "Basispreise, Bereiche und Bedingungen werden kopiert. Anpassungen können für die ganze Karte oder einen Artikel gelten.", "revisionEffectiveFrom": "Neue Version gültig ab", "adjustmentNumber": "Anpassung {number}", "removeAdjustment": "Anpassung entfernen", "adjustmentName": "Name", "adjustmentCode": "Code", "category": "Kategorie", "calculation": "Berechnung", "presentation": "Rechnungsdarstellung", "adjustmentValue": "Wert", "adjustmentUnit": "Einheit", "referenceText": "Beschreibung oder Vertragsverweis", "addAdjustment": "Anpassung hinzufügen", "saveRevision": "Revision speichern", "revisionSaved": "Satzkartenrevision gespeichert", "categories": { "markup": "Aufschlag", "travel": "Reise", "allowance": "Zulage", "minimum": "Minimum", "surcharge": "Zuschlag", "other": "Sonstige" }, "calculations": { "percent": "Prozent", "fixed": "Festbetrag", "per_hour": "Pro Stunde", "per_day": "Pro Tag", "distance": "Entfernung", "time": "Zeit", "text": "Informationstext" }, "presentations": { "included": "Im Satz enthalten", "separate": "Separate Zeile", "informational": "Informativ" }, "errors": { "notFound": "Satzkarte nicht gefunden.", "effectiveDate": "Wählen Sie ein Gültigkeitsdatum.", "adjustments": "Die Anpassungsdaten sind ungültig.", "item": "Wählen Sie einen gültigen aktiven Artikel.", "name": "Jede Anpassung benötigt Name und Code.", "duplicateCode": "Codes müssen je Artikel eindeutig sein.", "category": "Wählen Sie eine gültige Kategorie.", "calculation": "Wählen Sie eine gültige Berechnung.", "presentation": "Wählen Sie eine gültige Darstellung.", "value": "Geben Sie einen nicht negativen Wert ein.", "latestOnly": "Öffnen Sie die neueste Version.", "afterLatest": "Das Datum muss nach der neuesten Version liegen.", "save": "Die Revision konnte nicht gespeichert werden." }, "terms": "Vereinbarte Bedingungen", "none": "Keine", "derivations": { "explicit": "Explizite Sätze", "time_type_multipliers": "Zeitartenmultiplikatoren" }, "scopeTypes": { "department": "Abteilung", "subsidiary": "Tochtergesellschaft", "location": "Standort", "class": "Klasse", "trade": "Gewerk", "job_title": "Stellenbezeichnung", "other": "Sonstige" } },
-      "tabs": { "billing": "Abrechnungssätze" }
+      "reconciliation": {
+        "subsidiary": "Tochtergesellschaft"
+      },
+      "billing": {
+        "title": "Abrechnungssatzkarten",
+        "hint": "Datierte, mehrwährungsfähige Arbeitspreise je Kunde und Projekt mit Artikel-/Zeitart-Sätzen, allgemeinen Anpassungen, Vertragsbedingungen und Zuordnungshistorie.",
+        "search": "Satzkarten suchen…",
+        "add": "Neue Satzkarte",
+        "card": "Satzkarte",
+        "currency": "Währung",
+        "period": "Gültigkeitszeitraum",
+        "items": "Artikel",
+        "assignments": "Zuordnungen",
+        "status": "Status",
+        "empty": "Keine passende Satzkarte.",
+        "newTitle": "Neue Abrechnungssatzkarte",
+        "newDescription": "Erstellen Sie zuerst das gemeinsame Satzbuch und danach datierte Artikelsätze.",
+        "createInItemHint": "Die Erstellung erfolgt im gemeinsamen Satzbuch-Arbeitsbereich, damit Arbeit, Dienstleistungen und Geräte dieselbe Preislogik verwenden. Bedingungen und Zuordnungen sehen Sie anschließend hier.",
+        "openRateBooks": "Satzbücher öffnen",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "derivation": "Fehlende Stufe",
+        "scopes": "Dimensionsbereiche",
+        "allScopes": "Keine Dimensionseinschränkung",
+        "itemRates": "Artikel- und Zeitartensätze",
+        "item": "Artikel",
+        "regular": "Regulär",
+        "adjustments": "Anpassungen",
+        "appliesTo": "Gilt für",
+        "wholeCard": "Gesamte Satzkarte",
+        "revise": "Revision erstellen",
+        "reviseHint": "Eine Revision bewahrt diese Version und startet eine neue datierte Kopie.",
+        "historicalHint": "Dies ist eine historische Version. Öffnen Sie für eine Revision die neueste Version.",
+        "revisionTitle": "Neue Satzkartenrevision",
+        "revisionDescription": "Basispreise, Bereiche und Bedingungen werden kopiert. Anpassungen können für die ganze Karte oder einen Artikel gelten.",
+        "revisionEffectiveFrom": "Neue Version gültig ab",
+        "adjustmentNumber": "Anpassung {number}",
+        "removeAdjustment": "Anpassung entfernen",
+        "adjustmentName": "Name",
+        "adjustmentCode": "Code",
+        "category": "Kategorie",
+        "calculation": "Berechnung",
+        "presentation": "Rechnungsdarstellung",
+        "adjustmentValue": "Wert",
+        "adjustmentUnit": "Einheit",
+        "referenceText": "Beschreibung oder Vertragsverweis",
+        "addAdjustment": "Anpassung hinzufügen",
+        "saveRevision": "Revision speichern",
+        "revisionSaved": "Satzkartenrevision gespeichert",
+        "categories": {
+          "markup": "Aufschlag",
+          "travel": "Reise",
+          "allowance": "Zulage",
+          "minimum": "Minimum",
+          "surcharge": "Zuschlag",
+          "other": "Sonstige"
+        },
+        "calculations": {
+          "percent": "Prozent",
+          "fixed": "Festbetrag",
+          "per_hour": "Pro Stunde",
+          "per_day": "Pro Tag",
+          "distance": "Entfernung",
+          "time": "Zeit",
+          "text": "Informationstext"
+        },
+        "presentations": {
+          "included": "Im Satz enthalten",
+          "separate": "Separate Zeile",
+          "informational": "Informativ"
+        },
+        "errors": {
+          "notFound": "Satzkarte nicht gefunden.",
+          "effectiveDate": "Wählen Sie ein Gültigkeitsdatum.",
+          "adjustments": "Die Anpassungsdaten sind ungültig.",
+          "item": "Wählen Sie einen gültigen aktiven Artikel.",
+          "name": "Jede Anpassung benötigt Name und Code.",
+          "duplicateCode": "Codes müssen je Artikel eindeutig sein.",
+          "category": "Wählen Sie eine gültige Kategorie.",
+          "calculation": "Wählen Sie eine gültige Berechnung.",
+          "presentation": "Wählen Sie eine gültige Darstellung.",
+          "value": "Geben Sie einen nicht negativen Wert ein.",
+          "latestOnly": "Öffnen Sie die neueste Version.",
+          "afterLatest": "Das Datum muss nach der neuesten Version liegen.",
+          "save": "Die Revision konnte nicht gespeichert werden."
+        },
+        "terms": "Vereinbarte Bedingungen",
+        "none": "Keine",
+        "derivations": {
+          "explicit": "Explizite Sätze",
+          "time_type_multipliers": "Zeitartenmultiplikatoren"
+        },
+        "scopeTypes": {
+          "department": "Abteilung",
+          "subsidiary": "Tochtergesellschaft",
+          "location": "Standort",
+          "class": "Klasse",
+          "trade": "Gewerk",
+          "job_title": "Stellenbezeichnung",
+          "other": "Sonstige"
+        }
+      },
+      "tabs": {
+        "billing": "Abrechnungssätze"
+      }
     },
     "taxLibrary": {
       "title": "Bibliothek für Steuererklärungen",
@@ -1622,7 +1729,10 @@
         "purchases": "Einkäufe",
         "both": "Beide"
       },
-      "rateDateBasis": { "usageDate": "Nutzungsdatum", "projectStart": "Projektstartdatum" },
+      "rateDateBasis": {
+        "usageDate": "Nutzungsdatum",
+        "projectStart": "Projektstartdatum"
+      },
       "basis": {
         "collected": "Vereinnahmte Steuer (Output)",
         "paid": "Gezahlte Steuer / Vorsteuer (Input)",
@@ -1711,6 +1821,9 @@
         "transit": "Transit",
         "quarantine": "Quarantäne"
       }
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
     }
   },
   "flows": {
@@ -1963,6 +2076,12 @@
         "finished": "Abgeschlossen",
         "error": "Fehler"
       }
+    }
+  },
+  "features": {
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
     }
   }
 }

@@ -996,11 +996,118 @@
         "scopeSubsidiary": "子公司",
         "currency": "币种",
         "drawerNewDescription": "为某个人员范围添加带生效日期的工资率。",
-        "select": { "job_title": "选择职位", "trade": "选择工种", "department": "选择部门", "subsidiary": "选择子公司" }
+        "select": {
+          "job_title": "选择职位",
+          "trade": "选择工种",
+          "department": "选择部门",
+          "subsidiary": "选择子公司"
+        }
       },
-      "reconciliation": { "subsidiary": "子公司" },
-      "billing": { "title": "对外人工费率卡", "hint": "按客户和项目设置带生效日期及币种的人工价格，包含各项目常规/加班/双倍费率、通用调整、协商条款和分配历史。", "search": "搜索费率卡…", "add": "新建费率卡", "card": "费率卡", "currency": "币种", "period": "生效期间", "items": "项目", "assignments": "分配", "status": "状态", "empty": "没有符合筛选条件的费率卡。", "newTitle": "新建对外人工费率卡", "newDescription": "先创建共享费率表，再添加带生效日期的项目费率。", "createInItemHint": "费率卡通过共享项目费率表工作区创建，使人工、服务和设备使用同一计价引擎。返回此处查看条款和分配。", "openRateBooks": "打开费率表", "effectiveFrom": "生效日期", "effectiveTo": "失效日期", "derivation": "缺失档位处理", "scopes": "维度范围", "allScopes": "无维度限制", "itemRates": "项目和时间类型费率", "item": "项目", "regular": "常规", "adjustments": "调整", "appliesTo": "适用于", "wholeCard": "整张费率卡", "revise": "创建修订版", "reviseHint": "修订版会保留当前版本，并按新生效日期创建副本。", "historicalHint": "这是历史版本。请打开最新版本后创建修订版。", "revisionTitle": "新费率卡修订版", "revisionDescription": "基础项目费率、范围和条款会被复制；调整可适用于整张费率卡或指定项目。", "revisionEffectiveFrom": "新版本生效日期", "adjustmentNumber": "调整 {number}", "removeAdjustment": "移除调整", "adjustmentName": "名称", "adjustmentCode": "代码", "category": "类别", "calculation": "计算方式", "presentation": "发票显示方式", "adjustmentValue": "数值", "adjustmentUnit": "单位", "referenceText": "说明或合同依据", "addAdjustment": "添加调整", "saveRevision": "保存修订版", "revisionSaved": "费率卡修订版已保存", "categories": { "markup": "加价", "travel": "差旅", "allowance": "津贴", "minimum": "最低额", "surcharge": "附加费", "other": "其他" }, "calculations": { "percent": "百分比", "fixed": "固定金额", "per_hour": "每小时", "per_day": "每天", "distance": "距离", "time": "时间", "text": "说明文字" }, "presentations": { "included": "包含在费率中", "separate": "单独行", "informational": "仅供参考" }, "errors": { "notFound": "未找到费率卡。", "effectiveDate": "请选择生效日期。", "adjustments": "调整数据无效。", "item": "请选择有效的启用项目。", "name": "每项调整都需要名称和代码。", "duplicateCode": "同一项目的调整代码必须唯一。", "category": "请选择有效类别。", "calculation": "请选择有效计算方式。", "presentation": "请选择有效显示方式。", "value": "请输入非负数值。", "latestOnly": "请打开最新版本。", "afterLatest": "新日期必须晚于最新版本。", "save": "无法保存费率卡修订版。" }, "terms": "协商条款", "none": "无", "derivations": { "explicit": "明确费率", "time_type_multipliers": "时间类型倍数" }, "scopeTypes": { "department": "部门", "subsidiary": "子公司", "location": "地点", "class": "类别", "trade": "工种", "job_title": "职位", "other": "其他" } },
-      "tabs": { "billing": "对外费率卡" }
+      "reconciliation": {
+        "subsidiary": "子公司"
+      },
+      "billing": {
+        "title": "对外人工费率卡",
+        "hint": "按客户和项目设置带生效日期及币种的人工价格，包含各项目常规/加班/双倍费率、通用调整、协商条款和分配历史。",
+        "search": "搜索费率卡…",
+        "add": "新建费率卡",
+        "card": "费率卡",
+        "currency": "币种",
+        "period": "生效期间",
+        "items": "项目",
+        "assignments": "分配",
+        "status": "状态",
+        "empty": "没有符合筛选条件的费率卡。",
+        "newTitle": "新建对外人工费率卡",
+        "newDescription": "先创建共享费率表，再添加带生效日期的项目费率。",
+        "createInItemHint": "费率卡通过共享项目费率表工作区创建，使人工、服务和设备使用同一计价引擎。返回此处查看条款和分配。",
+        "openRateBooks": "打开费率表",
+        "effectiveFrom": "生效日期",
+        "effectiveTo": "失效日期",
+        "derivation": "缺失档位处理",
+        "scopes": "维度范围",
+        "allScopes": "无维度限制",
+        "itemRates": "项目和时间类型费率",
+        "item": "项目",
+        "regular": "常规",
+        "adjustments": "调整",
+        "appliesTo": "适用于",
+        "wholeCard": "整张费率卡",
+        "revise": "创建修订版",
+        "reviseHint": "修订版会保留当前版本，并按新生效日期创建副本。",
+        "historicalHint": "这是历史版本。请打开最新版本后创建修订版。",
+        "revisionTitle": "新费率卡修订版",
+        "revisionDescription": "基础项目费率、范围和条款会被复制；调整可适用于整张费率卡或指定项目。",
+        "revisionEffectiveFrom": "新版本生效日期",
+        "adjustmentNumber": "调整 {number}",
+        "removeAdjustment": "移除调整",
+        "adjustmentName": "名称",
+        "adjustmentCode": "代码",
+        "category": "类别",
+        "calculation": "计算方式",
+        "presentation": "发票显示方式",
+        "adjustmentValue": "数值",
+        "adjustmentUnit": "单位",
+        "referenceText": "说明或合同依据",
+        "addAdjustment": "添加调整",
+        "saveRevision": "保存修订版",
+        "revisionSaved": "费率卡修订版已保存",
+        "categories": {
+          "markup": "加价",
+          "travel": "差旅",
+          "allowance": "津贴",
+          "minimum": "最低额",
+          "surcharge": "附加费",
+          "other": "其他"
+        },
+        "calculations": {
+          "percent": "百分比",
+          "fixed": "固定金额",
+          "per_hour": "每小时",
+          "per_day": "每天",
+          "distance": "距离",
+          "time": "时间",
+          "text": "说明文字"
+        },
+        "presentations": {
+          "included": "包含在费率中",
+          "separate": "单独行",
+          "informational": "仅供参考"
+        },
+        "errors": {
+          "notFound": "未找到费率卡。",
+          "effectiveDate": "请选择生效日期。",
+          "adjustments": "调整数据无效。",
+          "item": "请选择有效的启用项目。",
+          "name": "每项调整都需要名称和代码。",
+          "duplicateCode": "同一项目的调整代码必须唯一。",
+          "category": "请选择有效类别。",
+          "calculation": "请选择有效计算方式。",
+          "presentation": "请选择有效显示方式。",
+          "value": "请输入非负数值。",
+          "latestOnly": "请打开最新版本。",
+          "afterLatest": "新日期必须晚于最新版本。",
+          "save": "无法保存费率卡修订版。"
+        },
+        "terms": "协商条款",
+        "none": "无",
+        "derivations": {
+          "explicit": "明确费率",
+          "time_type_multipliers": "时间类型倍数"
+        },
+        "scopeTypes": {
+          "department": "部门",
+          "subsidiary": "子公司",
+          "location": "地点",
+          "class": "类别",
+          "trade": "工种",
+          "job_title": "职位",
+          "other": "其他"
+        }
+      },
+      "tabs": {
+        "billing": "对外费率卡"
+      }
     },
     "taxLibrary": {
       "title": "纳税申报库",
@@ -1622,7 +1729,10 @@
         "purchases": "采购",
         "both": "两者"
       },
-      "rateDateBasis": { "usageDate": "使用日期", "projectStart": "项目开始日期" },
+      "rateDateBasis": {
+        "usageDate": "使用日期",
+        "projectStart": "项目开始日期"
+      },
       "basis": {
         "collected": "已收税额（销项）",
         "paid": "已付税额 / 进项税额抵扣（进项）",
@@ -1711,6 +1821,9 @@
         "transit": "在途",
         "quarantine": "隔离区"
       }
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
     }
   },
   "flows": {
@@ -1963,6 +2076,12 @@
         "finished": "完成",
         "error": "错误"
       }
+    }
+  },
+  "features": {
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
     }
   }
 }

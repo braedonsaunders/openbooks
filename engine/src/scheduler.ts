@@ -84,6 +84,15 @@ export async function tick(): Promise<void> {
       console.error("[scheduler] sftp import scan failed:", e);
     }
 
+    // Live bank feeds (Plaid / GoCardless / TrueLayer): pull each due connection
+    // and import through the same statement pipeline. Claimed per-connection.
+    try {
+      const { runDueBankFeeds } = await import("./bank-feed-providers.ts");
+      await runDueBankFeeds();
+    } catch (e) {
+      console.error("[scheduler] bank feed sync failed:", e);
+    }
+
     // Tenant-configured payment schedules: create draft runs or submit them.
     try {
       const { runDuePaymentSchedules } = await import("./payment-operations.ts");
