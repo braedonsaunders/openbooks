@@ -22,7 +22,7 @@ export interface ScratchOrg {
   stockLocationId: string;
   stockLocationId2: string;
   accounts: Record<
-    "invAsset" | "cogs" | "adjustment" | "clearing" | "freight" | "ar" | "ap" | "bank" | "revenue" | "deferred" | "recognized",
+    "invAsset" | "cogs" | "adjustment" | "clearing" | "freight" | "ar" | "ap" | "bank" | "revenue" | "deferred" | "recognized" | "fxGainLoss",
     string
   >;
   items: Record<"fifo" | "movingAvg" | "standard" | "component" | "assembly" | "service", string>;
@@ -93,6 +93,7 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     ["freight", "5200", "Freight In", "expense"],
     ["revenue", "4000", "Revenue", "income"],
     ["recognized", "4010", "Recognized Revenue", "income"],
+    ["fxGainLoss", "7010", "Realized FX Gain or Loss", "expense"],
   ];
   const accounts = {} as ScratchOrg["accounts"];
   for (const [key, number, name, type] of acctDefs) {
@@ -105,7 +106,7 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
 
   // Org control accounts (for document posting).
   await db.execute(sql`
-    update orgs set settings = ${JSON.stringify({ controlAccounts: { ar: accounts.ar, ap: accounts.ap, bank: accounts.bank } })}::jsonb
+    update orgs set settings = ${JSON.stringify({ controlAccounts: { ar: accounts.ar, ap: accounts.ap, bank: accounts.bank, fxRealizedGainLoss: accounts.fxGainLoss } })}::jsonb
      where id = ${orgId}`);
 
   // Items + inventory profiles.
@@ -291,6 +292,9 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "recognition_schedules",
       "performance_obligations",
       "revenue_contracts",
+      "applications",
+      "document_links",
+      "document_line_tax_components",
       "document_lines",
       "documents",
       "journal_lines",

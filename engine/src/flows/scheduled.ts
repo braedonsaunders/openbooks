@@ -210,7 +210,7 @@ async function executeScheduledRun(
 
 async function runScheduledFlow(flow: FlowRow, graph: AutomationGraph, nodeIds: string[]): Promise<void> {
   // Due nodes split by shape: plain schedules run ONCE with no record;
-  // `select` schedules FAN OUT one run per matching record (NetSuite
+  // `select` schedules FAN OUT one run per matching record (source platform
   // "scheduled workflow over a saved search"). Double-firing across
   // processes is prevented by the lastScheduledRunAt claim; a crash after
   // the claim loses at most this occurrence (documented trade above).

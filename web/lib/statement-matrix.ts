@@ -194,7 +194,7 @@ function columnPredicate(col: AmountColumn, mode: StatementMode): SQL {
 /**
  * Build the amount columns for a report from its breakout + comparison.
  * Comparison columns are only added when there is a single base column
- * (breakout = none) — NetSuite's comparative statements are likewise single-
+ * (breakout = none) — source platform's comparative statements are likewise single-
  * column plus a comparative amount.
  */
 async function buildAmountColumns(opts: {

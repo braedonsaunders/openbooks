@@ -8,7 +8,7 @@ export interface Kpi {
 }
 
 /**
- * A SINGLE horizontal row of KPI tiles (AGENTS.md: never stack two rows of
+ * A SINGLE horizontal row of KPI tiles (repository conventions: never stack two rows of
  * KPIs). Tiles keep a min width and the strip scrolls horizontally when there
  * are more than fit — never wrapping into a second row.
  */

@@ -77,8 +77,9 @@ anyone who offers it as a hosted service has to share their changes.
   product — identity comes from the database and the adapter registry, so the
   same build runs anyone's books.
 - **Internationalized to the last string.** Every user-facing string flows
-  through next-intl in **English, French, and Spanish** — copy, placeholders,
-  aria-labels, toasts, empty states. Per-tenant and per-user locale.
+  through next-intl in **English, French, Spanish, German, Brazilian Portuguese,
+  Chinese, and Japanese** — copy, placeholders, aria-labels, toasts, and empty
+  states. Locale selection is available per tenant and per user.
 
 ## Features
 
@@ -182,8 +183,7 @@ packages/
 ```
 
 Every change lands complete: UI, permission key, route, migration, FK, and
-grants ship together — no orphaned schema, no unreachable UI. See
-[`AGENTS.md`](AGENTS.md) for the full repo map and engineering conventions.
+grants ship together — no orphaned schema and no unreachable UI.
 
 ## Tech stack
 
@@ -229,10 +229,6 @@ npm run dev -w web
 
 Then open **http://localhost:4780** and sign in.
 
-Full conventions, validation gates, and the database rebuild recipe live in
-[`AGENTS.md`](AGENTS.md); the internationalization rules are in
-[`web/i18n/README.md`](web/i18n/README.md).
-
 ## Contributing
 
 Contributions are welcome — issues, discussions, and PRs all help.
@@ -240,8 +236,9 @@ Contributions are welcome — issues, discussions, and PRs all help.
 1. Fork the repo and follow the [Quick start](#quick-start).
 2. Keep changes type-safe: `npx tsc -p web --noEmit`, `npx tsc -p engine
    --noEmit`, and a clean `cd web && npx next build`. **Never commit on red.**
-3. Respect the non-negotiables: kernel discipline, complete i18n, flyout-first
-   records, and search/filter/pagination on every list ([`AGENTS.md`](AGENTS.md)).
+3. Respect the non-negotiables: kernel discipline, complete i18n across every
+   shipped locale, flyout-first records, and search/filter/pagination on every
+   list.
 4. Open a PR describing the change and the workflow it improves.
 
 If you run a real back office and something here doesn't match how your books

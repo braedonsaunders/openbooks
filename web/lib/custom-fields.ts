@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 
 /**
- * Custom fields platform — NetSuite-style header/line/entity extensions.
+ * Custom fields platform — source platform-style header/line/entity extensions.
  * Definitions live in custom_field_defs (targetTable + optional targetKind);
  * values live in each row's `custom` jsonb, validated here before write.
  * Every module renders its defs dynamically: document drawers (header),

@@ -5,7 +5,7 @@
  * never in the host page. Each save spins the org's active 'client' scripts
  * for the document kind through a throwaway OPAQUE-ORIGIN sandboxed iframe
  * (sandbox="allow-scripts": no cookies, no parent DOM, no host origin), the
- * same isolation model as App frontends — deliberately NOT NetSuite's
+ * same isolation model as App frontends — deliberately NOT source platform's
  * in-page client scripts.
  *
  * Script contract:  function main(ctx)   ctx = { kind, doc }

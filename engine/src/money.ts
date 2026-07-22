@@ -14,7 +14,7 @@ export function toUnits(s: string | number): bigint {
   const neg = str.startsWith("-");
   str = str.replace(/^[-+]/, "");
 
-  // expand scientific notation (SuiteQL emits e.g. "1.2355303E7")
+  // Expand scientific notation emitted by some connector APIs (for example, "1.2355303E7").
   let exp = 0;
   const em = str.match(/[eE]([-+]?\d+)$/);
   if (em) {

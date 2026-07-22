@@ -14,7 +14,7 @@ import type { InvoicingPreference } from "./project-types";
 
 /**
  * One party model. A party is a real-world person or company; ROLES make it
- * a customer, vendor, and/or employee. NetSuite's separate entity tables
+ * a customer, vendor, and/or employee. source platform's separate entity tables
  * force duplicate records (and duplicate bank details, addresses, contacts)
  * when one company is both customer and vendor.
  */
@@ -26,7 +26,7 @@ export const parties = pgTable(
     kind: text("kind", { enum: ["company", "person"] }).notNull(),
     displayName: text("display_name").notNull(),
     legalName: text("legal_name"),
-    shortCode: text("short_code"), // Rassaun's "Shortform" custentity, promoted
+    shortCode: text("short_code"), // reference organization's "Shortform" custentity, promoted
     email: text("email"),
     phone: text("phone"),
     website: text("website"),
@@ -83,7 +83,7 @@ export const vendorRoles = pgTable("vendor_roles", {
 
 /**
  * Employee role carries what payroll/job-costing needs. Trade + worker-comp
- * classification were bolt-on lists in NetSuite (WSIB groups, Employee Trade)
+ * classification were bolt-on lists in source platform (WSIB groups, Employee Trade)
  * but drive real money (burden rates, comp premiums) — promoted here.
  */
 export const employeeRoles = pgTable("employee_roles", {
@@ -147,7 +147,7 @@ export const addresses = pgTable(
 );
 
 /**
- * Contacts — people at a customer/vendor company (NetSuite's separate `contact`
+ * Contacts — people at a customer/vendor company (source platform's separate `contact`
  * entity). Linked to the company party; carries their own role, title, and
  * contact info. A company party can have many contacts; one may be primary.
  */
@@ -175,7 +175,7 @@ export const contacts = pgTable(
 );
 
 /**
- * Normalized bank accounts (NetSuite: a 52-field custom record). Changes are
+ * Normalized bank accounts (source platform: a 52-field custom record). Changes are
  * fraud-sensitive: `approvedAt/By` gate use in payment runs, mirroring the
  * bank-details approval workflow found in the extraction.
  */
@@ -195,7 +195,7 @@ export const partyBankAccounts = pgTable(
     approvedAt: date("approved_at"),
     approvedBy: uuid("approved_by"),
     /**
-     * Bank-detail change approval (the NetSuite "Vendor Bank Details Approval"
+     * Bank-detail change approval (the source platform "Vendor Bank Details Approval"
      * workflow, replicated as a flow): new/edited details sit 'pending' —
      * inactive and unusable by payment runs — until the gate approves.
      * Existing rows default 'approved' (they were in use pre-flows).

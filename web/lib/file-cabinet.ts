@@ -698,7 +698,7 @@ export async function restoreFolder(orgId: string, id: string): Promise<boolean>
 /**
  * Permanently delete a folder subtree — files, versions, blobs, attachment
  * links, and the folders. Fails if it contains files attached to records
- * (matching NetSuite). System folders cannot be purged.
+ * (matching source platform). System folders cannot be purged.
  */
 export async function purgeFolder(orgId: string, id: string): Promise<{ ok: boolean; reason?: string }> {
   const folder = await getFolder(orgId, id)

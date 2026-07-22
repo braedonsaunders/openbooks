@@ -50,7 +50,7 @@ export const journalEntries = pgTable(
     /**
      * Where this entry came from. Documents post through the kernel, so an
      * entry is traceable to its source; manual journals say so explicitly.
-     * `origin` supports the payroll/burden tagging that Rassaun implemented
+     * `origin` supports payroll and burden tagging without account-shaped fields.
      * as custbody checkboxes ("Payroll Journal", "Is Labor Burden JE").
      */
     sourceDocumentId: uuid("source_document_id"),
@@ -118,7 +118,7 @@ export const journalLines = pgTable(
     paymentCardId: uuid("payment_card_id"), // card subledger detail
     extraDims: jsonb("extra_dims").notNull().default({}), // registry-validated
 
-    /** Statistical quantity (hours, tonnes) — replaces NetSuite Stat accounts. */
+    /** Statistical quantity such as hours or tonnes. */
     quantity: money("quantity"),
     unit: text("unit"),
 
@@ -148,7 +148,7 @@ export const journalLines = pgTable(
 /**
  * Payment application — universal. Links a crediting line to a debiting
  * open item regardless of document type: payment→invoice, journal→invoice
- * (Rassaun's actual AR pattern: 18.5k of these, zero payment records),
+ * including imported settlement journals that have no separate payment record,
  * credit-memo→invoice, vendor-credit→bill, prepayment→bill.
  */
 export const applications = pgTable(

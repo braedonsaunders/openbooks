@@ -1,6 +1,6 @@
 -- Line-level subledger entity: document_lines.party_id (→ parties).
--- Faithful to how every source system models a transaction line (NetSuite line
--- "Name" / QBO line Entity): the customer/vendor/employee lives on the LINE, not
+-- Faithful to how every source system models a transaction line (source platform line
+-- "Name" / source platform line Entity): the customer/vendor/employee lives on the LINE, not
 -- only the header. Idempotent — the FK is added here too because bootstrap does
 -- not re-run referential-integrity.sql on an already-migrated cluster.
 ALTER TABLE "document_lines" ADD COLUMN IF NOT EXISTS "party_id" uuid;

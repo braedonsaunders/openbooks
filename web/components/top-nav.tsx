@@ -1,6 +1,6 @@
 'use client'
 
-// NetSuite-style top menu bar — the alternative to the left sidebar rail. Each
+// source platform-style top menu bar — the alternative to the left sidebar rail. Each
 // SidebarNavGroup (the same `groups` prop the sidebar consumes from
 // resolveNav) becomes a dropdown via the portal-based Popover (escapes the
 // header's overflow-hidden). Active matching reuses findActiveNavHref so the

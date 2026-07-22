@@ -58,7 +58,7 @@ export const documents = pgTable(
     subtotal: money("subtotal").notNull().default("0"),
     taxTotal: money("tax_total").notNull().default("0"),
     total: money("total").notNull().default("0"),
-    // Amount remaining to settle (NetSuite "Amount Remaining") — abs(open-item
+    // Absolute amount remaining to settle on the open item.
     // line) − applied for posted open-item docs, else NULL. Maintained by the
     // open-balance triggers in migrations/generated/0001_baseline.sql so lists
     // can show/sort/filter it without a live applications join.
@@ -73,7 +73,7 @@ export const documents = pgTable(
     extraDims: jsonb("extra_dims").notNull().default({}),
     paymentCardId: uuid("payment_card_id"), // card_charge/refund docs
 
-    // Promoted from Rassaun custbody fields:
+    // Native job-costing and billing fields:
     billingMethod: text("billing_method", { enum: ["time_and_materials", "fixed_price"] }),
     isFinalInvoice: boolean("is_final_invoice").notNull().default(false),
     referenceNumber: text("reference_number"), // vendor's invoice no., cheque no.
@@ -121,8 +121,8 @@ export const documentLines = pgTable(
     /**
      * Line-level subledger entity — the customer/vendor/employee this specific
      * line belongs to (→ parties), independent of the header party. Faithful to
-     * how every source system models a transaction line: NetSuite's line "Name"
-     * / QBO's line Entity. AR/AP legs on journals (e.g. opening-balance/month-end
+     * how source systems commonly model transaction-line parties. AR/AP legs on
+     * journals (e.g. opening-balance/month-end
      * entries) carry their party HERE, not on the header. Polymorphic "line
      * entity" = this party_id OR the projectId below (a job); the import routes
      * the source line entity to whichever it resolves to.
@@ -139,7 +139,7 @@ export const documentLines = pgTable(
     /** Line overrides for custom segment assignments. */
     extraDims: jsonb("extra_dims").notNull().default({}),
 
-    // Promoted from Rassaun custcols — job-costing/billing chain:
+    // Native job-costing and billing-chain fields:
     employeeId: uuid("employee_id"), // labor line: who worked it
     timeEntryId: uuid("time_entry_id"), // provenance from timesheets
     timeTypeId: uuid("time_type_id"),
@@ -182,7 +182,7 @@ export const documentLines = pgTable(
 
 /**
  * Document relationship chains (SO → PO, SO → invoice, bill → payment run):
- * explicit and queryable, replacing NetSuite's tangle of createdfrom +
+ * explicit and queryable, replacing opaque source relationship chains with
  * link tables + custbody "SO Created From" workarounds.
  */
 export const documentLinks = pgTable(
@@ -203,7 +203,7 @@ export const documentLinks = pgTable(
   ],
 );
 
-/** Item catalog — services business first (Rassaun: zero inventory items). */
+/** Item catalog shared by services, inventory, equipment, and billing. */
 export const items = pgTable(
   "items",
   {
@@ -258,7 +258,7 @@ export const items = pgTable(
 );
 
 /**
- * Overhead rates — a real job-costing concept here (was a NetSuite custom
+ * Overhead rates are a native job-costing concept rather than a custom
  * record driving hand-built payroll JEs). Drives overhead absorption on jobs:
  * DR project WIP/COGS, CR overhead applied.
  */
@@ -268,7 +268,7 @@ export const overheadRates = pgTable("overhead_rates", {
   departmentId: uuid("department_id"),
   category: text("category"), // Equipment / Indirect Labour / Consumables…
   method: text("method", { enum: ["three_year_average", "live", "standard"] }).notNull().default("live"),
-  /** How to read `rate`: per_hour = $/labor-hour (the NetSuite/adminapp model),
+  /** How to read `rate`: per_hour = amount per labor hour,
    *  percent = % of labor cost. */
   rateKind: text("rate_kind", { enum: ["per_hour", "percent"] }).notNull().default("per_hour"),
   /** The rate value — $/hour when rateKind=per_hour, a percentage when percent. */
@@ -288,5 +288,5 @@ export const timeTypes = pgTable("time_types", {
   billMultiplier: money("bill_multiplier").notNull().default("1"),
   isBillableDefault: boolean("is_billable_default").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
-  custom: jsonb("custom").notNull().default({}), // keeps NetSuite nsId for the time-record import bridge
+  custom: jsonb("custom").notNull().default({}), // retains connector identity for time-record imports
 });

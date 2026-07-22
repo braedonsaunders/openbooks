@@ -13,19 +13,19 @@ import {
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * File Cabinet — a NetSuite-class document management system.
+ * File Cabinet — a source platform-class document management system.
  *
  * Cabinet-first: files exist independently in folders; attaching a file to a
  * record (transaction, party, etc.) is a *link*, not a container. This
  * inverts the old attachment-only model so files can be browsed, moved,
- * renamed, reused across records, and versioned — exactly like NetSuite's
- * File Cabinet, with one improvement: real append-only versioning (NetSuite
+ * renamed, reused across records, and versioned — exactly like source platform's
+ * File Cabinet, with one improvement: real append-only versioning (source platform
  * has none).
  *
  * Tables:
  *   - folders: hierarchical folder tree (system, private, shared, per-record)
  *   - files: standalone file metadata (lives in a folder, has versions)
- *   - file_versions: append-only versions (surpasses NetSuite)
+ *   - file_versions: append-only versions (surpasses source platform)
  *   - file_blobs: raw bytes (fetched only on download)
  *   - file_attachments: polymorphic join between a file and any record
  *
@@ -136,7 +136,7 @@ export const files = pgTable(
 /**
  * Append-only file versions. Each upload or replace creates a new row here;
  * the file's current_version_id points to the active version. This is where
- * openbooks surpasses NetSuite — its File Cabinet has no versioning at all.
+ * openbooks surpasses source platform — its File Cabinet has no versioning at all.
  */
 export const fileVersions = pgTable(
   "file_versions",

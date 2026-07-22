@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 
 /**
  * PUT — set or clear the project's percent-complete OVERRIDE (0–100; null =
- * automatic cost-to-cost). Pure data entry, NetSuite's percent-complete
+ * automatic cost-to-cost). Pure data entry, source platform's percent-complete
  * override equivalent: it refreshes the project's revenue contract schedule,
  * and the central recognition run posts the catch-up. Nothing posts here.
  */

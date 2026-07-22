@@ -10,7 +10,7 @@ import { resolveAccountGroups } from './account-groups'
  * resolves the full measure catalog (base aggregations + derived formulas) so the
  * Financials P&L renders per-type. All measures are dollars (JS number); money
  * math stays in SQL numeric. Definitions validated to the penny against the
- * NetSuite RESTlet for job 6089 (invoiced $6,206,001.04, cost $6,320,076.85).
+ * source platform RESTlet for job 6089 (invoiced $6,206,001.04, cost $6,320,076.85).
  */
 
 const n = (v: unknown): number => (v == null ? 0 : Number(v))

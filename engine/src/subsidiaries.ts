@@ -3,7 +3,7 @@ import type { db } from "./db.ts";
 import { add, isZero, mulRate, neg } from "./money.ts";
 
 /**
- * Subsidiary context for the posting engine (NetSuite OneWorld model inside
+ * Subsidiary context for the posting engine (a multi-entity model inside
  * one tenant). Loads the org's subsidiary tree once per posting, resolves
  * every kernel line to a legal entity, validates restrictions, and — when an
  * entry spans subsidiaries — injects the due-to/due-from legs that make each
@@ -70,7 +70,7 @@ export function subtreeIds(ctx: SubsidiaryContext, subId: string): Set<string> {
 
 /**
  * Does a record restricted to `restrictedTo` (+children?) admit `target`?
- * A null restriction admits everything — restriction is opt-in, per NetSuite.
+ * A null restriction admits everything because restrictions are opt-in.
  */
 export function restrictionAdmits(
   ctx: SubsidiaryContext,

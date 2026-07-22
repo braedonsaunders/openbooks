@@ -9,7 +9,7 @@ import { analyticsConfig } from "./config";
  *
  * Source data = `time_entries` (per-entry hours / is_billable / cost_rate),
  * grouped employee × department × item exactly like Gantry's fetchTimeStats.
- * Differences from NetSuite forced by the schema, stated plainly:
+ * Differences from source platform forced by the schema, stated plainly:
  *  - billable = the `is_billable` flag (Gantry: `customer IS NOT NULL`; here
  *    every billable entry carries a project → customer, so it's equivalent);
  *  - non-billable cost = Σ hours × per-entry `cost_rate` on non-billable rows

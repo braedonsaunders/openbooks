@@ -16,9 +16,9 @@ import { auditColumns, currencyCode, fxRate, id, orgRef } from "./helpers";
 import type { InvoicingPreference } from "./project-types";
 
 /**
- * An org is a TENANT (NetSuite: account) — one sealed data space, one login
+ * An org is a tenant: one sealed data space, one login
  * realm, one RLS boundary. Legal entities that keep books live INSIDE it as
- * subsidiaries (subsidiaries.ts, NetSuite OneWorld model); every org has
+ * subsidiaries (subsidiaries.ts, the multi-entity model); every org has
  * exactly one root subsidiary and single-subsidiary orgs see no subsidiary UI.
  * `baseCurrency`/`country` remain as the root subsidiary's defaults and the
  * tenant-level fallback.
@@ -170,7 +170,7 @@ export const numberSequences = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Dimensions. One uniform mechanism (NetSuite has four). All are hierarchical
+// Dimensions use one uniform mechanism. All are hierarchical
 // where it matters and all are optional per line — enablement is UI config,
 // never schema.
 // ---------------------------------------------------------------------------
@@ -194,9 +194,8 @@ export const locations = pgTable("locations", dimensionColumns);
 export const classes = pgTable("classes", dimensionColumns);
 
 /**
- * Projects (jobs) — promoted to a core dimension. The NetSuite extraction
- * shows this is the center of the business (job costing, WIP, Account ×
- * Project reporting) implemented there via bolt-on custom fields.
+ * Projects (jobs) are a core dimension supporting job costing, WIP, and
+ * Account × Project reporting without bolt-on custom fields.
  */
 export const projects = pgTable(
   "projects",
@@ -228,8 +227,8 @@ export const projects = pgTable(
 );
 
 /**
- * Corporate cards as a subledger — replaces NetSuite's 67 one-GL-account-
- * per-card pattern. All cards post to one liability account; per-card
+ * Corporate cards use a subledger instead of one GL account per card.
+ * All cards post to one liability account; per-card
  * detail lives on journal lines via `payment_card_id`.
  */
 export const paymentCards = pgTable("payment_cards", {

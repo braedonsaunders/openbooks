@@ -111,7 +111,7 @@ export type ReportCustomQuery = {
   /** Defaults to the entity's default sort. */
   sort?: { column: string; direction: 'asc' | 'desc' } | null
   /**
-   * Multi-level sort (NetSuite "then by"): when present and non-empty this
+   * Multi-level sort (source platform "then by"): when present and non-empty this
    * wins over `sort`, which is kept for back-compat with stored plans.
    * Engine caps at 3 levels.
    */

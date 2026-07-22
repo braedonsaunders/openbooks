@@ -179,7 +179,7 @@ export function OrderDrawer({
   const meta = KIND_META[kind]
   const isDraft = doc.status === 'draft'
   const isApproved = doc.status === 'approved'
-  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
   // — even for drafts — with an Edit button in the header. Only DRAFT orders
   // are editable (Issue is terminal for the header). Save is EXPLICIT — one Save
   // button, no per-field autosave.

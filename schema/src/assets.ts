@@ -36,7 +36,7 @@ export const depreciationMethods = pgTable(
 );
 
 /**
- * Fixed assets. Replaces the locked NetSuite FAM bundle with an open
+ * Fixed assets. Replaces the locked source platform FAM bundle with an open
  * register: assets → per-book depreciation schedules → period journals
  * (origin = 'depreciation'); every lifecycle change is an explicit event.
  */

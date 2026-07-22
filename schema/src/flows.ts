@@ -11,7 +11,7 @@ import {
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * Flows — visual graph automation (docs/flows-design.md). A flow is an
+ * Flows — visual graph automation (the flow execution contract). A flow is an
  * authored node graph (trigger → conditions → actions → gates) over a subject
  * kind (a document kind like 'vendor_bill', or a module key). Runs are
  * checkpointed: every completed action writes a flow_run_effects row, so
@@ -182,7 +182,7 @@ export const flowGates = pgTable(
 );
 
 /**
- * Out-of-office approval delegation (NetSuite "approval delegate" parity,
+ * Out-of-office approval delegation (source platform "approval delegate" parity,
  * date-ranged). While now() is between startsAt/endsAt and the row is not
  * revoked, `toUserId` may see and decide `fromUserId`'s pending flow gates —
  * on behalf of the principal, never with more authority than the principal's
@@ -212,12 +212,12 @@ export const approvalDelegations = pgTable(
 );
 
 /**
- * Flow-managed record locks — the `lock_record` action (NetSuite "Lock
+ * Flow-managed record locks — the `lock_record` action (source platform "Lock
  * Record" with role exemptions). While a row exists the record rejects
  * edits/void/delete for everyone except admins and holders of an exemptRole;
  * `unlock_record` removes it. One lock per record (the unique index): a
  * second lock_record replaces the reason/exemptions. Locks deliberately
- * survive status changes (NetSuite's donotexitworkflow terminal locks — e.g.
+ * survive status changes (source platform's donotexitworkflow terminal locks — e.g.
  * an approved vendor payment stays locked forever).
  */
 export const flowLocks = pgTable(

@@ -1,5 +1,5 @@
-.env.netsuite
-extraction/netsuite-sdf/project.json
+.env.*
+extraction/*-sdf/project.json
 .env
 node_modules/
 gl-dump/
@@ -8,14 +8,16 @@ web/.env.local
 web/.next/
 .next/
 
-# large NetSuite extraction data dumps (regenerate via extraction/dump_*.py)
+# large connector extraction data dumps (regenerate via extraction scripts)
+extraction/account-data/
 extraction/transactions/
 extraction/transactions_dump.log
 extraction/reconciliation-report.json
+extraction/objects-list.txt
 
-# raw NetSuite XML metadata extractions — vendor SDF objects + SuiteTalk
+# raw connector XML metadata extractions and vendor schemas
 # schema (regenerable reference, not source; kept local, out of the repo)
-extraction/netsuite-sdf/
+extraction/*-sdf/
 extraction/standard-schema/
 extraction/**/*.xml
 extraction/**/*.xsd
@@ -28,16 +30,15 @@ dump.rdb
 .sftp-data/
 .backups/
 
-# regenerable 41MB NetSuite time-entry dump (dump_timebill.py recreates it)
+# regenerable time-entry dump
 extraction/account-data/timebill.ndjson
 
 # Python bytecode cache
 __pycache__/
 *.pyc
 
-# local-only workflow replication reference (names, emails, approval chains —
-# never commit; the replicated flows live in the database)
-docs/netsuite-workflows-*.md
+# local-only connector workflow references
+docs/*-workflows-*.md
 
 # generated report/pdf output
 output/

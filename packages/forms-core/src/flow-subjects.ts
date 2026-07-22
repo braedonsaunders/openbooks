@@ -11,7 +11,7 @@
 // (engine/src/flows/registry.ts).
 //
 // Ported from beaconhs-platform's flow-subjects module, adapted to the
-// openbooks document vocabulary (see docs/flows-design.md).
+// openbooks document vocabulary (see the flow execution contract).
 
 import type { TriggerKind, ActionKind } from './automation'
 

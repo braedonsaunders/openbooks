@@ -64,7 +64,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /**
  * Autosave an expense report. Draft/approved reports edit freely (no GL yet). A
- * POSTED report is editable in place, NetSuite-style: its journal entry is a
+ * A posted report is editable in place while its journal entry remains a
  * derived projection re-materialized on save (regenerateGlImpactTx) — a non-GL
  * change (memo) is a no-op on the ledger; a GL change regenerates the entry's
  * lines and is blocked only if the posting period is closed.

@@ -22,7 +22,7 @@ export interface FeatureDef {
   category: 'sales' | 'operations' | 'accounting' | 'platform'
 }
 
-/** The full switchboard (QBO "Enable features" / NetSuite Enable Features):
+/** The full feature switchboard:
  * everything currently visible defaults ON so existing orgs see no change;
  * new optional modules (field tickets) default OFF. */
 export const FEATURES: FeatureDef[] = [
@@ -38,7 +38,7 @@ export const FEATURES: FeatureDef[] = [
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
   { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },
   // Accounting
-  // Multi-subsidiary (NetSuite OneWorld): consolidation, intercompany, per-entity
+  // Multi-subsidiary: consolidation, intercompany, and per-entity
   // currencies/books. Data-dependent default — resolved by subsidiaryFeatureEnabled,
   // NOT the static defaultEnabled below (which only applies to brand-new orgs).
   { key: 'multiSubsidiary', defaultEnabled: false, category: 'accounting' },

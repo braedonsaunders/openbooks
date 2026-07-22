@@ -154,14 +154,20 @@ jobs:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          APP_URL: ${{ vars.OPENBOOKS_APP_URL }}
         run: |
           set -euo pipefail
+          if [ -z "$APP_URL" ]; then
+            echo "::error::OPENBOOKS_APP_URL environment variable is required"
+            exit 1
+          fi
+          app_url="${APP_URL%/}"
           for i in $(seq 1 30); do
             code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
-              'https://openbooks.cloud.rassaun.com/api/v1/health?include=worker' || true)"
+              "$app_url/api/v1/health?include=worker" || true)"
             echo "web + worker health: HTTP $code (poll $i)"
             if [ "$code" = "200" ]; then
-              echo "openbooks dev is up: https://openbooks.cloud.rassaun.com"
+              echo "openbooks dev is up: $app_url"
               exit 0
             fi
             sleep 10
@@ -196,5 +202,5 @@ jobs:
           else
             echo "::warning::Dokploy compose metadata did not include an appName; container logs unavailable"
           fi
-          echo "::error::App never became healthy at openbooks.cloud.rassaun.com"
+          echo "::error::App never became healthy at $app_url"
           exit 1

@@ -69,7 +69,7 @@
       },
       "sync": {
         "title": "Migrationen & Spiegelung",
-        "description": "Migrieren Sie von NetSuite, QuickBooks und mehr — dann spiegeln Sie, um beide im A/B-Betrieb parallel auszuführen"
+        "description": "Migrieren Sie aus einem Quellbuchhaltungssystem und spiegeln Sie beide Systeme während der Validierung"
       },
       "ai": {
         "title": "KI",

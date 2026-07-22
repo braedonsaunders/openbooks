@@ -25,7 +25,7 @@ import { db } from "../db.ts";
  * lib/flows/registry.ts: the gate-resume path and every dispatch site rebuild
  * the right adapter from a stored subjectKind string. The documents adapter
  * covers every document kind; party_bank_account is the first non-document
- * subject (the replicated NetSuite bank-details approval); future adapters
+ * subject (the replicated source platform bank-details approval); future adapters
  * (custom record types, …) register here.
  */
 

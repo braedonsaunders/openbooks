@@ -25,7 +25,7 @@ const BANK_ACCOUNT_STATUSES = [
   { value: "rejected", label: "Rejected" },
 ] as const;
 
-/** NetSuite's material fields: editing any of these re-enters approval. */
+/** source platform's material fields: editing any of these re-enters approval. */
 export const BANK_ACCOUNT_MATERIAL_FIELDS = [
   "bankName",
   "country",

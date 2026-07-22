@@ -106,7 +106,7 @@ export default async function ViewsPage({
               {rows.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell>
-                    {/* Name RUNS the view (NetSuite behaviour); editing is the
+                    {/* Name RUNS the view (source platform behaviour); editing is the
                         explicit action on the right. */}
                     <Link href={`/knowledge/views/${s.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                       {s.name}

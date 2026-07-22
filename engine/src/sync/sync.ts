@@ -582,7 +582,7 @@ export async function runSync(
     // -- 6b. GL residual trueup: bring in API-opaque sub-ledger GL (inventory
     //    valuation, realized FX, opening balances) as dated adjusting journals.
     //    OPT-IN per target org (orgs.settings.glTrueup) — it posts real journals,
-    //    so it must never fire silently on a live ledger (e.g. Rassaun/NetSuite,
+    //    so it must never fire silently on a live ledger (for example, a production tenant
     //    whose cumulative TB matches but has benign monthly date-allocation drift).
     const trueUpEnabled = (
       (await db.execute(sql`select (settings->>'glTrueup')::boolean as on from orgs where id = ${org.id}`)) as unknown as {

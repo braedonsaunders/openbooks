@@ -135,7 +135,7 @@ export function JournalDrawer({
   const router = useRouter()
   const doc = journal.doc
   const isDraft = doc.status === 'draft'
-  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
   // — even for drafts — with an Edit button in the header. Draft and POSTED
   // journals are both editable — saving a posted journal re-materializes its
   // GL-Impact projection (the server blocks only GL changes into a closed
@@ -330,7 +330,7 @@ export function JournalDrawer({
       },
       description: { key: 'description', label: tc('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
       // Line-level entity: the customer/vendor/employee this leg belongs to
-      // (NetSuite line "Name" / QBO line Entity). Required on AR/AP legs — the
+      // (source platform line "Name" / source platform line Entity). Required on AR/AP legs — the
       // kernel refuses a party-less open-item line; projects stay a sibling
       // column, exactly like the party/project kernel dimensions.
       party_id: {

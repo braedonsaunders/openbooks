@@ -11,7 +11,7 @@ import { resolveOrgId } from "../org-scope";
  * Ported from the Gantry package's "P&L / Financial Health" dashboard
  * (Dashboard.Health.js), but sourced natively from openbooks' own GL: every
  * figure derives from profitAndLoss()/balanceSheet(), so the numbers tie out
- * to the P&L and Balance Sheet reports exactly. No NetSuite, no Plotly.
+ * to the P&L and Balance Sheet reports exactly. No source platform, no Plotly.
  *
  * Sign convention follows web/lib/reports.ts — statement values are already
  * reader-signed (revenue positive, expense positive).

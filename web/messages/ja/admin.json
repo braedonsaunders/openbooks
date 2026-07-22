@@ -69,7 +69,7 @@
       },
       "sync": {
         "title": "移行とミラー",
-        "description": "NetSuite、QuickBooksなどから移行 — その後ミラーリングして両方を並行してA/B運用"
+        "description": "移行元の会計システムから移行し、検証中は両方のシステムをミラーリング"
       },
       "ai": {
         "title": "AI",

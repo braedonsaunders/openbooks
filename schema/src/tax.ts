@@ -68,7 +68,7 @@ export const taxGroupMembers = pgTable("tax_group_members", {
  * A configurable government tax return, tenant-owned and UI-editable via the
  * Setup registry. openbooks computes the box values from the ledger, renders a
  * faithful facsimile (works for every jurisdiction), and routes filing through
- * the channel the jurisdiction actually mandates — matching how NetSuite's Tax
+ * the channel the jurisdiction actually mandates. The filing method
  * Reporting Framework works. New jurisdictions are DATA (a form + its boxes),
  * not code. `code` matches tax_report_lines.report_code (e.g. "CA_GST34").
  */
@@ -156,7 +156,7 @@ export const taxFilings = pgTable(
 
 /**
  * Maps GL activity to tax return lines (GST34: line 101 sales, 103 collected,
- * 106 ITCs…). Replaces NetSuite's Tax Report Mapper custom record. A box is
+ * 106 ITCs…). A box is
  * either GL-mapped (tax code + basis) or COMPUTED (an arithmetic `formula` over
  * other line codes, e.g. line 109 = "105 - 108"). Both are UI-editable.
  */

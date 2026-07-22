@@ -245,7 +245,7 @@ export function PartyDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
   // — even for drafts — with an Edit button in the header. Save is EXPLICIT —
   // one Save button, no per-field autosave.
   const [mode, setMode] = useState<'view' | 'edit'>('view')

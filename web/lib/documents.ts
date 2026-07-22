@@ -255,7 +255,7 @@ async function glSignature(
 
 /**
  * Apply a header + lines edit to a posting document. Draft/approved docs edit
- * freely (no GL yet). A POSTED doc is editable in place, NetSuite-style: its
+ * freely (no GL yet). A posted transaction is editable in place while its
  * journal entry is a derived projection re-materialized on save
  * (regenerateGlImpactTx) — a non-GL change is a ledger no-op; a GL change
  * regenerates the entry's lines and is blocked only if the period is closed.

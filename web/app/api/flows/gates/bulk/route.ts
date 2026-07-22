@@ -15,7 +15,7 @@ export const runtime = 'nodejs'
  * Each item is decided independently (per-item try/catch); decideGate is the
  * single authority for who may decide (assignee / admin / delegate, submitter
  * refused). One failure never aborts the rest, and there is deliberately no
- * batch cap (NetSuite's 50-row bulk-approve limit is a gap this hub closes).
+ * batch cap (source platform's 50-row bulk-approve limit is a gap this hub closes).
  */
 
 type BulkItem = { gateId?: string }

@@ -4,7 +4,7 @@ import { buildAllRecognitionSchedules } from "./revenue-recognition.ts";
 import { recognitionAccounts } from "./project-recognition.ts";
 
 /**
- * Fixed-price project revenue through the ARM pipeline (NetSuite-shaped).
+ * Fixed-price project revenue through the ARM pipeline (source platform-shaped).
  *
  * Each qualifying project — project type recognition policy
  * `percent_complete_cost` with a contract value and a customer — carries ONE

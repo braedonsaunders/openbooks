@@ -146,7 +146,7 @@ const JOURNAL_ENTRY: PdfRecordTypeMeta = {
 
 
 /** Field ticket — the signed crew timesheet. Its merge surface is a superset
- * of what the classic Rassaun weekly billable-timesheet PDF needs: per-crew-row
+ * of what the classic reference organization weekly billable-timesheet PDF needs: per-crew-row
  * day columns (day1..day7 × reg/ot/dt) for exact grid replicas, plus the
  * summarized reg/OT/DT totals the modern starter uses. */
 const CREW_DAY_FIELDS: PdfMergeField[] = Array.from({ length: 7 }, (_, i) => [

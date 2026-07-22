@@ -139,7 +139,7 @@ export const inventoryMovements = pgTable(
  * Cost layers: one per valued receipt. `remainingQuantity` counts down as
  * issues consume the layer (FIFO order, or proportionally for
  * moving-average revaluations). Layer accounting makes COGS auditable to
- * the originating receipt — NetSuite's costing is a black box.
+ * the originating receipt — source platform's costing is a black box.
  */
 export const costLayers = pgTable(
   "cost_layers",

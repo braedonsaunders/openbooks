@@ -1,8 +1,8 @@
 import { pool } from "./db.ts";
 
 /**
- * The query surface is REAL PostgreSQL — no invented dialect. What NetSuite
- * calls SuiteQL, openbooks calls... SQL. Safety comes from the database,
+ * The query surface is real PostgreSQL, with no proprietary query dialect.
+ * Safety comes from the database,
  * not a parser:
  *   - runs as `openbooks_read` (SELECT-only role, no login)
  *   - inside a READ ONLY transaction (DML/DDL refused by Postgres itself)

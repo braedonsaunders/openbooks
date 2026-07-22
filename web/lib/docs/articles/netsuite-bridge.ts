@@ -9,7 +9,7 @@ export const netSuiteBridge: DocArticle = {
     'Install and operate the pull-based extraction bridge for exact migrations, daily mirrors, and proof-gated reconciliation.',
   updated: '2026-07-19',
   keywords: ['NetSuite', 'RESTlet', 'Map Reduce', 'SuiteCloud', 'SuiteQL', 'migration', 'mirror', 'trial balance'],
-  related: ['migration-and-cutover', 'reconciliation-before-cutover', 'coming-from-netsuite'],
+  related: ['migration-and-cutover', 'reconciliation-before-cutover', 'switching-from-enterprise-systems'],
   body: `# NetSuite Extraction Bridge
 
 The connector uses an account-installed, read-only extraction bridge. It does

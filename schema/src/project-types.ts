@@ -12,7 +12,7 @@ import { id, orgRef, auditColumns } from "./helpers";
  *
  * Built-in types (Fixed Price, Time & Materials, Cost-Plus, Not-to-Exceed) ship
  * world-class defaults that fit any project business; a tenant can add types and
- * tune every profile (e.g. to reproduce a legacy NetSuite RESTlet to the penny).
+ * tune every profile (e.g. to reproduce a legacy source platform RESTlet to the penny).
  */
 
 /* ------------------------------------------------------------------ */
@@ -70,7 +70,7 @@ export interface OverheadSource {
     | "none" //                no overhead
     | "percent_of_labor" //    laborCost × ratePercent
     | "per_labor_hour" //      project hours × ratePerHour (flat)
-    | "rate_engine" //         per-department composite burden rate × project hours-by-dept (the Rassaun/Gantry model)
+    | "rate_engine" //         per-department composite burden rate × project hours-by-dept (the reference organization/Gantry model)
     | "account_group_actual"; // legacy: sum posted GL to an overhead pool tagged to the project
   /** For percent_of_labor — the percentage (25 = 25%). */
   ratePercent?: number;

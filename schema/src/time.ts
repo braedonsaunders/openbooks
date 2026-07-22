@@ -75,7 +75,7 @@ export const timeEntries = pgTable(
     fieldTicketId: uuid("field_ticket_id"),
     invoicedByLineId: uuid("invoiced_by_line_id"),
     payrollBatchRef: text("payroll_batch_ref"),
-    /** Keeps the NetSuite timebill nsId + source flags for the import bridge. */
+    /** Keeps the source platform timebill nsId + source flags for the import bridge. */
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },

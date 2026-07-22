@@ -25,7 +25,7 @@ async function controlDeps(orgId: string) {
  * header date/currency plus each line's account, signed amount, and dimensions.
  * Comparing this before vs after a save tells us whether the edit was
  * GL-affecting — WITHOUT assuming the stored entry came from our own posting
- * rules (migrated journals carry NetSuite's GL). Non-GL edits (memo, reference #)
+ * rules (migrated journals carry source platform's GL). Non-GL edits (memo, reference #)
  * leave this unchanged and never touch the ledger.
  */
 async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, id: string, orgId: string): Promise<string> {
@@ -73,7 +73,7 @@ interface JournalLineInput {
 
 /**
  * Autosave a manual journal. Draft journals edit freely (no GL yet). A POSTED
- * journal is editable in place, NetSuite-style: its journal entry is a derived
+ * journal is editable in place, source platform-style: its journal entry is a derived
  * projection re-materialized on save (regenerateGlImpactTx) — a non-GL change
  * (memo, reference #) is a no-op on the ledger; a GL change regenerates the
  * entry's lines and is blocked only if the posting period is closed.

@@ -4,7 +4,7 @@
 # matching the other cluster apps (beaconhs, minio). Swarm placement puts the
 # service on the same node as dokploy-traefik and makes it visible to Traefik's
 # swarm provider; ingress is wired by a Dokploy managed domain (file provider),
-# the proven routing path for *.cloud.rassaun.com. The GitHub deploy workflow
+# the configured public application hostname. The GitHub deploy workflow
 # bumps OPENBOOKS_TAG and triggers compose.deploy.
 #
 # Database: the EXISTING Patroni pgcluster VM database (never a bundled

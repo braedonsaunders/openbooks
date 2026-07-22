@@ -14,7 +14,7 @@ import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
  * Project billing — the native reimplementation of the adminapp2 job-billing
- * flow (a NetSuite front-end there). A billing_request is a pre-invoice work
+ * flow (a source platform front-end there). A billing_request is a pre-invoice work
  * order that generates a `customer_invoice` DOCUMENT (never a parallel invoice
  * table — invoices are documents, posted through the existing kernel). The
  * generator (web/lib/billing) consumes unbilled billable time_entries + cost

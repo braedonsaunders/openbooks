@@ -3,13 +3,13 @@ import { db, schema } from "../db.ts";
 
 /**
  * Flow-managed record locks — the runtime side of the `lock_record` /
- * `unlock_record` actions (NetSuite "Lock Record" with role exemptions).
+ * `unlock_record` actions (source platform "Lock Record" with role exemptions).
  * Guards call `checkFlowLock` at their edit/void/delete chokepoints; the
  * executor writes rows via `lockRecord`/`unlockRecord`.
  *
  * Exemption model: admins are ALWAYS exempt (someone must be able to fix a
  * mis-locked record), plus any caller holding one of the lock's exemptRoles.
- * This mirrors the replicated NetSuite payment lock ("except Administrator +
+ * This mirrors the replicated source platform payment lock ("except Administrator +
  * customrole1734" → admin + controller).
  */
 

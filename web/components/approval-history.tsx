@@ -1,6 +1,6 @@
 'use client'
 
-// Approval history sublist for the record flyout — the NetSuite "Workflow
+// Approval history sublist for the record flyout — the source platform "Workflow
 // History" subtab, compacted into a collapsible "Approvals" section: one line
 // per event (submitted / requested / approved / rejected / escalated /
 // delegated) with an icon, the actor, relative time, and the comment or

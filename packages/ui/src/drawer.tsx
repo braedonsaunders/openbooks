@@ -84,7 +84,7 @@ export function Drawer({
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
-  // Fullscreen toggle: every flyout can expand to the full viewport (NetSuite
+  // Fullscreen toggle: every flyout can expand to the full viewport (source platform
   // "expand" affordance). Width animates via the max-width transition below;
   // height is already 100%. Resets when the drawer closes so the next open
   // starts at its designed size.

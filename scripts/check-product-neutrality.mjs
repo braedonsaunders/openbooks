@@ -16,6 +16,12 @@ const vendorPatterns = [
   new RegExp(joined('Dynamics ', '365'), 'i'),
   new RegExp(joined('Oracle ', 'Financials'), 'i'),
   new RegExp(`\\b${joined('S', 'AP')}\\b`),
+  new RegExp(joined('Suite', 'Analytics'), 'i'),
+  new RegExp(joined('Suite', 'Flow'), 'i'),
+  new RegExp(joined('Suite', 'Script'), 'i'),
+  new RegExp(joined('Suite', 'App'), 'i'),
+  new RegExp(joined('Suite', 'QL'), 'i'),
+  new RegExp(joined('One', 'World'), 'i'),
 ]
 
 const organizationPatterns = [new RegExp(['Ras', 'saun'].join(''), 'i')]

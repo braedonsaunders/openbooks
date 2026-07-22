@@ -11,7 +11,7 @@ import { mergeAndPrintPdf } from './pdf-templates/render'
 
 /**
  * Invoice backup PDF package — the native reimplementation of adminapp2's
- * getInvoiceBackupPDF (a NetSuite front-end there). Assembles, in a configurable
+ * getInvoiceBackupPDF (a source platform front-end there). Assembles, in a configurable
  * order, the invoice PDF + a costed-timesheet page + the vendor-bill/receipt
  * attachments of the cost documents the invoice billed, merges them with pdf-lib,
  * and stores the package in the file cabinet attached to the invoice document.

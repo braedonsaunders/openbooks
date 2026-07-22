@@ -15,7 +15,7 @@ import type { ReportFilterOperator, ReportRuleGroup } from './types'
 
 export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number'
 
-/** Every transaction kind the documents table holds — the NetSuite
+/** Every transaction kind the documents table holds — the source platform
  *  "Transaction Type" filter set. One source of truth for both the
  *  transactions and transaction_lines entities. */
 export const TRANSACTION_KINDS = [
@@ -52,7 +52,7 @@ export type ReportEntityColumn = {
   expr: string
   /**
    * Enum columns: the known value set. Drives option pickers in the filter
-   * UI (NetSuite "type is any of Bill, Expense Report…"). Values are stored
+   * UI (source platform "type is any of Bill, Expense Report…"). Values are stored
    * raw; display labels resolve through i18n with a humanized fallback.
    */
   options?: readonly string[]

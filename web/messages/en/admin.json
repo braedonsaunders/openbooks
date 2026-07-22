@@ -69,7 +69,7 @@
       },
       "sync": {
         "title": "Migrations & Mirror",
-        "description": "Migrate from NetSuite, QuickBooks and more — then mirror to A/B-run both in parallel"
+        "description": "Migrate from an accounting source, then mirror both systems during validation"
       },
       "ai": {
         "title": "AI",

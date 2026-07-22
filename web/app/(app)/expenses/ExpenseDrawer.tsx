@@ -130,7 +130,7 @@ export function ExpenseDrawer({
   const doc = report.doc
   const statusKey = STATUS_LABEL_KEYS[String(doc.status)]
   const isDraft = doc.status === 'draft'
-  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
   // — even for drafts — with an Edit button in the header. Draft, approved,
   // and POSTED reports are all editable (provided the viewer can enter
   // expenses) — saving a posted report re-materializes its GL-Impact projection

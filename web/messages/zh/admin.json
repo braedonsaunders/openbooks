@@ -69,7 +69,7 @@
       },
       "sync": {
         "title": "迁移与镜像",
-        "description": "从 NetSuite、QuickBooks 等迁移——然后镜像以并行 A/B 运行"
+        "description": "从源会计系统迁移，并在验证期间镜像运行两个系统"
       },
       "ai": {
         "title": "AI",

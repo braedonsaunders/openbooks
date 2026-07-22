@@ -69,7 +69,7 @@
       },
       "sync": {
         "title": "Migrações e Espelhamento",
-        "description": "Migre do NetSuite, QuickBooks e mais — depois espelhe para executar A/B ambos em paralelo"
+        "description": "Migre de um sistema contábil de origem e espelhe os dois sistemas durante a validação"
       },
       "ai": {
         "title": "IA",

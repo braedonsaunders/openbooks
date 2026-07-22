@@ -2,7 +2,7 @@
 
 /**
  * LineGrid — the transaction line editor used by every document type
- * (vendor bills, invoices, journals, expense reports). NetSuite-grade grid
+ * (vendor bills, invoices, journals, expense reports). source platform-grade grid
  * behavior, openbooks polish:
  *
  *  - spreadsheet keyboard model: Enter commits + moves down (appending a row

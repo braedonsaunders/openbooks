@@ -69,7 +69,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (row.status === 'voided') {
     return NextResponse.json({ error: 'a voided document cannot be edited' }, { status: 422 })
   }
-  // Pending-approval lock (NetSuite parity): while approvers are deciding, the
+  // Pending-approval lock: while approvers are deciding, the
   // record they were shown must not shift underneath them. Editing resumes
   // after the decision (approve → approved, reject → draft); flow admins may
   // override.
@@ -79,7 +79,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 409 },
     )
   }
-  // Flow-managed lock (the lock_record action — NetSuite "Lock Record" with
+  // Flow-managed lock (the lock_record action with
   // role exemptions). Independent of document status.
   {
     const roles = await userRoleKeys(user.orgId, user.id)

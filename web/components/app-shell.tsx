@@ -2,7 +2,7 @@
 // (mobile toggle, org name, account menu) + scrolling main + mobile tab bar.
 //
 // Two desktop layouts, picked server-side by resolveNavMode: "sidebar" (the
-// default left rail) or "topbar" (NetSuite-style TopNav dropdowns in the
+// default left rail) or "topbar" (source platform-style TopNav dropdowns in the
 // header, no rail). Below lg both modes fall back to the mobile drawer +
 // tab bar, so mobile behavior is identical either way.
 

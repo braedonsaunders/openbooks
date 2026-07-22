@@ -1,125 +1,35 @@
 import type { DocArticle } from '../types'
 
-export const comingFromNetSuite: DocArticle = {
-  slug: 'coming-from-netsuite',
-  title: 'Coming from NetSuite',
+export const switchingFromSmallBusinessSystems: DocArticle = {
+  slug: 'switching-from-small-business-systems',
+  title: 'Switching from a Small Business System',
   category: 'switching',
   order: 1,
   summary:
-    'Map familiar NetSuite navigation, records, segments, searches, workflows, scripts, and controls to OpenBooks.',
-  updated: '2026-07-19',
-  keywords: [
-    'NetSuite',
-    'SuiteAnalytics',
-    'SuiteFlow',
-    'SuiteScript',
-    'SuiteApp',
-    'saved search',
-    'OneWorld',
-    'familiarization',
-  ],
-  related: ['navigation-and-records', 'migration-and-cutover', 'analytics-and-saved-views'],
-  body: `# Coming from NetSuite
-
-OpenBooks covers many of the same accounting and operations jobs, but it does not
-reproduce NetSuite screens field for field. Start with the business purpose of a
-record, then learn the shared list-and-drawer workflow.
-
-## Familiar concepts
-
-| NetSuite concept | OpenBooks destination |
-| --- | --- |
-| Centers, roles, and permissions | Configurable navigation plus **Users, Roles, and Permissions** |
-| OneWorld subsidiaries | **Settings → Company Setup → Subsidiaries** |
-| Chart of Accounts | **Accounting → Chart of Accounts** |
-| Department, Class, Location | Organization dimensions in **Settings → Company Setup** |
-| Customers, vendors, employees | Role-specific views of shared parties |
-| Items | **Operations → Catalog → Items & Services** and **Inventory** |
-| Transactions | Sales, Purchases, Banking, and Accounting lists with record drawers |
-| Posting periods | **Accounting → Period Close** and accounting-period configuration |
-| Saved Searches | **Insights → Saved Views** |
-| SuiteAnalytics | **Analytics**, **Dashboards**, custom reports, and governed query |
-| SuiteFlow | **Settings → Automate → Flows** |
-| SuiteScript | **Settings → Automate → Scripts** in a QuickJS sandbox |
-| SuiteApps | Organization-installed **Apps** and the **App Library** |
-| File Cabinet | **Home → File Cabinet** |
-| System Notes | **Settings → Administration → Audit Log** |
-
-## The biggest workflow change
-
-Record creation and editing is flyout-first. Selecting a row opens one primary
-record in a drawer over the list. **New** creates a real autosaving draft.
-Posting and approval remain explicit, and secondary verbs live in the record's
-**Actions** menu.
-
-You do not need to navigate through a separate full page for every view or edit.
-Expand the drawer to fullscreen when the record needs more space.
-
-## Segments and custom data
-
-Map legal entity to subsidiary and reporting attributes to purpose-built
-dimensions. Do not flatten every custom segment into the chart of accounts.
-Native capabilities use typed configuration; organization-defined extra fields
-belong in the customization layer.
-
-## Searches, reporting, and scripting
-
-Use **Saved Views** for reusable record selections, financial reports for the
-books, and analytics for operating signals. Authorized SQL users query the real
-PostgreSQL model through a SELECT-only role rather than a proprietary formula
-dialect. Scripts execute real JavaScript in a governed QuickJS sandbox.
-
-## Migration advice
-
-Inventory custom records, fields, forms, workflows, scripts, searches, roles,
-segments, subsidiaries, accounting books, tax, revenue arrangements, and
-integrations before mapping transactions. Decide which customizations represent
-a real business requirement and which only compensate for the old interface.
-
-Prove trial balance and account-period activity, then reconcile AR, AP, bank,
-tax, fixed assets, inventory, projects, revenue, and intercompany detail. Keep
-the source read-only after cutover for historical evidence.
-`,
-}
-
-export const comingFromQuickBooksOnline: DocArticle = {
-  slug: 'coming-from-quickbooks-online',
-  title: 'Coming from QuickBooks Online',
-  category: 'switching',
-  order: 2,
-  summary:
-    'Translate QuickBooks Online lists, forms, classes, bank workflows, reports, and close controls into OpenBooks.',
-  updated: '2026-07-19',
-  keywords: [
-    'QuickBooks Online',
-    'QBO',
-    'classes',
-    'locations',
-    'bank feed',
-    'products and services',
-    'familiarization',
-  ],
+    'Map familiar lists, forms, bank workflows, reports, and close controls into OpenBooks.',
+  updated: '2026-07-21',
+  keywords: ['small business', 'migration', 'classes', 'bank feed', 'familiarization'],
   related: ['quick-start', 'banking-and-reconciliation', 'migration-and-cutover'],
-  body: `# Coming from QuickBooks Online
+  body: `# Switching from a Small Business System
 
-OpenBooks separates business transactions from their ledger entries and offers
-deeper configuration, approval, close, and audit controls. The daily sales,
-purchasing, and bank concepts remain familiar.
+OpenBooks separates business transactions from their ledger entries and adds
+deeper configuration, approval, close, and audit controls. Daily sales,
+purchasing, and banking concepts remain familiar.
 
 ## Familiar concepts
 
-| QuickBooks Online concept | OpenBooks destination |
+| Source concept | OpenBooks destination |
 | --- | --- |
-| Customers and vendors | **Customers → Relationships → Customers** and **Purchasing → Vendor Records → Vendors** |
+| Customers and vendors | Role-specific views of shared parties |
 | Products and services | **Operations → Catalog → Items & Services** |
-| Invoices and sales receipts | **Customers → Sell & Collect → Invoices** and **Customer Payments** |
-| Bills and bill payments | **Purchasing → Buy → Bills** and **Pay → Vendor Payments** |
+| Invoices and customer receipts | **Invoices** and **Customer Payments** |
+| Bills and supplier payments | **Bills** and **Vendor Payments** |
 | Expenses | **Purchasing → Pay → Expenses** |
 | Chart of accounts | **Accounting → Chart of Accounts** |
-| Classes and locations | Configurable dimensions in **Settings → Company Setup** |
-| Bank transactions and rules | **Banking → Match** and **Rules** |
-| Reconcile | **Banking → Reconciliations** |
-| Closing date | Accounting-period locks and the governed **Period Close** workflow |
+| Classes, locations, or tracking | Configurable dimensions in **Settings → Company Setup** |
+| Bank feeds and rules | **Banking → Match** and **Rules** |
+| Reconciliation | **Banking → Reconciliations** |
+| Closing date | Accounting-period locks and **Period Close** |
 | Custom reports | Reports, Saved Views, Analytics, and Dashboards |
 
 ## Transactions and posting
@@ -132,10 +42,10 @@ Use customer receipts, vendor payments, credits, and applications to maintain
 open-item detail. Avoid direct journals to receivables or payables control
 accounts.
 
-## Classes, locations, and projects
+## Dimensions, locations, and projects
 
-Map QBO classes and locations according to their real reporting purpose. A class
-used as department should become department; a location should remain location.
+Map each source classification according to its actual reporting purpose. A
+department should become a department and a location should remain a location.
 Use projects for job-level time, cost, billing, and profitability rather than as
 a generic tag.
 
@@ -149,290 +59,82 @@ Complete and sign off a reconciliation separately from transaction matching.
 
 Export the detailed general ledger, trial balance, chart, lists, open invoices
 and bills, unapplied cash and credits, reconciliations, tax detail, attachments,
-and audit evidence needed by policy. Preserve stable QBO identifiers where
-available.
+and audit evidence required by policy. Preserve stable source identifiers.
 
-QBO report totals alone are not enough. Reconcile account-period activity and
-open items, and verify class, location, customer, vendor, project, tax, and
-currency detail on representative transactions.
+Reconcile account-period activity and open items, then verify dimensions,
+parties, projects, tax, and currency detail on representative transactions.
 `,
 }
 
-export const comingFromQuickBooksDesktop: DocArticle = {
-  slug: 'coming-from-quickbooks-desktop',
-  title: 'Coming from QuickBooks Desktop',
+export const switchingFromEnterpriseSystems: DocArticle = {
+  slug: 'switching-from-enterprise-systems',
+  title: 'Switching from an Enterprise System',
   category: 'switching',
-  order: 3,
+  order: 2,
   summary:
-    'Learn the OpenBooks equivalents for QuickBooks Desktop lists, forms, classes, reports, and the read-only connector.',
-  updated: '2026-07-19',
-  keywords: [
-    'QuickBooks Desktop',
-    'QBD',
-    'lists',
-    'forms',
-    'classes',
-    'memorized reports',
-    'Web Connector',
-    'familiarization',
-  ],
-  related: ['quickbooks-desktop-connector', 'coming-from-quickbooks-online', 'migration-and-cutover'],
-  body: `# Coming from QuickBooks Desktop
+    'Map entities, dimensions, subledgers, workflows, reporting, and extensions into OpenBooks.',
+  updated: '2026-07-21',
+  keywords: ['enterprise', 'migration', 'dimensions', 'subledgers', 'familiarization'],
+  related: ['navigation-and-records', 'migration-and-cutover', 'analytics-and-saved-views'],
+  body: `# Switching from an Enterprise System
 
-The core list and form concepts are familiar, while OpenBooks adds server-side
-drafts, granular permissions, governed close, tenant-configured integrations, and
-a browser-based record workflow.
+OpenBooks covers the accounting and operations jobs expected from an enterprise
+suite without reproducing another product's screens field for field. Start with
+the business purpose of each record and use the shared list-and-drawer workflow.
 
 ## Familiar concepts
 
-| QuickBooks Desktop concept | OpenBooks destination |
+| Source concept | OpenBooks destination |
 | --- | --- |
-| Customer, Vendor, Employee lists | Role-specific party lists |
-| Item List | **Items & Services** and **Inventory** |
-| Chart of Accounts | **Accounting → Chart of Accounts** |
-| Classes | Configurable dimensions; map by actual business purpose |
-| Invoices and Receive Payments | **Invoices** and **Customer Payments** |
-| Enter Bills and Pay Bills | **Bills** and **Vendor Payments** |
-| Make General Journal Entries | **Accounting → Journals** |
-| Bank Feeds and Reconcile | **Banking → Match** and **Reconciliations** |
-| Memorized or customized reports | Saved report parameters, custom reports, and Saved Views |
-| Closing Date | Accounting periods, locks, and **Period Close** |
+| Legal entities and hierarchies | **Settings → Company Setup → Subsidiaries** |
+| Chart of accounts | **Accounting → Chart of Accounts** |
+| Departments, classes, and locations | Organization dimensions in **Settings → Company Setup** |
+| Customers, vendors, and employees | Role-specific views of shared parties |
+| Items and services | **Operations → Catalog → Items & Services** and **Inventory** |
+| Business transactions | Sales, Purchases, Banking, and Accounting record drawers |
+| Posting periods | **Accounting → Period Close** and accounting-period configuration |
+| Saved queries | **Insights → Saved Views** |
+| Workflow automation | **Settings → Automate → Flows** |
+| User scripting | **Settings → Automate → Scripts** in a QuickJS sandbox |
+| Extension marketplace | Organization-installed **Apps** and the **App Library** |
+| Document repository | **Home → File Cabinet** |
+| System history | **Settings → Administration → Audit Log** |
 
 ## Record workflow
 
-Lists use URL-based search, filters, sorting, and pagination. Records open in a
-drawer. **New** immediately creates a server-side draft that autosaves; use the
-**Actions** menu to submit, post, convert, pay, or reverse according to status
-and permission.
+Selecting a row opens one primary record in a drawer over the list. **New**
+creates a real autosaving draft. Posting and approval remain explicit, and
+secondary verbs live in the record's **Actions** menu. Expand the drawer to
+fullscreen when the record needs more space.
 
-## Read-only migration connector
+## Dimensions and custom data
 
-OpenBooks includes a QuickBooks Web Connector bridge for read-only historical
-capture. The Windows machine initiates HTTPS connections, and the connector does
-not write to the company file. It prioritizes exact GL migration and
-reconciliation; it does not recreate every QuickBooks form layout or application
-relationship as a native record.
+Map legal entities to subsidiaries and reporting attributes to purpose-built
+dimensions. Do not flatten every source segment into the chart of accounts.
+Native capabilities use typed configuration; organization-defined extra fields
+belong in the customization layer.
 
-See [QuickBooks Desktop Connector](/docs/quickbooks-desktop-connector) for setup,
-regional requirements, security, retention, and diagnostics.
+## Reporting and scripting
 
-## Migration advice
-
-Repair and verify the company file before capture, close unintended open windows,
-and retain a final backup. Reconcile the accrual-basis trial balance and
-debit-positive account activity for each posting month. Separately reconcile
-open receivables, payables, inventory, payroll, tax, and bank details needed at
-cutover.
-`,
-}
-
-export const comingFromOdoo: DocArticle = {
-  slug: 'coming-from-odoo',
-  title: 'Coming from Odoo',
-  category: 'switching',
-  order: 4,
-  summary:
-    'Map Odoo apps, companies, contacts, products, journals, analytic accounting, documents, and automation to OpenBooks.',
-  updated: '2026-07-19',
-  keywords: [
-    'Odoo',
-    'analytic account',
-    'analytic plan',
-    'contacts',
-    'products',
-    'journals',
-    'apps',
-    'familiarization',
-  ],
-  related: ['parties-items-and-projects', 'apps', 'migration-and-cutover'],
-  body: `# Coming from Odoo
-
-Both systems connect accounting with operational modules, but their record and
-extension models differ. Map by business purpose rather than assuming an Odoo
-model has a one-to-one destination.
-
-## Familiar concepts
-
-| Odoo concept | OpenBooks destination |
-| --- | --- |
-| Companies | Subsidiaries within the organization, when they are legal entities |
-| Contacts with customer/vendor use | Shared parties with customer and vendor roles |
-| Products and product categories | Items & Services, inventory profiles, and item categories |
-| Customer invoices | **Customers → Sell & Collect → Invoices** |
-| Vendor bills | **Purchasing → Buy → Bills** |
-| Payments and reconciliation | Customer/Vendor Payments plus **Banking** |
-| Accounts and journal items | Chart of Accounts and posted journal-entry lines |
-| Analytic accounts and plans | Projects and configurable dimensions, depending on purpose |
-| Documents | **File Cabinet** and record evidence |
-| Automated actions and approvals | **Flows** and approval configuration |
-| Installed modules | Native modules plus governed organization **Apps** |
-
-## Journals mean something different
-
-Odoo uses journals as operational groupings for transactions. In OpenBooks, a
-journal entry is the balanced ledger projection or a manual accounting
-transaction. Map Odoo bank, sales, purchase, and miscellaneous journal context to
-books, accounts, transaction kinds, number sequences, and payment configuration
-as appropriate; do not create one OpenBooks account per Odoo journal.
-
-## Analytic accounting
-
-Classify each analytic plan and account by purpose. Use projects for job-level
-time, billing, cost, and profitability. Use department, location, class, or
-another configured dimension for stable management reporting. Preserve analytic
-distribution at the line level when it affects reporting.
+Use **Saved Views** for reusable record selections, financial reports for the
+books, and analytics for operating signals. Authorized SQL users query the real
+PostgreSQL model through a SELECT-only role. Scripts execute real JavaScript in
+a governed QuickJS sandbox.
 
 ## Migration advice
 
-Export posted and draft moves separately, including move lines, reconciliations,
-currencies, taxes, fiscal positions, products, contacts, analytic distributions,
-assets, inventory valuation, attachments, and multi-company context. Decide how
-Odoo custom modules and fields map to native OpenBooks capabilities, custom
-fields, custom records, flows, scripts, or apps.
+Inventory custom records, fields, forms, workflows, scripts, queries, roles,
+segments, subsidiaries, accounting books, tax, revenue arrangements, and
+integrations before mapping transactions. Decide which customizations represent
+a real business requirement and which only compensate for the old interface.
 
-Reconcile by company, account, period, currency, tax, partner, and analytic
-dimension. Confirm payment and partial-reconciliation chains so open items do not
-reappear after cutover.
-`,
-}
-
-export const comingFromXero: DocArticle = {
-  slug: 'coming-from-xero',
-  title: 'Coming from Xero',
-  category: 'switching',
-  order: 5,
-  summary:
-    'Translate Xero contacts, items, tracking, bank reconciliation, invoices, bills, assets, and reports into OpenBooks.',
-  updated: '2026-07-19',
-  keywords: [
-    'Xero',
-    'tracking categories',
-    'contacts',
-    'bank reconciliation',
-    'manual journal',
-    'fixed assets',
-    'familiarization',
-  ],
-  related: ['banking-and-reconciliation', 'chart-of-accounts-and-dimensions', 'migration-and-cutover'],
-  body: `# Coming from Xero
-
-The daily invoice, bill, payment, and reconciliation concepts are familiar.
-OpenBooks adds explicit posting lifecycles, configurable books and periods,
-granular administration, and deeper workflow controls.
-
-## Familiar concepts
-
-| Xero concept | OpenBooks destination |
-| --- | --- |
-| Contacts | Shared parties with customer and vendor roles |
-| Products and services | **Items & Services** |
-| Sales invoices and credit notes | **Customers → Sell & Collect → Invoices** and customer credits |
-| Bills and credit notes | **Purchasing → Bills** and vendor credits |
-| Bank statements and reconciliation | **Banking → Match** and **Reconciliations** |
-| Tracking categories | Configurable dimensions such as department, location, or class |
-| Manual journals | **Accounting → Journals** |
-| Fixed assets | **Accounting → Fixed Assets** and tax depreciation |
-| Reports | Reports, Analytics, Dashboards, and Saved Views |
-| Lock dates | Accounting periods, module locks, and governed Period Close |
-
-## Tracking and parties
-
-Map each tracking category according to what it measures. Preserve contact roles
-without duplicating a business that is both customer and supplier. Validate
-default currencies, tax treatment, terms, and control-account behavior.
-
-## Bank reconciliation
-
-Import statement evidence, match it to existing accounting transactions, and
-categorize genuine missing activity. A signed-off reconciliation separately
-proves the statement ending balance to the ledger.
-
-## Migration advice
-
-Extract journals and source transactions, contacts, items, currencies, taxes,
-tracking, bank statements, reconciliations, assets, attachments, and report
-settings required by policy. Reconcile trial balance and account-period activity,
-then open invoices, bills, credits, cash, tax, assets, and tracking detail.
-
-Test partial payments, overpayments, prepayments, credit applications, foreign
-currency, and bank transfers explicitly; these are common places for a ledger
-total to agree while open-item detail does not.
-`,
-}
-
-export const comingFromSageIntacct: DocArticle = {
-  slug: 'coming-from-sage-intacct',
-  title: 'Coming from Sage Intacct',
-  category: 'switching',
-  order: 6,
-  summary:
-    'Map Sage Intacct entities, dimensions, modules, approvals, reports, and platform customizations to OpenBooks.',
-  updated: '2026-07-19',
-  keywords: [
-    'Sage Intacct',
-    'entities',
-    'dimensions',
-    'statistical account',
-    'custom report',
-    'approval',
-    'familiarization',
-  ],
-  related: ['coming-from-netsuite', 'company-settings', 'migration-and-cutover'],
-  body: `# Coming from Sage Intacct
-
-OpenBooks shares an emphasis on dimensional accounting, subledgers, controls,
-and multi-entity operations. The main adjustment is the shared drawer workflow
-and the way configuration, reports, automation, and extensions are organized.
-
-## Familiar concepts
-
-| Sage Intacct concept | OpenBooks destination |
-| --- | --- |
-| Entities and entity hierarchy | Subsidiaries and consolidation configuration |
-| General Ledger | Chart of Accounts, Journals, books, periods, and Reports |
-| Dimensions | Departments, locations, classes, projects, parties, and other configured dimensions |
-| Accounts Payable and Receivable | Purchases and Sales workflows |
-| Cash Management | Banking, matching, rules, and reconciliations |
-| Purchasing and Order Entry | Purchase Orders, Sales Orders, bills, and invoices |
-| Time and project accounting | Projects, Timesheets, project types, and profitability |
-| Dashboards and reports | Analytics, Dashboards, custom reports, and Saved Views |
-| Platform Services customization | Custom fields, forms, custom records, flows, scripts, APIs, and apps |
-
-## Dimensions and entities
-
-Map the entity hierarchy to legal subsidiaries. Map each dimension by its
-accounting or operational meaning, preserving line-level values. Avoid turning
-dimension combinations into separate accounts.
-
-Review intercompany due-to/due-from mappings, elimination entities, base
-currencies, rate types, and consolidation policy before loading cross-entity
-history.
-
-## Controls and workflow
-
-Configure roles, approvals, accounting books, periods, close blueprints, payment
-operations, tax, and number sequences before trial transactions. Test with the
-actual preparer, approver, payer, and closer roles rather than only an
-administrator.
-
-## Migration advice
-
-Inventory custom dimensions, objects, reports, dashboards, approval policies,
-allocations, statistical data, attachments, integrations, and multi-entity
-configuration. Map customizations to native capabilities first and use the
-customization or app layers only for genuine organization-specific needs.
-
-Reconcile by entity, book, account, period, currency, and dimension, plus every
-material subledger. Test consolidation and eliminations independently from
-single-entity trial balances.
+Prove trial balance and account-period activity, then reconcile AR, AP, bank,
+tax, fixed assets, inventory, projects, revenue, and intercompany detail. Keep
+the source read-only after cutover for historical evidence.
 `,
 }
 
 export const switchingArticles: DocArticle[] = [
-  comingFromNetSuite,
-  comingFromQuickBooksOnline,
-  comingFromQuickBooksDesktop,
-  comingFromOdoo,
-  comingFromXero,
-  comingFromSageIntacct,
+  switchingFromSmallBusinessSystems,
+  switchingFromEnterpriseSystems,
 ]

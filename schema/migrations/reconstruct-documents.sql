@@ -1,4 +1,4 @@
--- Reconstruct subledger DOCUMENTS from the replayed NetSuite GL.
+-- Reconstruct subledger DOCUMENTS from the replayed source platform GL.
 -- The replay created journal_entries (origin='migration') but not the source
 -- vendor bills / invoices / payments / expense reports, so the subledger
 -- lists are empty while the GL is complete. This backfills a posted document

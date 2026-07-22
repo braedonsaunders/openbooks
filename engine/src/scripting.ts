@@ -12,8 +12,8 @@ import { createScriptJournal } from "./journal-writes.ts";
 /**
  * User scripting: REAL JavaScript (ES2023), executed in a QuickJS sandbox —
  * a separate WASM-hosted engine with no access to Node, the filesystem, the
- * network, or the database connection. The SuiteScript idea, minus the
- * proprietary runtime and the 2010s JavaScript.
+ * network, or the database connection. It provides governed automation without
+ * exposing infrastructure or relying on a proprietary runtime.
  *
  * The sandbox uses the ASYNCIFY variant of QuickJS so host functions can do
  * real async I/O (database queries) while the script sees a synchronous call.

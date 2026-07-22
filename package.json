@@ -17,6 +17,7 @@
   },
   "scripts": {
     "worker": "tsx engine/src/worker/index.ts",
-    "test": "node --import tsx --test --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'"
+    "check:product-neutrality": "node scripts/check-product-neutrality.mjs",
+    "test": "npm run check:product-neutrality && node --import tsx --test --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'"
   }
 }

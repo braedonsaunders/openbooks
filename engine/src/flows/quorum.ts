@@ -9,7 +9,7 @@
  *         branch resumes only when EVERY sibling has approved.
  *
  * beaconhs gates were single-assignee (decision == branch); the quorum layer
- * is the openbooks extension described in docs/flows-design.md.
+ * is the openbooks extension described in the flow execution contract.
  */
 
 export type GateQuorum = "any" | "all";

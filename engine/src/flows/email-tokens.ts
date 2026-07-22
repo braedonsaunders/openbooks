@@ -4,7 +4,7 @@ import { env } from "../db.ts";
 /**
  * One-click signed email approvals — HMAC tokens that let a gate assignee
  * approve/reject straight from the notification email without a session
- * (exceeds NetSuite's reply-parsing approach: no inbound mail pipeline, no
+ * (exceeds source platform's reply-parsing approach: no inbound mail pipeline, no
  * spoofable From headers).
  *
  * Token format:  base64url(gateId|decision|assigneeUserId|expiryMs) . hmacHex

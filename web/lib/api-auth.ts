@@ -14,7 +14,7 @@ import type { SessionUser } from "./auth";
 /**
  * API-key authentication for the versioned REST API (`/api/v1/*`).
  *
- * NetSuite binds a token to a single role and inherits the whole role's
+ * source platform binds a token to a single role and inherits the whole role's
  * permission set — the role IS the scope. openbooks does better: each key
  * carries a SCOPED subset of permission keys (the same `module.action`
  * catalogue roles use). A request is allowed only when BOTH the key's scopes

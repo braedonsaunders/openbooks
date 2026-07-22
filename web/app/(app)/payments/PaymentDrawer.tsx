@@ -101,7 +101,7 @@ export function PaymentDrawer({
   const router = useRouter()
   const doc = payment.doc
   const isDraft = doc.status === 'draft'
-  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
   // — even for drafts — with an Edit button in the header. Only DRAFT payments
   // are editable (posting is terminal — applications become ledger state). Save
   // is EXPLICIT — one Save button, no per-field autosave.

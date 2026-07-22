@@ -21,7 +21,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
 type ApiError = { fieldId: string; message: string }
 
 /**
- * The custom-record flyout — NetSuite-style record model: ALWAYS opens
+ * The custom-record flyout — source platform-style record model: ALWAYS opens
  * READ-ONLY (view mode) — even for drafts — with an Edit button in the header;
  * editing is an explicit Edit → Save/Cancel cycle. Records are master data:
  * they stay editable while DRAFT or ACTIVE; only inactive records are

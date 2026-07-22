@@ -898,6 +898,6 @@
       "sales_order": "Órdenes de venta",
       "purchase_order": "Órdenes de compra"
     },
-    "note": "La conversión se rastrea mediante enlaces de documentos; los enlaces históricos de NetSuite aún no se importan."
+    "note": "La conversión se rastrea mediante enlaces de transacciones; los enlaces históricos del origen pueden requerir migración."
   }
 }

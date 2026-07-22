@@ -161,7 +161,7 @@ export function RowsConfig({
 }
 
 /**
- * Multi-level sort editor (NetSuite "Sort by / then by"). Writes both `sorts`
+ * Multi-level sort editor (source platform "Sort by / then by"). Writes both `sorts`
  * (the engine's multi-level list, max 3) and the legacy single `sort` (kept in
  * sync with level 1) so older consumers of the plan keep working.
  */

@@ -8,7 +8,7 @@ import { controlDeps } from './documents'
 import { resolveItemRate } from './item-rates'
 
 /**
- * Project charges / resource usage — the native replacement for NetSuite's
+ * Project charges / resource usage — the native replacement for source platform's
  * SO(price)+PO(cost) workaround. A project_charge allocates a pooled,
  * already-incurred cost (non-inventory materials, equipment, internal services)
  * onto a project at a cost rate, carrying a billable rate for T&M. It posts

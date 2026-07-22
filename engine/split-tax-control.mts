@@ -1,11 +1,11 @@
 /**
  * Step 1.1 — PERMANENT config change: split the collapsed tax control accounts.
  *
- * NetSuite keeps purchase-side (recoverable ITC) tax on account 1200
+ * source platform keeps purchase-side (recoverable ITC) tax on account 1200
  * "GST/HST on Purchases" (nsId 210) and sales-side tax on 2100 "GST/HST
  * Payable" (nsId 212). openbooks had both collapsed onto 2100. Point
  * controlAccounts.taxPaid at 1200 and taxCollected at 2100 so the posting
- * rules route purchase vs sales tax exactly as NetSuite does.
+ * rules route purchase vs sales tax exactly as source platform does.
  *
  * Idempotent. Run: node_modules/.bin/tsx engine/split-tax-control.mts
  */

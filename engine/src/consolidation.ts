@@ -4,7 +4,7 @@ import { isZero, neg, sum } from "./money.ts";
 import { loadSubsidiaryContext } from "./subsidiaries.ts";
 
 /**
- * Consolidation machinery (NetSuite parity):
+ * Consolidation machinery (source platform parity):
  *
  *  - deriveConsolidatedRates: builds the period's consolidated exchange-rate
  *    rows (current / average / historical) from the daily fx_rates table for

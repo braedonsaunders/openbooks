@@ -70,7 +70,7 @@ export function FolderDrawer({
   const initialTab = search.get('folderTab') ?? 'details'
   const [tab, setTab] = useState(tabs.some((x) => x.key === initialTab) ? initialTab : 'details')
 
-  // NetSuite-style record model: an EXISTING folder ALWAYS opens READ-ONLY
+  // source platform-style record model: an EXISTING folder ALWAYS opens READ-ONLY
   // (view mode) with an Edit button in the header; Save/Cancel replace it while
   // editing. The create variant is a plain creation form (footer submit).
   const [uiMode, setUiMode] = useState<'view' | 'edit'>(mode === 'create' ? 'edit' : 'view')

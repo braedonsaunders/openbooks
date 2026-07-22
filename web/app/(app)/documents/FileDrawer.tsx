@@ -71,7 +71,7 @@ export function FileDrawer({
   const router = useRouter()
   const search = useSearchParams()
 
-  // NetSuite-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
   // with an Edit button in the header; Save/Cancel replace it while editing.
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const [name, setName] = useState(file.name)

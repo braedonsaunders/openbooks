@@ -235,7 +235,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
 }
 
 /* ------------------------------------------------------------------ */
-/* Unbilled — "available to bill" (NetSuite CouldBeInvoiced)           */
+/* Unbilled — "available to bill" (source platform CouldBeInvoiced)           */
 /* ------------------------------------------------------------------ */
 
 export interface ProjectUnbilled {

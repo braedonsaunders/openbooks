@@ -228,7 +228,7 @@ create trigger tax_filing_immutable before update or delete on tax_filings
 
 -- ---------------------------------------------------------------------------
 -- 3. Lines post only to active, postable (non-summary) accounts.
---    NetSuite allows posting to parent accounts; openbooks refuses.
+--    Source imports may contain parent-account postings; openbooks refuses them.
 -- ---------------------------------------------------------------------------
 create or replace function jl_check_account() returns trigger
 language plpgsql as $$

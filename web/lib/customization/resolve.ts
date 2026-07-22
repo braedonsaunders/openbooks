@@ -22,7 +22,7 @@ import { ensureCustomizationDefaults } from "./seed-defaults";
 /**
  * Effective-resolution layer for transaction form layouts + saved list views.
  *
- * Precedence (NetSuite "Preferred Form" + saved-search model):
+ * Precedence (source platform "Preferred Form" + saved-search model):
  *   form layout: user's preferred form → org default → system default
  *   list view:    ?view=<id> → user's default → org default → system default
  *

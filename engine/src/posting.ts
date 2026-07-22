@@ -67,7 +67,7 @@ export interface PostingDeps {
    * regenerateGlImpactTx for journal documents; lets a journal's AR/AP legs
    * participate in payment applications — openbooks' model applies ANY
    * crediting document (journal, credit memo, payment) to open items, the way
-   * NetSuite's own receipt journals settle invoices.
+   * Source receipt journals may settle invoices directly.
    */
   openItemAccountIds?: Set<string>;
   /**
@@ -96,7 +96,7 @@ export interface PostingDeps {
 
 /**
  * An AR/AP journal line participates in the subledger only when it identifies
- * the customer/vendor whose balance it changes. NetSuite permits direct GL
+ * the customer/vendor whose balance it changes. Some source systems permit direct GL
  * journals to control accounts without an entity; those remain legitimate
  * control-account GL activity, but must not become anonymous aging items.
  */
@@ -154,7 +154,7 @@ type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
  * liability control account; a refund is the arithmetic reverse and rides the
  * same rule with negative line amounts (its detail is stored already signed).
  * The liability account is the doc's `controlAccountId` override (the per-card
- * employee sub-account NetSuite used) else the resolved card liability.
+ * employee sub-account used by the source) else the resolved card liability.
  */
 const cardRule: RuleFn = (doc, lines, deps) => {
   const expense: KernelLine[] = lines.map((l) => ({
@@ -266,7 +266,7 @@ const lineTotal = (l: DocLine) => add(l.amount, l.taxAmount ?? "0");
 
 /**
  * The payable/receivable/card-liability control account a document should post
- * to. NetSuite lets a transaction choose its own AP/AR/financing account on the
+ * to. A source transaction may choose its own AP/AR/financing account on the
  * header (usually the org default, but sometimes a financing sub-account like
  * "Ford Credit" or a per-card employee liability). We surface that choice as
  * `doc.custom.controlAccountId`; when present it wins over the org default.
@@ -279,7 +279,7 @@ const controlOverride = (doc: Doc): string | undefined => {
 /**
  * Group line tax by tax code → one kernel line per code. Each code may carry
  * its OWN control account (tax_codes.collected/paid_account_id — sources like
- * ERPNext post each rate to its own account); the passed account is the
+ * some connectors post each rate to its own account); the passed account is the
  * org-control fallback when the code doesn't specify one.
  */
 function taxLines(
@@ -766,7 +766,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   }
 
   // -- open-item lines must carry a subledger party (AR/AP faithfulness) ----
-  // Every source system (NetSuite line "Name", QBO line Entity) puts a
+  // Source systems commonly put a customer, vendor, or employee on each line.
   // customer/vendor on each AR/AP line, and both enforce AR⇒customer, AP⇒vendor.
   // An open-item leg with no party can't age or net by entity — the exact defect
   // that let party-less month-end journals corrupt the subledger↔GL tie-out.
@@ -896,7 +896,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
 //
 // For a document-sourced entry the DOCUMENT is the system of record; its
 // journal entry is a derived projection — entry = postingRules(document) —
-// re-materialized on every save (NetSuite's model). `postDocument` above is
+// re-materialized on every save. `postDocument` above is
 // the first materialization; `regenerateGlImpactTx` re-materializes a posted
 // document's entry in place after an edit. A non-GL edit (memo, reference #)
 // produces an identical projection and is a no-op on the ledger; a GL edit

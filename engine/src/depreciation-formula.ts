@@ -1,13 +1,13 @@
 /**
  * Depreciation formula engine — the flexible core that makes depreciation
  * METHODS DATA rather than a hardcoded switch. A method is an expression over a
- * fixed variable set (modelled 1:1 on NetSuite FAM's formula methods), evaluated
+ * fixed variable set with a deliberately small, auditable grammar, evaluated
  * once per period against a per-period context. One evaluator subsumes
  * straight-line, declining-balance (any factor), sum-of-years-digits,
  * units-of-production, fixed-percent, rate-table (MACRS) and arbitrary
  * user-defined methods.
  *
- * Grammar (NetSuite-compatible):
+ * Grammar:
  *   expr    := max
  *   max     := add ( '~' add )*                 // '~' = take the greater operand
  *   add     := mul ( ('+'|'-') mul )*

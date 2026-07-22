@@ -898,6 +898,6 @@
       "sales_order": "Sales orders",
       "purchase_order": "Purchase orders"
     },
-    "note": "Conversion is tracked via document links; historical NetSuite links are not yet imported."
+    "note": "Conversion is tracked via transaction links; historical source links may require migration."
   }
 }

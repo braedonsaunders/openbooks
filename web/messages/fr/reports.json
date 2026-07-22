@@ -898,6 +898,6 @@
       "sales_order": "Commandes client",
       "purchase_order": "Bons de commande"
     },
-    "note": "La conversion est suivie via les liens de documents ; les liens historiques NetSuite ne sont pas encore importés."
+    "note": "La conversion est suivie via les liens de transactions ; les liens historiques de la source peuvent nécessiter une migration."
   }
 }

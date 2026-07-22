@@ -12,7 +12,7 @@ export const runtime = 'nodejs'
 
 /**
  * Party bank details — the fraud-sensitive record behind the replicated
- * NetSuite "Vendor Bank Details Approval" workflow.
+ * source platform "Vendor Bank Details Approval" workflow.
  *
  * Every create lands PENDING (inactive, invisible to payment runs — see
  * payments.ts's `is_active AND approved_at IS NOT NULL` selection); a
@@ -119,7 +119,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const accountNumber = body.accountNumber?.trim()
   const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
   // Any material edit re-enters approval: pending + inactive + approval
-  // cleared (the NetSuite workflow's @OLDRECORD@ comparison, done natively).
+  // cleared (the source platform workflow's @OLDRECORD@ comparison, done natively).
   await db.execute(sql`
     update party_bank_accounts set
       bank_name = ${body.bankName !== undefined ? body.bankName?.trim() || null : sql`bank_name`},

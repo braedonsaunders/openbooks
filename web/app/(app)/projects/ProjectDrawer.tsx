@@ -170,11 +170,11 @@ export function ProjectDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  // NetSuite-style record: opens READ-ONLY; Edit switches to an explicit-save form.
+  // source platform-style record: opens READ-ONLY; Edit switches to an explicit-save form.
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canManage
 
-  // Flyout chrome: subtabs + Actions-menu-driven create forms (AGENTS.md).
+  // Flyout chrome: subtabs + Actions-menu-driven create forms (repository conventions).
   const [tab, setTab] = useState<TabKey>('overview')
   const [actionsOpen, setActionsOpen] = useState(false)
   const [chargeFormOpen, setChargeFormOpen] = useState(false)

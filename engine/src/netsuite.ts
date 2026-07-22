@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 export interface NetSuiteCreds {
-  /** Account id, e.g. "8638714" (used in the OAuth realm). */
+  /** Account id, e.g. "1234567" (used in the OAuth realm). */
   account: string;
   /** REST host, e.g. https://<acct>.suitetalk.api.netsuite.com */
   host: string;
