@@ -604,7 +604,7 @@ export async function runSync(
       cardLiabilityAccountId: ctx.control.ap,
       // Source replay can cross source-owned historical locks, while
       // controller-owned close locks remain authoritative.
-      migration: since === null,
+      migration: true,
     };
 
     // -- 3. pull native changes -------------------------------------------------
@@ -692,7 +692,7 @@ export async function runSync(
                 dueDate: doc.dueDate,
                 currency: doc.currency ?? source.baseCurrency,
                 fxRate: doc.fxRate ?? "1",
-                status: "approved",
+                status: "draft",
                 subtotal: doc.subtotal ?? "0",
                 taxTotal: "0",
                 total: doc.total ?? "0",
@@ -712,6 +712,9 @@ export async function runSync(
               row!.id,
               doc.lines,
               taxEvidence,
+            );
+            await db.execute(
+              sql`update documents set status = 'approved', updated_at = now() where id = ${row!.id}`,
             );
             if (doc.posting) {
               await postDocument(row!.id, deps, { deferEffects: true });
@@ -747,6 +750,7 @@ export async function runSync(
             // Old importer versions could commit the approved document before
             // posting failed. Rebuild its lines/evidence and post as one unit;
             // a repeat failure leaves the prior approved row unchanged.
+            await db.execute(sql`set local openbooks.amend = on`);
             await db.execute(
               sql`delete from document_lines where document_id = ${have.id}`,
             );

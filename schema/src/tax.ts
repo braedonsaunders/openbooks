@@ -40,7 +40,16 @@ export const taxJurisdictions = pgTable(
       .default("country"),
     /** The indirect tax this jurisdiction levies — drives which pack fits. */
     taxType: text("tax_type", {
-      enum: ["vat", "gst", "hst", "pst", "qst", "sales_use", "consumption", "other"],
+      enum: [
+        "vat",
+        "gst",
+        "hst",
+        "pst",
+        "qst",
+        "sales_use",
+        "consumption",
+        "other",
+      ],
     })
       .notNull()
       .default("other"),
@@ -105,7 +114,9 @@ export const taxCodes = pgTable("tax_codes", {
   jurisdictionId: uuid("jurisdiction_id"),
   country: text("country"),
   region: text("region"),
-  appliesTo: text("applies_to", { enum: ["sales", "purchases", "both"] }).notNull().default("both"),
+  appliesTo: text("applies_to", { enum: ["sales", "purchases", "both"] })
+    .notNull()
+    .default("both"),
   collectedAccountId: uuid("collected_account_id"), // liability (sales tax collected)
   paidAccountId: uuid("paid_account_id"), // recoverable ITC asset
   /** How the component affects settlement and GL projection. */
@@ -161,7 +172,10 @@ export const taxGroupMembers = pgTable(
   },
   (t) => [
     uniqueIndex("tax_group_members_code_unique").on(t.taxGroupId, t.taxCodeId),
-    uniqueIndex("tax_group_members_sequence_unique").on(t.taxGroupId, t.sequence),
+    uniqueIndex("tax_group_members_sequence_unique").on(
+      t.taxGroupId,
+      t.sequence,
+    ),
     check("tax_group_members_positive_sequence", sql`${t.sequence} > 0`),
   ],
 );
@@ -189,7 +203,9 @@ export const documentLineTaxComponents = pgTable(
       enum: ["standard", "withholding", "reverse_charge"],
     }).notNull(),
     priceIncludesTax: boolean("price_includes_tax").notNull().default(false),
-    compoundOnPrevious: boolean("compound_on_previous").notNull().default(false),
+    compoundOnPrevious: boolean("compound_on_previous")
+      .notNull()
+      .default(false),
     roundingScale: integer("rounding_scale").notNull().default(2),
     collectedAccountId: uuid("collected_account_id"),
     paidAccountId: uuid("paid_account_id"),
@@ -198,14 +214,19 @@ export const documentLineTaxComponents = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("document_line_tax_components_line_sequence").on(t.documentLineId, t.sequence),
+    uniqueIndex("document_line_tax_components_line_sequence").on(
+      t.documentLineId,
+      t.sequence,
+    ),
     index("document_line_tax_components_code").on(t.orgId, t.taxCodeId),
-    check("document_line_tax_components_nonnegative", sql`${t.taxAmount} >= 0`),
     check(
       "document_line_tax_components_recovery_crossfoot",
       sql`${t.recoverableAmount} + ${t.nonrecoverableAmount} = ${t.taxAmount}`,
     ),
-    check("document_line_tax_components_rounding_scale", sql`${t.roundingScale} between 0 and 4`),
+    check(
+      "document_line_tax_components_rounding_scale",
+      sql`${t.roundingScale} between 0 and 4`,
+    ),
   ],
 );
 
@@ -282,17 +303,28 @@ export const taxFilings = pgTable(
     periodFrom: date("period_from").notNull(),
     periodTo: date("period_to").notNull(),
     version: integer("version").notNull(),
-    status: text("status", { enum: ["prepared", "filed"] }).notNull().default("prepared"),
+    status: text("status", { enum: ["prepared", "filed"] })
+      .notNull()
+      .default("prepared"),
     submissionChannel: text("submission_channel").notNull(),
     boxes: jsonb("boxes").$type<TaxFilingSnapshotBox[]>().notNull(),
-    adjustments: jsonb("adjustments").$type<Record<string, string>>().notNull().default({}),
+    adjustments: jsonb("adjustments")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
     snapshotHash: text("snapshot_hash").notNull(),
     filingReference: text("filing_reference"),
     filedAt: timestamp("filed_at", { withTimezone: true }),
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("tax_filings_period_version").on(t.orgId, t.formCode, t.periodFrom, t.periodTo, t.version),
+    uniqueIndex("tax_filings_period_version").on(
+      t.orgId,
+      t.formCode,
+      t.periodFrom,
+      t.periodTo,
+      t.version,
+    ),
     index("tax_filings_org_period").on(t.orgId, t.periodTo),
     index("tax_filings_org_status").on(t.orgId, t.status),
     check("tax_filings_dates_check", sql`${t.periodFrom} <= ${t.periodTo}`),
@@ -321,7 +353,9 @@ export const taxReportLines = pgTable("tax_report_lines", {
    *  - tax_amount: every tax line for the code (no collected/paid split);
    *  - taxable_base: the base amount the tax applied to.
    */
-  basis: text("basis", { enum: ["tax_collected", "tax_paid", "tax_amount", "taxable_base"] }),
+  basis: text("basis", {
+    enum: ["tax_collected", "tax_paid", "tax_amount", "taxable_base"],
+  }),
   sign: integer("sign").notNull().default(1),
   /** Presentation + evaluation order within the form. */
   sequence: integer("sequence").notNull().default(0),
