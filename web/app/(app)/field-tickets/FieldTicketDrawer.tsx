@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Check, ClipboardList, Mail, Plus, Send, Trash2, X } from 'lucide-react'
+import { Check, Mail, Plus, Send, Trash2, X } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
@@ -792,18 +792,7 @@ export function FieldTicketDrawer(props: {
           </div>
         )}
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
-          <div className="flex items-start gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-            <span className="mt-0.5 rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-900 dark:text-slate-300"><ClipboardList size={16} /></span>
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.details.title')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.details.hint')}</p>
-            </div>
-          </div>
-          <div className="p-4">
-            <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderHeaderField} />
-          </div>
-        </section>
+        <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderHeaderField} />
         </> : null}
 
         {/* ---- crew hours ---- */}
