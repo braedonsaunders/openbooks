@@ -55,3 +55,16 @@ test("a failed scheduled mirror retries after bounded backoff", () => {
     true,
   );
 });
+
+test("database-wire timestamp strings are accepted by the mirror scheduler", () => {
+  assert.equal(
+    mirrorIsDue({
+      schedule: "daily",
+      now: new Date("2026-07-22T15:00:00.000Z"),
+      lastSuccessfulAt: "2026-07-20T18:22:17.627Z",
+      lastScheduledAttemptAt: null,
+      scheduledFailuresSinceSuccess: 0,
+    }),
+    true,
+  );
+});
