@@ -8,7 +8,6 @@ import { laborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { LaborCostingWorkspace, type RateRow } from './LaborCostingWorkspace'
-import type { BillCardDetail, BillCardRow } from './LaborBillRateCards'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +19,7 @@ export const dynamic = 'force-dynamic'
  * payroll actuals arrive), and the posting switch + control accounts.
  * Overhead is deliberately NOT here — that's the Overhead Model's job.
  */
-const VIEWS = ['rates', 'billing', 'components', 'posting', 'reconciliation'] as const
+const VIEWS = ['rates', 'components', 'posting', 'reconciliation'] as const
 export type LaborCostingView = (typeof VIEWS)[number]
 
 const RATE_STATUSES = ['all', 'active', 'current', 'scheduled', 'ended'] as const
@@ -47,8 +46,6 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
   const rateScope: RateScope = (RATE_SCOPES as readonly string[]).includes(rawScope) ? (rawScope as RateScope) : 'all'
   const rateParam = pickString(sp.rate)
   const creatingRate = rateParam === 'new'
-  const cardParam = pickString(sp.card)
-  const creatingCard = cardParam === 'new'
 
   const statusFilter =
     rateStatus === 'current'
@@ -80,7 +77,7 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
       left join departments dep on dep.id = r.department_id
       left join subsidiaries sub on sub.id = r.subsidiary_id`
 
-  const [settings, ratesRes, rateCountRes, selectedRateRes, tradesRes, departmentsRes, subsidiariesRes, jobTitlesRes, accountsRes, orgRes, coverageRes, billCardsRes, billCardCountRes, selectedBillCardRes, laborItemsRes, timeTypesRes] = await Promise.all([
+  const [settings, ratesRes, rateCountRes, selectedRateRes, tradesRes, departmentsRes, subsidiariesRes, jobTitlesRes, accountsRes, orgRes, coverageRes] = await Promise.all([
     laborCostingSettings(orgId),
     db.execute(sql`${rateSelect} ${rateFilter}
       order by case when r.job_title is not null then 0 when r.trade_id is not null then 1
@@ -123,36 +120,6 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
            or exists (select 1 from current_rates r where num_nonnulls(r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0)
         ) as covered,
         exists (select 1 from current_rates where num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0) as has_org_default`),
-    db.execute(sql`
-      select v.id, v.rate_book_id, b.code, b.name, b.currency, v.effective_from::text, v.effective_to::text,
-             v.status, p.derivation_policy,
-             not exists (select 1 from item_rate_versions newer where newer.rate_book_id=v.rate_book_id and newer.effective_from>v.effective_from) as is_latest,
-             (select count(*)::int from item_rate_lines l where l.version_id=v.id) as line_count,
-             (select count(*)::int from item_rate_book_assignments a where a.rate_book_id=b.id and a.is_active) as assignment_count
-        from item_rate_versions v
-        join item_rate_books b on b.id=v.rate_book_id
-        join labor_rate_version_policies p on p.version_id=v.id
-       where v.org_id=${orgId}
-         ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`})` : sql``}
-       order by v.effective_from desc,b.name
-       limit ${list.perPage} offset ${(list.page-1)*list.perPage}`),
-    db.execute(sql`
-      select count(*)::int n from item_rate_versions v join item_rate_books b on b.id=v.rate_book_id
-      join labor_rate_version_policies p on p.version_id=v.id
-      where v.org_id=${orgId} ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`})` : sql``}`),
-    cardParam && cardParam !== 'new' && isUuid(cardParam)
-      ? db.execute(sql`
-          select v.id,v.rate_book_id,b.code,b.name,b.currency,v.effective_from::text,v.effective_to::text,v.status,p.derivation_policy,
-            not exists (select 1 from item_rate_versions newer where newer.rate_book_id=v.rate_book_id and newer.effective_from>v.effective_from) as is_latest,
-            coalesce((select jsonb_agg(jsonb_build_object('id',s.id,'scopeType',s.scope_type,'scopeValueId',s.scope_value_id,'scopeValueText',s.scope_value_text,'includeChildren',s.include_children) order by s.created_at) from labor_rate_version_scopes s where s.version_id=v.id),'[]'::jsonb) scopes,
-            coalesce((select jsonb_agg(jsonb_build_object('id',a.id,'itemId',a.item_id,'code',a.code,'name',a.name,'category',a.category,'calculation',a.calculation,'value',a.value,'unit',a.unit,'presentation',a.presentation,'threshold',a.threshold,'thresholdUnit',a.threshold_unit,'referenceText',a.reference_text) order by a.sort_order,a.id) from labor_rate_adjustments a where a.version_id=v.id and a.is_active),'[]'::jsonb) adjustments,
-            coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'code',t.code,'label',t.label,'content',t.content,'placement',t.placement) order by t.sort_order,t.id) from labor_rate_terms t where t.version_id=v.id),'[]'::jsonb) terms,
-            coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'itemId',l.item_id,'itemName',i.name,'regular',l.bill_rate,'timeTypeRates',l.time_type_bill_rates) order by l.sort_order,l.id) from item_rate_lines l join items i on i.id=l.item_id where l.version_id=v.id),'[]'::jsonb) lines
-          from item_rate_versions v join item_rate_books b on b.id=v.rate_book_id join labor_rate_version_policies p on p.version_id=v.id
-          where v.id=${cardParam} and v.org_id=${orgId}`)
-      : Promise.resolve({rows:[]}),
-    db.execute(sql`select id,name from items where org_id=${orgId} and kind='labor' and is_active order by name`),
-    db.execute(sql`select id,name,bill_multiplier from time_types where org_id=${orgId} and is_active order by bill_multiplier,name`),
   ])
 
   const org = (
@@ -252,12 +219,6 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
           covered: Number(coverageRow.covered),
           hasOrgDefault: coverageRow.has_org_default === true,
         }}
-        billCards={(billCardsRes as unknown as {rows: BillCardRow[]}).rows}
-        selectedBillCard={(selectedBillCardRes as unknown as {rows: BillCardDetail[]}).rows[0] ?? null}
-        creatingBillCard={creatingCard}
-        totalBillCards={Number((billCardCountRes as unknown as {rows:{n:number}[]}).rows[0]?.n ?? 0)}
-        laborItems={(laborItemsRes as unknown as {rows:{id:string;name:string}[]}).rows}
-        timeTypes={(timeTypesRes as unknown as {rows:{id:string;name:string;bill_multiplier:string}[]}).rows}
       />
     </div>
   )

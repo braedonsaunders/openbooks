@@ -52,9 +52,11 @@ import salesOrders from './salesOrders.json'
 import sync from './sync.json'
 import tax from './tax.json'
 import timesheets from './timesheets.json'
+import laborPricing from './labor-pricing.json'
 
 export default {
   common,
+  laborPricing,
   data: dataIo,
   ui,
   nav,

@@ -6,7 +6,7 @@ export const laborCosting: DocArticle = {
   category: "projects",
   order: 3,
   summary:
-    "What an hour of labor costs and how it reaches your jobs: effective-dated wages, estimate components that anticipate payroll, standard-cost posting, bill-out rate tiers, and the payroll true-up.",
+    "What an hour of labor costs and how it reaches your jobs: effective-dated wages, estimate components that anticipate payroll, standard-cost posting, and the payroll true-up.",
   updated: "2026-07-21",
   keywords: [
     "labor",
@@ -15,7 +15,6 @@ export const laborCosting: DocArticle = {
     "currency",
     "foreign exchange",
     "cost rate",
-    "bill rate",
     "overtime",
     "payroll",
     "burden",
@@ -24,7 +23,7 @@ export const laborCosting: DocArticle = {
     "clearing",
     "timesheets",
   ],
-  related: ["overhead-costing", "item-rates", "project-types"],
+  related: ["overhead-costing", "labor-pricing", "project-types"],
   body: `# Labor Costing
 
 An hour of job labor carries three numbers with three different fates:
@@ -132,35 +131,9 @@ into a journal belonging to another legal entity or currency.
 Everything is inert until you configure it, and posting problems never block
 an approval — entries stay re-postable.
 
-## Bill-out rates
-
-Billing is the rate-book system's job (see *Item Rate Books*): assign books
-per customer or project, version them by date. For labor, each rate line can
-carry **explicit per-time-type rates** (your reg/OT/DT card, per item, per
-customer). When no explicit tier rate exists, the line's bill rate × the time
-type's bill multiplier applies. Approval stamps the resolved rate on the
-entry; invoicing uses it as before.
-
-The **Bill-out rate cards** tab is the labor-focused view of the shared rate
-book engine. A card retains its currency and effective period, regular/
-overtime/double-time prices for each labor item, customer and project
-assignments, dimension scopes, general adjustments, and ordered negotiated
-terms. Customer schedules may resolve by usage date or lock to the project's
-start date.
-
-Adjustments are deliberately general. A negotiated surcharge is a
-**percentage adjustment** in the **Surcharge** category, not a special setting
-or permanent field. Per-diem, travel, minimums, allowances, and future contract
-rules use the same auditable model. Link an adjustment to an item when it only
-applies to that service; leave the item blank for the whole card. Supported
-calculation methods are percentage, fixed, hourly, daily, distance, time, and
-informational text.
-
-Choose **Create revision** in the card drawer to change adjustments. OpenBooks
-copies the base item rates, scopes, and negotiated terms into a new version and
-ends the prior version the day before the new effective date. Historical cards
-remain read-only, so a later adjustment never rewrites time or invoices that
-used the prior version.
+Selling rates now live in the separate **Administration → Labor Pricing**
+workspace. See *Labor Pricing* for multi-currency rate cards, overtime tiers,
+markups, applicability, and negotiated terms.
 
 ## The payroll true-up
 

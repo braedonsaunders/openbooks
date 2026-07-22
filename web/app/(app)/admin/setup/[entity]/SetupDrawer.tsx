@@ -22,10 +22,29 @@ import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
 
-export function NewSetupButton({ entityKey, label }: { entityKey: string; label: string }) {
+export function NewSetupButton({
+  entityKey,
+  label,
+  basePath,
+}: {
+  entityKey: string
+  label: string
+  basePath?: string
+}) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  function open() {
+    if (basePath) {
+      const next = new URLSearchParams(searchParams.toString())
+      next.set('row', 'new')
+      router.push(`${pathname}?${next.toString()}`)
+      return
+    }
+    router.push(`/admin/setup/${entityKey}?row=new`)
+  }
   return (
-    <Button onClick={() => router.push(`/admin/setup/${entityKey}?row=new`)}>
+    <Button onClick={open}>
       <Plus size={15} /> {label}
     </Button>
   )

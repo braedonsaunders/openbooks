@@ -1,11 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  defaultFormLayout,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+} from "@openbooks/customization";
 import {
   Badge,
   Button,
@@ -19,8 +24,11 @@ import {
   TableHeader,
   TableRow,
   Textarea,
-  UrlDrawer,
 } from "@openbooks/ui";
+import { TransactionDrawer } from "../../../../../components/transaction-drawer";
+import { HeaderFields } from "../../../../../components/transaction-form/header-fields";
+import { CustomFieldInput } from "../../../../../components/custom-field-input";
+import type { CustomFieldDefClient } from "../../../../../components/custom-field-inputs";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
 import { mergeHref } from "../../../../../lib/list-params";
@@ -35,22 +43,31 @@ export interface BillCardRow {
   effective_to: string | null;
   status: string;
   derivation_policy: string;
-  is_latest: boolean;
   line_count: number;
   assignment_count: number;
 }
 
+export interface ApplicabilityTarget {
+  id?: string;
+  targetType: string;
+  targetValueId: string | null;
+  targetValueText: string | null;
+  targetLabel?: string | null;
+  includeChildren: boolean;
+}
+
 export interface BillCardDetail extends BillCardRow {
+  custom: Record<string, unknown>;
   scopes: {
-    id: string;
+    id?: string;
     scopeType: string;
     scopeValueId: string | null;
     scopeValueText: string | null;
+    scopeLabel?: string | null;
     includeChildren: boolean;
   }[];
   adjustments: {
-    id: string;
-    itemId: string | null;
+    id?: string;
     code: string;
     name: string;
     category: string;
@@ -61,16 +78,17 @@ export interface BillCardDetail extends BillCardRow {
     threshold: string | null;
     thresholdUnit: string | null;
     referenceText: string | null;
+    targets: ApplicabilityTarget[];
   }[];
   terms: {
-    id: string;
+    id?: string;
     code: string;
     label: string;
     content: string;
     placement: string;
   }[];
   lines: {
-    id: string;
+    id?: string;
     itemId: string;
     itemName: string;
     regular: string | null;
@@ -78,8 +96,45 @@ export interface BillCardDetail extends BillCardRow {
   }[];
 }
 
+type NamedOption = { id: string; name: string };
+type OptionMap = Record<string, NamedOption[]>;
+type ItemOption = NamedOption & { kind: string; category: string | null };
+type FormOption = { id: string; name: string };
+
+const TARGET_TYPES = [
+  "item",
+  "item_kind",
+  "item_category",
+  "transaction_type",
+  "department",
+  "subsidiary",
+  "location",
+  "class",
+  "trade",
+  "job_title",
+  "project",
+  "customer",
+  "other",
+] as const;
+const SCOPE_TYPES = [
+  "department",
+  "subsidiary",
+  "location",
+  "class",
+  "trade",
+  "job_title",
+  "other",
+] as const;
+const TEXT_TARGETS = new Set([
+  "item_kind",
+  "item_category",
+  "transaction_type",
+  "job_title",
+  "other",
+]);
+
 function amount(value: string | null, currency: string): string {
-  if (value == null) return "—";
+  if (value == null || value === "") return "—";
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
@@ -91,6 +146,10 @@ function amount(value: string | null, currency: string): string {
   }
 }
 
+function cloneCard(card: BillCardDetail): BillCardDetail {
+  return JSON.parse(JSON.stringify(card)) as BillCardDetail;
+}
+
 export function LaborBillRateCards(props: {
   cards: BillCardRow[];
   selected: BillCardDetail | null;
@@ -99,36 +158,68 @@ export function LaborBillRateCards(props: {
   page: number;
   perPage: number;
   currentParams: Record<string, string | string[] | undefined>;
-  laborItems: { id: string; name: string }[];
+  items: ItemOption[];
   timeTypes: { id: string; name: string; bill_multiplier: string }[];
+  options: OptionMap;
+  currencies: string[];
+  layout?: FormLayoutConfig;
+  forms: FormOption[];
+  currentFormId: string | null;
+  customFieldDefs: CustomFieldDefClient[];
+  canCustomize: boolean;
 }) {
-  const t = useTranslations("admin.setup.laborCosting.billing");
+  const t = useTranslations("laborPricing");
   const common = useTranslations("common");
   const router = useRouter();
-  const base = "/admin/setup/labor-costing";
-  const closeHref = mergeHref(base, props.currentParams, { card: undefined });
-  const newHref = mergeHref(base, props.currentParams, {
-    card: "new",
-    rate: undefined,
-    guide: undefined,
+  const [creatingCard, setCreatingCard] = useState(false);
+  const base = "/admin/setup/labor-pricing";
+  const closeHref = mergeHref(base, props.currentParams, {
+    card: undefined,
+    form: undefined,
+    transactionTab: undefined,
   });
+  async function createCard() {
+    setCreatingCard(true);
+    try {
+      const response = await fetch("/api/labor-rate-cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: t("newTitle"),
+          currency: props.currencies[0] ?? "CAD",
+        }),
+      });
+      const result = (await response.json()) as {
+        id?: string;
+        errorCode?: string;
+      };
+      if (!response.ok || !result.id) {
+        toast.error(t(`errors.${result.errorCode ?? "save"}`));
+        return;
+      }
+      router.push(
+        mergeHref(base, props.currentParams, {
+          card: result.id,
+          form: undefined,
+        }),
+      );
+      router.refresh();
+    } finally {
+      setCreatingCard(false);
+    }
+  }
   return (
     <section className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {t("title")}
-        </h3>
-        <p className="mt-0.5 max-w-4xl text-xs text-slate-500 dark:text-slate-400">
-          {t("hint")}
-        </p>
-      </div>
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t("search")} />
-        <Button asChild size="sm" className="ml-auto">
-          <Link href={newHref as never}>
-            <Plus size={14} />
-            {t("add")}
-          </Link>
+        <Button
+          size="sm"
+          className="ml-auto"
+          disabled={creatingCard}
+          onClick={createCard}
+        >
+          <Plus size={14} />
+          {t("add")}
         </Button>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -157,8 +248,7 @@ export function LaborBillRateCards(props: {
             {props.cards.map((card) => {
               const href = mergeHref(base, props.currentParams, {
                 card: card.id,
-                rate: undefined,
-                guide: undefined,
+                form: undefined,
               });
               return (
                 <TableRow
@@ -216,513 +306,1133 @@ export function LaborBillRateCards(props: {
           />
         ) : null}
       </div>
-      {props.selected || props.creating ? (
-        <UrlDrawer
-          open
+      {props.selected ? (
+        <RateCardDrawer
+          key={`${props.selected.id}:${props.currentFormId ?? "default"}`}
+          {...props}
+          card={props.selected}
           closeHref={closeHref}
-          title={props.creating ? t("newTitle") : props.selected!.name}
-          description={
-            props.creating
-              ? t("newDescription")
-              : `${props.selected!.code} · ${props.selected!.currency}`
-          }
-        >
-          {props.creating ? (
-            <div className="rounded-lg border border-dashed border-slate-300 p-5 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              {t("createInItemHint")}
-              <div className="mt-3">
-                <Button asChild>
-                  <Link href="/items?view=rate-books">
-                    {t("openRateBooks")}
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <CardDetail
-              card={props.selected!}
-              timeTypes={props.timeTypes}
-              laborItems={props.laborItems}
-              t={t}
-              common={common}
-              onSaved={(id) =>
-                router.push(mergeHref(base, props.currentParams, { card: id }))
-              }
-            />
-          )}
-        </UrlDrawer>
+        />
       ) : null}
     </section>
   );
 }
 
-function CardDetail({
-  card,
-  timeTypes,
-  laborItems,
-  t,
-  common,
-  onSaved,
-}: {
-  card: BillCardDetail;
-  timeTypes: { id: string; name: string; bill_multiplier: string }[];
-  laborItems: { id: string; name: string }[];
-  t: ReturnType<typeof useTranslations>;
-  common: ReturnType<typeof useTranslations>;
-  onSaved: (id: string) => void;
-}) {
-  const [revising, setRevising] = useState(false);
+function RateCardDrawer(
+  props: Omit<
+    Parameters<typeof LaborBillRateCards>[0],
+    "selected" | "cards" | "creating" | "total" | "page" | "perPage"
+  > & { card: BillCardDetail; closeHref: string },
+) {
+  const { card } = props;
+  const t = useTranslations("laborPricing");
+  const common = useTranslations("common");
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState(() => cloneCard(card));
+  const layout = props.layout ?? defaultFormLayout("labor_rate_card");
+  const itemOptions = props.items.map((x) => ({ id: x.id, name: x.name }));
+  const optionMap = useMemo(
+    () => ({ ...props.options, item: itemOptions }),
+    [props.options, props.items],
+  );
+  const update = <K extends keyof BillCardDetail>(
+    key: K,
+    value: BillCardDetail[K],
+  ) => setDraft((row) => ({ ...row, [key]: value }));
+
+  async function save() {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/labor-rate-cards/${card.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      const result = (await response.json()) as { errorCode?: string };
+      if (!response.ok) {
+        toast.error(t(`errors.${result.errorCode ?? "save"}`));
+        return;
+      }
+      toast.success(t("saved"));
+      setEditing(false);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const actions = (
+    <>
+      {props.forms.map((form) => (
+        <Button key={form.id} asChild variant="ghost" size="sm">
+          <Link
+            href={
+              mergeHref("/admin/setup/labor-pricing", props.currentParams, {
+                card: card.id,
+                form: form.id,
+              }) as never
+            }
+          >
+            {form.id === props.currentFormId ? `${form.name} ✓` : form.name}
+          </Link>
+        </Button>
+      ))}
+      {props.canCustomize ? (
+        <Button asChild variant="ghost" size="sm">
+          <Link
+            href={`/admin/customization?recordType=labor_rate_card&tab=forms${props.currentFormId ? `&form=${props.currentFormId}` : ""}`}
+          >
+            {common("actions.customize")}
+          </Link>
+        </Button>
+      ) : null}
+    </>
+  );
+
   return (
-    <div className="space-y-5 p-1">
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <Info label={t("effectiveFrom")} value={card.effective_from} />
-        <Info label={t("effectiveTo")} value={card.effective_to ?? "—"} />
-        <Info
-          label={t("derivation")}
-          value={t(`derivations.${card.derivation_policy}`)}
+    <TransactionDrawer
+      closeHref={props.closeHref}
+      recordId={card.id}
+      targetTable="item_rate_versions"
+      canEditAttachments
+      title={card.name}
+      description={`${card.code} · ${card.currency}`}
+      primaryAction={
+        !editing ? (
+          <Button size="sm" onClick={() => setEditing(true)}>
+            {common("actions.edit")}
+          </Button>
+        ) : undefined
+      }
+      actions={actions}
+      footer={
+        editing ? (
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setDraft(cloneCard(card));
+                setEditing(false);
+              }}
+            >
+              {common("actions.cancel")}
+            </Button>
+            <Button disabled={busy} onClick={save}>
+              {busy ? common("actions.saving") : common("actions.save")}
+            </Button>
+          </div>
+        ) : undefined
+      }
+    >
+      <div className="space-y-6 p-1">
+        <HeaderFields
+          layout={layout}
+          editable={editing}
+          renderField={(placement, editable) =>
+            renderHeaderField({
+              placement,
+              editable,
+              draft,
+              setDraft,
+              props,
+              t,
+              common,
+            })
+          }
         />
-        <Info
-          label={t("status")}
-          value={common(
-            card.status === "retired"
-              ? "status.inactive"
-              : `status.${card.status}`,
-          )}
+        <ScopeSection
+          draft={draft}
+          setDraft={setDraft}
+          options={props.options}
+          editing={editing}
+          t={t}
+        />
+        <LineSection
+          draft={draft}
+          setDraft={setDraft}
+          items={props.items}
+          timeTypes={props.timeTypes}
+          editing={editing}
+          layout={layout}
+          t={t}
+        />
+        <AdjustmentSection
+          draft={draft}
+          setDraft={setDraft}
+          options={optionMap}
+          editing={editing}
+          t={t}
+        />
+        <TermsSection
+          draft={draft}
+          setDraft={setDraft}
+          editing={editing}
+          t={t}
         />
       </div>
-      <Section title={t("scopes")}>
-        {card.scopes.length ? (
-          card.scopes.map((s) => (
-            <div
-              key={s.id}
-              className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800"
-            >
-              {t(`scopeTypes.${s.scopeType}`)} ·{" "}
-              {s.scopeValueText ?? s.scopeValueId}
-            </div>
-          ))
-        ) : (
-          <Empty text={t("allScopes")} />
-        )}
-      </Section>
-      <Section title={t("itemRates")}>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("item")}</TableHead>
-                <TableHead className="text-right">{t("regular")}</TableHead>
-                {timeTypes
-                  .filter((x) => Number(x.bill_multiplier) !== 1)
-                  .map((tt) => (
-                    <TableHead key={tt.id} className="text-right">
-                      {tt.name}
-                    </TableHead>
-                  ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {card.lines.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell>{l.itemName}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {amount(l.regular, card.currency)}
-                  </TableCell>
-                  {timeTypes
-                    .filter((x) => Number(x.bill_multiplier) !== 1)
-                    .map((tt) => (
-                      <TableCell
-                        key={tt.id}
-                        className="text-right tabular-nums"
-                      >
-                        {amount(
-                          l.timeTypeRates?.[tt.id] ?? null,
-                          card.currency,
-                        )}
-                      </TableCell>
-                    ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </Section>
-      <Section title={t("adjustments")}>
-        {card.adjustments.length ? (
-          card.adjustments.map((a) => (
-            <div
-              key={a.id}
-              className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="font-medium text-slate-900 dark:text-slate-100">
-                    {a.name}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {t("appliesTo")}:{" "}
-                    {a.itemId
-                      ? (laborItems.find((i) => i.id === a.itemId)?.name ??
-                        a.itemId)
-                      : t("wholeCard")}
-                  </div>
-                </div>
-                <Badge variant="outline">{t(`categories.${a.category}`)}</Badge>
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                {t(`calculations.${a.calculation}`)}
-                {a.value != null ? ` · ${a.value}` : ""}
-                {a.unit ? ` ${a.unit}` : ""} ·{" "}
-                {t(`presentations.${a.presentation}`)}
-              </div>
-              {a.referenceText ? (
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                  {a.referenceText}
-                </p>
-              ) : null}
-            </div>
-          ))
-        ) : (
-          <Empty text={t("none")} />
-        )}
-      </Section>
-      <Section title={t("terms")}>
-        {card.terms.length ? (
-          card.terms.map((term) => (
-            <div key={term.id}>
-              <div className="text-xs font-medium text-slate-500">
-                {term.label}
-              </div>
-              <div className="whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200">
-                {term.content}
-              </div>
-            </div>
-          ))
-        ) : (
-          <Empty text={t("none")} />
-        )}
-      </Section>
-      {revising ? (
-        <RevisionEditor
-          card={card}
-          laborItems={laborItems}
-          t={t}
-          onCancel={() => setRevising(false)}
-          onSaved={onSaved}
-        />
-      ) : card.is_latest ? (
-        <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-          <Button variant="outline" onClick={() => setRevising(true)}>
-            {t("revise")}
-          </Button>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {t("reviseHint")}
-          </p>
-        </div>
+    </TransactionDrawer>
+  );
+}
+
+function renderHeaderField(args: {
+  placement: HeaderFieldPlacement;
+  editable: boolean;
+  draft: BillCardDetail;
+  setDraft: React.Dispatch<React.SetStateAction<BillCardDetail>>;
+  props: { currencies: string[]; customFieldDefs: CustomFieldDefClient[] };
+  t: ReturnType<typeof useTranslations>;
+  common: ReturnType<typeof useTranslations>;
+}) {
+  const { placement, editable, draft, setDraft, props, t, common } = args;
+  const customKey = placement.key.startsWith("cf_")
+    ? placement.key.slice(3)
+    : null;
+  if (customKey) {
+    const def = props.customFieldDefs.find((x) => x.key === customKey);
+    if (!def) return null;
+    return (
+      <CustomFieldInput
+        def={def}
+        value={draft.custom?.[customKey]}
+        readOnly={!editable}
+        onChange={(value) =>
+          setDraft((row) => ({
+            ...row,
+            custom: { ...row.custom, [customKey]: value },
+          }))
+        }
+      />
+    );
+  }
+  const labels: Record<string, string> = {
+    name: t("name"),
+    code: t("adjustmentCode"),
+    currency: t("currency"),
+    effective_from: t("effectiveFrom"),
+    effective_to: t("effectiveTo"),
+    status: t("status"),
+    derivation_policy: t("derivation"),
+  };
+  const label =
+    placement.labelOverride || labels[placement.key] || placement.key;
+  const value =
+    placement.key === "effective_from"
+      ? draft.effective_from
+      : placement.key === "effective_to"
+        ? (draft.effective_to ?? "")
+        : placement.key === "derivation_policy"
+          ? draft.derivation_policy
+          : placement.key === "rate_book_id"
+            ? draft.rate_book_id
+            : String(
+                (draft as unknown as Record<string, unknown>)[placement.key] ??
+                  "",
+              );
+  const set = (v: string) =>
+    setDraft((row) => ({
+      ...row,
+      [placement.key === "effective_from"
+        ? "effective_from"
+        : placement.key === "effective_to"
+          ? "effective_to"
+          : placement.key === "derivation_policy"
+            ? "derivation_policy"
+            : placement.key]: v || null,
+    }));
+  if (!editable)
+    return (
+      <Info
+        label={label}
+        value={
+          placement.key === "status"
+            ? common(
+                draft.status === "retired"
+                  ? "status.inactive"
+                  : `status.${draft.status}`,
+              )
+            : placement.key === "derivation_policy"
+              ? t(`derivations.${draft.derivation_policy}`)
+              : value || "—"
+        }
+      />
+    );
+  return (
+    <div className="space-y-1">
+      <Label>
+        {label}
+        {placement.required ? <span className="text-red-500"> *</span> : null}
+      </Label>
+      {placement.key === "currency" ? (
+        <Select value={value} onChange={(e) => set(e.target.value)}>
+          {props.currencies.map((x) => (
+            <option key={x}>{x}</option>
+          ))}
+        </Select>
+      ) : placement.key === "status" ? (
+        <Select value={value} onChange={(e) => set(e.target.value)}>
+          {["draft", "active", "retired"].map((x) => (
+            <option key={x} value={x}>
+              {common(x === "retired" ? "status.inactive" : `status.${x}`)}
+            </option>
+          ))}
+        </Select>
+      ) : placement.key === "derivation_policy" ? (
+        <Select value={value} onChange={(e) => set(e.target.value)}>
+          {["explicit", "time_type_multipliers"].map((x) => (
+            <option key={x} value={x}>
+              {t(`derivations.${x}`)}
+            </option>
+          ))}
+        </Select>
       ) : (
-        <p className="border-t border-slate-200 pt-4 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {t("historicalHint")}
-        </p>
+        <Input
+          type={placement.key.startsWith("effective_") ? "date" : "text"}
+          value={value}
+          onChange={(e) => set(e.target.value)}
+        />
       )}
     </div>
   );
 }
 
-type AdjustmentDraft = {
-  itemId: string;
-  code: string;
-  name: string;
-  category: string;
-  calculation: string;
-  value: string;
-  unit: string;
-  presentation: string;
-  referenceText: string;
-};
-const blankAdjustment = (): AdjustmentDraft => ({
-  itemId: "",
-  code: "",
-  name: "",
-  category: "surcharge",
-  calculation: "percent",
-  value: "0",
-  unit: "",
-  presentation: "separate",
-  referenceText: "",
-});
-function nextRevisionDate(date: string): string {
-  const tomorrow = new Date(`${date}T00:00:00Z`);
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  const today = new Date().toISOString().slice(0, 10);
-  return tomorrow.toISOString().slice(0, 10) > today
-    ? tomorrow.toISOString().slice(0, 10)
-    : today;
-}
-function RevisionEditor({
-  card,
-  laborItems,
+function ScopeSection({
+  draft,
+  setDraft,
+  options,
+  editing,
   t,
-  onCancel,
-  onSaved,
 }: {
-  card: BillCardDetail;
-  laborItems: { id: string; name: string }[];
+  draft: BillCardDetail;
+  setDraft: React.Dispatch<React.SetStateAction<BillCardDetail>>;
+  options: OptionMap;
+  editing: boolean;
   t: ReturnType<typeof useTranslations>;
-  onCancel: () => void;
-  onSaved: (id: string) => void;
 }) {
-  const [effectiveFrom, setEffectiveFrom] = useState(
-    nextRevisionDate(card.effective_from),
-  );
-  const [adjustments, setAdjustments] = useState<AdjustmentDraft[]>(
-    card.adjustments.map((a) => ({
-      itemId: a.itemId ?? "",
-      code: a.code,
-      name: a.name,
-      category: a.category,
-      calculation: a.calculation,
-      value: a.value ?? "",
-      unit: a.unit ?? "",
-      presentation: a.presentation,
-      referenceText: a.referenceText ?? "",
-    })),
-  );
-  const [busy, setBusy] = useState(false);
-  const common = useTranslations("common");
-  const setAdjustment = (index: number, patch: Partial<AdjustmentDraft>) =>
-    setAdjustments((rows) =>
-      rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
-    );
-  async function save() {
-    setBusy(true);
-    try {
-      const response = await fetch(
-        `/api/labor-rate-cards/${card.id}/revisions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ effectiveFrom, adjustments }),
-        },
-      );
-      const result = (await response.json()) as {
-        id?: string;
-        errorCode?: string;
-      };
-      if (!response.ok || !result.id) {
-        toast.error(t(`errors.${result.errorCode ?? "save"}`));
-        return;
-      }
-      toast.success(t("revisionSaved"));
-      onSaved(result.id);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const setScope = (
+    i: number,
+    patch: Partial<BillCardDetail["scopes"][number]>,
+  ) =>
+    setDraft((row) => ({
+      ...row,
+      scopes: row.scopes.map((x, n) => (n === i ? { ...x, ...patch } : x)),
+    }));
   return (
-    <section className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
-      <div>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {t("revisionTitle")}
-        </h4>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t("revisionDescription")}
-        </p>
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="bill-card-revision-date">
-          {t("revisionEffectiveFrom")}
-        </Label>
-        <Input
-          id="bill-card-revision-date"
-          type="date"
-          min={nextRevisionDate(card.effective_from)}
-          value={effectiveFrom}
-          onChange={(e) => setEffectiveFrom(e.target.value)}
-        />
-      </div>
-      <div className="space-y-3">
-        {adjustments.map((adjustment, index) => (
-          <div
-            key={index}
-            className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h5 className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                {t("adjustmentNumber", { number: index + 1 })}
-              </h5>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={t("removeAdjustment")}
-                onClick={() =>
-                  setAdjustments((rows) => rows.filter((_, i) => i !== index))
-                }
-              >
-                <Trash2 size={14} />
-              </Button>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label>{t("adjustmentName")}</Label>
-                <Input
-                  aria-label={t("adjustmentName")}
-                  value={adjustment.name}
-                  onChange={(e) =>
-                    setAdjustment(index, { name: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>{t("adjustmentCode")}</Label>
-                <Input
-                  aria-label={t("adjustmentCode")}
-                  value={adjustment.code}
-                  onChange={(e) =>
-                    setAdjustment(index, { code: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label>{t("appliesTo")}</Label>
-              <Select
-                aria-label={t("appliesTo")}
-                value={adjustment.itemId}
-                onChange={(e) =>
-                  setAdjustment(index, { itemId: e.target.value })
-                }
-              >
-                <option value="">{t("wholeCard")}</option>
-                {laborItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1">
-                <Label>{t("category")}</Label>
-                <Select
-                  aria-label={t("category")}
-                  value={adjustment.category}
-                  onChange={(e) =>
-                    setAdjustment(index, { category: e.target.value })
-                  }
-                >
-                  {[
-                    "markup",
-                    "travel",
-                    "allowance",
-                    "minimum",
-                    "surcharge",
-                    "other",
-                  ].map((value) => (
-                    <option key={value} value={value}>
-                      {t(`categories.${value}`)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>{t("calculation")}</Label>
-                <Select
-                  aria-label={t("calculation")}
-                  value={adjustment.calculation}
-                  onChange={(e) =>
-                    setAdjustment(index, { calculation: e.target.value })
-                  }
-                >
-                  {[
-                    "percent",
-                    "fixed",
-                    "per_hour",
-                    "per_day",
-                    "distance",
-                    "time",
-                    "text",
-                  ].map((value) => (
-                    <option key={value} value={value}>
-                      {t(`calculations.${value}`)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>{t("presentation")}</Label>
-                <Select
-                  aria-label={t("presentation")}
-                  value={adjustment.presentation}
-                  onChange={(e) =>
-                    setAdjustment(index, { presentation: e.target.value })
-                  }
-                >
-                  {["included", "separate", "informational"].map((value) => (
-                    <option key={value} value={value}>
-                      {t(`presentations.${value}`)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-            {adjustment.calculation !== "text" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label>{t("adjustmentValue")}</Label>
-                  <Input
-                    aria-label={t("adjustmentValue")}
-                    inputMode="decimal"
-                    value={adjustment.value}
-                    onChange={(e) =>
-                      setAdjustment(index, { value: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>{t("adjustmentUnit")}</Label>
-                  <Input
-                    aria-label={t("adjustmentUnit")}
-                    value={adjustment.unit}
-                    onChange={(e) =>
-                      setAdjustment(index, { unit: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-            ) : null}
-            <div className="space-y-1">
-              <Label>{t("referenceText")}</Label>
-              <Textarea
-                aria-label={t("referenceText")}
-                rows={2}
-                value={adjustment.referenceText}
-                onChange={(e) =>
-                  setAdjustment(index, { referenceText: e.target.value })
-                }
-              />
-            </div>
+    <Section title={t("scopes")}>
+      {!editing ? (
+        draft.scopes.length ? (
+          <div className="flex flex-wrap gap-2">
+            {draft.scopes.map((s, i) => (
+              <Badge key={s.id ?? i} variant="outline">
+                {t(`scopeTypes.${s.scopeType}`)} ·{" "}
+                {s.scopeLabel ?? s.scopeValueText ?? t("unknownValue")}
+              </Badge>
+            ))}
           </div>
-        ))}
+        ) : (
+          <Empty text={t("allScopes")} />
+        )
+      ) : (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("scope")}</TableHead>
+                <TableHead>{t("valueLabel")}</TableHead>
+                <TableHead>{t("children")}</TableHead>
+                <TableHead className="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {draft.scopes.map((s, i) => {
+                const opts = options[s.scopeType] ?? [];
+                const text =
+                  SCOPE_TYPES.includes(s.scopeType as never) &&
+                  (s.scopeType === "job_title" || s.scopeType === "other");
+                return (
+                  <TableRow key={s.id ?? i}>
+                    <TableCell>
+                      <Select
+                        value={s.scopeType}
+                        onChange={(e) =>
+                          setScope(i, {
+                            scopeType: e.target.value,
+                            scopeValueId: null,
+                            scopeValueText: null,
+                            scopeLabel: null,
+                          })
+                        }
+                      >
+                        {SCOPE_TYPES.map((x) => (
+                          <option key={x} value={x}>
+                            {t(`scopeTypes.${x}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      {text ? (
+                        <Input
+                          value={s.scopeValueText ?? ""}
+                          onChange={(e) =>
+                            setScope(i, {
+                              scopeValueText: e.target.value,
+                              scopeValueId: null,
+                              scopeLabel: e.target.value,
+                            })
+                          }
+                        />
+                      ) : (
+                        <Select
+                          value={s.scopeValueId ?? ""}
+                          onChange={(e) => {
+                            const o = opts.find((x) => x.id === e.target.value);
+                            setScope(i, {
+                              scopeValueId: e.target.value || null,
+                              scopeValueText: null,
+                              scopeLabel: o?.name ?? null,
+                            });
+                          }}
+                        >
+                          <option value="">{t("chooseValue")}</option>
+                          {opts.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={s.includeChildren}
+                        onChange={(e) =>
+                          setScope(i, { includeChildren: e.target.checked })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={t("removeScope")}
+                        onClick={() =>
+                          setDraft((row) => ({
+                            ...row,
+                            scopes: row.scopes.filter((_, n) => n !== i),
+                          }))
+                        }
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setDraft((row) => ({
+                ...row,
+                scopes: [
+                  ...row.scopes,
+                  {
+                    scopeType: "department",
+                    scopeValueId: null,
+                    scopeValueText: null,
+                    scopeLabel: null,
+                    includeChildren: true,
+                  },
+                ],
+              }))
+            }
+          >
+            <Plus size={14} />
+            {t("addScope")}
+          </Button>
+        </>
+      )}
+    </Section>
+  );
+}
+
+function LineSection({
+  draft,
+  setDraft,
+  items,
+  timeTypes,
+  editing,
+  layout,
+  t,
+}: {
+  draft: BillCardDetail;
+  setDraft: React.Dispatch<React.SetStateAction<BillCardDetail>>;
+  items: ItemOption[];
+  timeTypes: { id: string; name: string; bill_multiplier: string }[];
+  editing: boolean;
+  layout: FormLayoutConfig;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const extras = timeTypes.filter((x) => Number(x.bill_multiplier) !== 1);
+  const visible = new Set(
+    layout.lines.columns.filter((x) => x.visible).map((x) => x.key),
+  );
+  const showItem = visible.has("item_id"),
+    showRate = visible.has("bill_rate");
+  const setLine = (
+    i: number,
+    patch: Partial<BillCardDetail["lines"][number]>,
+  ) =>
+    setDraft((row) => ({
+      ...row,
+      lines: row.lines.map((x, n) => (n === i ? { ...x, ...patch } : x)),
+    }));
+  return (
+    <Section title={t("itemRates")}>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {showItem ? <TableHead>{t("item")}</TableHead> : null}
+              {showRate ? (
+                <TableHead className="text-right">{t("regular")}</TableHead>
+              ) : null}
+              {extras.map((tt) => (
+                <TableHead key={tt.id} className="text-right">
+                  {tt.name}
+                </TableHead>
+              ))}
+              {editing ? <TableHead className="w-12" /> : null}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {draft.lines.map((line, i) => (
+              <TableRow key={line.id ?? i}>
+                {showItem ? (
+                  <TableCell>
+                    {editing ? (
+                      <Select
+                        value={line.itemId}
+                        onChange={(e) => {
+                          const item = items.find(
+                            (x) => x.id === e.target.value,
+                          );
+                          setLine(i, {
+                            itemId: e.target.value,
+                            itemName: item?.name ?? "",
+                          });
+                        }}
+                      >
+                        {items.map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.name}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      line.itemName
+                    )}
+                  </TableCell>
+                ) : null}
+                {showRate ? (
+                  <TableCell className="text-right tabular-nums">
+                    {editing ? (
+                      <Input
+                        className="text-right tabular-nums"
+                        inputMode="decimal"
+                        value={line.regular ?? ""}
+                        onChange={(e) =>
+                          setLine(i, { regular: e.target.value })
+                        }
+                      />
+                    ) : (
+                      amount(line.regular, draft.currency)
+                    )}
+                  </TableCell>
+                ) : null}
+                {extras.map((tt) => (
+                  <TableCell key={tt.id} className="text-right tabular-nums">
+                    {editing ? (
+                      <Input
+                        className="text-right tabular-nums"
+                        inputMode="decimal"
+                        value={line.timeTypeRates?.[tt.id] ?? ""}
+                        onChange={(e) =>
+                          setLine(i, {
+                            timeTypeRates: {
+                              ...line.timeTypeRates,
+                              [tt.id]: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    ) : (
+                      amount(
+                        line.timeTypeRates?.[tt.id] ?? null,
+                        draft.currency,
+                      )
+                    )}
+                  </TableCell>
+                ))}
+                {editing ? (
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={t("removeRate")}
+                      onClick={() =>
+                        setDraft((row) => ({
+                          ...row,
+                          lines: row.lines.filter((_, n) => n !== i),
+                        }))
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {editing ? (
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setAdjustments((rows) => [...rows, blankAdjustment()])}
+          onClick={() => {
+            const first = items[0];
+            if (first)
+              setDraft((row) => ({
+                ...row,
+                lines: [
+                  ...row.lines,
+                  {
+                    itemId: first.id,
+                    itemName: first.name,
+                    regular: "0",
+                    timeTypeRates: {},
+                  },
+                ],
+              }));
+          }}
         >
           <Plus size={14} />
-          {t("addAdjustment")}
+          {t("addRate")}
         </Button>
-      </div>
-      <div className="flex gap-2">
-        <Button disabled={busy} onClick={save}>
-          {busy ? common("actions.saving") : t("saveRevision")}
-        </Button>
-        <Button variant="outline" disabled={busy} onClick={onCancel}>
-          {common("actions.cancel")}
-        </Button>
-      </div>
-    </section>
+      ) : null}
+    </Section>
   );
 }
+
+function AdjustmentSection({
+  draft,
+  setDraft,
+  options,
+  editing,
+  t,
+}: {
+  draft: BillCardDetail;
+  setDraft: React.Dispatch<React.SetStateAction<BillCardDetail>>;
+  options: OptionMap;
+  editing: boolean;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const setAdjustment = (
+    i: number,
+    patch: Partial<BillCardDetail["adjustments"][number]>,
+  ) =>
+    setDraft((row) => ({
+      ...row,
+      adjustments: row.adjustments.map((x, n) =>
+        n === i ? { ...x, ...patch } : x,
+      ),
+    }));
+  const targetLabel = (x: ApplicabilityTarget) =>
+    `${t(`targetTypes.${x.targetType}`)} · ${x.targetLabel ?? x.targetValueText ?? t("unknownValue")}`;
+  return (
+    <Section title={t("adjustments")}>
+      {!editing ? (
+        draft.adjustments.length ? (
+          <div className="space-y-2">
+            {draft.adjustments.map((a, i) => (
+              <div
+                key={a.id ?? i}
+                className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{a.name}</div>
+                  <Badge variant="outline">
+                    {t(`categories.${a.category}`)}
+                  </Badge>
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {a.targets.length
+                    ? a.targets.map(targetLabel).join(" · ")
+                    : t("wholeCard")}{" "}
+                  · {t(`calculations.${a.calculation}`)}
+                  {a.value != null ? ` · ${a.value}` : ""}
+                  {a.unit ? ` ${a.unit}` : ""} ·{" "}
+                  {t(`presentations.${a.presentation}`)}
+                </div>
+                {a.referenceText ? (
+                  <p className="mt-2 text-sm">{a.referenceText}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty text={t("none")} />
+        )
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("adjustmentName")}</TableHead>
+                  <TableHead>{t("category")}</TableHead>
+                  <TableHead className="min-w-80">{t("appliesTo")}</TableHead>
+                  <TableHead>{t("calculation")}</TableHead>
+                  <TableHead>{t("adjustmentValue")}</TableHead>
+                  <TableHead>{t("presentation")}</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {draft.adjustments.map((a, i) => (
+                  <TableRow key={a.id ?? i} className="align-top">
+                    <TableCell>
+                      <Input
+                        value={a.name}
+                        onChange={(e) =>
+                          setAdjustment(i, { name: e.target.value })
+                        }
+                      />
+                      <Input
+                        className="mt-1 font-mono text-xs"
+                        aria-label={t("adjustmentCode")}
+                        value={a.code}
+                        onChange={(e) =>
+                          setAdjustment(i, { code: e.target.value })
+                        }
+                      />
+                      <Textarea
+                        className="mt-1"
+                        rows={2}
+                        aria-label={t("referenceText")}
+                        value={a.referenceText ?? ""}
+                        onChange={(e) =>
+                          setAdjustment(i, { referenceText: e.target.value })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={a.category}
+                        onChange={(e) =>
+                          setAdjustment(i, { category: e.target.value })
+                        }
+                      >
+                        {[
+                          "markup",
+                          "travel",
+                          "allowance",
+                          "minimum",
+                          "surcharge",
+                          "other",
+                        ].map((x) => (
+                          <option key={x} value={x}>
+                            {t(`categories.${x}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        {a.targets.map((target, ti) => (
+                          <TargetEditor
+                            key={target.id ?? ti}
+                            target={target}
+                            options={options}
+                            t={t}
+                            onChange={(patch) =>
+                              setAdjustment(i, {
+                                targets: a.targets.map((x, n) =>
+                                  n === ti ? { ...x, ...patch } : x,
+                                ),
+                              })
+                            }
+                            onRemove={() =>
+                              setAdjustment(i, {
+                                targets: a.targets.filter((_, n) => n !== ti),
+                              })
+                            }
+                          />
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setAdjustment(i, {
+                              targets: [
+                                ...a.targets,
+                                {
+                                  targetType: "item_category",
+                                  targetValueId: null,
+                                  targetValueText: null,
+                                  targetLabel: null,
+                                  includeChildren: false,
+                                },
+                              ],
+                            })
+                          }
+                        >
+                          <Plus size={13} />
+                          {t("addTarget")}
+                        </Button>
+                        {a.targets.length === 0 ? (
+                          <div className="text-xs text-slate-500">
+                            {t("wholeCard")}
+                          </div>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={a.calculation}
+                        onChange={(e) =>
+                          setAdjustment(i, { calculation: e.target.value })
+                        }
+                      >
+                        {[
+                          "percent",
+                          "fixed",
+                          "per_hour",
+                          "per_day",
+                          "distance",
+                          "time",
+                          "text",
+                        ].map((x) => (
+                          <option key={x} value={x}>
+                            {t(`calculations.${x}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      {a.calculation === "text" ? (
+                        <span>—</span>
+                      ) : (
+                        <>
+                          <Input
+                            inputMode="decimal"
+                            className="text-right tabular-nums"
+                            value={a.value ?? ""}
+                            onChange={(e) =>
+                              setAdjustment(i, { value: e.target.value })
+                            }
+                          />
+                          <Input
+                            className="mt-1"
+                            aria-label={t("adjustmentUnit")}
+                            value={a.unit ?? ""}
+                            onChange={(e) =>
+                              setAdjustment(i, { unit: e.target.value })
+                            }
+                          />
+                        </>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={a.presentation}
+                        onChange={(e) =>
+                          setAdjustment(i, { presentation: e.target.value })
+                        }
+                      >
+                        {["included", "separate", "informational"].map((x) => (
+                          <option key={x} value={x}>
+                            {t(`presentations.${x}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={t("removeAdjustment")}
+                        onClick={() =>
+                          setDraft((row) => ({
+                            ...row,
+                            adjustments: row.adjustments.filter(
+                              (_, n) => n !== i,
+                            ),
+                          }))
+                        }
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setDraft((row) => ({
+                ...row,
+                adjustments: [
+                  ...row.adjustments,
+                  {
+                    code: "",
+                    name: "",
+                    category: "markup",
+                    calculation: "percent",
+                    value: "0",
+                    unit: "%",
+                    presentation: "included",
+                    threshold: null,
+                    thresholdUnit: null,
+                    referenceText: null,
+                    targets: [],
+                  },
+                ],
+              }))
+            }
+          >
+            <Plus size={14} />
+            {t("addAdjustment")}
+          </Button>
+        </>
+      )}
+    </Section>
+  );
+}
+
+function TargetEditor({
+  target,
+  options,
+  t,
+  onChange,
+  onRemove,
+}: {
+  target: ApplicabilityTarget;
+  options: OptionMap;
+  t: ReturnType<typeof useTranslations>;
+  onChange: (patch: Partial<ApplicabilityTarget>) => void;
+  onRemove: () => void;
+}) {
+  const opts = options[target.targetType] ?? [];
+  const isText = TEXT_TARGETS.has(target.targetType);
+  return (
+    <div className="grid grid-cols-[9rem_1fr_auto] gap-1">
+      <Select
+        aria-label={t("targetType")}
+        value={target.targetType}
+        onChange={(e) =>
+          onChange({
+            targetType: e.target.value,
+            targetValueId: null,
+            targetValueText: null,
+            targetLabel: null,
+          })
+        }
+      >
+        {TARGET_TYPES.map((x) => (
+          <option key={x} value={x}>
+            {t(`targetTypes.${x}`)}
+          </option>
+        ))}
+      </Select>
+      {isText && target.targetType === "other" ? (
+        <Input
+          aria-label={t("targetValue")}
+          value={target.targetValueText ?? ""}
+          onChange={(e) =>
+            onChange({
+              targetValueText: e.target.value,
+              targetValueId: null,
+              targetLabel: e.target.value,
+            })
+          }
+        />
+      ) : (
+        <Select
+          aria-label={t("targetValue")}
+          value={(isText ? target.targetValueText : target.targetValueId) ?? ""}
+          onChange={(e) => {
+            const o = opts.find((x) => x.id === e.target.value);
+            onChange(
+              isText
+                ? {
+                    targetValueText: e.target.value || null,
+                    targetValueId: null,
+                    targetLabel: o?.name ?? null,
+                  }
+                : {
+                    targetValueId: e.target.value || null,
+                    targetValueText: null,
+                    targetLabel: o?.name ?? null,
+                  },
+            );
+          }}
+        >
+          <option value="">{t("chooseValue")}</option>
+          {opts.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </Select>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={t("removeTarget")}
+        onClick={onRemove}
+      >
+        <Trash2 size={14} />
+      </Button>
+    </div>
+  );
+}
+
+function TermsSection({
+  draft,
+  setDraft,
+  editing,
+  t,
+}: {
+  draft: BillCardDetail;
+  setDraft: React.Dispatch<React.SetStateAction<BillCardDetail>>;
+  editing: boolean;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const setTerm = (
+    i: number,
+    patch: Partial<BillCardDetail["terms"][number]>,
+  ) =>
+    setDraft((row) => ({
+      ...row,
+      terms: row.terms.map((x, n) => (n === i ? { ...x, ...patch } : x)),
+    }));
+  return (
+    <Section title={t("terms")}>
+      {!editing ? (
+        draft.terms.length ? (
+          <div className="space-y-3">
+            {draft.terms.map((term, i) => (
+              <div key={term.id ?? i}>
+                <div className="text-xs font-medium text-slate-500">
+                  {term.label}
+                </div>
+                <div className="whitespace-pre-wrap text-sm">
+                  {term.content}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty text={t("none")} />
+        )
+      ) : (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("termLabel")}</TableHead>
+                <TableHead>{t("termContent")}</TableHead>
+                <TableHead>{t("termPlacement")}</TableHead>
+                <TableHead className="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {draft.terms.map((term, i) => (
+                <TableRow key={term.id ?? i}>
+                  <TableCell>
+                    <Input
+                      value={term.label}
+                      onChange={(e) => setTerm(i, { label: e.target.value })}
+                    />
+                    <Input
+                      className="mt-1 font-mono text-xs"
+                      value={term.code}
+                      onChange={(e) => setTerm(i, { code: e.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Textarea
+                      rows={2}
+                      value={term.content}
+                      onChange={(e) => setTerm(i, { content: e.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={term.placement}
+                      onChange={(e) =>
+                        setTerm(i, { placement: e.target.value })
+                      }
+                    >
+                      {["header", "conditions", "footer"].map((x) => (
+                        <option key={x} value={x}>
+                          {t(`placements.${x}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={t("removeTerm")}
+                      onClick={() =>
+                        setDraft((row) => ({
+                          ...row,
+                          terms: row.terms.filter((_, n) => n !== i),
+                        }))
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setDraft((row) => ({
+                ...row,
+                terms: [
+                  ...row.terms,
+                  { code: "", label: "", content: "", placement: "conditions" },
+                ],
+              }))
+            }
+          >
+            <Plus size={14} />
+            {t("addTerm")}
+          </Button>
+        </>
+      )}
+    </Section>
+  );
+}
+
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
