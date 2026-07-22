@@ -185,6 +185,15 @@ export const NAV_MODULES: NavModule[] = [
     exact: true,
   },
   {
+    key: 'collections',
+    href: '/collections',
+    label: 'Recurring & Collections',
+    iconKey: 'history',
+    group: 'customers',
+    subgroup: 'sell-collect',
+    requiredPermission: 'documents.manage',
+  },
+  {
     key: 'ar-invoices',
     href: '/ar/invoices',
     label: 'Invoices',

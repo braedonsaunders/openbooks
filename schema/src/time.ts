@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -132,6 +133,14 @@ export const recurringSchedules = pgTable(
     autoPost: boolean("auto_post").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    /** Human label for the schedule list (falls back to the template's number). */
+    name: text("name"),
+    /** How many documents this schedule has generated so far. */
+    runCount: integer("run_count").notNull().default(0),
+    /** The most recent document produced (for the UI's "last run" link). */
+    lastDocumentId: uuid("last_document_id"),
+    /** Non-null when the last tick failed, so the UI can surface it. */
+    lastError: text("last_error"),
     ...auditColumns,
   },
   (t) => [index("recurring_next_run").on(t.isActive, t.nextRunOn)],

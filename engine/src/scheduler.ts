@@ -92,6 +92,24 @@ export async function tick(): Promise<void> {
       console.error("[scheduler] payment schedule scan failed:", e);
     }
 
+    // Recurring documents: clone each due template into a fresh draft (and post
+    // it when the schedule is set to auto-post). Self-throttles on next_run_on.
+    try {
+      const { runDueRecurringSchedules } = await import("./recurring.ts");
+      await runDueRecurringSchedules();
+    } catch (e) {
+      console.error("[scheduler] recurring billing scan failed:", e);
+    }
+
+    // Dunning: fire the due collections-ladder stage on each overdue invoice.
+    // Idempotent via the dunning_log unique (document, stage) index.
+    try {
+      const { runDunning } = await import("./dunning.ts");
+      await runDunning();
+    } catch (e) {
+      console.error("[scheduler] dunning scan failed:", e);
+    }
+
     // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
     try {
       const { runDueScheduledFlows } = await import("./flows/scheduled.ts");
