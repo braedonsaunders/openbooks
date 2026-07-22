@@ -459,6 +459,15 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'projects.read',
   },
   {
+    key: 'construction-billing',
+    href: '/construction',
+    label: 'Progress Billing',
+    iconKey: 'clipboard-check',
+    group: 'operations',
+    subgroup: 'delivery',
+    requiredPermission: 'ar.read',
+  },
+  {
     key: 'employees',
     href: '/entities/employees',
     label: 'Employees',
@@ -544,7 +553,7 @@ export const NAV_MODULES: NavModule[] = [
     exact: true,
   },
   // Documentation — the in-app help center. No permission gate: available to
-  // every signed-in user (NetSuite-help style), linked under Administration.
+  // every signed-in user (source platform-help style), linked under Administration.
   {
     key: 'docs',
     href: '/docs',
