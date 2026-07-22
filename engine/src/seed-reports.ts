@@ -1,10 +1,6 @@
 import { sql } from "drizzle-orm";
-import {
-  BUILT_IN_REPORT_DEFINITIONS,
-  STANDARD_STATEMENT_DEFINITIONS,
-  validateCustomQuery,
-} from "@openbooks/reports";
 import { db } from "./db.ts";
+import { ensureReportDefinitions } from "./ensure-report-definitions.ts";
 
 /**
  * Seed the built-in report definitions:
@@ -33,41 +29,7 @@ if (orgs.rows.length === 0) {
 }
 
 for (const org of orgs.rows) {
-  for (const def of BUILT_IN_REPORT_DEFINITIONS) {
-    // Fail loudly if a catalog plan no longer matches the entity schema.
-    const query = validateCustomQuery(def.query);
-    await db.execute(sql`
-      insert into report_definitions (org_id, kind, slug, name, description, query)
-      values (${org.id}, 'built_in', ${def.slug}, ${def.name}, ${def.description}, ${JSON.stringify(query)}::jsonb)
-      on conflict (org_id, slug) do update set
-        kind = 'built_in',
-        name = excluded.name,
-        description = excluded.description,
-        query = excluded.query,
-        updated_at = now()
-    `);
-    console.log(`org "${org.name}": built-in report "${def.name}" ready`);
-  }
-
-  // Standard financial statements as first-class definitions (report_type =
-  // 'statement', system-owned/locked). Standard and custom reports now live in
-  // ONE table. Idempotent on (org_id, slug); refreshes name/description/spec.
-  for (const def of STANDARD_STATEMENT_DEFINITIONS) {
-    const statement = { kind: def.statementKind, params: def.params ?? {} };
-    await db.execute(sql`
-      insert into report_definitions (org_id, kind, report_type, system, slug, name, description, query, statement)
-      values (${org.id}, 'built_in', 'statement', true, ${def.slug}, ${def.name}, ${def.description}, null, ${JSON.stringify(statement)}::jsonb)
-      on conflict (org_id, slug) do update set
-        kind = 'built_in',
-        report_type = 'statement',
-        system = true,
-        name = excluded.name,
-        description = excluded.description,
-        query = null,
-        statement = excluded.statement,
-        updated_at = now()
-    `);
-    console.log(`org "${org.name}": standard report "${def.name}" ready`);
-  }
+  await ensureReportDefinitions(org.id);
+  console.log(`org "${org.name}": built-in + standard report definitions ready`);
 }
 process.exit(0);

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { resolveDefinitionToExportData } from '../../../../../lib/report-run'
-import { exportDataToPdf, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
+import { exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../lib/report-filters'
 
@@ -39,6 +39,16 @@ export async function GET(req: Request) {
       orgId,
     })
     const data = await resolveDefinitionToExportData(orgId, definitionId, p, { orgId, t, period, query: q })
+    if (p.get('format') === 'xlsx') {
+      const xlsx = await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel })
+      return new NextResponse(new Uint8Array(xlsx), {
+        status: 200,
+        headers: {
+          'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'cache-control': 'no-store',
+        },
+      })
+    }
     const branding = await orgBranding(orgId)
     const { page, showSummary } = resolveLayout(null)
     const pdf = await exportDataToPdf(data, branding, page, { showSummary })

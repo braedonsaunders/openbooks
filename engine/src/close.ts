@@ -1959,6 +1959,27 @@ export async function publishCloseRun(
       update close_runs set binder_snapshot = ${JSON.stringify(snapshot)}::jsonb, binder_hash = ${binderHash}
        where id = ${runId} and org_id = ${orgId}`);
   });
+
+  // Deliver the reporting package once the publish has durably committed (a
+  // Redis enqueue isn't transactional with the DB, and delivery must never fire
+  // for a rolled-back publish). Best-effort: the worker itself skips manual
+  // cadence / no recipients, and a queue outage must not fail publication.
+  const packageRow = (await db.execute(sql`
+    select reporting_package_id from close_runs where id = ${runId} and org_id = ${orgId}`)) as unknown as {
+    rows: { reporting_package_id: string | null }[];
+  };
+  const packageId = packageRow.rows[0]?.reporting_package_id;
+  if (packageId) {
+    try {
+      const { enqueueCloseDelivery } = await import("@openbooks/jobs");
+      await enqueueCloseDelivery(
+        { orgId, runId, packageId },
+        { jobId: `close-package|${runId}` },
+      );
+    } catch (error) {
+      console.error("[close] failed to enqueue package delivery:", error);
+    }
+  }
 }
 
 export async function requestPeriodReopen(args: {

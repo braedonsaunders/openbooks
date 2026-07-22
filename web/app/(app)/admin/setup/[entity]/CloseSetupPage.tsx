@@ -2,6 +2,16 @@ import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db } from "@openbooks/engine/src/db.ts";
 import { ensureCloseDefaults } from "@openbooks/engine/src/close.ts";
+import {
+  BUILT_IN_REPORT_DEFINITIONS,
+  STANDARD_STATEMENT_DEFINITIONS,
+} from "@openbooks/reports";
+import { dimensionOptions } from "../../../../../lib/reports";
+import {
+  describeQuery,
+  describeStatement,
+  type ReportDescriptor,
+} from "../../../../../lib/close/report-descriptor";
 import { clamp, isUuid, pickString } from "../../../../../lib/list-params";
 import { CloseSetupWorkspace } from "./CloseSetupWorkspace";
 
@@ -239,6 +249,63 @@ export async function CloseSetupPage({
          ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`),
   ])) as any[];
 
+  // Option sources for the structured policy/automation/package editors — so
+  // notifications, assignments, and reporting packages pick from real people,
+  // roles, and reports (built-in + custom) instead of hand-typed JSON.
+  const [users, roles, reportDefs, subsidiaries, dimensions] = (await Promise.all([
+    db.execute(
+      sql`select id, name, email from users where org_id = ${orgId} and is_active order by name`,
+    ),
+    db.execute(
+      sql`select key, name from app_roles where org_id = ${orgId} order by name`,
+    ),
+    db.execute(
+      sql`select slug, name, kind, report_type, query, statement from report_definitions where org_id = ${orgId} order by kind, name`,
+    ),
+    db.execute(
+      sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`,
+    ),
+    dimensionOptions(orgId),
+  ])) as any[];
+
+  // The report picker must show the full catalog even when the org has never
+  // run the (manual) report seed script: start from the static built-in +
+  // standard-statement catalog, then overlay the org's own report_definitions
+  // so custom reports appear and any renamed/seeded rows win by slug.
+  const staticQuery = new Map(BUILT_IN_REPORT_DEFINITIONS.map((def) => [def.slug, def.query]));
+  const staticStatementParams = new Map(
+    STANDARD_STATEMENT_DEFINITIONS.map((def) => [def.slug, def.params]),
+  );
+  const dbRowBySlug = new Map((reportDefs.rows as any[]).map((row) => [row.slug, row]));
+  function descriptorFor(slug: string, dbRow: any): ReportDescriptor {
+    if (dbRow) {
+      if (dbRow.report_type === "query" && dbRow.query) return describeQuery(dbRow.query);
+      if (dbRow.report_type === "statement")
+        return describeStatement(dbRow.statement?.params ?? null);
+    }
+    if (staticQuery.has(slug)) return describeQuery(staticQuery.get(slug) as any);
+    if (staticStatementParams.has(slug))
+      return describeStatement(staticStatementParams.get(slug) ?? null);
+    return { dateRange: null, breakouts: [], filters: [], measures: [] };
+  }
+  const reportBySlug = new Map<
+    string,
+    { slug: string; name: string; kind: string; descriptor: ReportDescriptor }
+  >();
+  const addReport = (slug: string, name: string, kind: string) =>
+    reportBySlug.set(slug, {
+      slug,
+      name,
+      kind,
+      descriptor: descriptorFor(slug, dbRowBySlug.get(slug)),
+    });
+  for (const def of STANDARD_STATEMENT_DEFINITIONS) addReport(def.slug, def.name, "built_in");
+  for (const def of BUILT_IN_REPORT_DEFINITIONS) addReport(def.slug, def.name, "built_in");
+  for (const row of reportDefs.rows as any[]) addReport(row.slug, row.name, row.kind);
+  const mergedReportDefs = [...reportBySlug.values()].sort((a, b) =>
+    a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "built_in" ? -1 : 1,
+  );
+
   const stepRows = steps.rows as any[];
   return (
     <CloseSetupWorkspace
@@ -283,6 +350,11 @@ export async function CloseSetupPage({
       policies={policies.rows}
       automations={automations.rows}
       packages={packages.rows}
+      users={users.rows}
+      roles={roles.rows}
+      reportDefs={mergedReportDefs}
+      subsidiaries={subsidiaries.rows}
+      dimensions={dimensions}
       reopenRequests={reopenRequests.rows}
       reopenPage={reopenList.page}
       reopenTotal={Number(reopenCount.rows[0]?.count ?? 0)}

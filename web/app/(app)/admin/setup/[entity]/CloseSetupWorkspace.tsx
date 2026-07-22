@@ -16,6 +16,7 @@ import {
   Input,
   Label,
   Select,
+  SearchSelect,
   Table,
   TableBody,
   TableCell,
@@ -34,12 +35,19 @@ import {
   GitBranch,
   LockKeyhole,
   Plus,
+  Send,
   ShieldCheck,
   Trash2,
+  X,
 } from "lucide-react";
+import {
+  PERIOD_PRESETS,
+  PERIOD_PRESET_GROUP_LABELS,
+} from "@openbooks/reports";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
 import { mergeHref, pickString } from "../../../../../lib/list-params";
+import type { ReportDescriptor } from "../../../../../lib/close/report-descriptor";
 
 type Row = Record<string, any>;
 type ConfigListKey = "calendar" | "blueprint" | "policy" | "automation" | "package";
@@ -62,6 +70,16 @@ type Props = {
   policies: Row[];
   automations: Row[];
   packages: Row[];
+  users: Row[];
+  roles: Row[];
+  reportDefs: Row[];
+  subsidiaries: Row[];
+  dimensions: {
+    departments: Row[];
+    projects: Row[];
+    locations: Row[];
+    classes: Row[];
+  };
   reopenRequests: Row[];
   reopenPage: number;
   reopenTotal: number;
@@ -100,6 +118,102 @@ function Check({ checked, onChange, children }: { checked: boolean; onChange: (c
 function SectionHeading({ icon, title, description, action }: { icon: React.ReactNode; title: string; description: string; action?: React.ReactNode }) {
   return <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><div className="rounded-lg bg-teal-50 p-2 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">{icon}</div><div><h3 className="font-semibold text-slate-900 dark:text-slate-100">{title}</h3><p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">{description}</p></div></div>{action}</div>;
 }
+
+type Option = { value: string; label: string; group?: string };
+
+/** Checkbox chips for a fixed, short list of values (statuses, workstreams…). */
+function Chips({ options, value, onChange }: { options: Option[]; value: string[]; onChange: (next: string[]) => void }) {
+  return <div className="flex flex-wrap gap-1.5">{options.map((option) => { const on = value.includes(option.value); return <label key={option.value} className={cn("flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors", on ? "border-teal-500 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200" : "border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300")}><input type="checkbox" className="sr-only" checked={on} onChange={(event) => onChange(event.target.checked ? [...value, option.value] : value.filter((item) => item !== option.value))} />{option.label}</label>; })}</div>;
+}
+
+/** Searchable add-and-remove token list backed by a large/grouped option set
+ * (people, roles, reports). Selected values render as removable chips. */
+function TokenSelect({ options, value, onChange, placeholder, empty }: { options: Option[]; value: string[]; onChange: (next: string[]) => void; placeholder?: string; empty?: string }) {
+  const byValue = new Map(options.map((option) => [option.value, option]));
+  const available = options.filter((option) => !value.includes(option.value));
+  return <div className="space-y-2">
+    <SearchSelect value="" onChange={(next) => { if (next && !value.includes(next)) onChange([...value, next]); }} options={available} placeholder={placeholder} searchable emptyLabel={empty} ariaLabel={placeholder} />
+    {value.length > 0 ? <div className="flex flex-wrap gap-1.5">{value.map((item) => <span key={item} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">{byValue.get(item)?.label ?? item}<button type="button" onClick={() => onChange(value.filter((value) => value !== item))} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"><X size={12} /></button></span>)}</div> : null}
+  </div>;
+}
+
+/** Friendly replacement for a raw-JSON object field: rows of key/value pairs.
+ * Only used for policy/delivery shapes that have no dedicated engine schema. */
+function KeyValueRows({ rows, onChange }: { rows: Array<{ key: string; value: string }>; onChange: (next: Array<{ key: string; value: string }>) => void }) {
+  const t = useTranslations("close.setup");
+  return <div className="space-y-2">{rows.map((row, index) => <div key={index} className="flex items-center gap-2"><Input className="flex-1" placeholder={t("kv.key")} value={row.key} onChange={(event) => onChange(rows.map((item, i) => i === index ? { ...item, key: event.target.value } : item))} /><Input className="flex-1" placeholder={t("kv.value")} value={row.value} onChange={(event) => onChange(rows.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} /><Button variant="ghost" size="sm" onClick={() => onChange(rows.filter((_, i) => i !== index))}><Trash2 size={14} /></Button></div>)}<Button variant="outline" size="sm" onClick={() => onChange([...rows, { key: "", value: "" }])}><Plus size={14} />{t("kv.add")}</Button></div>;
+}
+
+/** Coerce a stored jsonb object into editable key/value rows, and back. */
+function objectToRows(value: unknown): Array<{ key: string; value: string }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>).map(([key, raw]) => ({ key, value: typeof raw === "string" ? raw : JSON.stringify(raw) }));
+}
+function rowsToObject(rows: Array<{ key: string; value: string }>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const { key, value } of rows) { const trimmed = key.trim(); if (!trimmed) continue; let parsed: unknown = value; if (value === "true") parsed = true; else if (value === "false") parsed = false; else if (value !== "" && !Number.isNaN(Number(value))) parsed = Number(value); out[trimmed] = parsed; }
+  return out;
+}
+function numberOrUndefined(value: string): number | undefined {
+  if (value.trim() === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : typeof value === "string" && value ? [value] : [];
+}
+/** Drop empty strings, nullish, and empty arrays so engine `?? fallback`
+ * defaults still apply (an empty title must not overwrite the rule name). */
+function pruneEmpty(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === "" || value == null) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/** One report attached to a reporting package, with the author's overrides for
+ * the date range, break-out dimension, and dimension filters it should run
+ * with when the package is delivered. Legacy packages stored bare slug strings;
+ * those normalize to `{ slug }` on load. */
+type ReportAttachment = {
+  slug: string;
+  period?: string;
+  from?: string;
+  to?: string;
+  breakout?: string;
+  departmentId?: string;
+  locationId?: string;
+  classId?: string;
+  projectId?: string;
+  subsidiaryId?: string;
+};
+
+function normalizeAttachments(raw: unknown): ReportAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => (typeof item === "string" ? { slug: item } : item && typeof item === "object" ? { ...(item as ReportAttachment) } : null))
+    .filter((item): item is ReportAttachment => Boolean(item && item.slug));
+}
+
+const BREAKOUT_DIMENSIONS = ["none", "department", "location", "class", "project", "month", "quarter"] as const;
+
+/** Period presets (~50) plus a leading token that follows whatever period is
+ * being closed, and a trailing custom range. */
+function periodOptions(closeLabel: string, customLabel: string): Option[] {
+  return [
+    { value: "$close", label: closeLabel },
+    ...PERIOD_PRESETS.map((preset) => ({ value: preset.id, label: preset.label, group: PERIOD_PRESET_GROUP_LABELS[preset.group] })),
+    { value: "custom", label: customLabel },
+  ];
+}
+
+const RUN_STATUSES = ["draft", "in_progress", "review", "approved", "closed", "published", "cancelled"] as const;
+const TASK_STATUSES = ["blocked", "ready", "in_progress", "submitted", "changes_requested", "complete", "waived", "invalidated"] as const;
+const SEVERITIES = ["info", "warning", "error", "critical"] as const;
+const ALL_WORKSTREAMS = ["readiness", "banking", "ar", "ap", "assets", "tax", "payroll", "intercompany", "gl", "review", "publish"] as const;
 
 function ConfigListControls({ listKey, list, currentParams, perPage }: { listKey: ConfigListKey; list: ConfigListMeta; currentParams: Props["currentParams"]; perPage: number }) {
   return <div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-64 max-w-md flex-1"><SearchInput paramKey={`${listKey}Q`} pageParamKey={`${listKey}Page`} /></div><Pagination basePath={BASE} currentParams={currentParams} total={list.total} page={list.page} perPage={perPage} pageParamKey={`${listKey}Page`} /></div>;
@@ -187,10 +301,293 @@ function BlueprintDrawer({ row, params }: { row?: Row; params: Props["currentPar
 
 function PoliciesTab(props: Props) { return <SimpleConfigTab props={props} kind="policy" icon={<ShieldCheck size={18} />} />; }
 function AutomationTab(props: Props) { return <SimpleConfigTab props={props} kind="automation" icon={<Bot size={18} />} />; }
-function SimpleConfigTab({ props, kind, icon }: { props: Props; kind: "policy" | "automation"; icon: React.ReactNode }) { const t = useTranslations("close.setup"); const td = useTranslations("close"); const tab = kind === "policy" ? "policies" : "automation"; const listKey = kind; const param = pickString(props.currentParams[kind]); const rows = kind === "policy" ? props.policies : props.automations; const row = param && param !== "new" ? rows.find((item) => item.id === param) : undefined; return <div className="space-y-4"><SectionHeading icon={icon} title={t(`${tab}.title`)} description={t(`${tab}.description`)} action={<Button size="sm" asChild><Link href={drawerHref(props.currentParams, tab, kind, "new") as any}><Plus size={14} />{t(`actions.new${kind === "policy" ? "Policy" : "Automation"}`)}</Link></Button>} /><ConfigListControls listKey={listKey} list={props.configLists[listKey]} currentParams={props.currentParams} perPage={props.configPerPage} /><div className="grid gap-3 md:grid-cols-2">{rows.map((item) => <RowLink key={item.id} href={drawerHref(props.currentParams, tab, kind, item.id)}><CardHeader className="p-4"><div className="flex justify-between gap-2"><CardTitle className="text-base">{dataText(td, item.name)}</CardTitle><div className="flex gap-1"><Badge variant={item.is_active ? "success" : "outline"}>{t(item.is_active ? "labels.active" : "labels.inactive")}</Badge><ChevronRight size={16} className="text-slate-400" /></div></div><CardDescription>{kind === "policy" ? `${t(`policyTypes.${item.policy_type}`)} · ${item.code}` : `${t(`automationTriggers.${item.trigger}`)} → ${t(`automationActions.${item.action}`)}`}</CardDescription></CardHeader></RowLink>)}</div>{rows.length === 0 ? <EmptyList>{t(`empty.${tab}`)}</EmptyList> : null}{param ? <JsonResourceDrawer key={param} kind={kind} row={row} params={props.currentParams} /> : null}</div>; }
+function SimpleConfigTab({ props, kind, icon }: { props: Props; kind: "policy" | "automation"; icon: React.ReactNode }) { const t = useTranslations("close.setup"); const td = useTranslations("close"); const tab = kind === "policy" ? "policies" : "automation"; const listKey = kind; const param = pickString(props.currentParams[kind]); const rows = kind === "policy" ? props.policies : props.automations; const row = param && param !== "new" ? rows.find((item) => item.id === param) : undefined; return <div className="space-y-4"><SectionHeading icon={icon} title={t(`${tab}.title`)} description={t(`${tab}.description`)} action={<Button size="sm" asChild><Link href={drawerHref(props.currentParams, tab, kind, "new") as any}><Plus size={14} />{t(`actions.new${kind === "policy" ? "Policy" : "Automation"}`)}</Link></Button>} /><ConfigListControls listKey={listKey} list={props.configLists[listKey]} currentParams={props.currentParams} perPage={props.configPerPage} /><div className="grid gap-3 md:grid-cols-2">{rows.map((item) => <RowLink key={item.id} href={drawerHref(props.currentParams, tab, kind, item.id)}><CardHeader className="p-4"><div className="flex justify-between gap-2"><CardTitle className="text-base">{dataText(td, item.name)}</CardTitle><div className="flex gap-1"><Badge variant={item.is_active ? "success" : "outline"}>{t(item.is_active ? "labels.active" : "labels.inactive")}</Badge><ChevronRight size={16} className="text-slate-400" /></div></div><CardDescription>{kind === "policy" ? `${t(`policyTypes.${item.policy_type}`)} · ${item.code}` : `${t(`automationTriggers.${item.trigger}`)} → ${t(`automationActions.${item.action}`)}`}</CardDescription></CardHeader></RowLink>)}</div>{rows.length === 0 ? <EmptyList>{t(`empty.${tab}`)}</EmptyList> : null}{param ? (kind === "policy" ? <PolicyDrawer key={param} row={row} params={props.currentParams} /> : <AutomationDrawer key={param} row={row} props={props} />) : null}</div>; }
 
-function JsonResourceDrawer({ kind, row, params }: { kind: "policy" | "automation"; row?: Row; params: Props["currentParams"] }) { const t = useTranslations("close.setup"); const td = useTranslations("close"); const router = useRouter(); const isPolicy = kind === "policy"; const tab = isPolicy ? "policies" : "automation"; const closeHref = drawerHref(params, tab, kind, null); const [draft, setDraft] = useState<Row>(row ? isPolicy ? { id: row.id, code: row.code, name: dataText(td, row.name), description: dataText(td, row.description), policyType: row.policy_type, rulesText: JSON.stringify(row.rules ?? {}, null, 2), isActive: row.is_active } : { id: row.id, name: row.name, trigger: row.trigger, automationAction: row.action, conditionsText: JSON.stringify(row.conditions ?? {}, null, 2), configText: JSON.stringify(row.config ?? {}, null, 2), isActive: row.is_active } : isPolicy ? { code: "", name: "", description: "", policyType: "materiality", rulesText: "{}", isActive: true } : { name: "", trigger: "run_started", automationAction: "notify", conditionsText: "{}", configText: "{}", isActive: true }); const [busy, setBusy] = useState(false); async function save() { setBusy(true); try { await post(isPolicy ? { action: "save-policy", ...draft, rules: JSON.parse(draft.rulesText || "{}") } : { action: "save-automation", ...draft, conditions: JSON.parse(draft.conditionsText || "{}"), config: JSON.parse(draft.configText || "{}") }); toast.success(t(isPolicy ? "messages.policySaved" : "messages.automationSaved")); router.push(closeHref as any); router.refresh(); } catch { toast.error(t("errors.invalidConfiguration")); } finally { setBusy(false); } } return <UrlDrawer open closeHref={closeHref} size="lg" title={isPolicy ? t("policies.formTitle") : t("automation.formTitle")} footer={<div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push(closeHref as any)}>{t("actions.cancel")}</Button><Button disabled={busy || !draft.name} onClick={save}>{busy ? t("actions.saving") : t("actions.save")}</Button></div>}><div className="space-y-4 p-1">{isPolicy ? <><div className="grid gap-3 sm:grid-cols-2"><Field label={t("fields.code")}><Input value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} /></Field><Field label={t("fields.policyType")}><Select value={draft.policyType} onChange={(e) => setDraft({ ...draft, policyType: e.target.value })}>{["materiality","lock","review","segregation","exception"].map((value) => <option key={value} value={value}>{t(`policyTypes.${value}`)}</option>)}</Select></Field></div><Field label={t("fields.name")}><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field><Field label={t("fields.description")}><Textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field><Field label={t("fields.rules")} hint={t("policies.rulesHint")}><Textarea className="font-mono text-xs" rows={8} value={draft.rulesText} onChange={(e) => setDraft({ ...draft, rulesText: e.target.value })} /></Field></> : <><Field label={t("fields.name")}><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field><div className="grid gap-3 sm:grid-cols-2"><Field label={t("fields.trigger")}><Select value={draft.trigger} onChange={(e) => setDraft({ ...draft, trigger: e.target.value })}>{["run_started","task_ready","exception_opened","deadline_approaching","run_closed"].map((value) => <option key={value} value={value}>{t(`automationTriggers.${value}`)}</option>)}</Select></Field><Field label={t("fields.action")}><Select value={draft.automationAction} onChange={(e) => setDraft({ ...draft, automationAction: e.target.value })}>{["notify","assign","run_check","complete_task","create_task","generate_report","start_flow"].map((value) => <option key={value} value={value}>{t(`automationActions.${value}`)}</option>)}</Select></Field></div><Field label={t("fields.conditions")}><Textarea className="font-mono text-xs" rows={5} value={draft.conditionsText} onChange={(e) => setDraft({ ...draft, conditionsText: e.target.value })} /></Field><Field label={t("fields.configuration")}><Textarea className="font-mono text-xs" rows={5} value={draft.configText} onChange={(e) => setDraft({ ...draft, configText: e.target.value })} /></Field></>}<Check checked={draft.isActive !== false} onChange={(value) => setDraft({ ...draft, isActive: value })}>{t("fields.active")}</Check></div></UrlDrawer>; }
+function PolicyDrawer({ row, params }: { row?: Row; params: Props["currentParams"] }) {
+  const t = useTranslations("close.setup");
+  const td = useTranslations("close");
+  const router = useRouter();
+  const closeHref = drawerHref(params, "policies", "policy", null);
+  const [draft, setDraft] = useState<Row>(row
+    ? { id: row.id, code: row.code, name: dataText(td, row.name), description: dataText(td, row.description) ?? "", policyType: row.policy_type, rules: row.rules ?? {}, isActive: row.is_active }
+    : { code: "", name: "", description: "", policyType: "materiality", rules: {}, isActive: true });
+  const [advanced, setAdvanced] = useState<Array<{ key: string; value: string }>>(objectToRows(row?.rules));
+  const [busy, setBusy] = useState(false);
+  const rules = (draft.rules ?? {}) as Record<string, any>;
+  const isAdvanced = draft.policyType === "review" || draft.policyType === "exception";
+  const setRules = (patch: Record<string, unknown>) => setDraft({ ...draft, rules: { ...rules, ...patch } });
+  function composeRules(): Record<string, unknown> {
+    if (draft.policyType === "materiality") return { amount: String(rules.amount || "10000.0000"), percent: numberOrUndefined(String(rules.percent ?? "")) ?? 20 };
+    if (draft.policyType === "lock") return { approvalRequired: rules.approvalRequired !== false, defaultHours: numberOrUndefined(String(rules.defaultHours ?? "")) ?? 24, maxHours: numberOrUndefined(String(rules.maxHours ?? "")) ?? 168 };
+    if (draft.policyType === "segregation") return { prohibitSelfApproval: rules.prohibitSelfApproval !== false };
+    return rowsToObject(advanced);
+  }
+  async function save() {
+    setBusy(true);
+    try {
+      await post({ action: "save-policy", id: draft.id, code: draft.code, name: draft.name, description: draft.description, policyType: draft.policyType, rules: composeRules(), isActive: draft.isActive });
+      toast.success(t("messages.policySaved"));
+      router.push(closeHref as any);
+      router.refresh();
+    } catch { toast.error(t("errors.invalidConfiguration")); } finally { setBusy(false); }
+  }
+  return <UrlDrawer open closeHref={closeHref} size="lg" title={draft.policyType === "materiality" ? t("policies.materialityFormTitle") : t("policies.formTitle")} footer={<div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push(closeHref as any)}>{t("actions.cancel")}</Button><Button disabled={busy || !draft.name || !draft.code} onClick={save}>{busy ? t("actions.saving") : t("actions.save")}</Button></div>}>
+    <div className="space-y-4 p-1">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t("fields.code")}><Input value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} /></Field>
+        <Field label={t("fields.policyType")}><Select value={draft.policyType} onChange={(e) => setDraft({ ...draft, policyType: e.target.value })}>{["materiality", "lock", "review", "segregation", "exception"].map((value) => <option key={value} value={value}>{t(`policyTypes.${value}`)}</option>)}</Select></Field>
+      </div>
+      <Field label={t("fields.name")}><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
+      <Field label={t("fields.description")}><Textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
+      <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        {draft.policyType === "materiality" ? <>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("policyRules.materialityIntro")}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("policyRules.amount")} hint={t("policyRules.amountHint")}><Input inputMode="decimal" value={String(rules.amount ?? "")} placeholder="10000.0000" onChange={(e) => setRules({ amount: e.target.value })} /></Field>
+            <Field label={t("policyRules.percent")} hint={t("policyRules.percentHint")}><Input type="number" min={0} value={rules.percent ?? ""} placeholder="20" onChange={(e) => setRules({ percent: e.target.value === "" ? "" : Number(e.target.value) })} /></Field>
+          </div>
+        </> : null}
+        {draft.policyType === "lock" ? <>
+          <Check checked={rules.approvalRequired !== false} onChange={(value) => setRules({ approvalRequired: value })}>{t("policyRules.approvalRequired")}</Check>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("policyRules.defaultHours")}><Input type="number" min={1} value={rules.defaultHours ?? ""} placeholder="24" onChange={(e) => setRules({ defaultHours: e.target.value === "" ? "" : Number(e.target.value) })} /></Field>
+            <Field label={t("policyRules.maxHours")}><Input type="number" min={1} value={rules.maxHours ?? ""} placeholder="168" onChange={(e) => setRules({ maxHours: e.target.value === "" ? "" : Number(e.target.value) })} /></Field>
+          </div>
+        </> : null}
+        {draft.policyType === "segregation" ? <Check checked={rules.prohibitSelfApproval !== false} onChange={(value) => setRules({ prohibitSelfApproval: value })}>{t("policyRules.prohibitSelfApproval")}</Check> : null}
+        {isAdvanced ? <><p className="text-xs text-slate-500 dark:text-slate-400">{t("policyRules.advancedIntro")}</p><KeyValueRows rows={advanced} onChange={setAdvanced} /></> : null}
+      </div>
+      <Check checked={draft.isActive !== false} onChange={(value) => setDraft({ ...draft, isActive: value })}>{t("fields.active")}</Check>
+    </div>
+  </UrlDrawer>;
+}
 
-function PackagesTab(props: Props) { const t = useTranslations("close.setup"); const td = useTranslations("close"); const selected = pickString(props.currentParams.package); const row = selected && selected !== "new" ? props.packages.find((item) => item.id === selected) : undefined; return <div className="space-y-4"><SectionHeading icon={<FileOutput size={18} />} title={t("packages.title")} description={t("packages.description")} action={<Button size="sm" asChild><Link href={drawerHref(props.currentParams, "packages", "package", "new") as any}><Plus size={14} />{t("actions.newPackage")}</Link></Button>} /><ConfigListControls listKey="package" list={props.configLists.package} currentParams={props.currentParams} perPage={props.configPerPage} /><div className="grid gap-3 md:grid-cols-2">{props.packages.map((item) => <RowLink key={item.id} href={drawerHref(props.currentParams, "packages", "package", item.id)}><CardHeader className="p-4"><div className="flex justify-between gap-2"><CardTitle className="text-base">{dataText(td, item.name)}</CardTitle><div className="flex gap-1">{item.is_default ? <Badge variant="success">{t("labels.default")}</Badge> : null}{!item.is_active ? <Badge variant="outline">{t("labels.inactive")}</Badge> : null}<ChevronRight size={16} className="text-slate-400" /></div></div><CardDescription>{t("packages.reportCount", { count: item.reports?.length ?? 0 })}</CardDescription></CardHeader></RowLink>)}</div>{props.packages.length === 0 ? <EmptyList>{t("empty.packages")}</EmptyList> : null}{selected ? <PackageDrawer key={selected} row={row} params={props.currentParams} /> : null}</div>; }
+function AutomationDrawer({ row, props }: { row?: Row; props: Props }) {
+  const t = useTranslations("close.setup");
+  const td = useTranslations("close");
+  const router = useRouter();
+  const closeHref = drawerHref(props.currentParams, "automation", "automation", null);
+  const [draft, setDraft] = useState<Row>(row
+    ? { id: row.id, name: row.name, trigger: row.trigger, automationAction: row.action, conditions: row.conditions ?? {}, config: row.config ?? {}, isActive: row.is_active }
+    : { name: "", trigger: "run_started", automationAction: "notify", conditions: {}, config: {}, isActive: true });
+  const [busy, setBusy] = useState(false);
+  const conditions = (draft.conditions ?? {}) as Record<string, any>;
+  const config = (draft.config ?? {}) as Record<string, any>;
+  const action = draft.automationAction;
+  const setCondList = (key: string, values: string[]) => { const next = { ...conditions }; if (values.length) next[key] = values; else delete next[key]; setDraft({ ...draft, conditions: next }); };
+  const setCondNum = (key: string, raw: string) => { const next = { ...conditions }; const num = numberOrUndefined(raw); if (num === undefined) delete next[key]; else next[key] = num; setDraft({ ...draft, conditions: next }); };
+  const setConfig = (patch: Record<string, unknown>) => setDraft({ ...draft, config: { ...config, ...patch } });
+  const userOptions: Option[] = props.users.map((u) => ({ value: u.id, label: u.name || u.email || u.id }));
+  const roleOptions: Option[] = props.roles.map((r) => ({ value: r.key, label: r.name }));
+  const reportOptions: Option[] = props.reportDefs.map((r) => ({ value: r.slug, label: r.name, group: t(`reportGroups.${r.kind}`) }));
+  async function save() {
+    setBusy(true);
+    try {
+      await post({ action: "save-automation", id: draft.id, name: draft.name, trigger: draft.trigger, automationAction: draft.automationAction, conditions: pruneEmpty(conditions), config: pruneEmpty(config), isActive: draft.isActive });
+      toast.success(t("messages.automationSaved"));
+      router.push(closeHref as any);
+      router.refresh();
+    } catch { toast.error(t("errors.invalidConfiguration")); } finally { setBusy(false); }
+  }
+  return <UrlDrawer open closeHref={closeHref} size="lg" title={t("automation.formTitle")} footer={<div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push(closeHref as any)}>{t("actions.cancel")}</Button><Button disabled={busy || !draft.name} onClick={save}>{busy ? t("actions.saving") : t("actions.save")}</Button></div>}>
+    <div className="space-y-4 p-1">
+      <Field label={t("fields.name")}><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t("fields.trigger")}><Select value={draft.trigger} onChange={(e) => setDraft({ ...draft, trigger: e.target.value })}>{["run_started", "task_ready", "exception_opened", "deadline_approaching", "run_closed"].map((value) => <option key={value} value={value}>{t(`automationTriggers.${value}`)}</option>)}</Select></Field>
+        <Field label={t("fields.action")}><Select value={draft.automationAction} onChange={(e) => setDraft({ ...draft, automationAction: e.target.value })}>{["notify", "assign", "run_check", "complete_task", "create_task", "generate_report", "start_flow"].map((value) => <option key={value} value={value}>{t(`automationActions.${value}`)}</option>)}</Select></Field>
+      </div>
+      <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        <div><h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("automationConfig.sectionConditions")}</h4><p className="text-xs text-slate-500 dark:text-slate-400">{t("conditions.intro")}</p></div>
+        <Field label={t("conditions.runStatus")}><Chips options={RUN_STATUSES.map((value) => ({ value, label: td(`runStatus.${value}`) }))} value={asStringArray(conditions.runStatus)} onChange={(next) => setCondList("runStatus", next)} /></Field>
+        <Field label={t("conditions.workstream")}><Chips options={ALL_WORKSTREAMS.map((value) => ({ value, label: t(`workstreams.${value}`) }))} value={asStringArray(conditions.workstream)} onChange={(next) => setCondList("workstream", next)} /></Field>
+        <Field label={t("conditions.taskStatus")}><Chips options={TASK_STATUSES.map((value) => ({ value, label: td(`taskStatus.${value}`) }))} value={asStringArray(conditions.taskStatus)} onChange={(next) => setCondList("taskStatus", next)} /></Field>
+        <Field label={t("conditions.severity")}><Chips options={SEVERITIES.map((value) => ({ value, label: td(`severity.${value}`) }))} value={asStringArray(conditions.severity)} onChange={(next) => setCondList("severity", next)} /></Field>
+        <Field label={t("conditions.taskKey")} hint={t("conditions.taskKeyHint")}><Input value={asStringArray(conditions.taskKey).join(", ")} onChange={(e) => setCondList("taskKey", e.target.value.split(",").map((v) => v.trim()).filter(Boolean))} /></Field>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label={t("conditions.minReadiness")}><Input type="number" min={0} max={100} value={conditions.minReadiness ?? ""} onChange={(e) => setCondNum("minReadiness", e.target.value)} /></Field>
+          <Field label={t("conditions.maxReadiness")}><Input type="number" min={0} max={100} value={conditions.maxReadiness ?? ""} onChange={(e) => setCondNum("maxReadiness", e.target.value)} /></Field>
+          <Field label={t("conditions.withinDays")}><Input type="number" value={conditions.withinDays ?? ""} onChange={(e) => setCondNum("withinDays", e.target.value)} /></Field>
+        </div>
+      </div>
+      <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("automationConfig.sectionConfig")}</h4>
+        {action === "notify" ? <>
+          <Field label={t("automationConfig.notifyUsers")} hint={t("automationConfig.notifyHint")}><TokenSelect options={userOptions} value={asStringArray(config.userIds)} onChange={(next) => setConfig({ userIds: next })} placeholder={t("automationConfig.notifyUsers")} /></Field>
+          <Field label={t("automationConfig.notifyRoles")}><TokenSelect options={roleOptions} value={asStringArray(config.roleKeys)} onChange={(next) => setConfig({ roleKeys: next })} placeholder={t("automationConfig.notifyRoles")} /></Field>
+          <Field label={t("automationConfig.title")}><Input value={config.title ?? ""} placeholder={t("automationConfig.titlePlaceholder")} onChange={(e) => setConfig({ title: e.target.value })} /></Field>
+          <Field label={t("automationConfig.body")}><Textarea value={config.body ?? ""} placeholder={t("automationConfig.bodyPlaceholder")} onChange={(e) => setConfig({ body: e.target.value })} /></Field>
+        </> : null}
+        {action === "assign" ? <>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("automationConfig.assignHint")}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("automationConfig.owner")}><SearchSelect value={config.ownerUserId ?? ""} onChange={(v) => setConfig({ ownerUserId: v })} options={userOptions} clearable searchable ariaLabel={t("automationConfig.owner")} /></Field>
+            <Field label={t("automationConfig.ownerRole")}><SearchSelect value={config.ownerRoleKey ?? ""} onChange={(v) => setConfig({ ownerRoleKey: v })} options={roleOptions} clearable searchable ariaLabel={t("automationConfig.ownerRole")} /></Field>
+            <Field label={t("automationConfig.reviewer")}><SearchSelect value={config.reviewerUserId ?? ""} onChange={(v) => setConfig({ reviewerUserId: v })} options={userOptions} clearable searchable ariaLabel={t("automationConfig.reviewer")} /></Field>
+            <Field label={t("automationConfig.reviewerRole")}><SearchSelect value={config.reviewerRoleKey ?? ""} onChange={(v) => setConfig({ reviewerRoleKey: v })} options={roleOptions} clearable searchable ariaLabel={t("automationConfig.reviewerRole")} /></Field>
+          </div>
+        </> : null}
+        {action === "create_task" ? <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("automationConfig.taskKey")}><Input value={config.key ?? ""} placeholder={t("automationConfig.taskKeyPlaceholder")} onChange={(e) => setConfig({ key: e.target.value })} /></Field>
+            <Field label={t("automationConfig.taskTitle")}><Input value={config.title ?? ""} onChange={(e) => setConfig({ title: e.target.value })} /></Field>
+            <Field label={t("fields.workstream")}><Select value={config.workstream ?? "review"} onChange={(e) => setConfig({ workstream: e.target.value })}>{ALL_WORKSTREAMS.map((value) => <option key={value} value={value}>{t(`workstreams.${value}`)}</option>)}</Select></Field>
+            <Field label={t("automationConfig.gate")}><Select value={config.gateType ?? "none"} onChange={(e) => setConfig({ gateType: e.target.value })}>{["none", "soft", "hard"].map((value) => <option key={value} value={value}>{t(`gates.${value}`)}</option>)}</Select></Field>
+          </div>
+          <Field label={t("automationConfig.taskDescription")}><Textarea value={config.description ?? ""} onChange={(e) => setConfig({ description: e.target.value })} /></Field>
+          <Check checked={config.evidenceRequired === true} onChange={(value) => setConfig({ evidenceRequired: value })}>{t("automationConfig.evidenceRequired")}</Check>
+        </> : null}
+        {action === "generate_report" ? <>
+          <Field label={t("automationConfig.report")}><SearchSelect value={config.report ?? ""} onChange={(v) => setConfig({ report: v })} options={reportOptions} searchable clearable ariaLabel={t("automationConfig.report")} emptyLabel={t("reportsEmpty")} /></Field>
+          <Field label={t("automationConfig.label")}><Input value={config.label ?? ""} onChange={(e) => setConfig({ label: e.target.value })} /></Field>
+        </> : null}
+        {action === "start_flow" ? <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("automationConfig.subjectKind")}><Input value={config.subjectKind ?? ""} onChange={(e) => setConfig({ subjectKind: e.target.value })} /></Field>
+            <Field label={t("automationConfig.subjectId")}><Select value={config.subjectId ?? "$run"} onChange={(e) => setConfig({ subjectId: e.target.value })}>{["$run", "$task"].map((value) => <option key={value} value={value}>{t(`subjectRefs.${value}`)}</option>)}</Select></Field>
+          </div>
+          <Field label={t("automationConfig.buttonId")}><Input value={config.buttonId ?? ""} onChange={(e) => setConfig({ buttonId: e.target.value })} /></Field>
+        </> : null}
+        {action === "run_check" || action === "complete_task" ? <p className="text-sm text-slate-500 dark:text-slate-400">{t("automationConfig.none")}</p> : null}
+      </div>
+      <Check checked={draft.isActive !== false} onChange={(value) => setDraft({ ...draft, isActive: value })}>{t("fields.active")}</Check>
+    </div>
+  </UrlDrawer>;
+}
 
-function PackageDrawer({ row, params }: { row?: Row; params: Props["currentParams"] }) { const t = useTranslations("close.setup"); const td = useTranslations("close"); const router = useRouter(); const closeHref = drawerHref(params, "packages", "package", null); const reportOptions = ["balance-sheet","pnl","cash-flow","trial-balance","general-ledger"]; const [draft, setDraft] = useState<Row>(row ? { id: row.id, name: dataText(td, row.name), description: dataText(td, row.description), reports: row.reports ?? [], recipientsText: (row.recipients ?? []).join("\n"), deliveryText: JSON.stringify(row.delivery ?? {}, null, 2), isDefault: row.is_default, isActive: row.is_active } : { name: "", description: "", reports: reportOptions, recipientsText: "", deliveryText: "{}", isDefault: false, isActive: true }); const [busy, setBusy] = useState(false); async function save() { setBusy(true); try { await post({ action: "save-package", ...draft, delivery: JSON.parse(draft.deliveryText || "{}"), recipients: draft.recipientsText.split("\n").map((value: string) => value.trim()).filter(Boolean) }); toast.success(t("messages.packageSaved")); router.push(closeHref as any); router.refresh(); } catch { toast.error(t("errors.invalidConfiguration")); } finally { setBusy(false); } } return <UrlDrawer open closeHref={closeHref} size="lg" title={t("packages.formTitle")} footer={<div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push(closeHref as any)}>{t("actions.cancel")}</Button><Button disabled={busy || !draft.name} onClick={save}>{busy ? t("actions.saving") : t("actions.save")}</Button></div>}><div className="space-y-4 p-1"><Field label={t("fields.name")}><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field><Field label={t("fields.description")}><Textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field><Field label={t("fields.reports")}><div className="grid gap-2 sm:grid-cols-2">{reportOptions.map((report) => <Check key={report} checked={draft.reports.includes(report)} onChange={(checked) => setDraft({ ...draft, reports: checked ? [...draft.reports, report] : draft.reports.filter((item: string) => item !== report) })}>{t(`reports.${report}`)}</Check>)}</div></Field><Field label={t("fields.recipients")} hint={t("packages.recipientsHint")}><Textarea rows={5} value={draft.recipientsText} onChange={(e) => setDraft({ ...draft, recipientsText: e.target.value })} /></Field><Field label={t("fields.delivery")}><Textarea className="font-mono text-xs" rows={6} value={draft.deliveryText} onChange={(e) => setDraft({ ...draft, deliveryText: e.target.value })} /></Field><div className="space-y-2"><Check checked={draft.isDefault} onChange={(value) => setDraft({ ...draft, isDefault: value })}>{t("fields.defaultPackage")}</Check><Check checked={draft.isActive} onChange={(value) => setDraft({ ...draft, isActive: value })}>{t("fields.active")}</Check></div></div></UrlDrawer>; }
+function PackagesTab(props: Props) { const t = useTranslations("close.setup"); const td = useTranslations("close"); const selected = pickString(props.currentParams.package); const row = selected && selected !== "new" ? props.packages.find((item) => item.id === selected) : undefined; return <div className="space-y-4"><SectionHeading icon={<FileOutput size={18} />} title={t("packages.title")} description={t("packages.description")} action={<Button size="sm" asChild><Link href={drawerHref(props.currentParams, "packages", "package", "new") as any}><Plus size={14} />{t("actions.newPackage")}</Link></Button>} /><ConfigListControls listKey="package" list={props.configLists.package} currentParams={props.currentParams} perPage={props.configPerPage} /><div className="grid gap-3 md:grid-cols-2">{props.packages.map((item) => <RowLink key={item.id} href={drawerHref(props.currentParams, "packages", "package", item.id)}><CardHeader className="p-4"><div className="flex justify-between gap-2"><CardTitle className="text-base">{dataText(td, item.name)}</CardTitle><div className="flex gap-1">{item.is_default ? <Badge variant="success">{t("labels.default")}</Badge> : null}{!item.is_active ? <Badge variant="outline">{t("labels.inactive")}</Badge> : null}<ChevronRight size={16} className="text-slate-400" /></div></div><CardDescription>{t("packages.reportCount", { count: item.reports?.length ?? 0 })}</CardDescription></CardHeader></RowLink>)}</div>{props.packages.length === 0 ? <EmptyList>{t("empty.packages")}</EmptyList> : null}{selected ? <PackageDrawer key={selected} row={row} props={props} /> : null}</div>; }
+
+/** Read-only recap of the parameters a report already carries in its own
+ * definition, shown above the editable overrides. */
+function ReportDescriptorSummary({ descriptor }: { descriptor: ReportDescriptor }) {
+  const t = useTranslations("close.setup");
+  const parts: Array<[string, string[]]> = [
+    [t("reportParams.definedDate"), descriptor.dateRange ? [descriptor.dateRange] : []],
+    [t("reportParams.definedBreakouts"), descriptor.breakouts],
+    [t("reportParams.definedFilters"), descriptor.filters],
+    [t("reportParams.definedMeasures"), descriptor.measures],
+  ];
+  const shown = parts.filter(([, values]) => values.length > 0);
+  if (shown.length === 0) return <p className="text-xs text-slate-400">{t("reportParams.noDefined")}</p>;
+  return <div className="space-y-1 rounded-md bg-slate-50 p-2 text-xs dark:bg-slate-900/50">{shown.map(([label, values]) => <div key={label} className="flex flex-wrap gap-x-1.5"><span className="font-medium text-slate-500 dark:text-slate-400">{label}:</span><span className="text-slate-600 dark:text-slate-300">{values.join(" · ")}</span></div>)}</div>;
+}
+
+/** One attached report: its defined parameters (read-only) plus the author's
+ * editable date-range / break-out / dimension-filter overrides for delivery. */
+function ReportAttachmentCard({ attachment, meta, props, onChange, onRemove }: { attachment: ReportAttachment; meta?: Row; props: Props; onChange: (patch: Partial<ReportAttachment>) => void; onRemove: () => void }) {
+  const t = useTranslations("close.setup");
+  const [open, setOpen] = useState(false);
+  const name = meta?.name ?? ((t as any).has(`reports.${attachment.slug}`) ? t(`reports.${attachment.slug}`) : attachment.slug);
+  const descriptor = (meta?.descriptor ?? { dateRange: null, breakouts: [], filters: [], measures: [] }) as ReportDescriptor;
+  const period = attachment.period ?? "$close";
+  const dimSelect = (label: string, key: keyof ReportAttachment, options: Row[]) =>
+    <Field label={label}><SearchSelect value={String(attachment[key] ?? "")} onChange={(value) => onChange({ [key]: value || undefined } as Partial<ReportAttachment>)} options={options.map((option) => ({ value: option.id, label: option.name }))} clearable searchable ariaLabel={label} placeholder={t("reportParams.anyValue")} /></Field>;
+  return <div className="rounded-lg border border-slate-200 dark:border-slate-800">
+    <div className="flex items-center justify-between gap-2 p-3">
+      <button type="button" onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <ChevronRight size={14} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-90")} />
+        <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{name}</span>
+        {meta?.kind === "custom" ? <Badge variant="outline">{t("reportGroups.custom")}</Badge> : null}
+      </button>
+      <Button variant="ghost" size="sm" onClick={onRemove}><X size={14} /></Button>
+    </div>
+    {open ? <div className="space-y-3 border-t border-slate-200 p-3 dark:border-slate-800">
+      <ReportDescriptorSummary descriptor={descriptor} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t("reportParams.dateRange")}><SearchSelect value={period} onChange={(value) => onChange({ period: value })} options={periodOptions(t("reportParams.closePeriod"), t("reportParams.custom"))} searchable ariaLabel={t("reportParams.dateRange")} /></Field>
+        <Field label={t("reportParams.breakout")}><Select value={attachment.breakout ?? "none"} onChange={(event) => onChange({ breakout: event.target.value })}>{BREAKOUT_DIMENSIONS.map((value) => <option key={value} value={value}>{t(`reportParams.breakouts.${value}`)}</option>)}</Select></Field>
+      </div>
+      {period === "custom" ? <div className="grid gap-3 sm:grid-cols-2"><Field label={t("reportParams.from")}><Input type="date" value={attachment.from ?? ""} onChange={(event) => onChange({ from: event.target.value })} /></Field><Field label={t("reportParams.to")}><Input type="date" value={attachment.to ?? ""} onChange={(event) => onChange({ to: event.target.value })} /></Field></div> : null}
+      <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-wide text-slate-400">{t("reportParams.filters")}</Label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {dimSelect(t("reportParams.department"), "departmentId", props.dimensions.departments)}
+          {dimSelect(t("reportParams.location"), "locationId", props.dimensions.locations)}
+          {dimSelect(t("reportParams.class"), "classId", props.dimensions.classes)}
+          {dimSelect(t("reportParams.project"), "projectId", props.dimensions.projects)}
+          {props.subsidiaries.length > 0 ? dimSelect(t("reportParams.subsidiary"), "subsidiaryId", props.subsidiaries) : null}
+        </div>
+      </div>
+    </div> : null}
+  </div>;
+}
+
+function PackageDrawer({ row, props }: { row?: Row; props: Props }) {
+  const t = useTranslations("close.setup");
+  const td = useTranslations("close");
+  const router = useRouter();
+  const closeHref = drawerHref(props.currentParams, "packages", "package", null);
+  const DELIVERY_KNOWN = ["format", "combine", "coverPage", "cadence"];
+  const [draft, setDraft] = useState<Row>(row
+    ? { id: row.id, name: dataText(td, row.name), description: dataText(td, row.description) ?? "", reports: normalizeAttachments(row.reports), recipientsText: (row.recipients ?? []).join("\n"), delivery: row.delivery ?? {}, isDefault: row.is_default, isActive: row.is_active }
+    : { name: "", description: "", reports: ["profit-and-loss", "balance-sheet", "cash-flow", "trial-balance", "general-ledger"].map((slug) => ({ slug })), recipientsText: "", delivery: {}, isDefault: false, isActive: true });
+  const [advancedDelivery, setAdvancedDelivery] = useState<Array<{ key: string; value: string }>>(objectToRows(row?.delivery && typeof row.delivery === "object" ? Object.fromEntries(Object.entries(row.delivery).filter(([key]) => !DELIVERY_KNOWN.includes(key))) : {}));
+  const [busy, setBusy] = useState(false);
+  const [sendPeriod, setSendPeriod] = useState("");
+  const [sendBook, setSendBook] = useState(props.selectedBookId || props.books[0]?.id || "");
+  const [sending, setSending] = useState(false);
+  async function sendNow() {
+    if (!draft.id || !sendPeriod || !sendBook) return;
+    setSending(true);
+    try {
+      await post({ action: "send-package", packageId: draft.id, periodId: sendPeriod, bookId: sendBook });
+      toast.success(t("packages.sendQueued"));
+    } catch { toast.error(t("errors.actionFailed")); } finally { setSending(false); }
+  }
+  const delivery = (draft.delivery ?? {}) as Record<string, any>;
+  const setDelivery = (patch: Record<string, unknown>) => setDraft({ ...draft, delivery: { ...delivery, ...patch } });
+  const attachments: ReportAttachment[] = draft.reports;
+  const metaBySlug = new Map(props.reportDefs.map((r) => [r.slug, r]));
+  const attachedSlugs = new Set(attachments.map((item) => item.slug));
+  const addOptions: Option[] = props.reportDefs
+    .filter((r) => !attachedSlugs.has(r.slug))
+    .map((r) => ({ value: r.slug, label: r.name, group: t(`reportGroups.${r.kind}`) }));
+  const setAttachment = (index: number, patch: Partial<ReportAttachment>) =>
+    setDraft({ ...draft, reports: attachments.map((item, i) => (i === index ? { ...item, ...patch } : item)) });
+  async function save() {
+    setBusy(true);
+    try {
+      const composedDelivery = pruneEmpty({ format: delivery.format, combine: delivery.combine, coverPage: delivery.coverPage, cadence: delivery.cadence, ...rowsToObject(advancedDelivery) });
+      await post({ action: "save-package", id: draft.id, name: draft.name, description: draft.description, reports: attachments, recipients: draft.recipientsText.split("\n").map((v: string) => v.trim()).filter(Boolean), delivery: composedDelivery, isDefault: draft.isDefault, isActive: draft.isActive });
+      toast.success(t("messages.packageSaved"));
+      router.push(closeHref as any);
+      router.refresh();
+    } catch { toast.error(t("errors.invalidConfiguration")); } finally { setBusy(false); }
+  }
+  return <UrlDrawer open closeHref={closeHref} size="lg" title={t("packages.formTitle")} footer={<div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push(closeHref as any)}>{t("actions.cancel")}</Button><Button disabled={busy || !draft.name} onClick={save}>{busy ? t("actions.saving") : t("actions.save")}</Button></div>}>
+    <div className="space-y-4 p-1">
+      <Field label={t("fields.name")}><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
+      <Field label={t("fields.description")}><Textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
+      <Field label={t("fields.reports")}>
+        <div className="space-y-2">
+          <SearchSelect value="" onChange={(slug) => { if (slug && !attachedSlugs.has(slug)) setDraft({ ...draft, reports: [...attachments, { slug }] }); }} options={addOptions} searchable placeholder={t("packages.addReport")} emptyLabel={t("reportsEmpty")} ariaLabel={t("packages.addReport")} />
+          {attachments.length === 0 ? <p className="text-xs text-slate-400">{t("packages.noReports")}</p> : <div className="space-y-2">{attachments.map((attachment, index) => <ReportAttachmentCard key={`${attachment.slug}-${index}`} attachment={attachment} meta={metaBySlug.get(attachment.slug)} props={props} onChange={(patch) => setAttachment(index, patch)} onRemove={() => setDraft({ ...draft, reports: attachments.filter((_, i) => i !== index) })} />)}</div>}
+        </div>
+      </Field>
+      <Field label={t("fields.recipients")} hint={t("packages.recipientsHint")}><Textarea rows={4} value={draft.recipientsText} onChange={(e) => setDraft({ ...draft, recipientsText: e.target.value })} /></Field>
+      <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        <div><h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("delivery.title")}</h4><p className="text-xs text-slate-500 dark:text-slate-400">{t("delivery.intro")}</p></div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("delivery.format")}><Select value={delivery.format ?? "pdf"} onChange={(e) => setDelivery({ format: e.target.value })}>{["pdf", "xlsx", "both"].map((value) => <option key={value} value={value}>{t(`delivery.formats.${value}`)}</option>)}</Select></Field>
+          <Field label={t("delivery.cadence")}><Select value={delivery.cadence ?? "on_publish"} onChange={(e) => setDelivery({ cadence: e.target.value })}>{["on_publish", "manual"].map((value) => <option key={value} value={value}>{t(`delivery.cadences.${value}`)}</option>)}</Select></Field>
+        </div>
+        <Check checked={delivery.combine === true} onChange={(value) => setDelivery({ combine: value })}>{t("delivery.combine")}</Check>
+        <Check checked={delivery.coverPage === true} onChange={(value) => setDelivery({ coverPage: value })}>{t("delivery.coverPage")}</Check>
+        <details className="text-sm"><summary className="cursor-pointer text-slate-500 dark:text-slate-400">{t("delivery.advanced")}</summary><div className="pt-2"><KeyValueRows rows={advancedDelivery} onChange={setAdvancedDelivery} /></div></details>
+      </div>
+      <div className="space-y-2">
+        <Check checked={draft.isDefault} onChange={(value) => setDraft({ ...draft, isDefault: value })}>{t("fields.defaultPackage")}</Check>
+        <Check checked={draft.isActive} onChange={(value) => setDraft({ ...draft, isActive: value })}>{t("fields.active")}</Check>
+      </div>
+      {draft.id ? <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        <div><h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("packages.sendNowTitle")}</h4><p className="text-xs text-slate-500 dark:text-slate-400">{t("packages.sendNowHint")}</p></div>
+        {props.periods.length === 0 ? <p className="text-xs text-slate-400">{t("packages.sendNoPeriods")}</p> : <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("fields.book")}><Select value={sendBook} onChange={(e) => setSendBook(e.target.value)}>{props.books.map((book) => <option key={book.id} value={book.id}>{book.name}</option>)}</Select></Field>
+            <Field label={t("packages.sendPeriod")}><Select value={sendPeriod} onChange={(e) => setSendPeriod(e.target.value)}><option value="">{t("packages.selectPeriod")}</option>{props.periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</Select></Field>
+          </div>
+          <Button variant="outline" size="sm" disabled={sending || !sendPeriod || !sendBook} onClick={sendNow}><Send size={14} />{sending ? t("packages.sending") : t("packages.sendNow")}</Button>
+        </>}
+      </div> : null}
+    </div>
+  </UrlDrawer>;
+}
