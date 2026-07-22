@@ -61,6 +61,8 @@
     "method": "Methode",
     "lifeMonths": "Nutzungsdauer (Monate)",
     "ratePercent": "Satz (%/Jahr)",
+    "unitsTotal": "Erwartete Gesamteinheiten",
+    "convention": "Konvention der ersten Periode",
     "serialNumber": "Seriennummer",
     "description": "Beschreibung",
     "assetAccount": "Anlagenkonto",
@@ -74,6 +76,14 @@
     "units_of_production": "Leistungsabschreibung",
     "manual": "Manuell"
   },
+  "conventions": { "full_month": "Voller Monat", "mid_month": "Halber Monat", "half_year": "Halbjahr" },
+  "depreciationInput": {
+    "recordUsage": "Produktionsnutzung erfassen", "recordManual": "Manuelle Abschreibung erfassen",
+    "effectiveDate": "Wirksamkeitsdatum", "productionUnits": "Produktionseinheiten", "manualAmount": "Abschreibungsbetrag",
+    "memo": "Buchungsvermerk", "memoPlaceholder": "Grund und Berechnungskontext", "evidenceReference": "Belegreferenz",
+    "evidencePlaceholder": "Zählerstand, Arbeitsauftrag oder Dateireferenz", "replacementNotice": "Ein ungebuchter Eintrag ersetzt den vorherigen Beleg. Korrigieren Sie einen gebuchten Betrag mit einem negativen Eintrag und separatem Nachweis.",
+    "save": "Beleg erfassen", "saving": "Wird erfasst…", "saved": "{amount} für {period} erfasst", "failed": "Abschreibungsbeleg konnte nicht erfasst werden"
+  },
   "status": {
     "draft": "Entwurf",
     "in_service": "In Betrieb",
@@ -86,6 +96,8 @@
     "noAvailableSubsidiary": "Ihrer Rolle steht keine aktive Tochtergesellschaft für diese Anlage zur Verfügung."
   },
   "drawer": {
+    "tabsAria": "Bereiche des Anlagensatzes",
+    "customForm": "Datensatzformular",
     "newAsset": "Neue Anlage",
     "editing": "Bearbeitung — Zum Übernehmen der Änderungen speichern",
     "identity": "Identität",
@@ -96,6 +108,10 @@
     "period": "Periode",
     "planned": "Geplant",
     "postedAmount": "Gebucht",
+    "evidence": "Beleg",
+    "formulaGenerated": "Formelbasiert",
+    "importedEvidence": "Importierter Eröffnungsbeleg",
+    "productionUnits": "{units} Einheiten",
     "runForAsset": "Abschreibung ausführen",
     "placeInService": "In Betrieb nehmen",
     "viewEntry": "Buchung anzeigen",

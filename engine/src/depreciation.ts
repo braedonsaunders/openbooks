@@ -1,7 +1,8 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { db, schema } from "./db.ts";
-import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
+import { sql } from "drizzle-orm";
+import { db } from "./db.ts";
+import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
+import { assertFinalKernelBalance } from "./posting.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
@@ -30,8 +31,9 @@ import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidi
 
 /**
  * The GL accounts a depreciation entry touches. The asset may override them in
- * `custom.accounts`; otherwise they come from the asset's category (the schema
- * design — accounts live on asset_categories).
+ * `custom.accounts`; otherwise they come from the asset's category. The custom
+ * account shape predates the typed depreciation controls and is retained here
+ * until the account-override migration is completed.
  */
 export interface AssetAccounts {
   assetAccountId: string;
@@ -86,6 +88,40 @@ export interface ScheduleInput {
   /** First-period convention: full_month (default), or mid_month / half_year
    *  which prorate the first period (and extend the schedule by one). */
   convention?: "full_month" | "mid_month" | "half_year" | null;
+}
+
+export interface UnitsOfProductionChargeInput {
+  cost: string;
+  salvage: string;
+  lifetimeUnits: string;
+  periodUnits: string;
+  unitsAlreadyRecorded?: string;
+  depreciationAlreadyPlanned: string;
+}
+
+/** Exact units-of-production charge, rounded once to ledger precision. Signed
+ * usage corrections are capped so accumulated depreciation remains between
+ * zero and the depreciable basis. */
+export function computeUnitsOfProductionCharge(input: UnitsOfProductionChargeInput): string {
+  const basis = toUnits(input.cost) - toUnits(input.salvage);
+  const lifetime = toUnits(input.lifetimeUnits);
+  const period = toUnits(input.periodUnits);
+  const priorUnits = toUnits(input.unitsAlreadyRecorded ?? "0");
+  const already = toUnits(input.depreciationAlreadyPlanned);
+  if (basis < 0n) throw new Error("salvage value cannot exceed acquisition cost");
+  if (lifetime <= 0n) throw new Error("expected lifetime production units must be greater than zero");
+  if (period === 0n) throw new Error("period production units must be non-zero");
+  if (priorUnits < 0n || priorUnits > lifetime || priorUnits + period < 0n || priorUnits + period > lifetime) {
+    throw new Error("recorded production must remain between zero and expected lifetime units");
+  }
+  if (already < 0n || already > basis) throw new Error("existing depreciation exceeds the depreciable basis");
+  const remaining = basis - already;
+  if (priorUnits + period === lifetime) return fromUnits(remaining);
+  const magnitude = toUnits(mulRatio(fromUnits(basis), period < 0n ? -period : period, lifetime));
+  const proportional = period < 0n ? -magnitude : magnitude;
+  if (proportional > remaining) return fromUnits(remaining);
+  if (proportional < -already) return fromUnits(-already);
+  return fromUnits(proportional);
 }
 
 export interface ScheduleLinePlan {
@@ -147,9 +183,8 @@ export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
  * Map a built-in method to a formula so the flexible engine drives every method
  * (declining-balance now gets the DB→SL crossover for a clean finish).
  * `declining_balance` passes its exact monthly rate as R1. Manual and
- * units-of-production are deliberately unavailable until their required
- * per-period evidence is stored; silently substituting straight-line would
- * materially misstate depreciation.
+ * units-of-production are input-driven and therefore never reach this
+ * formula-only mapper.
  */
 function formulaForMethod(
   method: DepreciationMethod,
@@ -168,9 +203,9 @@ function formulaForMethod(
     case "straight_line":
       return { formula: BUILTIN_FORMULAS.straight_line };
     case "manual":
-      throw new Error("manual depreciation is disabled until an explicit per-period schedule is entered");
+      throw new Error("manual depreciation requires a recorded period amount and evidence");
     case "units_of_production":
-      throw new Error("units-of-production depreciation is disabled until per-period and lifetime usage are recorded");
+      throw new Error("units-of-production depreciation requires recorded period usage and lifetime units");
     default: {
       const exhaustive: never = method;
       throw new Error(`unsupported depreciation method ${exhaustive}`);
@@ -183,18 +218,18 @@ function formulaForMethod(
 // ---------------------------------------------------------------------------
 
 /** Primary accounting book id (schedules are book-aware). */
-async function primaryBookId(): Promise<string> {
-  const [book] = await db
-    .select({ id: schema.accountingBooks.id })
-    .from(schema.accountingBooks)
-    .where(eq(schema.accountingBooks.isPrimary, true));
-  if (!book) throw new Error("no primary accounting book");
-  return book.id;
+async function primaryBookId(runner: any, orgId: string): Promise<string> {
+  const result = (await runner.execute(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`)) as unknown as {
+    rows: { id: string }[];
+  };
+  if (!result.rows[0]) throw new Error("no primary accounting book");
+  return result.rows[0].id;
 }
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
-async function periodForDate(orgId: string, date: string): Promise<string | null> {
-  const res = (await db.execute(sql`
+async function periodForDate(runner: any, orgId: string, date: string): Promise<string | null> {
+  const res = (await runner.execute(sql`
     select id from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
        and starts_on <= ${date} and ends_on >= ${date}
@@ -217,14 +252,17 @@ export interface BuildScheduleResult {
  *
  * Called from the asset save path and by "Run depreciation".
  */
-export async function buildSchedule(
+async function buildScheduleWithRunner(
+  runner: any,
   assetId: string,
   orgId: string,
   actorId: string | null,
   forBookId?: string,
 ): Promise<BuildScheduleResult> {
-  const assetRes = (await db.execute(sql`
-    select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value, custom
+  const assetRes = (await runner.execute(sql`
+    select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value, custom,
+           depreciation_method, useful_life_months, depreciation_rate_percent,
+           depreciation_convention, depreciation_units_total
       from fixed_assets where id = ${assetId} and org_id = ${orgId}`)) as unknown as {
     rows: {
       id: string;
@@ -233,13 +271,18 @@ export async function buildSchedule(
       acquisition_cost: string;
       salvage_value: string;
       custom: Record<string, any> | null;
+      depreciation_method: DepreciationMethod | null;
+      useful_life_months: number | null;
+      depreciation_rate_percent: string | null;
+      depreciation_convention: ScheduleInput["convention"];
+      depreciation_units_total: string | null;
     }[];
   };
   const asset = assetRes.rows[0];
   if (!asset) throw new Error("asset not found");
   if (!asset.in_service_on) throw new Error("asset has no in-service date");
 
-  const catRes = (await db.execute(sql`
+  const catRes = (await runner.execute(sql`
     select default_method, default_life_months, default_convention
       from asset_categories where id = ${asset.category_id} and org_id = ${orgId}`)) as unknown as {
     rows: { default_method: DepreciationMethod; default_life_months: number | null; default_convention: string | null }[];
@@ -247,42 +290,43 @@ export async function buildSchedule(
   const category = catRes.rows[0];
   if (!category) throw new Error("asset category not found");
 
-  // Method / life / rate live on the schedule; seed them from the asset's
-  // custom overrides (set by the drawer) else the category defaults.
-  const custom = asset.custom ?? {};
-  const bookId = forBookId ?? (await primaryBookId());
+  const bookId = forBookId ?? (await primaryBookId(runner, orgId));
 
   // Multi-book: a per-book policy for this category overrides the method / life /
   // rate / convention on this book; else the asset custom + category defaults.
-  const policyRes = (await db.execute(sql`
-    select method, life_months, rate_percent, convention from depreciation_book_policies
+  const policyRes = (await runner.execute(sql`
+    select method, life_months, rate_percent, units_total, convention from depreciation_book_policies
      where org_id = ${orgId} and book_id = ${bookId} and category_id = ${asset.category_id} limit 1`)) as unknown as {
-    rows: { method: DepreciationMethod; life_months: number | null; rate_percent: string | null; convention: string | null }[];
+    rows: { method: DepreciationMethod; life_months: number | null; rate_percent: string | null; units_total: string | null; convention: string | null }[];
   };
   const pol = policyRes.rows[0];
-  const method: DepreciationMethod = pol?.method ?? custom.method ?? category.default_method ?? "straight_line";
-  const lifeMonths: number = Number(pol?.life_months ?? custom.lifeMonths ?? category.default_life_months ?? 0);
+  const method: DepreciationMethod = pol?.method ?? asset.depreciation_method ?? category.default_method ?? "straight_line";
+  const lifeMonths: number = Number(pol?.life_months ?? asset.useful_life_months ?? category.default_life_months ?? 0);
   const ratePercent: string | null =
-    pol?.rate_percent != null ? String(pol.rate_percent) : custom.ratePercent != null ? String(custom.ratePercent) : null;
-  const convention = (pol?.convention ?? custom.convention ?? category.default_convention ?? null) as ScheduleInput["convention"];
-  if (!lifeMonths || lifeMonths <= 0) throw new Error("asset has no useful life (months)");
-  if (method === "manual" || method === "units_of_production") {
-    // Refuse before looking up a same-named custom formula: these built-in
-    // method identifiers promise evidence this schedule model does not store.
-    formulaForMethod(method, ratePercent, lifeMonths);
+    pol?.rate_percent != null ? String(pol.rate_percent) : asset.depreciation_rate_percent;
+  const unitsTotal: string | null = pol?.units_total != null ? String(pol.units_total) : asset.depreciation_units_total;
+  const convention = (pol?.convention ?? asset.depreciation_convention ?? category.default_convention ?? null) as ScheduleInput["convention"];
+  if (method !== "manual" && method !== "units_of_production" && (!lifeMonths || lifeMonths <= 0)) {
+    throw new Error("asset has no useful life (months)");
+  }
+  if (method === "units_of_production" && (unitsTotal == null || cmp(unitsTotal, "0") <= 0)) {
+    throw new Error("units-of-production depreciation requires positive expected lifetime units");
   }
 
   // A user-authored formula method (the formula builder) resolves by code; if
   // none matches, fall back to the built-in method path unchanged.
-  const custom2 = (await db.execute(sql`
+  const custom2 = (await runner.execute(sql`
     select formula, end_of_life from depreciation_methods
      where org_id = ${orgId} and code = ${method} and is_active limit 1`)) as unknown as {
     rows: { formula: string; end_of_life: "fully_depreciate" | "retain_balance" }[];
   };
   const firstPeriodFraction = convention === "mid_month" || convention === "half_year" ? "0.5" : "1";
 
-  let plan: ScheduleLinePlan[];
-  if (custom2.rows[0]) {
+  let plan: ScheduleLinePlan[] = [];
+  if (method === "manual" || method === "units_of_production") {
+    // Input-driven methods create lines only when the accountant records
+    // evidence for a period. Never synthesize future usage or manual amounts.
+  } else if (custom2.rows[0]) {
     const start = monthStart(asset.in_service_on);
     plan = computeScheduleByFormula({
       cost: asset.acquisition_cost,
@@ -310,25 +354,34 @@ export async function buildSchedule(
     });
   }
 
-  return await db.transaction(async (tx) => {
+  return await (async (tx: any) => {
     // find (or create) the primary-book schedule for this asset
     const existing = (await tx.execute(sql`
-      select id from depreciation_schedules
+      select id, method from depreciation_schedules
        where asset_id = ${assetId} and org_id = ${orgId} and book_id = ${bookId} limit 1`)) as unknown as {
-      rows: { id: string }[];
+      rows: { id: string; method: DepreciationMethod }[];
     };
     let scheduleId: string;
     if (existing.rows[0]) {
       scheduleId = existing.rows[0].id;
+      if (existing.rows[0].method !== method) {
+        const evidence = (await tx.execute(sql`
+          select 1 from depreciation_schedule_lines
+           where schedule_id = ${scheduleId} and source <> 'formula'
+           limit 1 for update`)) as unknown as { rows: unknown[] };
+        if (evidence.rows[0]) {
+          throw new Error("depreciation method cannot change after manual or production evidence exists");
+        }
+      }
       await tx.execute(sql`
         update depreciation_schedules
-           set method = ${method}, life_months = ${lifeMonths},
-               rate_percent = ${ratePercent}, updated_at = now(), updated_by = ${actorId}
+           set method = ${method}, life_months = ${lifeMonths || null},
+               rate_percent = ${ratePercent}, units_total = ${unitsTotal}, updated_at = now(), updated_by = ${actorId}
          where id = ${scheduleId}`);
     } else {
       const ins = (await tx.execute(sql`
-        insert into depreciation_schedules (org_id, asset_id, book_id, method, life_months, rate_percent, created_by, updated_by)
-        values (${orgId}, ${assetId}, ${bookId}, ${method}, ${lifeMonths}, ${ratePercent}, ${actorId}, ${actorId})
+        insert into depreciation_schedules (org_id, asset_id, book_id, method, life_months, rate_percent, units_total, created_by, updated_by)
+        values (${orgId}, ${assetId}, ${bookId}, ${method}, ${lifeMonths || null}, ${ratePercent}, ${unitsTotal}, ${actorId}, ${actorId})
         returning id`)) as unknown as { rows: { id: string }[] };
       scheduleId = ins.rows[0].id;
     }
@@ -336,19 +389,21 @@ export async function buildSchedule(
     // preserve posted lines; drop only the unposted plan and rewrite it
     const posted = (await tx.execute(sql`
       select period_id from depreciation_schedule_lines
-       where schedule_id = ${scheduleId} and journal_entry_id is not null`)) as unknown as {
+       where schedule_id = ${scheduleId} and posted_amount is not null`)) as unknown as {
       rows: { period_id: string }[];
     };
     const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
 
-    await tx.execute(sql`
-      delete from depreciation_schedule_lines
-       where schedule_id = ${scheduleId} and journal_entry_id is null`);
+    if (method !== "manual" && method !== "units_of_production") {
+      await tx.execute(sql`
+        delete from depreciation_schedule_lines
+         where schedule_id = ${scheduleId} and posted_amount is null and source = 'formula'`);
+    }
 
     const skippedMonths: string[] = [];
     let lineCount = 0;
     for (const p of plan) {
-      const periodId = await periodForDate(orgId, p.periodMonth);
+      const periodId = await periodForDate(tx, orgId, p.periodMonth);
       if (!periodId) {
         skippedMonths.push(p.periodMonth);
         continue;
@@ -356,12 +411,21 @@ export async function buildSchedule(
       if (postedPeriods.has(periodId)) continue; // already posted — keep as is
       await tx.execute(sql`
         insert into depreciation_schedule_lines
-          (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${periodId}, ${p.sequence}, ${p.planned}, ${actorId}, ${actorId})`);
+          (org_id, schedule_id, period_id, sequence, planned_amount, source, created_by, updated_by)
+        values (${orgId}, ${scheduleId}, ${periodId}, ${p.sequence}, ${p.planned}, 'formula', ${actorId}, ${actorId})`);
       lineCount++;
     }
     return { scheduleId, lineCount, skippedMonths };
-  });
+  })(runner);
+}
+
+export async function buildSchedule(
+  assetId: string,
+  orgId: string,
+  actorId: string | null,
+  forBookId?: string,
+): Promise<BuildScheduleResult> {
+  return db.transaction((tx) => buildScheduleWithRunner(tx, assetId, orgId, actorId, forBookId));
 }
 
 /**
@@ -373,12 +437,194 @@ export async function buildAllSchedules(
   orgId: string,
   actorId: string | null,
 ): Promise<BuildScheduleResult[]> {
-  const books = (await db.execute(sql`
+  return db.transaction((tx) => buildAllSchedulesWithRunner(tx, assetId, orgId, actorId));
+}
+
+export async function buildAllSchedulesWithRunner(
+  runner: any,
+  assetId: string,
+  orgId: string,
+  actorId: string | null,
+): Promise<BuildScheduleResult[]> {
+  const books = (await runner.execute(sql`
     select id from accounting_books where org_id = ${orgId} and is_active
      order by is_primary desc, code`)) as unknown as { rows: { id: string }[] };
   const results: BuildScheduleResult[] = [];
-  for (const b of books.rows) results.push(await buildSchedule(assetId, orgId, actorId, b.id));
+  for (const b of books.rows) results.push(await buildScheduleWithRunner(runner, assetId, orgId, actorId, b.id));
   return results;
+}
+
+export interface RecordDepreciationInputArgs {
+  orgId: string;
+  assetId: string;
+  bookId?: string;
+  effectiveDate: string;
+  kind: "manual" | "production_usage";
+  /** Manual depreciation amount or production units, according to kind. */
+  value: string;
+  memo: string;
+  evidenceReference: string;
+  actorId: string;
+}
+
+export interface RecordDepreciationInputResult {
+  inputId: string;
+  scheduleLineId: string;
+  periodId: string;
+  periodName: string;
+  plannedAmount: string;
+  replacedInputId: string | null;
+}
+
+/**
+ * Record or replace one unposted manual amount / production-usage fact and
+ * atomically materialize its schedule line. Posted facts remain immutable;
+ * signed, separately evidenced facts provide the correction path. Both usage
+ * and accumulated depreciation are bounded under schedule row locks.
+ */
+export async function recordDepreciationInput(
+  args: RecordDepreciationInputArgs,
+): Promise<RecordDepreciationInputResult> {
+  const memo = args.memo.trim();
+  const evidenceReference = args.evidenceReference.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.effectiveDate)) throw new Error("effective date is required");
+  if (!memo) throw new Error("an accounting memo is required");
+  if (!evidenceReference) throw new Error("an evidence reference is required");
+  const value = normalizeMoney(args.value);
+
+  return db.transaction(async (tx) => {
+    const schedule = (await tx.execute(sql`
+      select s.id, s.method, s.units_total, s.book_id,
+             a.acquisition_cost, a.salvage_value, a.status, a.in_service_on,
+             p.id as period_id, p.name as period_name,
+             (period_module_is_closed(${args.orgId}, p.id, s.book_id, a.subsidiary_id, 'assets')
+               or period_module_is_closed(${args.orgId}, p.id, s.book_id, a.subsidiary_id, 'gl')) as period_closed
+        from depreciation_schedules s
+        join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
+        join accounting_periods p on p.org_id = s.org_id and not p.is_adjustment
+          and p.starts_on <= ${args.effectiveDate} and p.ends_on >= ${args.effectiveDate}
+       where s.org_id = ${args.orgId} and s.asset_id = ${args.assetId}
+         ${args.bookId ? sql`and s.book_id = ${args.bookId}` : sql`and s.book_id = (select id from accounting_books where org_id = ${args.orgId} and is_primary limit 1)`}
+       limit 1
+       for update of s, a, p`)) as unknown as {
+      rows: {
+        id: string;
+        method: DepreciationMethod;
+        units_total: string | null;
+        book_id: string;
+        acquisition_cost: string;
+        salvage_value: string;
+        status: string;
+        in_service_on: string;
+        period_id: string;
+        period_name: string;
+        period_closed: boolean;
+      }[];
+    };
+    const row = schedule.rows[0];
+    if (!row) throw new Error("no depreciation schedule or accounting period covers the effective date");
+    if (row.status !== "in_service") throw new Error("depreciation inputs require an in-service asset");
+    if (args.effectiveDate < row.in_service_on) throw new Error("depreciation cannot precede the in-service date");
+    if (row.period_closed) throw new Error("the asset or GL period is closed");
+    const expectedMethod = args.kind === "manual" ? "manual" : "units_of_production";
+    if (row.method !== expectedMethod) throw new Error(`schedule method is ${row.method}, not ${expectedMethod}`);
+
+    const source = args.kind === "manual" ? "manual" : "production_usage";
+    const priorLine = (await tx.execute(sql`
+      select id, posted_amount, input_id
+        from depreciation_schedule_lines
+       where org_id = ${args.orgId} and schedule_id = ${row.id} and period_id = ${row.period_id}
+         and source = ${source} and posted_amount is null
+       order by created_at desc
+       limit 1
+       for update`)) as unknown as { rows: { id: string; posted_amount: string | null; input_id: string | null }[] };
+    const replacedInputId = priorLine.rows[0]?.input_id ?? null;
+
+    const totals = (await tx.execute(sql`
+      select coalesce(sum(l.planned_amount), 0)::text as planned,
+             coalesce(sum(i.production_units) filter (where i.voided_at is null), 0)::text as used_units
+        from depreciation_schedule_lines l
+        left join depreciation_inputs i on i.id = l.input_id
+       where l.org_id = ${args.orgId} and l.schedule_id = ${row.id}
+         ${priorLine.rows[0] ? sql`and l.id <> ${priorLine.rows[0].id}` : sql``}`)) as unknown as {
+      rows: { planned: string; used_units: string }[];
+    };
+    const basis = toUnits(row.acquisition_cost) - toUnits(row.salvage_value);
+    if (basis < 0n) throw new Error("salvage value cannot exceed acquisition cost");
+    const alreadyPlanned = totals.rows[0]?.planned ?? "0";
+    let plannedAmount: string;
+    if (args.kind === "manual") {
+      if (cmp(value, "0") === 0) throw new Error("manual depreciation must be non-zero");
+      const next = toUnits(alreadyPlanned) + toUnits(value);
+      if (next < 0n || next > basis) {
+        throw new Error("manual depreciation must keep accumulated depreciation between zero and the salvage floor");
+      }
+      plannedAmount = value;
+    } else {
+      if (cmp(value, "0") === 0) throw new Error("production units must be non-zero");
+      if (!row.units_total || cmp(row.units_total, "0") <= 0) {
+        throw new Error("expected lifetime production units are not configured");
+      }
+      const usedUnits = totals.rows[0]?.used_units ?? "0";
+      const nextUnits = toUnits(usedUnits) + toUnits(value);
+      if (nextUnits < 0n || nextUnits > toUnits(row.units_total)) {
+        throw new Error("recorded production must remain between zero and expected lifetime units");
+      }
+      plannedAmount = computeUnitsOfProductionCharge({
+        cost: row.acquisition_cost,
+        salvage: row.salvage_value,
+        lifetimeUnits: row.units_total,
+        periodUnits: value,
+        unitsAlreadyRecorded: usedUnits,
+        depreciationAlreadyPlanned: alreadyPlanned,
+      });
+    }
+
+    if (replacedInputId) {
+      await tx.execute(sql`
+        update depreciation_inputs
+           set voided_at = now(), voided_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
+         where id = ${replacedInputId} and voided_at is null`);
+    }
+    const inserted = (await tx.execute(sql`
+      insert into depreciation_inputs
+        (org_id, schedule_id, period_id, kind, manual_amount, production_units,
+         memo, evidence_reference, supersedes_input_id, created_by, updated_by)
+      values (${args.orgId}, ${row.id}, ${row.period_id}, ${args.kind},
+              ${args.kind === "manual" ? value : null}, ${args.kind === "production_usage" ? value : null},
+              ${memo}, ${evidenceReference}, ${replacedInputId}, ${args.actorId}, ${args.actorId})
+      returning id`)) as unknown as { rows: { id: string }[] };
+    const inputId = inserted.rows[0]!.id;
+
+    let scheduleLineId: string;
+    if (priorLine.rows[0]) {
+      scheduleLineId = priorLine.rows[0].id;
+      await tx.execute(sql`
+        update depreciation_schedule_lines
+           set planned_amount = ${plannedAmount}, source = ${args.kind === "manual" ? "manual" : "production_usage"},
+               input_id = ${inputId}, updated_at = now(), updated_by = ${args.actorId}
+         where id = ${scheduleLineId} and posted_amount is null`);
+    } else {
+      const line = (await tx.execute(sql`
+        insert into depreciation_schedule_lines
+          (org_id, schedule_id, period_id, sequence, planned_amount, source, input_id, created_by, updated_by)
+        values (${args.orgId}, ${row.id}, ${row.period_id},
+                (select coalesce(max(sequence), -1) + 1 from depreciation_schedule_lines where schedule_id = ${row.id}),
+                ${plannedAmount}, ${args.kind === "manual" ? "manual" : "production_usage"},
+                ${inputId}, ${args.actorId}, ${args.actorId})
+        returning id`)) as unknown as { rows: { id: string }[] };
+      scheduleLineId = line.rows[0]!.id;
+    }
+
+    return {
+      inputId,
+      scheduleLineId,
+      periodId: row.period_id,
+      periodName: row.period_name,
+      plannedAmount,
+      replacedInputId,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +686,7 @@ export async function runDepreciation(
       join asset_categories c on c.id = a.category_id
       join accounting_periods p on p.id = l.period_id
      where l.org_id = ${orgId}
-       and l.journal_entry_id is null
+       and l.posted_amount is null
        and a.status not in ('disposed', 'written_off')
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
@@ -458,15 +704,6 @@ export async function runDepreciation(
   };
 
   for (const row of due.rows) {
-    const planned: string = row.planned;
-    if (isZero(planned)) {
-      // a zero-planned month: mark it posted-with-no-entry so it never recurs.
-      await db.execute(sql`
-        update depreciation_schedule_lines set posted_amount = '0', updated_at = now()
-         where id = ${row.line_id}`);
-      result.skipped++;
-      continue;
-    }
     if (row.period_closed) {
       result.skipped++;
       result.problems.push(`${row.asset_number} ${row.period_name}: GL period closed`);
@@ -482,17 +719,16 @@ export async function runDepreciation(
       },
     );
 
-    // DR expense (+planned), CR accumulated (−planned) — balanced by construction.
-    const lines = [
-      { accountId: accounts.depreciationExpenseAccountId, amount: planned },
-      { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
+    const preliminaryLines = [
+      { accountId: accounts.depreciationExpenseAccountId, amount: String(row.planned) },
+      { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(String(row.planned)) },
     ];
     try {
       await validateSubsidiaryRestrictions(db, {
         orgId,
         ctx: subsidiaryContext,
         docSubsidiaryId: row.subsidiary_id,
-        lines: lines.map((line) => ({
+        lines: preliminaryLines.map((line) => ({
           ...line,
           subsidiaryId: row.subsidiary_id,
           departmentId: row.department_id,
@@ -504,15 +740,39 @@ export async function runDepreciation(
       result.problems.push(`${row.asset_number} ${row.period_name}: ${(error as Error).message}`);
       continue;
     }
-    const bal = sum(lines.map((l) => l.amount));
-    if (!isZero(bal)) {
-      result.problems.push(`${row.asset_number} ${row.period_name}: unbalanced (${bal})`);
-      continue;
-    }
+    assertFinalKernelBalance(preliminaryLines.map((line) => ({ amount: line.amount, subsidiaryId: row.subsidiary_id })));
 
     const postingDate: string = row.period_ends_on;
     try {
-      const entryId = await db.transaction(async (tx) => {
+      const posted = await db.transaction(async (tx) => {
+        // Claim the schedule line inside the posting transaction. Concurrent
+        // runners serialize here and the loser observes posted_amount.
+        const claim = (await tx.execute(sql`
+          select l.planned_amount,
+                 (period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'assets')
+                   or period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'gl')) as period_closed
+            from depreciation_schedule_lines l
+            join depreciation_schedules s on s.id = l.schedule_id
+            join fixed_assets a on a.id = s.asset_id
+           where l.id = ${row.line_id} and l.org_id = ${orgId} and l.posted_amount is null
+           for update of l`)) as unknown as { rows: { planned_amount: string; period_closed: boolean }[] };
+        const claimed = claim.rows[0];
+        if (!claimed) return null;
+        if (claimed.period_closed) throw new Error("GL period closed");
+        const planned = String(claimed.planned_amount);
+        if (isZero(planned)) {
+          await tx.execute(sql`
+            update depreciation_schedule_lines
+               set posted_amount = '0', updated_at = now(), updated_by = ${actorId}
+             where id = ${row.line_id} and posted_amount is null`);
+          return { entryId: null, amount: planned };
+        }
+
+        const lines = [
+          { accountId: accounts.depreciationExpenseAccountId, amount: planned },
+          { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
+        ];
+        assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: row.subsidiary_id })));
         const entryRes = (await tx.execute(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -544,16 +804,24 @@ export async function runDepreciation(
              set posted_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.line_id}`);
 
-        return eid;
+        return { entryId: eid, amount: planned };
       });
 
+      if (!posted) {
+        result.skipped++;
+        continue;
+      }
+      if (!posted.entryId) {
+        result.skipped++;
+        continue;
+      }
       result.posted++;
-      result.totalAmount = add(result.totalAmount, planned);
+      result.totalAmount = add(result.totalAmount, posted.amount);
       result.entries.push({
         assetNumber: row.asset_number,
         period: row.period_name,
-        amount: planned,
-        entryId,
+        amount: posted.amount,
+        entryId: posted.entryId,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -568,14 +836,13 @@ export async function runDepreciation(
        set status = 'fully_depreciated', updated_at = now()
      where a.org_id = ${orgId} and a.status = 'in_service'
        ${assetId ? sql`and a.id = ${assetId}` : sql``}
-       and not exists (
-         select 1 from depreciation_schedules s
-           join depreciation_schedule_lines l on l.schedule_id = s.id
-          where s.asset_id = a.id and l.journal_entry_id is null and l.planned_amount <> '0')
        and exists (
          select 1 from depreciation_schedules s
+           join accounting_books b on b.id = s.book_id and b.posts_gl and b.is_active
            join depreciation_schedule_lines l on l.schedule_id = s.id
-          where s.asset_id = a.id and l.journal_entry_id is not null)`);
+          where s.asset_id = a.id
+          group by s.id
+          having coalesce(sum(l.posted_amount), 0) >= a.acquisition_cost - a.salvage_value)`);
 
   return result;
 }

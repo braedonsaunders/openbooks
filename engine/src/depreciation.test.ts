@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeSchedule, type DepreciationMethod, type ScheduleInput } from "./depreciation.ts";
+import { computeSchedule, computeUnitsOfProductionCharge, type DepreciationMethod, type ScheduleInput } from "./depreciation.ts";
 import { add, toUnits } from "./money.ts";
 
 const base = (over: Partial<ScheduleInput>): ScheduleInput => ({
@@ -70,13 +70,68 @@ test("invariants hold across every enabled built-in method", () => {
   }
 });
 
-test("manual and units-of-production refuse to masquerade as straight-line", () => {
+test("input-driven methods cannot be mistaken for formula-generated schedules", () => {
   assert.throws(
     () => computeSchedule(base({ method: "manual" })),
-    /manual depreciation is disabled until an explicit per-period schedule is entered/,
+    /manual depreciation requires a recorded period amount and evidence/,
   );
   assert.throws(
     () => computeSchedule(base({ method: "units_of_production" })),
-    /units-of-production depreciation is disabled until per-period and lifetime usage are recorded/,
+    /units-of-production depreciation requires recorded period usage and lifetime units/,
   );
+});
+
+test("units-of-production uses an exact ratio and caps the salvage floor", () => {
+  assert.equal(computeUnitsOfProductionCharge({
+    cost: "100000.0000",
+    salvage: "10000.0000",
+    lifetimeUnits: "30000.0000",
+    periodUnits: "333.3333",
+    depreciationAlreadyPlanned: "0.0000",
+  }), "999.9999");
+  assert.equal(computeUnitsOfProductionCharge({
+    cost: "100000.0000",
+    salvage: "10000.0000",
+    lifetimeUnits: "30000.0000",
+    periodUnits: "1000.0000",
+    depreciationAlreadyPlanned: "89500.0000",
+  }), "500.0000");
+});
+
+test("units-of-production rejects invalid lifetime, usage, and prior basis", () => {
+  const valid = {
+    cost: "100.0000", salvage: "10.0000", lifetimeUnits: "1000.0000",
+    periodUnits: "10.0000", depreciationAlreadyPlanned: "0.0000",
+  };
+  assert.throws(() => computeUnitsOfProductionCharge({ ...valid, lifetimeUnits: "0" }), /lifetime production units/);
+  assert.throws(() => computeUnitsOfProductionCharge({ ...valid, periodUnits: "0" }), /period production units/);
+  assert.throws(() => computeUnitsOfProductionCharge({ ...valid, depreciationAlreadyPlanned: "91" }), /exceeds the depreciable basis/);
+});
+
+test("units-of-production corrections are exact and cannot make lifetime usage negative", () => {
+  assert.equal(computeUnitsOfProductionCharge({
+    cost: "1000.0000", salvage: "100.0000", lifetimeUnits: "300.0000",
+    periodUnits: "-25.0000", unitsAlreadyRecorded: "100.0000", depreciationAlreadyPlanned: "300.0000",
+  }), "-75.0000");
+  assert.throws(() => computeUnitsOfProductionCharge({
+    cost: "1000.0000", salvage: "100.0000", lifetimeUnits: "300.0000",
+    periodUnits: "-100.0001", unitsAlreadyRecorded: "100.0000", depreciationAlreadyPlanned: "300.0000",
+  }), /between zero and expected lifetime units/);
+});
+
+test("final production units absorb exact rounding remainder", () => {
+  const first = computeUnitsOfProductionCharge({
+    cost: "1.0000", salvage: "0.0000", lifetimeUnits: "3.0000", periodUnits: "1.0000",
+    unitsAlreadyRecorded: "0.0000", depreciationAlreadyPlanned: "0.0000",
+  });
+  const second = computeUnitsOfProductionCharge({
+    cost: "1.0000", salvage: "0.0000", lifetimeUnits: "3.0000", periodUnits: "1.0000",
+    unitsAlreadyRecorded: "1.0000", depreciationAlreadyPlanned: first,
+  });
+  const final = computeUnitsOfProductionCharge({
+    cost: "1.0000", salvage: "0.0000", lifetimeUnits: "3.0000", periodUnits: "1.0000",
+    unitsAlreadyRecorded: "2.0000", depreciationAlreadyPlanned: add(first, second),
+  });
+  assert.equal(add(add(first, second), final), "1.0000");
+  assert.equal(final, "0.3334");
 });

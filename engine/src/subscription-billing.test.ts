@@ -12,11 +12,12 @@ test("advanceSubscription steps by interval × count with month-end clamp", () =
 });
 
 test("monthlyRecurringRevenue normalizes each interval to a monthly figure", () => {
-  assert.equal(monthlyRecurringRevenue("100", "monthly", 1, "1"), 100);
-  assert.equal(monthlyRecurringRevenue("100", "monthly", 1, "3"), 300);
-  assert.equal(monthlyRecurringRevenue("1200", "annually", 1, "1"), 100);
-  assert.equal(monthlyRecurringRevenue("300", "quarterly", 1, "1"), 100);
-  assert.equal(monthlyRecurringRevenue("300", "monthly", 3, "1"), 100);
+  assert.equal(monthlyRecurringRevenue("100", "monthly", 1, "1"), "100.0000");
+  assert.equal(monthlyRecurringRevenue("100", "monthly", 1, "3"), "300.0000");
+  assert.equal(monthlyRecurringRevenue("1200", "annually", 1, "1"), "100.0000");
+  assert.equal(monthlyRecurringRevenue("300", "quarterly", 1, "1"), "100.0000");
+  assert.equal(monthlyRecurringRevenue("300", "monthly", 3, "1"), "100.0000");
+  assert.equal(monthlyRecurringRevenue("100", "weekly", 1, "1"), "433.3333");
 });
 
 test("prorate bills the remaining slice of a period exactly", () => {

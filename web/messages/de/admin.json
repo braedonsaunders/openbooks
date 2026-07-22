@@ -1649,6 +1649,7 @@
       "gapless": "Lückenlos",
       "costMultiplier": "Kostenmultiplikator",
       "isBillableDefault": "Standardmäßig fakturierbar",
+      "showOnFieldTicket": "Auf Außendienstbelegen anzeigen",
       "category": "Kategorie",
       "method": "Methode",
       "postsGl": "Bucht ins Hauptbuch",
@@ -1772,7 +1773,9 @@
       "method": {
         "straightLine": "Linear",
         "decliningBalance": "Degressiv",
-        "doubleDeclining": "Doppelt degressiv"
+        "doubleDeclining": "Doppelt degressiv",
+        "unitsOfProduction": "Leistungseinheiten",
+        "manual": "Manuell"
       },
       "convention": {
         "fullMonth": "Ganzer Monat",

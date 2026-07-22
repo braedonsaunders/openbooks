@@ -1649,6 +1649,7 @@
       "gapless": "Sem lacunas",
       "costMultiplier": "Multiplicador de custo",
       "isBillableDefault": "Faturável por padrão",
+      "showOnFieldTicket": "Mostrar em apontamentos de campo",
       "category": "Categoria",
       "method": "Método",
       "postsGl": "Lança no razão",
@@ -1772,7 +1773,9 @@
       "method": {
         "straightLine": "Linha reta",
         "decliningBalance": "Saldo decrescente",
-        "doubleDeclining": "Saldo duplo decrescente"
+        "doubleDeclining": "Saldo duplo decrescente",
+        "unitsOfProduction": "Unidades de produção",
+        "manual": "Manual"
       },
       "convention": {
         "fullMonth": "Mês inteiro",

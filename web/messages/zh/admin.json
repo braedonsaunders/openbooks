@@ -1649,6 +1649,7 @@
       "gapless": "无间隔",
       "costMultiplier": "成本乘数",
       "isBillableDefault": "默认可计费",
+      "showOnFieldTicket": "在现场工单上显示",
       "category": "类别",
       "method": "方法",
       "postsGl": "过账至总账",
@@ -1772,7 +1773,9 @@
       "method": {
         "straightLine": "直线法",
         "decliningBalance": "余额递减法",
-        "doubleDeclining": "双倍余额递减法"
+        "doubleDeclining": "双倍余额递减法",
+        "unitsOfProduction": "工作量法",
+        "manual": "手动"
       },
       "convention": {
         "fullMonth": "整月",

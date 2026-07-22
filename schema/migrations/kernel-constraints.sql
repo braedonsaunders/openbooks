@@ -157,6 +157,10 @@ for each row execute function close_append_only_guard();
 create or replace function je_guard() returns trigger
 language plpgsql as $$
 begin
+  if coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
   if tg_op = 'DELETE' then
     if openbooks_sandbox_wipe_allowed(old.org_id) then return old; end if;
     -- Deleting a transaction removes its journal entry too. That is the one
@@ -608,3 +612,76 @@ end $$;
 
 create trigger payment_run_item_guard before update or delete on payment_run_items
   for each row execute function payment_run_item_guard();
+-- Manual and production-usage depreciation evidence is append-preserved.
+-- A replacement voids an unposted input and inserts a successor; evidence that
+-- has reached the ledger can never be edited or deleted.
+create or replace function openbooks_guard_depreciation_evidence()
+returns trigger language plpgsql as $$
+declare
+  posted boolean;
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'depreciation input evidence is append-preserved';
+  end if;
+
+  select exists (
+    select 1 from depreciation_schedule_lines
+     where input_id = old.id and posted_amount is not null
+  ) into posted;
+  if posted then
+    raise exception 'posted depreciation input evidence is immutable';
+  end if;
+
+  if old.voided_at is not null
+     or new.voided_at is null
+     or new.voided_by is null
+     or new.org_id is distinct from old.org_id
+     or new.schedule_id is distinct from old.schedule_id
+     or new.period_id is distinct from old.period_id
+     or new.kind is distinct from old.kind
+     or new.manual_amount is distinct from old.manual_amount
+     or new.production_units is distinct from old.production_units
+     or new.memo is distinct from old.memo
+     or new.evidence_reference is distinct from old.evidence_reference
+     or new.supersedes_input_id is distinct from old.supersedes_input_id
+     or new.created_at is distinct from old.created_at
+     or new.created_by is distinct from old.created_by then
+    raise exception 'depreciation input evidence may only be voided before posting';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists depreciation_input_evidence_guard on depreciation_inputs;
+create trigger depreciation_input_evidence_guard
+before update or delete on depreciation_inputs
+for each row execute function openbooks_guard_depreciation_evidence();
+
+create or replace function openbooks_validate_depreciation_line_input()
+returns trigger language plpgsql as $$
+declare
+  input_row depreciation_inputs%rowtype;
+  schedule_method text;
+begin
+  if new.source in ('formula', 'imported') then return new; end if;
+  select * into input_row from depreciation_inputs where id = new.input_id;
+  if not found
+     or input_row.voided_at is not null
+     or input_row.org_id <> new.org_id
+     or input_row.schedule_id <> new.schedule_id
+     or input_row.period_id <> new.period_id then
+    raise exception 'depreciation line input evidence does not match its schedule and period';
+  end if;
+  select method into schedule_method from depreciation_schedules where id = new.schedule_id;
+  if (new.source = 'manual' and (input_row.kind <> 'manual' or schedule_method <> 'manual'))
+     or (new.source = 'production_usage' and (input_row.kind <> 'production_usage' or schedule_method <> 'units_of_production')) then
+    raise exception 'depreciation line source does not match its method evidence';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists depreciation_line_input_guard on depreciation_schedule_lines;
+create trigger depreciation_line_input_guard
+before insert or update of schedule_id, period_id, source, input_id on depreciation_schedule_lines
+for each row execute function openbooks_validate_depreciation_line_input();

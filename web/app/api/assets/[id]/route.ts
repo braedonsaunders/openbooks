@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { buildAllSchedules } from '@openbooks/engine/src/depreciation.ts'
+import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/depreciation.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadAsset } from '../_lib'
 
 export const runtime = 'nodejs'
 
-const METHODS = ['straight_line', 'declining_balance', 'double_declining'] as const
+const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'units_of_production', 'manual'] as const
+const CONVENTIONS = ['full_month', 'mid_month', 'half_year'] as const
 type Method = (typeof METHODS)[number]
 
 function bad(error: string) {
@@ -54,9 +56,12 @@ interface PatchBody {
   method?: Method
   lifeMonths?: number | string | null
   ratePercent?: number | string | null
+  unitsTotal?: number | string | null
+  convention?: (typeof CONVENTIONS)[number] | null
   assetAccountId?: string | null
   accumulatedDepreciationAccountId?: string | null
   depreciationExpenseAccountId?: string | null
+  custom?: Record<string, unknown>
   status?: string
 }
 
@@ -74,8 +79,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /**
  * Save the asset flyout — all edits go through one explicit Save. Depreciation
- * parameters (method, life, rate) and the three GL account overrides live in
- * fixed_assets.custom; identity/cost/dates live on the row. After a successful
+ * parameters live in native fixed_assets columns; tenant-defined fields and
+ * the three GL account overrides live in fixed_assets.custom. After a successful
  * save the primary-book schedule is rebuilt (unposted lines only) so the detail
  * view + a subsequent run reflect the new plan.
  */
@@ -87,9 +92,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existRes = (await db.execute(sql`
-    select id, status, custom from fixed_assets where id = ${id} and org_id = ${user.orgId}
+    select id, status, custom, acquisition_cost, salvage_value, in_service_on,
+           depreciation_method, useful_life_months,
+           depreciation_rate_percent, depreciation_units_total, depreciation_convention
+      from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
-  `)) as unknown as { rows: { id: string; status: string; custom: Record<string, any> | null }[] }
+  `)) as unknown as { rows: {
+    id: string
+    status: string
+    custom: Record<string, any> | null
+    acquisition_cost: string
+    salvage_value: string
+    in_service_on: string | null
+    depreciation_method: Method | null
+    useful_life_months: number | null
+    depreciation_rate_percent: string | null
+    depreciation_units_total: string | null
+    depreciation_convention: (typeof CONVENTIONS)[number] | null
+  }[] }
   const existing = existRes.rows[0]
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
@@ -134,7 +154,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     salvage = v ?? '0'
   }
 
-  // -- GL account overrides + method/life/rate → custom -------------------
+  // -- GL account overrides (legacy custom shape) --------------------------
   const custom: Record<string, any> = { ...(existing.custom ?? {}) }
   const accounts: Record<string, string> = { ...(custom.accounts ?? {}) }
 
@@ -162,15 +182,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return bad('Invalid depreciation expense account')
   custom.accounts = accounts
 
+  if (body.custom !== undefined) {
+    const defs = await loadFieldDefs('fixed_assets')
+    const validated = validateCustomValues(defs, body.custom)
+    if (!validated.ok) {
+      return NextResponse.json({ error: 'Invalid custom fields', fields: validated.errors }, { status: 422 })
+    }
+    // Replace only tenant-defined keys. Connector provenance and account
+    // overrides share this JSON object and must survive an ordinary UI edit.
+    for (const def of defs) delete custom[def.key]
+    Object.assign(custom, validated.cleaned)
+  }
+
+  let method: Method | null | undefined
   if (body.method !== undefined) {
     if (!METHODS.includes(body.method)) return bad('Invalid depreciation method')
-    custom.method = body.method
+    method = body.method
   }
+  let lifeMonths: number | null | undefined
   if (body.lifeMonths !== undefined) {
     const n = body.lifeMonths === null || body.lifeMonths === '' ? null : Math.trunc(Number(body.lifeMonths))
     if (n !== null && (Number.isNaN(n) || n <= 0)) return bad('Useful life must be a positive number of months')
-    custom.lifeMonths = n
+    lifeMonths = n
   }
+  let ratePercent: string | null | undefined
   if (body.ratePercent !== undefined) {
     const rate = body.ratePercent === null || body.ratePercent === '' ? null : String(body.ratePercent)
     try {
@@ -178,7 +213,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     } catch {
       return bad('Rate must be an exact non-negative percent')
     }
-    custom.ratePercent = rate
+    ratePercent = rate
+  }
+  let unitsTotal: string | null | undefined
+  if (body.unitsTotal !== undefined) {
+    const units = moneyOrNull(body.unitsTotal)
+    if (units === 'invalid' || (units !== null && cmp(units, '0') <= 0)) {
+      return bad('Expected lifetime units must be an exact positive quantity')
+    }
+    unitsTotal = units
+  }
+  let convention: (typeof CONVENTIONS)[number] | null | undefined
+  if (body.convention !== undefined) {
+    if (body.convention !== null && !CONVENTIONS.includes(body.convention)) return bad('Invalid depreciation convention')
+    convention = body.convention
   }
 
   // -- status transition (draft ↔ in_service) -----------------------------
@@ -193,15 +241,50 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ? strOrNull(body.inServiceOn)
           : ((await db.execute(sql`select in_service_on from fixed_assets where id = ${id} and org_id = ${user.orgId}`)) as any).rows[0]
               ?.in_service_on
-      const effLife = custom.lifeMonths
+      const effMethod = method !== undefined ? method : existing.depreciation_method
+      const effLife = lifeMonths !== undefined ? lifeMonths : existing.useful_life_months
+      const effUnits = unitsTotal !== undefined ? unitsTotal : existing.depreciation_units_total
       if (!effInService) return bad('Set an in-service date before placing the asset in service')
-      if (!effLife || Number(effLife) <= 0) return bad('Set a useful life before placing the asset in service')
+      if (effMethod !== 'manual' && effMethod !== 'units_of_production' && (!effLife || effLife <= 0)) {
+        return bad('Set a useful life before placing the asset in service')
+      }
+      if (effMethod === 'units_of_production' && (!effUnits || cmp(effUnits, '0') <= 0)) {
+        return bad('Set expected lifetime units before placing the asset in service')
+      }
     }
     status = body.status
   }
 
-  await db.execute(sql`
-    update fixed_assets set
+  const effectiveStatus = status ?? existing.status
+  const effectiveMethod = method !== undefined ? method : existing.depreciation_method
+  const effectiveLife = lifeMonths !== undefined ? lifeMonths : existing.useful_life_months
+  const effectiveUnits = unitsTotal !== undefined ? unitsTotal : existing.depreciation_units_total
+  const effectiveInService = body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : existing.in_service_on
+  const effectiveCost = cost ?? existing.acquisition_cost
+  const effectiveSalvage = salvage ?? existing.salvage_value
+  if (cmp(effectiveSalvage, effectiveCost) > 0) return bad('Salvage value cannot exceed acquisition cost')
+  if (effectiveStatus === 'in_service') {
+    if (!effectiveInService) return bad('Set an in-service date before placing the asset in service')
+    if (effectiveMethod !== 'manual' && effectiveMethod !== 'units_of_production' && (!effectiveLife || effectiveLife <= 0)) {
+      return bad('Set a useful life before placing the asset in service')
+    }
+    if (effectiveMethod === 'units_of_production' && (!effectiveUnits || cmp(effectiveUnits, '0') <= 0)) {
+      return bad('Set expected lifetime units before placing the asset in service')
+    }
+  }
+  if (method !== undefined && method !== existing.depreciation_method) {
+    const inputEvidence = (await db.execute(sql`
+      select 1 from depreciation_schedules s
+      join depreciation_schedule_lines l on l.schedule_id = s.id
+      where s.org_id = ${user.orgId} and s.asset_id = ${id} and l.source <> 'formula'
+      limit 1`)) as unknown as { rows: unknown[] }
+    if (inputEvidence.rows[0]) return bad('Depreciation method cannot change after manual or production evidence exists')
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        update fixed_assets set
       name = ${body.name !== undefined ? body.name.trim() || 'New asset' : sql`name`},
       asset_number = ${body.assetNumber !== undefined ? (strOrNull(body.assetNumber) ?? sql`asset_number`) : sql`asset_number`},
       description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
@@ -212,17 +295,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       acquired_on = ${body.acquiredOn !== undefined ? strOrNull(body.acquiredOn) : sql`acquired_on`},
       in_service_on = ${body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : sql`in_service_on`},
       serial_number = ${body.serialNumber !== undefined ? strOrNull(body.serialNumber) : sql`serial_number`},
+      depreciation_method = ${method !== undefined ? method : sql`depreciation_method`},
+      useful_life_months = ${lifeMonths !== undefined ? lifeMonths : sql`useful_life_months`},
+      depreciation_rate_percent = ${ratePercent !== undefined ? ratePercent : sql`depreciation_rate_percent`},
+      depreciation_units_total = ${unitsTotal !== undefined ? unitsTotal : sql`depreciation_units_total`},
+      depreciation_convention = ${convention !== undefined ? convention : sql`depreciation_convention`},
       custom = ${JSON.stringify(custom)}::jsonb,
       status = ${status !== undefined ? status : sql`status`},
       updated_at = now(), updated_by = ${user.id}
-    where id = ${id} and org_id = ${user.orgId}`)
-
-  // Rebuild the schedule when we have enough to plan (best-effort — a partial
-  // draft simply produces no lines and reports nothing).
-  try {
-    await buildAllSchedules(id, user.orgId, user.id)
-  } catch {
-    // asset not yet complete enough to schedule (no in-service / life) — fine.
+        where id = ${id} and org_id = ${user.orgId}`)
+      try {
+        await buildAllSchedulesWithRunner(tx, id, user.orgId, user.id)
+      } catch (error) {
+        if (effectiveStatus === 'in_service') throw error
+        // Partial drafts legitimately have no category/date/life yet.
+      }
+    })
+  } catch (error) {
+    return bad(error instanceof Error ? error.message : 'Could not build depreciation schedule')
   }
 
   const payload = await loadAsset(id, user.orgId)
@@ -245,15 +335,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   `)) as unknown as { rows: unknown[] }
   if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const posted = (await db.execute(sql`
+  const evidence = (await db.execute(sql`
     select 1
       from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id
-     where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.journal_entry_id is not null
+     where s.asset_id = ${id} and s.org_id = ${user.orgId}
+       and (l.posted_amount is not null or l.input_id is not null or l.source = 'imported')
      limit 1`)) as unknown as { rows: unknown[] }
-  if (posted.rows[0]) {
+  if (evidence.rows[0]) {
     return NextResponse.json(
-      { error: 'This asset has posted depreciation and cannot be deleted.' },
+      { error: 'This asset has depreciation evidence and cannot be deleted.' },
       { status: 409 },
     )
   }

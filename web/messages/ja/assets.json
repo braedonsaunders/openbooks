@@ -61,6 +61,8 @@
     "method": "方法",
     "lifeMonths": "耐用年数（月数）",
     "ratePercent": "率（%/年）",
+    "unitsTotal": "予定耐用総生産量",
+    "convention": "初回期間の慣行",
     "serialNumber": "シリアル番号",
     "description": "説明",
     "assetAccount": "資産勘定",
@@ -74,6 +76,14 @@
     "units_of_production": "生産高比例法",
     "manual": "手動"
   },
+  "conventions": { "full_month": "1か月", "mid_month": "月央", "half_year": "半年" },
+  "depreciationInput": {
+    "recordUsage": "生産使用量を記録", "recordManual": "手動減価償却を記録",
+    "effectiveDate": "適用日", "productionUnits": "生産量", "manualAmount": "減価償却額",
+    "memo": "会計メモ", "memoPlaceholder": "理由と計算根拠", "evidenceReference": "証憑参照",
+    "evidencePlaceholder": "メーター値、作業指示、ファイル参照", "replacementNotice": "未記帳の入力は以前の証憑を差し替えます。記帳済み金額は、別の証憑を付けたマイナス入力で訂正してください。",
+    "save": "証憑を記録", "saving": "記録中…", "saved": "{period} に {amount} を記録しました", "failed": "減価償却証憑を記録できませんでした"
+  },
   "status": {
     "draft": "下書き",
     "in_service": "使用中",
@@ -86,6 +96,8 @@
     "noAvailableSubsidiary": "この資産に利用できる有効な子会社が、あなたのロールにはありません。"
   },
   "drawer": {
+    "tabsAria": "固定資産レコードのセクション",
+    "customForm": "レコードフォーム",
     "newAsset": "新規資産",
     "editing": "編集中 — 保存して変更を適用します",
     "identity": "識別情報",
@@ -96,6 +108,10 @@
     "period": "期間",
     "planned": "計画",
     "postedAmount": "記帳済み",
+    "evidence": "証憑",
+    "formulaGenerated": "計算式で生成",
+    "importedEvidence": "インポート済み開始証憑",
+    "productionUnits": "{units} 単位",
     "runForAsset": "減価償却を実行",
     "placeInService": "使用開始にする",
     "viewEntry": "仕訳を表示",

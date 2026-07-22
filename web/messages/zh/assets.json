@@ -61,6 +61,8 @@
     "method": "方法",
     "lifeMonths": "使用寿命（月）",
     "ratePercent": "折旧率（%/年）",
+    "unitsTotal": "预计寿命总产量",
+    "convention": "首期折旧惯例",
     "serialNumber": "序列号",
     "description": "描述",
     "assetAccount": "资产科目",
@@ -74,6 +76,14 @@
     "units_of_production": "工作量法",
     "manual": "手工"
   },
+  "conventions": { "full_month": "整月", "mid_month": "月中", "half_year": "半年" },
+  "depreciationInput": {
+    "recordUsage": "记录生产用量", "recordManual": "记录手工折旧",
+    "effectiveDate": "生效日期", "productionUnits": "生产单位", "manualAmount": "折旧金额",
+    "memo": "会计备注", "memoPlaceholder": "原因及计算说明", "evidenceReference": "凭证参考",
+    "evidencePlaceholder": "仪表读数、工单或文件参考", "replacementNotice": "未过账录入会取代先前凭证。请使用附有独立凭证的负数录入更正已过账金额。",
+    "save": "记录凭证", "saving": "正在记录…", "saved": "已为 {period} 记录 {amount}", "failed": "无法记录折旧凭证"
+  },
   "status": {
     "draft": "草稿",
     "in_service": "使用中",
@@ -86,6 +96,8 @@
     "noAvailableSubsidiary": "您的角色没有可用于此资产的启用子公司。"
   },
   "drawer": {
+    "tabsAria": "固定资产记录分区",
+    "customForm": "记录表单",
     "newAsset": "新建资产",
     "editing": "编辑中——保存以应用更改",
     "identity": "标识",
@@ -96,6 +108,10 @@
     "period": "期间",
     "planned": "计划",
     "postedAmount": "已过账",
+    "evidence": "凭证",
+    "formulaGenerated": "公式生成",
+    "importedEvidence": "已导入期初凭证",
+    "productionUnits": "{units} 单位",
     "runForAsset": "运行折旧",
     "placeInService": "投入使用",
     "viewEntry": "查看分录",

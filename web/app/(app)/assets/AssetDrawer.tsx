@@ -24,6 +24,7 @@ import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
 import { DisposeButton } from './DisposeButton'
 import { RemeasureButton } from './RemeasureButton'
+import { DepreciationInputButton } from './DepreciationInputButton'
 import type { AssetPayload } from '../../api/assets/_lib'
 
 interface AccountOpt {
@@ -37,7 +38,8 @@ interface CategoryOpt {
 }
 interface SubsidiaryOpt { id: string; name: string; depth: number }
 
-const METHODS = ['straight_line', 'declining_balance', 'double_declining'] as const
+const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'units_of_production', 'manual'] as const
+const CONVENTIONS = ['full_month', 'mid_month', 'half_year'] as const
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
   in_service: 'success',
@@ -67,7 +69,6 @@ export function AssetDrawer({
   const router = useRouter()
 
   const a = payload.asset
-  const custom = (a.custom ?? {}) as Record<string, any>
   const isDraft = a.status === 'draft'
   // source platform-style record model: flyout ALWAYS opens READ-ONLY (view mode) —
   // even for drafts — with an Edit button. Draft/in_service are editable;
@@ -89,11 +90,13 @@ export function AssetDrawer({
   const [acquiredOn, setAcquiredOn] = useState<string>(a.acquired_on ?? '')
   const [inServiceOn, setInServiceOn] = useState<string>(a.in_service_on ?? '')
   const [serialNumber, setSerialNumber] = useState<string>(a.serial_number ?? '')
-  const [method, setMethod] = useState<string>(custom.method ?? payload.category?.default_method ?? 'straight_line')
+  const [method, setMethod] = useState<string>(a.depreciation_method ?? payload.category?.default_method ?? 'straight_line')
   const [lifeMonths, setLifeMonths] = useState<string>(
-    custom.lifeMonths != null ? String(custom.lifeMonths) : (payload.category?.default_life_months != null ? String(payload.category.default_life_months) : ''),
+    a.useful_life_months != null ? String(a.useful_life_months) : (payload.category?.default_life_months != null ? String(payload.category.default_life_months) : ''),
   )
-  const [ratePercent, setRatePercent] = useState<string>(custom.ratePercent != null ? String(custom.ratePercent) : '')
+  const [ratePercent, setRatePercent] = useState<string>(a.depreciation_rate_percent != null ? String(a.depreciation_rate_percent) : '')
+  const [unitsTotal, setUnitsTotal] = useState<string>(a.depreciation_units_total != null ? String(a.depreciation_units_total) : '')
+  const [convention, setConvention] = useState<string>(a.depreciation_convention ?? payload.category?.default_convention ?? 'full_month')
   const [assetAccountId, setAssetAccountId] = useState<string>(payload.accounts.assetAccountId ?? '')
   const [accumAccountId, setAccumAccountId] = useState<string>(payload.accounts.accumulatedDepreciationAccountId ?? '')
   const [expenseAccountId, setExpenseAccountId] = useState<string>(payload.accounts.depreciationExpenseAccountId ?? '')
@@ -130,11 +133,13 @@ export function AssetDrawer({
       method,
       lifeMonths: lifeMonths || null,
       ratePercent: ratePercent || null,
+      unitsTotal: unitsTotal || null,
+      convention,
       assetAccountId: assetAccountId || null,
       accumulatedDepreciationAccountId: accumAccountId || null,
       depreciationExpenseAccountId: expenseAccountId || null,
     }),
-    [name, assetNumber, description, categoryId, subsidiaryId, cost, salvage, acquiredOn, inServiceOn, serialNumber, method, lifeMonths, ratePercent, assetAccountId, accumAccountId, expenseAccountId],
+    [name, assetNumber, description, categoryId, subsidiaryId, cost, salvage, acquiredOn, inServiceOn, serialNumber, method, lifeMonths, ratePercent, unitsTotal, convention, assetAccountId, accumAccountId, expenseAccountId],
   )
   const first = useRef(true)
   useEffect(() => {
@@ -157,9 +162,11 @@ export function AssetDrawer({
     setAcquiredOn(a.acquired_on ?? '')
     setInServiceOn(a.in_service_on ?? '')
     setSerialNumber(a.serial_number ?? '')
-    setMethod(custom.method ?? payload.category?.default_method ?? 'straight_line')
-    setLifeMonths(custom.lifeMonths != null ? String(custom.lifeMonths) : (payload.category?.default_life_months != null ? String(payload.category.default_life_months) : ''))
-    setRatePercent(custom.ratePercent != null ? String(custom.ratePercent) : '')
+    setMethod(a.depreciation_method ?? payload.category?.default_method ?? 'straight_line')
+    setLifeMonths(a.useful_life_months != null ? String(a.useful_life_months) : (payload.category?.default_life_months != null ? String(payload.category.default_life_months) : ''))
+    setRatePercent(a.depreciation_rate_percent != null ? String(a.depreciation_rate_percent) : '')
+    setUnitsTotal(a.depreciation_units_total != null ? String(a.depreciation_units_total) : '')
+    setConvention(a.depreciation_convention ?? payload.category?.default_convention ?? 'full_month')
     setAssetAccountId(payload.accounts.assetAccountId ?? '')
     setAccumAccountId(payload.accounts.accumulatedDepreciationAccountId ?? '')
     setExpenseAccountId(payload.accounts.depreciationExpenseAccountId ?? '')
@@ -254,7 +261,9 @@ export function AssetDrawer({
   }
 
   const displayName = (editable ? name.trim() : a.name) || t('drawer.newAsset')
-  const hasPosted = payload.schedule.some((s) => s.journalEntryId)
+  const hasAccountingEvidence = payload.schedule.some(
+    (line) => line.postedAmount != null || line.input != null || line.source === 'imported',
+  )
 
   return (
     <UrlDrawer
@@ -297,13 +306,16 @@ export function AssetDrawer({
                   {t('drawer.runForAsset')}
                 </Button>
               ) : null}
+              {canManage && status === 'in_service' && (method === 'manual' || method === 'units_of_production') ? (
+                <DepreciationInputButton assetId={a.id} method={method as 'manual' | 'units_of_production'} />
+              ) : null}
               {canManage && status === 'in_service' ? (
                 <RemeasureButton assetId={a.id} />
               ) : null}
               {canManage && (status === 'in_service' || status === 'fully_depreciated') ? (
                 <DisposeButton assetId={a.id} accountOptions={accountOptions} />
               ) : null}
-              {canManage && isDraft && !hasPosted ? (
+              {canManage && isDraft && !hasAccountingEvidence ? (
                 <Button
                   variant="ghost"
                   disabled={busy}
@@ -469,14 +481,16 @@ export function AssetDrawer({
                 <p className="text-sm">{t(`methods.${method}`)}</p>
               )}
             </div>
-            <div className={field}>
-              <Label>{t('labels.lifeMonths')}</Label>
-              {editable ? (
-                <Input inputMode="numeric" className="text-right tabular-nums" value={lifeMonths} onChange={(e) => setLifeMonths(e.target.value)} />
-              ) : (
-                <p className="text-right text-sm tabular-nums">{lifeMonths || '—'}</p>
-              )}
-            </div>
+            {method !== 'manual' && method !== 'units_of_production' ? (
+              <div className={field}>
+                <Label>{t('labels.lifeMonths')}</Label>
+                {editable ? (
+                  <Input inputMode="numeric" className="text-right tabular-nums" value={lifeMonths} onChange={(e) => setLifeMonths(e.target.value)} />
+                ) : (
+                  <p className="text-right text-sm tabular-nums">{lifeMonths || '—'}</p>
+                )}
+              </div>
+            ) : null}
             {showRate ? (
               <div className={field}>
                 <Label>{t('labels.ratePercent')}</Label>
@@ -484,6 +498,28 @@ export function AssetDrawer({
                   <Input inputMode="decimal" className="text-right tabular-nums" value={ratePercent} onChange={(e) => setRatePercent(e.target.value)} />
                 ) : (
                   <p className="text-right text-sm tabular-nums">{ratePercent || '—'}</p>
+                )}
+              </div>
+            ) : null}
+            {method === 'units_of_production' ? (
+              <div className={field}>
+                <Label>{t('labels.unitsTotal')}</Label>
+                {editable ? (
+                  <Input inputMode="decimal" className="text-right tabular-nums" value={unitsTotal} onChange={(e) => setUnitsTotal(e.target.value)} />
+                ) : (
+                  <p className="text-right text-sm tabular-nums">{unitsTotal || '—'}</p>
+                )}
+              </div>
+            ) : null}
+            {method !== 'manual' ? (
+              <div className={field}>
+                <Label>{t('labels.convention')}</Label>
+                {editable ? (
+                  <Select value={convention} onChange={(e) => setConvention(e.target.value)}>
+                    {CONVENTIONS.map((item) => <option key={item} value={item}>{t(`conventions.${item}`)}</option>)}
+                  </Select>
+                ) : (
+                  <p className="text-sm">{t(`conventions.${convention}`)}</p>
                 )}
               </div>
             ) : null}
@@ -558,6 +594,7 @@ export function AssetDrawer({
                   <TableHead>{t('drawer.period')}</TableHead>
                   <TableHead className="text-right">{t('drawer.planned')}</TableHead>
                   <TableHead className="text-right">{t('drawer.postedAmount')}</TableHead>
+                  <TableHead>{t('drawer.evidence')}</TableHead>
                   <TableHead className="text-right">{t('labels.accumulated')}</TableHead>
                   <TableHead className="text-right">{t('labels.nbv')}</TableHead>
                 </TableRow>
@@ -580,6 +617,19 @@ export function AssetDrawer({
                         <Badge variant="success">{money(s.postedAmount)}</Badge>
                       ) : (
                         <span className="text-slate-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-56 text-xs">
+                      {s.input ? (
+                        <div>
+                          <p className="font-medium text-slate-700 dark:text-slate-200">{s.input.evidenceReference}</p>
+                          <p className="truncate text-slate-500 dark:text-slate-400">{s.input.memo}</p>
+                          {s.input.productionUnits ? <p className="tabular-nums text-slate-500">{t('drawer.productionUnits', { units: s.input.productionUnits })}</p> : null}
+                        </div>
+                      ) : s.source === 'imported' ? (
+                        <span className="text-slate-500 dark:text-slate-400">{t('drawer.importedEvidence')}</span>
+                      ) : (
+                        <span className="text-slate-400">{t('drawer.formulaGenerated')}</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{money(s.accumulated)}</TableCell>

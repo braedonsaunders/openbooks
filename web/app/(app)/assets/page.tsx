@@ -93,7 +93,7 @@ export default async function Assets({
                select sum(l.posted_amount)
                  from depreciation_schedules s
                  join depreciation_schedule_lines l on l.schedule_id = s.id
-                where s.asset_id = a.id and l.journal_entry_id is not null
+                where s.asset_id = a.id and l.posted_amount is not null
              ), 0) as accumulated
         from fixed_assets a
         left join asset_categories c on c.id = a.category_id
@@ -144,12 +144,17 @@ export default async function Assets({
             title={t('list.title')}
             description={t('list.description')}
             actions={
-              canManage ? (
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Link href="/docs/fixed-assets-depreciation" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
+                  {t('equipment.documentation')}
+                </Link>
+                {canManage ? (
+                  <>
                   <RunDepreciationButton />
                   <NewAssetButton />
-                </div>
-              ) : undefined
+                  </>
+                ) : null}
+              </div>
             }
           />
           <div className="flex flex-wrap items-center gap-2">
