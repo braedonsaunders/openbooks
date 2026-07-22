@@ -158,8 +158,21 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$APP_URL" ]; then
-            echo "::error::OPENBOOKS_APP_URL environment variable is required"
-            exit 1
+            base="${DOKPLOY_URL%/}"
+            compose="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+              -G "$base/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
+            host="$(jq -r '[.domains[]? | select((.host // "") != "")] | first | .host // empty' <<<"$compose")"
+            use_https="$(jq -r '[.domains[]? | select((.host // "") != "")] | first | .https // false' <<<"$compose")"
+            if [ -z "$host" ]; then
+              echo "::error::Neither OPENBOOKS_APP_URL nor a Dokploy-managed compose domain is configured"
+              exit 1
+            fi
+            if [ "$use_https" = "true" ]; then
+              APP_URL="https://$host"
+            else
+              APP_URL="http://$host"
+            fi
+            echo "Discovered app URL from Dokploy compose domain: $APP_URL"
           fi
           app_url="${APP_URL%/}"
           for i in $(seq 1 30); do

@@ -116,6 +116,25 @@ test('saved forms gain newly registered built-in fields in registry order', () =
   assert.deepEqual(lintFormLayout(legacy), [])
 })
 
+test('field ticket forms own every details control through the shared form layout', () => {
+  const layout = defaultFormLayout('field_ticket')
+  const fields = layout.header.groups[0]!.fields
+
+  assert.deepEqual(fields.map((field) => field.key), [
+    'project_id',
+    'party_id',
+    'document_date',
+    'period',
+    'foreman_party_id',
+    'reference_number',
+    'memo',
+  ])
+  assert.equal(fields.find((field) => field.key === 'party_id')?.colSpan, 2)
+  assert.equal(fields.find((field) => field.key === 'foreman_party_id')?.colSpan, 2)
+  assert.equal(fields.find((field) => field.key === 'memo')?.colSpan, 3)
+  assert.deepEqual(lintFormLayout(layout), [])
+})
+
 test('the baseline form upgrade refreshes built-in placement without losing field choices', () => {
   const legacy = defaultFormLayout('project')
   delete legacy.defaultLayoutVersion

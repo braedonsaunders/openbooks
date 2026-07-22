@@ -57,6 +57,20 @@
     "po": "Customer PO",
     "foreman": "Foreman",
     "workDescription": "Work description",
+    "details": {
+      "title": "Ticket details",
+      "hint": "Project, customer, ticket date, and field responsibility."
+    },
+    "work": {
+      "title": "Work summary",
+      "hint": "Customer reference and a clear description of the work performed."
+    },
+    "form": {
+      "label": "Record form",
+      "setPreferred": "Set as my preferred",
+      "preferredSaved": "Preferred form saved",
+      "preferredFailed": "Could not save the preferred form"
+    },
     "crew": {
       "title": "Crew hours",
       "hint": "One row per person (optionally per labor class). R / O / D = the time types' first letters.",
@@ -98,12 +112,23 @@
     },
     "signatures": {
       "title": "Signatures",
+      "hint": "Send the approved ticket to the customer for review and signature.",
       "customer": "Customer",
       "signedBy": "Signed — {name}",
+      "signedAt": "Signed {date}",
       "waiting": "Awaiting signature",
-      "notSent": "Not sent yet"
+      "notSent": "Not sent yet",
+      "ready": "Ready to send",
+      "notReady": "Not ready",
+      "draftHelp": "Submit and approve this ticket before sending it to the customer for signature.",
+      "pendingHelp": "This ticket can be sent for signature after it is approved.",
+      "sentTo": "Sent to",
+      "sentAt": "Sent",
+      "expiresAt": "Link expires",
+      "deliveryHelp": "The customer receives a PDF copy and a secure signing link valid for 14 days."
     },
     "sendSignature": "Send for signature",
+    "resendSignature": "Resend signing request",
     "sendTo": "Send to",
     "sendMessage": "Message (optional)",
     "send": "Send",

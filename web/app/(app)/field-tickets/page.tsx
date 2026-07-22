@@ -151,6 +151,9 @@ export default async function FieldTicketsPage({
         equipmentUnits={pickers.equipmentUnits}
         equipmentEnabled={equipmentEnabled}
         layout={resolvedForm?.layout}
+        availableLayouts={resolvedForm?.available}
+        currentLayoutId={resolvedForm?.row?.id ?? null}
+        canCustomize={can(authz, 'admin.customization.manage')}
         canApprove={canApprove}
         canManage={canManage}
       />
