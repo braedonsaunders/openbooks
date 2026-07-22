@@ -12,12 +12,12 @@ interface TimeRow {
   label: string
   hours: number
   billableHours: number
-  cost: number
-  bill: number
+  cost: string
+  bill: string
 }
 
 export interface CostTimeData {
-  totals: { hours: number; billableHours: number; cost: number; bill: number }
+  totals: { hours: number; billableHours: number; cost: string; bill: string }
   byTask: TimeRow[]
   byEmployee: TimeRow[]
 }

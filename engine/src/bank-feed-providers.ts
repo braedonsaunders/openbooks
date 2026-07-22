@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { importStatement, type ParsedStatementLine } from "./banking.ts";
+import { neg, normalizeMoney } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 
 /**
@@ -146,7 +147,7 @@ const plaid: BankFeedAdapter = {
     const lines: ParsedStatementLine[] = (body.transactions ?? []).map((t: any) => {
       currency ??= t.iso_currency_code ?? null;
       // Plaid: positive amount = outflow. Bank convention wants −withdrawal.
-      const signed = t.amount != null ? String(-Number(t.amount)) : "0";
+      const signed = t.amount != null ? neg(normalizeMoney(String(t.amount))) : "0.0000";
       return {
         postedOn: (t.date || sinceIso).slice(0, 10),
         amount: signed,

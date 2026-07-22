@@ -34,7 +34,7 @@ export const PROJECT_BASE_JOINS = sql`
        and a.type in ('expense', 'cogs', 'expense_other', 'expense_deferred')
   ) actual on true`
 
-const CONTRACT_EXPR = sql`(p.custom->>'contractValue')::numeric`
+const CONTRACT_EXPR = sql`p.contract_value`
 
 /** Built-in column key → select expression for the projects list. */
 export const PROJECT_BUILT_IN_EXPR: Record<string, SQL> = {

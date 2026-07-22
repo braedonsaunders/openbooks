@@ -19,6 +19,7 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { customSegmentOptions } from '../../../../lib/segments'
 import { RelatedPartyLink } from '../../../../components/related-party-link'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
+import { taxCodeOptions, taxGroupOptions } from '../../../../lib/documents'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,15 +128,8 @@ export default async function Expenses({
                     or exists (select 1 from employee_roles er where er.party_id = p.id))
              order by p.display_name limit 2000`) as any,
           db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`) as any,
-          db.execute(sql`
-            select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
-              from tax_codes tc
-              left join lateral (
-                select rate_percent from tax_rates
-                 where org_id = ${authz.user.orgId} and tax_code_id = tc.id and effective_from <= now()
-                 order by effective_from desc limit 1) tr on true
-             where tc.is_active and tc.org_id = ${authz.user.orgId}
-             order by tc.code`) as any,
+          taxCodeOptions(authz.user.orgId),
+          taxGroupOptions(authz.user.orgId),
           db.execute(sql`select id, name from departments where is_active and org_id = ${authz.user.orgId} order by name`) as any,
           db.execute(sql`select id, name from projects where is_active and org_id = ${authz.user.orgId} order by name limit 2000`) as any,
           loadFieldDefs('documents', 'expense_report'),
@@ -150,8 +144,8 @@ export default async function Expenses({
         userId: authz.user.id,
         recordType: 'expense_report',
         userRoles: [authz.user.role],
-        headerDefs: pickers[5] as any,
-        lineDefs: pickers[6] as any,
+        headerDefs: pickers[6] as any,
+        lineDefs: pickers[7] as any,
         explicitLayoutId: pickString(sp.form),
       })
     : null
@@ -246,12 +240,13 @@ export default async function Expenses({
           report={openReport as any}
           employees={pickers[0].rows}
           accounts={pickers[1].rows}
-          taxCodes={pickers[2].rows}
-          departments={pickers[3].rows}
-          projects={pickers[4].rows}
-          headerDefs={pickers[5] as any}
-          lineDefs={pickers[6] as any}
-          segments={pickers[7] as any}
+          taxCodes={pickers[2] as any}
+          taxGroups={pickers[3] as any}
+          departments={pickers[4].rows}
+          projects={pickers[5].rows}
+          headerDefs={pickers[6] as any}
+          lineDefs={pickers[7] as any}
+          segments={pickers[8] as any}
           canSubmit={canSubmit}
           canPost={canPost}
           layout={resolvedForm?.layout}

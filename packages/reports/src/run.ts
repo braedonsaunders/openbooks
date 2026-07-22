@@ -218,12 +218,12 @@ function shapeSummarizeResult(
   ]
   measures.forEach((m, i) => {
     if (m.fn === 'count' || m.fn === 'count_distinct' || m.fn === 'sum') {
-      const total = dataRows.reduce((acc, r) => acc + (Number(r[`m${i}`]) || 0), 0)
+      const total = sumExactDecimals(dataRows.map((row) => row[`m${i}`]))
       summary.push({
         label:
           labels.summaryTotal?.(measureHeading(m)) ??
           `Total ${measureLabel(entity, m).toLowerCase()}`,
-        value: Math.round(total * 100) / 100,
+        value: formatExactNumber(total) ?? '0.00',
       })
     }
   })
@@ -280,13 +280,41 @@ function formatCellValue(
   // Numeric columns: normalize trailing zeros ("2938.0000" → "2938.00") while
   // preserving genuine precision (rates like 0.0625 pass through untouched).
   if (kind === 'number' && v != null) {
-    const n = Number(v)
-    if (Number.isFinite(n)) {
-      const rounded = Math.round(n * 100) / 100
-      return Math.abs(n - rounded) < 1e-9 ? rounded.toFixed(2) : String(n)
-    }
+    const formatted = formatExactNumber(v)
+    if (formatted !== null) return formatted
   }
   return formatCustomValue(v)
+}
+
+function decimalParts(value: unknown): { units: bigint; scale: number } | null {
+  const raw = String(value ?? '').trim()
+  const match = /^([-+]?)(\d+)(?:\.(\d*))?$/.exec(raw)
+  if (!match) return null
+  const fraction = match[3] ?? ''
+  const magnitude = BigInt(match[2]! + fraction)
+  return { units: match[1] === '-' ? -magnitude : magnitude, scale: fraction.length }
+}
+
+function sumExactDecimals(values: unknown[]): string {
+  const parts = values.map(decimalParts).filter((part): part is { units: bigint; scale: number } => part !== null)
+  const scale = parts.reduce((maximum, part) => Math.max(maximum, part.scale), 0)
+  const units = parts.reduce((total, part) => total + part.units * 10n ** BigInt(scale - part.scale), 0n)
+  const negative = units < 0n
+  const absolute = negative ? -units : units
+  if (scale === 0) return `${negative ? '-' : ''}${absolute}`
+  const digits = absolute.toString().padStart(scale + 1, '0')
+  return `${negative ? '-' : ''}${digits.slice(0, -scale)}.${digits.slice(-scale)}`
+}
+
+function formatExactNumber(value: unknown): string | null {
+  const part = decimalParts(value)
+  if (!part) return null
+  const raw = String(value).replace(/^\+/, '')
+  const [whole, fraction = ''] = raw.split('.')
+  if (fraction.length <= 2 || /^\d{0,2}0*$/.test(fraction)) {
+    return `${whole}.${fraction.slice(0, 2).padEnd(2, '0')}`
+  }
+  return raw
 }
 
 function formatCustomValue(v: unknown): string | number | null {

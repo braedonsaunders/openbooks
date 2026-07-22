@@ -16,6 +16,8 @@ import { money } from '../../../lib/format'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
+import { cmp, fromUnits, mul, toUnits } from '@openbooks/engine/src/money.ts'
+import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 
 interface Opt {
   id: string
@@ -29,6 +31,7 @@ interface Opt {
   expense_account_id?: string | null
   tax_code_id?: string | null
   unit?: string | null
+  tax_components?: TaxComponentConfig[]
 }
 interface LineRow extends Record<string, unknown> {
   itemId: string
@@ -37,7 +40,7 @@ interface LineRow extends Record<string, unknown> {
   quantity: string
   unit: string
   unitPrice: string
-  taxCodeId: string
+  taxProfileId: string
   departmentId: string
   projectId: string
 }
@@ -122,7 +125,7 @@ const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   quantity: '',
   unit: '',
   unitPrice: '',
-  taxCodeId: '',
+  taxProfileId: '',
   departmentId: '',
   projectId: '',
   ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, ''])),
@@ -133,10 +136,10 @@ function toRow(l: Record<string, any>, segments: SegmentOption[]): LineRow {
     itemId: l.item_id ?? '',
     accountId: l.account_id ?? '',
     description: l.description ?? '',
-    quantity: l.quantity != null ? String(Number(l.quantity)) : '',
+    quantity: l.quantity != null ? String(l.quantity) : '',
     unit: l.unit ?? '',
-    unitPrice: l.unit_price != null ? Number(l.unit_price).toFixed(2) : '',
-    taxCodeId: l.tax_code_id ?? '',
+    unitPrice: l.unit_price != null ? String(l.unit_price) : '',
+    taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
     ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, l.extra_dims?.[segment.key] ?? ''])),
@@ -150,6 +153,7 @@ export function OrderDrawer({
   accounts,
   items,
   taxCodes,
+  taxGroups,
   departments,
   projects,
   segments,
@@ -162,6 +166,7 @@ export function OrderDrawer({
   accounts: Opt[]
   items: Opt[]
   taxCodes: Opt[]
+  taxGroups: Opt[]
   departments: Opt[]
   projects: Opt[]
   segments: SegmentOption[]
@@ -206,28 +211,29 @@ export function OrderDrawer({
   }`
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
-  const rateByCode = useMemo(() => new Map(taxCodes.map((t) => [t.id, Number(t.rate ?? 0)])), [taxCodes])
+  const taxProfiles = useMemo(() => [
+    ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
+    ...taxGroups.map((profile) => ({ ...profile, value: `group:${profile.id}` })),
+  ], [taxCodes, taxGroups])
+  const taxByProfile = useMemo(() => new Map(taxProfiles.map((profile) => [profile.value, profile.tax_components ?? []])), [taxProfiles])
 
   const lineAmount = (row: LineRow) => {
-    const amt = Number(row.quantity) * Number(row.unitPrice)
-    return Number.isFinite(amt) ? amt : 0
+    try { return mul(row.quantity || '0', row.unitPrice || '0') } catch { return '0.0000' }
   }
   const lineTax = (row: LineRow) => {
-    const rate = row.taxCodeId ? (rateByCode.get(row.taxCodeId) ?? 0) : 0
-    const amt = lineAmount(row)
-    if (!rate) return 0
-    return Math.round(amt * rate) / 100
+    try { return computeLineTaxes(lineAmount(row), taxByProfile.get(row.taxProfileId) ?? []).taxTotal }
+    catch { return '0.0000' }
   }
 
   /** Converted progress across all lines (quantity_billed / quantity). */
   const converted = useMemo(() => {
-    let ordered = 0
-    let billed = 0
+    let ordered = 0n
+    let billed = 0n
     for (const l of order.lines) {
-      ordered += Number(l.quantity ?? 0)
-      billed += Number(l.quantity_billed ?? 0)
+      ordered += toUnits(String(l.quantity ?? 0))
+      billed += toUnits(String(l.quantity_billed ?? 0))
     }
-    return { ordered, billed, partial: billed > 0.00005 && billed + 0.00005 < ordered, full: ordered > 0 && billed + 0.00005 >= ordered }
+    return { ordered: fromUnits(ordered), billed: fromUnits(billed), partial: billed > 0n && billed < ordered, full: ordered > 0n && billed >= ordered }
   }, [order.lines])
 
   // -- selecting an item defaults description/price/account/tax/unit ----------
@@ -240,10 +246,10 @@ export function OrderDrawer({
           return {
             ...row,
             description: row.description || (it.name ?? ''),
-            unitPrice: it.default_rate != null ? Number(it.default_rate).toFixed(2) : row.unitPrice,
+            unitPrice: it.default_rate != null ? String(it.default_rate) : row.unitPrice,
             accountId:
               (kind === 'purchase_order' ? it.expense_account_id : it.income_account_id) ?? row.accountId,
-            taxCodeId: it.tax_code_id ?? row.taxCodeId,
+            taxProfileId: it.tax_code_id ? `code:${it.tax_code_id}` : row.taxProfileId,
             unit: it.unit ?? row.unit,
             quantity: row.quantity || '1',
           }
@@ -265,7 +271,9 @@ export function OrderDrawer({
       projectId: projectId || null,
       extraDims,
       lines: rows
-        .filter((r) => (r.itemId || r.accountId) && Number(r.quantity) > 0 && Number(r.unitPrice) >= 0 && lineAmount(r) > 0)
+        .filter((r) => {
+          try { return Boolean(r.itemId || r.accountId) && cmp(r.quantity, '0') > 0 && cmp(r.unitPrice, '0') >= 0 && cmp(lineAmount(r), '0') > 0 } catch { return false }
+        })
         .map((r) => ({
           itemId: r.itemId || null,
           accountId: r.accountId || null,
@@ -273,7 +281,8 @@ export function OrderDrawer({
           quantity: r.quantity,
           unit: r.unit || null,
           unitPrice: r.unitPrice,
-          taxCodeId: r.taxCodeId || null,
+          taxCodeId: r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
+          taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
           extraDims: Object.fromEntries(
@@ -454,11 +463,11 @@ export function OrderDrawer({
         options: projects.map((project) => ({ value: project.id, label: project.name ?? '' })), placeholder: '—',
       },
       tax_code_id: {
-        key: 'taxCodeId',
+        key: 'taxProfileId',
         label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: t('columns.noTax') }, ...taxCodes.map((t) => ({ value: t.id, label: t.code ?? '' }))],
+        options: [{ value: '', label: t('columns.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
       amount: {
         key: '_amount',
@@ -502,7 +511,7 @@ export function OrderDrawer({
       ]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxCodes, departments, projects, segments, kind, layout, t, tCommon],
+    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon],
   )
 
   const field = 'space-y-1.5'
@@ -525,7 +534,9 @@ export function OrderDrawer({
         return null
     }
   }
-  const canIssue = !!partyId && rows.some((r) => (r.itemId || r.accountId) && lineAmount(r) > 0)
+  const canIssue = !!partyId && rows.some((r) => {
+    try { return Boolean(r.itemId || r.accountId) && cmp(lineAmount(r), '0') > 0 } catch { return false }
+  })
   const convertTargets = CONVERSION_TARGETS[kind]
 
   return (
@@ -544,8 +555,8 @@ export function OrderDrawer({
           {converted.partial ? (
             <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
               {t('convertedProgress', {
-                billed: converted.billed % 1 === 0 ? String(converted.billed) : converted.billed.toFixed(2),
-                ordered: converted.ordered % 1 === 0 ? String(converted.ordered) : converted.ordered.toFixed(2),
+                billed: converted.billed,
+                ordered: converted.ordered,
               })}
             </span>
           ) : converted.full ? (

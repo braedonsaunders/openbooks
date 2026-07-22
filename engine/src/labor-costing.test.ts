@@ -92,7 +92,7 @@ test("only fixed labor components convert to subsidiary functional currency", ()
   ];
   assert.deepEqual(convertFixedLaborComponents(components, "0.75"), [
     components[0],
-    { ...components[1], value: 2.25 },
-    { ...components[2], value: 45 },
+    { ...components[1], value: "2.2500" },
+    { ...components[2], value: "45.0000" },
   ]);
 });

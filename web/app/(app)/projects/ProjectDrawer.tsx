@@ -19,6 +19,7 @@ import { TransactionsTab } from './tabs/TransactionsTab'
 import { WorkBreakdownTab, type WorkBreakdownTask } from './tabs/WorkBreakdownTab'
 import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquipmentOption } from './tabs/ChargesSection'
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
+import { formatMoney } from '@openbooks/engine/src/money.ts'
 
 interface PartyOpt {
   id: string
@@ -144,7 +145,7 @@ export function ProjectDrawer({
   const [startsOn, setStartsOn] = useState<string>(pr.starts_on ?? '')
   const [endsOn, setEndsOn] = useState<string>(pr.ends_on ?? '')
   const [contractValue, setContractValue] = useState<string>(
-    payload.contractValue != null ? Number(payload.contractValue).toFixed(2) : '',
+    payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '',
   )
   const [notes, setNotes] = useState<string>(pr.notes ?? '')
   const customFieldDefs = payload.customFieldDefs ?? []
@@ -158,7 +159,7 @@ export function ProjectDrawer({
       name: task.name ?? '',
       status: task.status ?? 'open',
       estimatedHours: task.estimated_hours != null ? Number(task.estimated_hours).toString() : '',
-      estimatedCost: task.estimated_cost != null ? Number(task.estimated_cost).toFixed(2) : '',
+      estimatedCost: task.estimated_cost != null ? formatMoney(task.estimated_cost, 2) : '',
     })),
   )
   const [isActive, setIsActive] = useState<boolean>(pr.is_active === true)
@@ -247,7 +248,7 @@ export function ProjectDrawer({
     setCustomerPoNumber(pr.customer_po_number ?? '')
     setStartsOn(pr.starts_on ?? '')
     setEndsOn(pr.ends_on ?? '')
-    setContractValue(payload.contractValue != null ? Number(payload.contractValue).toFixed(2) : '')
+    setContractValue(payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '')
     setNotes(pr.notes ?? '')
     setCustom((pr.custom as Record<string, unknown> | null) ?? {})
     setSubsidiaryId(pr.subsidiary_id ?? '')
@@ -259,7 +260,7 @@ export function ProjectDrawer({
         name: task.name ?? '',
         status: task.status ?? 'open',
         estimatedHours: task.estimated_hours != null ? Number(task.estimated_hours).toString() : '',
-        estimatedCost: task.estimated_cost != null ? Number(task.estimated_cost).toFixed(2) : '',
+        estimatedCost: task.estimated_cost != null ? formatMoney(task.estimated_cost, 2) : '',
       })),
     )
   }

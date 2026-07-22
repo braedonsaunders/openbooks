@@ -25,6 +25,7 @@
   "list": {
     "searchPlaceholder": "Buscar nome, código, e-mail…",
     "shortCode": "Código curto",
-    "phone": "Telefone"
+    "phone": "Telefone",
+    "customerStatuses": { "existing": "Clientes existentes", "potential": "Clientes potenciais" }
   }
 }

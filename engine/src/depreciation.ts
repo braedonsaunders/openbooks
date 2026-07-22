@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
-import { BUILTIN_FORMULAS, computeScheduleByFormula } from "./depreciation-formula.ts";
+import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
@@ -124,7 +124,7 @@ export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
   const life = Math.max(1, Math.trunc(input.lifeMonths));
   const { formula, rateTable } = formulaForMethod(input.method, input.ratePercent, life);
   const firstPeriodFraction =
-    input.convention === "mid_month" || input.convention === "half_year" ? 0.5 : 1;
+    input.convention === "mid_month" || input.convention === "half_year" ? "0.5" : "1";
   const rows = computeScheduleByFormula({
     cost: input.cost,
     salvage: input.salvage,
@@ -146,27 +146,35 @@ export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
 /**
  * Map a built-in method to a formula so the flexible engine drives every method
  * (declining-balance now gets the DB→SL crossover for a clean finish).
- * `declining_balance` passes its monthly rate as R1 (from `ratePercent`, else the
- * straight-line-equivalent 1/life). `units_of_production` needs per-period usage
- * that this book path doesn't capture yet, so it falls back to straight-line.
+ * `declining_balance` passes its exact monthly rate as R1. Manual and
+ * units-of-production are deliberately unavailable until their required
+ * per-period evidence is stored; silently substituting straight-line would
+ * materially misstate depreciation.
  */
 function formulaForMethod(
   method: DepreciationMethod,
   ratePercent: string | null | undefined,
   lifeMonths: number,
-): { formula: string; rateTable?: number[] } {
+): { formula: string; rateTable?: string[] } {
   switch (method) {
     case "double_declining":
       return { formula: BUILTIN_FORMULAS.double_declining };
     case "declining_balance": {
-      const annual = ratePercent != null && Number(ratePercent) > 0 ? Number(ratePercent) / 100 : 12 / lifeMonths;
-      return { formula: "(NB-RV)*R1~(NB-RV)/(AL-CP+1)", rateTable: [annual / 12] };
+      const monthlyRate = ratePercent != null && cmp(ratePercent, "0") > 0
+        ? exactRatio(ratePercent, "1200")
+        : exactRatio("1", String(lifeMonths));
+      return { formula: "(NB-RV)*R1~(NB-RV)/(AL-CP+1)", rateTable: [monthlyRate] };
     }
     case "straight_line":
-    case "manual":
-    case "units_of_production":
-    default:
       return { formula: BUILTIN_FORMULAS.straight_line };
+    case "manual":
+      throw new Error("manual depreciation is disabled until an explicit per-period schedule is entered");
+    case "units_of_production":
+      throw new Error("units-of-production depreciation is disabled until per-period and lifetime usage are recorded");
+    default: {
+      const exhaustive: never = method;
+      throw new Error(`unsupported depreciation method ${exhaustive}`);
+    }
   }
 }
 
@@ -258,6 +266,11 @@ export async function buildSchedule(
     pol?.rate_percent != null ? String(pol.rate_percent) : custom.ratePercent != null ? String(custom.ratePercent) : null;
   const convention = (pol?.convention ?? custom.convention ?? category.default_convention ?? null) as ScheduleInput["convention"];
   if (!lifeMonths || lifeMonths <= 0) throw new Error("asset has no useful life (months)");
+  if (method === "manual" || method === "units_of_production") {
+    // Refuse before looking up a same-named custom formula: these built-in
+    // method identifiers promise evidence this schedule model does not store.
+    formulaForMethod(method, ratePercent, lifeMonths);
+  }
 
   // A user-authored formula method (the formula builder) resolves by code; if
   // none matches, fall back to the built-in method path unchanged.
@@ -266,7 +279,7 @@ export async function buildSchedule(
      where org_id = ${orgId} and code = ${method} and is_active limit 1`)) as unknown as {
     rows: { formula: string; end_of_life: "fully_depreciate" | "retain_balance" }[];
   };
-  const firstPeriodFraction = convention === "mid_month" || convention === "half_year" ? 0.5 : 1;
+  const firstPeriodFraction = convention === "mid_month" || convention === "half_year" ? "0.5" : "1";
 
   let plan: ScheduleLinePlan[];
   if (custom2.rows[0]) {

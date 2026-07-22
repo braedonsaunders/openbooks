@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { buildAllSchedules } from '@openbooks/engine/src/depreciation.ts'
+import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAsset } from '../_lib'
 
 export const runtime = 'nodejs'
 
-const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'units_of_production', 'manual'] as const
+const METHODS = ['straight_line', 'declining_balance', 'double_declining'] as const
 type Method = (typeof METHODS)[number]
 
 function bad(error: string) {
@@ -21,13 +22,15 @@ function strOrNull(v: unknown): string | null {
   return s === '' ? null : s
 }
 
-/** Decimal money string (2dp) or null; '' → null; NaN → 'invalid'. */
+/** Exact numeric(19,4) money string or null. */
 function moneyOrNull(v: unknown): string | null | 'invalid' {
   const s = strOrNull(typeof v === 'number' ? String(v) : v)
   if (s === null) return null
-  const n = Number(s)
-  if (Number.isNaN(n)) return 'invalid'
-  return n.toFixed(2)
+  try {
+    return normalizeMoney(s)
+  } catch {
+    return 'invalid'
+  }
 }
 
 async function acctExists(id: string, orgId: string): Promise<boolean> {
@@ -169,9 +172,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     custom.lifeMonths = n
   }
   if (body.ratePercent !== undefined) {
-    const n = body.ratePercent === null || body.ratePercent === '' ? null : Number(body.ratePercent)
-    if (n !== null && (Number.isNaN(n) || n < 0)) return bad('Rate must be a non-negative percent')
-    custom.ratePercent = n
+    const rate = body.ratePercent === null || body.ratePercent === '' ? null : String(body.ratePercent)
+    try {
+      if (rate !== null && (toUnits(rate) < 0n || cmp(rate, '10000') > 0)) throw new Error('invalid rate')
+    } catch {
+      return bad('Rate must be an exact non-negative percent')
+    }
+    custom.ratePercent = rate
   }
 
   // -- status transition (draft ↔ in_service) -----------------------------

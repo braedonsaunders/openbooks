@@ -61,6 +61,54 @@ export const taxPoolPeriods = pgTable(
 );
 
 /**
+ * Org-defined tax depreciation REGIMES — the configurable counterpart to the
+ * built-in engine regimes (ca_cca, uk_wda, au_pool, nz_pool). A tenant can add a
+ * jurisdiction the engine doesn't ship, or shadow a built-in to override it. The
+ * engine merges these over the built-ins. `classAttribute` is the asset-category
+ * tax_attributes key that carries a class code for this regime (Canada legacy
+ * data uses "ca_cca_class"; new regimes use "tax_pool_class").
+ */
+export const taxRegimes = pgTable(
+  "tax_regimes",
+  {
+    id: id(),
+    orgId: orgRef(),
+    code: text("code").notNull(), // "ca_cca", "uk_wda", or a tenant's own
+    name: text("name").notNull(),
+    classAttribute: text("class_attribute").notNull().default("tax_pool_class"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("tax_regimes_org_code").on(t.orgId, t.code)],
+);
+
+/**
+ * Org-defined pool CLASSES (rate, method, first-year fraction, recapture/terminal
+ * behavior, cost cap) per regime — makes the class table fully configurable
+ * instead of code-only. The engine resolves a class from here first, then falls
+ * back to the built-in regime definition.
+ */
+export const taxPoolClasses = pgTable(
+  "tax_pool_classes",
+  {
+    id: id(),
+    orgId: orgRef(),
+    regime: text("regime").notNull(),
+    classCode: text("class_code").notNull(),
+    name: text("name").notNull(),
+    rate: fxRate("rate").notNull(),
+    method: text("method", { enum: ["declining", "straight_line"] }).notNull().default("declining"),
+    firstYearFraction: fxRate("first_year_fraction").notNull().default("1"),
+    allowRecapture: boolean("allow_recapture").notNull().default(true),
+    allowTerminalLoss: boolean("allow_terminal_loss").notNull().default(true),
+    costCap: money("cost_cap"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("tax_pool_classes_identity").on(t.orgId, t.regime, t.classCode)],
+);
+
+/**
  * Dated first-year rules per regime/class (Canada half-year rule, AII, immediate
  * expensing). LEGISLATIVELY VOLATILE, so it's config data with effective dates
  * rather than hardcoded engine logic. Org-scoped so a tenant can adjust.

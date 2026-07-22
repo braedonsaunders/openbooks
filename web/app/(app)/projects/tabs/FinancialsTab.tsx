@@ -7,13 +7,14 @@ import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
 import { money } from '../../../../lib/format'
 import { RecognitionCard, type RecognitionStatus } from './RecognitionCard'
+import { add, cmp, neg } from '@openbooks/engine/src/money.ts'
 
-interface CategoryRow { category: string; amount: number }
-interface AccountRow { accountId: string; number: string | null; name: string; amount: number }
+interface CategoryRow { category: string; amount: string }
+interface AccountRow { accountId: string; number: string | null; name: string; amount: string }
 
 export interface FinancialsData {
   /** measure key → dollar value (margin_pct is a percentage). */
-  measures: Record<string, number>
+  measures: Record<string, string | number>
   /** ordered P&L lines from the project type's financial profile. */
   layout: PnlLine[]
   costByCategory: CategoryRow[]
@@ -65,22 +66,22 @@ export function FinancialsTab({ data, projectId, billingMethod, recognition, can
     if (!HINTED.has(key)) return undefined
     try { return t(`measures.hints.${key}` as never) } catch { return undefined }
   }
-  const measureTone = (key: string, v: number): 'good' | 'bad' | undefined => {
-    if (SIGNED_GOOD.has(key)) return v > 0 ? 'good' : v < 0 ? 'bad' : undefined
+  const measureTone = (key: string, v: string | number): 'good' | 'bad' | undefined => {
+    if (SIGNED_GOOD.has(key)) return cmp(String(v), '0') > 0 ? 'good' : cmp(String(v), '0') < 0 ? 'bad' : undefined
     return undefined
   }
-  const fmt = (key: string, v: number): string => (key === 'margin_pct' ? `${v.toFixed(1)}%` : money(v))
+  const fmt = (key: string, v: string | number): string => (key === 'margin_pct' ? `${Number(v).toFixed(1)}%` : money(v))
 
   // Budget bar (derived from measures).
   const costBudget = m.cost_budget ?? 0
   const actualCost = m.actual_cost ?? 0
   const committedCost = m.committed_cost ?? 0
   const totalCost = m.total_cost ?? 0
-  const scale = Math.max(costBudget, totalCost, 1)
-  const actualPct = Math.min(100, (actualCost / scale) * 100)
-  const committedPct = Math.min(100 - actualPct, (committedCost / scale) * 100)
-  const budgetMarkerPct = Math.min(100, (costBudget / scale) * 100)
-  const overBudget = totalCost > costBudget && costBudget > 0
+  const scale = Math.max(Number(costBudget), Number(totalCost), 1)
+  const actualPct = Math.min(100, (Number(actualCost) / scale) * 100)
+  const committedPct = Math.min(100 - actualPct, (Number(committedCost) / scale) * 100)
+  const budgetMarkerPct = Math.min(100, (Number(costBudget) / scale) * 100)
+  const overBudget = cmp(String(totalCost), String(costBudget)) > 0 && cmp(String(costBudget), '0') > 0
 
   const innerTabs = [
     { key: 'category' as const, label: t('cockpit.costByCategory') },
@@ -107,7 +108,9 @@ export function FinancialsTab({ data, projectId, billingMethod, recognition, can
                     hint={line.variant === 'line' ? measureHint(line.measure) : undefined}
                     value={fmt(line.measure, v)}
                     variant={line.variant}
-                    tone={line.variant === 'total' && line.measure === 'gross_profit' ? (v > 0 ? 'good' : v < 0 ? 'bad' : undefined) : measureTone(line.measure, v)}
+                    tone={line.variant === 'total' && line.measure === 'gross_profit'
+                      ? (cmp(String(v), '0') > 0 ? 'good' : cmp(String(v), '0') < 0 ? 'bad' : undefined)
+                      : measureTone(line.measure, v)}
                   />
                 )
               })}
@@ -121,15 +124,15 @@ export function FinancialsTab({ data, projectId, billingMethod, recognition, can
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.budgetBarTitle')}</h2>
               <span className={cn('text-sm font-medium tabular-nums', overBudget ? 'text-red-600 dark:text-red-400' : 'text-teal-700 dark:text-teal-300')}>
-                {overBudget ? t('cockpit.overBudget', { amount: money(totalCost - costBudget) })
-                  : costBudget > 0 ? t('cockpit.underBudget', { amount: money(costBudget - totalCost) })
+                {overBudget ? t('cockpit.overBudget', { amount: money(add(String(totalCost), neg(String(costBudget)))) })
+                  : cmp(String(costBudget), '0') > 0 ? t('cockpit.underBudget', { amount: money(add(String(costBudget), neg(String(totalCost)))) })
                     : t('cockpit.noCostBudget')}
               </span>
             </div>
             <div className="relative h-6 w-full overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800">
               <div className="absolute inset-y-0 left-0 bg-teal-500" style={{ width: `${actualPct}%` }} title={t('cockpit.actualAmount', { amount: money(actualCost) })} />
               <div className="absolute inset-y-0 bg-amber-400" style={{ left: `${actualPct}%`, width: `${committedPct}%` }} title={t('cockpit.committedAmount', { amount: money(committedCost) })} />
-              {costBudget > 0 ? <div className="absolute inset-y-0 w-0.5 bg-slate-900 dark:bg-white" style={{ left: `${budgetMarkerPct}%` }} title={t('cockpit.costBudgetAmount', { amount: money(costBudget) })} /> : null}
+              {cmp(String(costBudget), '0') > 0 ? <div className="absolute inset-y-0 w-0.5 bg-slate-900 dark:bg-white" style={{ left: `${budgetMarkerPct}%` }} title={t('cockpit.costBudgetAmount', { amount: money(costBudget) })} /> : null}
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-teal-500" /> {t('cockpit.actualAmount', { amount: money(actualCost) })}</span>

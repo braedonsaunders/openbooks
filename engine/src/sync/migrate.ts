@@ -327,6 +327,19 @@ async function findByRef(table: string, orgId: string, refKey: string, sourceRef
   return existing.rows[0]?.id ?? null;
 }
 
+async function findPartyByRef(orgId: string, refKey: string, sourceRef: string) {
+  const direct = await findByRef("parties", orgId, refKey, sourceRef);
+  if (direct || refKey !== "nsId") return direct;
+  // AdminApp2 and NetSuite use the same NetSuite customer id. If the labor
+  // import arrived first, adopt that party instead of creating a second one.
+  const existing = (await db.execute(sql`
+    select id from parties
+     where org_id = ${orgId}
+       and custom->'source'->>'externalId' = ${sourceRef}
+     limit 1`)) as { rows: { id: string }[] };
+  return existing.rows[0]?.id ?? null;
+}
+
 async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLoadStats): Promise<void> {
   const pending = [...records];
   while (pending.length > 0) {
@@ -502,24 +515,17 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       manager: ref(ctx.maps.parties, f.managerRef), po: str(f.customerPoNumber),
       starts: str(f.startsOn), ends: str(f.endsOn), isActive: f.isActive !== false,
     };
-    // The fixed-bid contract price lives in custom.contractValue. Merge it (not
-    // clobber) so re-syncs preserve the ref key + any user-set custom fields.
-    const contractValue = typeof f.contractValue === "number" ? f.contractValue : null;
-    const priceMerge = contractValue != null ? JSON.stringify({ contractValue }) : null;
+    const contractValue = typeof f.contractValue === "string" ? f.contractValue : null;
     const id = await findByRef("projects", orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update projects set name=${name}, code=${vals.code}, status=${vals.status}::text,
         billing_method=${vals.billing}, customer_id=${vals.customer}, foreman_id=${vals.foreman}, manager_id=${vals.manager},
-        customer_po_number=${vals.po}, starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive}${
-          priceMerge ? sql`, custom = coalesce(custom, '{}'::jsonb) || ${priceMerge}::jsonb` : sql``
-        } where id=${id}`);
+        customer_po_number=${vals.po}, contract_value=coalesce(${contractValue}, contract_value),
+        starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive} where id=${id}`);
       s.updated++; return id;
     }
-    const insCustom = priceMerge
-      ? JSON.stringify({ ...JSON.parse(custom), contractValue })
-      : custom;
-    const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, billing_method, customer_id, foreman_id, manager_id, customer_po_number, starts_on, ends_on, is_active, custom)
-      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, ${vals.billing}, ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${insCustom}::jsonb) returning id`)) as { rows: { id: string }[] };
+    const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, billing_method, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
+      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, ${vals.billing}, ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${contractValue}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
   }
 
@@ -568,13 +574,13 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
   const isActive = f.isActive !== false;
   const subsidiaryId = ref(ctx.maps.subsidiaries, f.subsidiaryRef);
   const taxIds = JSON.stringify((f.taxIds as Record<string, string>) ?? {});
-  let pid = await findByRef("parties", orgId, refKey, rec.sourceRef);
+  let pid = await findPartyByRef(orgId, refKey, rec.sourceRef);
   if (pid) {
     await db.execute(sql`update parties set display_name=${displayName}, kind=${kind}::text, is_active=${isActive},
       subsidiary_id=coalesce(${subsidiaryId}, subsidiary_id),
       email=coalesce(${str(f.email)}, email), phone=coalesce(${str(f.phone)}, phone),
       website=coalesce(${str(f.website)}, website), legal_name=coalesce(${str(f.legalName)}, legal_name),
-      tax_ids=${taxIds}::jsonb where id=${pid}`);
+      tax_ids=${taxIds}::jsonb, custom=parties.custom||${custom}::jsonb where id=${pid}`);
     s.updated++;
   } else {
     const ins = (await db.execute(sql`insert into parties (org_id, kind, display_name, is_active, subsidiary_id, email, phone, website, legal_name, tax_ids, custom)

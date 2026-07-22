@@ -12,6 +12,7 @@ import { NewOrderButton } from '../_order/NewOrderButton'
 import { NewOrderRedirect } from '../_order/NewOrderRedirect'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
+import { taxCodeOptions, taxGroupOptions } from '../../../lib/documents'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,14 +50,8 @@ export default async function SalesOrders({
              order by display_name limit 2000`) as any,
           db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('income','income_other') and is_active and not is_summary order by number nulls last`) as any,
           db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
-          db.execute(sql`
-            select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
-              from tax_codes tc
-              left join lateral (
-                select rate_percent from tax_rates
-                 where org_id = ${authz.user.orgId} and tax_code_id = tc.id and effective_from <= now()
-                 order by effective_from desc limit 1) tr on true
-             where tc.org_id = ${authz.user.orgId} and tc.is_active order by tc.code`) as any,
+          taxCodeOptions(authz.user.orgId),
+          taxGroupOptions(authz.user.orgId),
           db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
           db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
           customSegmentOptions(authz.user.orgId),
@@ -84,10 +79,11 @@ export default async function SalesOrders({
           parties={pickers[0].rows}
           accounts={pickers[1].rows}
           items={pickers[2].rows}
-          taxCodes={pickers[3].rows}
-          departments={pickers[4].rows}
-          projects={pickers[5].rows}
-          segments={pickers[6]}
+          taxCodes={pickers[3] as any}
+          taxGroups={pickers[4] as any}
+          departments={pickers[5].rows}
+          projects={pickers[6].rows}
+          segments={pickers[7]}
           canManage={canManage}
           layout={resolvedForm?.layout}
         />

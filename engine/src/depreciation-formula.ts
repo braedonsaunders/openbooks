@@ -1,247 +1,284 @@
+import { fromUnits, roundDiv, toUnits } from "./money.ts";
+
 /**
- * Depreciation formula engine — the flexible core that makes depreciation
- * METHODS DATA rather than a hardcoded switch. A method is an expression over a
- * fixed variable set with a deliberately small, auditable grammar, evaluated
- * once per period against a per-period context. One evaluator subsumes
- * straight-line, declining-balance (any factor), sum-of-years-digits,
- * units-of-production, fixed-percent, rate-table (MACRS) and arbitrary
- * user-defined methods.
- *
- * Grammar:
- *   expr    := max
- *   max     := add ( '~' add )*                 // '~' = take the greater operand
- *   add     := mul ( ('+'|'-') mul )*
- *   mul     := pow ( ('*'|'/') pow )*
- *   pow     := unary ( '^' pow )?               // right-associative
- *   unary   := '-' unary | primary
- *   primary := number | VAR | '(' expr ')'
- *            | 'IF' cond 'THEN' expr 'ELSE' expr 'ENDIF'
- *            | 'ROUND' '(' expr ( ',' number )? ')'
- *   cond    := expr ('<='|'<'|'=='|'!='|'>='|'>') expr
- *
- * Variables (all numbers): OC original cost, CC current cost (write-downs
- * reduce it), NB net book value, RV residual/salvage, AL asset life in periods,
- * CP current 1-based period, TD total depreciation to date, LD last period's
- * charge, CU current-period usage, LU lifetime usage, DH days held this period,
- * DP days in the period, FY days in the fiscal year, PB prior fiscal-year-end
- * NBV, and R1..Rn rate-table entries.
- *
- * Injection-safe by construction: only whitelisted tokens parse; there is no
- * `eval`/`Function`. Amounts are plain numbers here; the scheduler rounds each
- * period to the ledger's 4dp.
+ * Exact fixed-point depreciation formula engine. Formula values use 12 decimal
+ * places internally and schedule charges are rounded once to ledger precision
+ * (numeric(19,4)). No monetary value crosses JavaScript's binary-float path.
  */
 
+export type DecimalInput = string | number;
+
 export interface DepContext {
-  OC: number;
-  CC: number;
-  NB: number;
-  RV: number;
-  AL: number;
-  CP: number;
-  TD: number;
-  LD: number;
-  CU: number;
-  LU: number;
-  DH: number;
-  DP: number;
-  FY: number;
-  PB: number;
-  /** Rate-table entries referenced as R1..Rn (1-based in the formula). */
-  R?: number[];
+  OC: DecimalInput;
+  CC: DecimalInput;
+  NB: DecimalInput;
+  RV: DecimalInput;
+  AL: DecimalInput;
+  CP: DecimalInput;
+  TD: DecimalInput;
+  LD: DecimalInput;
+  CU: DecimalInput;
+  LU: DecimalInput;
+  DH: DecimalInput;
+  DP: DecimalInput;
+  FY: DecimalInput;
+  PB: DecimalInput;
+  R?: DecimalInput[];
 }
 
-const SCALAR_VARS = new Set([
-  "OC", "CC", "NB", "RV", "AL", "CP", "TD", "LD", "CU", "LU", "DH", "DP", "FY", "PB",
-]);
-const KEYWORDS = new Set(["IF", "THEN", "ELSE", "ENDIF", "ROUND"]);
+const PRECISION = 12;
+const EXACT_SCALE = 10n ** BigInt(PRECISION);
+const MONEY_TO_EXACT = 10n ** BigInt(PRECISION - 4);
 
 export class DepreciationFormulaError extends Error {
   readonly name = "DepreciationFormulaError";
 }
 
-// --- tokenizer --------------------------------------------------------------
+function exactUnits(value: DecimalInput): bigint {
+  let raw = String(value).trim();
+  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(raw)) {
+    throw new DepreciationFormulaError(`not a decimal number: "${value}"`);
+  }
+  const negative = raw.startsWith("-");
+  raw = raw.replace(/^[-+]/, "");
+  let exponent = 0;
+  const exponentMatch = raw.match(/[eE]([-+]?\d+)$/);
+  if (exponentMatch) {
+    exponent = Number.parseInt(exponentMatch[1]!, 10);
+    raw = raw.slice(0, exponentMatch.index);
+  }
+  let [whole = "0", fraction = ""] = raw.split(".");
+  const digits = `${whole}${fraction}` || "0";
+  const decimalPosition = whole.length + exponent;
+  let normalizedWhole: string;
+  let normalizedFraction: string;
+  if (decimalPosition <= 0) {
+    normalizedWhole = "0";
+    normalizedFraction = `${"0".repeat(-decimalPosition)}${digits}`;
+  } else if (decimalPosition >= digits.length) {
+    normalizedWhole = `${digits}${"0".repeat(decimalPosition - digits.length)}`;
+    normalizedFraction = "";
+  } else {
+    normalizedWhole = digits.slice(0, decimalPosition);
+    normalizedFraction = digits.slice(decimalPosition);
+  }
+  const kept = normalizedFraction.slice(0, PRECISION).padEnd(PRECISION, "0");
+  const discarded = normalizedFraction.slice(PRECISION);
+  let units = BigInt(normalizedWhole || "0") * EXACT_SCALE + BigInt(kept || "0");
+  if (discarded.length > 0 && discarded[0]! >= "5") units += 1n;
+  return negative ? -units : units;
+}
+
+function exactString(units: bigint): string {
+  const negative = units < 0n;
+  const absolute = negative ? -units : units;
+  const whole = absolute / EXACT_SCALE;
+  const fraction = (absolute % EXACT_SCALE).toString().padStart(PRECISION, "0").replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+/** Exact decimal ratio for configurable rates, retaining formula precision. */
+export function exactRatio(numerator: DecimalInput, denominator: DecimalInput): string {
+  const divisor = exactUnits(denominator);
+  if (divisor === 0n) throw new DepreciationFormulaError("ratio denominator cannot be zero");
+  return exactString(divExact(exactUnits(numerator), divisor));
+}
+
+const mulExact = (a: bigint, b: bigint): bigint => roundDiv(a * b, EXACT_SCALE);
+const divExact = (a: bigint, b: bigint): bigint => b === 0n ? 0n : roundDiv(a * EXACT_SCALE, b < 0n ? -b : b) * (b < 0n ? -1n : 1n);
+
+function powExact(base: bigint, exponent: bigint): bigint {
+  if (exponent % EXACT_SCALE !== 0n) {
+    throw new DepreciationFormulaError("formula exponent must be an integer");
+  }
+  let power = exponent / EXACT_SCALE;
+  if (power > 1_000n || power < -1_000n) throw new DepreciationFormulaError("formula exponent is out of range");
+  const inverse = power < 0n;
+  if (inverse) power = -power;
+  let result = EXACT_SCALE;
+  let factor = base;
+  while (power > 0n) {
+    if (power & 1n) result = mulExact(result, factor);
+    power >>= 1n;
+    if (power > 0n) factor = mulExact(factor, factor);
+  }
+  return inverse ? divExact(EXACT_SCALE, result) : result;
+}
 
 type Tok =
-  | { k: "num"; v: number }
+  | { k: "num"; v: string }
   | { k: "id"; v: string }
   | { k: "op"; v: string };
 
 const OP_RE = /^(<=|>=|==|!=|[-+*/^~()<>,])/;
+const SCALAR_VARS = new Set(["OC", "CC", "NB", "RV", "AL", "CP", "TD", "LD", "CU", "LU", "DH", "DP", "FY", "PB"]);
+const KEYWORDS = new Set(["IF", "THEN", "ELSE", "ENDIF", "ROUND"]);
 
 function tokenize(src: string): Tok[] {
-  const toks: Tok[] = [];
+  const tokens: Tok[] = [];
   let i = 0;
   while (i < src.length) {
-    const c = src[i]!;
-    if (c === " " || c === "\t" || c === "\n" || c === "\r") {
-      i++;
+    const char = src[i]!;
+    if (/\s/.test(char)) { i++; continue; }
+    if (/[0-9.]/.test(char)) {
+      const match = /^\d*\.?\d+(?:[eE][-+]?\d+)?/.exec(src.slice(i));
+      if (!match) throw new DepreciationFormulaError(`bad number at ${i}`);
+      tokens.push({ k: "num", v: match[0] });
+      i += match[0].length;
       continue;
     }
-    if (/[0-9.]/.test(c)) {
-      const m = /^\d*\.?\d+/.exec(src.slice(i));
-      if (!m) throw new DepreciationFormulaError(`bad number at ${i}`);
-      toks.push({ k: "num", v: Number(m[0]) });
-      i += m[0].length;
+    if (/[A-Za-z]/.test(char)) {
+      const match = /^[A-Za-z][A-Za-z0-9]*/.exec(src.slice(i))!;
+      tokens.push({ k: "id", v: match[0] });
+      i += match[0].length;
       continue;
     }
-    if (/[A-Za-z]/.test(c)) {
-      const m = /^[A-Za-z][A-Za-z0-9]*/.exec(src.slice(i))!;
-      toks.push({ k: "id", v: m[0] });
-      i += m[0].length;
-      continue;
-    }
-    const om = OP_RE.exec(src.slice(i));
-    if (!om) throw new DepreciationFormulaError(`unexpected "${c}" at ${i}`);
-    toks.push({ k: "op", v: om[0] });
-    i += om[0].length;
+    const match = OP_RE.exec(src.slice(i));
+    if (!match) throw new DepreciationFormulaError(`unexpected "${char}" at ${i}`);
+    tokens.push({ k: "op", v: match[0] });
+    i += match[0].length;
   }
-  return toks;
+  return tokens;
 }
 
-// --- parser (produces an AST of closures over DepContext) -------------------
-
-type Node = (ctx: DepContext) => number;
+type Node = (context: DepContext) => bigint;
 
 function resolveVar(name: string): Node {
-  if (SCALAR_VARS.has(name)) return (ctx) => (ctx as unknown as Record<string, number>)[name] ?? 0;
-  const rm = /^R(\d+)$/.exec(name);
-  if (rm) {
-    const idx = Number(rm[1]) - 1;
-    return (ctx) => ctx.R?.[idx] ?? 0;
+  if (SCALAR_VARS.has(name)) {
+    return (context) => exactUnits((context as unknown as Record<string, DecimalInput>)[name] ?? "0");
+  }
+  const rate = /^R(\d+)$/.exec(name);
+  if (rate) {
+    const index = Number.parseInt(rate[1]!, 10) - 1;
+    return (context) => exactUnits(context.R?.[index] ?? "0");
   }
   throw new DepreciationFormulaError(`unknown variable "${name}"`);
 }
 
 class Parser {
-  private pos = 0;
-  constructor(private readonly toks: Tok[], private readonly src: string) {}
+  private position = 0;
+  constructor(private readonly tokens: Tok[], private readonly source: string) {}
 
-  private peek(): Tok | undefined {
-    return this.toks[this.pos];
+  private peek(): Tok | undefined { return this.tokens[this.position]; }
+  private next(): Tok | undefined { return this.tokens[this.position++]; }
+  private eatOp(value: string): void {
+    const token = this.next();
+    if (!token || token.k !== "op" || token.v !== value) throw new DepreciationFormulaError(`expected "${value}" in "${this.source}"`);
   }
-  private next(): Tok | undefined {
-    return this.toks[this.pos++];
+  private eatKeyword(value: string): void {
+    const token = this.next();
+    if (!token || token.k !== "id" || token.v.toUpperCase() !== value) throw new DepreciationFormulaError(`expected ${value} in "${this.source}"`);
   }
-  private eatOp(v: string): void {
-    const t = this.next();
-    if (!t || t.k !== "op" || t.v !== v) throw new DepreciationFormulaError(`expected "${v}" in "${this.src}"`);
-  }
-  private eatKw(v: string): void {
-    const t = this.next();
-    if (!t || t.k !== "id" || t.v.toUpperCase() !== v) throw new DepreciationFormulaError(`expected ${v} in "${this.src}"`);
-  }
-
   parse(): Node {
-    const n = this.expr();
-    if (this.pos !== this.toks.length) throw new DepreciationFormulaError(`trailing tokens in "${this.src}"`);
-    return n;
+    const node = this.expression();
+    if (this.position !== this.tokens.length) throw new DepreciationFormulaError(`trailing tokens in "${this.source}"`);
+    return node;
   }
-
-  private expr(): Node {
-    let l = this.add();
+  private expression(): Node {
+    let left = this.add();
     while (this.peek()?.k === "op" && this.peek()!.v === "~") {
       this.next();
-      const r = this.add();
-      const a = l, b = r;
-      l = (ctx) => Math.max(a(ctx), b(ctx));
-    }
-    return l;
-  }
-  private add(): Node {
-    let l = this.mul();
-    while (this.peek()?.k === "op" && (this.peek()!.v === "+" || this.peek()!.v === "-")) {
-      const op = this.next()!.v;
-      const r = this.mul();
-      const a = l, b = r;
-      l = op === "+" ? (ctx) => a(ctx) + b(ctx) : (ctx) => a(ctx) - b(ctx);
-    }
-    return l;
-  }
-  private mul(): Node {
-    let l = this.pow();
-    while (this.peek()?.k === "op" && (this.peek()!.v === "*" || this.peek()!.v === "/")) {
-      const op = this.next()!.v;
-      const r = this.pow();
-      const a = l, b = r;
-      l = op === "*" ? (ctx) => a(ctx) * b(ctx) : (ctx) => {
-        const d = b(ctx);
-        return d === 0 ? 0 : a(ctx) / d;
+      const right = this.add();
+      const prior = left;
+      left = (context) => {
+        const a = prior(context), b = right(context);
+        return a > b ? a : b;
       };
     }
-    return l;
+    return left;
   }
-  private pow(): Node {
-    const l = this.unary();
+  private add(): Node {
+    let left = this.multiply();
+    while (this.peek()?.k === "op" && (this.peek()!.v === "+" || this.peek()!.v === "-")) {
+      const operation = this.next()!.v;
+      const right = this.multiply();
+      const prior = left;
+      left = operation === "+" ? (context) => prior(context) + right(context) : (context) => prior(context) - right(context);
+    }
+    return left;
+  }
+  private multiply(): Node {
+    let left = this.power();
+    while (this.peek()?.k === "op" && (this.peek()!.v === "*" || this.peek()!.v === "/")) {
+      const operation = this.next()!.v;
+      const right = this.power();
+      const prior = left;
+      left = operation === "*" ? (context) => mulExact(prior(context), right(context)) : (context) => divExact(prior(context), right(context));
+    }
+    return left;
+  }
+  private power(): Node {
+    const left = this.unary();
     if (this.peek()?.k === "op" && this.peek()!.v === "^") {
       this.next();
-      const r = this.pow(); // right-assoc
-      return (ctx) => Math.pow(l(ctx), r(ctx));
+      const right = this.power();
+      return (context) => powExact(left(context), right(context));
     }
-    return l;
+    return left;
   }
   private unary(): Node {
     if (this.peek()?.k === "op" && this.peek()!.v === "-") {
       this.next();
-      const e = this.unary();
-      return (ctx) => -e(ctx);
+      const node = this.unary();
+      return (context) => -node(context);
     }
     return this.primary();
   }
   private primary(): Node {
-    const t = this.next();
-    if (!t) throw new DepreciationFormulaError(`unexpected end of "${this.src}"`);
-    if (t.k === "num") {
-      const v = t.v;
-      return () => v;
+    const token = this.next();
+    if (!token) throw new DepreciationFormulaError(`unexpected end of "${this.source}"`);
+    if (token.k === "num") {
+      const value = exactUnits(token.v);
+      return () => value;
     }
-    if (t.k === "op" && t.v === "(") {
-      const e = this.expr();
+    if (token.k === "op" && token.v === "(") {
+      const node = this.expression();
       this.eatOp(")");
-      return e;
+      return node;
     }
-    if (t.k === "id") {
-      const up = t.v.toUpperCase();
-      if (up === "IF") return this.ifExpr();
-      if (up === "ROUND") return this.roundExpr();
-      if (KEYWORDS.has(up)) throw new DepreciationFormulaError(`unexpected ${t.v} in "${this.src}"`);
-      return resolveVar(t.v);
+    if (token.k === "id") {
+      const keyword = token.v.toUpperCase();
+      if (keyword === "IF") return this.ifExpression();
+      if (keyword === "ROUND") return this.roundExpression();
+      if (KEYWORDS.has(keyword)) throw new DepreciationFormulaError(`unexpected ${token.v} in "${this.source}"`);
+      return resolveVar(token.v);
     }
-    throw new DepreciationFormulaError(`unexpected "${t.v}" in "${this.src}"`);
+    throw new DepreciationFormulaError(`unexpected "${token.v}" in "${this.source}"`);
   }
-  private ifExpr(): Node {
-    const cond = this.condition();
-    this.eatKw("THEN");
-    const thenN = this.expr();
-    this.eatKw("ELSE");
-    const elseN = this.expr();
-    this.eatKw("ENDIF");
-    return (ctx) => (cond(ctx) ? thenN(ctx) : elseN(ctx));
+  private ifExpression(): Node {
+    const condition = this.condition();
+    this.eatKeyword("THEN");
+    const whenTrue = this.expression();
+    this.eatKeyword("ELSE");
+    const whenFalse = this.expression();
+    this.eatKeyword("ENDIF");
+    return (context) => condition(context) ? whenTrue(context) : whenFalse(context);
   }
-  private roundExpr(): Node {
+  private roundExpression(): Node {
     this.eatOp("(");
-    const e = this.expr();
+    const node = this.expression();
     let digits = 2;
     if (this.peek()?.k === "op" && this.peek()!.v === ",") {
       this.next();
-      const d = this.next();
-      if (!d || d.k !== "num") throw new DepreciationFormulaError(`ROUND digits must be a number in "${this.src}"`);
-      digits = Math.trunc(d.v);
+      const token = this.next();
+      if (!token || token.k !== "num" || !/^\d+$/.test(token.v)) throw new DepreciationFormulaError(`ROUND digits must be an integer in "${this.source}"`);
+      digits = Number.parseInt(token.v, 10);
     }
     this.eatOp(")");
-    const f = Math.pow(10, digits);
-    return (ctx) => Math.round(e(ctx) * f) / f;
+    if (digits < 0 || digits > PRECISION) throw new DepreciationFormulaError(`ROUND digits must be 0 through ${PRECISION}`);
+    const quantum = 10n ** BigInt(PRECISION - digits);
+    return (context) => roundDiv(node(context), quantum) * quantum;
   }
-  private condition(): (ctx: DepContext) => boolean {
-    const l = this.expr();
-    const opTok = this.next();
-    if (!opTok || opTok.k !== "op" || !["<=", "<", "==", "!=", ">=", ">"].includes(opTok.v)) {
-      throw new DepreciationFormulaError(`expected a comparison in "${this.src}"`);
+  private condition(): (context: DepContext) => boolean {
+    const left = this.expression();
+    const operator = this.next();
+    if (!operator || operator.k !== "op" || !["<=", "<", "==", "!=", ">=", ">"].includes(operator.v)) {
+      throw new DepreciationFormulaError(`expected a comparison in "${this.source}"`);
     }
-    const r = this.expr();
-    const op = opTok.v;
-    return (ctx) => {
-      const a = l(ctx), b = r(ctx);
-      switch (op) {
+    const right = this.expression();
+    return (context) => {
+      const a = left(context), b = right(context);
+      switch (operator.v) {
         case "<=": return a <= b;
         case "<": return a < b;
         case "==": return a === b;
@@ -255,117 +292,95 @@ class Parser {
 
 const cache = new Map<string, Node>();
 
-/** Compile a formula into a reusable evaluator (cached by source). */
-export function compileFormula(src: string): (ctx: DepContext) => number {
-  const hit = cache.get(src);
-  if (hit) return hit;
-  const node = new Parser(tokenize(src), src).parse();
-  cache.set(src, node);
+function compileExactFormula(source: string): Node {
+  const cached = cache.get(source);
+  if (cached) return cached;
+  const node = new Parser(tokenize(source), source).parse();
+  cache.set(source, node);
   return node;
 }
 
-/** Evaluate a formula against a context (compiles + caches on first use). */
-export function evalDepFormula(src: string, ctx: DepContext): number {
-  return compileFormula(src)(ctx);
+/** Compile a formula into an exact decimal-string evaluator. */
+export function compileFormula(source: string): (context: DepContext) => string {
+  const exact = compileExactFormula(source);
+  return (context) => exactString(exact(context));
 }
 
-// --- formula-driven schedule -----------------------------------------------
+export function evalDepFormula(source: string, context: DepContext): string {
+  return compileFormula(source)(context);
+}
 
 export interface FormulaScheduleInput {
-  /** Acquisition cost (decimal string). */
   cost: string;
-  /** Residual / salvage value (decimal string). */
   salvage: string;
-  /** Useful life in periods (> 0). */
   lifePeriods: number;
-  /** Method expression over the DepContext variable set. */
   formula: string;
-  /** fully_depreciate: last period plugs to residual (default). retain_balance:
-   *  charge only what the formula yields (e.g. units-of-production). */
   endOfLife?: "fully_depreciate" | "retain_balance";
-  /** Per-period usage for units-of-production (CU). */
-  usage?: number[];
-  /** Lifetime usage (LU); defaults to the sum of `usage`. */
-  lifetimeUsage?: number;
-  /** Rate-table entries referenced as R1..Rn. */
-  rateTable?: number[];
-  /** Convention: fraction of the FIRST period taken (1 = full month, 0.5 =
-   *  mid-month / half-year). When < 1 the schedule extends by one period so the
-   *  deferred fraction depreciates at the end; total lifetime is unchanged. */
-  firstPeriodFraction?: number;
+  usage?: DecimalInput[];
+  lifetimeUsage?: DecimalInput;
+  rateTable?: DecimalInput[];
+  firstPeriodFraction?: DecimalInput;
 }
 
 export interface FormulaScheduleLine {
   sequence: number;
-  /** Depreciation charged this period (decimal string, 4dp, ≥ 0). */
   planned: string;
-  /** Accumulated depreciation through this period (4dp). */
   accumulated: string;
-  /** Net book value at period end = cost − accumulated (4dp). */
   netBookValue: string;
 }
 
-const round4 = (n: number) => Math.round((n + Number.EPSILON) * 10_000) / 10_000;
-const fixed4 = (n: number) => round4(n).toFixed(4);
-
-/**
- * Build a per-period depreciation plan by evaluating a formula method each
- * period. Charges are clamped to `[0, NB − residual]` so no method drives book
- * value below salvage or negative; `fully_depreciate` plugs the final period so
- * total lifetime depreciation is exactly `cost − salvage`.
- */
 export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaScheduleLine[] {
   const life = Math.max(1, Math.trunc(input.lifePeriods));
-  const cost = Number(input.cost);
-  const salvage = Number(input.salvage);
-  const depreciableBase = round4(cost - salvage);
-  if (depreciableBase <= 0) return [];
-
-  const evalFn = compileFormula(input.formula);
+  const cost = toUnits(input.cost);
+  const salvage = toUnits(input.salvage);
+  const depreciableBase = cost - salvage;
+  if (depreciableBase <= 0n) return [];
+  const evaluate = compileExactFormula(input.formula);
   const endOfLife = input.endOfLife ?? "fully_depreciate";
-  const lu = input.lifetimeUsage ?? (input.usage ? input.usage.reduce((a, b) => a + b, 0) : 0);
-
-  const fpf = input.firstPeriodFraction ?? 1;
-  // A part-period convention defers a fraction of period 1, so the schedule
-  // needs one extra period at the end to absorb it (only meaningful when the
-  // final period plugs).
-  const extend = fpf < 1 && endOfLife === "fully_depreciate" ? 1 : 0;
-  const totalPeriods = life + extend;
-
+  const lifetimeUsage = input.lifetimeUsage !== undefined
+    ? exactUnits(input.lifetimeUsage)
+    : (input.usage ?? []).reduce((total, usage) => total + exactUnits(usage), 0n);
+  const firstPeriodFraction = exactUnits(input.firstPeriodFraction ?? "1");
+  if (firstPeriodFraction < 0n || firstPeriodFraction > EXACT_SCALE) {
+    throw new DepreciationFormulaError("first-period fraction must be between zero and one");
+  }
+  const extension = firstPeriodFraction < EXACT_SCALE && endOfLife === "fully_depreciate" ? 1 : 0;
+  const totalPeriods = life + extension;
   const lines: FormulaScheduleLine[] = [];
-  let accumulated = 0;
-  let last = 0;
-  for (let cp = 1; cp <= totalPeriods; cp++) {
-    const nb = round4(cost - accumulated);
-    const remaining = round4(nb - salvage); // depreciable value left above salvage
-    let charge: number;
-    if (endOfLife === "fully_depreciate" && cp === totalPeriods) {
-      charge = remaining; // plug so the schedule totals exactly
+  let accumulated = 0n;
+  let last = 0n;
+
+  for (let currentPeriod = 1; currentPeriod <= totalPeriods; currentPeriod++) {
+    const netBookValue = cost - accumulated;
+    const remaining = netBookValue - salvage;
+    let charge: bigint;
+    if (endOfLife === "fully_depreciate" && currentPeriod === totalPeriods) {
+      charge = remaining;
     } else {
-      const ctx: DepContext = {
-        OC: cost, CC: cost, NB: nb, RV: salvage, AL: life, CP: cp,
-        TD: accumulated, LD: last, CU: input.usage?.[cp - 1] ?? 0, LU: lu,
-        DH: 1, DP: 1, FY: 12, PB: 0, R: input.rateTable,
+      const context: DepContext = {
+        OC: fromUnits(cost), CC: fromUnits(cost), NB: fromUnits(netBookValue), RV: fromUnits(salvage),
+        AL: String(life), CP: String(currentPeriod), TD: fromUnits(accumulated), LD: fromUnits(last),
+        CU: input.usage?.[currentPeriod - 1] ?? "0", LU: exactString(lifetimeUsage),
+        DH: "1", DP: "1", FY: "12", PB: "0", R: input.rateTable,
       };
-      charge = round4(evalFn(ctx));
-      if (!Number.isFinite(charge) || charge < 0) charge = 0;
-      if (cp === 1 && fpf < 1) charge = round4(charge * fpf); // convention proration
+      let evaluated = evaluate(context);
+      if (currentPeriod === 1 && firstPeriodFraction < EXACT_SCALE) evaluated = mulExact(evaluated, firstPeriodFraction);
+      charge = roundDiv(evaluated, MONEY_TO_EXACT);
+      if (charge < 0n) charge = 0n;
       if (charge > remaining) charge = remaining;
     }
-    accumulated = round4(accumulated + charge);
+    accumulated += charge;
     last = charge;
     lines.push({
-      sequence: cp - 1,
-      planned: fixed4(charge),
-      accumulated: fixed4(accumulated),
-      netBookValue: fixed4(cost - accumulated),
+      sequence: currentPeriod - 1,
+      planned: fromUnits(charge),
+      accumulated: fromUnits(accumulated),
+      netBookValue: fromUnits(cost - accumulated),
     });
   }
   return lines;
 }
 
-/** Canonical built-in methods expressed in the formula grammar. `~` gives the
- *  declining-balance→straight-line crossover so DB methods finish cleanly. */
 export const BUILTIN_FORMULAS = {
   straight_line: "(OC-RV)/AL",
   straight_line_remaining: "(NB-RV)/(AL-CP+1)",

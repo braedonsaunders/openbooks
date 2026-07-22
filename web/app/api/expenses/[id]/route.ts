@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { cmp } from '@openbooks/engine/src/money.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardPermission } from '../../../../lib/authz'
-import { computeBillTotals, taxRateMap, type BillLineInput } from '../../../../lib/bills'
+import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLineInput } from '../../../../lib/bills'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
@@ -43,7 +44,8 @@ async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise
       coalesce(d.extra_dims::text,'{}') || '~' ||
       coalesce((select string_agg(
         coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
-        coalesce(tax_code_id::text,'') || ':' || tax_amount::text || ':' ||
+        coalesce(tax_code_id::text,'') || ':' || coalesce(tax_group_id::text,'') || ':' ||
+        coalesce(tax_input_amount::text,'') || ':' || tax_amount::text || ':' ||
         coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
         coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
         '|' order by line_number)
@@ -64,7 +66,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /**
  * Autosave an expense report. Draft/approved reports edit freely (no GL yet). A
- * A posted report is editable in place while its journal entry remains a
+ * POSTED report is editable in place, source platform-style: its journal entry is a
  * derived projection re-materialized on save (regenerateGlImpactTx) — a non-GL
  * change (memo) is a no-op on the ledger; a GL change regenerates the entry's
  * lines and is blocked only if the posting period is closed.
@@ -76,8 +78,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
 
   const existing = (await db.execute(
-    sql`select status from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
-  )) as unknown as { rows: { status: string }[] }
+    sql`select status, document_date from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
+  )) as unknown as { rows: { status: string; document_date: string }[] }
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (existing.rows[0].status === 'voided') {
     return NextResponse.json({ error: 'a voided expense report cannot be edited' }, { status: 422 })
@@ -116,10 +118,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Pre-validate + prepare lines (read-only) before touching the DB, so a bad
   // line returns 422 without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
-  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; departmentId: string | null; projectId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
+  let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; departmentId: string | null; projectId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
-    const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
-    const computed = computeBillTotals(valid, await taxRateMap(user.orgId))
+    const valid = body.lines.filter((l) => l.accountId && cmp(l.amount, '0') > 0)
+    const computed = computeBillTotals(
+      valid,
+      await taxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
+    )
     totals = computed
     preparedLines = []
     for (let i = 0; i < computed.lines.length; i++) {
@@ -143,8 +148,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         description: l.description ?? null,
         amount: l.amount,
         taxCodeId: l.taxCodeId ?? null,
+        taxGroupId: l.taxGroupId ?? null,
+        taxInputAmount: l.taxInputAmount,
         taxAmount: l.taxAmount,
         taxOverridden: l.taxOverridden === true,
+        taxComponents: l.taxComponents,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
         extraDims: lineDims.cleaned,
@@ -166,14 +174,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
-          await tx.execute(sql`
+          const inserted = (await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                        quantity, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
+                                        quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
+                                        tax_amount, tax_overridden,
                                         department_id, project_id, extra_dims, custom)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
-                    '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
+                    '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount},
+                    ${l.taxAmount}, ${l.taxOverridden},
                     ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
-          `)
+            returning id
+          `)) as unknown as { rows: { id: string }[] }
+          await persistLineTaxComponents(tx, {
+            orgId: user.orgId,
+            documentLineId: inserted.rows[0]!.id,
+            components: l.taxComponents,
+            actorId: user.id,
+          })
         }
       }
 

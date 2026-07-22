@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { abs, cmp, fromUnits, toUnits } from "../money.ts";
 
 /**
  * Scenario / close harness — turns a migrated company into a verifiable golden
@@ -201,11 +201,14 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
     const diff = toUnits(r.gl) - toUnits(r.subledger) - toUnits(r.direct);
     return { account: r.account, number: r.number, kind: r.kind, gl: r.gl, subledger: r.subledger, direct: r.direct, diff: fromUnits(diff) };
   });
-  const worstTie = controlTieOut.reduce((m, r) => Math.max(m, Math.abs(Number(r.diff))), 0);
+  const worstTie = controlTieOut.reduce(
+    (worst, row) => cmp(abs(row.diff), worst) > 0 ? abs(row.diff) : worst,
+    "0.0000",
+  );
   checks.push({
     name: "subledger-gl-tieout",
-    ok: worstTie < 0.01,
-    detail: `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie.toFixed(2)}`,
+    ok: cmp(worstTie, "0.0100") < 0,
+    detail: `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie}`,
   });
 
   // -- Report-latency benchmark (the inception-to-cutoff aggregation hot path) -

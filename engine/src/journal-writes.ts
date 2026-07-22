@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
+import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
 import { postDocument } from "./posting.ts";
 
 /**
@@ -50,11 +51,6 @@ const MAX_LINES = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Round to the ledger's 4dp and return a fixed string (numeric(19,4)). */
-function amt4(n: number): string {
-  return (Math.round(n * 10_000) / 10_000).toFixed(4);
-}
-
 /**
  * Pure validation + normalization — exported separately so it unit-tests
  * without a database. Throws JournalWriteError with a script-readable message.
@@ -74,35 +70,41 @@ export function validateJournalInput(input: ScriptJournalInput): {
   const documentDate = input.documentDate ?? new Date().toISOString().slice(0, 10);
   if (!DATE_RE.test(documentDate)) throw new JournalWriteError(`invalid documentDate "${input.documentDate}" (use YYYY-MM-DD)`);
 
-  let balance = 0;
-  let debits = 0;
+  const amounts: string[] = [];
+  const debits: string[] = [];
   const lines = input.lines.map((l, i) => {
-    const n = Number(l.amount);
-    if (!Number.isFinite(n) || n === 0) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
-    if (Math.abs(n) > 1e13) throw new JournalWriteError(`line ${i + 1}: amount out of range`);
+    let amount: string;
+    try {
+      amount = normalizeMoney(l.amount);
+    } catch {
+      throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number with at most 4 decimal places`);
+    }
+    if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
+    if (cmp(abs(amount), "10000000000000.0000") > 0) throw new JournalWriteError(`line ${i + 1}: amount out of range`);
     if (!l.accountId && !l.accountCode) throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
     if (l.accountId && !UUID_RE.test(l.accountId)) throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
-    balance += n;
-    if (n > 0) debits += n;
+    amounts.push(amount);
+    if (cmp(amount, "0") > 0) debits.push(amount);
     return {
       accountId: l.accountId,
       accountCode: l.accountCode ? String(l.accountCode) : undefined,
-      amount: amt4(n),
+      amount,
       description: l.description ? String(l.description).slice(0, 500) : null,
       departmentId: l.departmentId && UUID_RE.test(l.departmentId) ? l.departmentId : null,
       projectId: l.projectId && UUID_RE.test(l.projectId) ? l.projectId : null,
     };
   });
   // Balanced to the 4dp the ledger stores.
-  if (Math.abs(Math.round(balance * 10_000)) > 0) {
-    throw new JournalWriteError(`journal is not balanced (debits − credits = ${amt4(balance)})`);
+  const balance = sum(amounts);
+  if (!isZero(balance)) {
+    throw new JournalWriteError(`journal is not balanced (debits − credits = ${balance})`);
   }
   return {
     documentDate,
     memo: input.memo ? String(input.memo).slice(0, 2000) : null,
     referenceNumber: input.referenceNumber ? String(input.referenceNumber).slice(0, 100) : null,
     lines,
-    totalDebits: amt4(debits),
+    totalDebits: sum(debits),
   };
 }
 

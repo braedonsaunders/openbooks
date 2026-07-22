@@ -13,6 +13,7 @@ type Runner = Pick<typeof db, "execute">;
 export interface TransactionAuditSnapshot {
   document: Record<string, unknown>;
   lines: Record<string, unknown>[];
+  taxComponents: Record<string, unknown>[];
   glImpact: {
     entry: Record<string, unknown>;
     lines: Record<string, unknown>[];
@@ -38,6 +39,12 @@ export async function captureTransactionAuditSnapshot(
       'lines', coalesce((
         select jsonb_agg(to_jsonb(dl) order by dl.line_number, dl.id)
           from document_lines dl
+         where dl.document_id = d.id
+      ), '[]'::jsonb),
+      'taxComponents', coalesce((
+        select jsonb_agg(to_jsonb(tc) order by dl.line_number, tc.sequence, tc.id)
+          from document_lines dl
+          join document_line_tax_components tc on tc.document_line_id = dl.id
          where dl.document_id = d.id
       ), '[]'::jsonb),
       'glImpact', case when e.id is null then null else jsonb_build_object(

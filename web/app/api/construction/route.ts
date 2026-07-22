@@ -9,6 +9,7 @@ import {
 } from "@openbooks/engine/src/construction-billing.ts";
 import { requirePermission } from "../../../lib/authz";
 import { projectCostSummary } from "../../../lib/project-costing";
+import { sum } from "@openbooks/engine/src/money.ts";
 
 export const runtime = "nodejs";
 
@@ -59,14 +60,14 @@ export async function GET(req: Request) {
     projectCostSummary(orgId, projectId).catch(() => null),
   ]);
 
-  const contractSum = sov.rows.reduce((a: number, l: any) => a + Number(l.scheduledValue ?? 0), 0);
+  const contractSum = sum(sov.rows.map((line: any) => String(line.scheduledValue ?? "0")));
   return NextResponse.json({
     sovLines: sov.rows,
     changeOrders: cos.rows,
     payApplications: apps.rows,
-    contractSum: contractSum.toFixed(4),
+    contractSum,
     retainageHeld: String(held.rows[0]?.held ?? "0"),
-    committedCost: committed?.committed?.cost ?? 0,
+    committedCost: committed?.committed?.cost ?? "0.0000",
     retainageConfigured: Boolean(retainageAccountId),
   });
 }

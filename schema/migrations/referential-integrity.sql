@@ -24,6 +24,15 @@ alter table applications
   add foreign key (from_line_id) references journal_lines(id),
   add foreign key (to_line_id) references journal_lines(id),
   add foreign key (fx_gain_loss_entry_id) references journal_entries(id);
+alter table document_line_tax_components
+  add foreign key (org_id) references orgs(id) on delete cascade,
+  add foreign key (document_line_id) references document_lines(id) on delete cascade,
+  add foreign key (tax_code_id) references tax_codes(id),
+  add foreign key (collected_account_id) references accounts(id),
+  add foreign key (paid_account_id) references accounts(id),
+  add foreign key (withholding_account_id) references accounts(id),
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
 create index if not exists doc_lines_billed_by on document_lines (billed_by_line_id);
 create index if not exists doc_lines_time_entry on document_lines (time_entry_id);
 create index if not exists assets_source_document_line on fixed_assets (source_document_line_id);
@@ -84,7 +93,7 @@ alter table payment_cards
   add foreign key (holder_party_id) references parties(id),
   add foreign key (liability_account_id) references accounts(id);
 
--- external connections and desktop connector bridge
+-- external connections and source platform Desktop Web Connector bridge
 alter table connections
   add foreign key (org_id) references orgs(id) on delete cascade;
 alter table sync_runs
@@ -132,9 +141,22 @@ alter table party_bank_accounts add foreign key (party_id) references parties(id
 
 -- tax
 alter table tax_rates add foreign key (tax_code_id) references tax_codes(id);
+alter table tax_jurisdictions
+  add foreign key (org_id) references orgs(id),
+  add foreign key (parent_id) references tax_jurisdictions(id),
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
+alter table tax_registrations
+  add foreign key (org_id) references orgs(id),
+  add foreign key (jurisdiction_id) references tax_jurisdictions(id),
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
 alter table tax_codes
   add foreign key (collected_account_id) references accounts(id),
-  add foreign key (paid_account_id) references accounts(id);
+  add foreign key (paid_account_id) references accounts(id),
+  add foreign key (withholding_account_id) references accounts(id),
+  add foreign key (jurisdiction_id) references tax_jurisdictions(id);
+alter table tax_return_forms add foreign key (jurisdiction_id) references tax_jurisdictions(id);
 alter table tax_group_members
   add foreign key (tax_group_id) references tax_groups(id),
   add foreign key (tax_code_id) references tax_codes(id);
@@ -148,6 +170,14 @@ alter table tax_pool_periods
   add foreign key (org_id) references orgs(id),
   add foreign key (pool_id) references tax_depreciation_pools(id);
 alter table tax_first_year_rules add foreign key (org_id) references orgs(id);
+alter table tax_regimes
+  add foreign key (org_id) references orgs(id),
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
+alter table tax_pool_classes
+  add foreign key (org_id) references orgs(id),
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
 alter table depreciation_methods add foreign key (org_id) references orgs(id);
 alter table depreciation_book_policies
   add foreign key (org_id) references orgs(id),
@@ -169,6 +199,7 @@ alter table document_lines
   add foreign key (item_id) references items(id),
   add foreign key (account_id) references accounts(id),
   add foreign key (tax_code_id) references tax_codes(id),
+  add foreign key (tax_group_id) references tax_groups(id),
   add foreign key (party_id) references parties(id),
   add foreign key (employee_id) references parties(id),
   add foreign key (time_entry_id) references time_entries(id),
@@ -471,7 +502,7 @@ alter table insight_cards add foreign key (org_id) references orgs(id);
 alter table insight_dashboards add foreign key (org_id) references orgs(id);
 alter table insight_dashboard_pins add foreign key (org_id) references orgs(id), add foreign key (user_id) references users(id) on delete cascade, add foreign key (dashboard_id) references insight_dashboards(id) on delete cascade;
 
--- reusable views in the Knowledge menu
+-- views (source platform Saved Search analogue — Knowledge menu)
 alter table saved_views add foreign key (org_id) references orgs(id);
 alter table saved_views add foreign key (owner_id) references users(id) on delete cascade;
 alter table saved_views add foreign key (created_by) references users(id);

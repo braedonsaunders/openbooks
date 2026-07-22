@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, mulDecimal, toUnits } from "../money.ts";
 import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
 
 /**
@@ -87,7 +87,7 @@ export function buildNativeFromXero(
   if (!POSTED.has(status)) return { skip: `status=${status}` };
 
   const rate = t.CurrencyRate && t.CurrencyRate > 0 ? t.CurrencyRate : 1;
-  const home = (v: number | undefined): bigint => toUnits(((v ?? 0) * rate).toFixed(2));
+  const home = (v: number | undefined): bigint => toUnits(mulDecimal(String(v ?? 0), String(rate)));
   const byCode = (code?: string): string | null =>
     code ? ctx.accountByRef.get(opts.accountIdByCode.get(code) ?? "")?.id ?? null : null;
   const byId = (id?: string): string | null => (id ? ctx.accountByRef.get(id)?.id ?? null : null);

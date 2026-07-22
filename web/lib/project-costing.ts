@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 
 /**
  * Job-costing rollup for a single project — the heart of project accounting.
@@ -18,8 +19,7 @@ import { db } from '@openbooks/engine/src/db.ts'
  *   • Breakdown   — actual cost by GL account and by coarse category, plus the
  *                   source documents tagged to the job.
  *
- * All money is returned as JS numbers (dollars) — fine for display; the ledger
- * itself stays numeric(19,4).
+ * All money remains canonical decimal strings through every calculation.
  */
 
 // GL account types (see accounts.type) that count as job COST vs REVENUE.
@@ -30,14 +30,14 @@ const COST_SET = sql`(${sql.join(COST_TYPES.map((t) => sql`${t}`), sql`, `)})`
 const REVENUE_SET = sql`(${sql.join(REVENUE_TYPES.map((t) => sql`${t}`), sql`, `)})`
 
 export interface ProjectCostSummary {
-  budget: { cost: number; contractValue: number }
-  actual: { cost: number; revenue: number; margin: number }
-  committed: { cost: number; revenue: number }
+  budget: { cost: string; contractValue: string }
+  actual: { cost: string; revenue: string; margin: string }
+  committed: { cost: string; revenue: string }
   /** Budget vs (actual + committed). */
-  forecast: { projectedCost: number; remainingBudget: number; percentSpent: number | null }
-  costByAccount: { accountId: string; number: string | null; name: string; type: string; amount: number }[]
+  forecast: { projectedCost: string; remainingBudget: string; percentSpent: number | null }
+  costByAccount: { accountId: string; number: string | null; name: string; type: string; amount: string }[]
   /** `category` is a stable code ('cogs' | 'operating_expense') — render sites translate it. */
-  costByCategory: { category: string; amount: number }[]
+  costByCategory: { category: string; amount: string }[]
   documents: {
     id: string
     kind: string
@@ -45,17 +45,18 @@ export interface ProjectCostSummary {
     documentDate: string
     status: string
     partyName: string | null
-    amount: number
+    amount: string
   }[]
 }
 
+const m = (v: unknown) => normalizeMoney(v == null ? '0' : String(v))
 const n = (v: unknown) => (v == null ? 0 : Number(v))
 
 export async function projectCostSummary(orgId: string, projectId: string): Promise<ProjectCostSummary> {
   const [proj, actualRows, committedRows, byAccountRows, docRows] = await Promise.all([
     // project custom (contract value) + task cost budget
     db.execute(sql`
-      select coalesce((p.custom->>'contractValue')::numeric, 0) as contract_value,
+      select coalesce(p.contract_value, 0) as contract_value,
              coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id), 0) as cost_budget
         from projects p where p.id = ${projectId} and p.org_id = ${orgId}
     `) as any,
@@ -112,36 +113,39 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
 
 function assembleSummary(proj: any, actualRows: any, committedRows: any, byAccountRows: any, docRows: any): ProjectCostSummary {
   const p = proj.rows[0] ?? { contract_value: 0, cost_budget: 0 }
-  const contractValue = n(p.contract_value)
-  const costBudget = n(p.cost_budget)
-  const cost = n(actualRows.rows[0]?.cost)
-  const revenue = n(actualRows.rows[0]?.revenue)
-  const committedCost = n(committedRows.rows[0]?.committed_cost)
-  const committedRevenue = n(committedRows.rows[0]?.committed_revenue)
+  const contractValue = m(p.contract_value)
+  const costBudget = m(p.cost_budget)
+  const cost = m(actualRows.rows[0]?.cost)
+  const revenue = m(actualRows.rows[0]?.revenue)
+  const committedCost = m(committedRows.rows[0]?.committed_cost)
+  const committedRevenue = m(committedRows.rows[0]?.committed_revenue)
 
   const costByAccount = (byAccountRows.rows as any[]).map((r) => ({
     accountId: r.account_id,
     number: r.number,
     name: r.name,
     type: r.type,
-    amount: n(r.amount),
+    amount: m(r.amount),
   }))
-  const catMap = new Map<string, number>()
+  const catMap = new Map<string, string>()
   for (const r of costByAccount) {
     const cat = r.type === 'cogs' ? 'cogs' : 'operating_expense'
-    catMap.set(cat, (catMap.get(cat) ?? 0) + r.amount)
+    catMap.set(cat, add(catMap.get(cat) ?? '0', r.amount))
   }
   const costByCategory = [...catMap.entries()].map(([category, amount]) => ({ category, amount }))
 
-  const projectedCost = cost + committedCost
+  const projectedCost = add(cost, committedCost)
+  const costBudgetUnits = toUnits(costBudget)
   return {
     budget: { cost: costBudget, contractValue },
-    actual: { cost, revenue, margin: revenue - cost },
+    actual: { cost, revenue, margin: add(revenue, neg(cost)) },
     committed: { cost: committedCost, revenue: committedRevenue },
     forecast: {
       projectedCost,
-      remainingBudget: costBudget - projectedCost,
-      percentSpent: costBudget > 0 ? projectedCost / costBudget : null,
+      remainingBudget: add(costBudget, neg(projectedCost)),
+      percentSpent: costBudgetUnits > 0n
+        ? Number(fromUnits((toUnits(projectedCost) * 10_000n) / costBudgetUnits))
+        : null,
     },
     costByAccount,
     costByCategory,
@@ -152,7 +156,7 @@ function assembleSummary(proj: any, actualRows: any, committedRows: any, byAccou
       documentDate: r.document_date,
       status: r.status,
       partyName: r.party_name,
-      amount: n(r.amount),
+      amount: m(r.amount),
     })),
   }
 }
@@ -166,14 +170,14 @@ export interface ProjectTimeRow {
   label: string
   hours: number
   billableHours: number
-  cost: number
-  bill: number
+  cost: string
+  bill: string
 }
 
 export interface ProjectTimeSummary {
   byTask: ProjectTimeRow[]
   byEmployee: ProjectTimeRow[]
-  totals: { hours: number; billableHours: number; cost: number; bill: number }
+  totals: { hours: number; billableHours: number; cost: string; bill: string }
 }
 
 /**
@@ -223,14 +227,14 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
     label: r.label || '',
     hours: n(r.hours),
     billableHours: n(r.billable_hours),
-    cost: n(r.cost),
-    bill: n(r.bill),
+    cost: m(r.cost),
+    bill: m(r.bill),
   })
   const tot = totalRow.rows[0] ?? {}
   return {
     byTask: (byTaskRows.rows as any[]).map(row),
     byEmployee: (byEmpRows.rows as any[]).map(row),
-    totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: n(tot.cost), bill: n(tot.bill) },
+    totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: m(tot.cost), bill: m(tot.bill) },
   }
 }
 
@@ -240,9 +244,9 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
 
 export interface ProjectUnbilled {
   /** Billable value of work performed but not yet invoiced (bill rate / markup). */
-  revenue: number
+  revenue: string
   /** Cost basis of that unbilled work. */
-  cost: number
+  cost: string
   hours: number
   timeEntryCount: number
   costLineCount: number
@@ -300,8 +304,8 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
   const tr = timeRow.rows[0] ?? {}
   const lr = lineRow.rows[0] ?? {}
   return {
-    revenue: n(tr.revenue) + n(lr.revenue),
-    cost: n(tr.cost) + n(lr.cost),
+    revenue: add(m(tr.revenue), m(lr.revenue)),
+    cost: add(m(tr.cost), m(lr.cost)),
     hours: n(tr.hours),
     timeEntryCount: Number(tr.cnt ?? 0),
     costLineCount: Number(lr.cnt ?? 0),

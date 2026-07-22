@@ -10,15 +10,20 @@ create or replace function jl_check_balanced() returns trigger
 language plpgsql as $$
 declare
   v_entry uuid;
+  v_old_entry uuid;
   v_sum numeric(19,4);
 begin
-  v_entry := coalesce(new.entry_id, old.entry_id);
-  select coalesce(sum(amount), 0) into v_sum
-    from journal_lines where entry_id = v_entry;
-  if v_sum <> 0 then
-    raise exception 'journal entry % does not balance (sum = %)', v_entry, v_sum
-      using errcode = '23514';
-  end if;
+  v_entry := case when tg_op = 'DELETE' then old.entry_id else new.entry_id end;
+  v_old_entry := case when tg_op = 'UPDATE' then old.entry_id else null end;
+  foreach v_entry in array array[v_entry, v_old_entry] loop
+    if v_entry is null then continue; end if;
+    select coalesce(sum(amount), 0) into v_sum
+      from journal_lines where entry_id = v_entry;
+    if v_sum <> 0 then
+      raise exception 'journal entry % does not balance (sum = %)', v_entry, v_sum
+        using errcode = '23514';
+    end if;
+  end loop;
   return null;
 end $$;
 
@@ -26,6 +31,69 @@ create constraint trigger jl_balanced
   after insert or update or delete on journal_lines
   deferrable initially deferred
   for each row execute function jl_check_balanced();
+
+-- A line trigger alone is insufficient: a defective write path could build an
+-- unbalanced draft, satisfy/defer the line events, and later flip only the
+-- entry header to posted. Independently re-prove both whole-entry and legal-
+-- entity balance on every transition that ends in POSTED status.
+create or replace function je_check_posted_balance() returns trigger
+language plpgsql as $$
+declare
+  v_sum numeric(19,4);
+  v_bad record;
+begin
+  if new.status <> 'posted' then return null; end if;
+  select coalesce(sum(amount), 0) into v_sum
+    from journal_lines where entry_id = new.id;
+  if v_sum <> 0 then
+    raise exception 'posted journal entry % does not balance (sum = %)', new.id, v_sum
+      using errcode = '23514';
+  end if;
+  select subsidiary_id, sum(amount) as total into v_bad
+    from journal_lines where entry_id = new.id
+   group by subsidiary_id having sum(amount) <> 0 limit 1;
+  if found then
+    raise exception 'posted journal entry % does not balance for subsidiary % (sum = %)',
+      new.id, v_bad.subsidiary_id, v_bad.total using errcode = '23514';
+  end if;
+  if (select count(*) from journal_lines where entry_id = new.id) < 2 then
+    raise exception 'posted journal entry % must contain at least two lines', new.id
+      using errcode = '23514';
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists je_posted_balanced on journal_entries;
+create constraint trigger je_posted_balanced
+  after insert or update of status on journal_entries
+  deferrable initially deferred
+  for each row execute function je_check_posted_balance();
+
+-- The baseline defines the per-subsidiary constraint trigger. Replace its
+-- function here so an UPDATE that reassigns a line validates BOTH the old and
+-- new entries, exactly like the whole-entry trigger above.
+create or replace function jl_check_balanced_by_subsidiary() returns trigger
+language plpgsql as $$
+declare
+  v_entry uuid;
+  v_new_entry uuid;
+  v_old_entry uuid;
+  v_bad record;
+begin
+  v_new_entry := case when tg_op = 'DELETE' then null else new.entry_id end;
+  v_old_entry := case when tg_op in ('UPDATE', 'DELETE') then old.entry_id else null end;
+  foreach v_entry in array array[v_new_entry, v_old_entry] loop
+    if v_entry is null then continue; end if;
+    select subsidiary_id, sum(amount) as total into v_bad
+      from journal_lines where entry_id = v_entry
+     group by subsidiary_id having sum(amount) <> 0 limit 1;
+    if found then
+      raise exception 'journal entry % does not balance for subsidiary % (sum = %)',
+        v_entry, v_bad.subsidiary_id, v_bad.total using errcode = '23514';
+    end if;
+  end loop;
+  return null;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- 2. Posted entries are locked by default; posting requires an open period.
@@ -90,6 +158,7 @@ create or replace function je_guard() returns trigger
 language plpgsql as $$
 begin
   if tg_op = 'DELETE' then
+    if openbooks_sandbox_wipe_allowed(old.org_id) then return old; end if;
     -- Deleting a transaction removes its journal entry too. That is the one
     -- legitimate removal of a posted entry, done by the engine's guarded
     -- delete under the 'openbooks.amend' flag (after it has proven the delete
@@ -153,6 +222,9 @@ declare
   v_period uuid;
   v_book uuid;
 begin
+  if tg_op = 'DELETE' and openbooks_sandbox_wipe_allowed(old.org_id) then
+    return old;
+  end if;
   select status, org_id, period_id, book_id into v_status, v_org, v_period, v_book from journal_entries
     where id = coalesce(new.entry_id, old.entry_id);
   if v_status is distinct from 'draft' then
@@ -228,7 +300,7 @@ create trigger tax_filing_immutable before update or delete on tax_filings
 
 -- ---------------------------------------------------------------------------
 -- 3. Lines post only to active, postable (non-summary) accounts.
---    Source imports may contain parent-account postings; openbooks refuses them.
+--    source platform allows posting to parent accounts; openbooks refuses.
 -- ---------------------------------------------------------------------------
 create or replace function jl_check_account() returns trigger
 language plpgsql as $$
@@ -299,29 +371,90 @@ alter table journal_lines add constraint jl_fx_consistent
 -- ---------------------------------------------------------------------------
 -- 5. Applications never exceed the open item, on either side.
 -- ---------------------------------------------------------------------------
+create or replace function app_validate_endpoints() returns trigger
+language plpgsql as $$
+declare
+  v_from journal_lines%rowtype;
+  v_to journal_lines%rowtype;
+  v_status_count integer;
+begin
+  -- Deterministic row locks serialize competing applications to either line.
+  perform id from journal_lines
+   where id in (new.from_line_id, new.to_line_id)
+   order by id for update;
+  select * into v_from from journal_lines where id = new.from_line_id;
+  select * into v_to from journal_lines where id = new.to_line_id;
+  if v_from.id is null or v_to.id is null or v_from.id = v_to.id then
+    raise exception 'application endpoints must be two distinct journal lines' using errcode = '23514';
+  end if;
+  if v_from.org_id <> new.org_id or v_to.org_id <> new.org_id
+     or v_from.org_id <> v_to.org_id then
+    raise exception 'application endpoints must belong to the application tenant' using errcode = '23514';
+  end if;
+  if not v_from.is_open_item or not v_to.is_open_item then
+    raise exception 'applications require open-item journal lines' using errcode = '23514';
+  end if;
+  if v_from.account_id <> v_to.account_id
+     or v_from.party_id is distinct from v_to.party_id
+     or v_from.subsidiary_id <> v_to.subsidiary_id then
+    raise exception 'application endpoints must share account, party, and subsidiary' using errcode = '23514';
+  end if;
+  if sign(v_from.amount) = sign(v_to.amount) then
+    raise exception 'application endpoints must have opposite debit/credit signs' using errcode = '23514';
+  end if;
+  if v_from.currency <> new.transaction_currency or v_to.currency <> new.transaction_currency then
+    raise exception 'application transaction currency must match both journal lines' using errcode = '23514';
+  end if;
+  select count(*) into v_status_count from journal_entries
+   where id in (v_from.entry_id, v_to.entry_id) and status = 'posted';
+  if v_status_count <> 2 then
+    raise exception 'applications may only connect posted journal entries' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists app_validate_endpoints on applications;
+create trigger app_validate_endpoints before insert or update on applications
+  for each row execute function app_validate_endpoints();
+
 create or replace function app_check_open() returns trigger
 language plpgsql as $$
 declare
   v_line numeric(19,4);
   v_applied numeric(19,4);
+  v_transaction numeric(19,4);
 begin
+  if new.unapplied_at is not null then return new; end if;
   -- target side: total applied to the open item <= |line amount|
   select abs(amount) into v_line from journal_lines where id = new.to_line_id;
   select coalesce(sum(amount), 0) into v_applied
     from applications
    where to_line_id = new.to_line_id and unapplied_at is null and id <> new.id;
-  if v_applied + new.amount > v_line + 0.005 then
+  if v_applied + new.amount > v_line then
     raise exception 'application exceeds open amount on target line % (% applied of %)',
       new.to_line_id, v_applied + new.amount, v_line;
   end if;
 
-  -- source side: a credit can't be applied beyond its own magnitude
+  select abs(txn_amount) into v_line from journal_lines where id = new.to_line_id;
+  select coalesce(sum(transaction_amount), 0) into v_transaction from applications
+   where to_line_id = new.to_line_id and unapplied_at is null and id <> new.id;
+  if v_transaction + new.transaction_amount > v_line then
+    raise exception 'application exceeds transaction amount on target line %', new.to_line_id using errcode = '23514';
+  end if;
+
+  -- source side uses its independently recorded carrying amount.
   select abs(amount) into v_line from journal_lines where id = new.from_line_id;
-  select coalesce(sum(amount), 0) into v_applied
+  select coalesce(sum(source_amount), 0) into v_applied
     from applications
    where from_line_id = new.from_line_id and unapplied_at is null and id <> new.id;
-  if v_applied + new.amount > v_line + 0.005 then
-    raise exception 'application exceeds available amount on source line %', new.from_line_id;
+  if v_applied + new.source_amount > v_line then
+    raise exception 'application exceeds available amount on source line %', new.from_line_id using errcode = '23514';
+  end if;
+  select abs(txn_amount) into v_line from journal_lines where id = new.from_line_id;
+  select coalesce(sum(transaction_amount), 0) into v_transaction from applications
+   where from_line_id = new.from_line_id and unapplied_at is null and id <> new.id;
+  if v_transaction + new.transaction_amount > v_line then
+    raise exception 'application exceeds transaction amount on source line %', new.from_line_id using errcode = '23514';
   end if;
   return new;
 end $$;
@@ -330,6 +463,56 @@ create constraint trigger app_check_open
   after insert or update on applications
   deferrable initially deferred
   for each row execute function app_check_open();
+
+create or replace function application_evidence_guard() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'DELETE' then
+    if openbooks_sandbox_wipe_allowed(old.org_id) then return old; end if;
+    raise exception 'application evidence is immutable; unapply it instead';
+  end if;
+  if new.org_id is distinct from old.org_id
+     or new.from_line_id is distinct from old.from_line_id
+     or new.to_line_id is distinct from old.to_line_id
+     or new.amount is distinct from old.amount
+     or new.source_amount is distinct from old.source_amount
+     or new.transaction_amount is distinct from old.transaction_amount
+     or new.transaction_currency is distinct from old.transaction_currency
+     or new.applied_on is distinct from old.applied_on
+     or new.fx_gain_loss_entry_id is distinct from old.fx_gain_loss_entry_id
+     or old.unapplied_at is not null
+     or new.unapplied_at is null then
+    raise exception 'application evidence is immutable; only a one-time unapply is allowed';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists application_evidence_guard on applications;
+create trigger application_evidence_guard before update or delete on applications
+  for each row execute function application_evidence_guard();
+
+-- Tax component rows are the immutable explanation of a posted line's tax.
+create or replace function document_line_tax_component_guard() returns trigger
+language plpgsql as $$
+declare v_status text;
+declare v_org uuid;
+begin
+  v_org := case when tg_op = 'DELETE' then old.org_id else new.org_id end;
+  if tg_op = 'DELETE' and openbooks_sandbox_wipe_allowed(v_org) then return old; end if;
+  select d.status into v_status
+    from documents d join document_lines dl on dl.document_id = d.id
+   where dl.id = case when tg_op = 'DELETE' then old.document_line_id else new.document_line_id end;
+  if v_status <> 'draft'
+     and coalesce(current_setting('openbooks.amend', true), 'off') <> 'on' then
+    raise exception 'posted tax calculation evidence is immutable';
+  end if;
+  return coalesce(new, old);
+end $$;
+
+drop trigger if exists document_line_tax_component_guard on document_line_tax_components;
+create trigger document_line_tax_component_guard
+  before insert or update or delete on document_line_tax_components
+  for each row execute function document_line_tax_component_guard();
 
 -- Application changes normally refresh denormalized document open balances.
 -- A sandbox wipe removes both sides, so the private, sandbox-verified lifecycle

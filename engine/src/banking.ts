@@ -466,7 +466,7 @@ function baiAmount(cents: string): string {
   const neg = cents.startsWith("-");
   const digits = cents.replace(/[^0-9]/g, "");
   if (!digits) throw new BankingError(`BAI2: unparseable amount "${cents}"`);
-  return fromUnits((neg ? -1n : 1n) * toUnits((Number(digits) / 100).toString()));
+  return fromUnits((neg ? -1n : 1n) * BigInt(digits) * 100n);
 }
 
 /**

@@ -146,6 +146,12 @@ const APPLIES_TO = [
   { value: 'both', labelKey: 'options.appliesTo.both' },
 ]
 
+const TAX_CALCULATION_TYPES = [
+  { value: 'standard', labelKey: 'options.taxCalculationType.standard' },
+  { value: 'withholding', labelKey: 'options.taxCalculationType.withholding' },
+  { value: 'reverse_charge', labelKey: 'options.taxCalculationType.reverseCharge' },
+]
+
 // Values match the tax_report_lines.basis enum (schema/src/tax.ts) and the tax
 // return engine: tax_amount sums the tax collected/paid, taxable_base sums the
 // base the tax applied to.
@@ -173,6 +179,42 @@ const GOVERNMENT_FORMATS = [
 const TAX_SIGN = [
   { value: '1', labelKey: 'options.sign.positive' },
   { value: '-1', labelKey: 'options.sign.negative' },
+]
+
+// Values match the tax_jurisdictions.level / tax_type enums (schema/src/tax.ts).
+const JURISDICTION_LEVELS = [
+  { value: 'country', labelKey: 'options.jurisdictionLevel.country' },
+  { value: 'state', labelKey: 'options.jurisdictionLevel.state' },
+  { value: 'county', labelKey: 'options.jurisdictionLevel.county' },
+  { value: 'city', labelKey: 'options.jurisdictionLevel.city' },
+  { value: 'special', labelKey: 'options.jurisdictionLevel.special' },
+  { value: 'federal', labelKey: 'options.jurisdictionLevel.federal' },
+]
+
+const TAX_TYPES = [
+  { value: 'vat', labelKey: 'options.taxType.vat' },
+  { value: 'gst', labelKey: 'options.taxType.gst' },
+  { value: 'hst', labelKey: 'options.taxType.hst' },
+  { value: 'pst', labelKey: 'options.taxType.pst' },
+  { value: 'qst', labelKey: 'options.taxType.qst' },
+  { value: 'sales_use', labelKey: 'options.taxType.salesUse' },
+  { value: 'consumption', labelKey: 'options.taxType.consumption' },
+  { value: 'other', labelKey: 'options.taxType.other' },
+]
+
+// Values match the tax_registrations.filing_frequency enum (schema/src/tax.ts).
+const FILING_FREQUENCIES = [
+  { value: 'monthly', labelKey: 'options.filingFrequency.monthly' },
+  { value: 'bimonthly', labelKey: 'options.filingFrequency.bimonthly' },
+  { value: 'quarterly', labelKey: 'options.filingFrequency.quarterly' },
+  { value: 'semiannual', labelKey: 'options.filingFrequency.semiannual' },
+  { value: 'annual', labelKey: 'options.filingFrequency.annual' },
+]
+
+// Values match the tax_pool_classes.method enum (schema/src/tax-pools.ts).
+const POOL_METHODS = [
+  { value: 'declining', labelKey: 'options.poolMethod.declining' },
+  { value: 'straight_line', labelKey: 'options.poolMethod.straightLine' },
 ]
 
 const DEPRECIATION_METHODS = [
@@ -208,7 +250,7 @@ const CONSOLIDATED_RATE_SOURCES = [
   { value: 'manual', labelKey: 'options.rateSource.manual' },
 ]
 
-// Revenue recognition methods governed by ASC 606 and IFRS 15.
+// Revenue recognition (ASC 606 / IFRS 15) — mirrors source platform ARM rule methods.
 const RECOGNITION_METHODS = [
   { value: 'point_in_time', labelKey: 'options.recognitionMethod.pointInTime' },
   { value: 'straight_line_even', labelKey: 'options.recognitionMethod.straightLineEven' },
@@ -347,6 +389,63 @@ export const SETUP_ENTITIES: SetupEntity[] = [
 
   // --- Taxes ---------------------------------------------------------------
   {
+    key: 'tax-jurisdictions',
+    table: 'tax_jurisdictions',
+    singularTitleKey: 'entities.tax-jurisdictions.singularTitle',
+    actorCols: true,
+    groupKey: 'taxes',
+    iconKey: 'map-pin',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    docSlug: 'tax-configuration',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'country', kind: 'text' },
+      { key: 'level', kind: 'text' },
+      { key: 'taxType', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'country', kind: 'country', required: true },
+      { key: 'region', kind: 'text' },
+      { key: 'level', kind: 'select', options: JURISDICTION_LEVELS, keepDefault: true },
+      { key: 'taxType', kind: 'select', options: TAX_TYPES, keepDefault: true },
+      { key: 'parentId', kind: 'ref', ref: 'tax-jurisdictions' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'tax-registrations',
+    table: 'tax_registrations',
+    singularTitleKey: 'entities.tax-registrations.singularTitle',
+    actorCols: true,
+    groupKey: 'taxes',
+    iconKey: 'badge-check',
+    orgScoped: true,
+    hasActive: true,
+    docSlug: 'tax-configuration',
+    columns: [
+      { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions' },
+      { key: 'registrationNumber', kind: 'text' },
+      { key: 'filingFrequency', kind: 'text' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions', required: true },
+      { key: 'registrationNumber', kind: 'text' },
+      { key: 'filingFrequency', kind: 'select', options: FILING_FREQUENCIES, keepDefault: true },
+      { key: 'returnFormCode', kind: 'text' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
     key: 'tax-codes',
     table: 'tax_codes',
     singularTitleKey: 'entities.tax-codes.singularTitle',
@@ -361,18 +460,26 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'appliesTo', kind: 'text' },
+      { key: 'calculationType', kind: 'text' },
       { key: 'recoverablePercent', kind: 'percent' },
+      { key: 'priceIncludesTax', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
+      { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions' },
       { key: 'country', kind: 'country' },
       { key: 'region', kind: 'text' },
       { key: 'appliesTo', kind: 'select', options: APPLIES_TO, keepDefault: true },
+      { key: 'calculationType', kind: 'select', options: TAX_CALCULATION_TYPES, keepDefault: true },
       { key: 'collectedAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'paidAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'withholdingAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'recoverablePercent', kind: 'percent', keepDefault: true },
+      { key: 'priceIncludesTax', kind: 'boolean' },
+      { key: 'compoundOnPrevious', kind: 'boolean' },
+      { key: 'roundingScale', kind: 'integer', keepDefault: true },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -412,11 +519,13 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
+      { key: 'priceIncludesTax', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
+      { key: 'priceIncludesTax', kind: 'boolean' },
       { key: 'members', kind: 'multiref', ref: 'tax-codes' },
       { key: 'isActive', kind: 'boolean' },
     ],
@@ -1027,6 +1136,94 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    // Configurable tax depreciation regimes (built-ins: ca_cca, uk_wda, au_pool,
+    // nz_pool). Add a jurisdiction the engine doesn't ship, or shadow a built-in.
+    key: 'tax-regimes',
+    table: 'tax_regimes',
+    singularTitleKey: 'entities.tax-regimes.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    docSlug: 'tax-configuration',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'classAttribute', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'classAttribute', kind: 'text', keepDefault: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Configurable pool CLASSES per regime (rate, method, first-year fraction,
+    // recapture/terminal behavior). Org rows override the built-in class table.
+    key: 'tax-pool-classes',
+    table: 'tax_pool_classes',
+    singularTitleKey: 'entities.tax-pool-classes.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'regime, class_code',
+    hasActive: true,
+    docSlug: 'tax-configuration',
+    columns: [
+      { key: 'regime', kind: 'text' },
+      { key: 'classCode', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'rate', kind: 'number' },
+      { key: 'method', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'regime', kind: 'text', required: true },
+      { key: 'classCode', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'rate', kind: 'decimal', required: true },
+      { key: 'method', kind: 'select', options: POOL_METHODS, keepDefault: true },
+      { key: 'firstYearFraction', kind: 'decimal', keepDefault: true },
+      { key: 'allowRecapture', kind: 'boolean', keepDefault: true },
+      { key: 'allowTerminalLoss', kind: 'boolean', keepDefault: true },
+      { key: 'costCap', kind: 'decimal' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Dated first-year rules per regime/class (half-year rule, AII, immediate
+    // expensing) — legislatively volatile, so config not code.
+    key: 'tax-first-year-rules',
+    table: 'tax_first_year_rules',
+    singularTitleKey: 'entities.tax-first-year-rules.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'regime, class_code',
+    hasActive: false,
+    docSlug: 'tax-configuration',
+    columns: [
+      { key: 'regime', kind: 'text' },
+      { key: 'classCode', kind: 'code' },
+      { key: 'firstYearFraction', kind: 'number' },
+      { key: 'acquiredFrom', kind: 'date' },
+    ],
+    fields: [
+      { key: 'regime', kind: 'text', required: true },
+      { key: 'classCode', kind: 'text' },
+      { key: 'acquiredFrom', kind: 'date' },
+      { key: 'acquiredTo', kind: 'date' },
+      { key: 'firstYearFraction', kind: 'decimal', keepDefault: true },
+      { key: 'enhancedMultiplier', kind: 'decimal' },
+    ],
+  },
+  {
     // The depreciation formula builder — user-authored methods (formula over the
     // depreciation variable set: NB, OC, RV, AL, CP, …). Referenced by code from
     // an asset category's Default method.
@@ -1086,6 +1283,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     actorCols: true,
     groupKey: 'currency',
     iconKey: 'coins',
+    featureKey: 'multiCurrency',
     orgScoped: true,
     orderBy: 'as_of desc',
     hasActive: false,
@@ -1141,6 +1339,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     idColumn: 'code',
     groupKey: 'currency',
     iconKey: 'coins',
+    featureKey: 'multiCurrency',
     orgScoped: false,
     naturalKey: 'code',
     orderBy: 'code',

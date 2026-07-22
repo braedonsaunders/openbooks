@@ -5,7 +5,7 @@ import { loadFieldDefs, type CustomFieldDef } from '../../../lib/custom-fields'
 
 /**
  * Project payload for the flyout + cockpit header: the project row (with the
- * contract value lifted out of `custom` for convenience), resolved display
+ * native contract value, resolved display
  * names for the linked customer / foreman / manager parties, and the WBS
  * tasks that make up the cost budget.
  */
@@ -67,11 +67,7 @@ export async function loadProject(id: string, orgId: string): Promise<ProjectPay
   const [customer, foreman, manager, tasks] = names
 
   const name = (r?: Record<string, unknown>) => (r ? ((r.display_name as string) ?? null) : null)
-  const custom = (row.custom as Record<string, unknown> | null) ?? null
-  const contractValue =
-    custom && custom.contractValue != null && String(custom.contractValue).trim() !== ''
-      ? String(custom.contractValue)
-      : null
+  const contractValue = row.contract_value == null ? null : String(row.contract_value)
 
   return {
     project: row,

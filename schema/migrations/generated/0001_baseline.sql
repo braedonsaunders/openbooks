@@ -242,15 +242,19 @@ CREATE FUNCTION public.jl_check_balanced() RETURNS trigger
     AS $$
 declare
   v_entry uuid;
+  v_new_entry uuid;
+  v_old_entry uuid;
   v_sum numeric(19,4);
 begin
-  v_entry := coalesce(new.entry_id, old.entry_id);
-  select coalesce(sum(amount), 0) into v_sum
-    from journal_lines where entry_id = v_entry;
-  if v_sum <> 0 then
-    raise exception 'journal entry % does not balance (sum = %)', v_entry, v_sum
-      using errcode = '23514';
-  end if;
+  v_new_entry := case when tg_op = 'DELETE' then null else new.entry_id end;
+  v_old_entry := case when tg_op in ('UPDATE', 'DELETE') then old.entry_id else null end;
+  foreach v_entry in array array[v_new_entry, v_old_entry] loop
+    if v_entry is null then continue; end if;
+    select coalesce(sum(amount), 0) into v_sum from journal_lines where entry_id = v_entry;
+    if v_sum <> 0 then
+      raise exception 'journal entry % does not balance (sum = %)', v_entry, v_sum using errcode = '23514';
+    end if;
+  end loop;
   return null;
 end $$;
 
@@ -267,16 +271,22 @@ CREATE FUNCTION public.jl_check_balanced_by_subsidiary() RETURNS trigger
     AS $$
 declare
   v_entry uuid;
+  v_new_entry uuid;
+  v_old_entry uuid;
   v_bad record;
 begin
-  v_entry := coalesce(new.entry_id, old.entry_id);
-  select subsidiary_id, sum(amount) as total into v_bad
-    from journal_lines where entry_id = v_entry
-   group by subsidiary_id having sum(amount) <> 0 limit 1;
-  if found then
-    raise exception 'journal entry % does not balance for subsidiary % (sum = %)',
-      v_entry, v_bad.subsidiary_id, v_bad.total using errcode = '23514';
-  end if;
+  v_new_entry := case when tg_op = 'DELETE' then null else new.entry_id end;
+  v_old_entry := case when tg_op in ('UPDATE', 'DELETE') then old.entry_id else null end;
+  foreach v_entry in array array[v_new_entry, v_old_entry] loop
+    if v_entry is null then continue; end if;
+    select subsidiary_id, sum(amount) as total into v_bad
+      from journal_lines where entry_id = v_entry
+     group by subsidiary_id having sum(amount) <> 0 limit 1;
+    if found then
+      raise exception 'journal entry % does not balance for subsidiary % (sum = %)',
+        v_entry, v_bad.subsidiary_id, v_bad.total using errcode = '23514';
+    end if;
+  end loop;
   return null;
 end $$;
 
@@ -19445,5 +19455,4 @@ ALTER TABLE public.worker_comp_groups ENABLE ROW LEVEL SECURITY;
 --
 -- PostgreSQL database dump complete
 --
-
 

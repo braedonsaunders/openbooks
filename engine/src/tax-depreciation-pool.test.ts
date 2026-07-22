@@ -10,6 +10,18 @@ import {
 const run = (over: Partial<PoolYearInput>): ReturnType<typeof computePoolYear> =>
   computePoolYear({ openingBalance: "0", additions: "0", dispositions: "0", rate: 0.2, ...over });
 
+test("ships multiple pooled regimes (not just Canada), all resolvable", () => {
+  assert.deepEqual(
+    Object.keys(TAX_DEPRECIATION_REGIMES).sort(),
+    ["au_pool", "ca_cca", "nz_pool", "uk_wda"],
+  );
+  // UK main pool 18% full-year; AU small-business pool 30% at half in year one.
+  assert.equal(resolvePoolClass("uk_wda", "main")?.rate, 0.18);
+  assert.equal(resolvePoolClass("uk_wda", "main")?.firstYearFraction, 1);
+  assert.equal(resolvePoolClass("au_pool", "sbp")?.firstYearFraction, 0.5);
+  assert.equal(resolvePoolClass("ca_cca", "10")?.firstYearFraction, 0.5); // half-year rule
+});
+
 // The Canada CCA half-year rule is just firstYearFraction 0.5 on a generic pool.
 test("first-year fraction (Canada half-year rule) halves year-1 additions", () => {
   const r = run({ additions: "10000", firstYearFraction: 0.5 });

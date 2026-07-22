@@ -93,7 +93,7 @@ export function buildNativeFromQbo(
   // QBO amounts are already in the txn currency; ExchangeRate is txn→home.
   const currency = t.CurrencyRef?.value || ctx.baseCurrency;
   const fxRate = t.ExchangeRate && t.ExchangeRate > 0 ? String(t.ExchangeRate) : "1";
-  const txn = (v: number | undefined): bigint => toUnits((v ?? 0).toFixed(2));
+  const txn = (v: number | undefined): bigint => toUnits(String(v ?? 0));
   const acct = (ref?: Ref): string | null => (ref?.value ? ctx.accountByRef.get(ref.value)?.id ?? null : null);
   const sourceRef = `${entity}:${t.Id}`;
   const base = {

@@ -1,5 +1,5 @@
 import { ErpNextClient, type ErpNextCreds } from "../erpnext.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { formatMoney, fromUnits, toUnits } from "../money.ts";
 import {
   buildErpInvoice, buildErpJournal, buildErpPayment,
   type ErpInvoice, type ErpJournal, type ErpPayment,
@@ -252,7 +252,7 @@ export class ErpNextSource implements MigrationSource {
       );
       for (const r of doc.references ?? []) {
         if (!(r.allocated_amount > 0)) continue;
-        applications.push({ paymentRef: p.name, appliedRef: r.reference_name, amount: r.allocated_amount.toFixed(2) });
+        applications.push({ paymentRef: p.name, appliedRef: r.reference_name, amount: formatMoney(String(r.allocated_amount), 2) });
       }
     }
 
@@ -267,7 +267,7 @@ export class ErpNextSource implements MigrationSource {
     );
     const byAccount = new Map<string, bigint>();
     for (const g of rows) {
-      const u = toUnits((g.debit ?? 0).toFixed(2)) - toUnits((g.credit ?? 0).toFixed(2));
+      const u = toUnits(String(g.debit ?? 0)) - toUnits(String(g.credit ?? 0));
       byAccount.set(g.account, (byAccount.get(g.account) ?? 0n) + u);
     }
     return [...byAccount.entries()].map(([accountRef, bal]) => ({ accountRef, balance: fromUnits(bal) }));
@@ -295,7 +295,7 @@ export class ErpNextSource implements MigrationSource {
       const rows = await this.client.listAll<{ name: string; outstanding_amount: number }>(
         doctype, ["name", "outstanding_amount"], [["docstatus", "=", 1]],
       );
-      for (const r of rows) out.push({ ref: r.name, unpaid: (r.outstanding_amount ?? 0).toFixed(2) });
+      for (const r of rows) out.push({ ref: r.name, unpaid: formatMoney(String(r.outstanding_amount ?? 0), 2) });
     }
     return out;
   }

@@ -50,7 +50,7 @@ export const journalEntries = pgTable(
     /**
      * Where this entry came from. Documents post through the kernel, so an
      * entry is traceable to its source; manual journals say so explicitly.
-     * `origin` supports payroll and burden tagging without account-shaped fields.
+     * `origin` supports the payroll/burden tagging that reference organization implemented
      * as custbody checkboxes ("Payroll Journal", "Is Labor Burden JE").
      */
     sourceDocumentId: uuid("source_document_id"),
@@ -118,7 +118,7 @@ export const journalLines = pgTable(
     paymentCardId: uuid("payment_card_id"), // card subledger detail
     extraDims: jsonb("extra_dims").notNull().default({}), // registry-validated
 
-    /** Statistical quantity such as hours or tonnes. */
+    /** Statistical quantity (hours, tonnes) — replaces source platform Stat accounts. */
     quantity: money("quantity"),
     unit: text("unit"),
 
@@ -148,7 +148,7 @@ export const journalLines = pgTable(
 /**
  * Payment application — universal. Links a crediting line to a debiting
  * open item regardless of document type: payment→invoice, journal→invoice
- * including imported settlement journals that have no separate payment record,
+ * (reference organization's actual AR pattern: 18.5k of these, zero payment records),
  * credit-memo→invoice, vendor-credit→bill, prepayment→bill.
  */
 export const applications = pgTable(
@@ -159,6 +159,11 @@ export const applications = pgTable(
     fromLineId: uuid("from_line_id").notNull(), // the crediting side
     toLineId: uuid("to_line_id").notNull(), // the open item being settled
     amount: money("amount").notNull(), // always positive, in base currency
+    /** Source-line carrying amount; differs from amount on realized FX settlement. */
+    sourceAmount: money("source_amount").notNull(),
+    /** Settlement amount in the shared transaction currency. */
+    transactionAmount: money("transaction_amount").notNull(),
+    transactionCurrency: currencyCode("transaction_currency").notNull(),
     appliedOn: date("applied_on").notNull(),
     /** FX difference on settlement posts its own journal entry. */
     fxGainLossEntryId: uuid("fx_gain_loss_entry_id"),
@@ -169,5 +174,7 @@ export const applications = pgTable(
     index("app_from").on(t.fromLineId),
     index("app_to").on(t.toLineId),
     check("app_positive", sql`${t.amount} > 0`),
+    check("app_source_positive", sql`${t.sourceAmount} > 0`),
+    check("app_transaction_positive", sql`${t.transactionAmount} > 0`),
   ],
 );

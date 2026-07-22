@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
+import { add, cmp, fromUnits, isZero, mul, mulPercent, neg, sum, toUnits } from "./money.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /**
@@ -91,25 +91,19 @@ export function addDays(date: string, n: number): string {
  * EXACTLY to the total (largest-remainder / Hamilton apportionment). A zero
  * total or non-positive weight sum yields all zeros.
  */
-export function apportion(totalUnits: bigint, weights: number[]): bigint[] {
+export function apportion(totalUnits: bigint, weights: readonly (number | string | bigint)[]): bigint[] {
   const n = weights.length;
   if (n === 0) return [];
-  const wsum = weights.reduce((a, b) => a + b, 0);
-  if (wsum <= 0 || totalUnits === 0n) return new Array(n).fill(0n);
+  const iw = weights.map((weight) => {
+    if (typeof weight === "bigint") return weight > 0n ? weight : 0n;
+    const units = toUnits(String(weight));
+    return units > 0n ? units : 0n;
+  });
+  const iwsum = iw.reduce((a, b) => a + b, 0n);
+  if (iwsum === 0n || totalUnits === 0n) return new Array(n).fill(0n);
 
   const negative = totalUnits < 0n;
   const total = negative ? -totalUnits : totalUnits;
-
-  // Scale weights to integers so the apportionment is deterministic. Scale each
-  // weight directly (NOT weight/wsum) so integer weights stay exact — the ratio
-  // iw_i / Σiw is then identical to weight_i / Σweight.
-  const SCALE = 1_000_000n;
-  const iw = weights.map((w) => BigInt(Math.max(0, Math.round(w * Number(SCALE)))));
-  let iwsum = iw.reduce((a, b) => a + b, 0n);
-  if (iwsum === 0n) {
-    iw[0] = SCALE;
-    iwsum = SCALE;
-  }
 
   const base = iw.map((w) => (total * w) / iwsum);
   const distributed = base.reduce((a, b) => a + b, 0n);
@@ -138,10 +132,7 @@ export function allocateByRelativeSSP(
   total: string,
   obligations: { ssp?: string | null; booked?: string | null }[],
 ): string[] {
-  const weights = obligations.map((o) => {
-    const w = o.ssp != null && o.ssp !== "" ? o.ssp : (o.booked ?? "0");
-    return Number(w);
-  });
+  const weights = obligations.map((o) => o.ssp != null && o.ssp !== "" ? o.ssp : (o.booked ?? "0"));
   return apportion(toUnits(total), weights).map(fromUnits);
 }
 
@@ -149,9 +140,8 @@ export function allocateByRelativeSSP(
  * Fair-value range review (source platform fair-value range policy): compare an
  * obligation's allocated PER-UNIT price against the matched fair value price's
  * [low, high] bounds. Either bound may be absent (open-ended range). Returns
- * null when in range or when no bound is configured. Comparison only — never
- * used in posting math, so float precision is fine (with an epsilon so exact
- * boundary values never flag).
+ * null when in range or when no bound is configured. Cross multiplication
+ * avoids division and makes exact boundary decisions.
  */
 export function fairValueRangeFlag(
   allocated: string,
@@ -160,12 +150,9 @@ export function fairValueRangeFlag(
   high: string | null,
 ): "below_range" | "above_range" | null {
   if (low == null && high == null) return null;
-  const qty = Number(quantity ?? "1");
-  const perUnit = qty > 0 ? Number(allocated) / qty : Number(allocated);
-  if (!Number.isFinite(perUnit)) return null;
-  const EPS = 1e-9;
-  if (low != null && perUnit < Number(low) - EPS) return "below_range";
-  if (high != null && perUnit > Number(high) + EPS) return "above_range";
+  const qty = quantity != null && cmp(quantity, "0") > 0 ? quantity : "1";
+  if (low != null && cmp(allocated, mul(low, qty)) < 0) return "below_range";
+  if (high != null && cmp(allocated, mul(high, qty)) > 0) return "above_range";
   return null;
 }
 
@@ -207,9 +194,9 @@ export interface RecognitionLinePlan {
 }
 
 /** Cumulative-percent × total, exact to 4dp. */
-function pctOf(totalUnits: bigint, pct: number): bigint {
-  const clamped = Math.max(0, Math.min(100, pct));
-  return (totalUnits * BigInt(Math.round(clamped * 10_000))) / 1_000_000n;
+function pctOf(totalUnits: bigint, pct: string): bigint {
+  const clamped = cmp(pct, "0") < 0 ? "0" : cmp(pct, "100") > 0 ? "100" : pct;
+  return toUnits(mulPercent(fromUnits(totalUnits), clamped, 4));
 }
 
 /** Resolve the term end from an explicit endOn, else start + termPeriods. */
@@ -233,7 +220,7 @@ function monthSpan(startOn: string, endOn: string): number {
  */
 function spreadWithInitial(input: RecognitionInput, start: string, weights: number[]): { month: string; units: bigint }[] {
   const totalUnits = toUnits(input.total);
-  const initialUnits = pctOf(totalUnits, Number(input.initialAmountPercent ?? "0"));
+  const initialUnits = pctOf(totalUnits, input.initialAmountPercent ?? "0");
   const parts = apportion(totalUnits - initialUnits, weights);
   if (weights.length > 0) parts[0] += initialUnits;
   return parts.map((units, i) => ({ month: addMonths(start, i), units }));
@@ -257,7 +244,7 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
       case "percent_complete": {
         // Cumulative catch-up, BOTH directions (ASC 606 over-time): a falling
         // estimate reverses previously recognized revenue in the current period.
-        const targetUnits = pctOf(toUnits(input.total), Number(input.percentComplete ?? "0"));
+        const targetUnits = pctOf(toUnits(input.total), input.percentComplete ?? "0");
         const already = toUnits(input.alreadyRecognized ?? "0");
         return [{ month: start, units: targetUnits - already }];
       }
@@ -461,7 +448,7 @@ export async function buildRecognitionSchedule(
       // percent_complete, where later catch-ups legitimately post additional
       // lines into the current period (distinct sequence numbers).
       if (!isPercentComplete && postedPeriods.has(periodId)) continue;
-      if (isPercentComplete && Number(p.planned) === 0) continue;
+      if (isPercentComplete && isZero(p.planned)) continue;
       await tx.execute(sql`
         insert into recognition_schedule_lines
           (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)

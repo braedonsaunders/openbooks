@@ -18,6 +18,7 @@ import {
   loadDocument,
   partyOptions,
   taxCodeOptions,
+  taxGroupOptions,
 } from '../../../../lib/documents'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
@@ -89,6 +90,7 @@ export default async function ApBills({
           partyOptions('vendor'),
           accountOptions(DOC_KINDS[openKind as 'vendor_bill']!),
           taxCodeOptions(),
+          taxGroupOptions(),
           dimensionOptions(),
           itemOptions(),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
@@ -123,14 +125,15 @@ export default async function ApBills({
         parties={pickers[0] as any}
         accounts={pickers[1] as any}
         taxCodes={pickers[2] as any}
-        departments={(pickers[3] as any).departments}
-        projects={(pickers[3] as any).projects}
-        locations={(pickers[3] as any).locations}
-        classes={(pickers[3] as any).classes}
-        segments={(pickers[3] as any).segments}
-        builtinSegments={(pickers[3] as any).builtinSegments}
-        items={pickers[4] as any}
-        subsidiaries={(pickers[5] as any) ?? undefined}
+        taxGroups={pickers[3] as any}
+        departments={(pickers[4] as any).departments}
+        projects={(pickers[4] as any).projects}
+        locations={(pickers[4] as any).locations}
+        classes={(pickers[4] as any).classes}
+        segments={(pickers[4] as any).segments}
+        builtinSegments={(pickers[4] as any).builtinSegments}
+        items={pickers[5] as any}
+        subsidiaries={(pickers[6] as any) ?? undefined}
         headerDefs={headerDefs as any}
         lineDefs={lineDefs as any}
         canCreate={canCreate}

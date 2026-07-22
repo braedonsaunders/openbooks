@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from "drizzle-orm";
-import { db, schema } from "./db.ts";
-import { add, isZero, mulRate, neg, sum, toUnits } from "./money.ts";
+import { db, inDbTransaction, schema } from "./db.ts";
+import { add, cmp, isZero, mulRate, neg, sum, toUnits } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
@@ -58,6 +58,7 @@ export interface PostingDeps {
     taxCollected?: string;
     taxPaid?: string;
     employeePayable?: string;
+    fxRealizedGainLoss?: string;
   };
   /** Resolved by postDocument when the document has a payment card. */
   cardLiabilityAccountId?: string;
@@ -67,7 +68,7 @@ export interface PostingDeps {
    * regenerateGlImpactTx for journal documents; lets a journal's AR/AP legs
    * participate in payment applications — openbooks' model applies ANY
    * crediting document (journal, credit memo, payment) to open items, the way
-   * Source receipt journals may settle invoices directly.
+   * source platform's own receipt journals settle invoices.
    */
   openItemAccountIds?: Set<string>;
   /**
@@ -77,6 +78,8 @@ export interface PostingDeps {
    */
   taxCollectedByCode?: Map<string, string>;
   taxPaidByCode?: Map<string, string>;
+  /** Exact per-line tax calculation snapshots, expanded from a code or group. */
+  taxComponentsByLine?: Map<string, TaxPostingComponent[]>;
   /**
    * document_line id → deferred-revenue account, for customer_invoice lines
    * whose item carries a recognition rule (ASC 606). Such lines credit deferred
@@ -94,9 +97,21 @@ export interface PostingDeps {
   inventoryAssetByLine?: Map<string, string>;
 }
 
+export interface TaxPostingComponent {
+  taxCodeId: string;
+  sequence: number;
+  taxAmount: string;
+  recoverableAmount: string;
+  nonrecoverableAmount: string;
+  calculationType: "standard" | "withholding" | "reverse_charge";
+  collectedAccountId: string | null;
+  paidAccountId: string | null;
+  withholdingAccountId: string | null;
+}
+
 /**
  * An AR/AP journal line participates in the subledger only when it identifies
- * the customer/vendor whose balance it changes. Some source systems permit direct GL
+ * the customer/vendor whose balance it changes. source platform permits direct GL
  * journals to control accounts without an entity; those remain legitimate
  * control-account GL activity, but must not become anonymous aging items.
  */
@@ -147,6 +162,40 @@ async function resolveTaxAccounts(
   return { collected, paid };
 }
 
+async function resolveTaxComponents(
+  runner: Pick<typeof db, "execute">,
+  documentId: string,
+): Promise<Map<string, TaxPostingComponent[]>> {
+  const result = (await runner.execute(sql`
+    select c.document_line_id, c.tax_code_id, c.sequence, c.tax_amount::text,
+           c.recoverable_amount::text, c.nonrecoverable_amount::text,
+           c.calculation_type, c.collected_account_id, c.paid_account_id,
+           c.withholding_account_id
+      from document_line_tax_components c
+      join document_lines dl on dl.id = c.document_line_id
+     where dl.document_id = ${documentId}
+     order by c.document_line_id, c.sequence
+  `)) as unknown as { rows: Record<string, any>[] };
+  const byLine = new Map<string, TaxPostingComponent[]>();
+  for (const row of result.rows) {
+    const lineId = String(row.document_line_id);
+    const components = byLine.get(lineId) ?? [];
+    components.push({
+      taxCodeId: String(row.tax_code_id),
+      sequence: Number(row.sequence),
+      taxAmount: String(row.tax_amount),
+      recoverableAmount: String(row.recoverable_amount),
+      nonrecoverableAmount: String(row.nonrecoverable_amount),
+      calculationType: row.calculation_type,
+      collectedAccountId: row.collected_account_id,
+      paidAccountId: row.paid_account_id,
+      withholdingAccountId: row.withholding_account_id,
+    });
+    byLine.set(lineId, components);
+  }
+  return byLine;
+}
+
 type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
 
 /**
@@ -154,18 +203,18 @@ type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
  * liability control account; a refund is the arithmetic reverse and rides the
  * same rule with negative line amounts (its detail is stored already signed).
  * The liability account is the doc's `controlAccountId` override (the per-card
- * employee sub-account used by the source) else the resolved card liability.
+ * employee sub-account source platform used) else the resolved card liability.
  */
 const cardRule: RuleFn = (doc, lines, deps) => {
   const expense: KernelLine[] = lines.map((l) => ({
     accountId: l.accountId!,
-    amount: l.amount,
+    amount: purchaseBaseAmount(l, deps),
     memo: l.description,
     partyId: l.partyId ?? doc.partyId,
     paymentCardId: doc.paymentCardId,
     ...dims(doc, l),
   }));
-  const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
+  const tax = purchaseTaxLines(doc, lines, deps, 1);
   const total = sum([...expense, ...tax].map((l) => l.amount));
   const cardLiability = controlOverride(doc) ?? deps.cardLiabilityAccountId;
   if (!cardLiability) throw new PostingError("card_charge requires a payment card");
@@ -266,7 +315,7 @@ const lineTotal = (l: DocLine) => add(l.amount, l.taxAmount ?? "0");
 
 /**
  * The payable/receivable/card-liability control account a document should post
- * to. A source transaction may choose its own AP/AR/financing account on the
+ * to. source platform lets a transaction choose its own AP/AR/financing account on the
  * header (usually the org default, but sometimes a financing sub-account like
  * "Ford Credit" or a per-card employee liability). We surface that choice as
  * `doc.custom.controlAccountId`; when present it wins over the org default.
@@ -276,30 +325,113 @@ const controlOverride = (doc: Doc): string | undefined => {
   return typeof c === "string" && c ? c : undefined;
 };
 
+function componentSettlementTotal(components: TaxPostingComponent[]): string {
+  const standard = sum(components.filter((c) => c.calculationType === "standard").map((c) => c.taxAmount));
+  const withholding = sum(components.filter((c) => c.calculationType === "withholding").map((c) => c.taxAmount));
+  return add(standard, neg(withholding));
+}
+
+function componentsForLine(line: DocLine, deps: PostingDeps): TaxPostingComponent[] {
+  const components = deps.taxComponentsByLine?.get(line.id) ?? [];
+  const hasTaxProfile = Boolean(line.taxCodeId || line.taxGroupId);
+  if (hasTaxProfile && components.length === 0) {
+    throw new PostingError(`line ${line.lineNumber} has a tax profile but no calculation evidence`);
+  }
+  if (components.length > 0) {
+    const settlement = componentSettlementTotal(components);
+    if (cmp(settlement, line.taxAmount ?? "0") !== 0) {
+      throw new PostingError(
+        `line ${line.lineNumber} tax components (${settlement}) do not match stored tax total (${line.taxAmount})`,
+      );
+    }
+  }
+  return components;
+}
+
+function signed(amount: string, direction: 1 | -1): string {
+  return direction === 1 ? amount : neg(amount);
+}
+
+/** Expense/inventory basis includes only the nonrecoverable purchase tax. */
+function purchaseBaseAmount(line: DocLine, deps: PostingDeps): string {
+  const nonrecoverable = sum(
+    componentsForLine(line, deps)
+      .filter((c) => c.calculationType !== "withholding")
+      .map((c) => c.nonrecoverableAmount),
+  );
+  return add(line.amount, nonrecoverable);
+}
+
 /**
- * Group line tax by tax code → one kernel line per code. Each code may carry
- * its OWN control account (tax_codes.collected/paid_account_id — sources like
- * some connectors post each rate to its own account); the passed account is the
- * org-control fallback when the code doesn't specify one.
+ * Purchase tax projection:
+ * - standard: recoverable input tax only (nonrecoverable was capitalized above)
+ * - withholding: credit the statutory withholding payable
+ * - reverse charge: debit recoverable input, credit full output liability;
+ *   nonrecoverable input remains in expense/inventory.
  */
-function taxLines(
+function purchaseTaxLines(
   doc: Doc,
   lines: DocLine[],
-  accountId: string,
-  sign: 1 | -1,
-  accountByCode?: Map<string, string>,
+  deps: PostingDeps,
+  direction: 1 | -1,
 ): KernelLine[] {
-  const byCode = new Map<string, string>();
-  for (const l of lines) {
-    if (!l.taxCodeId || isZero(l.taxAmount ?? "0")) continue;
-    byCode.set(l.taxCodeId, add(byCode.get(l.taxCodeId) ?? "0", l.taxAmount!));
+  const out: KernelLine[] = [];
+  for (const line of lines) {
+    for (const component of componentsForLine(line, deps)) {
+      const common = { taxCodeId: component.taxCodeId, partyId: line.partyId ?? doc.partyId, ...dims(doc, line) };
+      if (component.calculationType === "withholding") {
+        if (!component.withholdingAccountId) {
+          throw new PostingError(`withholding tax ${component.taxCodeId} has no withholding account`);
+        }
+        out.push({ ...common, accountId: component.withholdingAccountId, amount: signed(neg(component.taxAmount), direction) });
+        continue;
+      }
+      if (!isZero(component.recoverableAmount)) {
+        out.push({
+          ...common,
+          accountId: component.paidAccountId ?? deps.taxPaidByCode?.get(component.taxCodeId) ?? deps.control.taxPaid ?? deps.control.ap,
+          amount: signed(component.recoverableAmount, direction),
+        });
+      }
+      if (component.calculationType === "reverse_charge" && !isZero(component.taxAmount)) {
+        out.push({
+          ...common,
+          accountId: component.collectedAccountId ?? deps.taxCollectedByCode?.get(component.taxCodeId) ?? deps.control.taxCollected ?? deps.control.ap,
+          amount: signed(neg(component.taxAmount), direction),
+        });
+      }
+    }
   }
-  return [...byCode.entries()].map(([taxCodeId, amt]) => ({
-    accountId: accountByCode?.get(taxCodeId) ?? accountId,
-    amount: sign === 1 ? amt : neg(amt),
-    taxCodeId,
-    ...dims(doc),
-  }));
+  return out;
+}
+
+/** Sales tax projection: standard output liability, withholding receivable. */
+function salesTaxLines(
+  doc: Doc,
+  lines: DocLine[],
+  deps: PostingDeps,
+  direction: 1 | -1,
+): KernelLine[] {
+  const out: KernelLine[] = [];
+  for (const line of lines) {
+    for (const component of componentsForLine(line, deps)) {
+      const common = { taxCodeId: component.taxCodeId, partyId: line.partyId ?? doc.partyId, ...dims(doc, line) };
+      if (component.calculationType === "reverse_charge") continue;
+      if (component.calculationType === "withholding") {
+        if (!component.withholdingAccountId) {
+          throw new PostingError(`withholding tax ${component.taxCodeId} has no withholding account`);
+        }
+        out.push({ ...common, accountId: component.withholdingAccountId, amount: signed(component.taxAmount, direction) });
+      } else {
+        out.push({
+          ...common,
+          accountId: component.collectedAccountId ?? deps.taxCollectedByCode?.get(component.taxCodeId) ?? deps.control.taxCollected ?? deps.control.ar,
+          amount: signed(neg(component.taxAmount), direction),
+        });
+      }
+    }
+  }
+  return out;
 }
 
 export const RULES: Record<string, RuleFn> = {
@@ -308,12 +440,12 @@ export const RULES: Record<string, RuleFn> = {
       // Inventory item lines DR the clearing/asset account (subledger receives
       // the stock); all other lines DR their expense account.
       accountId: deps.inventoryAssetByLine?.get(l.id) ?? l.accountId!,
-      amount: l.amount, // debit expense / inventory
+      amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
+    const tax = purchaseTaxLines(doc, lines, deps, 1);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
@@ -339,7 +471,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, -1, deps.taxCollectedByCode);
+    const tax = salesTaxLines(doc, lines, deps, 1);
     const total = sum([...income, ...tax].map((l) => l.amount));
     return [
       {
@@ -388,12 +520,12 @@ export const RULES: Record<string, RuleFn> = {
   expense_report: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
       accountId: l.accountId!,
-      amount: l.amount,
+      amount: purchaseBaseAmount(l, deps),
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
+    const tax = purchaseTaxLines(doc, lines, deps, 1);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
@@ -443,12 +575,12 @@ export const RULES: Record<string, RuleFn> = {
   check: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
       accountId: l.accountId!,
-      amount: l.amount, // debit line account
+      amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, 1, deps.taxPaidByCode);
+    const tax = purchaseTaxLines(doc, lines, deps, 1);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       ...expense,
@@ -501,12 +633,12 @@ export const RULES: Record<string, RuleFn> = {
   vendor_credit: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
       accountId: l.accountId!,
-      amount: neg(l.amount), // credit expense (reverse of bill)
+      amount: neg(purchaseBaseAmount(l, deps)), // credit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxPaid ?? deps.control.ap, -1, deps.taxPaidByCode);
+    const tax = purchaseTaxLines(doc, lines, deps, -1);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
       {
@@ -531,7 +663,7 @@ export const RULES: Record<string, RuleFn> = {
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
     }));
-    const tax = taxLines(doc, lines, deps.control.taxCollected ?? deps.control.ar, 1, deps.taxCollectedByCode);
+    const tax = salesTaxLines(doc, lines, deps, -1);
     const total = sum([...income, ...tax].map((l) => l.amount));
     return [
       {
@@ -564,6 +696,34 @@ export const RULES: Record<string, RuleFn> = {
 };
 
 export class PostingError extends Error {}
+
+/**
+ * Application-layer proof immediately before a ledger write. PostgreSQL
+ * repeats these assertions at the deferred-constraint boundary; keeping both
+ * defenses independent turns a malformed projection into a readable posting
+ * error before any journal row is inserted.
+ */
+export function assertFinalKernelBalance(
+  lines: readonly { amount: string; subsidiaryId: string }[],
+): void {
+  if (lines.length < 2) throw new PostingError("posting produced fewer than 2 lines");
+  const total = sum(lines.map((line) => line.amount));
+  if (!isZero(total)) throw new PostingError(`functional-currency journal does not balance (sum=${total})`);
+  const bySubsidiary = new Map<string, string[]>();
+  for (const line of lines) {
+    const amounts = bySubsidiary.get(line.subsidiaryId) ?? [];
+    amounts.push(line.amount);
+    bySubsidiary.set(line.subsidiaryId, amounts);
+  }
+  for (const [subsidiaryId, amounts] of bySubsidiary) {
+    const subsidiaryTotal = sum(amounts);
+    if (!isZero(subsidiaryTotal)) {
+      throw new PostingError(
+        `functional-currency journal does not balance for subsidiary ${subsidiaryId} (sum=${subsidiaryTotal})`,
+      );
+    }
+  }
+}
 
 /**
  * Accounts whose lines are open items on a journal (all AR/AP-typed accounts
@@ -678,7 +838,11 @@ async function applySubsidiaries(
   }
 }
 
-export async function postDocument(documentId: string, deps: PostingDeps): Promise<string> {
+export async function postDocument(
+  documentId: string,
+  deps: PostingDeps,
+  options: { deferEffects?: boolean } = {},
+): Promise<string> {
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   if (doc.status === "posted") throw new PostingError(`document ${doc.documentNumber} already posted`);
@@ -689,6 +853,9 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(db, doc.orgId);
     deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
+  }
+  if (!deps.taxComponentsByLine && doc.kind !== "journal") {
+    deps = { ...deps, taxComponentsByLine: await resolveTaxComponents(db, doc.id) };
   }
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(db, doc.id) };
@@ -766,7 +933,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   }
 
   // -- open-item lines must carry a subledger party (AR/AP faithfulness) ----
-  // Source systems commonly put a customer, vendor, or employee on each line.
+  // Every source system (source platform line "Name", source platform line Entity) puts a
   // customer/vendor on each AR/AP line, and both enforce AR⇒customer, AP⇒vendor.
   // An open-item leg with no party can't age or net by entity — the exact defect
   // that let party-less month-end journals corrupt the subledger↔GL tie-out.
@@ -780,6 +947,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
 
   // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----
   const subApplied = await applySubsidiaries(db, effectiveDoc, kernelLines);
+  assertFinalKernelBalance(subApplied.lines);
   await validateRequiredDimensions(db, doc.orgId, subApplied.lines);
 
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
@@ -811,7 +979,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
   }
 
   // -- write entry + lines + flip document, atomically ---------------------
-  const entryId = await db.transaction(async (tx) => {
+  const entryId = await inDbTransaction(async (tx) => {
     if (deps.migration) await tx.execute(sql`set local openbooks.migration = on`);
     const [entry] = await tx
       .insert(schema.journalEntries)
@@ -883,12 +1051,42 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
     return entry.id;
   });
 
-  await runTriggerScripts("after_post", { ...scriptCtx, trigger: "after_post" }, doc.id);
-
-  // -- flows: after_post + the status transition (never throws) -------------
-  await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, { orgId: doc.orgId });
-  await emitStatusChange(doc.kind, doc.id, { from: doc.status, to: "posted" }, { orgId: doc.orgId });
+  if (!options.deferEffects) {
+    await runTriggerScripts("after_post", { ...scriptCtx, trigger: "after_post" }, doc.id);
+    // -- flows: after_post + the status transition (never throws) -----------
+    await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, { orgId: doc.orgId });
+    await emitStatusChange(doc.kind, doc.id, { from: doc.status, to: "posted" }, { orgId: doc.orgId });
+  }
   return entryId;
+}
+
+/**
+ * Emit post-commit effects for a caller that used `deferEffects` so a larger
+ * accounting unit (for example payment + applications + realized FX) could
+ * commit atomically before any automation observes it.
+ */
+export async function runPostDocumentEffects(
+  documentId: string,
+  previousStatus = "draft",
+): Promise<void> {
+  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
+  if (!doc || doc.status !== "posted") return;
+  const lines = await db
+    .select()
+    .from(schema.documentLines)
+    .where(eq(schema.documentLines.documentId, documentId))
+    .orderBy(asc(schema.documentLines.lineNumber));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
+  if (!org) return;
+  const ctx: ScriptContext = {
+    trigger: "after_post",
+    document: doc as unknown as Record<string, unknown>,
+    lines: lines as unknown as Record<string, unknown>[],
+    org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+  };
+  await runTriggerScripts("after_post", ctx, doc.id);
+  await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, { orgId: doc.orgId });
+  await emitStatusChange(doc.kind, doc.id, { from: previousStatus, to: "posted" }, { orgId: doc.orgId });
 }
 
 // ---------------------------------------------------------------------------
@@ -896,7 +1094,7 @@ export async function postDocument(documentId: string, deps: PostingDeps): Promi
 //
 // For a document-sourced entry the DOCUMENT is the system of record; its
 // journal entry is a derived projection — entry = postingRules(document) —
-// re-materialized on every save. `postDocument` above is
+// re-materialized on every save (source platform's model). `postDocument` above is
 // the first materialization; `regenerateGlImpactTx` re-materializes a posted
 // document's entry in place after an edit. A non-GL edit (memo, reference #)
 // produces an identical projection and is a no-op on the ledger; a GL edit
@@ -1011,6 +1209,9 @@ export async function regenerateGlImpactTx(
     const tax = await resolveTaxAccounts(tx, doc.orgId);
     deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
   }
+  if (!deps.taxComponentsByLine && doc.kind !== "journal") {
+    deps = { ...deps, taxComponentsByLine: await resolveTaxComponents(tx, doc.id) };
+  }
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id) };
   }
@@ -1026,6 +1227,7 @@ export async function regenerateGlImpactTx(
 
   const projection = buildProjection(doc, lines, deps);
   const { lines: kernelLines, docSubId } = await applySubsidiaries(tx, doc, projection);
+  assertFinalKernelBalance(kernelLines);
   await validateRequiredDimensions(tx, doc.orgId, kernelLines);
   const postingDate = doc.postingDate ?? doc.documentDate;
 

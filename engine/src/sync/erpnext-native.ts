@@ -57,7 +57,7 @@ export interface ErpJournal {
   accounts: { account: string; debit: number; credit: number; party_type?: string | null; party?: string | null }[];
 }
 
-const num = (v: number): bigint => toUnits((v ?? 0).toFixed(2));
+const num = (v: number): bigint => toUnits(String(v ?? 0));
 
 function line(
   accountId: string,

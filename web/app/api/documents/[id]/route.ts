@@ -57,7 +57,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
 
   const owned = (await db.execute(
-    sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId" from documents where id = ${id} and org_id = ${user.orgId}`,
+    sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
+               document_date as "documentDate"
+          from documents where id = ${id} and org_id = ${user.orgId}`,
   )) as unknown as { rows: (DocumentEditCurrent)[] }
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -69,7 +71,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (row.status === 'voided') {
     return NextResponse.json({ error: 'a voided document cannot be edited' }, { status: 422 })
   }
-  // Pending-approval lock: while approvers are deciding, the
+  // Pending-approval lock (source platform parity): while approvers are deciding, the
   // record they were shown must not shift underneath them. Editing resumes
   // after the decision (approve → approved, reject → draft); flow admins may
   // override.
@@ -79,7 +81,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 409 },
     )
   }
-  // Flow-managed lock (the lock_record action with
+  // Flow-managed lock (the lock_record action — source platform "Lock Record" with
   // role exemptions). Independent of document status.
   {
     const roles = await userRoleKeys(user.orgId, user.id)

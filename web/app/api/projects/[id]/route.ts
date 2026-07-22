@@ -5,6 +5,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 
 export const runtime = 'nodejs'
 
@@ -34,9 +35,11 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
 function moneyOrNull(v: unknown): string | null | 'invalid' {
   const s = strOrNull(v)
   if (s === null) return null
-  const n = Number(s)
-  if (Number.isNaN(n)) return 'invalid'
-  return n.toFixed(4)
+  try {
+    return normalizeMoney(s)
+  } catch {
+    return 'invalid'
+  }
 }
 
 interface TaskInput {
@@ -89,7 +92,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /**
  * Autosave for the project flyout: header fields, the party links, the contract
- * value (merged into custom), the WBS task list (replace semantics — rows not
+ * value, the WBS task list (replace semantics — rows not
  * present are deleted, provided rows are inserted/updated), and the explicit
  * activate/deactivate action. Only provided fields are touched; a real name is
  * required to activate.
@@ -180,10 +183,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     endsOn = s
   }
 
-  // -- custom jsonb: contract value + admin-defined custom fields -----------
-  // Both live in the same `custom` blob, so build one merged object: start
-  // from the existing custom, apply the contractValue delta, then overlay the
-  // validated custom-field values (unknown keys already stripped by validate).
+  // -- custom jsonb: admin-defined custom fields only -----------------------
   // Native project-level invoicing override (a real column, not custom jsonb).
   let invoicingPref: Record<string, unknown> | null | undefined
   if (body.invoicingPreference !== undefined) {
@@ -192,26 +192,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   let mergedCustom: Record<string, unknown> | undefined
-  if (body.contractValue !== undefined || body.custom !== undefined) {
+  if (body.custom !== undefined) {
     const base = { ...(existing.rows[0].custom ?? {}) }
-    if (body.contractValue !== undefined) {
-      const v = moneyOrNull(body.contractValue)
-      if (v === 'invalid') return bad('Contract value must be a number')
-      if (v === null) delete base.contractValue
-      else base.contractValue = v
-    }
-    if (body.custom !== undefined) {
-      const defs = await loadFieldDefs('projects')
-      const result = validateCustomValues(defs, body.custom)
-      if (!result.ok) return bad(Object.values(result.errors)[0]!, result.errors)
-      // Rebuild the custom-field portion from the validated payload (the drawer
-      // sends the full set): drop every def key first so cleared fields vanish,
-      // then overlay cleaned. Non-def keys (e.g. contractValue) are preserved.
-      for (const d of defs) delete base[d.key]
-      Object.assign(base, result.cleaned)
-    }
+    const defs = await loadFieldDefs('projects')
+    const result = validateCustomValues(defs, body.custom)
+    if (!result.ok) return bad(Object.values(result.errors)[0]!, result.errors)
+    for (const d of defs) delete base[d.key]
+    Object.assign(base, result.cleaned)
     mergedCustom = base
   }
+
+  const contractValue = body.contractValue === undefined ? undefined : moneyOrNull(body.contractValue)
+  if (contractValue === 'invalid') return bad('Contract value must be a number')
 
   // -- validate tasks up front (before we touch anything) ------------------
   let tasks: { id: string | null; code: string | null; name: string; status: string; estimatedHours: string | null; estimatedCost: string | null }[] | undefined
@@ -268,6 +260,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       status = coalesce(${body.status ?? null}, status),
       billing_method = ${body.billingMethod !== undefined ? body.billingMethod : (derivedBilling !== undefined ? derivedBilling : sql`billing_method`)},
       customer_po_number = ${body.customerPoNumber !== undefined ? strOrNull(body.customerPoNumber) : sql`customer_po_number`},
+      contract_value = ${contractValue !== undefined ? contractValue : sql`contract_value`},
       starts_on = ${startsOn !== undefined ? startsOn : sql`starts_on`},
       ends_on = ${endsOn !== undefined ? endsOn : sql`ends_on`},
       notes = ${body.notes !== undefined ? strOrNull(body.notes) : sql`notes`},

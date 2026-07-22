@@ -5,6 +5,8 @@
  * composes these with posting + matching primitives.
  */
 
+import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
+
 // ---------------------------------------------------------------------------
 // Condition model (v2)
 // ---------------------------------------------------------------------------
@@ -114,27 +116,27 @@ const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().trim()
 
 /** Evaluate a single condition against a bank line. `now` is injectable for tests. */
 export function evaluateCondition(line: BankLine, cond: RuleCondition, now: number = Date.now()): boolean {
-  const amount = Number(line.amount)
+  const amount = normalizeMoney(line.amount)
   switch (cond.field) {
     case 'flow': {
-      const dir = amount >= 0 ? 'in' : 'out'
+      const dir = cmp(amount, '0') >= 0 ? 'in' : 'out'
       return cond.value === 'any' || dir === cond.value
     }
     case 'amount': {
-      const abs = Math.abs(amount)
+      const absolute = moneyAbs(amount)
       if (cond.op === 'between' && Array.isArray(cond.value)) {
         const [min, max] = cond.value
-        return abs >= Number(min) && abs <= Number(max)
+        return cmp(absolute, String(min)) >= 0 && cmp(absolute, String(max)) <= 0
       }
-      const v = Number(cond.value)
-      if (!Number.isFinite(v)) return true
+      let value: string
+      try { value = normalizeMoney(String(cond.value)) } catch { return true }
       switch (cond.op) {
-        case 'eq': return abs === v
-        case 'ne': return abs !== v
-        case 'gt': return abs > v
-        case 'gte': return abs >= v
-        case 'lt': return abs < v
-        case 'lte': return abs <= v
+        case 'eq': return cmp(absolute, value) === 0
+        case 'ne': return cmp(absolute, value) !== 0
+        case 'gt': return cmp(absolute, value) > 0
+        case 'gte': return cmp(absolute, value) >= 0
+        case 'lt': return cmp(absolute, value) < 0
+        case 'lte': return cmp(absolute, value) <= 0
         default: return true
       }
     }
@@ -199,12 +201,12 @@ export function matchesLegacyCriteria(line: BankLine, c: RuleCriteria): boolean 
     const hay = `${line.description ?? ''} ${line.counterparty_ref ?? ''}`.toLowerCase()
     if (!hay.includes(c.descriptionContains.toLowerCase())) return false
   }
-  const amount = Number(line.amount)
-  if (c.amountSign === 'in' && amount < 0) return false
-  if (c.amountSign === 'out' && amount >= 0) return false
-  const abs = Math.abs(amount)
-  if (typeof c.minAmount === 'number' && abs < c.minAmount) return false
-  if (typeof c.maxAmount === 'number' && abs > c.maxAmount) return false
+  const amount = normalizeMoney(line.amount)
+  if (c.amountSign === 'in' && cmp(amount, '0') < 0) return false
+  if (c.amountSign === 'out' && cmp(amount, '0') >= 0) return false
+  const absolute = moneyAbs(amount)
+  if (typeof c.minAmount === 'number' && cmp(absolute, String(c.minAmount)) < 0) return false
+  if (typeof c.maxAmount === 'number' && cmp(absolute, String(c.maxAmount)) > 0) return false
   if (c.source && line.source !== c.source) return false
   return true
 }
@@ -232,10 +234,6 @@ export function firstMatchingRule(line: BankLine, accountId: string, rules: Rule
 // Split maths
 // ---------------------------------------------------------------------------
 
-function money2(n: number): string {
-  return (Math.round(n * 100) / 100).toFixed(2)
-}
-
 /**
  * Resolve split lines into concrete signed amounts that sum EXACTLY to the
  * negated bank amount. `bankAmount` is signed from the bank's perspective (the
@@ -248,35 +246,36 @@ export function resolveSplitAmounts(
   bankAmount: string,
   lines: RuleSplitLine[],
 ): { line: RuleSplitLine; amount: string }[] {
-  const gross = Number(bankAmount)
-  const absGross = Math.abs(gross)
-  const sign = gross >= 0 ? 1 : -1
-  const offsetSign = -sign
+  const gross = normalizeMoney(bankAmount)
+  const absGross = moneyAbs(gross)
+  const offsetNegative = cmp(gross, '0') >= 0
 
-  const resolved: { line: RuleSplitLine; amount: number }[] = []
-  let allocated = 0
+  const resolved: { line: RuleSplitLine; amount: string }[] = []
+  const allocated: string[] = []
   let remainderIdx = -1
   lines.forEach((line, i) => {
     if (line.portion.kind === 'remainder') {
       remainderIdx = i
-      resolved.push({ line, amount: 0 })
+      resolved.push({ line, amount: '0.0000' })
       return
     }
-    const magnitude =
+    const magnitude = roundMoney(
       line.portion.kind === 'percent'
-        ? absGross * (line.portion.value / 100)
-        : Math.abs(line.portion.value)
-    const rounded = Math.round(magnitude * 100) / 100
-    allocated += rounded
-    resolved.push({ line, amount: offsetSign * rounded })
+        ? mulPercent(absGross, String(line.portion.value), 2)
+        : moneyAbs(normalizeMoney(String(line.portion.value))),
+      2,
+    )
+    allocated.push(magnitude)
+    resolved.push({ line, amount: offsetNegative ? neg(magnitude) : magnitude })
   })
 
-  const remainderMagnitude = Math.round((absGross - allocated) * 100) / 100
+  const remainderMagnitude = roundMoney(add(absGross, neg(sum(allocated))), 2)
   if (remainderIdx >= 0) {
-    resolved[remainderIdx]!.amount = offsetSign * remainderMagnitude
+    resolved[remainderIdx]!.amount = offsetNegative ? neg(remainderMagnitude) : remainderMagnitude
   } else if (resolved.length > 0) {
-    resolved[resolved.length - 1]!.amount += offsetSign * remainderMagnitude
+    const signedRemainder = offsetNegative ? neg(remainderMagnitude) : remainderMagnitude
+    resolved[resolved.length - 1]!.amount = add(resolved[resolved.length - 1]!.amount, signedRemainder)
   }
 
-  return resolved.map((r) => ({ line: r.line, amount: money2(r.amount) }))
+  return resolved.map((r) => ({ line: r.line, amount: formatMoney(r.amount, 2) }))
 }

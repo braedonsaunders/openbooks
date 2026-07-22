@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money.ts";
 import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
 
 /**
@@ -127,12 +127,12 @@ export function buildNativeFromNetSuite(
   const lineTaxCode = (l: NsLine): { codeId: string; rateUnits: bigint } | null => {
     const tr = l.taxrate1;
     if (tr == null || tr === "") return null;
-    const sourceRateUnits = toUnits(String(Number(tr) * 100));
+    const sourceRateUnits = toUnits(mulDecimal(String(tr), "100"));
     if (sourceRateUnits === 0n) return null;
     const sourceCodeId = l.taxcode ? ctx.taxCodeByRef.get(String(l.taxcode)) : null;
     if (sourceCodeId) return { codeId: sourceCodeId, rateUnits: sourceRateUnits };
-    const key = String(Math.round(Number(tr) * 100));
-    const code = ctx.taxByRate.get(key);
+    const key = fromUnits(sourceRateUnits);
+    const code = ctx.taxByRate.get(key) ?? ctx.taxByRate.get(key.replace(/\.0+$/, ""));
     if (!code) return null;
     const rateUnits = toUnits(code.rate);
     // A percentage does not uniquely identify a NetSuite tax code. Tenants
@@ -157,7 +157,7 @@ export function buildNativeFromNetSuite(
     line.mainline === "F"
     && line.taxline === "F"
     && line.taxcode
-    && Number(line.taxrate1 ?? 0) !== 0
+    && toUnits(mulDecimal(String(line.taxrate1 ?? 0), "100")) !== 0n
     && !ctx.taxCodeByRef.has(String(line.taxcode)),
   )?.taxcode;
   if (unmappedTaxCode) return { skip: `unmapped tax code ${unmappedTaxCode}` };
@@ -405,7 +405,8 @@ function buildOrder(
     const itemId = l.item ? ctx.itemByRef.get(l.item) ?? null : null;
     if (!accountId && !itemId) continue; // a line needs an account OR an item
     const tr = l.taxrate1;
-    const code = tr != null && tr !== "" ? ctx.taxByRate.get(String(Math.round(Number(tr) * 100))) : null;
+    const normalizedRate = tr != null && tr !== "" ? normalizeMoney(mulDecimal(String(tr), "100")) : null;
+    const code = normalizedRate ? ctx.taxByRate.get(normalizedRate) ?? ctx.taxByRate.get(normalizedRate.replace(/\.0+$/, "")) : null;
     lines.push({
       accountId, itemId,
       amount: fromUnits(glUnits(l)),

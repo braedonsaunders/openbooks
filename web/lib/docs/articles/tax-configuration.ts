@@ -7,8 +7,8 @@ export const taxConfiguration: DocArticle = {
   order: 2,
   summary:
     'Configure tax-code posting, effective rates, and the return boxes that map ledger activity into jurisdiction filings.',
-  updated: '2026-07-21',
-  keywords: ['tax code', 'tax rate', 'tax return', 'return box', 'filing', 'formula', 'tax mapping'],
+  updated: '2026-07-22',
+  keywords: ['tax code', 'tax rate', 'tax return', 'return box', 'filing', 'formula', 'tax mapping', 'nexus', 'jurisdiction', 'facsimile', 'form pdf'],
   related: ['company-settings', 'accounting-model', 'audit-log'],
   body: `# Tax Codes, Rates, and Returns
 
@@ -17,10 +17,53 @@ selected and posted. Each code identifies whether it applies to sales,
 purchases, or both; the collected and paid accounts; and the recoverable
 percentage.
 
+## Calculation behavior
+
+Each code has a **Calculation type**:
+
+- **Standard tax** posts collected tax on sales and input tax on purchases.
+- **Withholding tax** reduces the amount payable or receivable and posts the
+  withheld amount to its configured withholding account.
+- **Reverse charge** records both output tax and the recoverable input portion;
+  any nonrecoverable portion remains in transaction cost.
+
+Use **Recoverable %** to split purchase or reverse-charge tax between the input
+tax account and transaction cost. **Price includes tax** extracts tax from the
+entered gross price instead of adding it. **Compound on previous components**
+adds earlier group components to the next component's taxable base. **Tax
+rounding decimals** controls component rounding from zero through four decimal
+places. Withholding and reverse-charge codes cannot be marked inclusive.
+
+## Tax groups and posting evidence
+
+A **Tax Group** applies its member codes in sequence. The engine calculates
+every component with exact decimal arithmetic, including inclusive extraction,
+compound bases, recoverability, withholding, and reverse charge. The line total
+must cross-foot to the saved component snapshots before posting.
+
+Those snapshots are immutable accounting evidence after posting. Changing a
+tax code or an effective rate later does not rewrite the calculation that
+supported an existing transaction.
+
 Open a tax code and choose the **Tax Rates** subtab to maintain its rate
 history. Rates are effective-dated so a new statutory rate does not rewrite
 transactions from an earlier period. The open tax code is fixed on every rate
 created or edited from this subtab.
+
+## Jurisdictions and nexus
+
+**Taxes → Tax Jurisdictions** holds the countries, states, and localities that
+levy indirect tax — each with a level (country, state, county, city) and tax
+type (VAT, GST, sales & use). Jurisdictions can nest, so a US city rolls up to
+its state and country. Installing a return pack creates its jurisdiction
+automatically.
+
+**Taxes → Tax Nexus** records where the business is actually registered to
+collect and remit: the jurisdiction, the government registration number, the
+filing frequency, and the return it files. This is the source of truth for your
+filing calendar — the concrete return periods that come due — rather than
+inferring obligations from whichever tax codes happen to exist. Tax codes and
+returns both point at a structured jurisdiction.
 
 ## Install a maintained return
 
@@ -69,6 +112,20 @@ flyout alongside the boxes they combine.
 
 Leave both **Tax code** and **Formula** blank only for a manual box whose value
 must be entered while preparing the filing.
+
+## Form PDF and official form
+
+Prepare a return, then **Form PDF** downloads a form-faithful facsimile — a
+working copy laid out like the real government return (agency masthead, numbered
+line grid, section headings), populated from your ledger and watermarked
+not-for-filing. This is generated from your own template, so it works for every
+jurisdiction, including the API- and portal-only returns that have no fillable
+government PDF.
+
+If a jurisdiction publishes a fillable official PDF, upload it on the return and
+map each box to its AcroForm field; **Filled official form** then fills and
+flattens that PDF. openbooks never bundles government PDFs — you supply the copy
+you are entitled to.
 
 ## Validate before filing
 

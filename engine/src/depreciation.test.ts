@@ -64,19 +64,19 @@ test("a fully-salvaged asset (salvage ≥ cost) has an empty schedule", () => {
   assert.deepEqual(computeSchedule(base({ cost: "5000.0000", salvage: "5000.0000" })), []);
 });
 
-test("invariants hold across every implemented method", () => {
-  for (const method of ["straight_line", "declining_balance", "double_declining", "manual"] as DepreciationMethod[]) {
+test("invariants hold across every enabled built-in method", () => {
+  for (const method of ["straight_line", "declining_balance", "double_declining"] as DepreciationMethod[]) {
     assertInvariants(base({ cost: "8000.0000", salvage: "500.0000", lifeMonths: 36, method, ratePercent: "25" }));
   }
 });
 
-// units_of_production needs per-period usage that the per-asset BOOK path does
-// not capture yet, so in this path it falls back to straight-line (a sensible,
-// non-zero schedule) rather than the old silent declining-balance fall-through.
-// The formula engine (depreciation-formula.ts) computes true units-of-production
-// when usage is supplied — see its tests.
-test("units_of_production falls back to straight-line in the book path (until usage capture)", () => {
-  const asUsage = base({ cost: "10000.0000", lifeMonths: 60, method: "units_of_production" });
-  const asStraightLine = base({ cost: "10000.0000", lifeMonths: 60, method: "straight_line" });
-  assert.deepEqual(computeSchedule(asUsage), computeSchedule(asStraightLine));
+test("manual and units-of-production refuse to masquerade as straight-line", () => {
+  assert.throws(
+    () => computeSchedule(base({ method: "manual" })),
+    /manual depreciation is disabled until an explicit per-period schedule is entered/,
+  );
+  assert.throws(
+    () => computeSchedule(base({ method: "units_of_production" })),
+    /units-of-production depreciation is disabled until per-period and lifetime usage are recorded/,
+  );
 });

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
+import { cmp } from "./money.ts";
 
 /**
  * Dunning — automated collections over the AR subledger. For each active policy
@@ -140,7 +141,7 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
 
         for (const doc of docs.rows) {
           result.scanned += 1;
-          if (Number(doc.balanceDue) <= Number(policy.minBalance)) continue;
+          if (cmp(doc.balanceDue, policy.minBalance) <= 0) continue;
           const daysOverdue = daysBetween(doc.dueDate, today);
           if (daysOverdue < policy.gracePeriodDays) continue;
 

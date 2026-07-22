@@ -20,6 +20,7 @@ import { useCallback, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Popover, SearchSelect, Select, cn } from '@openbooks/ui'
+import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 
 export interface LineGridOption {
   value: string
@@ -44,7 +45,7 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
    * line is flagged overridden; a reset affordance clears the override and
    * falls back to this computed value.
    */
-  computeTax?: (row: Row) => number
+  computeTax?: (row: Row) => string
   /**
    * For `type: 'tax'` columns: apply a manual override to a line — set the
    * explicit tax amount and the overridden flag. `overridden: false` clears the
@@ -54,9 +55,13 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
 }
 
 function normalizeAmount(v: string): string {
-  const n = Number(v)
-  if (v.trim() === '' || Number.isNaN(n)) return v
-  return n.toFixed(2)
+  if (v.trim() === '') return v
+  try { return normalizeMoney(v) } catch { return v }
+}
+
+function invalidAmount(value: unknown): boolean {
+  if (value === '' || value == null) return false
+  try { normalizeMoney(String(value)); return false } catch { return true }
 }
 
 export function LineGrid<Row extends Record<string, unknown>>({
@@ -260,25 +265,25 @@ function TaxCell<Row extends Record<string, unknown>>({
 }) {
   const t = useTranslations('ui.lineGrid.tax')
   const overridden = row.taxOverridden === true
-  const computed = column.computeTax?.(row) ?? 0
+  const computed = column.computeTax?.(row) ?? '0.0000'
   // While overridden, show the explicit amount; otherwise mirror the computed
   // value so the cell always reflects what will post.
   const [draft, setDraft] = useState<string | null>(null)
   const shown =
-    draft != null ? draft : overridden ? String(row.taxAmount ?? '') : computed ? computed.toFixed(2) : ''
+    draft != null ? draft : overridden ? String(row.taxAmount ?? '') : cmp(computed, '0') !== 0 ? computed : ''
 
   const commit = (raw: string) => {
     setDraft(null)
-    const n = Number(raw)
-    if (raw.trim() === '' || Number.isNaN(n)) {
+    let normalized: string
+    try { normalized = normalizeMoney(raw) } catch { normalized = '' }
+    if (raw.trim() === '' || normalized === '') {
       // Empty / invalid → treat as "reset to computed".
-      column.onTaxChange?.(index, { taxAmount: computed.toFixed(2), overridden: false })
+      column.onTaxChange?.(index, { taxAmount: computed, overridden: false })
       return
     }
-    const rounded = n.toFixed(2)
     // Only an actual divergence from the computed value flags an override.
-    const isOverride = Math.abs(n - computed) > 0.005
-    column.onTaxChange?.(index, { taxAmount: rounded, overridden: isOverride })
+    const isOverride = cmp(normalized, computed) !== 0
+    column.onTaxChange?.(index, { taxAmount: normalized, overridden: isOverride })
   }
 
   return (
@@ -294,17 +299,17 @@ function TaxCell<Row extends Record<string, unknown>>({
         inputMode="decimal"
         value={shown}
         placeholder="0.00"
-        aria-invalid={shown !== '' && Number.isNaN(Number(shown)) ? true : undefined}
+        aria-invalid={invalidAmount(shown) || undefined}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(e) => commit(e.target.value)}
         title={
-          overridden ? t('computedOverriddenTitle', { amount: computed.toFixed(2) }) : undefined
+          overridden ? t('computedOverriddenTitle', { amount: computed }) : undefined
         }
         className={cn(
           inputBase,
           'text-right tabular-nums',
           overridden && 'font-medium text-amber-700 dark:text-amber-400',
-          shown !== '' && Number.isNaN(Number(shown)) &&
+          invalidAmount(shown) &&
             'text-red-600 focus:ring-red-500/60 dark:text-red-400',
         )}
       />
@@ -312,10 +317,10 @@ function TaxCell<Row extends Record<string, unknown>>({
         <button
           type="button"
           aria-label={t('resetAria')}
-          title={t('resetTitle', { amount: computed.toFixed(2) })}
+          title={t('resetTitle', { amount: computed })}
           onClick={() => {
             setDraft(null)
-            column.onTaxChange?.(index, { taxAmount: computed.toFixed(2), overridden: false })
+            column.onTaxChange?.(index, { taxAmount: computed, overridden: false })
           }}
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
         >
@@ -423,7 +428,7 @@ function RowCells<Row extends Record<string, unknown>>({
           let display: React.ReactNode
           if (c.type === 'tax') {
             const overridden = row.taxOverridden === true
-            const shown = overridden ? Number(row.taxAmount ?? 0) : (c.computeTax?.(row) ?? 0)
+            const shown = overridden ? String(row.taxAmount ?? '0.0000') : (c.computeTax?.(row) ?? '0.0000')
             display = (
               <span className="inline-flex items-center gap-1.5">
                 {overridden ? (
@@ -433,7 +438,7 @@ function RowCells<Row extends Record<string, unknown>>({
                     className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
                   />
                 ) : null}
-                {shown ? shown.toFixed(2) : ''}
+                {cmp(shown, '0') !== 0 ? shown : ''}
               </span>
             )
           } else if (c.render) display = c.render(row, i)
@@ -484,14 +489,14 @@ function RowCells<Row extends Record<string, unknown>>({
                 value={(value as string) ?? ''}
                 placeholder={c.placeholder ?? '0.00'}
                 aria-invalid={
-                  value !== '' && value != null && Number.isNaN(Number(value)) ? true : undefined
+                  invalidAmount(value) || undefined
                 }
                 onChange={(e) => setCell(i, c.key, e.target.value)}
                 onBlur={(e) => setCell(i, c.key, normalizeAmount(e.target.value))}
                 className={cn(
                   inputBase,
                   'text-right tabular-nums',
-                  value !== '' && value != null && Number.isNaN(Number(value)) &&
+                  invalidAmount(value) &&
                     'text-red-600 focus:ring-red-500/60 dark:text-red-400',
                 )}
               />

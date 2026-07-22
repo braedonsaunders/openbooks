@@ -58,7 +58,7 @@ export const documents = pgTable(
     subtotal: money("subtotal").notNull().default("0"),
     taxTotal: money("tax_total").notNull().default("0"),
     total: money("total").notNull().default("0"),
-    // Absolute amount remaining to settle on the open item.
+    // Amount remaining to settle (source platform "Amount Remaining") — abs(open-item
     // line) − applied for posted open-item docs, else NULL. Maintained by the
     // open-balance triggers in migrations/generated/0001_baseline.sql so lists
     // can show/sort/filter it without a live applications join.
@@ -73,7 +73,7 @@ export const documents = pgTable(
     extraDims: jsonb("extra_dims").notNull().default({}),
     paymentCardId: uuid("payment_card_id"), // card_charge/refund docs
 
-    // Native job-costing and billing fields:
+    // Promoted from reference organization custbody fields:
     billingMethod: text("billing_method", { enum: ["time_and_materials", "fixed_price"] }),
     isFinalInvoice: boolean("is_final_invoice").notNull().default(false),
     referenceNumber: text("reference_number"), // vendor's invoice no., cheque no.
@@ -108,6 +108,10 @@ export const documentLines = pgTable(
     unitPrice: money("unit_price").notNull().default("0"),
     amount: money("amount").notNull(), // qty × price, txn currency
     taxCodeId: uuid("tax_code_id"),
+    /** Mutually exclusive with tax_code_id; expands to ordered component evidence. */
+    taxGroupId: uuid("tax_group_id"),
+    /** User-entered gross when tax is inclusive; otherwise equals amount. */
+    taxInputAmount: money("tax_input_amount"),
     taxAmount: money("tax_amount").notNull().default("0"),
     /**
      * True when tax_amount was manually set instead of computed from the tax
@@ -121,8 +125,8 @@ export const documentLines = pgTable(
     /**
      * Line-level subledger entity — the customer/vendor/employee this specific
      * line belongs to (→ parties), independent of the header party. Faithful to
-     * how source systems commonly model transaction-line parties. AR/AP legs on
-     * journals (e.g. opening-balance/month-end
+     * how every source system models a transaction line: source platform's line "Name"
+     * / source platform's line Entity. AR/AP legs on journals (e.g. opening-balance/month-end
      * entries) carry their party HERE, not on the header. Polymorphic "line
      * entity" = this party_id OR the projectId below (a job); the import routes
      * the source line entity to whichever it resolves to.
@@ -139,7 +143,7 @@ export const documentLines = pgTable(
     /** Line overrides for custom segment assignments. */
     extraDims: jsonb("extra_dims").notNull().default({}),
 
-    // Native job-costing and billing-chain fields:
+    // Promoted from reference organization custcols — job-costing/billing chain:
     employeeId: uuid("employee_id"), // labor line: who worked it
     timeEntryId: uuid("time_entry_id"), // provenance from timesheets
     timeTypeId: uuid("time_type_id"),
@@ -177,12 +181,13 @@ export const documentLines = pgTable(
     index("doc_lines_project_billable").on(t.projectId, t.isBillable),
     index("doc_lines_party").on(t.partyId),
     check("doc_lines_target", sql`${t.itemId} IS NOT NULL OR ${t.accountId} IS NOT NULL`),
+    check("doc_lines_one_tax_profile", sql`num_nonnulls(${t.taxCodeId}, ${t.taxGroupId}) <= 1`),
   ],
 );
 
 /**
  * Document relationship chains (SO → PO, SO → invoice, bill → payment run):
- * explicit and queryable, replacing opaque source relationship chains with
+ * explicit and queryable, replacing source platform's tangle of createdfrom +
  * link tables + custbody "SO Created From" workarounds.
  */
 export const documentLinks = pgTable(
@@ -203,7 +208,7 @@ export const documentLinks = pgTable(
   ],
 );
 
-/** Item catalog shared by services, inventory, equipment, and billing. */
+/** Item catalog — services business first (reference organization: zero inventory items). */
 export const items = pgTable(
   "items",
   {
@@ -258,7 +263,7 @@ export const items = pgTable(
 );
 
 /**
- * Overhead rates are a native job-costing concept rather than a custom
+ * Overhead rates — a real job-costing concept here (was a source platform custom
  * record driving hand-built payroll JEs). Drives overhead absorption on jobs:
  * DR project WIP/COGS, CR overhead applied.
  */
@@ -268,7 +273,7 @@ export const overheadRates = pgTable("overhead_rates", {
   departmentId: uuid("department_id"),
   category: text("category"), // Equipment / Indirect Labour / Consumables…
   method: text("method", { enum: ["three_year_average", "live", "standard"] }).notNull().default("live"),
-  /** How to read `rate`: per_hour = amount per labor hour,
+  /** How to read `rate`: per_hour = $/labor-hour (the source platform/adminapp model),
    *  percent = % of labor cost. */
   rateKind: text("rate_kind", { enum: ["per_hour", "percent"] }).notNull().default("per_hour"),
   /** The rate value — $/hour when rateKind=per_hour, a percentage when percent. */
@@ -288,5 +293,5 @@ export const timeTypes = pgTable("time_types", {
   billMultiplier: money("bill_multiplier").notNull().default("1"),
   isBillableDefault: boolean("is_billable_default").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
-  custom: jsonb("custom").notNull().default({}), // retains connector identity for time-record imports
+  custom: jsonb("custom").notNull().default({}), // keeps source platform nsId for the time-record import bridge
 });

@@ -34,6 +34,7 @@ type ControlAccounts = {
   taxPaid: string
   employeePayable: string
   fxUnrealizedGainLoss: string
+  fxRealizedGainLoss: string
   laborWip?: string
   laborClearing?: string
   unbilledReceivable?: string
@@ -68,6 +69,7 @@ const CONTROL_FIELDS: { key: keyof ControlAccounts }[] = [
   { key: 'taxPaid' },
   { key: 'employeePayable' },
   { key: 'fxUnrealizedGainLoss' },
+  { key: 'fxRealizedGainLoss' },
   { key: 'laborWip' },
   { key: 'laborClearing' },
   { key: 'unbilledReceivable' },
@@ -78,10 +80,14 @@ export function SettingsForm({
   initial,
   accounts,
   currencies,
+  multiSubsidiary = false,
 }: {
   initial: Initial
   accounts: AccountOption[]
   currencies: { code: string; name: string }[]
+  /** When the org runs multiple legal entities, identity/currency are per
+   *  subsidiary and control accounts here are the fallback defaults. */
+  multiSubsidiary?: boolean
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
@@ -145,6 +151,18 @@ export function SettingsForm({
           <CardTitle>{t('organization.title')}</CardTitle>
           <CardDescription>{t('organization.description')}</CardDescription>
         </CardHeader>
+        {multiSubsidiary ? (
+          <CardContent className="pt-0">
+            <Alert>
+              <AlertDescription className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                <span>{t('organization.perEntityNote')}</span>
+                <Link href="/admin/setup/subsidiaries" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                  {t('organization.subsidiariesLink')}
+                </Link>
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        ) : null}
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="name">{t('organization.displayName')}</Label>
@@ -314,6 +332,13 @@ export function SettingsForm({
           <CardTitle>{t('controlAccounts.title')}</CardTitle>
           <CardDescription>{t('controlAccounts.description')}</CardDescription>
         </CardHeader>
+        {multiSubsidiary ? (
+          <CardContent className="pt-0">
+            <Alert>
+              <AlertDescription>{t('controlAccounts.defaultsNote')}</AlertDescription>
+            </Alert>
+          </CardContent>
+        ) : null}
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {CONTROL_FIELDS.map((field) => {
             const label = t(`controlAccounts.fields.${field.key}.label`)

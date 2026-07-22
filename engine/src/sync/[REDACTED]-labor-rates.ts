@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg, { type PoolClient } from "pg";
+import { cmp, normalizeMoney } from "../money.ts";
 
 type Row = Record<string, unknown>;
 
@@ -207,6 +208,18 @@ interface SourceCustomer {
 interface SourceJob {
   CustomerID: number | null;
   RateID: number | null;
+}
+
+/** Reuse the NetSuite-owned party whenever that source identity is present. */
+export function canonicalCustomerPartyId(
+  customer: SourceCustomer,
+  existingByExternalId: ReadonlyMap<string, string>,
+): string {
+  return (
+    (customer.NetsuiteID != null
+      ? existingByExternalId.get(String(customer.NetsuiteID))
+      : undefined) ?? deterministicUuid("customer", customer.id)
+  );
 }
 
 /** The source table contains rows written by two historical code paths: most
@@ -541,6 +554,33 @@ export async function importAdminApp2LaborRates(options: {
     );
 
     const sourceCustomers = customersRes.rows as SourceCustomer[];
+    const externalCustomerIds = [
+      ...new Set(
+        sourceCustomers
+          .filter((customer) => customer.NetsuiteID != null)
+          .map((customer) => String(customer.NetsuiteID)),
+      ),
+    ];
+    const existingCustomers = externalCustomerIds.length
+      ? await client.query<{ id: string; external_id: string }>(
+          `select id,custom->>'nsId' external_id
+             from parties
+            where org_id=$1 and custom->>'nsId'=any($2::text[])`,
+          [orgId, externalCustomerIds],
+        )
+      : { rows: [] as { id: string; external_id: string }[] };
+    const existingCustomerByExternal = new Map(
+      existingCustomers.rows.map((customer) => [
+        customer.external_id,
+        customer.id,
+      ]),
+    );
+    const customerPartyIdByLocal = new Map(
+      sourceCustomers.map((customer) => [
+        Number(customer.id),
+        canonicalCustomerPartyId(customer, existingCustomerByExternal),
+      ]),
+    );
     await bulkInsert(
       client,
       "parties",
@@ -554,7 +594,7 @@ export async function importAdminApp2LaborRates(options: {
         "custom",
       ],
       sourceCustomers.map((c) => [
-        deterministicUuid("customer", c.id),
+        customerPartyIdByLocal.get(Number(c.id)),
         orgId,
         "company",
         c.Name || `Customer ${c.id}`,
@@ -568,7 +608,7 @@ export async function importAdminApp2LaborRates(options: {
           },
         }),
       ]),
-      `on conflict (id) do update set display_name=excluded.display_name,is_active=excluded.is_active,custom=excluded.custom,updated_at=now()`,
+      `on conflict (id) do update set display_name=excluded.display_name,is_active=excluded.is_active,custom=parties.custom||excluded.custom,updated_at=now()`,
     );
     await bulkInsert(
       client,
@@ -577,11 +617,11 @@ export async function importAdminApp2LaborRates(options: {
       sourceCustomers.map((c) => [
         deterministicUuid("customer-role", c.id),
         orgId,
-        deterministicUuid("customer", c.id),
+        customerPartyIdByLocal.get(Number(c.id)),
         options.currency,
         c.IsInactive !== true,
       ]),
-      `on conflict (id) do update set currency=excluded.currency,is_active=excluded.is_active,updated_at=now()`,
+      `on conflict (party_id) do update set currency=excluded.currency,is_active=excluded.is_active,updated_at=now()`,
     );
     const customerByLocal = new Map(
       sourceCustomers.map((c) => [Number(c.id), c]),
@@ -626,7 +666,7 @@ export async function importAdminApp2LaborRates(options: {
           orgId,
           String(j.NetsuiteID ?? j.id),
           String(j.Name ?? `Project ${j.id}`),
-          customer ? deterministicUuid("customer", customer.id) : null,
+          customer ? customerPartyIdByLocal.get(Number(customer.id)) : null,
           rootSubsidiaryId,
           j.IsInactive === true ? "closed" : "active",
           billingMethod(j.BillingType),
@@ -988,7 +1028,7 @@ export async function importAdminApp2LaborRates(options: {
         orgId,
         deterministicUuid("rate-book", String(matrix.RateID)),
         deterministicUuid("rate-version", String(matrix.RateID)),
-        deterministicUuid("customer", resolved.customer.id),
+        customerPartyIdByLocal.get(Number(resolved.customer.id)),
         null,
         dateOnly(matrix.StartDate),
         dateOnly(matrix.EndDate),
@@ -1082,7 +1122,8 @@ export async function importAdminApp2LaborRates(options: {
       );
       if (!targetLine) return true;
       const same = (left: unknown, right: unknown) =>
-        (left == null && right == null) || Number(left) === Number(right);
+        (left == null && right == null) ||
+        (left != null && right != null && cmp(normalizeMoney(String(left)), normalizeMoney(String(right))) === 0);
       const tiers = (targetLine.time_type_bill_rates ?? {}) as Record<
         string,
         string

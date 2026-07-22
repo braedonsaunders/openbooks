@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { toUnits } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity } from '../../../../../lib/setup/registry'
 import {
@@ -46,11 +47,11 @@ async function audit(args: {
 }
 
 /** Reconcile a tax group's members join table to exactly `taxCodeIds`. */
-async function syncMembers(groupId: string, taxCodeIds: string[]) {
+async function syncMembers(groupId: string, taxCodeIds: string[], runner: Pick<typeof db, 'execute'> = db) {
   const clean = [...new Set(taxCodeIds.filter((v) => UUID_RE.test(v)))]
-  await db.execute(sql`delete from tax_group_members where tax_group_id = ${groupId}`)
+  await runner.execute(sql`delete from tax_group_members where tax_group_id = ${groupId}`)
   for (let i = 0; i < clean.length; i++) {
-    await db.execute(sql`
+    await runner.execute(sql`
       insert into tax_group_members (tax_group_id, tax_code_id, sequence)
       values (${groupId}, ${clean[i]}, ${i + 1})`)
   }
@@ -73,6 +74,67 @@ async function validateEntityIntegrity(
       if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'invalid-url'
     } catch {
       return 'invalid-url'
+    }
+  }
+  if (entity.key === 'tax-codes') {
+    const current = rowId
+      ? ((await db.execute(sql`select * from tax_codes where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const value = (camel: string, snake: string, fallback: unknown) =>
+      body[camel] !== undefined ? body[camel] : current?.[snake] ?? fallback
+    const calculationType = String(value('calculationType', 'calculation_type', 'standard'))
+    const appliesTo = String(value('appliesTo', 'applies_to', 'both'))
+    const inclusive = coerceBoolean(value('priceIncludesTax', 'price_includes_tax', false))
+    const roundingScale = Number(value('roundingScale', 'rounding_scale', 2))
+    if (!['standard', 'withholding', 'reverse_charge'].includes(calculationType)) return 'invalid-tax-calculation-type'
+    if (inclusive && calculationType !== 'standard') return 'inclusive-standard-only'
+    if (!Number.isInteger(roundingScale) || roundingScale < 0 || roundingScale > 4) return 'invalid-tax-rounding-scale'
+    try {
+      const recovery = toUnits(String(value('recoverablePercent', 'recoverable_percent', '100')))
+      if (recovery < 0n || recovery > toUnits('100')) return 'invalid-recoverable-percent'
+    } catch {
+      return 'invalid-recoverable-percent'
+    }
+    const withholdingAccountId = value('withholdingAccountId', 'withholding_account_id', null)
+    const collectedAccountId = value('collectedAccountId', 'collected_account_id', null)
+    const paidAccountId = value('paidAccountId', 'paid_account_id', null)
+    if (calculationType === 'withholding' && !withholdingAccountId) return 'withholding-account-required'
+    if (calculationType === 'reverse_charge' && (!collectedAccountId || !paidAccountId)) return 'reverse-charge-accounts-required'
+    const accountIds = [withholdingAccountId, collectedAccountId, paidAccountId].filter(Boolean).map(String)
+    if (accountIds.length > 0) {
+      const accounts = (await db.execute(sql`
+        select id from accounts where org_id = ${orgId} and id = any(${`{${accountIds.join(',')}}`}::uuid[])
+          and is_active and not is_summary
+      `)) as any
+      if (accounts.rows.length !== new Set(accountIds).size) return 'invalid-tax-account'
+    }
+    if (!['sales', 'purchases', 'both'].includes(appliesTo)) return 'invalid-tax-application-scope'
+  }
+  if (entity.key === 'tax-groups') {
+    const current = rowId
+      ? ((await db.execute(sql`
+          select price_includes_tax from tax_groups where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const members = Array.isArray(body.members)
+      ? body.members.map(String)
+      : rowId
+        ? ((await db.execute(sql`
+            select tax_code_id from tax_group_members where tax_group_id = ${rowId} order by sequence`)) as any).rows.map((row: any) => String(row.tax_code_id))
+        : []
+    if (members.length === 0) return 'tax-group-members-required'
+    if (new Set(members).size !== members.length || members.some((id: string) => !UUID_RE.test(id))) return 'invalid-tax-group-members'
+    const rows = (await db.execute(sql`
+      select id, calculation_type from tax_codes
+       where org_id = ${orgId} and is_active and id = any(${`{${members.join(',')}}`}::uuid[])
+    `)) as any
+    if (rows.rows.length !== members.length) return 'invalid-tax-group-members'
+    const inclusive = body.priceIncludesTax === undefined
+      ? Boolean(current?.price_includes_tax)
+      : coerceBoolean(body.priceIncludesTax)
+    if (inclusive && rows.rows.some((row: any) => row.calculation_type !== 'standard')) {
+      return 'inclusive-tax-group-standard-only'
     }
   }
   if (entity.key === 'accounting-books') {
@@ -383,25 +445,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   )
 
   try {
-    const inserted = (await db.execute(sql`
-      insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
-      returning ${sql.raw(idColumn(entity))} as id`)) as any
-    const newId = inserted.rows[0]?.id as string
-
-    const members = multirefField(entity)
-    if (members && Array.isArray(body[members.key])) {
-      await syncMembers(newId, (body[members.key] as unknown[]).map(String))
-    }
-    await audit({
-      orgId: entity.orgScoped ? orgId : null,
-      table: entity.table,
-      rowId: String(newId),
-      action: 'insert',
-      changes: {
-        ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
-        ...(entity.key === 'fx-rates' ? { source: 'manual' } : {}),
-      },
-      actorId,
+    const newId = await db.transaction(async (tx) => {
+      const inserted = (await tx.execute(sql`
+        insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
+        returning ${sql.raw(idColumn(entity))} as id`)) as any
+      const id = String(inserted.rows[0]?.id)
+      const members = multirefField(entity)
+      if (members && Array.isArray(body[members.key])) {
+        await syncMembers(id, (body[members.key] as unknown[]).map(String), tx)
+      }
+      await audit({
+        orgId: entity.orgScoped ? orgId : null,
+        table: entity.table,
+        rowId: id,
+        action: 'insert',
+        changes: {
+          ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
+          ...(entity.key === 'fx-rates' ? { source: 'manual' } : {}),
+        },
+        actorId,
+      }, tx)
+      return id
     })
     return NextResponse.json({ id: newId })
   } catch (e) {
@@ -539,27 +603,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
         return NextResponse.json({ error: 'The root subsidiary cannot be deleted' }, { status: 400 })
       }
     }
-    const updated = (await db.execute(sql`
-      update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
-       where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
-      returning ${sql.raw(idColumn(entity))} as id`)) as any
-    if (updated.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
-
-    const members = multirefField(entity)
-    if (members && Array.isArray(body[members.key])) {
-      await syncMembers(id, (body[members.key] as unknown[]).map(String))
-    }
-    await audit({
-      orgId: entity.orgScoped ? orgId : null,
-      table: entity.table,
-      rowId: id,
-      action: 'update',
-      changes: {
-        ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
-        ...(entity.key === 'fx-rates' ? { source: 'manual', provider_config_id: null, imported_at: null } : {}),
-      },
-      actorId,
+    const found = await db.transaction(async (tx) => {
+      const updated = (await tx.execute(sql`
+        update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
+         where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
+        returning ${sql.raw(idColumn(entity))} as id`)) as any
+      if (updated.rows.length === 0) return false
+      const members = multirefField(entity)
+      if (members && Array.isArray(body[members.key])) {
+        await syncMembers(id, (body[members.key] as unknown[]).map(String), tx)
+      }
+      await audit({
+        orgId: entity.orgScoped ? orgId : null,
+        table: entity.table,
+        rowId: id,
+        action: 'update',
+        changes: {
+          ...Object.fromEntries(built.cols.map((c) => [c.column, c.value])),
+          ...(entity.key === 'fx-rates' ? { source: 'manual', provider_config_id: null, imported_at: null } : {}),
+        },
+        actorId,
+      }, tx)
+      return true
     })
+    if (!found) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ id })
   } catch (e) {
     return NextResponse.json({ error: describeDbError(e) }, { status: 400 })

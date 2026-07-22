@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, pool } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { divRate, fromUnits, toUnits } from "../money.ts";
 
 /**
  * Payment-application reconciler — the platform's settlement sync.
@@ -51,7 +51,8 @@ export async function reconcileApplications(
   const lineRows = (await db.execute(sql`
     select d.custom->>${refKey} as ref, l.id as line_id, e.posting_date::text as pdate,
            l.line_number as line_no, abs(l.amount) as amt,
-           l.account_id as account_id, l.party_id as party_id
+           l.account_id as account_id, l.party_id as party_id,
+           l.subsidiary_id, l.currency, l.fx_rate, sign(l.amount) as amount_sign
       from journal_entries e
       join documents d on d.id = e.source_document_id
       join journal_lines l on l.entry_id = e.id and l.is_open_item
@@ -59,14 +60,14 @@ export async function reconcileApplications(
      where e.origin = 'document' and d.org_id = ${orgId}
        and a.type in ('liability_payable', 'asset_receivable')
        and d.custom->>${refKey} is not null`)) as unknown as {
-    rows: { ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null }[];
+    rows: { ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; amount_sign: string }[];
   };
 
-  interface OpenLine { lineId: string; remaining: bigint; date: string; lineNo: number; accountId: string; partyId: string | null }
+  interface OpenLine { lineId: string; remaining: bigint; date: string; lineNo: number; accountId: string; partyId: string | null; subsidiaryId: string; currency: string; fxRate: string; sign: string }
   const linesByRef = new Map<string, OpenLine[]>();
   for (const r of lineRows.rows) {
     const arr = linesByRef.get(r.ref) ?? [];
-    arr.push({ lineId: r.line_id, remaining: toUnits(r.amt), date: r.pdate, lineNo: r.line_no, accountId: r.account_id, partyId: r.party_id });
+    arr.push({ lineId: r.line_id, remaining: toUnits(r.amt), date: r.pdate, lineNo: r.line_no, accountId: r.account_id, partyId: r.party_id, subsidiaryId: r.subsidiary_id, currency: r.currency, fxRate: r.fx_rate, sign: r.amount_sign });
     linesByRef.set(r.ref, arr);
   }
   for (const arr of linesByRef.values()) arr.sort((a, b) => a.lineNo - b.lineNo);
@@ -110,7 +111,7 @@ export async function reconcileApplications(
   }
 
   // -- allocate the missing deltas ---------------------------------------------
-  const toInsert: [string, string, bigint, string][] = []; // from, to, amount, date
+  const toInsert: [string, string, bigint, string, string, string][] = []; // from, to, base, date, txn, currency
   let alreadySettled = 0;
   let skippedNoLine = 0;
   let unallocated = 0n;
@@ -142,7 +143,10 @@ export async function reconcileApplications(
       // as unallocated), which is the faithful outcome.
       if (
         payLines[pi]!.accountId !== appLines[ai]!.accountId ||
-        payLines[pi]!.partyId !== appLines[ai]!.partyId
+        payLines[pi]!.partyId !== appLines[ai]!.partyId ||
+        payLines[pi]!.subsidiaryId !== appLines[ai]!.subsidiaryId ||
+        payLines[pi]!.currency !== appLines[ai]!.currency ||
+        payLines[pi]!.sign === appLines[ai]!.sign
       ) {
         if (payLines[pi]!.lineNo <= appLines[ai]!.lineNo) pi++;
         else ai++;
@@ -155,7 +159,14 @@ export async function reconcileApplications(
         else ai++;
         continue;
       }
-      toInsert.push([payLines[pi]!.lineId, appLines[ai]!.lineId, alloc, payLines[pi]!.date]);
+      toInsert.push([
+        payLines[pi]!.lineId,
+        appLines[ai]!.lineId,
+        alloc,
+        payLines[pi]!.date,
+        divRate(fromUnits(alloc), appLines[ai]!.fxRate),
+        appLines[ai]!.currency,
+      ]);
       payLines[pi]!.remaining -= alloc;
       appLines[ai]!.remaining -= alloc;
       remaining -= alloc;
@@ -177,12 +188,12 @@ export async function reconcileApplications(
       const params: unknown[] = [orgId];
       for (const row of chunk) {
         const b = params.length;
-        params.push(row[0], row[1], fromUnits(row[2]), row[3]);
-        values.push(`($1, $${b + 1}, $${b + 2}, $${b + 3}, $${b + 4})`);
+        params.push(row[0], row[1], fromUnits(row[2]), fromUnits(row[2]), row[4], row[5], row[3]);
+        values.push(`($1, $${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7})`);
         insertedUnits += row[2];
       }
       await client.query(
-        `insert into applications (org_id, from_line_id, to_line_id, amount, applied_on) values ${values.join(",")}`,
+        `insert into applications (org_id, from_line_id, to_line_id, amount, source_amount, transaction_amount, transaction_currency, applied_on) values ${values.join(",")}`,
         params,
       );
       inserted += chunk.length;
