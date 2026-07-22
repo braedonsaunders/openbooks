@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { resolveAssetAccounts } from '@openbooks/engine/src/depreciation.ts'
+import { add, fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
 
 /**
  * Asset payload for the flyout: the asset row, its category, the resolved
@@ -37,6 +38,14 @@ export interface AssetPayload {
     accumulated: string
     netBookValue: string
     journalEntryId: string | null
+    source: 'formula' | 'manual' | 'production_usage' | 'imported'
+    input: {
+      id: string
+      kind: 'manual' | 'production_usage'
+      productionUnits: string | null
+      memo: string
+      evidenceReference: string
+    } | null
   }[]
 }
 
@@ -89,24 +98,28 @@ export async function loadAsset(id: string, orgId: string): Promise<AssetPayload
 
   // Full schedule for the primary book, period-ordered, with running totals.
   const linesRes = (await db.execute(sql`
-    select l.id, l.sequence, l.planned_amount, l.posted_amount, l.journal_entry_id,
+    select l.id, l.sequence, l.planned_amount, l.posted_amount, l.journal_entry_id, l.source,
+           i.id as input_id, i.kind as input_kind, i.production_units, i.memo as input_memo,
+           i.evidence_reference,
            p.name as period_name, p.ends_on as period_ends_on, p.starts_on as period_starts_on
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id
       join accounting_books b on b.id = s.book_id and b.is_primary = true
       join accounting_periods p on p.id = l.period_id
+      left join depreciation_inputs i on i.id = l.input_id
      where s.asset_id = ${id} and l.org_id = ${orgId}
      order by p.starts_on, l.sequence
   `)) as unknown as { rows: Record<string, any>[] }
 
-  const cost = Number(asset.acquisition_cost ?? 0)
-  let running = 0
-  let postedTotal = 0
-  let plannedTotal = 0
+  const cost = toUnits(String(asset.acquisition_cost ?? '0'))
+  let running = '0.0000'
+  let postedTotal = '0.0000'
+  let plannedTotal = '0.0000'
   const schedule = linesRes.rows.map((l) => {
-    running += Number(l.planned_amount ?? 0)
-    plannedTotal += Number(l.planned_amount ?? 0)
-    if (l.posted_amount != null) postedTotal += Number(l.posted_amount)
+    const planned = String(l.planned_amount ?? '0')
+    running = add(running, planned)
+    plannedTotal = add(plannedTotal, planned)
+    if (l.posted_amount != null) postedTotal = add(postedTotal, String(l.posted_amount))
     return {
       id: l.id as string,
       sequence: Number(l.sequence),
@@ -114,14 +127,22 @@ export async function loadAsset(id: string, orgId: string): Promise<AssetPayload
       periodEndsOn: l.period_ends_on as string,
       plannedAmount: String(l.planned_amount),
       postedAmount: l.posted_amount != null ? String(l.posted_amount) : null,
-      accumulated: running.toFixed(2),
-      netBookValue: (cost - running).toFixed(2),
+      accumulated: running,
+      netBookValue: fromUnits(cost - toUnits(running)),
       journalEntryId: (l.journal_entry_id as string | null) ?? null,
+      source: l.source as 'formula' | 'manual' | 'production_usage' | 'imported',
+      input: l.input_id ? {
+        id: l.input_id as string,
+        kind: l.input_kind as 'manual' | 'production_usage',
+        productionUnits: l.production_units != null ? String(l.production_units) : null,
+        memo: String(l.input_memo),
+        evidenceReference: String(l.evidence_reference),
+      } : null,
     }
   })
 
-  const accumulated = postedTotal.toFixed(2)
-  const netBookValue = (cost - postedTotal).toFixed(2)
+  const accumulated = postedTotal
+  const netBookValue = fromUnits(cost - toUnits(postedTotal))
 
   return {
     asset,
@@ -139,8 +160,8 @@ export async function loadAsset(id: string, orgId: string): Promise<AssetPayload
     totals: {
       accumulated,
       netBookValue,
-      posted: postedTotal.toFixed(2),
-      planned: plannedTotal.toFixed(2),
+      posted: postedTotal,
+      planned: plannedTotal,
     },
     schedule,
   }

@@ -61,6 +61,8 @@
     "method": "Método",
     "lifeMonths": "Vida útil (meses)",
     "ratePercent": "Taxa (%/ano)",
+    "unitsTotal": "Unidades totais previstas",
+    "convention": "Convenção do primeiro período",
     "serialNumber": "Número de série",
     "description": "Descrição",
     "assetAccount": "Conta do ativo",
@@ -74,6 +76,14 @@
     "units_of_production": "Unidades produzidas",
     "manual": "Manual"
   },
+  "conventions": { "full_month": "Mês completo", "mid_month": "Meio do mês", "half_year": "Meio ano" },
+  "depreciationInput": {
+    "recordUsage": "Registrar uso de produção", "recordManual": "Registrar depreciação manual",
+    "effectiveDate": "Data efetiva", "productionUnits": "Unidades de produção", "manualAmount": "Valor da depreciação",
+    "memo": "Nota contábil", "memoPlaceholder": "Motivo e contexto do cálculo", "evidenceReference": "Referência da evidência",
+    "evidencePlaceholder": "Leitura do medidor, ordem de serviço ou arquivo", "replacementNotice": "Um lançamento não contabilizado substitui a evidência anterior. Use um lançamento negativo com evidência separada para corrigir um valor contabilizado.",
+    "save": "Registrar evidência", "saving": "Registrando…", "saved": "{amount} registrado para {period}", "failed": "Não foi possível registrar a evidência de depreciação"
+  },
   "status": {
     "draft": "Rascunho",
     "in_service": "Em uso",
@@ -86,6 +96,8 @@
     "noAvailableSubsidiary": "Seu papel não tem nenhuma subsidiária ativa disponível para este ativo."
   },
   "drawer": {
+    "tabsAria": "Seções do registro do ativo",
+    "customForm": "Formulário do registro",
     "newAsset": "Novo ativo",
     "editing": "Editando — Salve para aplicar as alterações",
     "identity": "Identidade",
@@ -96,6 +108,10 @@
     "period": "Período",
     "planned": "Planejado",
     "postedAmount": "Lançado",
+    "evidence": "Evidência",
+    "formulaGenerated": "Gerado por fórmula",
+    "importedEvidence": "Evidência inicial importada",
+    "productionUnits": "{units} unidades",
     "runForAsset": "Executar depreciação",
     "placeInService": "Colocar em uso",
     "viewEntry": "Ver lançamento",

@@ -9,6 +9,7 @@ import {
   prorateFirstInvoice,
   type Interval,
 } from "@openbooks/engine/src/subscription-billing.ts";
+import { add } from "@openbooks/engine/src/money.ts";
 import { requirePermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 
@@ -48,13 +49,13 @@ export async function GET() {
     `) as unknown as Promise<{ rows: any[] }>,
   ]);
 
-  let mrr = 0;
+  let mrr = "0.0000";
   const subscriptions = subs.rows.map((s) => {
     const m =
       s.status === "active"
         ? monthlyRecurringRevenue(String(s.priceOverride ?? s.planAmount ?? "0"), s.interval as Interval, Number(s.intervalCount ?? 1), String(s.quantity ?? "1"))
-        : 0;
-    if (s.status === "active") mrr += m;
+        : "0.0000";
+    if (s.status === "active") mrr = add(mrr, m);
     return { ...s, mrr: m };
   });
   return NextResponse.json({ plans: plans.rows, subscriptions, mrr });

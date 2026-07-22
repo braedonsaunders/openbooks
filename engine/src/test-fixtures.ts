@@ -302,6 +302,7 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "document_lines",
       "documents",
       "depreciation_schedule_lines",
+      "depreciation_inputs",
       "depreciation_schedules",
       "depreciation_book_policies",
       "asset_events",

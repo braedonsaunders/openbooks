@@ -61,6 +61,8 @@
     "method": "Méthode",
     "lifeMonths": "Durée d'utilisation (mois)",
     "ratePercent": "Taux (%/an)",
+    "unitsTotal": "Unités totales prévues",
+    "convention": "Convention de première période",
     "serialNumber": "Numéro de série",
     "description": "Description",
     "assetAccount": "Compte d'actif",
@@ -74,6 +76,14 @@
     "units_of_production": "Unités de production",
     "manual": "Manuel"
   },
+  "conventions": { "full_month": "Mois complet", "mid_month": "Mi-mois", "half_year": "Demi-année" },
+  "depreciationInput": {
+    "recordUsage": "Saisir l’utilisation de production", "recordManual": "Saisir l’amortissement manuel",
+    "effectiveDate": "Date d’effet", "productionUnits": "Unités de production", "manualAmount": "Montant d’amortissement",
+    "memo": "Note comptable", "memoPlaceholder": "Motif et contexte du calcul", "evidenceReference": "Référence justificative",
+    "evidencePlaceholder": "Relevé de compteur, ordre de travail ou fichier", "replacementNotice": "Une saisie non comptabilisée remplace le justificatif antérieur. Utilisez une saisie négative avec un justificatif distinct pour corriger un montant comptabilisé.",
+    "save": "Enregistrer le justificatif", "saving": "Enregistrement…", "saved": "{amount} enregistré pour {period}", "failed": "Impossible d’enregistrer le justificatif d’amortissement"
+  },
   "status": {
     "draft": "Brouillon",
     "in_service": "En service",
@@ -86,6 +96,8 @@
     "noAvailableSubsidiary": "Votre rôle ne dispose d'aucune filiale active pour cet actif."
   },
   "drawer": {
+    "tabsAria": "Sections de l’immobilisation",
+    "customForm": "Formulaire du dossier",
     "newAsset": "Nouvel actif",
     "editing": "Modification — Enregistrer pour appliquer les modifications",
     "identity": "Identité",
@@ -96,6 +108,10 @@
     "period": "Période",
     "planned": "Prévu",
     "postedAmount": "Comptabilisé",
+    "evidence": "Justificatif",
+    "formulaGenerated": "Généré par formule",
+    "importedEvidence": "Justificatif d’ouverture importé",
+    "productionUnits": "{units} unités",
     "runForAsset": "Exécuter l'amortissement",
     "placeInService": "Mettre en service",
     "viewEntry": "Voir l'écriture",

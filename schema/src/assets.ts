@@ -8,6 +8,7 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -89,6 +90,17 @@ export const fixedAssets = pgTable(
     projectId: uuid("project_id"),
     locationId: uuid("location_id"),
     custodianPartyId: uuid("custodian_party_id"),
+    /** Native per-asset depreciation overrides. Null means use the category/book policy. */
+    depreciationMethod: text("depreciation_method", {
+      enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
+    }),
+    usefulLifeMonths: integer("useful_life_months"),
+    depreciationRatePercent: money("depreciation_rate_percent"),
+    depreciationConvention: text("depreciation_convention", {
+      enum: ["full_month", "mid_month", "half_year"],
+    }),
+    /** Expected lifetime output for units-of-production depreciation. */
+    depreciationUnitsTotal: money("depreciation_units_total"),
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
@@ -149,7 +161,13 @@ export const depreciationSchedules = pgTable(
     unitsTotal: money("units_total"), // units-of-production
     ...auditColumns,
   },
-  (t) => [index("depr_schedules_asset").on(t.assetId)],
+  (t) => [
+    uniqueIndex("depr_schedules_org_asset_book").on(t.orgId, t.assetId, t.bookId),
+    index("depr_schedules_asset").on(t.assetId),
+    check("depr_schedules_positive_life", sql`${t.lifeMonths} is null or ${t.lifeMonths} > 0`),
+    check("depr_schedules_nonnegative_rate", sql`${t.ratePercent} is null or ${t.ratePercent} >= 0`),
+    check("depr_schedules_positive_units", sql`${t.unitsTotal} is null or ${t.unitsTotal} > 0`),
+  ],
 );
 
 export const depreciationScheduleLines = pgTable(
@@ -163,9 +181,66 @@ export const depreciationScheduleLines = pgTable(
     plannedAmount: money("planned_amount").notNull(),
     postedAmount: money("posted_amount"),
     journalEntryId: uuid("journal_entry_id"),
+    /** Calculation provenance: generated formula, accountant evidence, or imported opening history. */
+    source: text("source", { enum: ["formula", "manual", "production_usage", "imported"] }).notNull().default("formula"),
+    inputId: uuid("input_id"),
     ...auditColumns,
   },
-  (t) => [index("depr_lines_schedule").on(t.scheduleId), index("depr_lines_period").on(t.periodId)],
+  (t) => [
+    uniqueIndex("depr_lines_org_formula_period")
+      .on(t.orgId, t.scheduleId, t.periodId)
+      .where(sql`${t.source} = 'formula'`),
+    index("depr_lines_schedule").on(t.scheduleId),
+    index("depr_lines_period").on(t.periodId),
+    check(
+      "depr_lines_amount_direction",
+      sql`${t.source} in ('manual', 'production_usage')
+          or (${t.plannedAmount} >= 0 and (${t.postedAmount} is null or ${t.postedAmount} >= 0))`,
+    ),
+    check(
+      "depr_lines_posting_evidence_pair",
+      sql`(${t.postedAmount} is null and ${t.journalEntryId} is null) or (${t.postedAmount} is not null and (${t.postedAmount} = 0 or ${t.journalEntryId} is not null or ${t.source} = 'imported'))`,
+    ),
+    check(
+      "depr_lines_input_provenance",
+      sql`(${t.source} in ('formula', 'imported') and ${t.inputId} is null) or (${t.source} in ('manual', 'production_usage') and ${t.inputId} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * Append-preserved accountant inputs supporting manual and units-of-production
+ * depreciation. Replacing an unposted input voids it and inserts a successor;
+ * posted evidence is protected by the kernel trigger.
+ */
+export const depreciationInputs = pgTable(
+  "depreciation_inputs",
+  {
+    id: id(),
+    orgId: orgRef(),
+    scheduleId: uuid("schedule_id").notNull(),
+    periodId: uuid("period_id").notNull(),
+    kind: text("kind", { enum: ["manual", "production_usage"] }).notNull(),
+    manualAmount: money("manual_amount"),
+    productionUnits: money("production_units"),
+    memo: text("memo").notNull(),
+    /** File-cabinet attachment, meter reading id, work order, or other source reference. */
+    evidenceReference: text("evidence_reference").notNull(),
+    supersedesInputId: uuid("supersedes_input_id"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by"),
+    ...auditColumns,
+  },
+  (t) => [
+    index("depr_inputs_schedule_period").on(t.scheduleId, t.periodId),
+    index("depr_inputs_org_active").on(t.orgId, t.scheduleId, t.voidedAt),
+    check(
+      "depr_inputs_kind_value",
+      sql`(${t.kind} = 'manual' and ${t.manualAmount} is not null and ${t.manualAmount} <> 0 and ${t.productionUnits} is null)
+          or (${t.kind} = 'production_usage' and ${t.productionUnits} is not null and ${t.productionUnits} <> 0 and ${t.manualAmount} is null)`,
+    ),
+    check("depr_inputs_evidence_required", sql`length(btrim(${t.memo})) > 0 and length(btrim(${t.evidenceReference})) > 0`),
+  ],
 );
 
 /** Lifecycle events; disposals/revaluations carry their posted entries. */
@@ -205,8 +280,12 @@ export const depreciationBookPolicies = pgTable(
     }).notNull().default("straight_line"),
     lifeMonths: integer("life_months"),
     ratePercent: money("rate_percent"),
+    unitsTotal: money("units_total"),
     convention: text("convention", { enum: ["full_month", "mid_month", "half_year"] }).notNull().default("full_month"),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("dep_book_policies_identity").on(t.orgId, t.bookId, t.categoryId)],
+  (t) => [
+    uniqueIndex("dep_book_policies_identity").on(t.orgId, t.bookId, t.categoryId),
+    check("dep_book_policies_positive_units", sql`${t.unitsTotal} is null or ${t.unitsTotal} > 0`),
+  ],
 );

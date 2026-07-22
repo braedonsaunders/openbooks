@@ -1647,6 +1647,7 @@
       "gapless": "Gapless",
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
+      "showOnFieldTicket": "Afficher sur les bons de régie",
       "category": "Category",
       "method": "Method",
       "postsGl": "Comptabilise au grand livre",
@@ -1766,9 +1767,11 @@
         "paper": "Formulaire papier officiel"
       },
       "method": {
-        "straightLine": "Straight line",
-        "decliningBalance": "Declining balance",
-        "doubleDeclining": "Double declining"
+        "straightLine": "Linéaire",
+        "decliningBalance": "Dégressif",
+        "doubleDeclining": "Double dégressif",
+        "unitsOfProduction": "Unités de production",
+        "manual": "Manuel"
       },
       "convention": {
         "fullMonth": "Mois complet",
@@ -2116,7 +2119,7 @@
         "reviewTradeRates": "+ {count} taux par métier.",
         "reviewPosting": "Le coût standard sera comptabilisé à l'approbation",
         "reviewNoPosting": "La comptabilisation reste désactivée — activable plus tard",
-        "reviewExample": "Exemple avec un salaire de ${wage}/h :",
+        "reviewExample": "Exemple avec un salaire de {wage}/h :",
         "exReg": "Normal",
         "exOt": "Supp. ×1,5",
         "exDt": "Double ×2",
@@ -2130,7 +2133,7 @@
         "fallbackRate": "Taux de repli optionnel pour les employés sans salaire",
         "fallbackHint": "Garde le calcul des coûts fonctionnel pendant que les fiches se remplissent — la plupart le laissent vide.",
         "reviewEmployeeRates": "Salaires pour {count} employé(s).",
-        "reviewFallback": "Repli de {rate} $/h pour les non-tarifés.",
+        "reviewFallback": "Repli de {rate}/h pour les non-tarifés.",
         "wagesOnRecord": "Le salaire de chaque employé (et son historique) se définit sur sa fiche d'employé — là où vous gérez tout le reste. Rien à remplir ici.",
         "openEmployees": "Ouvrir les employés",
         "reviewWagesOnRecord": "Les salaires proviennent de la fiche de chaque employé."

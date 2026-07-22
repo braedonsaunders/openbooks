@@ -1603,6 +1603,7 @@
       "gapless": "Gapless",
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
+      "showOnFieldTicket": "Mostrar en partes de campo",
       "category": "Category",
       "method": "Method",
       "postsGl": "Contabiliza en el libro mayor",
@@ -1722,9 +1723,11 @@
         "paper": "Formulario oficial en papel"
       },
       "method": {
-        "straightLine": "Straight line",
-        "decliningBalance": "Declining balance",
-        "doubleDeclining": "Double declining"
+        "straightLine": "Línea recta",
+        "decliningBalance": "Saldo decreciente",
+        "doubleDeclining": "Doble saldo decreciente",
+        "unitsOfProduction": "Unidades de producción",
+        "manual": "Manual"
       },
       "convention": {
         "fullMonth": "Mes completo",
@@ -2072,7 +2075,7 @@
         "reviewTradeRates": "+ {count} tarifa(s) por oficio.",
         "reviewPosting": "El costo estándar se contabilizará al aprobar",
         "reviewNoPosting": "La contabilización queda apagada — puede activarla después",
-        "reviewExample": "Ejemplo con salario de ${wage}/h:",
+        "reviewExample": "Ejemplo con salario de {wage}/h:",
         "exReg": "Normal",
         "exOt": "Extra ×1.5",
         "exDt": "Doble ×2",
@@ -2086,7 +2089,7 @@
         "fallbackRate": "Tarifa de respaldo opcional para empleados sin salario aún",
         "fallbackHint": "Mantiene el costeo funcionando mientras se completan las fichas — la mayoría lo deja vacío.",
         "reviewEmployeeRates": "Salarios para {count} empleado(s).",
-        "reviewFallback": "Respaldo de ${rate}/h para quien no tenga tarifa.",
+        "reviewFallback": "Respaldo de {rate}/h para quien no tenga tarifa.",
         "wagesOnRecord": "El salario de cada empleado (y su historial) se define en su ficha de empleado — donde gestiona todo lo demás. Aquí no hay nada que llenar.",
         "openEmployees": "Abrir Empleados",
         "reviewWagesOnRecord": "Los salarios provienen de la ficha de cada empleado."

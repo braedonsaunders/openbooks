@@ -308,7 +308,16 @@ alter table depreciation_schedules
 alter table depreciation_schedule_lines
   add foreign key (schedule_id) references depreciation_schedules(id),
   add foreign key (period_id) references accounting_periods(id),
-  add foreign key (journal_entry_id) references journal_entries(id);
+  add foreign key (journal_entry_id) references journal_entries(id),
+  add foreign key (input_id) references depreciation_inputs(id);
+alter table depreciation_inputs
+  add foreign key (org_id) references orgs(id),
+  add foreign key (schedule_id) references depreciation_schedules(id),
+  add foreign key (period_id) references accounting_periods(id),
+  add foreign key (supersedes_input_id) references depreciation_inputs(id),
+  add foreign key (voided_by) references users(id),
+  add foreign key (created_by) references users(id),
+  add foreign key (updated_by) references users(id);
 alter table asset_events
   add foreign key (asset_id) references fixed_assets(id),
   add foreign key (journal_entry_id) references journal_entries(id);

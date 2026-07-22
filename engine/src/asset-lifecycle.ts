@@ -145,7 +145,7 @@ export async function disposeAsset(
            c.asset_account_id, c.accumulated_depreciation_account_id, c.gain_loss_account_id,
            coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
                        join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
-                      where s.asset_id = a.id and l.journal_entry_id is not null), 0)::text as accumulated
+                      where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id
       join asset_categories c on c.id = a.category_id
@@ -238,7 +238,7 @@ export async function remeasureAsset(
            c.accumulated_depreciation_account_id, c.gain_loss_account_id,
            coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
                        join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
-                      where s.asset_id = a.id and l.journal_entry_id is not null), 0)::text as accumulated
+                      where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id
       join asset_categories c on c.id = a.category_id
@@ -302,7 +302,7 @@ export async function remeasureAsset(
   const remaining = (await db.execute(sql`
     select l.id from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
-     where l.org_id = ${orgId} and s.asset_id = ${assetId} and l.journal_entry_id is null
+     where l.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is null
      order by l.sequence`)) as unknown as { rows: { id: string }[] };
   const count = remaining.rows.length;
   let rebuilt = 0;

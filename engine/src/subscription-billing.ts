@@ -52,10 +52,12 @@ export function monthlyRecurringRevenue(
   interval: Interval,
   intervalCount: number,
   quantity: string,
-): number {
-  const perPeriod = Number(mul(amount, quantity));
-  const months = (interval === "weekly" ? 12 / 52 : interval === "monthly" ? 1 : interval === "quarterly" ? 3 : 12) * Math.max(1, intervalCount);
-  return months > 0 ? perPeriod / months : 0;
+): string {
+  const perPeriod = mul(amount, quantity);
+  const count = BigInt(Math.max(1, Math.trunc(intervalCount)));
+  if (interval === "weekly") return mulRatio(perPeriod, 52n, 12n * count);
+  const months = interval === "monthly" ? 1n : interval === "quarterly" ? 3n : 12n;
+  return mulRatio(perPeriod, 1n, months * count);
 }
 
 async function nextNumber(orgId: string, kind: string, subsidiaryId: string | null, prefix: string): Promise<string> {

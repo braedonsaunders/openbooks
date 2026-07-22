@@ -1649,6 +1649,7 @@
       "gapless": "連番（欠番なし）",
       "costMultiplier": "コスト乗数",
       "isBillableDefault": "既定で請求可能",
+      "showOnFieldTicket": "フィールドチケットに表示",
       "category": "カテゴリ",
       "method": "方法",
       "postsGl": "GLに記帳",
@@ -1772,7 +1773,9 @@
       "method": {
         "straightLine": "定額法",
         "decliningBalance": "定率法",
-        "doubleDeclining": "倍額定率法"
+        "doubleDeclining": "倍額定率法",
+        "unitsOfProduction": "生産高比例法",
+        "manual": "手動"
       },
       "convention": {
         "fullMonth": "月初計上",

@@ -1763,6 +1763,7 @@
       "gapless": "Gapless",
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
+      "showOnFieldTicket": "Show on field tickets",
       "category": "Category",
       "postsGl": "Posts to GL",
       "bookId": "Book",
@@ -1919,7 +1920,9 @@
       "method": {
         "straightLine": "Straight line",
         "decliningBalance": "Declining balance",
-        "doubleDeclining": "Double declining"
+        "doubleDeclining": "Double declining",
+        "unitsOfProduction": "Units of production",
+        "manual": "Manual"
       },
       "convention": {
         "fullMonth": "Full month",
@@ -2267,7 +2270,7 @@
         "reviewTradeRates": "+ {count} trade rate(s).",
         "reviewPosting": "Standard cost will post to jobs at approval",
         "reviewNoPosting": "Posting stays off — you can enable it later",
-        "reviewExample": "Example at a ${wage}/h wage:",
+        "reviewExample": "Example at a {wage}/h wage:",
         "exReg": "Regular",
         "exOt": "OT ×1.5",
         "exDt": "DT ×2",
@@ -2281,7 +2284,7 @@
         "fallbackRate": "Optional fallback rate for employees without a wage yet",
         "fallbackHint": "Keeps job costing working while records are being filled in — most companies leave this empty.",
         "reviewEmployeeRates": "Wages for {count} employee(s).",
-        "reviewFallback": "Fallback ${rate}/h for anyone unrated.",
+        "reviewFallback": "Fallback {rate}/h for anyone unrated.",
         "wagesOnRecord": "Each employee's wage (and raise history) is set on their employee record — exactly where you manage everything else about them. Nothing to fill in here.",
         "openEmployees": "Open Employees",
         "reviewWagesOnRecord": "Wages come from each employee's record."

@@ -61,6 +61,8 @@
     "method": "Método",
     "lifeMonths": "Vida útil (meses)",
     "ratePercent": "Tasa (%/año)",
+    "unitsTotal": "Unidades totales previstas",
+    "convention": "Convención del primer período",
     "serialNumber": "Número de serie",
     "description": "Descripción",
     "assetAccount": "Cuenta de activo",
@@ -74,6 +76,14 @@
     "units_of_production": "Unidades de producción",
     "manual": "Manual"
   },
+  "conventions": { "full_month": "Mes completo", "mid_month": "Mitad de mes", "half_year": "Medio año" },
+  "depreciationInput": {
+    "recordUsage": "Registrar uso de producción", "recordManual": "Registrar depreciación manual",
+    "effectiveDate": "Fecha efectiva", "productionUnits": "Unidades de producción", "manualAmount": "Importe de depreciación",
+    "memo": "Nota contable", "memoPlaceholder": "Motivo y contexto del cálculo", "evidenceReference": "Referencia de evidencia",
+    "evidencePlaceholder": "Lectura de contador, orden de trabajo o archivo", "replacementNotice": "Una entrada no contabilizada reemplaza la evidencia anterior. Use una entrada negativa con evidencia separada para corregir un importe contabilizado.",
+    "save": "Registrar evidencia", "saving": "Registrando…", "saved": "Se registró {amount} para {period}", "failed": "No se pudo registrar la evidencia de depreciación"
+  },
   "status": {
     "draft": "Borrador",
     "in_service": "En servicio",
@@ -86,6 +96,8 @@
     "noAvailableSubsidiary": "Su rol no tiene ninguna subsidiaria activa disponible para este activo."
   },
   "drawer": {
+    "tabsAria": "Secciones del activo",
+    "customForm": "Formulario del registro",
     "newAsset": "Nuevo activo",
     "editing": "Editando — Guarde para aplicar los cambios",
     "identity": "Identidad",
@@ -96,6 +108,10 @@
     "period": "Período",
     "planned": "Planificado",
     "postedAmount": "Contabilizado",
+    "evidence": "Evidencia",
+    "formulaGenerated": "Generado por fórmula",
+    "importedEvidence": "Evidencia inicial importada",
+    "productionUnits": "{units} unidades",
     "runForAsset": "Ejecutar depreciación",
     "placeInService": "Poner en servicio",
     "viewEntry": "Ver asiento",

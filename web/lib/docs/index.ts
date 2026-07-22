@@ -11,6 +11,7 @@ import { laborPricing } from './articles/labor-pricing'
 import { taxConfiguration } from './articles/tax-configuration'
 import { fieldTickets } from './articles/field-tickets'
 import { itemRates } from './articles/item-rates'
+import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
@@ -144,6 +145,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'chart-of-accounts-and-dimensions': 'accounting-ledger',
   'parties-items-and-projects': 'accounting-master-data',
   'revenue-recognition': 'accounting-advanced',
+  'fixed-assets-depreciation': 'accounting-advanced',
   'sales-workflow': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
   'payments-and-applications': 'transactions-daily',
@@ -173,6 +175,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   chartOfAccountsAndDimensions,
   partiesItemsAndProjects,
   revenueRecognition,
+  fixedAssetsDepreciation,
   salesWorkflow,
   purchasingWorkflow,
   paymentsAndApplications,

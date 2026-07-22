@@ -221,6 +221,8 @@ const DEPRECIATION_METHODS = [
   { value: 'straight_line', labelKey: 'options.method.straightLine' },
   { value: 'declining_balance', labelKey: 'options.method.decliningBalance' },
   { value: 'double_declining', labelKey: 'options.method.doubleDeclining' },
+  { value: 'units_of_production', labelKey: 'options.method.unitsOfProduction' },
+  { value: 'manual', labelKey: 'options.method.manual' },
 ]
 
 const DEPRECIATION_CONVENTIONS = [
@@ -1117,6 +1119,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
+    docSlug: 'fixed-assets-depreciation',
     columns: [
       { key: 'name', kind: 'text' },
       { key: 'defaultMethod', kind: 'text' },
@@ -1235,6 +1238,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     naturalKey: 'code',
     hasActive: true,
+    docSlug: 'fixed-assets-depreciation',
     columns: [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
@@ -1260,6 +1264,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'book_id, category_id',
     hasActive: false,
+    docSlug: 'fixed-assets-depreciation',
     columns: [
       { key: 'bookId', kind: 'ref', ref: 'accounting-books' },
       { key: 'categoryId', kind: 'ref', ref: 'asset-categories' },
@@ -1272,6 +1277,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'method', kind: 'select', options: DEPRECIATION_METHODS, keepDefault: true },
       { key: 'lifeMonths', kind: 'integer' },
       { key: 'ratePercent', kind: 'percent' },
+      { key: 'unitsTotal', kind: 'decimal' },
       { key: 'convention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
     ],
   },

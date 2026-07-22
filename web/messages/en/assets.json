@@ -19,9 +19,11 @@
     "working": "Applying…",
     "done": "{kind} — {delta}"
   },
+  "tabs": { "register": "Register", "taxDepreciation": "Tax depreciation" },
   "taxPools": {
-    "title": "Tax Depreciation (CCA)",
-    "description": "Compute capital cost allowance by class pool for a tax year.",
+    "title": "Tax Depreciation — Class Pools",
+    "description": "Compute the annual pooled tax depreciation allowance by class for a tax year (Canada CCA, UK writing-down allowances, Australia pools, and more).",
+    "regime": "Tax regime",
     "taxYear": "Tax year",
     "run": "Run",
     "running": "Running…",
@@ -30,11 +32,11 @@
     "totals": "Total",
     "columns": {
       "class": "Class",
-      "opening": "Opening UCC",
+      "opening": "Opening balance",
       "additions": "Additions",
       "dispositions": "Dispositions",
-      "allowance": "CCA",
-      "closing": "Closing UCC",
+      "allowance": "Allowance",
+      "closing": "Closing balance",
       "recapture": "Recapture",
       "terminalLoss": "Terminal loss"
     }
@@ -61,6 +63,8 @@
     "method": "Method",
     "lifeMonths": "Useful life (months)",
     "ratePercent": "Rate (%/yr)",
+    "unitsTotal": "Expected lifetime units",
+    "convention": "First-period convention",
     "serialNumber": "Serial number",
     "description": "Description",
     "assetAccount": "Asset account",
@@ -74,6 +78,27 @@
     "units_of_production": "Units of production",
     "manual": "Manual"
   },
+  "conventions": {
+    "full_month": "Full month",
+    "mid_month": "Mid-month",
+    "half_year": "Half-year"
+  },
+  "depreciationInput": {
+    "recordUsage": "Record production usage",
+    "recordManual": "Record manual depreciation",
+    "effectiveDate": "Effective date",
+    "productionUnits": "Production units",
+    "manualAmount": "Depreciation amount",
+    "memo": "Accounting memo",
+    "memoPlaceholder": "Reason and calculation context",
+    "evidenceReference": "Evidence reference",
+    "evidencePlaceholder": "Meter reading, work order, or file reference",
+    "replacementNotice": "An unposted entry supersedes prior evidence. Use a negative, separately evidenced entry to correct a posted amount.",
+    "save": "Record evidence",
+    "saving": "Recording…",
+    "saved": "Recorded {amount} for {period}",
+    "failed": "Could not record depreciation evidence"
+  },
   "status": {
     "draft": "Draft",
     "in_service": "In service",
@@ -86,6 +111,8 @@
     "noAvailableSubsidiary": "Your role has no active subsidiary available for this asset."
   },
   "drawer": {
+    "tabsAria": "Asset record sections",
+    "customForm": "Record form",
     "newAsset": "New asset",
     "editing": "Editing — Save to apply changes",
     "identity": "Identity",
@@ -96,6 +123,10 @@
     "period": "Period",
     "planned": "Planned",
     "postedAmount": "Posted",
+    "evidence": "Evidence",
+    "formulaGenerated": "Formula generated",
+    "importedEvidence": "Imported opening evidence",
+    "productionUnits": "{units} units",
     "runForAsset": "Run depreciation",
     "placeInService": "Place in service",
     "viewEntry": "View entry",
@@ -104,7 +135,7 @@
     "selectCategory": "Select category",
     "saveFailed": "Save failed",
     "runFailed": "Run failed",
-    "deleteBlocked": "This asset has posted depreciation and cannot be deleted.",
+    "deleteBlocked": "This asset has depreciation evidence and cannot be deleted.",
     "deleteTitle": "Delete this asset?",
     "deleteMessage": "This permanently deletes the draft asset and its schedule. This cannot be undone.",
     "deleted": "Asset deleted",
@@ -123,6 +154,11 @@
     "deleteFailed": "Could not delete equipment",
     "activate": "Activate",
     "deactivate": "Deactivate",
+    "capitalize": "Capitalize as fixed asset",
+    "capitalizeTitle": "Capitalize as fixed asset",
+    "capitalizeMessage": "Create a fixed asset from this equipment (cost, dates and serial), link it, and begin depreciation. You'll set the depreciation category on the new asset.",
+    "capitalized": "Fixed asset created and linked",
+    "capitalizeFailed": "Could not capitalize this equipment",
     "fixedAssets": "Fixed assets",
     "taxDepreciation": "Tax depreciation",
     "documentation": "Documentation",
