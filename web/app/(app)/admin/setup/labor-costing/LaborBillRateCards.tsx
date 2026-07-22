@@ -158,6 +158,8 @@ export function LaborBillRateCards(props: {
   page: number;
   perPage: number;
   currentParams: Record<string, string | string[] | undefined>;
+  timeFilter: "active" | "scheduled" | "expired" | "all";
+  dimensionFilter: string;
   items: ItemOption[];
   timeTypes: { id: string; name: string; bill_multiplier: string }[];
   options: OptionMap;
@@ -212,6 +214,27 @@ export function LaborBillRateCards(props: {
     <section className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t("search")} />
+        <Select
+          value={props.timeFilter}
+          onChange={(event) => router.push(mergeHref(base, props.currentParams, { time: event.target.value === "active" ? undefined : event.target.value, page: undefined }))}
+          className="w-auto min-w-40"
+          aria-label={t("filters.time")}
+        >
+          <option value="active">{t("filters.active")}</option>
+          <option value="scheduled">{t("filters.scheduled")}</option>
+          <option value="expired">{t("filters.expired")}</option>
+          <option value="all">{t("filters.allTime")}</option>
+        </Select>
+        <Select
+          value={props.dimensionFilter}
+          onChange={(event) => router.push(mergeHref(base, props.currentParams, { dimension: event.target.value === "all" ? undefined : event.target.value, page: undefined }))}
+          className="w-auto min-w-44"
+          aria-label={t("filters.dimension")}
+        >
+          <option value="all">{t("filters.allDimensions")}</option>
+          <option value="unscoped">{t("filters.unscoped")}</option>
+          {SCOPE_TYPES.map((type) => <option key={type} value={type}>{t(`scopeTypes.${type}`)}</option>)}
+        </Select>
         <Button
           size="sm"
           className="ml-auto"

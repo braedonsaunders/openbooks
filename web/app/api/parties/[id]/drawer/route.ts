@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { can, guardPermission } from '../../../../../lib/authz'
 import { loadFieldDefs } from '../../../../../lib/custom-fields'
+import { resolveFormLayout } from '../../../../../lib/customization/resolve'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadParty } from '../../_lib'
 
@@ -36,7 +37,7 @@ async function loadSubsidiaries(orgId: string) {
 }
 
 /** Complete, org-scoped payload needed by the shell-level related-party drawer. */
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('parties.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -55,6 +56,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active order by p.display_name`) as any,
   ])
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const requestedRole = new URL(request.url).searchParams.get('role')
+  const role = requestedRole === 'customer' || requestedRole === 'vendor' || requestedRole === 'employee'
+    ? requestedRole
+    : payload.customer ? 'customer' : payload.vendor ? 'vendor' : 'employee'
+  const formId = new URL(request.url).searchParams.get('form')
+  const resolvedForm = await resolveFormLayout({
+    orgId: gate.user.orgId,
+    userId: gate.user.id,
+    recordType: role,
+    userRoles: [gate.user.role],
+    headerDefs: fieldDefs as any,
+    lineDefs: [],
+    explicitLayoutId: formId,
+  })
 
   return NextResponse.json({
     payload,
@@ -67,5 +82,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     accounts: accounts.rows,
     taxCodes: taxCodes.rows,
     salesReps: salesReps.rows,
+    layout: resolvedForm.layout,
+    forms: resolvedForm.available,
+    currentFormId: resolvedForm.row?.id ?? null,
+    recordType: role,
+    canCustomize: can(gate, 'admin.customization.manage'),
   })
 }

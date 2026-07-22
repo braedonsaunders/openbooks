@@ -14,6 +14,7 @@ import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
 import { subsidiaryOptions } from '../../../lib/subsidiaries'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { NewPartyButton } from './NewPartyButton'
 import { NewPartyRedirect } from './NewPartyRedirect'
 import { PartyDrawer, type PartyTab } from './PartyDrawer'
@@ -51,7 +52,7 @@ export default async function Parties({
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
-    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages' || requestedPartyTab === 'audit'
+    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
     ? requestedPartyTab
     : 'overview'
   const params = parseListParams(sp, {
@@ -118,6 +119,17 @@ export default async function Parties({
         ])
       : null,
   ])
+  const resolvedPartyForm = openParty && pickers && role
+    ? await resolveFormLayout({
+        orgId,
+        userId: authz.user.id,
+        recordType: role,
+        userRoles: [authz.user.role],
+        headerDefs: pickers[3] as any,
+        lineDefs: [],
+        explicitLayoutId: pickString(sp.partyForm),
+      })
+    : null
 
   const roleOptions = [
     { value: 'customer', label: tc('labels.customer'), count: Number(c.customers) },
@@ -208,6 +220,12 @@ export default async function Parties({
           canReadActivities={can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
           initialTab={partyTab}
+          role={role}
+          layout={resolvedPartyForm?.layout}
+          forms={resolvedPartyForm?.available ?? []}
+          currentFormId={resolvedPartyForm?.row?.id ?? null}
+          recordType={role}
+          canCustomize={can(authz, 'admin.customization.manage')}
         />
       ) : null}
       {openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind ? (

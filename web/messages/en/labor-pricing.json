@@ -5,6 +5,16 @@
   "description": "Selling prices for labor and project work: multi-currency rate cards, overtime tiers, markups, applicability, negotiated terms, and customer or project assignments.",
   "docs": "Documentation",
   "search": "Search labor rate cards…",
+  "filters": {
+    "time": "Effective period",
+    "active": "Active now",
+    "scheduled": "Scheduled",
+    "expired": "Expired",
+    "allTime": "All time frames",
+    "dimension": "Dimension",
+    "allDimensions": "All dimensions",
+    "unscoped": "Organization default"
+  },
   "add": "New rate card",
   "card": "Rate card",
   "name": "Name",

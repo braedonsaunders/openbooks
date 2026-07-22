@@ -16,6 +16,8 @@
     "ar": "売掛金管理",
     "ar-invoices": "請求書",
     "receipts": "得意先入金",
+    "collections": "債権回収",
+    "construction-billing": "建設請求",
     "customers": "得意先",
     "vendors": "仕入先",
     "employees": "従業員",

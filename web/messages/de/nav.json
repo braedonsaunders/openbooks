@@ -16,6 +16,8 @@
     "ar": "Debitorenbuchhaltung",
     "ar-invoices": "Ausgangsrechnungen",
     "receipts": "Kundenzahlungen",
+    "collections": "Inkasso",
+    "construction-billing": "Bauabrechnung",
     "customers": "Kunden",
     "vendors": "Lieferanten",
     "employees": "Mitarbeiter",

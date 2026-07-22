@@ -314,6 +314,27 @@ const VENDOR_BILL_HEADER_SPAN: Record<string, number> = {
 /** Per-record-type header col-span defaults so a fresh baseline reads well.
  *  Falls back to VENDOR_BILL_HEADER_SPAN for transaction kinds. */
 const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
+  customer: {
+    display_name: 2,
+    legal_name: 2,
+    website: 2,
+    invoicing_preference: 4,
+    labor_pricing: 4,
+    additional_subsidiaries: 4,
+  },
+  vendor: {
+    display_name: 2,
+    legal_name: 2,
+    website: 2,
+    eft_notification_email: 2,
+    additional_subsidiaries: 4,
+  },
+  employee: {
+    display_name: 2,
+    legal_name: 2,
+    website: 2,
+    additional_subsidiaries: 4,
+  },
   project: {
     name: 3,
     project_type_id: 2,

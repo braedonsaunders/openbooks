@@ -5,6 +5,16 @@
   "description": "Prix de vente multidevises pour la main-d’œuvre et les projets : taux, heures supplémentaires, majorations, portée, conditions et affectations.",
   "docs": "Documentation",
   "search": "Rechercher des cartes de taux…",
+  "filters": {
+    "time": "Période d’effet",
+    "active": "Actifs maintenant",
+    "scheduled": "Planifiés",
+    "expired": "Expirés",
+    "allTime": "Toutes les périodes",
+    "dimension": "Dimension",
+    "allDimensions": "Toutes les dimensions",
+    "unscoped": "Valeur par défaut de l’organisation"
+  },
   "add": "Nouvelle carte",
   "card": "Carte de taux",
   "name": "Nom",

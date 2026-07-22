@@ -174,24 +174,41 @@
       "vendor": "Vendor details",
       "employee": "Employee details"
     },
-    "workerCompGroup": "Worker-comp group"
+    "workerCompGroup": "Worker-comp group",
+    "customForm": "Record form",
+    "manageForms": "Customize record form"
   },
   "rateBookAssignments": {
-    "title": "Rate book assignments",
+    "title": "Labor Pricing",
     "hint": {
-      "customer": "Which effective-dated rate book applies to this customer's item charges.",
-      "project": "Which effective-dated rate book applies to this project's item charges."
+      "customer": "Effective-dated labor rate cards assigned to this customer.",
+      "project": "Effective-dated labor rate cards assigned to this project."
     },
-    "new": "New assignment",
-    "rateBook": "Rate book",
+    "new": "Assign rate card",
+    "rateBook": "Labor rate card",
     "effectiveFrom": "Effective from",
     "effectiveTo": "Effective to",
     "dateBasis": "Schedule date",
     "dateBasisOptions": { "usage_date": "Usage / transaction date", "project_start": "Project start date" },
-    "empty": "No rate book assigned — the organization default applies.",
-    "noBooks": "Create a rate book first (Items → Rate books).",
-    "rateBookRequired": "Choose a rate book",
-    "created": "Rate book assigned",
-    "confirmDelete": "Remove this rate book assignment?"
+    "empty": "No labor rate card assigned — the organization default applies.",
+    "noBooks": "Create a Labor Pricing rate card first.",
+    "rateBookRequired": "Choose a labor rate card",
+    "created": "Labor rate card assigned",
+    "confirmDelete": "Remove this Labor Pricing assignment?",
+    "search": "Search assigned rate cards…",
+    "statusFilter": "Assignment status",
+    "status": { "active": "Active", "inactive": "Inactive", "all": "All statuses" },
+    "openPricing": "Open pricing",
+    "count": "{count, plural, one {# assignment} other {# assignments}}",
+    "errors": {
+      "invalidRecord": "Choose a valid record.",
+      "scope": "Choose exactly one customer or project.",
+      "dates": "Choose valid effective dates.",
+      "dateOrder": "The end date cannot precede the start date.",
+      "dateBasis": "Choose a valid schedule date.",
+      "references": "Choose records from this organization.",
+      "overlap": "This record already has active Labor Pricing for part of that date range.",
+      "save": "Could not save the Labor Pricing assignment."
+    }
   }
 }

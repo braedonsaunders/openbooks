@@ -16,6 +16,8 @@
     "ar": "Cuentas por cobrar",
     "ar-invoices": "Facturas de cliente",
     "receipts": "Pagos de clientes",
+    "collections": "Cobranza",
+    "construction-billing": "Facturación de construcción",
     "customers": "Clientes",
     "vendors": "Proveedores",
     "employees": "Empleados",
