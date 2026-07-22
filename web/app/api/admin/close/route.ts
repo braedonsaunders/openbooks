@@ -423,6 +423,20 @@ export async function POST(req: Request) {
         ok: true,
         id: await savePackage(orgId, actorId, body),
       });
+    if (action === "send-package") {
+      const packageId = text(body, "packageId", true)!;
+      const periodId = text(body, "periodId", true)!;
+      const bookId = text(body, "bookId", true)!;
+      if (!isUuid(packageId) || !isUuid(periodId) || !isUuid(bookId))
+        throw new CloseError("invalid send target");
+      try {
+        const { enqueueCloseDelivery } = await import("@openbooks/jobs");
+        await enqueueCloseDelivery({ orgId, packageId, periodId, bookId });
+      } catch {
+        throw new CloseError("the delivery queue is unavailable");
+      }
+      return NextResponse.json({ ok: true });
+    }
     if (action === "set-lock") {
       const periodId = text(body, "periodId", true)!;
       const bookId = text(body, "bookId", true)!;

@@ -32,7 +32,10 @@
     "tax": "Tax",
     "gl": "GL"
   },
-  "status": { "closed": "closed", "open": "open" },
+  "status": {
+    "closed": "closed",
+    "open": "open"
+  },
   "runStatus": {
     "not_started": "Not started",
     "draft": "Draft",
@@ -74,7 +77,9 @@
     "publish": "Publish package",
     "downloadBinder": "Download immutable audit binder"
   },
-  "errors": { "actionFailed": "The close action could not be completed" },
+  "errors": {
+    "actionFailed": "The close action could not be completed"
+  },
   "messages": {
     "refresh": "Close state refreshed",
     "request_approval": "Close submitted for approval",
@@ -168,7 +173,11 @@
     "review": "Review",
     "publish": "Publish"
   },
-  "gates": { "none": "No gate", "soft": "Soft gate", "hard": "Hard gate" },
+  "gates": {
+    "none": "No gate",
+    "soft": "Soft gate",
+    "hard": "Hard gate"
+  },
   "taskStatus": {
     "blocked": "Blocked",
     "ready": "Ready",
@@ -241,7 +250,9 @@
     "general-ledger": "General ledger"
   },
   "defaultData": {
-    "calendar": { "name": "Standard fiscal calendar" },
+    "calendar": {
+      "name": "Standard fiscal calendar"
+    },
     "blueprint": {
       "name": "Standard close",
       "description": "Ledger-native month, quarter, and year-end close"
@@ -371,7 +382,8 @@
       "title": "Close policies",
       "description": "Configure materiality, lock, review, segregation, and exception controls.",
       "formTitle": "Policy configuration",
-      "rulesHint": "Set custom materiality thresholds and control where each policy applies — no developer involvement needed."
+      "rulesHint": "Thresholds and controls for this policy, tailored to its type below.",
+      "materialityFormTitle": "Materiality policy"
     },
     "automation": {
       "title": "Close automation",
@@ -383,7 +395,17 @@
       "description": "Define the statements, recipients, and delivery configuration published with a close.",
       "formTitle": "Reporting package",
       "reportCount": "{count, plural, one {# report} other {# reports}}",
-      "recipientsHint": "One recipient per line."
+      "recipientsHint": "One recipient per line.",
+      "addReport": "Add a report…",
+      "noReports": "No reports attached yet.",
+      "sendNowTitle": "Send now",
+      "sendNowHint": "Deliver the saved package immediately for a chosen period, without waiting for a close to publish.",
+      "sendNow": "Send now",
+      "sending": "Sending…",
+      "sendQueued": "Delivery queued — the package will be emailed to the recipients.",
+      "sendPeriod": "Period",
+      "selectPeriod": "Select a period…",
+      "sendNoPeriods": "Generate accounting periods before sending."
     },
     "actions": {
       "newCalendar": "New calendar",
@@ -406,7 +428,8 @@
       "reject": "Reject",
       "cancel": "Cancel",
       "manageBooks": "Manage books",
-      "managePeriod": "Manage {period}"
+      "managePeriod": "Manage {period}",
+      "addRow": "Add"
     },
     "fields": {
       "name": "Name",
@@ -512,7 +535,11 @@
       "review": "Review",
       "publish": "Publish"
     },
-    "gates": { "none": "No gate", "soft": "Soft gate", "hard": "Hard gate" },
+    "gates": {
+      "none": "No gate",
+      "soft": "Soft gate",
+      "hard": "Hard gate"
+    },
     "completionModes": {
       "manual": "Manual",
       "computed": "Ledger-computed",
@@ -557,7 +584,12 @@
       "trial-balance": "Trial balance",
       "general-ledger": "General ledger"
     },
-    "table": { "period": "Period", "range": "Range", "entries": "Entries", "status": "Status" },
+    "table": {
+      "period": "Period",
+      "range": "Range",
+      "entries": "Entries",
+      "status": "Status"
+    },
     "empty": {
       "calendars": "No fiscal calendars match this search.",
       "periods": "No accounting periods match these filters.",
@@ -581,6 +613,123 @@
     "errors": {
       "actionFailed": "The setup change could not be saved",
       "invalidConfiguration": "Configuration must be valid and complete"
+    },
+    "policyRules": {
+      "materialityIntro": "A period-over-period account swing is flagged for review only when it exceeds BOTH thresholds.",
+      "amount": "Amount threshold",
+      "amountHint": "Absolute change in base currency (e.g. 10,000).",
+      "percent": "Percent threshold",
+      "percentHint": "Relative change vs. the prior period.",
+      "approvalRequired": "Require independent approval to reopen a locked period",
+      "defaultHours": "Default reopen window (hours)",
+      "maxHours": "Maximum reopen window (hours)",
+      "prohibitSelfApproval": "Prevent people from approving their own work",
+      "advancedIntro": "This policy type has no built-in settings. Add custom key/value settings if your workflow needs them.",
+      "noSettings": "This policy type needs no additional settings."
+    },
+    "conditions": {
+      "intro": "The rule runs only when every condition below is met. Leave a condition blank to ignore it.",
+      "runStatus": "Close run status is",
+      "workstream": "Workstream is",
+      "taskStatus": "Task status is",
+      "severity": "Exception severity is",
+      "taskKey": "Task key is one of",
+      "taskKeyHint": "Comma-separated stable task keys.",
+      "minReadiness": "Readiness score is at least",
+      "maxReadiness": "Readiness score is at most",
+      "withinDays": "Days remaining to target close is at most",
+      "readinessHint": "0–100.",
+      "any": "Any"
+    },
+    "automationConfig": {
+      "notifyUsers": "Notify these people",
+      "notifyRoles": "…and everyone in these roles",
+      "notifyHint": "If no one is selected, the person who started the run is notified.",
+      "title": "Notification title",
+      "titlePlaceholder": "Defaults to the rule name",
+      "body": "Message",
+      "bodyPlaceholder": "Defaults to the period and book",
+      "owner": "Assign owner (person)",
+      "ownerRole": "…or first available in role",
+      "reviewer": "Assign reviewer (person)",
+      "reviewerRole": "…or first available in role",
+      "assignHint": "Assignment automations run on task events.",
+      "taskKey": "Task key",
+      "taskKeyPlaceholder": "kebab-case, e.g. late-accrual-review",
+      "taskTitle": "Task title",
+      "taskDescription": "Task description",
+      "gate": "Gate",
+      "evidenceRequired": "Require evidence before completion",
+      "report": "Report to snapshot",
+      "label": "Evidence label",
+      "subjectKind": "Flow subject kind",
+      "subjectId": "Run the flow against",
+      "buttonId": "Flow button id",
+      "none": "This action needs no extra configuration.",
+      "sectionConditions": "When (conditions)",
+      "sectionConfig": "Then (configuration)"
+    },
+    "subjectRefs": {
+      "$run": "The close run",
+      "$task": "The triggering task"
+    },
+    "reportGroups": {
+      "built_in": "Standard reports",
+      "custom": "Custom reports"
+    },
+    "reportsEmpty": "No reports are defined yet.",
+    "delivery": {
+      "title": "Delivery",
+      "intro": "How this package is packaged and sent when a close is published.",
+      "format": "File format",
+      "formats": {
+        "pdf": "PDF",
+        "xlsx": "Excel",
+        "both": "PDF + Excel"
+      },
+      "combine": "Combine all reports into one PDF",
+      "coverPage": "Include a cover page",
+      "cadence": "When to deliver",
+      "cadences": {
+        "on_publish": "When the close is published",
+        "manual": "Manually only"
+      },
+      "advanced": "Advanced delivery settings"
+    },
+    "kv": {
+      "key": "Setting",
+      "value": "Value",
+      "add": "Add setting",
+      "empty": "No custom settings."
+    },
+    "reportParams": {
+      "dateRange": "Date range",
+      "closePeriod": "The close period",
+      "custom": "Custom range",
+      "from": "From",
+      "to": "To",
+      "breakout": "Break out by",
+      "breakouts": {
+        "none": "No breakout",
+        "department": "Department",
+        "location": "Location",
+        "class": "Class",
+        "project": "Project",
+        "month": "Month",
+        "quarter": "Quarter"
+      },
+      "filters": "Filters",
+      "department": "Department",
+      "location": "Location",
+      "class": "Class",
+      "project": "Project",
+      "subsidiary": "Subsidiary",
+      "anyValue": "Any",
+      "definedDate": "Date range",
+      "definedBreakouts": "Breakouts",
+      "definedFilters": "Filters",
+      "definedMeasures": "Measures",
+      "noDefined": "This report takes its date range and filters at delivery time."
     }
   }
 }

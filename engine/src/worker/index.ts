@@ -8,6 +8,7 @@
 import { closeJobConnections, markWorkerHeartbeat } from "@openbooks/jobs";
 import { createEmailWorker } from "./email-worker.ts";
 import { createReportsWorker } from "./reports-worker.ts";
+import { createCloseDeliveryWorker } from "./close-delivery-worker.ts";
 import { createMigrationWorker, startMirrorScheduler } from "./migration-worker.ts";
 import { createSandboxWorker } from "./sandbox-worker.ts";
 import { createScriptsWorker } from "./scripts-worker.ts";
@@ -19,6 +20,7 @@ import { createApCaptureWorker } from "./ap-capture-worker.ts";
 const workers = [
   createEmailWorker(),
   createReportsWorker(),
+  createCloseDeliveryWorker(),
   createMigrationWorker(),
   createSandboxWorker(),
   createScriptsWorker(),
