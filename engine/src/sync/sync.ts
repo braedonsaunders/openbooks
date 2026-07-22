@@ -415,7 +415,7 @@ async function importedTaxEvidence(
   >();
   for (const taxCodeId of new Set(
     lines
-      .map((line) => line.taxCodeId)
+      .map((line) => effectiveTaxCodeId(line.taxAmount, line.taxCodeId))
       .filter((id): id is string => Boolean(id)),
   )) {
     const config = await loadTaxComponentConfig(orgId, taxCodeId, documentDate);
@@ -427,13 +427,14 @@ async function importedTaxEvidence(
   }
   const evidence = new Map<number, ComputedTaxComponent[]>();
   for (const line of lines) {
-    if (!line.taxCodeId) continue;
+    const taxCodeId = effectiveTaxCodeId(line.taxAmount, line.taxCodeId);
+    if (!taxCodeId) continue;
     evidence.set(
       line.lineNumber,
       computeImportedLineTaxEvidence(
         line.amount,
         line.taxAmount,
-        configs.get(line.taxCodeId)!,
+        configs.get(taxCodeId)!,
       ),
     );
   }
@@ -458,7 +459,7 @@ async function insertImportedLines(
         accountId: line.accountId,
         itemId: line.itemId,
         amount: line.amount,
-        taxCodeId: line.taxCodeId,
+        taxCodeId: effectiveTaxCodeId(line.taxAmount, line.taxCodeId),
         taxAmount: line.taxAmount,
         taxOverridden: line.taxOverridden,
         partyId: line.partyId ?? null,
@@ -629,6 +630,19 @@ export async function runSync(
     ).rows) {
       existing.set(r.ref, { id: r.id, status: r.status, posted: r.posted });
     }
+    // Older rate-keyed order imports retained a non-zero-rate code even when
+    // no source tax existed. Zero tax has no unambiguous tax identity in this
+    // adapter; remove that legacy promise before canonical change detection.
+    await db.execute(sql`
+      update document_lines dl set tax_code_id = null, updated_at = now()
+       where dl.tax_amount = 0 and dl.tax_code_id is not null
+         and not exists (
+           select 1 from document_line_tax_components c where c.document_line_id = dl.id
+         )
+         and exists (
+           select 1 from documents d where d.id = dl.document_id and d.org_id = ${org.id}
+             and d.custom->>${refKey} is not null
+         )`);
     const fullStoredKeys =
       since === null ? await loadStoredKeys(org.id, refKey) : null;
 
