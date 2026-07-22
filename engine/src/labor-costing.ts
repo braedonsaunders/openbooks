@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, divRate, mulRate, neg, isZero } from "./money.ts";
+import { add, cmp, divRate, mulPercent, mulRate, neg, isZero, normalizeMoney } from "./money.ts";
 import { postProjectGlEntry, reverseProjectGlEntry, recognitionAccounts } from "./project-recognition.ts";
 
 /**
@@ -24,7 +24,7 @@ export interface LaborCostComponent {
    * worker-comp/WSIB group (value is only the fallback when unassigned). */
   kind: "percent_of_wage" | "per_hour" | "per_day" | "worker_comp";
   name: string;
-  value: number;
+  value: number | string;
   /** percent_of_wage/worker_comp/per_hour: apply to (or alongside) the
    * OT-multiplied wage. */
   scaleWithOvertime?: boolean;
@@ -133,7 +133,7 @@ export async function resolveWage(
   if (!row) return null;
   const wage =
     row.basis === "year"
-      ? divRate(String(row.rate), String(Number(row.annual_hours) > 0 ? row.annual_hours : opts?.annualHoursDefault ?? 2080))
+      ? divRate(String(row.rate), cmp(String(row.annual_hours), "0") > 0 ? String(row.annual_hours) : String(opts?.annualHoursDefault ?? 2080))
       : String(row.rate);
   return { wage, currency: row.currency, scope: row.scope, rateId: row.id };
 }
@@ -150,7 +150,7 @@ export function convertFixedLaborComponents(
 ): LaborCostComponent[] {
   return components.map((component) =>
     component.kind === "per_hour" || component.kind === "per_day"
-      ? { ...component, value: Number(convertLaborWage(String(component.value), fxRate)) }
+      ? { ...component, value: convertLaborWage(String(component.value), fxRate) }
       : component,
   );
 }
@@ -179,7 +179,7 @@ export function computeCostRate(
   wage: string,
   costMultiplier: string,
   settings: Pick<LaborCostingSettings, "hoursPerDay" | "components">,
-  opts: { workerCompPercent?: number } = {},
+  opts: { workerCompPercent?: number | string } = {},
 ): string {
   const base = mulRate(wage, costMultiplier);
   let rate = base;
@@ -187,22 +187,25 @@ export function computeCostRate(
     if (c.kind === "worker_comp") {
       // Rate = the employee's assigned comp-group %, else the component's
       // fallback value. A 0% group means no worker comp for that person.
-      const pct = opts.workerCompPercent ?? Number(c.value);
-      if (!Number.isFinite(pct) || pct === 0) continue;
+      const pct = String(opts.workerCompPercent ?? c.value);
+      let exactPercent: string;
+      try { exactPercent = normalizeMoney(pct); } catch { continue; }
+      if (cmp(exactPercent, "0") === 0) continue;
       const on = c.scaleWithOvertime ? base : wage;
-      rate = add(rate, mulRate(on, String(pct / 100)));
+      rate = add(rate, mulPercent(on, exactPercent));
       continue;
     }
-    const v = Number(c.value);
-    if (!Number.isFinite(v) || v === 0) continue;
+    let value: string;
+    try { value = normalizeMoney(c.value); } catch { continue; }
+    if (isZero(value)) continue;
     if (c.kind === "percent_of_wage") {
       const on = c.scaleWithOvertime ? base : wage;
-      rate = add(rate, mulRate(on, String(v / 100)));
+      rate = add(rate, mulPercent(on, value));
     } else if (c.kind === "per_hour") {
-      rate = add(rate, c.scaleWithOvertime ? mulRate(String(v), costMultiplier) : String(v));
+      rate = add(rate, c.scaleWithOvertime ? mulRate(value, costMultiplier) : value);
     } else if (c.kind === "per_day") {
-      const perDay = settings.hoursPerDay > 0 ? v / settings.hoursPerDay : 0;
-      rate = add(rate, String(perDay));
+      const perDay = settings.hoursPerDay > 0 ? divRate(value, String(settings.hoursPerDay)) : "0.0000";
+      rate = add(rate, perDay);
     }
   }
   return rate;
@@ -286,7 +289,7 @@ export async function snapshotLaborCostRates(orgId: string, timeEntryIds: string
       ...settings,
       components: convertFixedLaborComponents(settings.components, componentFxRate),
     };
-    const workerCompPercent = r.worker_comp_percent != null ? Number(r.worker_comp_percent) : undefined;
+    const workerCompPercent = r.worker_comp_percent != null ? String(r.worker_comp_percent) : undefined;
     const rate = computeCostRate(functionalWage, String(r.cost_multiplier), functionalSettings, { workerCompPercent });
     await db.execute(sql`
       update time_entries

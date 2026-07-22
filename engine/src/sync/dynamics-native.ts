@@ -84,7 +84,7 @@ export function buildNativeFromBC(
   const id = t.id;
   if (!id) return { skip: "missing id" };
   const sourceRef = `${entity}:${id}`;
-  const home = (v: number | undefined): bigint => toUnits((v ?? 0).toFixed(2));
+  const home = (v: number | undefined): bigint => toUnits(String(v ?? 0));
   const byId = (aid?: string): string | null => (aid ? ctx.accountByRef.get(aid)?.id ?? null : null);
 
   const docDate = isoDay(t.invoiceDate ?? t.creditMemoDate ?? t.postingDate ?? t.documentDate);

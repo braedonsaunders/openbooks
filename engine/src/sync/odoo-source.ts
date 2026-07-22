@@ -1,5 +1,5 @@
 import { OdooClient, m2oId, type OdooCreds } from "../odoo.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { formatMoney, fromUnits, toUnits } from "../money.ts";
 import { buildNativeFromOdoo, type OdooMove, type OdooMoveLine } from "./odoo-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -313,7 +313,7 @@ export class OdooSource implements MigrationSource {
       // Payable: credit side = the bill (open item), debit side settles it.
       const [paymentRef, appliedRef] =
         type === "liability_payable" ? [debit.moveId, credit.moveId] : [credit.moveId, debit.moveId];
-      applications.push({ paymentRef, appliedRef, amount: p.amount.toFixed(2) });
+      applications.push({ paymentRef, appliedRef, amount: formatMoney(String(p.amount), 2) });
     }
 
     return {
@@ -337,7 +337,7 @@ export class OdooSource implements MigrationSource {
       .filter((g) => m2oId(g.account_id))
       .map((g) => ({
         accountRef: m2oId(g.account_id)!,
-        balance: fromUnits(toUnits((g.balance ?? 0).toFixed(2))),
+        balance: fromUnits(toUnits(String(g.balance ?? 0))),
       }));
   }
 
@@ -364,6 +364,6 @@ export class OdooSource implements MigrationSource {
       [["state", "=", "posted"], ["move_type", "in", ["out_invoice", "in_invoice", "out_refund", "in_refund"]]],
       ["id", "amount_residual"],
     );
-    return rows.map((r) => ({ ref: String(r.id), unpaid: (r.amount_residual ?? 0).toFixed(2) }));
+    return rows.map((r) => ({ ref: String(r.id), unpaid: formatMoney(String(r.amount_residual ?? 0), 2) }));
   }
 }

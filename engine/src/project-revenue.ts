@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "./money.ts";
 import { buildAllRecognitionSchedules } from "./revenue-recognition.ts";
 import { recognitionAccounts } from "./project-recognition.ts";
 
@@ -38,7 +39,7 @@ export interface ProjectContractStatus {
   obligationId: string;
   contractValue: string;
   /** 0..100 cumulative target used for the schedule. */
-  percentComplete: number;
+  percentComplete: string;
   /** True when the % came from the manual override, not cost-to-cost. */
   overridden: boolean;
   created: boolean;
@@ -49,11 +50,19 @@ export interface ProjectRevenueSyncResult {
   problems: string[];
 }
 
-/** Cost-to-cost completion fraction (0..1): actual ÷ budget, clamped. */
-export function costToCostFraction(budget: number, actual: number): number {
-  if (!Number.isFinite(budget) || budget <= 0) return 0;
-  if (!Number.isFinite(actual) || actual <= 0) return 0;
-  return Math.min(1, actual / budget);
+/** Cost-to-cost completion fraction (0..1), exact and clamped. */
+export function costToCostFraction(budget: string, actual: string): string {
+  const percent = costToCostPercent(budget, actual);
+  return mulRatio("1", toUnits(percent), toUnits("100"));
+}
+
+/** Exact cumulative completion percentage at ledger precision. */
+export function costToCostPercent(budget: string, actual: string): string {
+  const exactBudget = normalizeMoney(budget);
+  const exactActual = normalizeMoney(actual);
+  if (cmp(exactBudget, "0") <= 0 || cmp(exactActual, "0") <= 0) return "0.0000";
+  if (cmp(exactActual, exactBudget) >= 0) return "100.0000";
+  return mulRatio("100", toUnits(exactActual), toUnits(exactBudget));
 }
 
 /**
@@ -98,7 +107,7 @@ export async function syncProjectRevenueContracts(
 
   const projects = (await db.execute(sql`
     select p.id, p.code, p.name, p.customer_id, p.subsidiary_id, p.starts_on,
-           coalesce(nullif(p.custom->>'contractValue', '')::numeric, 0)::numeric(19,4) as contract_value,
+           coalesce(p.contract_value, 0)::numeric(19,4) as contract_value,
            nullif(p.custom->>'percentCompleteOverride', '')::numeric as pct_override
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
@@ -121,7 +130,7 @@ export async function syncProjectRevenueContracts(
   let ruleId: string | null = null;
 
   for (const p of projects.rows) {
-    if (Number(p.contract_value) === 0) continue; // nothing to recognize (yet)
+    if (cmp(p.contract_value, "0") === 0) continue; // nothing to recognize (yet)
     if (!p.customer_id) {
       result.problems.push(`${p.code}: project has no customer — cannot carry a revenue contract`);
       continue;
@@ -129,10 +138,11 @@ export async function syncProjectRevenueContracts(
     ruleId ??= await ensureProjectPocRule(orgId, actorId);
 
     // -- percent complete: override (0..100) wins, else cost-to-cost ---------
-    let percent: number;
+    let percent: string;
     let overridden = false;
-    if (p.pct_override != null && Number.isFinite(Number(p.pct_override))) {
-      percent = Math.max(0, Math.min(100, Number(p.pct_override)));
+    if (p.pct_override != null) {
+      const override = normalizeMoney(p.pct_override);
+      percent = cmp(override, "0") < 0 ? "0.0000" : cmp(override, "100") > 0 ? "100.0000" : override;
       overridden = true;
     } else {
       const cc = (await db.execute(sql`
@@ -146,7 +156,7 @@ export async function syncProjectRevenueContracts(
                       and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`)) as unknown as {
         rows: { budget: string; actual: string }[];
       };
-      percent = costToCostFraction(Number(cc.rows[0]?.budget ?? 0), Number(cc.rows[0]?.actual ?? 0)) * 100;
+      percent = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
     }
 
     // -- ensure the contract --------------------------------------------------
@@ -185,7 +195,7 @@ export async function syncProjectRevenueContracts(
       await db.execute(sql`
         update performance_obligations
            set booked_amount = ${p.contract_value}, standalone_selling_price = ${p.contract_value},
-               allocated_price = ${p.contract_value}, percent_complete = ${percent.toFixed(4)},
+               allocated_price = ${p.contract_value}, percent_complete = ${percent},
                deferred_account_id = ${accts.unbilledReceivable}, recognized_account_id = ${accts.projectRevenue},
                updated_at = now(), updated_by = ${actorId}
          where id = ${obligationId}`);
@@ -196,7 +206,7 @@ export async function syncProjectRevenueContracts(
            booked_amount, standalone_selling_price, allocated_price, percent_complete,
            recognition_starts_on, deferred_account_id, recognized_account_id, status, created_by, updated_by)
         values (${orgId}, ${contractId}, null, ${p.name}, ${ruleId},
-                ${p.contract_value}, ${p.contract_value}, ${p.contract_value}, ${percent.toFixed(4)},
+                ${p.contract_value}, ${p.contract_value}, ${p.contract_value}, ${percent},
                 ${startsOn}, ${accts.unbilledReceivable}, ${accts.projectRevenue}, 'open', ${actorId}, ${actorId})
         returning id`)) as unknown as { rows: { id: string }[] };
       obligationId = ins.rows[0].id;
@@ -215,7 +225,7 @@ export async function syncProjectRevenueContracts(
       contractId,
       obligationId,
       contractValue: p.contract_value,
-      percentComplete: Number(percent.toFixed(4)),
+      percentComplete: formatMoney(percent, 4),
       overridden,
       created,
     });

@@ -5,6 +5,8 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { guardPermission } from '../../../lib/authz'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, loadOrder, orderTaxRateMap, type OrderLineInput } from './lib'
+import { cmp } from '@openbooks/engine/src/money.ts'
+import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 
@@ -59,8 +61,8 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const { id } = await params
 
     const existing = (await db.execute(
-      sql`select status from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
-    )) as unknown as { rows: { status: string }[] }
+      sql`select status, document_date from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    )) as unknown as { rows: { status: string; document_date: string }[] }
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const status = existing.rows[0].status
 
@@ -76,7 +78,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           sql`select party_id, total from documents where id = ${id} and org_id = ${user.orgId}`,
         )) as unknown as { rows: { party_id: string | null; total: string }[] }
         const d = doc.rows[0]!
-        if (!d.party_id || Number(d.total) <= 0) {
+        if (!d.party_id || cmp(d.total, '0') <= 0) {
           return NextResponse.json(
             { error: 'Add a party and at least one line before issuing' },
             { status: 422 },
@@ -114,9 +116,12 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     let preparedLines: (ReturnType<typeof computeOrderTotals>['lines'][number] & { extraDims: Record<string, string> })[] | null = null
     if (body.lines) {
       const valid = body.lines.filter(
-        (l) => (l.itemId || l.accountId) && Number(l.quantity) > 0 && Number(l.unitPrice) >= 0,
+        (l) => (l.itemId || l.accountId) && cmp(l.quantity ?? '0', '0') > 0 && cmp(l.unitPrice ?? '0', '0') >= 0,
       )
-      const computed = computeOrderTotals(valid, await orderTaxRateMap(user.orgId))
+      const computed = computeOrderTotals(
+        valid,
+        await orderTaxRateMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
+      )
       totals = { subtotal: computed.subtotal, taxTotal: computed.taxTotal, total: computed.total }
       preparedLines = []
       for (let i = 0; i < computed.lines.length; i++) {
@@ -134,15 +139,23 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
-          await tx.execute(sql`
+          const inserted = (await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-                                        quantity, unit, unit_price, amount, tax_code_id, tax_amount,
+                                        quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
+                                        tax_input_amount, tax_amount,
                                         department_id, project_id, extra_dims)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
                     ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
-                    ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxAmount},
+                    ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
                     ${l.departmentId ?? null}, ${l.projectId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb)
-          `)
+            returning id
+          `)) as unknown as { rows: { id: string }[] }
+          await persistLineTaxComponents(tx, {
+            orgId: user.orgId,
+            documentLineId: inserted.rows[0]!.id,
+            components: l.taxComponents,
+            actorId: user.id,
+          })
         }
       }
 

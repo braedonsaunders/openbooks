@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { normalizeMoney } from "../money.ts";
 import type { PostingDeps } from "../posting.ts";
 
 /**
@@ -178,8 +179,10 @@ export async function buildNativeContext(
     }
   ).rows) {
     const rate = r.rate ?? "0";
-    const key = String(Math.round(Number(rate)));
+    const key = normalizeMoney(rate);
     if (!taxByRate.has(key)) taxByRate.set(key, { id: r.id, rate });
+    const compactKey = key.replace(/\.0+$/, "");
+    if (!taxByRate.has(compactKey)) taxByRate.set(compactKey, { id: r.id, rate });
     if (r.ref) taxCodeByRef.set(r.ref, r.id);
   }
 

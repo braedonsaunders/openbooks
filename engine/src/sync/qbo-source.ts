@@ -1,5 +1,5 @@
 import { QboClient } from "../qbo.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
 import { buildNativeFromQbo, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -248,14 +248,14 @@ export class QboSource implements MigrationSource {
         if (/voided/i.test(p.PrivateNote ?? "")) continue;
         const rate = p.ExchangeRate && p.ExchangeRate > 0 ? p.ExchangeRate : 1;
         for (const l of p.Line ?? []) {
-          const amt = (l.Amount ?? 0) * rate;
-          if (!(amt > 0)) continue;
+          const amt = mulDecimal(String(l.Amount ?? 0), String(rate));
+          if (toUnits(amt) <= 0n) continue;
           for (const lt of l.LinkedTxn ?? []) {
             if (lt.TxnType === "Invoice" || lt.TxnType === "Bill") {
               applications.push({
                 paymentRef: `${entity}:${p.Id}`,
                 appliedRef: `${lt.TxnType}:${lt.TxnId}`,
-                amount: amt.toFixed(2),
+                amount: formatMoney(amt, 2),
               });
             } else if (lt.TxnType === "CreditMemo" || lt.TxnType === "VendorCredit") {
               // A zero-amount payment can consume a credit against the other
@@ -265,7 +265,7 @@ export class QboSource implements MigrationSource {
                 applications.push({
                   paymentRef: `${lt.TxnType}:${lt.TxnId}`,
                   appliedRef: `${target.TxnType}:${target.TxnId}`,
-                  amount: amt.toFixed(2),
+                  amount: formatMoney(amt, 2),
                 });
               }
             }
@@ -328,7 +328,7 @@ export class QboSource implements MigrationSource {
       for (const r of rows) {
         if (/voided/i.test(r.PrivateNote ?? "")) continue;
         const rate = r.ExchangeRate && r.ExchangeRate > 0 ? r.ExchangeRate : 1;
-        out.push({ ref: `${entity}:${r.Id}`, unpaid: ((r.Balance ?? 0) * rate).toFixed(2) });
+        out.push({ ref: `${entity}:${r.Id}`, unpaid: formatMoney(mulDecimal(String(r.Balance ?? 0), String(rate)), 2) });
       }
     }
     return out;

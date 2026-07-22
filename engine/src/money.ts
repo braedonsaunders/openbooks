@@ -6,6 +6,28 @@
 const SCALE = 10_000n;
 const RATE_SCALE = 10_000_000_000n;
 
+function decimalFactorUnits(value: string | number): bigint {
+  const raw = String(value).trim();
+  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) throw new Error(`not a decimal factor: "${value}"`);
+  const negative = raw.startsWith("-");
+  const unsigned = raw.replace(/^[-+]/, "");
+  const [whole = "0", fraction = ""] = unsigned.split(".");
+  if (fraction.length > 10 && /[1-9]/.test(fraction.slice(10))) {
+    throw new Error(`decimal factor loses precision beyond 10 decimal places: "${value}"`);
+  }
+  const units = BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  return negative ? -units : units;
+}
+
+/** Round an exact rational to the nearest integer, halves away from zero. */
+export function roundDiv(numerator: bigint, denominator: bigint): bigint {
+  if (denominator <= 0n) throw new Error("denominator must be greater than zero");
+  const negative = numerator < 0n;
+  const absolute = negative ? -numerator : numerator;
+  const rounded = (absolute + denominator / 2n) / denominator;
+  return negative ? -rounded : rounded;
+}
+
 export function toUnits(s: string | number): bigint {
   let str = String(s).trim();
   if (!/^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(str)) {
@@ -66,10 +88,68 @@ export const cmp = (a: string, b: string) => {
  * unit amount, not an FX conversion. */
 export function mul(a: string, b: string): string {
   const product = toUnits(a) * toUnits(b);
-  const negative = product < 0n;
-  const absolute = negative ? -product : product;
-  const rounded = (absolute + SCALE / 2n) / SCALE;
-  return fromUnits(negative ? -rounded : rounded);
+  return fromUnits(roundDiv(product, SCALE));
+}
+
+/** Multiply money by one or more exact decimal factors (up to 10dp each). */
+export function mulDecimalFactors(amount: string, factors: readonly (string | number)[]): string {
+  let numerator = toUnits(amount);
+  let denominator = 1n;
+  for (const factor of factors) {
+    numerator *= decimalFactorUnits(factor);
+    denominator *= RATE_SCALE;
+  }
+  return fromUnits(roundDiv(numerator, denominator));
+}
+
+export function mulDecimal(amount: string, factor: string | number): string {
+  return mulDecimalFactors(amount, [factor]);
+}
+
+/**
+ * Multiply money by a percentage without crossing JavaScript's floating-point
+ * boundary. Both inputs are exact numeric(19,4) strings; `13.25` means 13.25%.
+ * The result is rounded half-away-from-zero to `decimalPlaces` (0..4), while
+ * remaining represented as the ledger's canonical four-decimal money string.
+ */
+export function mulPercent(amount: string, percent: string, decimalPlaces = 4): string {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+    throw new Error("decimalPlaces must be an integer from 0 through 4");
+  }
+  const quantum = 10n ** BigInt(4 - decimalPlaces);
+  const roundedQuanta = roundDiv(
+    toUnits(amount) * toUnits(percent),
+    100n * SCALE * quantum,
+  );
+  return fromUnits(roundedQuanta * quantum);
+}
+
+/** Exact proportional money allocation, rounded to ledger precision. */
+export function mulRatio(amount: string, numerator: bigint, denominator: bigint): string {
+  if (numerator < 0n) throw new Error("ratio numerator cannot be negative");
+  if (denominator <= 0n) throw new Error("ratio denominator must be greater than zero");
+  return fromUnits(roundDiv(toUnits(amount) * numerator, denominator));
+}
+
+/** Canonicalize a money input to the ledger's numeric(19,4) representation. */
+export function normalizeMoney(value: string | number): string {
+  return fromUnits(toUnits(value));
+}
+
+/** Round a ledger value to a requested precision without binary floating point. */
+export function roundMoney(value: string | number, decimalPlaces = 4): string {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+    throw new Error("decimalPlaces must be an integer from 0 through 4");
+  }
+  const quantum = 10n ** BigInt(4 - decimalPlaces);
+  return fromUnits(roundDiv(toUnits(value), quantum) * quantum);
+}
+
+/** Fixed-width exact decimal formatting, used by settlement/export formats. */
+export function formatMoney(value: string | number, decimalPlaces = 2): string {
+  const rounded = roundMoney(value, decimalPlaces);
+  const [whole, fraction = ""] = rounded.split(".");
+  return decimalPlaces === 0 ? whole! : `${whole}.${fraction.slice(0, decimalPlaces)}`;
 }
 
 /**
@@ -92,10 +172,7 @@ export function mulRate(amount: string, rate: string): string {
   if (rateUnits <= 0n) throw new Error(`FX rate must be greater than zero: "${rate}"`);
 
   const product = toUnits(amount) * rateUnits;
-  const negative = product < 0n;
-  const absolute = negative ? -product : product;
-  const rounded = (absolute + RATE_SCALE / 2n) / RATE_SCALE;
-  return fromUnits(negative ? -rounded : rounded);
+  return fromUnits(roundDiv(product, RATE_SCALE));
 }
 
 /** Divide functional-currency money by an FX rate, rounded to 4 decimals. */
@@ -109,8 +186,5 @@ export function divRate(amount: string, rate: string): string {
   const rateUnits = BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
   if (rateUnits <= 0n) throw new Error(`FX rate must be greater than zero: "${rate}"`);
   const numerator = toUnits(amount) * RATE_SCALE;
-  const negative = numerator < 0n;
-  const absolute = negative ? -numerator : numerator;
-  const rounded = (absolute + rateUnits / 2n) / rateUnits;
-  return fromUnits(negative ? -rounded : rounded);
+  return fromUnits(roundDiv(numerator, rateUnits));
 }

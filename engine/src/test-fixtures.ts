@@ -22,7 +22,7 @@ export interface ScratchOrg {
   stockLocationId: string;
   stockLocationId2: string;
   accounts: Record<
-    "invAsset" | "cogs" | "adjustment" | "clearing" | "freight" | "ar" | "ap" | "bank" | "revenue" | "deferred" | "recognized" | "fxGainLoss",
+    "invAsset" | "cogs" | "adjustment" | "clearing" | "freight" | "ar" | "ap" | "bank" | "revenue" | "deferred" | "recognized" | "fxGainLoss" | "taxInput" | "taxOutput" | "withholding",
     string
   >;
   items: Record<"fifo" | "movingAvg" | "standard" | "component" | "assembly" | "service", string>;
@@ -94,6 +94,9 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     ["revenue", "4000", "Revenue", "income"],
     ["recognized", "4010", "Recognized Revenue", "income"],
     ["fxGainLoss", "7010", "Realized FX Gain or Loss", "expense"],
+    ["taxInput", "1250", "Recoverable Tax", "asset_current_other"],
+    ["taxOutput", "2250", "Tax Payable", "liability_current_other"],
+    ["withholding", "2260", "Withholding Payable", "liability_current_other"],
   ];
   const accounts = {} as ScratchOrg["accounts"];
   for (const [key, number, name, type] of acctDefs) {
@@ -274,6 +277,7 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     // inv_move_guard blocks deleting POSTED movements but allows posted→pending;
     // demote them first so the delete can proceed.
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId}`);
+    await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
     const tables = [
       "flow_run_effects",
       "flow_gates",
@@ -297,6 +301,16 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "document_line_tax_components",
       "document_lines",
       "documents",
+      "depreciation_schedule_lines",
+      "depreciation_schedules",
+      "depreciation_book_policies",
+      "asset_events",
+      "fixed_assets",
+      "asset_categories",
+      "depreciation_methods",
+      "tax_rates",
+      "tax_groups",
+      "tax_codes",
       "journal_lines",
       "journal_entries",
       "equipment_units",

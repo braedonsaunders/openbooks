@@ -7,7 +7,7 @@ export const accountingModel: DocArticle = {
   order: 1,
   summary:
     'Understand business transactions, ledger entries, books, periods, subledgers, and immutable accounting evidence.',
-  updated: '2026-07-19',
+  updated: '2026-07-22',
   keywords: ['double entry', 'ledger', 'journal entry', 'subledger', 'book', 'period', 'posting', 'immutability'],
   related: ['transaction-lifecycle', 'chart-of-accounts-and-dimensions', 'period-close'],
   body: `# How Accounting Works in OpenBooks
@@ -68,6 +68,16 @@ Posting, application, foreign exchange, tax, and other financial engines avoid
 binary floating-point math. When an imported source is out of balance, the
 correct response is to diagnose the source or mapping—not force a rounding line
 without an accounting policy.
+
+## Depreciation method integrity
+
+Straight-line, declining-balance, and double-declining schedules use exact
+decimal formula evaluation and must depreciate exactly to salvage value.
+**Manual** and **units-of-production** are deliberately unavailable until the
+system stores the required per-period manual amounts or production evidence.
+They never silently fall back to straight-line. Existing configurations using
+either method must be changed to a supported method before a schedule can be
+built.
 `,
 }
 

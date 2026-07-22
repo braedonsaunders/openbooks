@@ -14,6 +14,8 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { money } from '../../../lib/format'
+import { cmp } from '@openbooks/engine/src/money.ts'
+import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../../../lib/confirm'
 import {
   customFieldDefKey,
@@ -29,6 +31,7 @@ interface Opt {
   name?: string
   code?: string
   rate?: string
+  tax_components?: TaxComponentConfig[]
 }
 interface SegmentOpt {
   key: string
@@ -42,7 +45,7 @@ interface LineRow extends Record<string, unknown> {
   description: string
   departmentId: string
   projectId: string
-  taxCodeId: string
+  taxProfileId: string
   amount: string
   taxOverridden: boolean
   taxAmount: string
@@ -75,11 +78,15 @@ const emptyLine = (): LineRow => ({
   description: '',
   departmentId: '',
   projectId: '',
-  taxCodeId: '',
+  taxProfileId: '',
   amount: '',
   taxOverridden: false,
   taxAmount: '',
 })
+
+function positiveAmount(value: unknown): boolean {
+  try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
+}
 
 function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
@@ -87,10 +94,10 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     description: l.description ?? '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
-    taxCodeId: l.tax_code_id ?? '',
-    amount: l.amount != null ? Number(l.amount).toFixed(2) : '',
+    taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
+    amount: l.amount != null ? String(l.amount) : '',
     taxOverridden: l.tax_overridden === true,
-    taxAmount: l.tax_amount != null ? Number(l.tax_amount).toFixed(2) : '',
+    taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
@@ -102,6 +109,7 @@ export function ExpenseDrawer({
   employees,
   accounts,
   taxCodes,
+  taxGroups,
   departments,
   projects,
   segments = [],
@@ -115,6 +123,7 @@ export function ExpenseDrawer({
   employees: Opt[]
   accounts: Opt[]
   taxCodes: Opt[]
+  taxGroups: Opt[]
   departments: Opt[]
   projects: Opt[]
   segments?: SegmentOpt[]
@@ -153,12 +162,14 @@ export function ExpenseDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  const rateByCode = useMemo(() => new Map(taxCodes.map((tc) => [tc.id, Number(tc.rate ?? 0)])), [taxCodes])
+  const taxProfiles = useMemo(() => [
+    ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
+    ...taxGroups.map((profile) => ({ ...profile, value: `group:${profile.id}` })),
+  ], [taxCodes, taxGroups])
+  const taxByProfile = useMemo(() => new Map(taxProfiles.map((profile) => [profile.value, profile.tax_components ?? []])), [taxProfiles])
   const lineTax = (row: LineRow) => {
-    const rate = row.taxCodeId ? (rateByCode.get(row.taxCodeId) ?? 0) : 0
-    const amt = Number(row.amount)
-    if (!rate || Number.isNaN(amt)) return 0
-    return Math.round(amt * rate) / 100
+    try { return computeLineTaxes(String(row.amount || '0'), taxByProfile.get(row.taxProfileId) ?? []).taxTotal }
+    catch { return '0.0000' }
   }
 
   // -- explicit save (no autosave) -----------------------------------------
@@ -170,12 +181,15 @@ export function ExpenseDrawer({
       extraDims,
       custom: customValues,
       lines: rows
-        .filter((r) => r.accountId && Number(r.amount) > 0)
+        .filter((r) => {
+          try { return r.accountId && cmp(r.amount, '0') > 0 } catch { return false }
+        })
         .map((r) => ({
           accountId: r.accountId,
           description: r.description,
           amount: r.amount,
-          taxCodeId: r.taxCodeId || null,
+          taxCodeId: r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
+          taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
           taxOverridden: r.taxOverridden,
           taxAmount: r.taxOverridden ? r.taxAmount : null,
           departmentId: r.departmentId || null,
@@ -310,11 +324,11 @@ export function ExpenseDrawer({
         placeholder: '—',
       },
       tax_code_id: {
-        key: 'taxCodeId',
+        key: 'taxProfileId',
         label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: t('drawer.noTax') }, ...taxCodes.map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
+        options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
       amount: { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
       tax_amount: {
@@ -351,7 +365,7 @@ export function ExpenseDrawer({
       return [...configured, ...segmentColumns]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxCodes, lineDefs, segments, layout, t, tCommon],
+    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon],
   )
 
   const field = 'space-y-1.5'
@@ -419,7 +433,7 @@ export function ExpenseDrawer({
             <>
               <PdfButton recordType="expense_report" recordId={String(doc.id)} />
               {isDraft && canSubmit ? (
-                <Button disabled={busy || !partyId || Number(totals.total) <= 0} onClick={() => act('submit')}>
+                <Button disabled={busy || !partyId || !positiveAmount(totals.total)} onClick={() => act('submit')}>
                   {t('actions.submitForApproval')}
                 </Button>
               ) : null}

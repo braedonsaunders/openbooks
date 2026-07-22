@@ -10,8 +10,8 @@ import { PagedTable } from '../../../../components/paged-table'
 import { money } from '../../../../lib/format'
 
 export interface UnbilledClient {
-  revenue: number
-  cost: number
+  revenue: string
+  cost: string
   hours: number
   timeEntryCount: number
   costLineCount: number

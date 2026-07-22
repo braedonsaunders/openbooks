@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, mulPercent, neg, sum } from "./money.ts";
+import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
 
 /**
  * Construction progress billing engine (AIA G702/G703). An Application for
@@ -49,11 +49,13 @@ export interface ComputedApplication {
 export function computeApplication(lines: AppLineInput[]): ComputedApplication {
   const computed: ComputedAppLine[] = lines.map((l) => {
     const gross = add(l.thisPeriodCompleted || "0", l.materialsStored || "0");
-    const retainage = Number(l.retainagePercent) > 0 ? mulPercent(gross, l.retainagePercent) : "0";
+    const retainage = cmp(l.retainagePercent, "0") > 0 ? mulPercent(gross, l.retainagePercent) : "0.0000";
     const net = add(gross, neg(retainage));
     const completedToDate = add(l.previousCompleted || "0", gross);
-    const scheduled = Number(l.scheduledValue || "0");
-    const percent = scheduled > 0 ? ((Number(completedToDate) / scheduled) * 100).toFixed(2) : "0.00";
+    const scheduled = normalizeMoney(l.scheduledValue || "0");
+    const percent = cmp(scheduled, "0") > 0 && cmp(completedToDate, "0") >= 0
+      ? formatMoney(mulRatio("100", toUnits(completedToDate), toUnits(scheduled)), 2)
+      : "0.00";
     return {
       sovLineId: l.sovLineId,
       grossThisPeriod: gross,
@@ -209,13 +211,13 @@ export async function generatePayApplicationInvoice(
       })),
     );
 
-    if (Number(computed.grossThisPeriod) === 0) {
+    if (cmp(computed.grossThisPeriod, "0") === 0) {
       throw new ConstructionBillingError("Nothing to bill — enter work completed on at least one line");
     }
 
     const defIncome = await defaultIncomeAccount(tx, orgId);
     const retAcct = await retainageReceivableAccount(tx, orgId);
-    if (Number(computed.retainageThisPeriod) > 0 && !retAcct) {
+    if (cmp(computed.retainageThisPeriod, "0") > 0 && !retAcct) {
       throw new ConstructionBillingError(
         "Configure a Retainage Receivable control account (Company control accounts) before withholding retainage",
       );
@@ -236,7 +238,7 @@ export async function generatePayApplicationInvoice(
     const byLine = new Map(computed.lines.map((c) => [c.sovLineId, c]));
     for (const src of linesRes.rows) {
       const c = byLine.get(src.sov_line_id)!;
-      if (Number(c.grossThisPeriod) === 0) continue;
+      if (cmp(c.grossThisPeriod, "0") === 0) continue;
       const acct = src.income_account_id ?? defIncome;
       if (!acct) throw new ConstructionBillingError("No income account configured for a schedule-of-values line");
       await tx.execute(sql`
@@ -251,7 +253,7 @@ export async function generatePayApplicationInvoice(
     // The single retainage line: a NEGATIVE posting to Retainage Receivable.
     // The kernel credits the line account by its amount, so a negative amount
     // debits Retainage Receivable and reduces the AR (the collectible total).
-    if (Number(computed.retainageThisPeriod) > 0) {
+    if (cmp(computed.retainageThisPeriod, "0") > 0) {
       const negRetainage = neg(computed.retainageThisPeriod);
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description, quantity,
@@ -292,7 +294,8 @@ export async function releaseRetainage(
   amount: string,
 ): Promise<{ invoiceId: string; documentNumber: string; amount: string }> {
   return db.transaction(async (tx) => {
-    if (Number(amount) <= 0) throw new ConstructionBillingError("Release amount must be positive");
+    const exactAmount = normalizeMoney(amount);
+    if (cmp(exactAmount, "0") <= 0) throw new ConstructionBillingError("Release amount must be positive");
     const projRes = (await tx.execute(sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
         from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id
@@ -310,7 +313,7 @@ export async function releaseRetainage(
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id}, ${periodEnd},
               ${project.currency}, 'draft', ${projectId}, ${project.subsidiary_id}, 'Retainage release',
-              ${amount}, '0', ${amount}, ${userId})
+              ${exactAmount}, '0', ${exactAmount}, ${userId})
       returning id
     `)) as unknown as { rows: { id: string }[] };
     const invoiceId = invoice.rows[0]!.id;
@@ -318,9 +321,9 @@ export async function releaseRetainage(
     await tx.execute(sql`
       insert into document_lines (org_id, document_id, line_number, account_id, description, quantity,
             unit_price, amount, is_billable, project_id, created_by)
-      values (${orgId}, ${invoiceId}, 1, ${retAcct}, 'Retainage release', '1', ${amount}, ${amount}, false,
+      values (${orgId}, ${invoiceId}, 1, ${retAcct}, 'Retainage release', '1', ${exactAmount}, ${exactAmount}, false,
             ${projectId}, ${userId})
     `);
-    return { invoiceId, documentNumber, amount };
+    return { invoiceId, documentNumber, amount: exactAmount };
   });
 }

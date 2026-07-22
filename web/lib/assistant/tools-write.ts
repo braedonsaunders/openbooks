@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { sum } from "@openbooks/engine/src/money.ts";
+import { cmp, formatMoney, isZero, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { signProposal, type JournalLinePreview, type JournalPreview } from "./proposals";
 
@@ -50,18 +50,25 @@ const draftJournalEntry: AssistantToolDef = {
     const a = parsed.data;
 
     // Reject imbalance up front with a message the model can act on.
-    const total = a.lines.reduce((acc, l) => acc + Math.round(l.amount * 100), 0);
-    if (total !== 0) {
+    let exactAmounts: string[];
+    try {
+      exactAmounts = a.lines.map((line) => normalizeMoney(String(line.amount)));
+    } catch {
+      return { ok: false, error: "line amounts must have at most four decimal places" };
+    }
+    const total = sum(exactAmounts);
+    if (!isZero(total)) {
       return {
         ok: false,
-        error: `lines must balance to zero; they sum to ${(total / 100).toFixed(2)}`,
+        error: `lines must balance to zero; they sum to ${formatMoney(total, 2)}`,
       };
     }
 
     // Resolve each line's account by number first, then exact name — against
     // active, postable (non-summary) accounts only.
     const lines: JournalLinePreview[] = [];
-    for (const l of a.lines) {
+    for (let index = 0; index < a.lines.length; index++) {
+      const l = a.lines[index]!;
       const key = l.account.trim();
       const r = (await db.execute(sql`
         select id, number, name from accounts
@@ -81,7 +88,7 @@ const draftJournalEntry: AssistantToolDef = {
         accountId: acct.id,
         accountLabel: `${acct.number ?? ""} · ${acct.name}`.replace(/^ · /, ""),
         description: l.description?.trim() || null,
-        amount: l.amount.toFixed(2),
+        amount: formatMoney(exactAmounts[index]!, 2),
       });
     }
 
@@ -95,7 +102,7 @@ const draftJournalEntry: AssistantToolDef = {
       ok: true,
       data: {
         proposed: { kind: "create_journal_entry", preview, confirmToken },
-        totalDebits: sum(lines.map((l) => (Number(l.amount) > 0 ? l.amount : "0"))),
+        totalDebits: sum(lines.map((l) => (cmp(l.amount, "0") > 0 ? l.amount : "0"))),
       },
       note: "Drafted for the user to review — nothing is created until they click Apply, and applying only saves a draft journal.",
     };

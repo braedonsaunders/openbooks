@@ -31,6 +31,7 @@ import {
   postPermission,
   readPermission,
   taxCodeOptions,
+  taxGroupOptions,
 } from '../lib/documents'
 import { loadExpenseReport } from '../lib/expenses'
 import { loadJournalDoc } from '../lib/journals'
@@ -128,11 +129,12 @@ export async function loadRelatedTransactionDrawerData({
     const roleCondition = orderKind === 'purchase_order'
       ? sql`(p.custom->>'nsKind' = 'vendor' or exists (select 1 from vendor_roles r where r.party_id = p.id and r.is_active))`
       : sql`(p.custom->>'nsKind' = 'customer' or exists (select 1 from customer_roles r where r.party_id = p.id and r.is_active))`
-    const [parties, accounts, items, taxCodes, departments, projects, segments, resolvedForm] = await Promise.all([
+    const [parties, accounts, items, taxCodes, taxGroups, departments, projects, segments, resolvedForm] = await Promise.all([
       db.execute(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`) as any,
       db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
       db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
       taxCodeOptions(),
+      taxGroupOptions(),
       db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
       db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
       customSegmentOptions(authz.user.orgId),
@@ -155,6 +157,7 @@ export async function loadRelatedTransactionDrawerData({
         accounts: accounts.rows,
         items: items.rows,
         taxCodes: taxCodes as any,
+        taxGroups: taxGroups as any,
         departments: departments.rows,
         projects: projects.rows,
         segments,
@@ -168,7 +171,7 @@ export async function loadRelatedTransactionDrawerData({
     if (!can(authz, 'expenses.read')) return null
     const report = await loadExpenseReport(id, authz.user.orgId)
     if (!report || !canSeeDocument(report.doc as Record<string, any>, partyId, authz)) return null
-    const [employees, accounts, taxCodes, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
+    const [employees, accounts, taxCodes, taxGroups, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
       db.execute(sql`
         select p.id, p.display_name from parties p
          where p.org_id = ${authz.user.orgId} and p.is_active
@@ -176,6 +179,7 @@ export async function loadRelatedTransactionDrawerData({
          order by p.display_name limit 2000`) as any,
       db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('expense','expense_other','cogs') and is_active and not is_summary order by number nulls last`) as any,
       taxCodeOptions(),
+      taxGroupOptions(),
       dimensionOptions(),
       loadFieldDefs('documents', 'expense_report'),
       loadFieldDefs('document_lines', 'expense_report'),
@@ -197,6 +201,7 @@ export async function loadRelatedTransactionDrawerData({
         employees: employees.rows,
         accounts: accounts.rows,
         taxCodes: taxCodes as any,
+        taxGroups: taxGroups as any,
         departments: dimensions.departments as any,
         projects: dimensions.projects as any,
         segments: segments as any,

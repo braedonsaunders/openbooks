@@ -24,6 +24,8 @@
  * Accelerated Investment Incentive).
  */
 
+import { add, cmp, formatMoney, mulDecimal, mulDecimalFactors, neg, normalizeMoney, roundMoney } from "./money.ts";
+
 export interface PoolClassDef {
   /** Regime class code — CA "8"/"10.1", UK "main"/"special". */
   code: string;
@@ -75,7 +77,39 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
       "10.1": [0.3, "Passenger vehicles (over ceiling)", { costCap: 37000, allowRecapture: false, allowTerminalLoss: false }],
     }),
   },
+  uk_wda: {
+    code: "uk_wda",
+    name: "United Kingdom — Writing-Down Allowances",
+    classes: {
+      main: fullYear("main", 0.18, "Main rate pool"),
+      special: fullYear("special", 0.06, "Special rate pool"),
+      sba: { code: "sba", rate: 0.03, method: "straight_line", firstYearFraction: 1, allowRecapture: false, allowTerminalLoss: false, name: "Structures & buildings allowance" },
+    },
+  },
+  au_pool: {
+    code: "au_pool",
+    name: "Australia — Depreciation Pools",
+    classes: {
+      // Diminishing-value pools: half the pool rate in the year of allocation.
+      sbp: { code: "sbp", rate: 0.3, method: "declining", firstYearFraction: 0.5, allowRecapture: true, allowTerminalLoss: true, name: "Small business pool (15% then 30%)" },
+      lvp: { code: "lvp", rate: 0.375, method: "declining", firstYearFraction: 0.5, allowRecapture: true, allowTerminalLoss: true, name: "Low-value pool (18.75% then 37.5%)" },
+    },
+  },
+  nz_pool: {
+    code: "nz_pool",
+    name: "New Zealand — Pool method",
+    classes: {
+      // The pool depreciates at the lowest DV rate of its assets; a maintained
+      // default the tenant tunes per pool (see Tax Setup → pool classes).
+      pool: fullYear("pool", 0.1, "Pooled assets (diminishing value)"),
+    },
+  },
 };
+
+/** A full-year regime class (no half-year rule): first-year fraction 1. */
+function fullYear(code: string, rate: number, name: string): PoolClassDef {
+  return { code, rate, method: "declining", firstYearFraction: 1, allowRecapture: true, allowTerminalLoss: true, name };
+}
 
 /** Build Canada class defs with the half-year rule as the default first-year fraction. */
 function caClass(
@@ -140,18 +174,20 @@ export interface PoolYearResult {
   terminalLoss: string;
 }
 
-const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-const s = (n: number) => round2(n).toFixed(2);
+const zeroMoney = "0.0000";
+const nonnegative = (value: string) => cmp(value, zeroMoney) < 0 ? zeroMoney : value;
+const minMoney = (left: string, right: string) => cmp(left, right) <= 0 ? left : right;
+const s = (value: string) => formatMoney(value, 2);
 
 export function computePoolYear(input: PoolYearInput): PoolYearResult {
-  const opening = Number(input.openingBalance);
-  const additions = Number(input.additions);
-  const dispositions = Number(input.dispositions);
-  const immediateExpense = Math.max(0, Number(input.immediateExpense ?? "0"));
-  const shortYear = input.shortYearFactor ?? 1;
-  const firstYearFraction = input.firstYearFraction ?? 1;
-  const netAdditions = Math.max(0, additions - dispositions);
-  const balance = round2(opening + additions - dispositions);
+  const opening = normalizeMoney(input.openingBalance);
+  const additions = normalizeMoney(input.additions);
+  const dispositions = normalizeMoney(input.dispositions);
+  const requestedImmediateExpense = nonnegative(normalizeMoney(input.immediateExpense ?? "0"));
+  const shortYear = String(input.shortYearFactor ?? 1);
+  const firstYearFraction = String(input.firstYearFraction ?? 1);
+  const netAdditions = nonnegative(add(additions, neg(dispositions)));
+  const balance = roundMoney(add(add(opening, additions), neg(dispositions)), 2);
 
   const zero = (over: Partial<PoolYearResult>): PoolYearResult => ({
     openingBalance: s(opening), additions: s(additions), dispositions: s(dispositions),
@@ -159,30 +195,33 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
     allowance: "0.00", closingBalance: "0.00", recapture: "0.00", terminalLoss: "0.00", ...over,
   });
 
-  if (balance < 0 && (input.allowRecapture ?? true)) return zero({ recapture: s(-balance) });
-  if (balance > 0 && input.poolHasAssetsAtYearEnd === false && (input.allowTerminalLoss ?? true)) {
+  if (cmp(balance, zeroMoney) < 0 && (input.allowRecapture ?? true)) return zero({ recapture: s(neg(balance)) });
+  if (cmp(balance, zeroMoney) > 0 && input.poolHasAssetsAtYearEnd === false && (input.allowTerminalLoss ?? true)) {
     return zero({ terminalLoss: s(balance) });
   }
-  if (balance <= 0) return zero({ closingBalance: s(Math.max(0, balance)) });
+  if (cmp(balance, zeroMoney) <= 0) return zero({ closingBalance: "0.00" });
 
-  const afterIei = balance - immediateExpense;
-  let base: number;
-  if (input.enhancedFirstYearMultiplier && input.enhancedFirstYearMultiplier > 1) {
-    base = afterIei + (input.enhancedFirstYearMultiplier - 1) * netAdditions;
+  const immediateExpense = minMoney(requestedImmediateExpense, balance);
+  const afterIei = add(balance, neg(immediateExpense));
+  let base: string;
+  const enhancedMultiplier = String(input.enhancedFirstYearMultiplier ?? 1);
+  if (cmp(normalizeMoney(enhancedMultiplier), "1") > 0) {
+    const enhancedAddition = add(mulDecimal(netAdditions, enhancedMultiplier), neg(netAdditions));
+    base = add(afterIei, enhancedAddition);
   } else {
-    base = afterIei - (1 - firstYearFraction) * netAdditions;
+    const eligibleAddition = mulDecimal(netAdditions, firstYearFraction);
+    base = add(afterIei, neg(add(netAdditions, neg(eligibleAddition))));
   }
-  base = Math.max(0, round2(base));
+  base = nonnegative(roundMoney(base, 2));
 
-  let allowance = round2(base * input.rate * shortYear);
-  allowance = Math.min(allowance, round2(afterIei));
-  if (input.claimCap != null) allowance = Math.min(allowance, Math.max(0, Number(input.claimCap)));
-  if (allowance < 0) allowance = 0;
+  let allowance = roundMoney(mulDecimalFactors(base, [String(input.rate), shortYear]), 2);
+  allowance = minMoney(nonnegative(allowance), roundMoney(afterIei, 2));
+  if (input.claimCap != null) allowance = minMoney(allowance, nonnegative(normalizeMoney(input.claimCap)));
 
   return zero({
     immediateExpense: s(immediateExpense),
     base: s(base),
     allowance: s(allowance),
-    closingBalance: s(round2(afterIei - allowance)),
+    closingBalance: s(roundMoney(add(afterIei, neg(allowance)), 2)),
   });
 }

@@ -37,7 +37,7 @@ interface CategoryOpt {
 }
 interface SubsidiaryOpt { id: string; name: string; depth: number }
 
-const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'units_of_production', 'manual'] as const
+const METHODS = ['straight_line', 'declining_balance', 'double_declining'] as const
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
   in_service: 'success',
@@ -84,8 +84,8 @@ export function AssetDrawer({
   const [description, setDescription] = useState<string>(a.description ?? '')
   const [categoryId, setCategoryId] = useState<string>(a.category_id ?? '')
   const [subsidiaryId, setSubsidiaryId] = useState<string>(a.subsidiary_id ?? '')
-  const [cost, setCost] = useState<string>(a.acquisition_cost != null ? Number(a.acquisition_cost).toFixed(2) : '')
-  const [salvage, setSalvage] = useState<string>(a.salvage_value != null ? Number(a.salvage_value).toFixed(2) : '0.00')
+  const [cost, setCost] = useState<string>(a.acquisition_cost != null ? String(a.acquisition_cost) : '')
+  const [salvage, setSalvage] = useState<string>(a.salvage_value != null ? String(a.salvage_value) : '0.0000')
   const [acquiredOn, setAcquiredOn] = useState<string>(a.acquired_on ?? '')
   const [inServiceOn, setInServiceOn] = useState<string>(a.in_service_on ?? '')
   const [serialNumber, setSerialNumber] = useState<string>(a.serial_number ?? '')
@@ -152,8 +152,8 @@ export function AssetDrawer({
     setDescription(a.description ?? '')
     setCategoryId(a.category_id ?? '')
     setSubsidiaryId(a.subsidiary_id ?? '')
-    setCost(a.acquisition_cost != null ? Number(a.acquisition_cost).toFixed(2) : '')
-    setSalvage(a.salvage_value != null ? Number(a.salvage_value).toFixed(2) : '0.00')
+    setCost(a.acquisition_cost != null ? String(a.acquisition_cost) : '')
+    setSalvage(a.salvage_value != null ? String(a.salvage_value) : '0.0000')
     setAcquiredOn(a.acquired_on ?? '')
     setInServiceOn(a.in_service_on ?? '')
     setSerialNumber(a.serial_number ?? '')

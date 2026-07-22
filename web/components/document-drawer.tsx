@@ -18,6 +18,8 @@ import { ApprovalActions } from './approval-actions'
 import { ApprovalHistory } from './approval-history'
 import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
 import { money } from '../lib/format'
+import { cmp } from '@openbooks/engine/src/money.ts'
+import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../lib/confirm'
 import { runClientScripts } from '../lib/client-scripts'
 import type { DocKindConfig } from '../lib/document-kinds'
@@ -40,6 +42,7 @@ interface Opt {
   rate?: string
   label?: string
   subsidiary_id?: string | null
+  tax_components?: TaxComponentConfig[]
 }
 
 interface SubsidiaryOpt {
@@ -72,7 +75,7 @@ interface LineRow extends Record<string, unknown> {
   projectId: string
   locationId: string
   classId: string
-  taxCodeId: string
+  taxProfileId: string
   amount: string
   taxOverridden: boolean
   taxAmount: string
@@ -113,11 +116,15 @@ const emptyLine = (): LineRow => ({
   projectId: '',
   locationId: '',
   classId: '',
-  taxCodeId: '',
+  taxProfileId: '',
   amount: '',
   taxOverridden: false,
   taxAmount: '',
 })
+
+function positiveAmount(value: unknown): boolean {
+  try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
+}
 
 function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
@@ -126,15 +133,15 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     description: l.description ?? '',
     quantity: l.quantity != null ? String(l.quantity) : '',
     unit: l.unit ?? '',
-    unitPrice: l.unit_price != null ? Number(l.unit_price).toFixed(2) : '',
+    unitPrice: l.unit_price != null ? String(l.unit_price) : '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
     locationId: l.location_id ?? '',
     classId: l.class_id ?? '',
-    taxCodeId: l.tax_code_id ?? '',
-    amount: l.amount != null ? Number(l.amount).toFixed(2) : '',
+    taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
+    amount: l.amount != null ? String(l.amount) : '',
     taxOverridden: l.tax_overridden === true,
-    taxAmount: l.tax_amount != null ? Number(l.tax_amount).toFixed(2) : '',
+    taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
@@ -148,6 +155,7 @@ export interface DocumentDrawerProps {
   parties?: Opt[]
   accounts: Opt[]
   taxCodes?: Opt[]
+  taxGroups?: Opt[]
   cards?: Opt[]
   bankAccounts?: Opt[]
   departments: Opt[]
@@ -185,6 +193,7 @@ export function DocumentDrawer({
   parties,
   accounts,
   taxCodes,
+  taxGroups,
   cards,
   bankAccounts,
   departments,
@@ -223,7 +232,7 @@ export function DocumentDrawer({
   // applications ledger (invoices). Credits post open items too but their
   // "applied" flows the opposite direction, so they show their raw status.
   const displayStatus = isPosted && config.showsBalance
-    ? Number(doc.balance_due) > 0
+    ? cmp(String(doc.balance_due ?? '0'), '0') > 0
       ? 'open'
       : 'paid'
     : doc.status
@@ -254,7 +263,7 @@ export function DocumentDrawer({
     ? {
         toAccount: payload.lines[0]?.account_id ?? '',
         fromAccount: payload.lines[1]?.account_id ?? '',
-        amount: payload.lines[0]?.amount != null ? Number(payload.lines[0].amount).toFixed(2) : '',
+        amount: payload.lines[0]?.amount != null ? String(payload.lines[0].amount) : '',
       }
     : null
   const [transfer, setTransfer] = useState(initialTransfer)
@@ -266,15 +275,20 @@ export function DocumentDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  const rateByCode = useMemo(
-    () => new Map((taxCodes ?? []).map((tc) => [tc.id, Number(tc.rate ?? 0)])),
-    [taxCodes],
+  const taxProfiles = useMemo(() => [
+    ...(taxCodes ?? []).map((profile) => ({ ...profile, value: `code:${profile.id}` })),
+    ...(taxGroups ?? []).map((profile) => ({ ...profile, value: `group:${profile.id}` })),
+  ], [taxCodes, taxGroups])
+  const taxByProfile = useMemo(
+    () => new Map(taxProfiles.map((profile) => [profile.value, profile.tax_components ?? []])),
+    [taxProfiles],
   )
   const lineTax = (row: LineRow) => {
-    const rate = row.taxCodeId ? (rateByCode.get(row.taxCodeId) ?? 0) : 0
-    const amt = Number(row.amount)
-    if (!rate || Number.isNaN(amt)) return 0
-    return Math.round(amt * rate) / 100
+    try {
+      return computeLineTaxes(String(row.amount || '0'), taxByProfile.get(row.taxProfileId) ?? []).taxTotal
+    } catch {
+      return '0.0000'
+    }
   }
 
   // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
@@ -311,7 +325,7 @@ export function DocumentDrawer({
           ? [
               { accountId: transfer.toAccount, amount: transfer.amount, description: null },
               { accountId: transfer.fromAccount, amount: transfer.amount, description: null },
-            ].filter((l) => l.accountId && Number(l.amount) > 0)
+            ].filter((l) => l.accountId && positiveAmount(l.amount))
           : [],
       }
     }
@@ -339,7 +353,7 @@ export function DocumentDrawer({
       isFinalInvoice,
       custom: customValues,
       lines: rows
-        .filter((r) => r.accountId && Number(r.amount) > 0)
+        .filter((r) => r.accountId && positiveAmount(r.amount))
         .map((r) => ({
           accountId: r.accountId,
           itemId: r.itemId || null,
@@ -348,7 +362,8 @@ export function DocumentDrawer({
           unit: r.unit || null,
           unitPrice: r.unitPrice !== '' ? r.unitPrice : null,
           amount: r.amount,
-          taxCodeId: config.hasTax ? r.taxCodeId || null : null,
+          taxCodeId: config.hasTax && r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
+          taxGroupId: config.hasTax && r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
           taxOverridden: config.hasTax ? r.taxOverridden : false,
           taxAmount: config.hasTax && r.taxOverridden ? r.taxAmount : null,
           departmentId: r.departmentId || null,
@@ -509,11 +524,11 @@ export function DocumentDrawer({
     ]
     if (config.hasTax) {
       cols.push({
-        key: 'taxCodeId',
+        key: 'taxProfileId',
         label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: t('drawer.noTax') }, ...(taxCodes ?? []).map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
+        options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       })
     }
     for (const segment of segments.filter((item) => item.showOnLines)) {
@@ -556,7 +571,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxCodes, lineDefs, segments, builtinSegments, config, t, tCommon])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -617,8 +632,8 @@ export function DocumentDrawer({
         options: [{ value: '', label: '—' }, ...(classes ?? []).map((c) => ({ value: c.id, label: c.name ?? '' }))],
       },
       tax_code_id: {
-        key: 'taxCodeId', width: '110px', type: 'select',
-        options: [{ value: '', label: t('drawer.noTax') }, ...(taxCodes ?? []).map((tc) => ({ value: tc.id, label: tc.code ?? '' }))],
+        key: 'taxProfileId', width: '110px', type: 'select',
+        options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
       amount: { key: 'amount', width: '120px', type: 'amount', align: 'right', required: true },
       tax_amount: {
@@ -663,7 +678,7 @@ export function DocumentDrawer({
       .filter((c): c is LineGridColumn<LineRow> => c !== null)
     return [...configured, ...columns.filter((column) => String(column.key).startsWith('seg_'))]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxCodes, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {
@@ -959,13 +974,13 @@ export function DocumentDrawer({
         ) : null
       case 'submit':
         return isDraft && canCreate && !config.directPost ? (
-          <Button disabled={busy || (config.partyRole ? !partyId : false) || Number(totals.total) <= 0} onClick={() => act('submit')}>
+          <Button disabled={busy || (config.partyRole ? !partyId : false) || !positiveAmount(totals.total)} onClick={() => act('submit')}>
             {t('actions.submitForApproval')}
           </Button>
         ) : null
       case 'post':
         return (isDraft && canCreate && config.directPost) || (doc.status === 'approved' && canPost) ? (
-          <Button disabled={busy || (isDraft && Number(totals.total) <= 0)} onClick={() => act('post')}>
+          <Button disabled={busy || (isDraft && !positiveAmount(totals.total))} onClick={() => act('post')}>
             {tCommon('actions.post')}
           </Button>
         ) : null

@@ -15,6 +15,7 @@ import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
+import { cmp, formatMoney, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
 
 /**
  * Shared payment/receipt flyout. side='ap' → vendor payment applying open
@@ -129,7 +130,7 @@ export function PaymentDrawer({
   const [openItems, setOpenItems] = useState<OpenItemClient[]>(initialOpenItems)
   const [loadingItems, setLoadingItems] = useState(false)
   const [allocs, setAllocs] = useState<Record<string, string>>(() =>
-    Object.fromEntries(payment.allocations.map((a) => [a.openLineId, Number(a.amount).toFixed(2)])),
+    Object.fromEntries(payment.allocations.map((a) => [a.openLineId, formatMoney(a.amount, 2)])),
   )
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
@@ -168,19 +169,23 @@ export function PaymentDrawer({
   const rowValid = (item: OpenItemClient) => {
     const v = allocs[item.lineId]
     if (v === undefined) return true
-    const n = Number(v)
-    return Number.isFinite(n) && n > 0 && n <= Number(item.open) + 1e-9
+    try {
+      const amount = normalizeMoney(v)
+      return cmp(amount, '0') > 0 && cmp(amount, item.open) <= 0
+    } catch {
+      return false
+    }
   }
   const validAllocations = useMemo(
     () =>
       openItems
-        .filter((i) => allocs[i.lineId] !== undefined && rowValid(i) && Number(allocs[i.lineId]) > 0)
-        .map((i) => ({ openLineId: i.lineId, amount: Number(allocs[i.lineId]).toFixed(2) })),
+        .filter((i) => allocs[i.lineId] !== undefined && rowValid(i))
+        .map((i) => ({ openLineId: i.lineId, amount: formatMoney(normalizeMoney(allocs[i.lineId]!), 2) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allocs, openItems],
   )
   const hasInvalidRow = openItems.some((i) => !rowValid(i))
-  const total = validAllocations.reduce((acc, a) => acc + Number(a.amount), 0)
+  const total = sum(validAllocations.map((allocation) => allocation.amount))
 
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
@@ -213,7 +218,7 @@ export function PaymentDrawer({
     setDocumentDate(doc.document_date ?? '')
     setReferenceNumber(doc.reference_number ?? '')
     setMemo(doc.memo ?? '')
-    setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, Number(a.amount).toFixed(2)])))
+    setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, formatMoney(a.amount, 2)])))
   }
 
   async function save() {
@@ -285,7 +290,7 @@ export function PaymentDrawer({
   function toggle(item: OpenItemClient) {
     setAllocs((prev) => {
       const next = { ...prev }
-      if (next[item.lineId] === undefined) next[item.lineId] = Number(item.open).toFixed(2)
+      if (next[item.lineId] === undefined) next[item.lineId] = formatMoney(item.open, 2)
       else delete next[item.lineId]
       return next
     })
@@ -295,7 +300,7 @@ export function PaymentDrawer({
   // across the party's open items (reference → exact → FIFO) and fill the rows.
   async function autoApply() {
     if (!partyId) return
-    const amount = receivedAmount.trim() || openItems.reduce((a, i) => a + Number(i.open), 0).toFixed(2)
+    const amount = receivedAmount.trim() || formatMoney(sum(openItems.map((item) => item.open)), 2)
     setBusy(true)
     try {
       const res = await fetch('/api/payments/suggest', {
@@ -312,7 +317,7 @@ export function PaymentDrawer({
         toast.info(t('autoApplyNone'))
         return
       }
-      setAllocs(Object.fromEntries(data.allocations.map((a: any) => [a.openLineId, Number(a.amount).toFixed(2)])))
+      setAllocs(Object.fromEntries(data.allocations.map((a: any) => [a.openLineId, formatMoney(String(a.amount), 2)])))
       toast.success(t('autoApplyDone', { count: data.allocations.length, strategy: t(`autoApplyStrategy.${data.strategy}`) }))
     } finally {
       setBusy(false)
@@ -345,7 +350,7 @@ export function PaymentDrawer({
     !!partyId &&
     !!bankAccountId &&
     validAllocations.length > 0 &&
-    total > 0
+    cmp(total, '0') > 0
 
   return (
     <TransactionDrawer

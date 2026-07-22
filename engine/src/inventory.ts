@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
+import { add, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "./money.ts";
 import {
   consumeFifo,
   extendCost,
@@ -818,8 +818,8 @@ export async function allocateLandedCost(orgId: string, actorId: string | null, 
   // Weight each layer by remaining quantity, or remaining value.
   const weights = layers.map((l) =>
     input.basis === "quantity"
-      ? Number(l.remaining_quantity)
-      : Number(extendCost(l.remaining_quantity, l.unit_cost)),
+      ? l.remaining_quantity
+      : extendCost(l.remaining_quantity, l.unit_cost),
   );
   const shares = apportionUnits(toUnits(input.amount), weights);
 
@@ -831,7 +831,7 @@ export async function allocateLandedCost(orgId: string, actorId: string | null, 
       const l = layers[i];
       const qtyUnits = toUnits(l.remaining_quantity);
       // new unit cost = old + share / remaining qty
-      const bumpPerUnit = qtyUnits === 0n ? 0n : (shareUnits * 10_000n) / qtyUnits;
+      const bumpPerUnit = qtyUnits === 0n ? 0n : roundDiv(shareUnits * 10_000n, qtyUnits);
       const newUnitCost = fromUnits(toUnits(l.unit_cost) + bumpPerUnit);
       await tx.execute(sql`update cost_layers set unit_cost = ${newUnitCost}, updated_at = now() where id = ${l.id}`);
       await tx.execute(sql`
@@ -856,12 +856,13 @@ export async function allocateLandedCost(orgId: string, actorId: string | null, 
 }
 
 /** Largest-remainder apportionment of money units across numeric weights. */
-function apportionUnits(totalUnits: bigint, weights: number[]): bigint[] {
-  const wsum = weights.reduce((a, b) => a + b, 0);
-  if (wsum <= 0 || totalUnits === 0n) return weights.map(() => 0n);
-  const SCALE = 1_000_000n;
-  const iw = weights.map((w) => BigInt(Math.max(0, Math.round(w * Number(SCALE)))));
-  const iwsum = iw.reduce((a, b) => a + b, 0n) || 1n;
+function apportionUnits(totalUnits: bigint, weights: string[]): bigint[] {
+  const iw = weights.map((weight) => {
+    const units = toUnits(weight);
+    return units > 0n ? units : 0n;
+  });
+  const iwsum = iw.reduce((a, b) => a + b, 0n);
+  if (iwsum === 0n || totalUnits === 0n) return weights.map(() => 0n);
   const base = iw.map((w) => (totalUnits * w) / iwsum);
   let remainder = totalUnits - base.reduce((a, b) => a + b, 0n);
   const order = iw

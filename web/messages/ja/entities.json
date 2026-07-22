@@ -25,6 +25,7 @@
   "list": {
     "searchPlaceholder": "名称、コード、メールを検索…",
     "shortCode": "短縮コード",
-    "phone": "電話番号"
+    "phone": "電話番号",
+    "customerStatuses": { "existing": "既存顧客", "potential": "見込み顧客" }
   }
 }

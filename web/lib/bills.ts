@@ -2,44 +2,150 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, sum } from '@openbooks/engine/src/money.ts'
-import { resolveLineTax } from '@openbooks/engine/src/tax.ts'
+import {
+  computeLineTaxes,
+  type ComputedTaxComponent,
+  type TaxComponentConfig,
+} from '@openbooks/engine/src/tax.ts'
 import { resolveOrgId } from './org-scope'
 
-/** Latest effective rate per tax code, as of now. */
-export async function taxRateMap(orgId?: string): Promise<Map<string, number>> {
+export interface TaxProfiles {
+  codes: Map<string, TaxComponentConfig[]>
+  groups: Map<string, TaxComponentConfig[]>
+}
+
+/** Effective, ordered tax profiles for a transaction date. */
+export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<TaxProfiles> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const rates = (await db.execute(sql`
-    select tc.id, coalesce(tr.rate_percent, 0) as rate
+  const date = asOfDate ?? new Date().toISOString().slice(0, 10)
+  const codeRows = (await db.execute(sql`
+    select tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
+           tc.recoverable_percent::text as recoverable_percent,
+           tc.calculation_type, tc.price_includes_tax, tc.compound_on_previous,
+           tc.rounding_scale, tc.collected_account_id, tc.paid_account_id,
+           tc.withholding_account_id
       from tax_codes tc
       left join lateral (
         select rate_percent from tax_rates
-         where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= now()
+         where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= ${date}
+           and (effective_to is null or effective_to >= ${date})
          order by effective_from desc limit 1) tr on true
-     where tc.org_id = ${resolvedOrgId}
-  `)) as unknown as { rows: { id: string; rate: string }[] }
-  return new Map(rates.rows.map((r) => [r.id, Number(r.rate)]))
+     where tc.org_id = ${resolvedOrgId} and tc.is_active
+  `)) as unknown as { rows: Record<string, any>[] }
+  const config = (row: Record<string, any>, sequence: number, inclusive?: boolean): TaxComponentConfig => ({
+    taxCodeId: String(row.id),
+    code: String(row.code),
+    sequence,
+    ratePercent: String(row.rate),
+    recoverablePercent: String(row.recoverable_percent),
+    calculationType: row.calculation_type,
+    priceIncludesTax: inclusive ?? Boolean(row.price_includes_tax),
+    compoundOnPrevious: Boolean(row.compound_on_previous),
+    roundingScale: Number(row.rounding_scale),
+    collectedAccountId: row.collected_account_id,
+    paidAccountId: row.paid_account_id,
+    withholdingAccountId: row.withholding_account_id,
+  })
+  const codes = new Map<string, TaxComponentConfig[]>(codeRows.rows.map((row) => [String(row.id), [config(row, 1)]]))
+
+  const groupRows = (await db.execute(sql`
+    select tg.id as group_id, tg.price_includes_tax as group_inclusive,
+           tgm.sequence, tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
+           tc.recoverable_percent::text as recoverable_percent,
+           tc.calculation_type, tc.compound_on_previous, tc.rounding_scale,
+           tc.collected_account_id, tc.paid_account_id, tc.withholding_account_id
+      from tax_groups tg
+      join tax_group_members tgm on tgm.tax_group_id = tg.id
+      join tax_codes tc on tc.id = tgm.tax_code_id and tc.org_id = tg.org_id and tc.is_active
+      left join lateral (
+        select rate_percent from tax_rates
+         where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= ${date}
+           and (effective_to is null or effective_to >= ${date})
+         order by effective_from desc limit 1) tr on true
+     where tg.org_id = ${resolvedOrgId} and tg.is_active
+     order by tg.id, tgm.sequence
+  `)) as unknown as { rows: Record<string, any>[] }
+  const groups = new Map<string, TaxComponentConfig[]>()
+  for (const row of groupRows.rows) {
+    const id = String(row.group_id)
+    const members = groups.get(id) ?? []
+    members.push(config(row, Number(row.sequence), Boolean(row.group_inclusive)))
+    groups.set(id, members)
+  }
+  return { codes, groups }
 }
+
+/** Backwards-compatible name for server callers; value is now exact profiles, not floats. */
+export const taxRateMap = taxProfileMap
 
 export interface BillLineInput {
   accountId: string
   description?: string | null
   amount: string
   taxCodeId?: string | null
+  taxGroupId?: string | null
   /** Manual tax override: when true, `taxAmount` is honored instead of computed. */
   taxOverridden?: boolean
   taxAmount?: string | null
 }
 
 /** Pre-tax lines → per-line tax + document totals. Honors manual overrides. */
-export function computeBillTotals(lines: BillLineInput[], rateByCode: Map<string, number>) {
+export function computeBillTotals(lines: BillLineInput[], profiles: TaxProfiles) {
   const computed = lines.map((l) => {
-    const rate = l.taxCodeId ? (rateByCode.get(l.taxCodeId) ?? 0) : 0
-    const res = resolveLineTax(l.amount, rate, { overridden: l.taxOverridden, taxAmount: l.taxAmount })
-    return { ...l, taxAmount: res.taxAmount, taxOverridden: res.overridden }
+    if (l.taxCodeId && l.taxGroupId) throw new Error('select either a tax code or a tax group, not both')
+    const config = l.taxGroupId
+      ? profiles.groups.get(l.taxGroupId)
+      : l.taxCodeId
+        ? profiles.codes.get(l.taxCodeId)
+        : []
+    if ((l.taxCodeId || l.taxGroupId) && !config) throw new Error('selected tax profile is inactive or has no effective rate')
+    const result = computeLineTaxes(l.amount, config ?? [], {
+      overridden: l.taxOverridden,
+      taxAmount: l.taxAmount,
+    })
+    return {
+      ...l,
+      amount: result.netAmount,
+      taxInputAmount: result.inputAmount,
+      taxAmount: result.taxTotal,
+      taxOverridden: result.overridden,
+      taxComponents: result.components,
+    }
   })
   const subtotal = sum(computed.map((l) => l.amount))
   const taxTotal = sum(computed.map((l) => l.taxAmount))
   return { lines: computed, subtotal, taxTotal, total: add(subtotal, taxTotal) }
+}
+
+type SqlRunner = { execute: (query: ReturnType<typeof sql>) => Promise<unknown> }
+
+/** Persist the immutable calculation snapshot immediately after its document line. */
+export async function persistLineTaxComponents(
+  runner: SqlRunner,
+  args: {
+    orgId: string
+    documentLineId: string
+    components: ComputedTaxComponent[]
+    actorId: string | null
+  },
+): Promise<void> {
+  for (const component of args.components) {
+    await runner.execute(sql`
+      insert into document_line_tax_components
+        (org_id, document_line_id, tax_code_id, sequence, rate_percent,
+         taxable_amount, tax_amount, recoverable_amount, nonrecoverable_amount,
+         calculation_type, price_includes_tax, compound_on_previous, rounding_scale,
+         collected_account_id, paid_account_id, withholding_account_id, overridden,
+         created_by, updated_by)
+      values (${args.orgId}, ${args.documentLineId}, ${component.taxCodeId}, ${component.sequence},
+              ${component.ratePercent}, ${component.taxableAmount}, ${component.taxAmount},
+              ${component.recoverableAmount}, ${component.nonrecoverableAmount},
+              ${component.calculationType}, ${component.priceIncludesTax},
+              ${component.compoundOnPrevious}, ${component.roundingScale},
+              ${component.collectedAccountId}, ${component.paidAccountId},
+              ${component.withholdingAccountId}, ${component.overridden},
+              ${args.actorId}, ${args.actorId})`)
+  }
 }
 
 export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null) {

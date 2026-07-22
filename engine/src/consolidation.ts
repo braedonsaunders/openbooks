@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { isZero, neg, sum } from "./money.ts";
+import { assertFinalKernelBalance } from "./posting.ts";
 import { loadSubsidiaryContext } from "./subsidiaries.ts";
 
 /**
@@ -121,7 +122,12 @@ export async function runAutoElimination(
     );
   }
 
-  const activity = (await db.execute(sql`
+  return db.transaction(async (tx) => {
+  // One elimination run per tenant/period at a time. Every read that decides
+  // what to reverse or create happens after this transaction-scoped lock.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`);
+
+  const activity = (await tx.execute(sql`
     select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
            sum(round(l.amount * case
              when source_sub.base_currency = ${elim.baseCurrency} then 1
@@ -156,7 +162,7 @@ export async function runAutoElimination(
 
   // Prior effective elimination entries are reversed on a re-run. Posted
   // ledger rows are never deleted or rewritten.
-  const prior = (await db.execute(sql`
+  const prior = (await tx.execute(sql`
     select original.id, original.entry_number as "entryNumber"
       from journal_entries original
      where original.org_id = ${orgId} and original.period_id = ${periodId}
@@ -183,19 +189,24 @@ export async function runAutoElimination(
     );
   }
 
-  const periodRes = (await db.execute(sql`
+  if (translatedActivity.length > 0) {
+    assertFinalKernelBalance(
+      translatedActivity.map((row) => ({ amount: neg(row.total), subsidiaryId: elim.id })),
+    );
+  }
+
+  const periodRes = (await tx.execute(sql`
     select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`)) as unknown as {
     rows: { ends_on: string; name: string }[];
   };
   const period = periodRes.rows[0];
-  const [book] = await db
+  const [book] = await tx
     .select()
     .from(schema.accountingBooks)
     .where(sql`${schema.accountingBooks.orgId} = ${orgId} and ${schema.accountingBooks.isPrimary} = true`);
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
   if (!book) throw new ConsolidationError("no primary accounting book is configured");
 
-  return db.transaction(async (tx) => {
     let lastReversalId: string | null = null;
     for (const p of prior.rows) {
       const rev = (await tx.execute(sql`

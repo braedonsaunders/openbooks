@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, normalizeMoney, toUnits } from "../money.ts";
 import { m2oId } from "../odoo.ts";
 import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
 
@@ -63,7 +63,7 @@ const MOVE_KIND: Record<string, string> = {
   in_refund: "vendor_credit",
 };
 
-const num = (v: number): bigint => toUnits(v.toFixed(2));
+const num = (v: number): bigint => toUnits(String(v));
 
 export function buildNativeFromOdoo(
   ctx: NativeContext,
@@ -157,7 +157,8 @@ export function buildNativeFromOdoo(
     if (!a) return { skip: `unmapped account ${m2oId(l.account_id)}` };
     const primaryTax = (l.tax_ids ?? [])[0];
     const rate = primaryTax !== undefined ? opts.taxRateById.get(primaryTax) : undefined;
-    const code = rate !== undefined ? ctx.taxByRate.get(String(Math.round(rate))) : undefined;
+    const rateKey = rate !== undefined ? normalizeMoney(String(rate)) : null;
+    const code = rateKey ? ctx.taxByRate.get(rateKey) ?? ctx.taxByRate.get(rateKey.replace(/\.0+$/, "")) : undefined;
     const row: NativeDocLine = {
       accountId: a, itemId: null,
       amount: fromUnits(num(l.balance) * BigInt(sign)),
@@ -190,7 +191,9 @@ export function buildNativeFromOdoo(
     if (!carrier.row.taxCodeId) {
       const rate = opts.taxRateById.get(taxId);
       carrier.row.taxCodeId =
-        (rate !== undefined ? ctx.taxByRate.get(String(Math.round(rate)))?.id : undefined) ?? null;
+        (rate !== undefined
+          ? (ctx.taxByRate.get(normalizeMoney(String(rate))) ?? ctx.taxByRate.get(normalizeMoney(String(rate)).replace(/\.0+$/, "")))?.id
+          : undefined) ?? null;
     }
   }
 

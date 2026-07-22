@@ -73,7 +73,7 @@ export function LaborCostingWizard(props: {
   const example = (mult: number) => {
     let r = exampleWage * mult
     for (const c of components) {
-      if (c.kind === 'percent_of_wage') r += (c.scaleWithOvertime ? exampleWage * mult : exampleWage) * (c.value / 100)
+      if (c.kind === 'percent_of_wage') r += (c.scaleWithOvertime ? exampleWage * mult : exampleWage) * (Number(c.value) / 100)
     }
     return r
   }

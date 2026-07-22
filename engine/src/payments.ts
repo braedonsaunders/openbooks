@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
-import { db, schema } from "./db.ts";
-import { cmp, divRate, fromUnits, isZero, sum, toUnits } from "./money.ts";
-import { postDocument, type PostingDeps } from "./posting.ts";
+import { db, inDbTransaction, schema, withOrg } from "./db.ts";
+import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRatio, neg, sum, toUnits } from "./money.ts";
+import { postDocument, runPostDocumentEffects, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
@@ -98,6 +98,7 @@ export async function paymentControlDeps(orgId: string): Promise<PostingDeps> {
       taxCollected: c.taxCollected,
       taxPaid: c.taxPaid,
       employeePayable: c.employeePayable,
+      fxRealizedGainLoss: c.fxRealizedGainLoss,
     },
   };
 }
@@ -247,9 +248,9 @@ export async function updateDraftPayment(
     for (const a of allocations) {
       const item = byLine.get(a.openLineId);
       if (!item) throw new PaymentError("an allocated item is not an open item for this party");
-      if (cmp(a.baseAmount ?? a.amount, item.open) > 0) {
+      if (cmp(a.amount, item.transactionOpen) > 0) {
         throw new PaymentError(
-          `applying ${a.baseAmount ?? a.amount} exceeds the open balance ${item.open} on ${item.documentNumber ?? item.entryNumber}`,
+          `applying ${a.amount} ${item.currency} exceeds the open transaction balance ${item.transactionOpen} on ${item.documentNumber ?? item.entryNumber}`,
         );
       }
     }
@@ -308,6 +309,11 @@ export interface OpenItem {
   applied: string;
   /** amount − applied. Only items with open > 0 are returned. */
   open: string;
+  currency: string;
+  fxRate: string;
+  transactionAmount: string;
+  transactionApplied: string;
+  transactionOpen: string;
 }
 
 export interface SuggestedApplication {
@@ -378,14 +384,16 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
   const r = (await db.execute(sql`
     select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
+           jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
            je.id as entry_id, je.entry_number, je.posting_date,
            d.id as document_id, d.document_number, d.kind as document_kind, d.reference_number,
-           coalesce(ap.applied, 0) as applied
+           coalesce(ap.applied, 0) as applied,
+           coalesce(ap.transaction_applied, 0) as transaction_applied
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
       left join documents d on d.id = je.source_document_id
       left join lateral (
-        select sum(a.amount) as applied
+        select sum(a.amount) as applied, sum(a.transaction_amount) as transaction_applied
           from applications a
          where a.to_line_id = jl.id and a.unapplied_at is null
       ) ap on true
@@ -405,6 +413,10 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
       document_kind: string | null;
       reference_number: string | null;
       applied: string;
+      currency: string;
+      fx_rate: string;
+      transaction_amount: string;
+      transaction_applied: string;
     }[];
   };
   return r.rows
@@ -422,6 +434,11 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
       amount: row.amount,
       applied: row.applied,
       open: sum([row.amount, negStr(String(row.applied))]),
+      currency: row.currency,
+      fxRate: row.fx_rate,
+      transactionAmount: row.transaction_amount,
+      transactionApplied: row.transaction_applied,
+      transactionOpen: sum([row.transaction_amount, negStr(String(row.transaction_applied))]),
     }))
     .filter((i) => cmp(i.open, "0") > 0);
 }
@@ -479,152 +496,263 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind) {
 // Post + apply
 // ---------------------------------------------------------------------------
 
+/** Exact carrying amount consumed by a transaction-currency settlement. */
+export function carryingAmountForSettlement(
+  openBase: string,
+  openTransaction: string,
+  settledTransaction: string,
+): string {
+  if (cmp(settledTransaction, "0") <= 0 || cmp(settledTransaction, openTransaction) > 0) {
+    throw new PaymentError("settlement amount must be positive and cannot exceed the open transaction amount");
+  }
+  // Taking the complete residual consumes the complete carrying value. This
+  // prevents proportional rounding from leaving an uncloseable 0.0001 tail.
+  if (cmp(settledTransaction, openTransaction) === 0) return openBase;
+  return mulRatio(openBase, toUnits(settledTransaction), toUnits(openTransaction));
+}
+
 /**
- * Post the payment document through the kernel, then link its AP/AR line to
- * each selected open item via `applications` (+ document_links 'pays').
- *
- * postDocument commits its own transaction, so applications cannot share it.
- * The allocations are fully validated first; if the applications insert still
- * fails (e.g. a concurrent application won the race at the deferred trigger),
- * the posted entry is automatically reversed and the document voided so no
- * half-applied payment survives.
+ * Control-account adjustment required to clear source and target carrying
+ * values. Positive is a debit; its exact opposite is realized gain/loss.
  */
+export function realizedFxControlAdjustment(
+  sourceSignedAmount: string,
+  targetSignedAmount: string,
+): string {
+  return neg(add(sourceSignedAmount, targetSignedAmount));
+}
+
+type SettlementApplication = {
+  fromLineId: string;
+  toLineId: string;
+  amount: string;
+  sourceAmount: string;
+  transactionAmount: string;
+  transactionCurrency: string;
+  appliedOn: string;
+  controlAdjustment: string;
+};
+
+/** Post the payment, applications, realized FX, and links as one atomic unit. */
 export async function postPaymentWithApplications(
   paymentDocId: string,
   allocations?: AllocationInput[],
   userId?: string,
 ): Promise<{ entryId: string }> {
-  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
-  if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
-  if (doc.status === "posted") throw new PaymentError(`${doc.documentNumber} is already posted`);
-  if (doc.status === "voided") throw new PaymentError(`${doc.documentNumber} is voided`);
-  if (!doc.partyId) throw new PaymentError("select a party before posting");
+  const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
+  if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
 
-  const custom = (doc.custom ?? {}) as {
-    bankAccountId?: string;
-    allocations?: AllocationInput[];
-    creditAllocations?: CreditAllocationInput[];
-    discountAmount?: string;
-  };
-  const allocs = allocations ?? custom.allocations ?? [];
-  const creditAllocs = custom.creditAllocations ?? [];
-  if (allocs.length === 0) throw new PaymentError("select at least one open item to apply");
-  validateAllocationInputs(allocs);
+  const result = await withOrg(preflight.orgId, async () => {
+    // Serialize both the payment aggregate and every application endpoint.
+    await db.execute(sql`select id from documents where id = ${paymentDocId} for update`);
+    const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
+    if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
+    if (doc.status === "posted") throw new PaymentError(`${doc.documentNumber} is already posted`);
+    if (doc.status === "voided") throw new PaymentError(`${doc.documentNumber} is voided`);
+    if (!doc.partyId) throw new PaymentError("select a party before posting");
 
-  const side = PAYMENT_KIND_SIDE[doc.kind];
-  const openItems = await openItemsForParty(doc.partyId, side);
-  const byLine = new Map(openItems.map((i) => [i.lineId, i]));
-  for (const a of allocs) {
-    const item = byLine.get(a.openLineId);
-    if (!item) throw new PaymentError("an allocated item is no longer an open item for this party");
-    if (cmp(a.baseAmount ?? a.amount, item.open) > 0) {
-      throw new PaymentError(
-        `applying ${a.baseAmount ?? a.amount} exceeds the open balance ${item.open} on ${item.documentNumber ?? item.entryNumber}`,
-      );
+    const custom = (doc.custom ?? {}) as {
+      bankAccountId?: string;
+      allocations?: AllocationInput[];
+      creditAllocations?: CreditAllocationInput[];
+      discountAmount?: string;
+      controlAccountId?: string;
+    };
+    const allocs = allocations ?? custom.allocations ?? [];
+    const creditAllocs = custom.creditAllocations ?? [];
+    if (allocs.length === 0) throw new PaymentError("select at least one open item to apply");
+    validateAllocationInputs(allocs);
+
+    const endpointIds = [...new Set([
+      ...allocs.map((a) => a.openLineId),
+      ...creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId]),
+    ])];
+    await db.execute(sql`select id from journal_lines where id in ${endpointIds} order by id for update`);
+
+    const side = PAYMENT_KIND_SIDE[doc.kind];
+    const openItems = await openItemsForParty(doc.partyId, side);
+    const byLine = new Map(openItems.map((item) => [item.lineId, item]));
+    for (const allocation of allocs) {
+      const item = byLine.get(allocation.openLineId);
+      if (!item) throw new PaymentError("an allocated item is no longer open for this party");
+      if (item.currency !== doc.currency) {
+        throw new PaymentError(`cross-currency applications require a shared transaction currency (${item.currency} ≠ ${doc.currency})`);
+      }
+      if (cmp(allocation.amount, item.transactionOpen) > 0) {
+        throw new PaymentError(`application exceeds ${item.documentNumber ?? item.entryNumber}'s open transaction balance`);
+      }
     }
-  }
-  const totalAlloc = sum(allocs.map((a) => a.amount));
-  const discountAmount = custom.discountAmount ?? "0";
-  if (cmp(totalAlloc, fromUnits(toUnits(doc.total) + toUnits(discountAmount))) !== 0) {
-    throw new PaymentError(
-      `cash ${doc.total} plus discount ${discountAmount} does not equal the applied total ${totalAlloc} — save the draft again`,
-    );
-  }
 
-  if (creditAllocs.length > 0) {
-    const creditLines = [...new Set(creditAllocs.map((a) => a.fromLineId))];
-    const creditState = (await db.execute(sql`
-      select jl.id, jl.account_id, abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open
+    const totalAlloc = sum(allocs.map((a) => a.amount));
+    const discountAmount = custom.discountAmount ?? "0";
+    if (cmp(totalAlloc, fromUnits(toUnits(doc.total) + toUnits(discountAmount))) !== 0) {
+      throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} must equal applications ${totalAlloc}`);
+    }
+
+    const deps = await paymentControlDeps(doc.orgId);
+    const controlAccountId = custom.controlAccountId ?? (side === "ap" ? deps.control.ap : deps.control.ar);
+    const entryId = await postDocument(doc.id, deps, { deferEffects: true });
+    const sourceResult = (await db.execute(sql`
+      select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id,
+             jl.subsidiary_id, je.posting_date, je.period_id, je.book_id,
+             s.base_currency as functional_currency
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id
+        join subsidiaries s on s.id = jl.subsidiary_id
+       where jl.entry_id = ${entryId} and jl.account_id = ${controlAccountId}
+       limit 1
+    `)) as unknown as { rows: {
+      id: string; amount: string; currency: string; txn_amount: string; account_id: string;
+      party_id: string | null; subsidiary_id: string; posting_date: string; period_id: string;
+      book_id: string; functional_currency: string;
+    }[] };
+    const source = sourceResult.rows[0];
+    if (!source) throw new PaymentError("posted payment entry has no AP/AR control line");
+    if (source.currency !== doc.currency || cmp(fromUnits(toUnits(source.txn_amount) < 0n ? -toUnits(source.txn_amount) : toUnits(source.txn_amount)), totalAlloc) !== 0) {
+      throw new PaymentError("payment control line does not cross-foot to the transaction-currency applications");
+    }
+
+    const targetsResult = (await db.execute(sql`
+      select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id, jl.subsidiary_id,
+             abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
+             abs(jl.txn_amount) - coalesce(sum(a.transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-        left join applications a on a.from_line_id = jl.id
-       where jl.id in ${creditLines} and jl.org_id = ${doc.orgId} and jl.party_id = ${doc.partyId}
-         and jl.is_open_item and jl.amount > 0
-       group by jl.id, jl.account_id
-    `)) as unknown as { rows: { id: string; account_id: string; open: string }[] };
-    const byCredit = new Map(creditState.rows.map((r) => [r.id, r]));
-    const used = new Map<string, bigint>();
-    for (const a of creditAllocs) {
-      const source = byCredit.get(a.fromLineId);
-      if (!source || !byLine.has(a.toLineId)) throw new PaymentError("a selected vendor credit is no longer available for this payment");
-      const next = (used.get(a.fromLineId) ?? 0n) + toUnits(a.amount);
-      if (next > toUnits(source.open)) throw new PaymentError("vendor credit application exceeds its open balance");
-      used.set(a.fromLineId, next);
+        left join applications a on a.to_line_id = jl.id
+       where jl.id in ${allocs.map((a) => a.openLineId)}
+       group by jl.id
+    `)) as unknown as { rows: {
+      id: string; amount: string; currency: string; txn_amount: string; account_id: string;
+      party_id: string | null; subsidiary_id: string; open_base: string; open_transaction: string;
+    }[] };
+    const targetById = new Map(targetsResult.rows.map((row) => [row.id, row]));
+
+    let sourceBaseRemaining = fromUnits(toUnits(source.amount) < 0n ? -toUnits(source.amount) : toUnits(source.amount));
+    let sourceTransactionRemaining = totalAlloc;
+    const applicationsToWrite: SettlementApplication[] = [];
+    for (const allocation of allocs) {
+      const target = targetById.get(allocation.openLineId);
+      if (!target) throw new PaymentError("an application target disappeared while posting");
+      if (target.account_id !== source.account_id || target.party_id !== source.party_id || target.subsidiary_id !== source.subsidiary_id) {
+        throw new PaymentError("applications must settle the same control account, party, and subsidiary as the payment");
+      }
+      const targetBase = carryingAmountForSettlement(target.open_base, target.open_transaction, allocation.amount);
+      if (allocation.baseAmount !== undefined && cmp(allocation.baseAmount, targetBase) !== 0) {
+        throw new PaymentError(`saved base amount ${allocation.baseAmount} no longer matches carrying amount ${targetBase}`);
+      }
+      const sourceBase = carryingAmountForSettlement(sourceBaseRemaining, sourceTransactionRemaining, allocation.amount);
+      const sourceSigned = cmp(source.amount, "0") > 0 ? sourceBase : neg(sourceBase);
+      const targetSigned = cmp(target.amount, "0") > 0 ? targetBase : neg(targetBase);
+      applicationsToWrite.push({
+        fromLineId: source.id,
+        toLineId: target.id,
+        amount: targetBase,
+        sourceAmount: sourceBase,
+        transactionAmount: allocation.amount,
+        transactionCurrency: doc.currency,
+        appliedOn: source.posting_date,
+        controlAdjustment: realizedFxControlAdjustment(sourceSigned, targetSigned),
+      });
+      sourceBaseRemaining = fromUnits(toUnits(sourceBaseRemaining) - toUnits(sourceBase));
+      sourceTransactionRemaining = fromUnits(toUnits(sourceTransactionRemaining) - toUnits(allocation.amount));
     }
-  }
 
-  const deps = await paymentControlDeps(doc.orgId);
-  const controlAccountId = side === "ap" ? deps.control.ap : deps.control.ar;
-
-  const entryId = await postDocument(doc.id, deps);
-
-  const fromLine = (await db.execute(sql`
-    select jl.id, je.posting_date
-      from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id
-     where jl.entry_id = ${entryId} and jl.account_id = ${controlAccountId}
-     limit 1
-  `)) as unknown as { rows: { id: string; posting_date: string }[] };
-
-  try {
-    const from = fromLine.rows[0];
-    if (!from) {
-      throw new PaymentError("posted payment entry has no AP/AR control line");
-    }
-    await db.transaction(async (tx) => {
-      await tx.insert(schema.applications).values(
-        allocs.map((a) => ({
+    const fxAdjustment = sum(applicationsToWrite.map((a) => a.controlAdjustment));
+    let fxEntryId: string | null = null;
+    if (!isZero(fxAdjustment)) {
+      const gainLossAccountId = deps.control.fxRealizedGainLoss;
+      if (!gainLossAccountId) {
+        throw new PaymentError("realized FX gain/loss account is not configured");
+      }
+      const [fxEntry] = await db
+        .insert(schema.journalEntries)
+        .values({
           orgId: doc.orgId,
-          fromLineId: from.id,
-          toLineId: a.openLineId,
-          amount: a.baseAmount ?? a.amount,
-          appliedOn: from.posting_date,
+          bookId: source.book_id,
+          subsidiaryId: source.subsidiary_id,
+          entryNumber: `${doc.documentNumber}-FX`,
+          postingDate: source.posting_date,
+          periodId: source.period_id,
+          memo: `Realized FX settlement — ${doc.documentNumber}`,
+          status: "draft",
+          sourceDocumentId: doc.id,
+          origin: "fx_settlement",
           createdBy: userId ?? doc.createdBy,
-        })),
-      );
-      if (creditAllocs.length > 0) {
-        await tx.insert(schema.applications).values(
-          creditAllocs.map((a) => ({
-            orgId: doc.orgId,
-            fromLineId: a.fromLineId,
-            toLineId: a.toLineId,
-            amount: a.amount,
-            appliedOn: from.posting_date,
-            createdBy: userId ?? doc.createdBy,
-          })),
-        );
-      }
-      const lineIds = [...allocs.map((a) => a.openLineId), ...creditAllocs.map((a) => a.toLineId)];
-      const targets = (await tx.execute(sql`
-        select distinct je.source_document_id as doc_id
-          from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id
-         where jl.id in ${lineIds} and je.source_document_id is not null
-      `)) as unknown as { rows: { doc_id: string }[] };
-      if (targets.rows.length > 0) {
-        await tx.insert(schema.documentLinks).values(
-          targets.rows.map((t) => ({
-            orgId: doc.orgId,
-            fromDocumentId: doc.id,
-            toDocumentId: t.doc_id,
-            linkType: "pays" as const,
-            createdBy: userId ?? doc.createdBy,
-          })),
-        );
-      }
-    });
-  } catch (e) {
-    const reason = e instanceof Error ? e.message : String(e);
-    await reversePostedEntry(entryId, doc.id, doc.orgId, `auto-reversal: applying ${doc.documentNumber} failed`);
-    throw new PaymentError(
-      `${doc.documentNumber} was posted but applying it failed (${reason}); the posting was automatically reversed — review the open items and retry`,
-    );
-  }
+        })
+        .returning({ id: schema.journalEntries.id });
+      fxEntryId = fxEntry.id;
+      await db.insert(schema.journalLines).values([
+        {
+          orgId: doc.orgId, entryId: fxEntryId!, lineNumber: 1, accountId: source.account_id,
+          subsidiaryId: source.subsidiary_id, amount: fxAdjustment, currency: source.functional_currency,
+          txnAmount: fxAdjustment, fxRate: "1", partyId: doc.partyId, isOpenItem: false,
+          memo: `Realized FX settlement — ${doc.documentNumber}`,
+        },
+        {
+          orgId: doc.orgId, entryId: fxEntryId!, lineNumber: 2, accountId: gainLossAccountId,
+          subsidiaryId: source.subsidiary_id, amount: neg(fxAdjustment), currency: source.functional_currency,
+          txnAmount: neg(fxAdjustment), fxRate: "1", isOpenItem: false,
+          memo: `Realized FX settlement — ${doc.documentNumber}`,
+        },
+      ]);
+      await db.update(schema.journalEntries).set({ status: "posted", postedAt: new Date(), postedBy: userId ?? doc.createdBy }).where(eq(schema.journalEntries.id, fxEntryId!));
+    }
 
-  return { entryId };
+    await db.insert(schema.applications).values(applicationsToWrite.map(({ controlAdjustment: _adjustment, ...application }) => ({
+      ...application,
+      orgId: doc.orgId,
+      fxGainLossEntryId: fxEntryId,
+      createdBy: userId ?? doc.createdBy,
+    })));
+
+    if (creditAllocs.length > 0) {
+      // Credit allocations currently carry functional-currency amounts. Keep
+      // their evidence explicit and reject any attempt to disguise foreign
+      // transaction values as base amounts.
+      const creditRows = (await db.execute(sql`
+        select jl.id, jl.currency, s.base_currency
+          from journal_lines jl join subsidiaries s on s.id = jl.subsidiary_id
+         where jl.id in ${creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId])}
+      `)) as unknown as { rows: { id: string; currency: string; base_currency: string }[] };
+      if (creditRows.rows.some((row) => row.currency !== row.base_currency)) {
+        throw new PaymentError("foreign-currency credit applications require explicit transaction amounts");
+      }
+      await db.insert(schema.applications).values(creditAllocs.map((application) => ({
+        orgId: doc.orgId,
+        fromLineId: application.fromLineId,
+        toLineId: application.toLineId,
+        amount: application.amount,
+        sourceAmount: application.amount,
+        transactionAmount: application.amount,
+        transactionCurrency: source.functional_currency,
+        appliedOn: source.posting_date,
+        createdBy: userId ?? doc.createdBy,
+      })));
+    }
+
+    const targetIds = [...allocs.map((a) => a.openLineId), ...creditAllocs.map((a) => a.toLineId)];
+    const targets = (await db.execute(sql`
+      select distinct je.source_document_id as doc_id
+        from journal_lines jl join journal_entries je on je.id = jl.entry_id
+       where jl.id in ${targetIds} and je.source_document_id is not null
+    `)) as unknown as { rows: { doc_id: string }[] };
+    if (targets.rows.length > 0) {
+      await db.insert(schema.documentLinks).values(targets.rows.map((target) => ({
+        orgId: doc.orgId,
+        fromDocumentId: doc.id,
+        toDocumentId: target.doc_id,
+        linkType: "pays" as const,
+        createdBy: userId ?? doc.createdBy,
+      })));
+    }
+    return { entryId };
+  });
+
+  await runPostDocumentEffects(paymentDocId, preflight.status);
+  return result;
 }
 
-/** Compensation: reverse a just-posted entry and void its document. */
+/** Reverse a payment and every realized-FX entry tied to its applications. */
 async function reversePostedEntry(
   entryId: string,
   documentId: string,
@@ -670,7 +798,17 @@ async function reversePostedEntry(
     await runRecordFlows({ kind: "before_void" }, doc.kind, documentId, { orgId });
   }
 
-  await db.transaction(async (tx) => {
+  let reversalId: string | null = null;
+  await inDbTransaction(async (tx) => {
+    const fxRows = unapplySourceEntry
+      ? ((await tx.execute(sql`
+          select distinct a.fx_gain_loss_entry_id as id
+            from applications a
+            join journal_lines jl on jl.id = a.from_line_id
+           where jl.entry_id = ${entryId} and a.unapplied_at is null
+             and a.fx_gain_loss_entry_id is not null
+        `)) as unknown as { rows: { id: string }[] }).rows
+      : [];
     if (unapplySourceEntry) {
       await tx.execute(sql`
         update applications a set unapplied_at = now()
@@ -678,24 +816,29 @@ async function reversePostedEntry(
            select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${entryId})
       `);
     }
-    const [rev] = await tx
+    const insertReversal = async (
+      sourceEntry: typeof schema.journalEntries.$inferSelect,
+      sourceLines: (typeof schema.journalLines.$inferSelect)[],
+      reversalMemo: string,
+    ): Promise<string> => {
+      const [rev] = await tx
       .insert(schema.journalEntries)
       .values({
         orgId,
-        bookId: entry.bookId,
-        subsidiaryId: entry.subsidiaryId,
-        entryNumber: `${entry.entryNumber}-R`,
-        postingDate: entry.postingDate,
-        periodId: entry.periodId,
-        memo,
+        bookId: sourceEntry.bookId,
+        subsidiaryId: sourceEntry.subsidiaryId,
+        entryNumber: `${sourceEntry.entryNumber}-R`,
+        postingDate: sourceEntry.postingDate,
+        periodId: sourceEntry.periodId,
+        memo: reversalMemo,
         status: "draft",
-        sourceDocumentId: entry.sourceDocumentId,
-        origin: "document",
-        reversesEntryId: entryId,
+        sourceDocumentId: sourceEntry.sourceDocumentId,
+        origin: sourceEntry.origin,
+        reversesEntryId: sourceEntry.id,
       })
       .returning({ id: schema.journalEntries.id });
-    await tx.insert(schema.journalLines).values(
-      lines.map((l) => ({
+      await tx.insert(schema.journalLines).values(
+      sourceLines.map((l) => ({
         orgId,
         entryId: rev.id,
         lineNumber: l.lineNumber,
@@ -710,6 +853,8 @@ async function reversePostedEntry(
         projectId: l.projectId,
         locationId: l.locationId,
         classId: l.classId,
+        equipmentUnitId: l.equipmentUnitId,
+        extraDims: l.extraDims,
         paymentCardId: l.paymentCardId,
         taxCodeId: l.taxCodeId,
         memo: l.memo,
@@ -717,14 +862,26 @@ async function reversePostedEntry(
         isOpenItem: false,
       })),
     );
-    await tx
+      await tx
       .update(schema.journalEntries)
       .set({ status: "posted", postedAt: new Date() })
       .where(eq(schema.journalEntries.id, rev.id));
-    await tx
+      await tx
       .update(schema.journalEntries)
       .set({ status: "reversed" })
-      .where(eq(schema.journalEntries.id, entryId));
+      .where(eq(schema.journalEntries.id, sourceEntry.id));
+      return rev.id;
+    };
+
+    reversalId = await insertReversal(entry, lines, memo);
+    for (const fxRow of fxRows) {
+      const [fxEntry] = await tx.select().from(schema.journalEntries).where(eq(schema.journalEntries.id, fxRow.id));
+      if (!fxEntry || fxEntry.status !== "posted") {
+        throw new PaymentError("realized FX evidence is missing or is not posted");
+      }
+      const fxLines = await tx.select().from(schema.journalLines).where(eq(schema.journalLines.entryId, fxEntry.id));
+      await insertReversal(fxEntry, fxLines, `${memo} — realized FX`);
+    }
     await tx.execute(sql`
       update documents set status = 'voided', voided_at = now() where id = ${documentId}
     `);
@@ -734,10 +891,7 @@ async function reversePostedEntry(
   if (doc) {
     await emitStatusChange(doc.kind, documentId, { from: doc.status, to: "voided" }, { orgId });
   }
-  const reversal = (await db.execute(sql`
-    select id from journal_entries where reverses_entry_id = ${entryId} order by created_at desc limit 1
-  `)) as unknown as { rows: { id: string }[] };
-  return reversal.rows[0]?.id ?? null;
+  return reversalId;
 }
 
 /** Reverse a posted payment after a bank return and reopen its applications. */
@@ -746,21 +900,24 @@ export async function reversePaymentForReturn(
   orgId: string,
   reason: string,
 ): Promise<string> {
-  const row = (await db.execute(sql`
-    select d.id, d.posted_entry_id, d.document_number
-      from documents d
-     where d.id = ${paymentDocumentId} and d.org_id = ${orgId}
-       and d.kind in ('vendor_payment', 'customer_payment') and d.status = 'posted'
-  `)) as unknown as { rows: { id: string; posted_entry_id: string; document_number: string }[] };
-  const payment = row.rows[0];
-  if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
-  const reversalId = await reversePostedEntry(
-    payment.posted_entry_id,
-    payment.id,
-    orgId,
-    `bank return: ${reason.trim() || payment.document_number}`,
-    true,
-  );
+  const reversalId = await withOrg(orgId, async () => {
+    const row = (await db.execute(sql`
+      select d.id, d.posted_entry_id, d.document_number
+        from documents d
+       where d.id = ${paymentDocumentId} and d.org_id = ${orgId}
+         and d.kind in ('vendor_payment', 'customer_payment') and d.status = 'posted'
+       for update
+    `)) as unknown as { rows: { id: string; posted_entry_id: string; document_number: string }[] };
+    const payment = row.rows[0];
+    if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
+    return reversePostedEntry(
+      payment.posted_entry_id,
+      payment.id,
+      orgId,
+      `bank return: ${reason.trim() || payment.document_number}`,
+      true,
+    );
+  });
   if (!reversalId) throw new PaymentError("payment reversal could not be created");
   return reversalId;
 }
@@ -1881,13 +2038,13 @@ export function buildSepaFile(opts: {
 }): string {
   const s = opts.settings;
   if (opts.payments.length === 0) throw new PaymentError("run has no payments to export");
-  const ctrlSum = opts.payments.reduce((a, p) => a + Number(p.amount), 0).toFixed(2);
+  const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
   const nb = opts.payments.length;
   const tx = opts.payments.map((p) => {
     const bic = (p.creditorBic ?? "").trim();
     return `      <CdtTrfTxInf>
         <PmtId><EndToEndId>${xmlEsc(p.endToEndId.slice(0, 35))}</EndToEndId></PmtId>
-        <Amt><InstdAmt Ccy="EUR">${Number(p.amount).toFixed(2)}</InstdAmt></Amt>
+        <Amt><InstdAmt Ccy="EUR">${formatMoney(p.amount, 2)}</InstdAmt></Amt>
 ${bic ? `        <CdtrAgt><FinInstnId><BIC>${xmlEsc(bic)}</BIC></FinInstnId></CdtrAgt>\n` : ""}        <Cdtr><Nm>${xmlEsc(p.creditorName.slice(0, 70))}</Nm></Cdtr>
         <CdtrAcct><Id><IBAN>${xmlEsc(p.creditorIban.replace(/\s/g, ""))}</IBAN></Id></CdtrAcct>
         <RmtInf><Ustrd>${xmlEsc((p.remittance ?? p.endToEndId).slice(0, 140))}</Ustrd></RmtInf>

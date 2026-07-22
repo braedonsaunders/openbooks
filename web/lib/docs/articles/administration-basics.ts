@@ -7,7 +7,7 @@ export const companySettings: DocArticle = {
   order: 1,
   summary:
     'Use the configuration center for company, accounting, tax, dimensions, billing, revenue, inventory, workforce, assets, and currency.',
-  updated: '2026-07-21',
+  updated: '2026-07-22',
   keywords: [
     'company settings',
     'setup',
@@ -46,6 +46,15 @@ The exact tabs available depend on enabled capabilities and permissions.
 Country fields use the shared searchable ISO country list across organization,
 subsidiary, tax, and payment configuration. They do not accept arbitrary
 two-letter text.
+
+## Foreign-currency settlement accounts
+
+Under **Company & Accounting → Control accounts**, configure both **Unrealized
+FX gain/loss** for period-end revaluation and **Realized FX gain/loss** for
+settlement differences. A foreign-currency payment application that requires a
+realized adjustment is refused unless the realized account is configured. The
+payment journal, application evidence, realized-FX journal, and subsequent
+reversal are committed as one accounting operation.
 
 ## Change control
 

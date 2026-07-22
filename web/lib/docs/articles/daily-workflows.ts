@@ -82,7 +82,7 @@ export const purchasingWorkflow: DocArticle = {
   category: 'transactions',
   order: 2,
   summary: 'A practical tour of purchase orders, bills, credits, approvals, payments, and vendor balances.',
-  updated: '2026-07-19',
+  updated: '2026-07-22',
   keywords: ['purchase', 'purchase order', 'vendor bill', 'vendor credit', 'accounts payable', 'payment', 'approval'],
   related: ['payments-and-applications', 'transaction-lifecycle', 'file-cabinet'],
   body: `# Purchases: Order to Payment
@@ -168,11 +168,20 @@ currency, book, subsidiary, date, and period compatibility. Never use a manual
 journal to mark an invoice or bill as paid: the general ledger might move while
 the open-item subledger remains outstanding.
 
+For a foreign-currency settlement, the application preserves both sides'
+functional carrying amounts and the settled transaction-currency amount. Any
+rate difference posts to **Realized FX gain/loss**. The payment journal,
+application rows, realized-FX journal, document links, and audit evidence commit
+atomically; if any part fails, none of the payment is posted.
+
 ## Corrections
 
 If cash was recorded against the wrong party or open item, reverse or amend the
 governed record while the relevant period permits it, then create the correct
 application. Preserve the relationship to the original evidence.
+
+Reversing a settled foreign-currency payment also reverses its linked realized-
+FX entry and unapplies the settlement in the same transaction.
 
 ## Reconciliation
 

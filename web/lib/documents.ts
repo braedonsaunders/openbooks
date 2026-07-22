@@ -1,11 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
+import { cmp } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { computeBillTotals, nextDocumentNumber, taxRateMap, type BillLineInput } from './bills'
+import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, taxRateMap, type BillLineInput } from './bills'
 import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
@@ -130,7 +131,7 @@ export async function loadDocument(id: string, orgId?: string) {
   if (!doc.rows[0]) return null
   const lines = (await db.execute(sql`
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
-           l.unit_price, l.amount, l.tax_code_id, l.tax_amount,
+           l.unit_price, l.amount, l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
            l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
            l.extra_dims, l.custom
       from document_lines l
@@ -197,6 +198,7 @@ export interface DocumentEditCurrent {
   total: string
   taxTotal: string
   partyId: string | null
+  documentDate: string
 }
 
 export interface DocumentEditContext {
@@ -241,7 +243,15 @@ async function glSignature(
       coalesce(d.extra_dims::text,'{}') || '~' ||
       coalesce((select string_agg(
         coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
-        coalesce(tax_code_id::text,'') || ':' || tax_amount::text || ':' ||
+        coalesce(tax_code_id::text,'') || ':' || coalesce(tax_group_id::text,'') || ':' ||
+        coalesce(tax_input_amount::text,'') || ':' || tax_amount::text || ':' ||
+        coalesce((select string_agg(
+          c.tax_code_id::text || ':' || c.sequence::text || ':' || c.tax_amount::text || ':' ||
+          c.recoverable_amount::text || ':' || c.nonrecoverable_amount::text || ':' ||
+          c.calculation_type || ':' || coalesce(c.collected_account_id::text,'') || ':' ||
+          coalesce(c.paid_account_id::text,'') || ':' || coalesce(c.withholding_account_id::text,''),
+          ',' order by c.sequence)
+          from document_line_tax_components c where c.document_line_id = document_lines.id), '') || ':' ||
         coalesce(party_id::text,'') || ':' ||
         coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
         coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' ||
@@ -255,7 +265,7 @@ async function glSignature(
 
 /**
  * Apply a header + lines edit to a posting document. Draft/approved docs edit
- * freely (no GL yet). A posted transaction is editable in place while its
+ * freely (no GL yet). A POSTED doc is editable in place, source platform-style: its
  * journal entry is a derived projection re-materialized on save
  * (regenerateGlImpactTx) — a non-GL change is a ledger no-op; a GL change
  * regenerates the entry's lines and is blocked only if the period is closed.
@@ -306,11 +316,11 @@ export async function applyDocumentEdit(
   // without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxAmount: string; taxOverridden: boolean; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
     | null = null
   if (body.lines) {
-    const valid = body.lines.filter((l) => l.accountId && Number(l.amount) > 0)
-    const computed = computeBillTotals(valid, await taxRateMap(orgId))
+    const valid = body.lines.filter((l) => l.accountId && cmp(l.amount, '0') > 0)
+    const computed = computeBillTotals(valid, await taxProfileMap(orgId, body.documentDate ?? current.documentDate))
     totals = computed
     // A transfer moves one amount between two accounts; its two legs carry the
     // same amount, so the document total is that amount — NOT the summed legs.
@@ -334,8 +344,11 @@ export async function applyDocumentEdit(
         unitPrice: l.unitPrice ?? null,
         amount: l.amount,
         taxCodeId: l.taxCodeId ?? null,
+        taxGroupId: l.taxGroupId ?? null,
+        taxInputAmount: l.taxInputAmount,
         taxAmount: l.taxAmount,
         taxOverridden: l.taxOverridden === true,
+        taxComponents: l.taxComponents,
         partyId: l.partyId ?? null,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
@@ -370,16 +383,24 @@ export async function applyDocumentEdit(
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
-          await tx.execute(sql`
+          const inserted = (await tx.execute(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
-                                        quantity, unit, unit_price, amount, tax_code_id, tax_amount, tax_overridden,
+                                        quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
+                                        tax_amount, tax_overridden,
                                         party_id, department_id, project_id, location_id, class_id, extra_dims, custom)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
-                    ${l.taxCodeId}, ${l.taxAmount}, ${l.taxOverridden},
+                    ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden},
                     ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
                     ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
-          `)
+            returning id
+          `)) as unknown as { rows: { id: string }[] }
+          await persistLineTaxComponents(tx, {
+            orgId,
+            documentLineId: inserted.rows[0]!.id,
+            components: l.taxComponents,
+            actorId: userId,
+          })
         }
       }
 
@@ -454,8 +475,8 @@ export async function applyDocumentEdit(
   const newTotal = totals?.total ?? current.total
   const newTaxTotal = totals?.taxTotal ?? current.taxTotal
   const changedFields: string[] = []
-  if (Number(newTotal) !== Number(current.total)) changedFields.push('total')
-  if (Number(newTaxTotal) !== Number(current.taxTotal)) changedFields.push('taxTotal')
+  if (cmp(newTotal, current.total) !== 0) changedFields.push('total')
+  if (cmp(newTaxTotal, current.taxTotal) !== 0) changedFields.push('taxTotal')
   if (body.partyId !== undefined && body.partyId !== current.partyId) changedFields.push('partyId')
   const changedLineFields = new Set<string>()
   if (preparedLines) {
@@ -470,7 +491,7 @@ export async function applyDocumentEdit(
       if (o.accountId !== n.accountId) changedLineFields.add('accountId')
       if ((o.departmentId ?? null) !== (n.departmentId ?? null)) changedLineFields.add('departmentId')
       if ((o.projectId ?? null) !== (n.projectId ?? null)) changedLineFields.add('projectId')
-      if (Number(o.amount) !== Number(n.amount)) changedLineFields.add('amount')
+      if (cmp(o.amount, n.amount) !== 0) changedLineFields.add('amount')
     }
   }
   await runRecordFlows(
@@ -478,7 +499,7 @@ export async function applyDocumentEdit(
       kind: 'on_update',
       source: ctx.source,
       previousTotal: current.total,
-      totalChanged: Number(newTotal) !== Number(current.total),
+      totalChanged: cmp(newTotal, current.total) !== 0,
       changedFields,
       changedLineFields: [...changedLineFields],
       old: { total: current.total, taxTotal: current.taxTotal },
@@ -506,6 +527,7 @@ export interface Opt {
   liability_account_id?: string
   /** Party pickers carry the party's primary subsidiary (drafts default to it). */
   subsidiary_id?: string | null
+  tax_components?: import('@openbooks/engine/src/tax.ts').TaxComponentConfig[]
 }
 
 export async function partyOptions(role: 'vendor' | 'customer', orgId?: string): Promise<Opt[]> {
@@ -538,6 +560,7 @@ export async function accountOptions(cfg: DocKindConfig, orgId?: string): Promis
 
 export async function taxCodeOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
+  const profiles = await taxProfileMap(resolvedOrgId)
   const r = (await db.execute(sql`
     select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
       from tax_codes tc
@@ -547,7 +570,17 @@ export async function taxCodeOptions(orgId?: string): Promise<Opt[]> {
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active order by tc.code
   `)) as unknown as { rows: Opt[] }
-  return r.rows
+  return r.rows.map((row) => ({ ...row, tax_components: profiles.codes.get(row.id) ?? [] }))
+}
+
+export async function taxGroupOptions(orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
+  const profiles = await taxProfileMap(resolvedOrgId)
+  const result = (await db.execute(sql`
+    select id, code, name from tax_groups
+     where org_id = ${resolvedOrgId} and is_active order by code
+  `)) as unknown as { rows: Opt[] }
+  return result.rows.map((row) => ({ ...row, tax_components: profiles.groups.get(row.id) ?? [] }))
 }
 
 export async function dimensionOptions(orgId?: string) {

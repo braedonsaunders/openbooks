@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { auditColumns, currencyCode, fxRate, id, orgRef } from "./helpers";
+import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 import type { InvoicingPreference } from "./project-types";
 
 /**
@@ -219,6 +219,8 @@ export const projects = pgTable(
     // and customer). A first-class capability, not a user custom field.
     invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),
     customerPoNumber: text("customer_po_number"),
+    /** Native fixed-price ceiling / transaction price used by project accounting. */
+    contractValue: money("contract_value"),
     startsOn: date("starts_on"),
     endsOn: date("ends_on"),
     notes: text("notes"),

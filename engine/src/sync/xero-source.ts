@@ -1,5 +1,5 @@
 import { XeroClient, xeroDate } from "../xero.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
 import { buildNativeFromXero, type XeroBuildOpts, type XeroDoc } from "./xero-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -254,7 +254,7 @@ export class XeroSource implements MigrationSource {
       applications.push({
         paymentRef: `Payment:${p.PaymentID}`,
         appliedRef: `Invoice:${p.Invoice.InvoiceID}`,
-        amount: (p.Amount * rate).toFixed(2),
+        amount: formatMoney(mulDecimal(String(p.Amount), String(rate)), 2),
       });
     }
     const credits = await this.client.listAll<
@@ -268,7 +268,7 @@ export class XeroSource implements MigrationSource {
         applications.push({
           paymentRef: `CreditNote:${c.CreditNoteID}`,
           appliedRef: `Invoice:${a.Invoice.InvoiceID}`,
-          amount: (a.Amount * rate).toFixed(2),
+          amount: formatMoney(mulDecimal(String(a.Amount), String(rate)), 2),
         });
       }
     }
@@ -310,7 +310,7 @@ export class XeroSource implements MigrationSource {
             if (!accountRef) continue;
             const num = (i: number) => {
               const v = String(row.Cells?.[i]?.Value ?? "").replace(/,/g, "").trim();
-              return v === "" ? 0n : toUnits(Number(v).toFixed(2));
+              return v === "" ? 0n : toUnits(String(v));
             };
             const movement = num(debitCol) - num(creditCol);
             if (movement === 0n) continue;
@@ -351,7 +351,7 @@ export class XeroSource implements MigrationSource {
     for (const i of invoices) {
       if (!["AUTHORISED", "PAID"].includes(i.Status ?? "")) continue;
       const rate = i.CurrencyRate && i.CurrencyRate > 0 ? i.CurrencyRate : 1;
-      out.push({ ref: `Invoice:${i.InvoiceID}`, unpaid: ((i.AmountDue ?? 0) * rate).toFixed(2) });
+      out.push({ ref: `Invoice:${i.InvoiceID}`, unpaid: formatMoney(mulDecimal(String(i.AmountDue ?? 0), String(rate)), 2) });
     }
     const credits = await this.client.listAll<{
       CreditNoteID: string; RemainingCredit?: number; CurrencyRate?: number; Status?: string;
@@ -359,7 +359,7 @@ export class XeroSource implements MigrationSource {
     for (const c of credits) {
       if (!["AUTHORISED", "PAID"].includes(c.Status ?? "")) continue;
       const rate = c.CurrencyRate && c.CurrencyRate > 0 ? c.CurrencyRate : 1;
-      out.push({ ref: `CreditNote:${c.CreditNoteID}`, unpaid: ((c.RemainingCredit ?? 0) * rate).toFixed(2) });
+      out.push({ ref: `CreditNote:${c.CreditNoteID}`, unpaid: formatMoney(mulDecimal(String(c.RemainingCredit ?? 0), String(rate)), 2) });
     }
     return out;
   }

@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
+import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 
 /**
@@ -13,7 +14,7 @@ import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies] = (await Promise.all([
+  const [org, accounts, currencies, multiSubsidiary] = (await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
@@ -22,7 +23,8 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
        where org_id = ${orgId} and not is_summary and is_active
        order by number nulls last, name`),
     db.execute(sql`select code, name from currencies order by code`),
-  ])) as any[]
+    subsidiaryFeatureEnabled(orgId),
+  ])) as [any, any, any, boolean]
 
   const row = org.rows[0]
   const settings = (row?.settings ?? {}) as Record<string, unknown>
@@ -64,10 +66,16 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             taxPaid: control.taxPaid ?? '',
             employeePayable: control.employeePayable ?? '',
             fxUnrealizedGainLoss: control.fxUnrealizedGainLoss ?? '',
+            fxRealizedGainLoss: control.fxRealizedGainLoss ?? '',
+            laborWip: control.laborWip ?? '',
+            laborClearing: control.laborClearing ?? '',
+            unbilledReceivable: control.unbilledReceivable ?? '',
+            projectRevenue: control.projectRevenue ?? '',
           },
         }}
         accounts={accountOptions}
         currencies={currencies.rows as { code: string; name: string }[]}
+        multiSubsidiary={multiSubsidiary}
       />
     </div>
   )

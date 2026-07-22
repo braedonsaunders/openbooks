@@ -7,6 +7,7 @@ import { loadProjectType } from '../../../lib/project-type'
 import { listBillingRequests } from '../../../lib/billing-requests'
 import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
 import type { ProjectCockpitData } from './ProjectDrawer'
+import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money.ts'
 
 /**
  * Loads everything the project flyout's cockpit tabs need. The Financials tab is
@@ -72,7 +73,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       percentComplete: pct,
       overridden: overrideValue != null,
       overrideValue,
-      earned: ((Number(contractValue) * pct) / 100).toFixed(4),
+      earned: mulPercent(contractValue, String(recRow?.percent_complete ?? '0')),
       recognized: String(recRow?.recognized ?? '0'),
       accountsMapped: Boolean(accts.unbilledReceivable && accts.projectRevenue),
     }
@@ -102,8 +103,8 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
     items: items as ProjectCockpitData['items'],
     equipment: equipment as ProjectCockpitData['equipment'],
     absorption: {
-      recovered: charges.filter((c) => c.status === 'posted').reduce((a, c) => a + Number(c.cost), 0).toFixed(2),
-      billValue: charges.reduce((a, c) => a + Number(c.billValue), 0).toFixed(2),
+      recovered: formatMoney(sum(charges.filter((c) => c.status === 'posted').map((c) => String(c.cost))), 2),
+      billValue: formatMoney(sum(charges.map((c) => String(c.billValue))), 2),
     },
     recognition,
     transactions: financials.documents as ProjectCockpitData['transactions'],
@@ -111,6 +112,6 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
 }
 
 /** Contract value fallback for projects not yet synced into a contract. */
-function financialsContractValue(measures: Record<string, number>): string {
+function financialsContractValue(measures: Record<string, string | number>): string {
   return String(measures.total_price ?? 0)
 }

@@ -84,6 +84,24 @@ export interface NetSuiteAccountMappings {
   projectStatuses?: Record<string, "active" | "awarded" | "substantially_complete" | "closed" | "cancelled">;
 }
 
+/**
+ * Complete NetSuite Fixed Assets Management snapshot.  Rows intentionally stay
+ * lossless here: FAM is a locked SuiteApp with account-specific custom fields,
+ * so the loader persists every source column in `fixed_assets.custom` while it
+ * maps the stable accounting fields into the OpenBooks register.
+ */
+export interface NetSuiteFixedAssetSnapshot {
+  assets: Record<string, unknown>[];
+  assetTypes: Record<string, unknown>[];
+  depreciationHistory: Record<string, unknown>[];
+  assetValues: Record<string, unknown>[];
+  depreciationMethods: Record<string, unknown>[];
+  alternateMethods: Record<string, unknown>[];
+  alternateDepreciation: Record<string, unknown>[];
+  alternateDefinitions: Record<string, unknown>[];
+  assetLifetimes: Record<string, unknown>[];
+}
+
 const safeSuiteScriptId = (value: unknown, label: string): string | null => {
   const field = s(value);
   if (!field) return null;
@@ -193,12 +211,12 @@ const s = (v: unknown): string | null => {
   const t = (v == null ? "" : String(v)).trim();
   return t === "" ? null : t;
 };
-/** Parse a NetSuite numeric field; null for blank or zero (nothing to carry). */
-const num = (v: unknown): number | null => {
+/** Parse a NetSuite money field without crossing the IEEE-754 boundary. */
+const moneyValue = (v: unknown): string | null => {
   const t = s(v);
   if (!t) return null;
-  const n = Number(t.replace(/[$,]/g, ""));
-  return Number.isFinite(n) && n !== 0 ? n : null;
+  const normalized = fromUnits(toUnits(t.replace(/[$,]/g, "")));
+  return toUnits(normalized) === 0n ? null : normalized;
 };
 /** MM/DD/YYYY → ISO YYYY-MM-DD (NetSuite date columns come back US-formatted). */
 const isoDate = (v: unknown): string | null => {
@@ -290,6 +308,46 @@ export class NetSuiteSource implements MigrationSource {
     return {
       ok: true,
       detail: `bridge ${health.bridgeVersion} · account ${health.accountId} · ${rows[0]?.n ?? 0} accounts visible`,
+    };
+  }
+
+  /**
+   * Pull only the FAM register through the already-deployed OpenBooks RESTlet.
+   * This is deliberately separate from `entities()` so a fixed-assets refresh
+   * never starts the high-volume transaction connector.
+   */
+  async fixedAssets(): Promise<NetSuiteFixedAssetSnapshot> {
+    const [
+      assets,
+      assetTypes,
+      depreciationHistory,
+      assetValues,
+      depreciationMethods,
+      alternateMethods,
+      alternateDepreciation,
+      alternateDefinitions,
+      assetLifetimes,
+    ] = await Promise.all([
+      this.q("SELECT * FROM customrecord_ncfar_asset ORDER BY id"),
+      this.q("SELECT * FROM customrecord_ncfar_assettype ORDER BY id"),
+      this.q("SELECT * FROM customrecord_ncfar_deprhistory ORDER BY id"),
+      this.q("SELECT * FROM customrecord_fam_assetvalues ORDER BY id"),
+      this.q("SELECT * FROM customrecord_ncfar_deprmethod ORDER BY id"),
+      this.q("SELECT * FROM customrecord_ncfar_altmethods ORDER BY id"),
+      this.q("SELECT * FROM customrecord_ncfar_altdepreciation ORDER BY id"),
+      this.q("SELECT * FROM customrecord_ncfar_altdeprdef ORDER BY id"),
+      this.q("SELECT * FROM customrecord_assetlifetimes ORDER BY id"),
+    ]);
+    return {
+      assets,
+      assetTypes,
+      depreciationHistory,
+      assetValues,
+      depreciationMethods,
+      alternateMethods,
+      alternateDepreciation,
+      alternateDefinitions,
+      assetLifetimes,
     };
   }
 
@@ -485,7 +543,7 @@ export class NetSuiteSource implements MigrationSource {
         billingMethod: NS_BILLING[String(j.jobbillingtype)] ?? null,
         // NetSuite `jobprice` — the fixed-bid contract price. T&M/cost-billed
         // jobs price from billable work, so 0/blank stays unset.
-        contractValue: num(priceByRef.get(String(j.id))),
+        contractValue: moneyValue(priceByRef.get(String(j.id))),
         customerRef: s(j.customer),
         foremanRef: s(j.foreman),
         managerRef: s(j.projectmanager),
@@ -870,7 +928,7 @@ export class NetSuiteSource implements MigrationSource {
       links.push(...(exported.get(partition.id) ?? []));
     }
     const applications = uniqueNetSuiteApplicationLinks(links)
-      .filter((l) => l.foreignamount != null && Number(l.foreignamount) > 0)
+      .filter((l) => l.foreignamount != null && toUnits(l.foreignamount) > 0n)
       .map((l) => ({
         paymentRef: String(l.nextdoc),
         appliedRef: String(l.previousdoc),

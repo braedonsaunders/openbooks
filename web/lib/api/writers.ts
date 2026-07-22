@@ -378,7 +378,14 @@ function docEditError(e: unknown): WriteResult | null {
 
 async function createDocument(user: SessionUser, docKind: string, body: DocApiBody): Promise<WriteResult> {
   const draft = await createDocumentDraft(user.orgId, user.id, docKind);
-  const current: DocumentEditCurrent = { kind: docKind, status: "draft", total: "0", taxTotal: "0", partyId: null };
+  const current: DocumentEditCurrent = {
+    kind: docKind,
+    status: "draft",
+    total: "0",
+    taxTotal: "0",
+    partyId: null,
+    documentDate: body.documentDate ?? new Date().toISOString().slice(0, 10),
+  };
   try {
     await applyDocumentEdit(draft.id, current, body, { orgId: user.orgId, userId: user.id, source: "api" });
   } catch (e) {
@@ -393,7 +400,8 @@ async function createDocument(user: SessionUser, docKind: string, body: DocApiBo
 
 async function updateDocument(user: SessionUser, docKind: string, id: string, body: DocApiBody): Promise<WriteResult> {
   const owned = (await db.execute(sql`
-    select kind, status, total, tax_total as "taxTotal", party_id as "partyId"
+    select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
+           document_date as "documentDate"
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`)) as unknown as { rows: DocumentEditCurrent[] };
   const row = owned.rows[0];
   if (!row) return err(404, "not found");

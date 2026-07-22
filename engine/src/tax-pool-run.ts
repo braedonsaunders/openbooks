@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { computePoolYear, resolvePoolClass, TAX_DEPRECIATION_REGIMES } from "./tax-depreciation-pool.ts";
+import { add, formatMoney } from "./money.ts";
+import { computePoolYear, type PoolClassDef, TAX_DEPRECIATION_REGIMES } from "./tax-depreciation-pool.ts";
 
 /**
  * Run a jurisdiction's tax depreciation pools for a tax year on a book. Groups
@@ -57,6 +58,47 @@ async function firstYearRule(
   return { firstYearFraction: row.fraction, enhancedMultiplier: row.mult ?? undefined };
 }
 
+/** The asset-category tax_attributes key that carries a class code for a regime.
+ *  An org regime row can override it; Canada's legacy data uses "ca_cca_class". */
+async function regimeClassAttribute(orgId: string, regime: string): Promise<string> {
+  const r = (await db.execute(sql`
+    select class_attribute from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`)) as unknown as {
+    rows: { class_attribute: string }[];
+  };
+  return r.rows[0]?.class_attribute ?? (regime === "ca_cca" ? "ca_cca_class" : "tax_pool_class");
+}
+
+/** Effective class definitions for a regime: built-in defaults with org
+ *  tax_pool_classes rows merged on top (org wins). */
+async function effectiveClasses(orgId: string, regime: string): Promise<Map<string, PoolClassDef>> {
+  const map = new Map<string, PoolClassDef>();
+  for (const [code, def] of Object.entries(TAX_DEPRECIATION_REGIMES[regime]?.classes ?? {})) map.set(code, def);
+  const rows = (await db.execute(sql`
+    select class_code, name, rate::float8 as rate, method, first_year_fraction::float8 as fyf,
+           allow_recapture, allow_terminal_loss, cost_cap::float8 as cost_cap
+      from tax_pool_classes where org_id = ${orgId} and regime = ${regime} and is_active`)) as unknown as {
+    rows: { class_code: string; name: string; rate: number; method: "declining" | "straight_line"; fyf: number; allow_recapture: boolean; allow_terminal_loss: boolean; cost_cap: number | null }[];
+  };
+  for (const r of rows.rows) {
+    map.set(r.class_code, {
+      code: r.class_code, rate: r.rate, method: r.method, firstYearFraction: r.fyf,
+      allowRecapture: r.allow_recapture, allowTerminalLoss: r.allow_terminal_loss,
+      costCap: r.cost_cap ?? undefined, name: r.name,
+    });
+  }
+  return map;
+}
+
+/** Regimes available for a run/picker: built-ins plus any org-defined regimes. */
+export async function listTaxRegimes(orgId: string): Promise<{ code: string; name: string }[]> {
+  const byCode = new Map<string, { code: string; name: string }>();
+  for (const r of Object.values(TAX_DEPRECIATION_REGIMES)) byCode.set(r.code, { code: r.code, name: r.name });
+  const rows = (await db.execute(sql`
+    select code, name from tax_regimes where org_id = ${orgId} and is_active`)) as unknown as { rows: { code: string; name: string }[] };
+  for (const r of rows.rows) byCode.set(r.code, { code: r.code, name: r.name }); // org overrides built-in name
+  return [...byCode.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function runTaxPool(
   orgId: string,
   bookId: string,
@@ -65,34 +107,35 @@ export async function runTaxPool(
   taxYear: number,
   opts: { yearStart: string; yearEnd: string; shortYearFactor?: number; actorId: string | null },
 ): Promise<TaxPoolRunResult> {
-  const regimeDef = TAX_DEPRECIATION_REGIMES[regime];
-  if (!regimeDef) throw new TaxPoolError(`unknown tax depreciation regime "${regime}"`);
+  const classes = await effectiveClasses(orgId, regime);
+  if (classes.size === 0) throw new TaxPoolError(`unknown tax depreciation regime "${regime}"`);
+  const attr = await regimeClassAttribute(orgId, regime);
 
   // Additions this year + whether the class still holds assets at year-end.
   const classRows = (await db.execute(sql`
-    select c.tax_attributes->>'ca_cca_class' as class_code,
+    select c.tax_attributes->>${attr} as class_code,
            coalesce(sum(case when coalesce(a.in_service_on, a.acquired_on) between ${opts.yearStart} and ${opts.yearEnd}
                              then a.acquisition_cost else 0 end), 0)::text as additions,
            bool_or(a.status not in ('disposed', 'written_off')) as has_assets
       from fixed_assets a
       join asset_categories c on c.id = a.category_id
      where a.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
-       and coalesce(c.tax_attributes->>'ca_cca_class', '') <> ''
-     group by c.tax_attributes->>'ca_cca_class'`)) as unknown as {
+       and coalesce(c.tax_attributes->>${attr}, '') <> ''
+     group by c.tax_attributes->>${attr}`)) as unknown as {
     rows: { class_code: string; additions: string; has_assets: boolean }[];
   };
 
   // Dispositions this year: Σ least(proceeds, capital cost) per class.
   const dispRows = (await db.execute(sql`
-    select c.tax_attributes->>'ca_cca_class' as class_code,
+    select c.tax_attributes->>${attr} as class_code,
            coalesce(sum(least(e.amount, a.acquisition_cost)), 0)::text as dispositions
       from asset_events e
       join fixed_assets a on a.id = e.asset_id
       join asset_categories c on c.id = a.category_id
      where e.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
        and e.kind in ('disposed', 'written_off') and e.occurred_on between ${opts.yearStart} and ${opts.yearEnd}
-       and coalesce(c.tax_attributes->>'ca_cca_class', '') <> ''
-     group by c.tax_attributes->>'ca_cca_class'`)) as unknown as {
+       and coalesce(c.tax_attributes->>${attr}, '') <> ''
+     group by c.tax_attributes->>${attr}`)) as unknown as {
     rows: { class_code: string; dispositions: string }[];
   };
   const dispByClass = new Map(dispRows.rows.map((r) => [r.class_code, r.dispositions]));
@@ -102,7 +145,7 @@ export async function runTaxPool(
 
   for (const row of classRows.rows) {
     const classCode = row.class_code;
-    const classDef = resolvePoolClass(regime, classCode) ?? regimeDef.classes[classCode];
+    const classDef = classes.get(classCode);
     if (!classDef) continue; // unknown class code — skip rather than guess
     const dispositions = dispByClass.get(classCode) ?? "0";
 
@@ -159,7 +202,7 @@ export async function runTaxPool(
   return { regime, taxYear, lines, totals: { allowance: totAllow, recapture: totRecap, terminalLoss: totTerm } };
 }
 
-const addStr = (a: string, b: string) => (Math.round((Number(a) + Number(b)) * 100) / 100).toFixed(2);
+const addStr = (a: string, b: string) => formatMoney(add(a, b), 2);
 
 async function ensurePool(
   orgId: string,

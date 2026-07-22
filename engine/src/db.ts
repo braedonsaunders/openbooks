@@ -238,4 +238,18 @@ export const db = new Proxy(poolDb, {
   },
 }) as typeof poolDb;
 
+type DbTransaction = Parameters<Parameters<typeof poolDb.transaction>[0]>[0];
+
+/**
+ * Run one database transaction, reusing the transaction pinned by `withOrg`
+ * when the caller already owns the atomic boundary. This prevents nested
+ * helpers from issuing a second BEGIN/COMMIT on the same PostgreSQL client and
+ * accidentally committing only part of a larger accounting operation.
+ */
+export async function inDbTransaction<T>(fn: (tx: DbTransaction) => Promise<T>): Promise<T> {
+  const current = orgContext.getStore()?.txDb;
+  if (current) return fn(current as unknown as DbTransaction);
+  return db.transaction(fn);
+}
+
 export { schema };

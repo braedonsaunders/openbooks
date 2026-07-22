@@ -1,5 +1,5 @@
 import { DynamicsClient } from "../dynamics.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { formatMoney, fromUnits, toUnits } from "../money.ts";
 import { buildNativeFromBC, type BCBuildOpts, type BCDoc } from "./dynamics-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -178,18 +178,19 @@ export class DynamicsSource implements MigrationSource {
     const glAll = await this.client.list<BCGLEntry & { documentNumber?: string }>("generalLedgerEntries");
     const docIncomeAccount = new Map<string, string>();
     const docExpenseAccount = new Map<string, string>();
-    const incMag = new Map<string, number>();
-    const expMag = new Map<string, number>();
+    const incMag = new Map<string, bigint>();
+    const expMag = new Map<string, bigint>();
     for (const e of glAll) {
       if (!e.documentNumber || !e.accountId) continue;
       const obId = ctx.accountByRef.get(e.accountId)?.id;
       if (!obId) continue;
       const cat = catByBcId.get(e.accountId) ?? ""; // already decoded in catByBcId
-      const mag = Math.abs((e.creditAmount ?? 0) - (e.debitAmount ?? 0));
+      const movement = toUnits(String(e.creditAmount ?? 0)) - toUnits(String(e.debitAmount ?? 0));
+      const mag = movement < 0n ? -movement : movement;
       if (cat === "income" || cat === "income_other") {
-        if (mag > (incMag.get(e.documentNumber) ?? 0)) { incMag.set(e.documentNumber, mag); docIncomeAccount.set(e.documentNumber, obId); }
+        if (mag > (incMag.get(e.documentNumber) ?? 0n)) { incMag.set(e.documentNumber, mag); docIncomeAccount.set(e.documentNumber, obId); }
       } else if (cat === "expense" || cat === "cogs" || cat === "expense_other") {
-        if (mag > (expMag.get(e.documentNumber) ?? 0)) { expMag.set(e.documentNumber, mag); docExpenseAccount.set(e.documentNumber, obId); }
+        if (mag > (expMag.get(e.documentNumber) ?? 0n)) { expMag.set(e.documentNumber, mag); docExpenseAccount.set(e.documentNumber, obId); }
       }
     }
     const opts: BCBuildOpts = { itemSalesAccount: new Map(), itemPurchaseAccount: new Map(), docIncomeAccount, docExpenseAccount };
@@ -204,13 +205,14 @@ export class DynamicsSource implements MigrationSource {
       if (obId && /\b(cash|bank|chequ|checking)\b/i.test(`${odataDecode(a.subCategory)} ${a.displayName ?? ""}`)) bankObIds.add(obId);
     }
     const docBank = new Map<string, string>();
-    const bankMag = new Map<string, number>();
+    const bankMag = new Map<string, bigint>();
     for (const e of glAll) {
       if (!e.documentNumber || !e.accountId) continue;
       const obId = ctx.accountByRef.get(e.accountId)?.id;
       if (!obId || !bankObIds.has(obId)) continue;
-      const mag = Math.abs((e.debitAmount ?? 0) - (e.creditAmount ?? 0));
-      if (mag > (bankMag.get(e.documentNumber) ?? 0)) { bankMag.set(e.documentNumber, mag); docBank.set(e.documentNumber, obId); }
+      const movement = toUnits(String(e.debitAmount ?? 0)) - toUnits(String(e.creditAmount ?? 0));
+      const mag = movement < 0n ? -movement : movement;
+      if (mag > (bankMag.get(e.documentNumber) ?? 0n)) { bankMag.set(e.documentNumber, mag); docBank.set(e.documentNumber, obId); }
     }
 
     const documents: NativeDocument[] = [];
@@ -236,18 +238,22 @@ export class DynamicsSource implements MigrationSource {
         if ((isSales || isPurch) && t.number) {
           // Settle against OUR posted AR (per-line ex-tax + tax) rather than BC's
           // rounded document total, so the invoice closes to the exact penny.
-          const arTotal = (lines ?? []).reduce((s, l) => s + (l.amountExcludingTax ?? 0) + (l.totalTaxAmount ?? 0), 0);
-          const settled = arTotal - (t.remainingAmount ?? 0);
+          const arTotal = (lines ?? []).reduce(
+            (total, line) => total + toUnits(String(line.amountExcludingTax ?? 0)) + toUnits(String(line.totalTaxAmount ?? 0)),
+            0n,
+          );
+          const settled = arTotal - toUnits(String(t.remainingAmount ?? 0));
           const bank = docBank.get(t.number) ?? ctx.control.bank ?? null;
-          if (settled > 0.005 && bank) {
+          if (settled > 0n && bank) {
+            const settledAmount = formatMoney(fromUnits(settled), 2);
             documents.push({
               sourceRef: `${entity}Payment:${t.id}`, kind: isSales ? "customer_payment" : "vendor_payment",
               posting: true, partyId: built.partyId, controlAccountId: null,
               documentDate: built.documentDate, dueDate: null,
               memo: `Settlement of ${t.number}`, referenceNumber: `PAY-${t.number}`,
-              lines: [{ accountId: bank, itemId: null, amount: settled.toFixed(2), taxAmount: "0", taxOverridden: false, taxCodeId: null, departmentId: null, projectId: null, description: "Payment", lineNumber: 1 }],
+              lines: [{ accountId: bank, itemId: null, amount: settledAmount, taxAmount: "0", taxOverridden: false, taxCodeId: null, departmentId: null, projectId: null, description: "Payment", lineNumber: 1 }],
             });
-            applications.push({ paymentRef: `${entity}Payment:${t.id}`, appliedRef: `${entity}:${t.id}`, amount: settled.toFixed(2) });
+            applications.push({ paymentRef: `${entity}Payment:${t.id}`, appliedRef: `${entity}:${t.id}`, amount: settledAmount });
           }
         }
       }
@@ -268,7 +274,7 @@ export class DynamicsSource implements MigrationSource {
           applications.push({
             paymentRef: `${entity}:${p.id}`,
             appliedRef: `${invEntity}:${p.appliesToInvoiceId}`,
-            amount: Math.abs(p.amount).toFixed(2),
+            amount: formatMoney(fromUnits(toUnits(String(p.amount)) < 0n ? -toUnits(String(p.amount)) : toUnits(String(p.amount))), 2),
           });
         }
       }
@@ -289,7 +295,7 @@ export class DynamicsSource implements MigrationSource {
     const byAccount = new Map<string, bigint>();
     for (const e of await this.glEntries()) {
       if (!e.accountId) continue;
-      const mv = toUnits((e.debitAmount ?? 0).toFixed(2)) - toUnits((e.creditAmount ?? 0).toFixed(2));
+      const mv = toUnits(String(e.debitAmount ?? 0)) - toUnits(String(e.creditAmount ?? 0));
       byAccount.set(e.accountId, (byAccount.get(e.accountId) ?? 0n) + mv);
     }
     return [...byAccount.entries()].map(([accountRef, bal]) => ({ accountRef, balance: fromUnits(bal) }));
@@ -300,7 +306,7 @@ export class DynamicsSource implements MigrationSource {
     for (const e of await this.glEntries()) {
       if (!e.accountId || !e.postingDate) continue;
       const key = `${e.accountId}|${e.postingDate.slice(0, 7)}`;
-      const mv = toUnits((e.debitAmount ?? 0).toFixed(2)) - toUnits((e.creditAmount ?? 0).toFixed(2));
+      const mv = toUnits(String(e.debitAmount ?? 0)) - toUnits(String(e.creditAmount ?? 0));
       buckets.set(key, (buckets.get(key) ?? 0n) + mv);
     }
     return [...buckets.entries()].map(([k, amt]) => {
@@ -315,7 +321,7 @@ export class DynamicsSource implements MigrationSource {
       const rows = await this.client.list<{ id: string; remainingAmount?: number; status?: string }>(path);
       for (const r of rows) {
         if (r.status === "Draft" || r.status === "Canceled") continue;
-        out.push({ ref: `${entity}:${r.id}`, unpaid: (r.remainingAmount ?? 0).toFixed(2) });
+        out.push({ ref: `${entity}:${r.id}`, unpaid: formatMoney(String(r.remainingAmount ?? 0), 2) });
       }
     }
     return out;

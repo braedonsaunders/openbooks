@@ -8,6 +8,7 @@ import {
 const before: TransactionAuditSnapshot = {
   document: { id: "doc-1", total: "10.0000" },
   lines: [{ id: "line-1", amount: "10.0000" }],
+  taxComponents: [{ id: "tax-1", taxAmount: "1.3000" }],
   glImpact: {
     entry: { id: "entry-1", status: "posted" },
     lines: [

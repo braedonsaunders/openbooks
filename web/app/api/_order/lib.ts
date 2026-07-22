@@ -1,6 +1,9 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { add, mul, sum } from '@openbooks/engine/src/money.ts'
+import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
+import { taxProfileMap, type TaxProfiles } from '../../../lib/bills'
 import type { OrderKind } from '../../../lib/order-cycle'
 
 /**
@@ -19,46 +22,43 @@ export interface OrderLineInput {
   unit?: string | null
   unitPrice?: string | null
   taxCodeId?: string | null
+  taxGroupId?: string | null
   departmentId?: string | null
   projectId?: string | null
   extraDims?: Record<string, string | null>
 }
 
-/** Latest effective rate per tax code, as of now. */
-async function taxRateMap(orgId: string): Promise<Map<string, number>> {
-  const rates = (await db.execute(sql`
-    select tc.id, coalesce(tr.rate_percent, 0) as rate
-      from tax_codes tc
-      left join lateral (
-        select rate_percent from tax_rates
-         where org_id = ${orgId} and tax_code_id = tc.id and effective_from <= now()
-         order by effective_from desc limit 1) tr on true
-     where tc.org_id = ${orgId}
-  `)) as unknown as { rows: { id: string; rate: string }[] }
-  return new Map(rates.rows.map((r) => [r.id, Number(r.rate)]))
-}
-
 /** qty × price per line → per-line amount + tax + document totals. */
-export function computeOrderTotals(lines: OrderLineInput[], rateByCode: Map<string, number>) {
+export function computeOrderTotals(lines: OrderLineInput[], profiles: TaxProfiles) {
   const computed = lines.map((l) => {
-    const qty = Number(l.quantity ?? '0')
-    const price = Number(l.unitPrice ?? '0')
-    const amount = Math.round(qty * price * 100) / 100
-    const rate = l.taxCodeId ? (rateByCode.get(l.taxCodeId) ?? 0) : 0
-    const taxAmount = Math.round(amount * rate) / 100
-    return { ...l, amount: amount.toFixed(2), taxAmount: taxAmount.toFixed(2) }
+    if (l.taxCodeId && l.taxGroupId) throw new Error('select either a tax code or a tax group, not both')
+    const inputAmount = mul(l.quantity ?? '0', l.unitPrice ?? '0')
+    const config = l.taxGroupId
+      ? profiles.groups.get(l.taxGroupId)
+      : l.taxCodeId
+        ? profiles.codes.get(l.taxCodeId)
+        : []
+    if ((l.taxCodeId || l.taxGroupId) && !config) throw new Error('selected tax profile is inactive or has no effective rate')
+    const result = computeLineTaxes(inputAmount, config ?? [])
+    return {
+      ...l,
+      amount: result.netAmount,
+      taxInputAmount: result.inputAmount,
+      taxAmount: result.taxTotal,
+      taxComponents: result.components,
+    }
   })
-  const subtotal = computed.reduce((a, l) => a + Number(l.amount), 0)
-  const taxTotal = computed.reduce((a, l) => a + Number(l.taxAmount), 0)
+  const subtotal = sum(computed.map((line) => line.amount))
+  const taxTotal = sum(computed.map((line) => line.taxAmount))
   return {
     lines: computed,
-    subtotal: subtotal.toFixed(2),
-    taxTotal: taxTotal.toFixed(2),
-    total: (subtotal + taxTotal).toFixed(2),
+    subtotal,
+    taxTotal,
+    total: add(subtotal, taxTotal),
   }
 }
 
-export { taxRateMap as orderTaxRateMap }
+export { taxProfileMap as orderTaxRateMap }
 
 /**
  * Full order payload for the drawer: header (with party name resolved), lines
@@ -76,7 +76,8 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
 
   const lines = (await db.execute(sql`
     select l.id, l.line_number, l.item_id, l.account_id, l.description, l.quantity, l.unit,
-           l.unit_price, l.amount, l.tax_code_id, l.tax_amount, l.quantity_billed,
+           l.unit_price, l.amount, l.tax_code_id, l.tax_group_id, l.tax_input_amount,
+           l.tax_amount, l.quantity_billed,
            l.department_id, l.project_id, l.extra_dims,
            i.name as item_name, a.number as account_number, a.name as account_name, tc.code as tax_code
       from document_lines l

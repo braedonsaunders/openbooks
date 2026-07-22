@@ -25,6 +25,7 @@
   "list": {
     "searchPlaceholder": "搜索名称、代码、邮箱…",
     "shortCode": "简码",
-    "phone": "电话"
+    "phone": "电话",
+    "customerStatuses": { "existing": "现有客户", "potential": "潜在客户" }
   }
 }

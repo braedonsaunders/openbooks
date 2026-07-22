@@ -25,6 +25,7 @@
   "list": {
     "searchPlaceholder": "Search name, code, email…",
     "shortCode": "Short code",
-    "phone": "Phone"
+    "phone": "Phone",
+    "customerStatuses": { "existing": "Existing customers", "potential": "Potential customers" }
   }
 }
