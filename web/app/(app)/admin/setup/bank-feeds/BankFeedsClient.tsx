@@ -87,6 +87,44 @@ const PROVIDER_COLOR: Record<string, string> = {
   manual: "#64748B",
 };
 
+/** How each method works, shown as an explainer at the top of the configure step. */
+const METHOD_HELP: Record<
+  string,
+  { kind: string; blurb: string; docsUrl?: string; docsLabel?: string }
+> = {
+  plaid: {
+    kind: "Live feed",
+    blurb:
+      "openbooks pulls new transactions automatically through Plaid, an open-banking aggregator. You connect once with your Plaid API keys; there are no files to manage.",
+    docsUrl: "https://dashboard.plaid.com/developers/keys",
+    docsLabel: "Get keys in the Plaid dashboard",
+  },
+  gocardless: {
+    kind: "Live feed",
+    blurb:
+      "openbooks pulls transactions through GoCardless Bank Account Data (formerly Nordigen) — a free European open-banking feed. Create a Secret ID and Secret Key in their dashboard.",
+    docsUrl: "https://bankaccountdata.gocardless.com/overview/",
+    docsLabel: "Get credentials from GoCardless",
+  },
+  truelayer: {
+    kind: "Live feed",
+    blurb:
+      "openbooks pulls transactions through TrueLayer, a UK/EU open-banking provider. Paste an access token from your TrueLayer console.",
+    docsUrl: "https://console.truelayer.com/",
+    docsLabel: "Open the TrueLayer console",
+  },
+  sftp: {
+    kind: "File drop",
+    blurb:
+      "Your bank pushes statement files (OFX/CSV/CAMT/BAI2/MT940) to openbooks over SFTP. We create a dedicated login for this bank; you hand the host, username, and password to your bank, and files that land are imported automatically.",
+  },
+  manual: {
+    kind: "Manual",
+    blurb:
+      "No automation — you'll upload statement files by hand from the account's page in Banking whenever you have them. Good for accounts your bank can't feed.",
+  },
+};
+
 // --- main --------------------------------------------------------------------
 
 export function BankFeedsClient({
@@ -226,8 +264,8 @@ export function BankFeedsClient({
         </div>
       )}
 
-      {/* Shared SFTP receiving endpoint */}
-      {(sftpServers.length > 0 || adding) && <SftpEndpointCard daemon={daemon} />}
+      {/* Shared SFTP receiving endpoint — only relevant once SFTP logins exist. */}
+      {sftpServers.length > 0 && <SftpEndpointCard daemon={daemon} />}
     </div>
   );
 }
@@ -509,77 +547,108 @@ function ConfigureConnection({
     );
   }
 
+  const help = METHOD_HELP[provider];
+
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center gap-3">
         <Button size="sm" variant="ghost" onClick={onBack}>← Back</Button>
         <BankAvatar name={name || "Bank"} color={color} size={32} />
-        <div className="text-sm font-semibold">{bank?.name ?? "New connection"}</div>
-        <Badge variant="secondary" className="ml-auto">{PROVIDER_LABEL[provider]}</Badge>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{bank?.name ?? "New connection"}</div>
+          <div className="text-xs text-slate-400">{help?.kind} · {PROVIDER_LABEL[provider]}</div>
+        </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <Label>Connection name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Operating account — daily" />
-        </div>
-        <div>
-          <Label>Bank / GL account</Label>
-          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+      {/* Provider picker first for the "other" path, so the explainer matches. */}
+      {selection.kind === "other" && (
+        <div className="mb-4">
+          <Label>Which open-banking provider?</Label>
+          <Select value={provider} onChange={(e) => setProvider(e.target.value as FeedProvider)} className="max-w-xs">
+            <option value="gocardless">GoCardless — free, Europe</option>
+            <option value="plaid">Plaid — US / Canada / UK</option>
+            <option value="truelayer">TrueLayer — UK / EU</option>
           </Select>
         </div>
+      )}
 
-        {selection.kind === "other" && (
+      {/* What this method actually does. */}
+      {help && (
+        <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <div className="mb-1 flex items-center gap-2">
+            <StatusDot status="pending" />
+            <span className="font-medium text-slate-900 dark:text-slate-100">
+              {help.kind === "Live feed" ? `Automatic feed via ${PROVIDER_LABEL[provider]}` : help.kind === "File drop" ? "SFTP file drop" : "Manual upload"}
+            </span>
+          </div>
+          <p>{help.blurb}</p>
+          {help.docsUrl && (
+            <a href={help.docsUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-teal-700 hover:underline dark:text-teal-300">
+              {help.docsLabel} ↗
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Step 1 — what it feeds. Common to every method. */}
+      <div className="space-y-1">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">1 · Which account</div>
+        <div className="grid gap-3 pt-1 sm:grid-cols-2">
           <div>
-            <Label>Provider</Label>
-            <Select value={provider} onChange={(e) => setProvider(e.target.value as FeedProvider)}>
-              <option value="gocardless">GoCardless</option>
-              <option value="plaid">Plaid</option>
-              <option value="truelayer">TrueLayer</option>
+            <Label>Connection name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Operating account — daily" />
+          </div>
+          <div>
+            <Label>Bank / GL account</Label>
+            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
             </Select>
           </div>
-        )}
+        </div>
+      </div>
 
-        {isApi && (
-          <>
-            <div>
-              <Label>Provider account id</Label>
-              <Input value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} placeholder="account id at the provider" />
-            </div>
-            <div>
-              <Label>Sync cadence</Label>
-              <Select value={cadence} onChange={(e) => setCadence(e.target.value)}>
-                <option value="daily">Daily</option>
-                <option value="hourly">Hourly</option>
-                <option value="manual">Manual only</option>
-              </Select>
-            </div>
+      {/* Step 2 — method-specific configuration. */}
+      {isApi && (
+        <div className="mt-5 space-y-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">2 · {PROVIDER_LABEL[provider]} credentials</div>
+          <div className="grid gap-3 pt-1 sm:grid-cols-2">
             {(PROVIDER_CREDENTIALS[provider] ?? []).map((f) => (
               <div key={f.key}>
                 <Label>{f.label}</Label>
                 <Input type={f.secret ? "password" : "text"} value={creds[f.key] ?? ""} onChange={(e) => setCreds({ ...creds, [f.key]: e.target.value })} />
               </div>
             ))}
-          </>
-        )}
+            <div>
+              <Label>Provider account id</Label>
+              <Input value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} placeholder="the account's id at the provider" />
+            </div>
+            <div>
+              <Label>Import how often?</Label>
+              <Select value={cadence} onChange={(e) => setCadence(e.target.value)}>
+                <option value="daily">Automatically, daily</option>
+                <option value="hourly">Automatically, hourly</option>
+                <option value="manual">Only when I click Sync</option>
+              </Select>
+            </div>
+          </div>
+        </div>
+      )}
 
-        {provider === "sftp" && (
-          <p className="text-xs text-slate-500 sm:col-span-2 dark:text-slate-400">
-            We'll create a dedicated SFTP login and route its <span className="font-mono">/inbound</span> folder to the account above.
-            You'll get the host, username, and a one-time password to hand to your bank.
+      {provider === "sftp" && (
+        <div className="mt-5 space-y-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">2 · Create the SFTP login</div>
+          <p className="pt-1 text-xs text-slate-500 dark:text-slate-400">
+            We'll create a dedicated login and route its <span className="font-mono">/inbound</span> folder to the account above.
+            You'll get the host, username, and a one-time password to give your bank. Manage extra folders under the connection afterwards.
           </p>
-        )}
-        {provider === "manual" && (
-          <p className="text-xs text-slate-500 sm:col-span-2 dark:text-slate-400">
-            Records that this account is fed by manual OFX/CSV upload. Import files from the account's page in Banking.
-          </p>
-        )}
-      </div>
+        </div>
+      )}
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      <div className="mt-4 flex gap-2">
-        <Button onClick={save} disabled={busy || !accountId || (!name && !bank)}>Add connection</Button>
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <Button onClick={save} disabled={busy || !accountId || (!name && !bank)}>
+          {provider === "sftp" ? "Create SFTP login" : "Add connection"}
+        </Button>
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
     </Card>

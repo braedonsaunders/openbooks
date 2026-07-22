@@ -38,6 +38,20 @@ type Options = {
   sftpServers: Array<{ id: string; name: string }>
   profiles: Array<{ id: string; name: string }>
   parties: Array<{ id: string; display_name: string; bank_accounts: Array<{ id: string; label: string }> }>
+  currencies: Array<{ code: string; name: string }>
+}
+
+/** Currency picker over the org's currency reference table (never free text). */
+function CurrencyField({ value, onChange, label, currencies, allowInherit }: { value: string; onChange: (v: string) => void; label: string; currencies: Array<{ code: string; name: string }>; allowInherit?: boolean }) {
+  return (
+    <Field label={label}>
+      <Select value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+        {allowInherit && <option value="">Inherit from format / account</option>}
+        {!allowInherit && !value && <option value="">Select…</option>}
+        {currencies.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}
+      </Select>
+    </Field>
+  )
 }
 
 const VIEWS: PaymentSetupView[] = ['profiles', 'formats', 'schedules', 'mandates']
@@ -236,7 +250,7 @@ function SetupEditor({ view, row, creating, options, closeHref }: { view: Paymen
     }>
       <div className="space-y-5 p-1">
         {view === 'profiles' ? <ProfileFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
-        {view === 'formats' ? <FormatFields form={form} set={set} t={t} creating={creating} /> : null}
+        {view === 'formats' ? <FormatFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
         {view === 'schedules' ? <ScheduleFields form={form} set={set} options={options} t={t} /> : null}
         {view === 'mandates' ? <MandateFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
       </div>
@@ -275,7 +289,7 @@ function ProfileFields({ form, set, options, t, creating }: { form: Record<strin
   const settingSet = (key: string, value: unknown) => set('settings', { ...settings, [key]: value })
   return <>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
-      <Field label={t('fields.currency')}><Input maxLength={3} value={form.currency ?? format?.currency ?? ''} onChange={(e) => set('currency', e.target.value.toUpperCase())} /></Field></div>
+      <CurrencyField label={t('fields.currency')} currencies={options.currencies} value={form.currency ?? format?.currency ?? ''} onChange={(v) => set('currency', v)} /></div>
     <Field label={t('fields.bankAccount')}><Select value={form.bank_account_id ?? form.bankAccountId ?? ''} onChange={(e) => set('bankAccountId', e.target.value)}><option value="">{t('select')}</option>{options.bankAccounts.map((a) => <option key={a.id} value={a.id}>{[a.number, a.name].filter(Boolean).join(' · ')}</option>)}</Select></Field>
     <Field label={t('fields.format')}><Select value={formatId} onChange={(e) => set('paymentFormatId', e.target.value)}><option value="">{t('select')}</option>{options.formats.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</Select></Field>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.subsidiary')}><Select value={form.subsidiary_id ?? form.subsidiaryId ?? ''} onChange={(e) => set('subsidiaryId', e.target.value || null)}><option value="">{t('allSubsidiaries')}</option>{options.subsidiaries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
@@ -287,10 +301,10 @@ function ProfileFields({ form, set, options, t, creating }: { form: Record<strin
   </>
 }
 
-function FormatFields({ form, set, t, creating }: { form: Record<string, any>; set: (k: string, v: any) => void; t: any; creating: boolean }) {
+function FormatFields({ form, set, options, t, creating }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean }) {
   const custom = creating || form.rail === 'custom'
   return <><div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.code')}><Input disabled={!creating} value={form.code ?? ''} onChange={(e) => set('code', e.target.value.toUpperCase())} /></Field><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field></div>
-    <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.direction')}><Select disabled={!custom} value={form.direction ?? 'credit'} onChange={(e) => set('direction', e.target.value)}><option value="credit">{t('directions.credit')}</option><option value="debit">{t('directions.debit')}</option><option value="both">{t('directions.both')}</option></Select></Field><Field label={t('fields.currency')}><Input value={form.currency ?? ''} onChange={(e) => set('currency', e.target.value.toUpperCase())} /></Field></div>
+    <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.direction')}><Select disabled={!custom} value={form.direction ?? 'credit'} onChange={(e) => set('direction', e.target.value)}><option value="credit">{t('directions.credit')}</option><option value="debit">{t('directions.debit')}</option><option value="both">{t('directions.both')}</option></Select></Field><CurrencyField label={t('fields.currency')} currencies={options.currencies} value={form.currency ?? ''} onChange={(v) => set('currency', v)} allowInherit /></div>
     <div className="grid gap-4 sm:grid-cols-3"><CountryField label={t('fields.country')} placeholder={t('select')} value={form.country ?? ''} onChange={(value) => set('country', value)} /><Field label={t('fields.extension')}><Input value={form.file_extension ?? form.fileExtension ?? 'txt'} onChange={(e) => set('fileExtension', e.target.value)} /></Field><Field label={t('fields.contentType')}><Input value={form.content_type ?? form.contentType ?? 'text/plain; charset=utf-8'} onChange={(e) => set('contentType', e.target.value)} /></Field></div>
     {custom ? <Field label={t('fields.formatterScript')}><Textarea rows={16} className="font-mono text-xs" spellCheck={false} value={form.formatter_script ?? form.formatterScript ?? 'function main(ctx) {\n  return {\n    filename: `PAY-${ctx.request.run.run_number}.txt`,\n    content: "",\n    contentType: "text/plain"\n  };\n}'} onChange={(e) => set('formatterScript', e.target.value)} /></Field> : <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t('builtInFormatHint')}</p>}
     <Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('isActive', v)} label={t('fields.active')} /></>

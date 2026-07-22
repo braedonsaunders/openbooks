@@ -7,6 +7,13 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Building2, CalendarDays, CircleDollarSign, FileText, Landmark, Plus, Search, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  customFieldDefKey,
+  defaultFormLayout,
+  isCustomFieldKey,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+} from '@openbooks/customization'
+import {
   Badge,
   Button,
   Input,
@@ -20,14 +27,16 @@ import {
   TableHeader,
   TableRow,
   TabContent,
-  UrlDrawer,
   cn,
 } from '@openbooks/ui'
+import { ISO_CURRENCIES } from '../../../lib/iso-currencies'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import { CustomFieldInput } from '../../../components/custom-field-input'
+import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { AuditTrailPanel } from '../../../components/audit-trail-panel'
+import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { EmployeeWageRates } from './EmployeeWageRates'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { ApprovalActions } from '../../../components/approval-actions'
@@ -112,7 +121,7 @@ const emptyContact = (): ContactRow => ({
   mobilePhone: '', isPrimary: 'false', isActive: 'true',
 })
 
-export type PartyTab = 'overview' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages' | 'audit'
+export type PartyTab = 'overview' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages'
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -134,6 +143,11 @@ export function PartyDrawer({
   role,
   initialTab = 'overview',
   basePath = '/parties',
+  layout,
+  forms = [],
+  currentFormId = null,
+  recordType,
+  canCustomize = false,
 }: {
   payload: PartyPayload
   paymentTerms: Opt[]
@@ -156,16 +170,24 @@ export function PartyDrawer({
   role?: 'customer' | 'vendor' | 'employee'
   initialTab?: PartyTab
   basePath?: string
+  layout?: FormLayoutConfig
+  forms?: { id: string; name: string }[]
+  currentFormId?: string | null
+  recordType?: 'customer' | 'vendor' | 'employee'
+  canCustomize?: boolean
 }) {
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
   const tInv = useTranslations('projects.invoicingPref')
   const locale = useLocale()
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const allowedInitialTab = initialTab === 'wages' && (role !== 'employee' || !canManageWages) ? 'overview' : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
   useEffect(() => setTab(allowedInitialTab), [allowedInitialTab])
   const p = payload.party
+  const effectiveLayout = layout ?? (recordType ? defaultFormLayout(recordType) : null)
   const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((payload.party.invoicing_preference as InvoicingPref) ?? {})
   // 'New party' is the server-side draft sentinel stored in the DB — compare
   // and persist it verbatim; only the *displayed* fallback is translated.
@@ -459,23 +481,82 @@ export function PartyDrawer({
     { key: 'isPrimary', label: t('primaryContact'), type: 'select', width: '110px', options: yesNo },
     { key: 'isActive', label: tc('labels.active'), type: 'select', width: '95px', options: yesNo },
   ], [t, tc, yesNo])
+  const customDefByKey = useMemo(() => new Map(fieldDefs.map((definition) => [definition.key, definition])), [fieldDefs])
+  const label = (placement: HeaderFieldPlacement, fallback: string) => placement.labelOverride?.trim() || fallback
+  const renderPartyField = (placement: HeaderFieldPlacement) => {
+    if (isCustomFieldKey(placement.key)) {
+      const definition = customDefByKey.get(customFieldDefKey(placement.key))
+      return definition ? <CustomFieldInput def={definition} value={customValues[definition.key]} onChange={(value) => setCustomValues((current) => ({ ...current, [definition.key]: value }))} readOnly={ro} /> : null
+    }
+    switch (placement.key) {
+      case 'kind': return <><Label>{label(placement, t('kind'))}</Label><Select value={kind} onChange={(event) => setKind(event.target.value)} disabled={ro}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option></Select></>
+      case 'display_name': return <><Label>{label(placement, t('displayName'))}<span className="text-red-500"> *</span></Label><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} disabled={ro} /></>
+      case 'short_code': return <><Label>{label(placement, t('shortCode'))}</Label><Input value={shortCode} onChange={(event) => setShortCode(event.target.value)} className="font-mono" placeholder={t('shortCodePlaceholder')} disabled={ro} /></>
+      case 'legal_name': return <><Label>{label(placement, t('legalName'))}</Label><Input value={legalName} onChange={(event) => setLegalName(event.target.value)} disabled={ro} /></>
+      case 'email': return <><Label>{label(placement, tc('labels.email'))}</Label><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={ro} /></>
+      case 'phone': return <><Label>{label(placement, t('phone'))}</Label><Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} disabled={ro} /></>
+      case 'website': return <><Label>{label(placement, t('website'))}</Label><Input value={website} onChange={(event) => setWebsite(event.target.value)} placeholder={t('websitePlaceholder')} disabled={ro} /></>
+      case 'subsidiary_id':
+        if (!multiSubsidiary) return null
+        return <><Label>{label(placement, t('primarySubsidiary'))}</Label><Select value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)} disabled={ro}>{subsidiaries.filter((item) => !item.isElimination).map((item) => <option key={item.id} value={item.id}>{`${'— '.repeat(item.depth)}${item.name ?? ''}`}</option>)}</Select><p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p></>
+      case 'additional_subsidiaries':
+        if (!multiSubsidiary) return null
+        return <><Label>{label(placement, t('additionalSubsidiaries'))}</Label><div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">{subsidiaries.filter((item) => !item.isElimination && item.id !== subsidiaryId).map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-2.5 py-1.5"><input type="checkbox" checked={additionalSubsidiaryIds.has(item.id)} disabled={ro} onChange={(event) => setAdditionalSubsidiaryIds((previous) => { const next = new Set(previous); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next })} className={checkboxClass} /><span className="text-sm text-slate-800 dark:text-slate-200" style={{ paddingLeft: `${item.depth * 12}px` }}>{item.name}</span></label>)}</div><p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p></>
+      case 'payment_terms_id': {
+        const value = recordType === 'vendor' ? vendor.paymentTermsId : customer.paymentTermsId
+        return <><Label>{label(placement, t('paymentTerms'))}</Label><Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, paymentTermsId: event.target.value }) : setCustomer({ ...customer, paymentTermsId: event.target.value })} disabled={ro}><option value="">—</option>{paymentTerms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}</Select></>
+      }
+      case 'credit_limit': return <><Label>{label(placement, t('creditLimit'))}</Label><Input inputMode="decimal" className="text-right tabular-nums" value={customer.creditLimit} onChange={(event) => setCustomer({ ...customer, creditLimit: event.target.value })} disabled={ro} /></>
+      case 'currency': {
+        const value = recordType === 'vendor' ? vendor.currency : customer.currency
+        return <><Label>{label(placement, tc('labels.currency'))}</Label><Select value={value ?? ''} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, currency: event.target.value }) : setCustomer({ ...customer, currency: event.target.value })} disabled={ro}>{!value && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select></>
+      }
+      case 'ar_account_id': return <><Label>{label(placement, t('receivableAccount'))}</Label><Select value={customer.arAccountId} onChange={(event) => setCustomer({ ...customer, arAccountId: event.target.value })} disabled={ro}><option value="">—</option>{accounts.filter((account) => account.type === 'asset_receivable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select></>
+      case 'sales_rep_id': return <><Label>{label(placement, t('salesRepresentative'))}</Label><Select value={customer.salesRepId} onChange={(event) => setCustomer({ ...customer, salesRepId: event.target.value })} disabled={ro}><option value="">—</option>{salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}</Select></>
+      case 'tax_code_id': {
+        const value = recordType === 'vendor' ? vendor.taxCodeId : customer.taxCodeId
+        return <><Label>{label(placement, t('taxCode'))}</Label><Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, taxCodeId: event.target.value }) : setCustomer({ ...customer, taxCodeId: event.target.value })} disabled={ro}><option value="">—</option>{taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}</Select></>
+      }
+      case 'invoicing_preference': return <div className="space-y-2"><div><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{label(placement, tInv('heading'))}</h3><p className="text-xs text-slate-500 dark:text-slate-400">{tInv('customerHint')}</p></div><InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} /></div>
+      case 'labor_pricing': return isPlaceholderName ? null : <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} />
+      case 'payment_method': return <><Label>{label(placement, t('paymentMethod'))}</Label><Select value={vendor.paymentMethod} onChange={(event) => setVendor({ ...vendor, paymentMethod: event.target.value })} disabled={ro}><option value="">—</option>{PAYMENT_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{t(option.labelKey)}</option>)}</Select></>
+      case 'eft_notification_email': return <><Label>{label(placement, t('eftNotificationEmail'))}</Label><Input type="email" value={vendor.eftNotificationEmail} onChange={(event) => setVendor({ ...vendor, eftNotificationEmail: event.target.value })} disabled={ro} /></>
+      case 'is_1099_or_t4a': return <label className="flex items-center gap-2 pt-7"><input type="checkbox" checked={vendor.is1099OrT4a} onChange={(event) => setVendor({ ...vendor, is1099OrT4a: event.target.checked })} disabled={ro} className={checkboxClass} /><span className="text-sm">{label(placement, t('t4aReportable'))}</span></label>
+      case 'ap_account_id': return <><Label>{label(placement, t('payableAccount'))}</Label><Select value={vendor.apAccountId} onChange={(event) => setVendor({ ...vendor, apAccountId: event.target.value })} disabled={ro}><option value="">—</option>{accounts.filter((account) => account.type === 'liability_payable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select></>
+      case 'default_expense_account_id': return <><Label>{label(placement, t('defaultExpenseAccount'))}</Label><Select value={vendor.defaultExpenseAccountId} onChange={(event) => setVendor({ ...vendor, defaultExpenseAccountId: event.target.value })} disabled={ro}><option value="">—</option>{accounts.filter((account) => account.type === 'expense' || account.type === 'expense_other' || account.type === 'cogs').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select></>
+      case 'employee_number': return <><Label>{label(placement, t('employeeNumber'))}</Label><Input value={employee.employeeNumber} onChange={(event) => setEmployee({ ...employee, employeeNumber: event.target.value })} disabled={ro} /></>
+      case 'job_title': return <><Label>{label(placement, t('jobTitle'))}</Label><Input value={employee.jobTitle} onChange={(event) => setEmployee({ ...employee, jobTitle: event.target.value })} disabled={ro} /></>
+      case 'department_id': return <><Label>{label(placement, tc('labels.department'))}</Label><Select value={employee.departmentId} onChange={(event) => setEmployee({ ...employee, departmentId: event.target.value })} disabled={ro}><option value="">—</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
+      case 'trade_id': return <><Label>{label(placement, t('trade'))}</Label><Select value={employee.tradeId} onChange={(event) => setEmployee({ ...employee, tradeId: event.target.value })} disabled={ro}><option value="">—</option>{trades.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
+      case 'worker_comp_group_id': return <><Label>{label(placement, t('workerCompGroup'))}</Label><Select value={employee.workerCompGroupId} onChange={(event) => setEmployee({ ...employee, workerCompGroupId: event.target.value })} disabled={ro}><option value="">—</option>{workerCompGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
+      case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label><Input type="date" value={employee.hiredOn} onChange={(event) => setEmployee({ ...employee, hiredOn: event.target.value })} disabled={ro} /></>
+      default: return null
+    }
+  }
   const tabs: Array<{ key: PartyTab; label: string; count?: number }> = [
     { key: 'overview', label: t('tabs.overview') },
     { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
     ...(role === 'customer' && canReadActivities ? [{ key: 'activities' as const, label: t('tabs.activities') }] : []),
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
-    { key: 'accounting', label: t('tabs.accounting') },
+    ...(!effectiveLayout || !role || role === 'vendor' ? [{ key: 'accounting' as const, label: role === 'vendor' && effectiveLayout ? t('bankAccountsHeading') : t('tabs.accounting') }] : []),
     ...(role === 'employee' && canManageWages ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
-    { key: 'audit', label: tc('auditTrail.tabs.audit') },
   ]
 
+  const selectForm = (formId: string) => {
+    const next = new URLSearchParams(searchParams.toString())
+    if (formId) next.set('partyForm', formId)
+    else next.delete('partyForm')
+    const query = next.toString()
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
+
   return (
-    <UrlDrawer
-      open
+    <TransactionDrawer
       closeHref={basePath}
-      contextualReturn={false}
-      size="2xl"
+      recordId={String(p.id)}
+      targetTable="parties"
+      canEditAttachments={canManage}
       title={
         <span className="flex items-center gap-2.5">
           <span>{displayName.trim() || t('newPartyFallback')}</span>
@@ -483,62 +564,27 @@ export function PartyDrawer({
         </span>
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
-      subtabs={
-        <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('tabs.ariaLabel')}>
-          {tabs.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.key}
-              onClick={() => setTab(item.key)}
-              className={cn(
-                'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-                tab === item.key
-                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-              )}
-            >
-              {item.label}
-              {item.count != null ? <span className="text-xs tabular-nums text-slate-400">{item.count}</span> : null}
-            </button>
-          ))}
-        </nav>
-      }
-      headerActions={
+      primaryAction={mode === 'view' && canManage ? <Button variant="outline" size="sm" onClick={() => setMode('edit')}>{tc('actions.edit')}</Button> : undefined}
+      actionsMenuHeader={forms.length > 0 ? (
+        <div className="border-b border-slate-200 p-2 dark:border-slate-800">
+          <Label className="mb-1 block text-xs">{t('customForm')}</Label>
+          <Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>
+            {forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}
+          </Select>
+        </div>
+      ) : undefined}
+      actions={canManage || canCustomize ? (
         <>
-          {mode === 'edit' ? (
-            <>
-              <Button disabled={busy} onClick={save}>
-                {busy ? tc('actions.saving') : tc('actions.save')}
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={cancel}>
-                {tc('actions.cancel')}
-              </Button>
-            </>
-          ) : canManage ? (
-            <>
-              <Button variant="outline" onClick={() => setMode('edit')}>
-                {tc('actions.edit')}
-              </Button>
-              {isActive ? (
-                <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                  {t('deactivate')}
-                </Button>
-              ) : (
-                <>
-                  {!nameValid ? (
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('nameToActivate')}</span>
-                  ) : null}
-                  <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                    {t('activate')}
-                  </Button>
-                </>
-              )}
-            </>
+          {canManage ? isActive ? (
+            <Button disabled={busy} onClick={() => setActiveState(false)}>{t('deactivate')}</Button>
+          ) : (
+            <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>{t('activate')}</Button>
+          ) : null}
+          {canCustomize && recordType ? (
+            <Button asChild><Link href={`/admin/customization?recordType=${recordType}&tab=forms`}>{t('manageForms')}</Link></Button>
           ) : null}
         </>
-      }
+      ) : undefined}
       footer={
         <div className="flex w-full items-center gap-3">
           <span
@@ -557,12 +603,48 @@ export function PartyDrawer({
                     : null
               : null}
           </span>
+          {mode === 'edit' ? (
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="outline" disabled={busy} onClick={cancel}>{tc('actions.cancel')}</Button>
+              <Button disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+            </div>
+          ) : null}
         </div>
       }
     >
+      <nav className="-mt-2 mb-5 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t('tabs.ariaLabel')}>
+        {tabs.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.key}
+            onClick={() => setTab(item.key)}
+            className={cn(
+              'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+              tab === item.key
+                ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+                : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
+            )}
+          >
+            {item.label}
+            {item.count != null ? <span className="text-xs tabular-nums text-slate-400">{item.count}</span> : null}
+          </button>
+        ))}
+      </nav>
       <TabContent tabKey={tab}>
       <div className="space-y-7 p-1">
         {tab === 'overview' ? (
+          effectiveLayout && role ? (
+            <>
+              <PartySummary payload={payload} />
+              <HeaderFields
+                layout={effectiveLayout}
+                editable={!ro}
+                renderField={renderPartyField}
+              />
+            </>
+          ) : (
           <>
           <PartySummary payload={payload} />
         {/* -- identity ------------------------------------------------- */}
@@ -660,6 +742,7 @@ export function PartyDrawer({
         ) : null}
 
           </>
+          )
         ) : null}
 
         {/* -- roles ------------------------------------------------------
@@ -667,7 +750,7 @@ export function PartyDrawer({
              role's details render, with no enable checkbox — the multi-role
              party model is an internal abstraction. The unified /parties
              directory (no `role`) keeps the full checkbox view. */}
-        {tab === 'accounting' ? (
+        {tab === 'accounting' && (!effectiveLayout || !role) ? (
         <>
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1008,15 +1091,14 @@ export function PartyDrawer({
           </section>
         ) : null}
 
-        {tab === 'accounting' ? (
+        {tab === 'accounting' && (!role || role === 'vendor') ? (
           <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} />
         ) : null}
 
         {tab === 'wages' && role === 'employee' && canManageWages ? <EmployeeWageRates partyId={String(p.id)} /> : null}
-        {tab === 'audit' ? <AuditTrailPanel table="parties" recordId={String(p.id)} /> : null}
       </div>
       </TabContent>
-    </UrlDrawer>
+    </TransactionDrawer>
   )
 }
 
@@ -1246,7 +1328,7 @@ function BankAccountsPanel({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}><Label>{t('bankName')}</Label><Input value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></div>
             <div className={field}><Label>{t('country')}</Label><SearchSelect value={draft.country} onChange={(country) => setDraft({ ...draft, country })} options={countries} sheetTitle={t('country')} clearable ariaLabel={t('country')} /></div>
-            <div className={field}><Label>{tc('labels.currency')}</Label><Input maxLength={3} className="font-mono uppercase" value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value.toUpperCase() })} /></div>
+            <div className={field}><Label>{tc('labels.currency')}</Label><Select value={draft.currency ?? ''} onChange={(event) => setDraft({ ...draft, currency: event.target.value })}>{!draft.currency && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select></div>
             <div className={field}><Label>{t('routingNumber')}</Label><Input className="font-mono" value={draft.routingNumber} onChange={(event) => setDraft({ ...draft, routingNumber: event.target.value })} /></div>
             <div className={field}><Label>{t('branchNumber')}</Label><Input className="font-mono" value={draft.branchNumber} onChange={(event) => setDraft({ ...draft, branchNumber: event.target.value })} /></div>
             <div className={field}>

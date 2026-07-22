@@ -102,7 +102,7 @@ export default async function PaymentOperationsSetupPage({
     rows = data.rows as any[]; total = Number((count.rows[0] as any)?.n ?? 0); stateCounts = counts.rows as any[]; selected = (open.rows[0] as any) ?? null
   }
 
-  const [formats, bankAccounts, accountingAccounts, subsidiaries, sftpServers, profiles, parties] = await Promise.all([
+  const [formats, bankAccounts, accountingAccounts, subsidiaries, sftpServers, profiles, parties, currencies] = await Promise.all([
     db.execute(sql`select id, name, rail, currency from payment_formats where org_id = ${orgId} and is_active order by name`),
     db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary order by number nulls last, name`),
     db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
@@ -115,6 +115,7 @@ export default async function PaymentOperationsSetupPage({
       ) order by b.created_at desc) as bank_accounts
       from parties p join party_bank_accounts b on b.party_id = p.id and b.is_active and b.approved_at is not null
      where p.org_id = ${orgId} and p.is_active group by p.id, p.display_name order by p.display_name`),
+    db.execute(sql`select code, name from currencies order by code`),
   ])
 
   return (
@@ -130,7 +131,7 @@ export default async function PaymentOperationsSetupPage({
       stateCounts={stateCounts}
       options={{
         formats: formats.rows as any[], bankAccounts: bankAccounts.rows as any[], accountingAccounts: accountingAccounts.rows as any[], subsidiaries: subsidiaries.rows as any[],
-        sftpServers: sftpServers.rows as any[], profiles: profiles.rows as any[], parties: parties.rows as any[],
+        sftpServers: sftpServers.rows as any[], profiles: profiles.rows as any[], parties: parties.rows as any[], currencies: currencies.rows as any[],
       }}
     />
   )
