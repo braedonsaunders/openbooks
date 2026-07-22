@@ -493,6 +493,9 @@ function buildOrder(
     (l) => l.mainline === "F" && l.taxline === "F",
   );
   const lines: NativeDocLine[] = [];
+  const detailRows: { row: NativeDocLine; codeId: string | null }[] = [];
+  const baseByCode = new Map<string, bigint>();
+  const rateByCode = new Map<string, bigint>();
   let n = 0;
   for (const l of detail) {
     const ref = l.expenseaccount ?? l.account;
@@ -504,20 +507,34 @@ function buildOrder(
       tr != null && tr !== ""
         ? normalizeMoney(mulDecimal(String(tr), "100"))
         : null;
-    const code = normalizedRate
-      ? (ctx.taxByRate.get(normalizedRate) ??
-        ctx.taxByRate.get(normalizedRate.replace(/\.0+$/, "")))
-      : null;
+    const rateUnits = normalizedRate ? toUnits(normalizedRate) : 0n;
+    const sourceCodeId =
+      rateUnits !== 0n && l.taxcode
+        ? ctx.taxCodeByRef.get(String(l.taxcode))
+        : null;
+    if (rateUnits !== 0n && l.taxcode && !sourceCodeId) {
+      return { skip: `unmapped tax code ${l.taxcode}` };
+    }
+    const code = sourceCodeId
+      ? { id: sourceCodeId }
+      : normalizedRate
+        ? (ctx.taxByRate.get(normalizedRate) ??
+          ctx.taxByRate.get(normalizedRate.replace(/\.0+$/, "")))
+        : null;
     const signedAmount = glUnits(l);
-    lines.push({
+    const amountUnits =
+      orderKind === "sales_order" ? -signedAmount : signedAmount;
+    if (code && rateUnits !== 0n) {
+      baseByCode.set(code.id, (baseByCode.get(code.id) ?? 0n) + amountUnits);
+      rateByCode.set(code.id, rateUnits);
+    }
+    const row: NativeDocLine = {
       accountId,
       itemId,
       // NetSuite sales-order detail is the future credit side of the sale;
       // OpenBooks stores orders in document direction. Opposite-signed source
       // discount lines remain negative after the same normalization.
-      amount: fromUnits(
-        orderKind === "sales_order" ? -signedAmount : signedAmount,
-      ),
+      amount: fromUnits(amountUnits),
       taxAmount: "0",
       taxOverridden: false,
       taxCodeId: code?.id ?? null,
@@ -531,11 +548,21 @@ function buildOrder(
         : null,
       description: l.memo ?? null,
       lineNumber: ++n,
-    });
+    };
+    lines.push(row);
+    detailRows.push({ row, codeId: code?.id ?? null });
   }
   if (lines.length === 0) return { skip: "order has no resolvable lines" };
+  for (const [codeId, base] of baseByCode) {
+    const carrier = detailRows.find((detailRow) => detailRow.codeId === codeId);
+    if (carrier) {
+      carrier.row.taxAmount = fromUnits(
+        taxOnBase(base, rateByCode.get(codeId) ?? 0n),
+      );
+    }
+  }
   const sub = lines.reduce((s, l) => s + toUnits(l.amount), 0n);
-  const subAbs = fromUnits(sub < 0n ? -sub : sub);
+  const tax = lines.reduce((s, l) => s + toUnits(l.taxAmount), 0n);
   return {
     doc: {
       sourceRef: h.id,
@@ -552,8 +579,8 @@ function buildOrder(
       memo: h.memo ?? null,
       referenceNumber: h.otherrefnum ?? h.tranid ?? null,
       controlAccountId: null,
-      subtotal: subAbs,
-      total: subAbs,
+      subtotal: fromUnits(sub),
+      total: fromUnits(sub + tax),
       lines,
     },
     taxComputedMatch: true,

@@ -191,6 +191,36 @@ test("NetSuite sales orders normalize source credit-side detail into document di
   );
 });
 
+test("NetSuite orders retain exact source-code tax in document direction", () => {
+  const taxContext = {
+    ...context,
+    taxByRate: new Map([["13", { id: "rate-fallback", rate: "13" }]]),
+    taxCodeByRef: new Map([["2529", "source-hst-code"]]),
+  } as unknown as NativeContext;
+  const built = buildNativeFromNetSuite(
+    taxContext,
+    { ...header, ttype: "SalesOrd", posting: "F" },
+    [
+      {
+        transaction: "123",
+        id: "1",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "-100",
+        taxrate1: "0.13",
+        taxcode: "2529",
+        subsidiary: "1",
+      },
+    ],
+  );
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.lines[0]?.taxCodeId, "source-hst-code");
+  assert.equal(built.doc.lines[0]?.taxAmount, "13.0000");
+  assert.equal(built.doc.subtotal, "100.0000");
+  assert.equal(built.doc.total, "113.0000");
+});
+
 test("NetSuite zero-rate lines do not invent an ambiguous tax-code identity", () => {
   const taxContext = {
     ...context,
