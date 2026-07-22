@@ -30,7 +30,18 @@ export const customFieldDefs = pgTable(
     key: text("key").notNull(), // snake_case, unique per target
     label: text("label").notNull(),
     fieldType: text("field_type", {
-      enum: ["text", "long_text", "number", "currency", "date", "boolean", "select", "multi_select", "reference", "file"],
+      enum: [
+        "text",
+        "long_text",
+        "number",
+        "currency",
+        "date",
+        "boolean",
+        "select",
+        "multi_select",
+        "reference",
+        "file",
+      ],
     }).notNull(),
     /** For select: options; for reference: the referenced table. */
     config: jsonb("config").notNull().default({}),
@@ -39,7 +50,9 @@ export const customFieldDefs = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [index("custom_field_defs_target").on(t.orgId, t.targetTable, t.targetKind)],
+  (t) => [
+    index("custom_field_defs_target").on(t.orgId, t.targetTable, t.targetKind),
+  ],
 );
 
 /**
@@ -65,7 +78,16 @@ export const userScripts = pgTable(
     orgId: orgRef(),
     name: text("name").notNull(),
     triggerPoint: text("trigger_point", {
-      enum: ["before_submit", "before_post", "after_post", "before_void", "scheduled", "endpoint", "bulk", "client"],
+      enum: [
+        "before_submit",
+        "before_post",
+        "after_post",
+        "before_void",
+        "scheduled",
+        "endpoint",
+        "bulk",
+        "client",
+      ],
     }).notNull(),
     /** Narrow to a document kind; null = all kinds at this trigger. */
     documentKind: text("document_kind"),
@@ -86,8 +108,18 @@ export const userScripts = pgTable(
     ...auditColumns,
   },
   (t) => [
-    index("user_scripts_trigger").on(t.orgId, t.triggerPoint, t.documentKind, t.isActive),
-    index("user_scripts_scheduled").on(t.orgId, t.triggerPoint, t.isActive, t.nextRunAt),
+    index("user_scripts_trigger").on(
+      t.orgId,
+      t.triggerPoint,
+      t.documentKind,
+      t.isActive,
+    ),
+    index("user_scripts_scheduled").on(
+      t.orgId,
+      t.triggerPoint,
+      t.isActive,
+      t.nextRunAt,
+    ),
     uniqueIndex("user_scripts_endpoint_slug").on(t.orgId, t.endpointSlug),
   ],
 );
@@ -101,7 +133,9 @@ export const scriptRuns = pgTable(
     scriptId: uuid("script_id").notNull(),
     targetKind: text("target_kind"),
     targetId: uuid("target_id"),
-    status: text("status", { enum: ["ok", "aborted", "error", "timeout"] }).notNull(),
+    status: text("status", {
+      enum: ["ok", "aborted", "error", "timeout"],
+    }).notNull(),
     logs: jsonb("logs").notNull().default([]),
     errorMessage: text("error_message"),
     durationMs: integer("duration_ms"),
@@ -122,7 +156,9 @@ export const users = pgTable(
     email: text("email").notNull(),
     name: text("name").notNull(),
     passwordHash: text("password_hash").notNull(),
-    role: text("role", { enum: ["admin", "controller", "accountant", "approver", "viewer"] })
+    role: text("role", {
+      enum: ["admin", "controller", "accountant", "approver", "viewer"],
+    })
       .notNull()
       .default("viewer"),
     partyId: uuid("party_id"),
@@ -213,8 +249,12 @@ export const connections = pgTable(
     source: text("source").notNull(),
     displayName: text("display_name").notNull(),
     /** How this connection authenticates: token paste vs OAuth redirect. */
-    authKind: text("auth_kind", { enum: ["token", "oauth2"] }).notNull().default("token"),
-    status: text("status", { enum: ["active", "paused", "error", "unconfigured"] })
+    authKind: text("auth_kind", { enum: ["token", "oauth2"] })
+      .notNull()
+      .default("token"),
+    status: text("status", {
+      enum: ["active", "paused", "error", "unconfigured"],
+    })
       .notNull()
       .default("unconfigured"),
     /** Non-secret settings (host, account, baseCurrency, realmId, refKey…). */
@@ -249,11 +289,17 @@ export const syncRuns = pgTable(
     /** The connection this run belongs to (nullable: pre-connections legacy runs). */
     connectionId: uuid("connection_id"),
     source: text("source").notNull(), // "netsuite"
-    kind: text("kind", { enum: ["incremental", "full_migration", "attachments", "tb_check"] })
+    kind: text("kind", {
+      enum: ["incremental", "full_migration", "attachments", "tb_check"],
+    })
       .notNull()
       .default("incremental"),
-    status: text("status", { enum: ["running", "ok", "failed"] }).notNull().default("running"),
-    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    status: text("status", { enum: ["running", "ok", "failed"] })
+      .notNull()
+      .default("running"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     /** High-water mark this run synced up to (source clock). */
     syncedThrough: timestamp("synced_through", { withTimezone: true }),
@@ -272,6 +318,32 @@ export const syncRuns = pgTable(
   ],
 );
 
+/** Controller evidence for a source transaction that disappeared upstream. */
+export const sourceDeletionResolutions = pgTable(
+  "source_deletion_resolutions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    connectionId: uuid("connection_id").notNull(),
+    sourceRef: text("source_ref").notNull(),
+    documentId: uuid("document_id"),
+    action: text("action", { enum: ["retain", "void"] }).notNull(),
+    note: text("note"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    resolvedBy: uuid("resolved_by"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("source_deletion_resolutions_connection_ref").on(
+      t.connectionId,
+      t.sourceRef,
+    ),
+    index("source_deletion_resolutions_org").on(t.orgId, t.resolvedAt),
+  ],
+);
+
 /**
  * Immutable audit trail for business-layer changes and open-period posted
  * transaction amendments. Posted transactions may be re-materialized in an
@@ -286,12 +358,17 @@ export const auditLog = pgTable(
     orgId: orgRef(),
     tableName: text("table_name").notNull(),
     rowId: uuid("row_id").notNull(),
-    action: text("action", { enum: ["insert", "update", "delete", "post", "void", "approve", "reject"] }).notNull(),
+    action: text("action", {
+      enum: ["insert", "update", "delete", "post", "void", "approve", "reject"],
+    }).notNull(),
     /** Field diffs or a full posted-transaction before/after evidence envelope. */
     changes: jsonb("changes").notNull().default({}),
     actorId: uuid("actor_id"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
     requestId: text("request_id"),
   },
-  (t) => [index("audit_log_row").on(t.tableName, t.rowId), index("audit_log_org_at").on(t.orgId, t.at)],
+  (t) => [
+    index("audit_log_row").on(t.tableName, t.rowId),
+    index("audit_log_org_at").on(t.orgId, t.at),
+  ],
 );

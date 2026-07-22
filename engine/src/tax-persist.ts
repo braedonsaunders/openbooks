@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import type { ComputedTaxComponent, TaxComponentConfig } from "./tax.ts";
+import {
+  computeLineTaxes,
+  type ComputedTaxComponent,
+  type TaxComponentConfig,
+} from "./tax.ts";
+import { cmp } from "./money.ts";
 
 /**
  * Engine-side tax helpers so background generators (subscription billing, etc.)
@@ -17,8 +22,9 @@ export async function loadTaxComponentConfig(
   orgId: string,
   taxCodeId: string,
   dateIso: string,
+  runner: Runner = db,
 ): Promise<TaxComponentConfig[]> {
-  const r = (await db.execute(sql`
+  const r = (await runner.execute(sql`
     select tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
            tc.recoverable_percent::text as recoverable_percent, tc.calculation_type,
            tc.price_includes_tax, tc.compound_on_previous, tc.rounding_scale,
@@ -49,6 +55,27 @@ export async function loadTaxComponentConfig(
       withholdingAccountId: row.withholding_account_id,
     },
   ];
+}
+
+/**
+ * Reconstruct immutable tax evidence for an imported source line. Source
+ * adapters already provide the exact line tax total. We first perform the
+ * statutory calculation; when the source total uses a different allocation or
+ * rounding convention, the normal aggregate-override path records that fact on
+ * the final component instead of inventing a silent difference.
+ */
+export function computeImportedLineTaxEvidence(
+  amount: string,
+  sourceTaxAmount: string,
+  configs: TaxComponentConfig[],
+): ComputedTaxComponent[] {
+  const calculated = computeLineTaxes(amount, configs);
+  if (cmp(calculated.taxTotal, sourceTaxAmount) === 0)
+    return calculated.components;
+  return computeLineTaxes(amount, configs, {
+    overridden: true,
+    taxAmount: sourceTaxAmount,
+  }).components;
 }
 
 /** Write the immutable per-line tax calculation snapshot. */

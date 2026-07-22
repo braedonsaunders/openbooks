@@ -5,11 +5,13 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1087.0",
+    "@jitl/quickjs-singlefile-browser-release-asyncify": "^0.31.0",
     "@openbooks/emails": "*",
     "@openbooks/forms-core": "*",
     "@openbooks/jobs": "*",
     "@openbooks/schema": "*",
     "bullmq": "^5.80.2",
+    "cron-parser": "^5.6.2",
     "drizzle-orm": "*",
     "fast-xml-parser": "^5.10.1",
     "ioredis": "^5.11.1",

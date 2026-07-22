@@ -1,4 +1,4 @@
-import { newAsyncContext } from "quickjs-emscripten";
+import { newAsyncContext } from "./quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 // Named export, NOT the default: under ESM/tsx the default import resolves to
 // the module namespace (no .parse), so computeNextRunAt silently returned
@@ -69,8 +69,16 @@ export interface ScriptOutcome {
 }
 
 const MUTABLE_FIELDS = new Set([
-  "memo", "internalNotes", "expectedPayDate", "paymentHoldReason", "dueDate",
-  "departmentId", "projectId", "locationId", "classId", "custom",
+  "memo",
+  "internalNotes",
+  "expectedPayDate",
+  "paymentHoldReason",
+  "dueDate",
+  "departmentId",
+  "projectId",
+  "locationId",
+  "classId",
+  "custom",
 ]);
 
 export async function runScript(
@@ -102,7 +110,10 @@ export async function runScript(
     const queryFn = vm.newAsyncifiedFunction("__query", async (sqlH) => {
       const sqlText = String(vm.dump(sqlH));
       try {
-        const result = await runUserSql(sqlText, { maxRows: 5_000, timeoutMs: 5_000 });
+        const result = await runUserSql(sqlText, {
+          maxRows: 5_000,
+          timeoutMs: 5_000,
+        });
         return vm.newString(JSON.stringify(result.rows));
       } catch (e) {
         return { error: vm.newError(`query failed: ${(e as Error).message}`) };
@@ -111,19 +122,35 @@ export async function runScript(
 
     // Governed ledger write. post:true is refused inside before_* triggers —
     // the posting engine is already mid-flight for the triggering document.
-    const journalFn = vm.newAsyncifiedFunction("__journal_create", async (inputH, postH) => {
-      const post = vm.dump(postH) === true;
-      if (post && ctx.trigger.startsWith("before_")) {
-        return { error: vm.newError(`journal.create: post:true is not allowed in ${ctx.trigger} (create a draft instead)`) };
-      }
-      try {
-        const input = JSON.parse(String(vm.dump(inputH)));
-        const result = await createScriptJournal(ctx.org.id, ctx.user?.id ?? null, input, { post });
-        return vm.newString(JSON.stringify(result));
-      } catch (e) {
-        return { error: vm.newError(`journal.create failed: ${(e as Error).message}`) };
-      }
-    });
+    const journalFn = vm.newAsyncifiedFunction(
+      "__journal_create",
+      async (inputH, postH) => {
+        const post = vm.dump(postH) === true;
+        if (post && ctx.trigger.startsWith("before_")) {
+          return {
+            error: vm.newError(
+              `journal.create: post:true is not allowed in ${ctx.trigger} (create a draft instead)`,
+            ),
+          };
+        }
+        try {
+          const input = JSON.parse(String(vm.dump(inputH)));
+          const result = await createScriptJournal(
+            ctx.org.id,
+            ctx.user?.id ?? null,
+            input,
+            { post },
+          );
+          return vm.newString(JSON.stringify(result));
+        } catch (e) {
+          return {
+            error: vm.newError(
+              `journal.create failed: ${(e as Error).message}`,
+            ),
+          };
+        }
+      },
+    );
 
     vm.setProp(obHandle, "log", logFn);
     vm.setProp(obHandle, "abort", abortFn);
@@ -194,24 +221,44 @@ export async function runScript(
     if (result.error) {
       const err = vm.dump(result.error);
       result.error.dispose();
-      const msg = typeof err === "object" && err && "message" in err ? String((err as any).message) : String(err);
+      const msg =
+        typeof err === "object" && err && "message" in err
+          ? String((err as any).message)
+          : String(err);
       if (msg.startsWith("__OB_ABORT__")) {
-        return { status: "aborted", abortReason: msg.slice("__OB_ABORT__".length), logs, durationMs: Date.now() - started };
+        return {
+          status: "aborted",
+          abortReason: msg.slice("__OB_ABORT__".length),
+          logs,
+          durationMs: Date.now() - started,
+        };
       }
       if (Date.now() > deadline) {
         return { status: "timeout", logs, durationMs: Date.now() - started };
       }
-      return { status: "error", abortReason: msg, logs, durationMs: Date.now() - started };
+      return {
+        status: "error",
+        abortReason: msg,
+        logs,
+        durationMs: Date.now() - started,
+      };
     }
     const raw = vm.dump(result.value);
     result.value.dispose();
     // raw is the VM's JSON.stringify(out); non-serializable returns (functions,
     // undefined) come back as a non-string — treat them as "no return value".
-    const parsed = typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
+    const parsed =
+      typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
     let set: Record<string, unknown> | undefined;
     // The { set: {...} } mutation contract only applies to before_* triggers —
     // endpoint/bulk/scheduled scripts' returns are plain data, never mutations.
-    if (ctx.trigger.startsWith("before_") && parsed && typeof parsed === "object" && parsed.set && typeof parsed.set === "object") {
+    if (
+      ctx.trigger.startsWith("before_") &&
+      parsed &&
+      typeof parsed === "object" &&
+      parsed.set &&
+      typeof parsed.set === "object"
+    ) {
       set = {};
       for (const [k, v] of Object.entries(parsed.set)) {
         if (!MUTABLE_FIELDS.has(k)) {
@@ -225,7 +272,13 @@ export async function runScript(
         set[k] = v;
       }
     }
-    return { status: "ok", set, returned: parsed, logs, durationMs: Date.now() - started };
+    return {
+      status: "ok",
+      set,
+      returned: parsed,
+      logs,
+      durationMs: Date.now() - started,
+    };
   } finally {
     vm.dispose();
     runtime.dispose();
@@ -269,8 +322,15 @@ export async function runTriggerScripts(
       errorMessage: res.status === "ok" ? null : res.abortReason,
       durationMs: res.durationMs,
     });
-    await db.execute(sql`update user_scripts set last_run_at = now() where id = ${s.id}`);
-    if (res.status === "aborted" || res.status === "error" || res.status === "timeout") break;
+    await db.execute(
+      sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+    );
+    if (
+      res.status === "aborted" ||
+      res.status === "error" ||
+      res.status === "timeout"
+    )
+      break;
   }
   return outcomes;
 }
@@ -282,10 +342,18 @@ export async function runScheduledScript(
   const [s] = await db
     .select()
     .from(schema.userScripts)
-    .where(and(eq(schema.userScripts.id, scriptId), eq(schema.userScripts.orgId, orgId)));
+    .where(
+      and(
+        eq(schema.userScripts.id, scriptId),
+        eq(schema.userScripts.orgId, orgId),
+      ),
+    );
   if (!s) throw new Error("script not found");
 
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
   const ctx: ScriptContext = {
@@ -305,7 +373,9 @@ export async function runScheduledScript(
     errorMessage: res.status === "ok" ? null : res.abortReason,
     durationMs: res.durationMs,
   });
-  await db.execute(sql`update user_scripts set last_run_at = now() where id = ${s.id}`);
+  await db.execute(
+    sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+  );
 
   return outcome;
 }
@@ -334,7 +404,10 @@ export async function runEndpointScript(
     );
   if (!s) return null;
 
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
   const ctx: ScriptContext = {
@@ -356,7 +429,9 @@ export async function runEndpointScript(
     errorMessage: res.status === "ok" ? null : res.abortReason,
     durationMs: res.durationMs,
   });
-  await db.execute(sql`update user_scripts set last_run_at = now() where id = ${s.id}`);
+  await db.execute(
+    sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+  );
   return outcome;
 }
 
@@ -368,14 +443,25 @@ const BULK_TIMEOUT_MS = 30_000;
  * scheduled script (doc-less ctx), but with an extended deadline; meant to be
  * consumed on the worker via the scripts queue, with inline fallback.
  */
-export async function runBulkScript(scriptId: string, orgId: string): Promise<ScriptOutcome> {
+export async function runBulkScript(
+  scriptId: string,
+  orgId: string,
+): Promise<ScriptOutcome> {
   const [s] = await db
     .select()
     .from(schema.userScripts)
-    .where(and(eq(schema.userScripts.id, scriptId), eq(schema.userScripts.orgId, orgId)));
+    .where(
+      and(
+        eq(schema.userScripts.id, scriptId),
+        eq(schema.userScripts.orgId, orgId),
+      ),
+    );
   if (!s) throw new Error("script not found");
 
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
   const ctx: ScriptContext = {
@@ -395,13 +481,22 @@ export async function runBulkScript(scriptId: string, orgId: string): Promise<Sc
     errorMessage: res.status === "ok" ? null : res.abortReason,
     durationMs: res.durationMs,
   });
-  await db.execute(sql`update user_scripts set last_run_at = now() where id = ${s.id}`);
+  await db.execute(
+    sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+  );
   return outcome;
 }
 
-export function computeNextRunAt(cron: string, from: Date = new Date(), timezone = "UTC"): Date | null {
+export function computeNextRunAt(
+  cron: string,
+  from: Date = new Date(),
+  timezone = "UTC",
+): Date | null {
   try {
-    const expr = CronExpressionParser.parse(cron, { currentDate: from, tz: timezone });
+    const expr = CronExpressionParser.parse(cron, {
+      currentDate: from,
+      tz: timezone,
+    });
     return expr.next().toDate();
   } catch {
     return null;
@@ -423,10 +518,14 @@ export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
   for (const s of scripts) {
     const cron = (s as any).cron as string | null;
     if (!cron) {
-      await db.execute(sql`update user_scripts set next_run_at = null where id = ${s.id}`);
+      await db.execute(
+        sql`update user_scripts set next_run_at = null where id = ${s.id}`,
+      );
       continue;
     }
     const next = computeNextRunAt(cron);
-    await db.execute(sql`update user_scripts set next_run_at = ${next} where id = ${s.id}`);
+    await db.execute(
+      sql`update user_scripts set next_run_at = ${next} where id = ${s.id}`,
+    );
   }
 }

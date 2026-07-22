@@ -1,11 +1,20 @@
 import { Worker } from "bullmq";
 import { sql } from "drizzle-orm";
-import { MIGRATION_QUEUE, enqueueMigration, getBlockingConnection, type MigrationJobData } from "@openbooks/jobs";
+import {
+  MIGRATION_QUEUE,
+  enqueueMigration,
+  getBlockingConnection,
+  type MigrationJobData,
+} from "@openbooks/jobs";
 import { db } from "../db.ts";
 import { buildSource, getConnection } from "../sync/connection.ts";
 import { runFullMigration, runSync } from "../sync/sync.ts";
-import { AttachmentImportError, importNetSuiteAttachments } from "../sync/netsuite-attachments.ts";
+import {
+  AttachmentImportError,
+  importNetSuiteAttachments,
+} from "../sync/netsuite-attachments.ts";
 import { purgeExpiredQbdBridgeData } from "../qbd/bridge.ts";
+import { mirrorIsDue } from "../sync/mirror-schedule.ts";
 
 /**
  * Consumes the `migration` queue: build the tenant's adapter from its stored
@@ -20,10 +29,16 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
     async (job) => {
       const { orgId, connectionId, mode, triggeredBy } = job.data;
       const conn = await getConnection(orgId, connectionId);
-      if (!conn) throw new Error(`connection ${connectionId} not found for org ${orgId}`);
+      if (!conn)
+        throw new Error(
+          `connection ${connectionId} not found for org ${orgId}`,
+        );
 
       if (mode === "attachments") {
-        if (conn.source !== "netsuite") throw new Error("attachment migration is only supported by NetSuite connections");
+        if (conn.source !== "netsuite")
+          throw new Error(
+            "attachment migration is only supported by NetSuite connections",
+          );
         await db.execute(sql`
           update sync_runs
              set status = 'failed', finished_at = now(),
@@ -51,21 +66,17 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                    progress = ${JSON.stringify({ phase: "complete" })}::jsonb
              where id = ${runId}
           `);
-          await db.execute(sql`
-            update connections set status = 'active', last_error = null, last_run_at = now() where id = ${connectionId}
-          `);
           return { runId, kind: "attachments", ...summary };
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          const stats = error instanceof AttachmentImportError ? error.summary : null;
+          const message =
+            error instanceof Error ? error.message : String(error);
+          const stats =
+            error instanceof AttachmentImportError ? error.summary : null;
           await db.execute(sql`
             update sync_runs
                set status = 'failed', finished_at = now(), error_message = ${message},
                    stats = ${stats ? JSON.stringify(stats) : null}::jsonb
              where id = ${runId}
-          `);
-          await db.execute(sql`
-            update connections set status = 'error', last_error = ${message}, last_run_at = now() where id = ${connectionId}
           `);
           throw error;
         }
@@ -83,14 +94,21 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
         kind: result.kind,
         docsNew: result.docsNew,
         docsAmended: result.docsAmended,
-        tb: { accounts: result.tb.accounts, matches: result.tb.matches, mismatches: result.tb.mismatches.length },
+        tb: {
+          accounts: result.tb.accounts,
+          matches: result.tb.matches,
+          mismatches: result.tb.mismatches.length,
+        },
         periods: {
           checked: result.periods.checked,
           matches: result.periods.matches,
           mismatches: result.periods.checked - result.periods.matches,
         },
         openItems: result.openItems
-          ? { checked: result.openItems.checked, matches: result.openItems.matches }
+          ? {
+              checked: result.openItems.checked,
+              matches: result.openItems.matches,
+            }
           : null,
       };
     },
@@ -107,26 +125,67 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
   );
 }
 
+const MIRROR_TICK_MS = 5 * 60_000;
+
 /**
- * Mirror scheduler: every 5 minutes, enqueue a mirror pass for each connection
- * with mirroring enabled whose last run is older than its cadence (daily).
- * The per-day jobId dedupes — a tick can never double-queue the same day.
+ * Mirror scheduler: cadence is based only on the last successful incremental
+ * proof. Failed mirrors retry with bounded exponential backoff; attachment and
+ * full-migration activity never postpones or disables the mirror.
  */
 export function startMirrorScheduler(): void {
   const tick = async () => {
     try {
       await purgeExpiredQbdBridgeData();
-      const due = (await db.execute(sql`
-        select id, org_id as "orgId" from connections
-         where mirror_enabled and status = 'active'
-           and (last_run_at is null or last_run_at < now() - interval '1 day')`)) as unknown as {
-        rows: { id: string; orgId: string }[];
+      const candidates = (await db.execute(sql`
+        select c.id, c.org_id as "orgId", c.mirror_schedule as schedule,
+               history.last_successful_at as "lastSuccessfulAt",
+               history.last_scheduled_attempt_at as "lastScheduledAttemptAt",
+               history.scheduled_failures_since_success::int as "scheduledFailuresSinceSuccess"
+          from connections c
+          cross join lateral (
+            select
+              max(sr.finished_at) filter (
+                where sr.kind = 'incremental' and sr.status = 'ok'
+              ) as last_successful_at,
+              max(sr.started_at) filter (
+                where sr.kind = 'incremental' and sr.triggered_by = 'scheduler'
+              ) as last_scheduled_attempt_at,
+              count(*) filter (
+                where sr.kind = 'incremental' and sr.triggered_by = 'scheduler'
+                  and sr.status = 'failed'
+                  and sr.started_at > coalesce((
+                    select max(ok.finished_at) from sync_runs ok
+                     where ok.connection_id = c.id and ok.kind = 'incremental' and ok.status = 'ok'
+                  ), '-infinity'::timestamptz)
+              ) as scheduled_failures_since_success
+            from sync_runs sr where sr.connection_id = c.id
+          ) history
+         where c.mirror_enabled and c.status not in ('paused', 'unconfigured')
+           and not exists (
+             select 1 from sync_runs running
+              where running.connection_id = c.id and running.kind = 'incremental' and running.status = 'running'
+           )`)) as unknown as {
+        rows: {
+          id: string;
+          orgId: string;
+          schedule: string;
+          lastSuccessfulAt: Date | null;
+          lastScheduledAttemptAt: Date | null;
+          scheduledFailuresSinceSuccess: number;
+        }[];
       };
-      for (const c of due.rows) {
-        const day = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      for (const c of candidates.rows) {
+        if (!mirrorIsDue({ ...c, now })) continue;
+        const bucket = Math.floor(now.getTime() / MIRROR_TICK_MS);
         await enqueueMigration(
-          { orgId: c.orgId, connectionId: c.id, mode: "mirror", triggeredBy: "scheduler" },
-          { jobId: `mirror|${c.id}|${day}` },
+          {
+            orgId: c.orgId,
+            connectionId: c.id,
+            mode: "mirror",
+            triggeredBy: "scheduler",
+          },
+          { jobId: `mirror|${c.id}|${bucket}` },
         );
       }
     } catch (e) {
@@ -134,5 +193,5 @@ export function startMirrorScheduler(): void {
     }
   };
   void tick();
-  setInterval(() => void tick(), 5 * 60_000);
+  setInterval(() => void tick(), MIRROR_TICK_MS);
 }
