@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, withOrg } from "./db.ts";
-import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRatio, neg, sum, toUnits } from "./money.ts";
+import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, sum, toUnits } from "./money.ts";
 import { postDocument, runPostDocumentEffects, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -18,7 +18,8 @@ import { sealSecret, unsealJson, unsealSecret } from "./secrets.ts";
  * deferred `app_check_open` trigger is the final authority on caps.
  *
  * Draft payments carry their working state on documents.custom:
- *   { bankAccountId: uuid, allocations: [{ openLineId, amount }] }
+ *   { bankAccountId: uuid, allocations: [{ openLineId,
+ *       sourceTransactionAmount, targetTransactionAmount, settlementRate, … }] }
  * plus a single document line (the bank account, amount = payment total) so
  * the existing posting rules pick up the right bank account.
  */
@@ -27,6 +28,7 @@ export class PaymentError extends Error {}
 
 export type PaymentKind = "vendor_payment" | "customer_payment";
 export type OpenItemSide = "ap" | "ar";
+export type SettlementRateSource = "same_currency" | "provider" | "manual" | "contractual" | "imported";
 
 export const PAYMENT_KIND_SIDE: Record<PaymentKind, OpenItemSide> = {
   vendor_payment: "ap",
@@ -40,10 +42,19 @@ const NUMBER_PREFIX: Record<PaymentKind, string> = {
 
 export interface AllocationInput {
   openLineId: string;
-  /** Transaction-currency amount used for the payment document total. */
-  amount: string;
-  /** Ledger/base-currency application amount. Defaults to `amount`. */
-  baseAmount?: string;
+  /** Amount consumed from the payment/credit source, in the payment currency. */
+  sourceTransactionAmount: string;
+  /** Amount extinguished on the invoice/bill, in the target open-item currency. */
+  targetTransactionAmount: string;
+  /** Optional independently saved target carrying value, revalidated at posting. */
+  targetBaseAmount?: string;
+  /** Target-currency units for one source-currency unit. Required cross-currency. */
+  settlementRate: string;
+  settlementRateSource: SettlementRateSource;
+  /** Bank advice, contract, provider observation, or import evidence reference. */
+  settlementRateReference: string;
+  /** Tenant-owned fx_rates observation when settlementRateSource is provider. */
+  settlementFxRateId?: string | null;
 }
 
 export interface CreditAllocationInput {
@@ -150,23 +161,84 @@ export async function createPaymentDocument(opts: {
   return doc;
 }
 
-/** Validate allocation shape: positive exact money amounts, distinct lines. */
+export function sameCurrencyAllocation(
+  openLineId: string,
+  amount: string,
+  targetBaseAmount?: string,
+): AllocationInput {
+  return {
+    openLineId,
+    sourceTransactionAmount: amount,
+    targetTransactionAmount: amount,
+    ...(targetBaseAmount === undefined ? {} : { targetBaseAmount }),
+    settlementRate: "1",
+    settlementRateSource: "same_currency",
+    settlementRateReference: "same transaction currency",
+  };
+}
+
+/** Validate allocation shape: positive exact amounts, rate evidence, distinct lines. */
 function validateAllocationInputs(allocations: AllocationInput[]): void {
   const seen = new Set<string>();
   for (const a of allocations) {
     if (!a.openLineId) throw new PaymentError("allocation is missing its open item line");
     if (seen.has(a.openLineId)) throw new PaymentError("the same open item is allocated twice");
     seen.add(a.openLineId);
-    let units: bigint;
     try {
-      units = toUnits(a.amount);
-      if (a.baseAmount !== undefined && toUnits(a.baseAmount) <= 0n) {
-        throw new Error("base amount must be positive");
+      if (toUnits(a.sourceTransactionAmount) <= 0n || toUnits(a.targetTransactionAmount) <= 0n) {
+        throw new Error("transaction amounts must be positive");
       }
+      if (a.targetBaseAmount !== undefined && toUnits(a.targetBaseAmount) <= 0n) {
+        throw new Error("target base amount must be positive");
+      }
+      // Also validates numeric(19,10) precision and positivity.
+      mulRate(a.sourceTransactionAmount, a.settlementRate);
     } catch {
-      throw new PaymentError(`allocation amount "${a.amount}" is not a valid amount`);
+      throw new PaymentError("allocation amounts and settlement rate must be positive exact decimals");
     }
-    if (units <= 0n) throw new PaymentError("allocation amounts must be greater than zero");
+    if (!a.settlementRateReference?.trim()) throw new PaymentError("settlement-rate evidence reference is required");
+    if (!["same_currency", "provider", "manual", "contractual", "imported"].includes(a.settlementRateSource)) {
+      throw new PaymentError("settlement-rate evidence source is invalid");
+    }
+  }
+}
+
+function canonicalSettlementRate(rate: string): string {
+  const raw = String(rate).trim();
+  const match = raw.match(/^\+?(\d+)(?:\.(\d*))?$/);
+  if (!match || (match[2]?.length ?? 0) > 10) {
+    throw new PaymentError("settlement rate must be a positive decimal with at most ten decimal places");
+  }
+  const whole = BigInt(match[1]!).toString();
+  const fraction = (match[2] ?? "").padEnd(10, "0");
+  if (BigInt(whole) === 0n && !/[1-9]/.test(fraction)) throw new PaymentError("settlement rate must be positive");
+  return `${whole}.${fraction}`;
+}
+
+function validateSettlementEvidence(
+  allocation: AllocationInput,
+  sourceCurrency: string,
+  targetCurrency: string,
+): void {
+  if (cmp(mulRate(allocation.sourceTransactionAmount, allocation.settlementRate), allocation.targetTransactionAmount) !== 0) {
+    throw new PaymentError("settlement rate does not cross-foot source and target transaction amounts");
+  }
+  if (sourceCurrency === targetCurrency) {
+    if (
+      cmp(allocation.sourceTransactionAmount, allocation.targetTransactionAmount) !== 0 ||
+      canonicalSettlementRate(allocation.settlementRate) !== "1.0000000000" ||
+      allocation.settlementRateSource !== "same_currency" ||
+      allocation.settlementFxRateId
+    ) {
+      throw new PaymentError("same-currency applications require equal amounts and a rate of one");
+    }
+    return;
+  }
+  if (allocation.settlementRateSource === "same_currency") {
+    throw new PaymentError("cross-currency applications require explicit settlement-rate evidence");
+  }
+  if (allocation.settlementRateSource === "provider" && !allocation.settlementFxRateId) {
+    throw new PaymentError("provider settlement evidence requires an FX rate observation");
   }
 }
 
@@ -213,7 +285,7 @@ export async function updateDraftPayment(
   const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);
 
   validateAllocationInputs(allocations);
-  validateAllocationInputs(creditAllocations.map((a) => ({ openLineId: `${a.fromLineId}:${a.toLineId}`, amount: a.amount })));
+  validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
   const discountUnits = toUnits(discountAmount);
   if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
   if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
@@ -248,15 +320,16 @@ export async function updateDraftPayment(
     for (const a of allocations) {
       const item = byLine.get(a.openLineId);
       if (!item) throw new PaymentError("an allocated item is not an open item for this party");
-      if (cmp(a.amount, item.transactionOpen) > 0) {
+      validateSettlementEvidence(a, doc.currency, item.currency);
+      if (cmp(a.targetTransactionAmount, item.transactionOpen) > 0) {
         throw new PaymentError(
-          `applying ${a.amount} ${item.currency} exceeds the open transaction balance ${item.transactionOpen} on ${item.documentNumber ?? item.entryNumber}`,
+          `applying ${a.targetTransactionAmount} ${item.currency} exceeds the open transaction balance ${item.transactionOpen} on ${item.documentNumber ?? item.entryNumber}`,
         );
       }
     }
   }
 
-  const grossApplied = sum(allocations.map((a) => a.amount));
+  const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
   if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
   const total = fromUnits(toUnits(grossApplied) - discountUnits);
 
@@ -336,9 +409,13 @@ export async function suggestApplications(
   partyId: string,
   amount: string,
   side: OpenItemSide = "ar",
-  opts?: { reference?: string | null },
+  opts?: { reference?: string | null; sourceCurrency: string },
 ): Promise<SuggestedApplication> {
-  const items = await openItemsForParty(partyId, side);
+  if (!opts?.sourceCurrency) throw new PaymentError("payment currency is required for automatic application");
+  // Automated allocation is intentionally limited to open items already in the
+  // payment currency. Cross-currency rows require explicit rate evidence and
+  // source/target amounts from the accountant or bank advice.
+  const items = (await openItemsForParty(partyId, side)).filter((item) => item.currency === opts.sourceCurrency);
   const target = toUnits(amount);
   if (target <= 0n || items.length === 0) {
     return { allocations: [], applied: "0", remaining: fromUnits(target < 0n ? 0n : target), strategy: "none" };
@@ -351,15 +428,15 @@ export async function suggestApplications(
       (i) => (i.documentNumber ?? "").toLowerCase() === ref || (i.referenceNumber ?? "").toLowerCase() === ref,
     );
     if (m) {
-      const take = toUnits(m.open) <= target ? toUnits(m.open) : target;
-      return { allocations: [{ openLineId: m.lineId, amount: fromUnits(take) }], applied: fromUnits(take), remaining: fromUnits(target - take), strategy: "reference" };
+      const take = toUnits(m.transactionOpen) <= target ? toUnits(m.transactionOpen) : target;
+      return { allocations: [sameCurrencyAllocation(m.lineId, fromUnits(take))], applied: fromUnits(take), remaining: fromUnits(target - take), strategy: "reference" };
     }
   }
 
   // 2) exact single-item match — paid one invoice to the cent
-  const exact = items.find((i) => toUnits(i.open) === target);
+  const exact = items.find((i) => toUnits(i.transactionOpen) === target);
   if (exact) {
-    return { allocations: [{ openLineId: exact.lineId, amount: amount }], applied: amount, remaining: "0", strategy: "exact" };
+    return { allocations: [sameCurrencyAllocation(exact.lineId, amount)], applied: amount, remaining: "0", strategy: "exact" };
   }
 
   // 3) FIFO oldest-first (openItemsForParty is ordered by due/posting date)
@@ -367,9 +444,9 @@ export async function suggestApplications(
   let remaining = target;
   for (const i of items) {
     if (remaining <= 0n) break;
-    const take = toUnits(i.open) <= remaining ? toUnits(i.open) : remaining;
+    const take = toUnits(i.transactionOpen) <= remaining ? toUnits(i.transactionOpen) : remaining;
     if (take > 0n) {
-      allocations.push({ openLineId: i.lineId, amount: fromUnits(take) });
+      allocations.push(sameCurrencyAllocation(i.lineId, fromUnits(take)));
       remaining -= take;
     }
   }
@@ -393,7 +470,7 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
       join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
       left join documents d on d.id = je.source_document_id
       left join lateral (
-        select sum(a.amount) as applied, sum(a.transaction_amount) as transaction_applied
+        select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied
           from applications a
          where a.to_line_id = jl.id and a.unapplied_at is null
       ) ap on true
@@ -469,9 +546,15 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind) {
   const applied =
     row.status === "posted" && row.posted_entry_id
       ? ((await db.execute(sql`
-          select a.id, a.amount, a.applied_on,
+          select a.id, a.amount, a.source_amount,
+                 a.source_transaction_amount, a.source_transaction_currency,
+                 a.target_transaction_amount, a.target_transaction_currency,
+                 a.settlement_rate, a.settlement_rate_source,
+                 a.settlement_rate_reference, a.settlement_fx_rate_id,
+                 a.fx_gain_loss_entry_id, a.applied_on,
                  te.entry_number as target_entry_number, te.posting_date as target_posting_date,
                  tl.due_date as target_due_date, abs(tl.amount) as target_amount,
+                 abs(tl.txn_amount) as target_transaction_original,
                  td.id as target_document_id, td.document_number as target_document_number,
                  td.kind as target_document_kind, td.reference_number as target_reference_number
             from journal_lines jl
@@ -527,8 +610,14 @@ type SettlementApplication = {
   toLineId: string;
   amount: string;
   sourceAmount: string;
-  transactionAmount: string;
-  transactionCurrency: string;
+  sourceTransactionAmount: string;
+  sourceTransactionCurrency: string;
+  targetTransactionAmount: string;
+  targetTransactionCurrency: string;
+  settlementRate: string;
+  settlementRateSource: SettlementRateSource;
+  settlementRateReference: string;
+  settlementFxRateId: string | null;
   appliedOn: string;
   controlAdjustment: string;
 };
@@ -575,15 +664,36 @@ export async function postPaymentWithApplications(
     for (const allocation of allocs) {
       const item = byLine.get(allocation.openLineId);
       if (!item) throw new PaymentError("an allocated item is no longer open for this party");
-      if (item.currency !== doc.currency) {
-        throw new PaymentError(`cross-currency applications require a shared transaction currency (${item.currency} ≠ ${doc.currency})`);
-      }
-      if (cmp(allocation.amount, item.transactionOpen) > 0) {
+      validateSettlementEvidence(allocation, doc.currency, item.currency);
+      if (cmp(allocation.targetTransactionAmount, item.transactionOpen) > 0) {
         throw new PaymentError(`application exceeds ${item.documentNumber ?? item.entryNumber}'s open transaction balance`);
       }
     }
+    const evidenceIds = [...new Set(allocs.map((a) => a.settlementFxRateId).filter((id): id is string => !!id))];
+    if (evidenceIds.length) {
+      const evidenceRows = (await db.execute(sql`
+        select id, from_currency, to_currency, rate, as_of::text as as_of
+          from fx_rates
+         where org_id = ${doc.orgId} and id in ${evidenceIds}
+      `)) as unknown as { rows: { id: string; from_currency: string; to_currency: string; rate: string; as_of: string }[] };
+      const evidenceById = new Map(evidenceRows.rows.map((row) => [row.id, row]));
+      for (const allocation of allocs) {
+        if (!allocation.settlementFxRateId) continue;
+        const evidence = evidenceById.get(allocation.settlementFxRateId);
+        const targetCurrency = byLine.get(allocation.openLineId)!.currency;
+        if (
+          !evidence ||
+          evidence.from_currency !== doc.currency ||
+          evidence.to_currency !== targetCurrency ||
+          canonicalSettlementRate(evidence.rate) !== canonicalSettlementRate(allocation.settlementRate) ||
+          evidence.as_of > doc.documentDate
+        ) {
+          throw new PaymentError("settlement FX observation does not match the payment, open item, rate, and date");
+        }
+      }
+    }
 
-    const totalAlloc = sum(allocs.map((a) => a.amount));
+    const totalAlloc = sum(allocs.map((a) => a.sourceTransactionAmount));
     const discountAmount = custom.discountAmount ?? "0";
     if (cmp(totalAlloc, fromUnits(toUnits(doc.total) + toUnits(discountAmount))) !== 0) {
       throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} must equal applications ${totalAlloc}`);
@@ -615,7 +725,7 @@ export async function postPaymentWithApplications(
     const targetsResult = (await db.execute(sql`
       select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id, jl.subsidiary_id,
              abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
-             abs(jl.txn_amount) - coalesce(sum(a.transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
+             abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
         left join applications a on a.to_line_id = jl.id
@@ -636,11 +746,11 @@ export async function postPaymentWithApplications(
       if (target.account_id !== source.account_id || target.party_id !== source.party_id || target.subsidiary_id !== source.subsidiary_id) {
         throw new PaymentError("applications must settle the same control account, party, and subsidiary as the payment");
       }
-      const targetBase = carryingAmountForSettlement(target.open_base, target.open_transaction, allocation.amount);
-      if (allocation.baseAmount !== undefined && cmp(allocation.baseAmount, targetBase) !== 0) {
-        throw new PaymentError(`saved base amount ${allocation.baseAmount} no longer matches carrying amount ${targetBase}`);
+      const targetBase = carryingAmountForSettlement(target.open_base, target.open_transaction, allocation.targetTransactionAmount);
+      if (allocation.targetBaseAmount !== undefined && cmp(allocation.targetBaseAmount, targetBase) !== 0) {
+        throw new PaymentError(`saved target base amount ${allocation.targetBaseAmount} no longer matches carrying amount ${targetBase}`);
       }
-      const sourceBase = carryingAmountForSettlement(sourceBaseRemaining, sourceTransactionRemaining, allocation.amount);
+      const sourceBase = carryingAmountForSettlement(sourceBaseRemaining, sourceTransactionRemaining, allocation.sourceTransactionAmount);
       const sourceSigned = cmp(source.amount, "0") > 0 ? sourceBase : neg(sourceBase);
       const targetSigned = cmp(target.amount, "0") > 0 ? targetBase : neg(targetBase);
       applicationsToWrite.push({
@@ -648,13 +758,19 @@ export async function postPaymentWithApplications(
         toLineId: target.id,
         amount: targetBase,
         sourceAmount: sourceBase,
-        transactionAmount: allocation.amount,
-        transactionCurrency: doc.currency,
+        sourceTransactionAmount: allocation.sourceTransactionAmount,
+        sourceTransactionCurrency: doc.currency,
+        targetTransactionAmount: allocation.targetTransactionAmount,
+        targetTransactionCurrency: target.currency,
+        settlementRate: allocation.settlementRate,
+        settlementRateSource: allocation.settlementRateSource,
+        settlementRateReference: allocation.settlementRateReference.trim(),
+        settlementFxRateId: allocation.settlementFxRateId ?? null,
         appliedOn: source.posting_date,
         controlAdjustment: realizedFxControlAdjustment(sourceSigned, targetSigned),
       });
       sourceBaseRemaining = fromUnits(toUnits(sourceBaseRemaining) - toUnits(sourceBase));
-      sourceTransactionRemaining = fromUnits(toUnits(sourceTransactionRemaining) - toUnits(allocation.amount));
+      sourceTransactionRemaining = fromUnits(toUnits(sourceTransactionRemaining) - toUnits(allocation.sourceTransactionAmount));
     }
 
     const fxAdjustment = sum(applicationsToWrite.map((a) => a.controlAdjustment));
@@ -723,8 +839,13 @@ export async function postPaymentWithApplications(
         toLineId: application.toLineId,
         amount: application.amount,
         sourceAmount: application.amount,
-        transactionAmount: application.amount,
-        transactionCurrency: source.functional_currency,
+        sourceTransactionAmount: application.amount,
+        sourceTransactionCurrency: source.functional_currency,
+        targetTransactionAmount: application.amount,
+        targetTransactionCurrency: source.functional_currency,
+        settlementRate: "1",
+        settlementRateSource: "same_currency" as const,
+        settlementRateReference: "same transaction currency",
         appliedOn: source.posting_date,
         createdBy: userId ?? doc.createdBy,
       })));
@@ -1189,7 +1310,7 @@ export async function createPaymentRun(opts: {
       discountTotal += toUnits(discountTxn);
       billComposition.push({
         bill,
-        allocation: { openLineId: bill.open_line_id, amount: remainingTxn, baseAmount: fromUnits(remainingBase) },
+        allocation: sameCurrencyAllocation(bill.open_line_id, remainingTxn, fromUnits(remainingBase)),
         creditAmount: divRate(fromUnits(toUnits(bill.open_base) - remainingBase), bill.fx_rate),
         discountAmount: discountTxn,
         paymentAmount,
@@ -1197,7 +1318,7 @@ export async function createPaymentRun(opts: {
     }
     const allocations = billComposition.map((c) => c.allocation);
     if (allocations.length === 0) continue;
-    const total = fromUnits(allocations.reduce((n, a) => n + toUnits(a.amount), 0n) - discountTotal);
+    const total = fromUnits(allocations.reduce((n, a) => n + toUnits(a.sourceTransactionAmount), 0n) - discountTotal);
 
     const payment = await createPaymentDocument({
       orgId: opts.orgId,

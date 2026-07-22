@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -11,11 +12,10 @@ import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
-import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
-import { cmp, formatMoney, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
+import { cmp, divRate, formatMoney, mulRate, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
 
 /**
  * Shared payment/receipt flyout. side='ap' → vendor payment applying open
@@ -41,12 +41,35 @@ export interface OpenItemClient {
   amount: string
   applied: string
   open: string
+  currency: string
+  transactionAmount: string
+  transactionApplied: string
+  transactionOpen: string
+}
+
+interface AllocationClient {
+  openLineId: string
+  sourceTransactionAmount: string
+  targetTransactionAmount: string
+  targetBaseAmount?: string
+  settlementRate: string
+  settlementRateSource: 'same_currency' | 'provider' | 'manual' | 'contractual' | 'imported'
+  settlementRateReference: string
+  settlementFxRateId?: string | null
+}
+
+interface SettlementRateOption {
+  id: string
+  toCurrency: string
+  rate: string
+  asOf: string
+  source: string
 }
 
 export interface PaymentPayload {
   doc: Record<string, any>
   bankAccountId: string | null
-  allocations: { openLineId: string; amount: string }[]
+  allocations: AllocationClient[]
   applied: Record<string, any>[]
 }
 
@@ -97,6 +120,7 @@ export function PaymentDrawer({
   basePath: string
   layout?: FormLayoutConfig
 }) {
+  const { money } = useMoney()
   const t = useTranslations('payments.drawer')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -129,9 +153,10 @@ export function PaymentDrawer({
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [openItems, setOpenItems] = useState<OpenItemClient[]>(initialOpenItems)
   const [loadingItems, setLoadingItems] = useState(false)
-  const [allocs, setAllocs] = useState<Record<string, string>>(() =>
-    Object.fromEntries(payment.allocations.map((a) => [a.openLineId, formatMoney(a.amount, 2)])),
+  const [allocs, setAllocs] = useState<Record<string, AllocationClient>>(() =>
+    Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])),
   )
+  const [settlementRates, setSettlementRates] = useState<SettlementRateOption[]>([])
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
@@ -166,12 +191,44 @@ export function PaymentDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyId, side, isDraft])
 
+  useEffect(() => {
+    const targets = [...new Set(openItems.filter((item) => item.currency !== doc.currency).map((item) => item.currency))]
+    if (!targets.length || !documentDate) {
+      setSettlementRates([])
+      return
+    }
+    let cancelled = false
+    const query = new URLSearchParams({
+      side,
+      from: doc.currency,
+      to: targets.join(','),
+      date: documentDate,
+    })
+    fetch(`/api/payments/settlement-rates?${query}`)
+      .then(async (response) => {
+        const data = await response.json()
+        if (!cancelled && response.ok) setSettlementRates(data.rates ?? [])
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [doc.currency, documentDate, openItems, side])
+
   const rowValid = (item: OpenItemClient) => {
-    const v = allocs[item.lineId]
-    if (v === undefined) return true
+    const allocation = allocs[item.lineId]
+    if (allocation === undefined) return true
     try {
-      const amount = normalizeMoney(v)
-      return cmp(amount, '0') > 0 && cmp(amount, item.open) <= 0
+      const source = normalizeMoney(allocation.sourceTransactionAmount)
+      const target = normalizeMoney(allocation.targetTransactionAmount)
+      if (cmp(source, '0') <= 0 || cmp(target, '0') <= 0 || cmp(target, item.transactionOpen) > 0) return false
+      if (cmp(mulRate(source, allocation.settlementRate), target) !== 0) return false
+      if (!allocation.settlementRateReference.trim()) return false
+      if (item.currency === doc.currency) {
+        return cmp(source, target) === 0 && cmp(allocation.settlementRate, '1') === 0 && allocation.settlementRateSource === 'same_currency'
+      }
+      return allocation.settlementRateSource !== 'same_currency' &&
+        (allocation.settlementRateSource !== 'provider' || !!allocation.settlementFxRateId)
     } catch {
       return false
     }
@@ -180,12 +237,19 @@ export function PaymentDrawer({
     () =>
       openItems
         .filter((i) => allocs[i.lineId] !== undefined && rowValid(i))
-        .map((i) => ({ openLineId: i.lineId, amount: formatMoney(normalizeMoney(allocs[i.lineId]!), 2) })),
+        .map((i) => {
+          const allocation = allocs[i.lineId]!
+          return {
+            ...allocation,
+            sourceTransactionAmount: normalizeMoney(allocation.sourceTransactionAmount),
+            targetTransactionAmount: normalizeMoney(allocation.targetTransactionAmount),
+          }
+        }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allocs, openItems],
   )
   const hasInvalidRow = openItems.some((i) => !rowValid(i))
-  const total = sum(validAllocations.map((allocation) => allocation.amount))
+  const total = sum(validAllocations.map((allocation) => allocation.sourceTransactionAmount))
 
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
@@ -218,7 +282,7 @@ export function PaymentDrawer({
     setDocumentDate(doc.document_date ?? '')
     setReferenceNumber(doc.reference_number ?? '')
     setMemo(doc.memo ?? '')
-    setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, formatMoney(a.amount, 2)])))
+    setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])))
   }
 
   async function save() {
@@ -287,11 +351,40 @@ export function PaymentDrawer({
     }
   }
 
+  function updateAllocation(lineId: string, patch: Partial<AllocationClient>) {
+    setAllocs((previous) => ({
+      ...previous,
+      [lineId]: { ...previous[lineId]!, ...patch },
+    }))
+  }
+
   function toggle(item: OpenItemClient) {
     setAllocs((prev) => {
       const next = { ...prev }
-      if (next[item.lineId] === undefined) next[item.lineId] = formatMoney(item.open, 2)
-      else delete next[item.lineId]
+      if (next[item.lineId] === undefined) {
+        const targetAmount = normalizeMoney(item.transactionOpen)
+        if (item.currency === doc.currency) {
+          next[item.lineId] = {
+            openLineId: item.lineId,
+            sourceTransactionAmount: targetAmount,
+            targetTransactionAmount: targetAmount,
+            settlementRate: '1',
+            settlementRateSource: 'same_currency',
+            settlementRateReference: 'same transaction currency',
+          }
+        } else {
+          const evidence = settlementRates.find((rate) => rate.toCurrency === item.currency)
+          next[item.lineId] = {
+            openLineId: item.lineId,
+            sourceTransactionAmount: evidence ? divRate(targetAmount, evidence.rate) : '',
+            targetTransactionAmount: targetAmount,
+            settlementRate: evidence?.rate ?? '',
+            settlementRateSource: evidence ? 'provider' : 'manual',
+            settlementRateReference: evidence ? `${evidence.source} · ${evidence.asOf}` : '',
+            settlementFxRateId: evidence?.id ?? null,
+          }
+        }
+      } else delete next[item.lineId]
       return next
     })
   }
@@ -300,13 +393,14 @@ export function PaymentDrawer({
   // across the party's open items (reference → exact → FIFO) and fill the rows.
   async function autoApply() {
     if (!partyId) return
-    const amount = receivedAmount.trim() || formatMoney(sum(openItems.map((item) => item.open)), 2)
+    const sameCurrencyItems = openItems.filter((item) => item.currency === doc.currency)
+    const amount = receivedAmount.trim() || formatMoney(sum(sameCurrencyItems.map((item) => item.transactionOpen)), 2)
     setBusy(true)
     try {
       const res = await fetch('/api/payments/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ partyId, amount, side, reference: referenceNumber || null }),
+        body: JSON.stringify({ partyId, amount, side, currency: doc.currency, reference: referenceNumber || null }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -317,7 +411,7 @@ export function PaymentDrawer({
         toast.info(t('autoApplyNone'))
         return
       }
-      setAllocs(Object.fromEntries(data.allocations.map((a: any) => [a.openLineId, formatMoney(String(a.amount), 2)])))
+      setAllocs(Object.fromEntries(data.allocations.map((a: AllocationClient) => [a.openLineId, a])))
       toast.success(t('autoApplyDone', { count: data.allocations.length, strategy: t(`autoApplyStrategy.${data.strategy}`) }))
     } finally {
       setBusy(false)
@@ -369,9 +463,9 @@ export function PaymentDrawer({
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
-        mode === 'view' && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
-            {tCommon('actions.edit')}
+        canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null
       }
@@ -381,9 +475,6 @@ export function PaymentDrawer({
             <>
               <Button disabled={busy} onClick={save}>
                 {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={cancel}>
-                {tCommon('actions.cancel')}
               </Button>
             </>
           ) : (
@@ -438,14 +529,14 @@ export function PaymentDrawer({
             {isDraft ? (
               t.rich('applyingSummary', {
                 count: validAllocations.length,
-                amount: money(total),
+                amount: money(total, { currency: doc.currency }),
                 total: (chunks) => (
                   <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>
                 ),
               })
             ) : (
               <strong className="text-slate-900 dark:text-slate-100">
-                {t('totalAmount', { amount: money(doc.total) })}
+                {t('totalAmount', { amount: money(doc.total, { currency: doc.currency }) })}
               </strong>
             )}
           </span>
@@ -563,7 +654,7 @@ export function PaymentDrawer({
                       <th className="px-3 py-2 text-right">{t('columns.original')}</th>
                       <th className="px-3 py-2 text-right">{t('columns.appliedToDate')}</th>
                       <th className="px-3 py-2 text-right">{t('columns.open')}</th>
-                      <th className="w-36 px-3 py-2 text-right">{t('columns.apply')}</th>
+                      <th className="min-w-56 px-3 py-2 text-right">{t('columns.apply')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -595,26 +686,81 @@ export function PaymentDrawer({
                             </span>
                           </td>
                           <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{item.dueDate ?? '—'}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{money(item.amount)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{money(item.transactionAmount, { currency: item.currency })}</td>
                           <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                            {money(item.applied)}
+                            {money(item.transactionApplied, { currency: item.currency })}
                           </td>
-                          <td className="px-3 py-2 text-right font-medium tabular-nums">{money(item.open)}</td>
+                          <td className="px-3 py-2 text-right font-medium tabular-nums">{money(item.transactionOpen, { currency: item.currency })}</td>
                           <td className="px-3 py-2">
                             {checked ? (
-                              <Input
-                                inputMode="decimal"
-                                className={
-                                  'h-8 text-right tabular-nums ' +
-                                  (invalid ? 'border-red-400 focus-visible:ring-red-400 dark:border-red-600' : '')
-                                }
-                                value={allocs[item.lineId]}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setAllocs((prev) => ({ ...prev, [item.lineId]: e.target.value }))
-                                }
-                                aria-invalid={invalid}
-                              />
+                              <div className="space-y-2">
+                                <div>
+                                  <span className="mb-1 block text-[11px] text-slate-500">{t('targetAmount', { currency: item.currency })}</span>
+                                  <Input
+                                    inputMode="decimal"
+                                    className={'h-8 text-right tabular-nums ' + (invalid ? 'border-red-400 focus-visible:ring-red-400 dark:border-red-600' : '')}
+                                    value={allocs[item.lineId]!.targetTransactionAmount}
+                                    disabled={!editable}
+                                    onChange={(event) => updateAllocation(item.lineId, { targetTransactionAmount: event.target.value })}
+                                    aria-invalid={invalid}
+                                  />
+                                </div>
+                                {item.currency !== doc.currency ? (
+                                  <div className="space-y-2 rounded-md bg-slate-50 p-2 dark:bg-slate-900/60">
+                                    <div>
+                                      <span className="mb-1 block text-[11px] text-slate-500">{t('sourceAmount', { currency: doc.currency })}</span>
+                                      <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.sourceTransactionAmount} disabled={!editable} onChange={(event) => updateAllocation(item.lineId, { sourceTransactionAmount: event.target.value })} />
+                                    </div>
+                                    <div>
+                                      <span className="mb-1 block text-[11px] text-slate-500">{t('settlementRate', { target: item.currency, source: doc.currency })}</span>
+                                      <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.settlementRate} disabled={!editable || allocs[item.lineId]!.settlementRateSource === 'provider'} onChange={(event) => updateAllocation(item.lineId, { settlementRate: event.target.value })} />
+                                    </div>
+                                    <select
+                                      className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
+                                      value={allocs[item.lineId]!.settlementRateSource}
+                                      disabled={!editable}
+                                      onChange={(event) => {
+                                        const source = event.target.value as AllocationClient['settlementRateSource']
+                                        if (source === 'provider') {
+                                          const evidence = settlementRates.find((rate) => rate.toCurrency === item.currency)
+                                          updateAllocation(item.lineId, evidence ? {
+                                            settlementRateSource: 'provider', settlementRate: evidence.rate,
+                                            sourceTransactionAmount: divRate(allocs[item.lineId]!.targetTransactionAmount, evidence.rate),
+                                            settlementRateReference: `${evidence.source} · ${evidence.asOf}`,
+                                            settlementFxRateId: evidence.id,
+                                          } : { settlementRateSource: 'manual', settlementFxRateId: null })
+                                        } else {
+                                          updateAllocation(item.lineId, { settlementRateSource: source, settlementFxRateId: null })
+                                        }
+                                      }}
+                                    >
+                                      <option value="manual">{t('rateSource.manual')}</option>
+                                      <option value="contractual">{t('rateSource.contractual')}</option>
+                                      <option value="provider" disabled={!settlementRates.some((rate) => rate.toCurrency === item.currency)}>{t('rateSource.provider')}</option>
+                                    </select>
+                                    {allocs[item.lineId]!.settlementRateSource === 'provider' ? (
+                                      <select
+                                        className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
+                                        value={allocs[item.lineId]!.settlementFxRateId ?? ''}
+                                        disabled={!editable}
+                                        onChange={(event) => {
+                                          const evidence = settlementRates.find((rate) => rate.id === event.target.value)
+                                          if (evidence) updateAllocation(item.lineId, {
+                                            settlementRate: evidence.rate,
+                                            sourceTransactionAmount: divRate(allocs[item.lineId]!.targetTransactionAmount, evidence.rate),
+                                            settlementRateReference: `${evidence.source} · ${evidence.asOf}`,
+                                            settlementFxRateId: evidence.id,
+                                          })
+                                        }}
+                                      >
+                                        {settlementRates.filter((rate) => rate.toCurrency === item.currency).map((rate) => <option key={rate.id} value={rate.id}>{rate.asOf} · {rate.rate} · {rate.source}</option>)}
+                                      </select>
+                                    ) : (
+                                      <Input className="h-8" value={allocs[item.lineId]!.settlementRateReference} disabled={!editable} placeholder={t('rateReferencePlaceholder')} onChange={(event) => updateAllocation(item.lineId, { settlementRateReference: event.target.value })} />
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
                             ) : null}
                           </td>
                         </tr>
@@ -645,6 +791,7 @@ export function PaymentDrawer({
                       <th className="px-3 py-2">{t('columns.appliedOn')}</th>
                       <th className="px-3 py-2 text-right">{t('columns.original')}</th>
                       <th className="px-3 py-2 text-right">{t('columns.applied')}</th>
+                      <th className="px-3 py-2">{t('columns.rateEvidence')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -661,8 +808,15 @@ export function PaymentDrawer({
                         </td>
                         <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{a.target_due_date ?? '—'}</td>
                         <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{a.applied_on}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{money(a.target_amount)}</td>
-                        <td className="px-3 py-2 text-right font-medium tabular-nums">{money(a.amount)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{money(a.target_transaction_original, { currency: a.target_transaction_currency })}</td>
+                        <td className="px-3 py-2 text-right font-medium tabular-nums">
+                          <div>{money(a.target_transaction_amount, { currency: a.target_transaction_currency })}</div>
+                          {a.source_transaction_currency !== a.target_transaction_currency ? <div className="text-xs font-normal text-slate-500">{money(a.source_transaction_amount, { currency: a.source_transaction_currency })}</div> : null}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-500">
+                          <div className="font-mono">{a.settlement_rate}</div>
+                          <div>{a.settlement_rate_reference}</div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

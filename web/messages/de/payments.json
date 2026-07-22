@@ -57,10 +57,16 @@
       "appliedToDate": "Bisher zugeordnet",
       "open": "Offen",
       "appliedOn": "Zugeordnet am",
-      "applied": "Zugeordnet"
+      "applied": "Zugeordnet",
+      "rateEvidence": "Kursnachweis"
     },
+    "targetAmount": "Zugeordneter Betrag ({currency})",
+    "sourceAmount": "Zahlungsbetrag ({currency})",
+    "settlementRate": "Kurs: {target} je {source}",
+    "rateReferencePlaceholder": "Bankbeleg oder Vertragsreferenz…",
+    "rateSource": { "manual": "Manueller Kurs", "contractual": "Vertragskurs", "provider": "Mandanten-Devisenkurs" },
     "applyAriaLabel": "Auf {document} zuordnen",
-    "invalidAllocation": "Jeder zugeordnete Betrag muss größer als null sein und darf den offenen Saldo des Postens nicht überschreiten.",
+    "invalidAllocation": "Beträge müssen positiv sein, den offenen Saldo einhalten und mit dem belegten Abrechnungskurs exakt aufgehen.",
     "appliedTo": "Zugeordnet auf",
     "voidedNote": "Diese Zahlung wurde storniert; ihre Buchung wurde rückgängig gemacht.",
     "noLiveApplications": "Keine aktiven Zuordnungen.",

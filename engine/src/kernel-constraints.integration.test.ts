@@ -107,8 +107,8 @@ test("applications enforce independent base and transaction caps at deferred com
         values
           (${targetLine}, ${org.orgId}, ${targetEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '120', 'EUR', '100', '1.2', ${org.customerId}, true),
           (${randomUUID()}, ${org.orgId}, ${targetEntry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-120', 'EUR', '-100', '1.2', null, false),
-          (${sourceLine}, ${org.orgId}, ${sourceEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '-130', 'EUR', '-100', '1.3', ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${sourceEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '130', 'EUR', '100', '1.3', null, false)`);
+          (${sourceLine}, ${org.orgId}, ${sourceEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '-130', 'USD', '-80', '1.625', ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${sourceEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '130', 'USD', '80', '1.625', null, false)`);
       await tx.execute(sql`update journal_entries set status = 'posted' where id in (${targetEntry}, ${sourceEntry})`);
       await tx.execute(sql`set constraints all immediate`);
     });
@@ -117,8 +117,12 @@ test("applications enforce independent base and transaction caps at deferred com
       db.transaction(async (tx) => {
         await tx.execute(sql`
           insert into applications
-            (org_id, from_line_id, to_line_id, amount, source_amount, transaction_amount, transaction_currency, applied_on)
-          values (${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130.0001', '100', 'EUR', ${org.date})`);
+            (org_id, from_line_id, to_line_id, amount, source_amount,
+             source_transaction_amount, source_transaction_currency,
+             target_transaction_amount, target_transaction_currency,
+             settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
+          values (${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130.0001',
+                  '80', 'USD', '100', 'EUR', '1.25', 'manual', 'TEST-RATE', ${org.date})`);
         await tx.execute(sql`set constraints all immediate`);
       }),
       (error: unknown) => {
@@ -130,8 +134,12 @@ test("applications enforce independent base and transaction caps at deferred com
       db.transaction(async (tx) => {
         await tx.execute(sql`
           insert into applications
-            (org_id, from_line_id, to_line_id, amount, source_amount, transaction_amount, transaction_currency, applied_on)
-          values (${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130', '100.0001', 'EUR', ${org.date})`);
+            (org_id, from_line_id, to_line_id, amount, source_amount,
+             source_transaction_amount, source_transaction_currency,
+             target_transaction_amount, target_transaction_currency,
+             settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
+          values (${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130',
+                  '80', 'USD', '100.0001', 'EUR', '1.25000125', 'manual', 'TEST-RATE', ${org.date})`);
         await tx.execute(sql`set constraints all immediate`);
       }),
       (error: unknown) => {
@@ -139,13 +147,25 @@ test("applications enforce independent base and transaction caps at deferred com
         return /exceeds transaction amount on target line/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
       },
     );
+    const validApplication = randomUUID();
     await db.transaction(async (tx) => {
       await tx.execute(sql`
         insert into applications
-          (org_id, from_line_id, to_line_id, amount, source_amount, transaction_amount, transaction_currency, applied_on)
-        values (${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130', '100', 'EUR', ${org.date})`);
+          (id, org_id, from_line_id, to_line_id, amount, source_amount,
+           source_transaction_amount, source_transaction_currency,
+           target_transaction_amount, target_transaction_currency,
+           settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
+        values (${validApplication}, ${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130',
+                '80', 'USD', '100', 'EUR', '1.25', 'manual', 'TEST-RATE', ${org.date})`);
       await tx.execute(sql`set constraints all immediate`);
     });
+    await assert.rejects(
+      db.execute(sql`update applications set settlement_rate_reference = 'CHANGED' where id = ${validApplication}`),
+      (error: unknown) => {
+        const wrapped = error as { message?: string; cause?: { message?: string } };
+        return /application evidence is immutable/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
+      },
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

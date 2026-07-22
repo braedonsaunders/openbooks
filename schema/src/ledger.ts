@@ -161,9 +161,21 @@ export const applications = pgTable(
     amount: money("amount").notNull(), // always positive, in base currency
     /** Source-line carrying amount; differs from amount on realized FX settlement. */
     sourceAmount: money("source_amount").notNull(),
-    /** Settlement amount in the shared transaction currency. */
-    transactionAmount: money("transaction_amount").notNull(),
-    transactionCurrency: currencyCode("transaction_currency").notNull(),
+    /** Amount consumed from the payment/credit source in its transaction currency. */
+    sourceTransactionAmount: money("source_transaction_amount").notNull(),
+    sourceTransactionCurrency: currencyCode("source_transaction_currency").notNull(),
+    /** Amount extinguished on the invoice/bill target in its transaction currency. */
+    targetTransactionAmount: money("target_transaction_amount").notNull(),
+    targetTransactionCurrency: currencyCode("target_transaction_currency").notNull(),
+    /** Target-currency units per one source-currency unit, retained as settlement evidence. */
+    settlementRate: fxRate("settlement_rate").notNull(),
+    settlementRateSource: text("settlement_rate_source", {
+      enum: ["same_currency", "provider", "manual", "contractual", "imported"],
+    }).notNull(),
+    /** Provider quote, bank advice, contract, or source-system reference. */
+    settlementRateReference: text("settlement_rate_reference").notNull(),
+    /** Optional tenant-owned spot-rate observation supporting the settlement rate. */
+    settlementFxRateId: uuid("settlement_fx_rate_id"),
     appliedOn: date("applied_on").notNull(),
     /** FX difference on settlement posts its own journal entry. */
     fxGainLossEntryId: uuid("fx_gain_loss_entry_id"),
@@ -175,6 +187,9 @@ export const applications = pgTable(
     index("app_to").on(t.toLineId),
     check("app_positive", sql`${t.amount} > 0`),
     check("app_source_positive", sql`${t.sourceAmount} > 0`),
-    check("app_transaction_positive", sql`${t.transactionAmount} > 0`),
+    check("app_source_transaction_positive", sql`${t.sourceTransactionAmount} > 0`),
+    check("app_target_transaction_positive", sql`${t.targetTransactionAmount} > 0`),
+    check("app_settlement_rate_positive", sql`${t.settlementRate} > 0`),
+    check("app_rate_reference_required", sql`length(btrim(${t.settlementRateReference})) > 0`),
   ],
 );

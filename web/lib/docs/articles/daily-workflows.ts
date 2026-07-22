@@ -138,7 +138,7 @@ export const paymentsAndApplications: DocArticle = {
   category: 'transactions',
   order: 3,
   summary: 'Understand how cash and credits settle open receivables and payables without losing subledger detail.',
-  updated: '2026-07-19',
+  updated: '2026-07-21',
   keywords: ['payment', 'receipt', 'application', 'credit', 'unapplied', 'open item', 'settlement'],
   related: ['sales-workflow', 'purchasing-workflow', 'banking-and-reconciliation'],
   body: `# Payments, Credits, and Applications
@@ -168,11 +168,18 @@ currency, book, subsidiary, date, and period compatibility. Never use a manual
 journal to mark an invoice or bill as paid: the general ledger might move while
 the open-item subledger remains outstanding.
 
-For a foreign-currency settlement, the application preserves both sides'
-functional carrying amounts and the settled transaction-currency amount. Any
-rate difference posts to **Realized FX gain/loss**. The payment journal,
-application rows, realized-FX journal, document links, and audit evidence commit
-atomically; if any part fails, none of the payment is posted.
+For a foreign-currency settlement, the application preserves the payment amount
+in its source currency, the amount extinguished in the invoice or bill currency,
+both functional carrying amounts, and the exact cross-rate evidence. When the
+currencies differ, select a tenant FX observation or enter the contractual/manual
+rate and its bank-advice or contract reference. The target amount must equal the
+source amount multiplied by that rate at ledger precision.
+
+Any carrying-value difference posts to **Realized FX gain/loss**. The payment
+journal, dual-currency application evidence, realized-FX journal, document links,
+and audit evidence commit atomically; if any part fails, none of the payment is
+posted. Automatic application only fills same-currency items because a system
+must not invent cross-currency settlement evidence.
 
 ## Corrections
 

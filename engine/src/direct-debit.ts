@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { sum } from "./money.ts";
-import { cancelPaymentRun, createPaymentDocument, nextNumber, PaymentError, updateDraftPayment, type AllocationInput } from "./payments.ts";
+import { cancelPaymentRun, createPaymentDocument, nextNumber, PaymentError, sameCurrencyAllocation, updateDraftPayment, type AllocationInput } from "./payments.ts";
 
 /** Build an inbound collection run from open invoices backed by active mandates. */
 export async function createDirectDebitRun(opts: {
@@ -49,8 +49,8 @@ export async function createDirectDebitRun(opts: {
   try {
     for (const invoices of groups.values()) {
       const first = invoices[0]!;
-      const allocations: AllocationInput[] = invoices.map((i) => ({ openLineId: i.open_line_id, amount: i.open, baseAmount: i.open_base }));
-      const total = sum(allocations.map((a) => a.amount));
+      const allocations: AllocationInput[] = invoices.map((i) => sameCurrencyAllocation(i.open_line_id, i.open, i.open_base));
+      const total = sum(allocations.map((a) => a.sourceTransactionAmount));
       const receipt = await createPaymentDocument({ orgId: opts.orgId, kind: "customer_payment", createdBy: opts.createdBy, partyId: first.party_id, bankAccountId: profile.bank_account_id, subsidiaryId: first.subsidiary_id, currency: profile.currency, fxRate: first.fx_rate, memo: `Collection run ${runNumber}` });
       createdReceiptIds.push(receipt.id);
       await updateDraftPayment(receipt.id, { partyId: first.party_id, bankAccountId: profile.bank_account_id, allocations, controlAccountId: first.control_account_id }, opts.createdBy);

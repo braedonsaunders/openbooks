@@ -57,10 +57,16 @@
       "appliedToDate": "Appliqué à ce jour",
       "open": "Solde ouvert",
       "appliedOn": "Appliqué le",
-      "applied": "Appliqué"
+      "applied": "Appliqué",
+      "rateEvidence": "Justificatif du taux"
     },
+    "targetAmount": "Montant imputé ({currency})",
+    "sourceAmount": "Montant du paiement ({currency})",
+    "settlementRate": "Taux : {target} par {source}",
+    "rateReferencePlaceholder": "Avis bancaire ou référence contractuelle…",
+    "rateSource": { "manual": "Taux manuel", "contractual": "Taux contractuel", "provider": "Taux de change du locataire" },
     "applyAriaLabel": "Appliquer à {document}",
-    "invalidAllocation": "Chaque montant appliqué doit être supérieur à zéro et ne pas dépasser le solde ouvert de l’élément.",
+    "invalidAllocation": "Les montants doivent être positifs, respecter le solde ouvert et se recouper exactement avec le taux de règlement justifié.",
     "appliedTo": "Appliqué à",
     "voidedNote": "Ce paiement a été annulé; sa comptabilisation a été contrepassée.",
     "noLiveApplications": "Aucune imputation active.",

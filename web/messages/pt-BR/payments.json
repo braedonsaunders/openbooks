@@ -57,10 +57,16 @@
       "appliedToDate": "Aplicado até a data",
       "open": "Em aberto",
       "appliedOn": "Aplicado em",
-      "applied": "Aplicado"
+      "applied": "Aplicado",
+      "rateEvidence": "Evidência da taxa"
     },
+    "targetAmount": "Valor aplicado ({currency})",
+    "sourceAmount": "Valor do pagamento ({currency})",
+    "settlementRate": "Taxa: {target} por {source}",
+    "rateReferencePlaceholder": "Aviso bancário ou referência contratual…",
+    "rateSource": { "manual": "Taxa manual", "contractual": "Taxa contratual", "provider": "Taxa cambial do locatário" },
     "applyAriaLabel": "Aplicar a {document}",
-    "invalidAllocation": "Cada valor aplicado deve ser maior que zero e não superior ao saldo em aberto do item.",
+    "invalidAllocation": "Os valores devem ser positivos, respeitar o saldo em aberto e fechar exatamente pela taxa de liquidação comprovada.",
     "appliedTo": "Aplicado a",
     "voidedNote": "Este pagamento foi cancelado; seu lançamento foi estornado.",
     "noLiveApplications": "Nenhuma aplicação ativa.",
