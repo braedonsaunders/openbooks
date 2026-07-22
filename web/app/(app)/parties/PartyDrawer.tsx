@@ -29,6 +29,7 @@ import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { AuditTrailPanel } from '../../../components/audit-trail-panel'
 import { EmployeeWageRates } from './EmployeeWageRates'
+import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { money } from '../../../lib/format'
@@ -755,6 +756,9 @@ export function PartyDrawer({
                 </div>
                 <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
               </div>
+              {role === 'customer' && !isPlaceholderName ? (
+                <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} />
+              ) : null}
               </>
             ) : null}
           </div>

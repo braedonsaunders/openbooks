@@ -221,13 +221,14 @@ async function validateEntityIntegrity(
     if (rowId) {
       const current = (await db.execute(sql`
         select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
-               effective_from as "effectiveFrom", effective_to as "effectiveTo"
+               effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis"
           from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}
       `)) as any
       if (!current.rows[0]) return 'Rate book assignment not found'
       values = { ...current.rows[0], ...body }
     }
     if (values.customerId && values.projectId) return 'Choose a customer or a project, not both'
+    if (!['usage_date','project_start'].includes(String(values.dateBasis ?? 'usage_date'))) return 'Choose a valid schedule date'
     if (values.effectiveFrom && values.effectiveTo && String(values.effectiveTo) < String(values.effectiveFrom)) {
       return 'The end date cannot precede the start date'
     }

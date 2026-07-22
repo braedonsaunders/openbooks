@@ -6,8 +6,10 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -30,6 +32,147 @@ export const itemRateBooks = pgTable(
   (t) => [uniqueIndex("item_rate_books_org_code").on(t.orgId, t.code)],
 );
 
+/** Effective-dated labor-card behavior. Numeric item prices stay in the shared
+ * rate engine; this row only selects how missing time-type prices derive. */
+export const laborRateVersionPolicies = pgTable(
+  "labor_rate_version_policies",
+  {
+    id: id(),
+    orgId: orgRef(),
+    versionId: uuid("version_id").notNull(),
+    derivationPolicy: text("derivation_policy", {
+      enum: ["explicit", "time_type_multipliers"],
+    })
+      .notNull()
+      .default("explicit"),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("labor_rate_version_policies_version").on(t.versionId)],
+);
+
+/** Dimension restrictions are rows, not one-off columns: a labor card may be
+ * scoped by any standard dimension today and extended without reshaping the
+ * rate-book header. Text values cover operational scopes such as job title or
+ * trade; UUID values cover persisted dimensions. */
+export const laborRateVersionScopes = pgTable(
+  "labor_rate_version_scopes",
+  {
+    id: id(),
+    orgId: orgRef(),
+    versionId: uuid("version_id").notNull(),
+    scopeType: text("scope_type", {
+      enum: [
+        "department",
+        "subsidiary",
+        "location",
+        "class",
+        "trade",
+        "job_title",
+        "other",
+      ],
+    }).notNull(),
+    scopeValueId: uuid("scope_value_id"),
+    scopeValueText: text("scope_value_text"),
+    includeChildren: boolean("include_children").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    index("labor_rate_version_scopes_version").on(t.versionId),
+    check(
+      "labor_rate_version_scopes_one_value",
+      sql`num_nonnulls(${t.scopeValueId}, ${t.scopeValueText}) = 1`,
+    ),
+  ],
+);
+
+/** General commercial adjustments on a labor card. A fuel surcharge imports
+ * as category=surcharge + calculation=percent; per-diem, travel, minimums,
+ * allowances, and future negotiated rules use the same model. */
+export const laborRateAdjustments = pgTable(
+  "labor_rate_adjustments",
+  {
+    id: id(),
+    orgId: orgRef(),
+    versionId: uuid("version_id").notNull(),
+    /** Null applies to the whole card; set for an item-specific adjustment. */
+    itemId: uuid("item_id"),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    category: text("category", {
+      enum: ["markup", "travel", "allowance", "minimum", "surcharge", "other"],
+    }).notNull(),
+    calculation: text("calculation", {
+      enum: [
+        "percent",
+        "fixed",
+        "per_hour",
+        "per_day",
+        "distance",
+        "time",
+        "text",
+      ],
+    }).notNull(),
+    value: numeric("value", { precision: 19, scale: 10 }),
+    unit: text("unit"),
+    presentation: text("presentation", {
+      enum: ["included", "separate", "informational"],
+    })
+      .notNull()
+      .default("included"),
+    threshold: numeric("threshold", { precision: 19, scale: 4 }),
+    thresholdUnit: text("threshold_unit"),
+    referenceText: text("reference_text"),
+    appliesRegular: boolean("applies_regular").notNull().default(true),
+    appliesOvertime: boolean("applies_overtime").notNull().default(true),
+    appliesDoubleTime: boolean("applies_double_time").notNull().default(true),
+    appliesShift: boolean("applies_shift").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    unique("labor_rate_adjustments_version_item_code")
+      .on(t.versionId, t.itemId, t.code)
+      .nullsNotDistinct(),
+    index("labor_rate_adjustments_version").on(
+      t.versionId,
+      t.itemId,
+      t.sortOrder,
+    ),
+    check(
+      "labor_rate_adjustments_nonnegative_value",
+      sql`${t.value} is null or ${t.value} >= 0`,
+    ),
+    check(
+      "labor_rate_adjustments_nonnegative_threshold",
+      sql`${t.threshold} is null or ${t.threshold} >= 0`,
+    ),
+  ],
+);
+
+/** Ordered contract language and display notes. This retains negotiated terms
+ * exactly without turning each source phrase into a permanent schema field. */
+export const laborRateTerms = pgTable(
+  "labor_rate_terms",
+  {
+    id: id(),
+    orgId: orgRef(),
+    versionId: uuid("version_id").notNull(),
+    code: text("code").notNull(),
+    label: text("label").notNull(),
+    content: text("content").notNull(),
+    placement: text("placement", { enum: ["header", "conditions", "footer"] })
+      .notNull()
+      .default("conditions"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("labor_rate_terms_version_code").on(t.versionId, t.code),
+    index("labor_rate_terms_version").on(t.versionId, t.sortOrder),
+  ],
+);
+
 /** Activated versions are immutable in the application; charges retain the
  * exact version used so later price changes never rewrite history. */
 export const itemRateVersions = pgTable(
@@ -40,13 +183,25 @@ export const itemRateVersions = pgTable(
     rateBookId: uuid("rate_book_id").notNull(),
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
-    status: text("status", { enum: ["draft", "active", "retired"] }).notNull().default("draft"),
+    status: text("status", { enum: ["draft", "active", "retired"] })
+      .notNull()
+      .default("draft"),
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("item_rate_versions_book_from").on(t.rateBookId, t.effectiveFrom),
-    index("item_rate_versions_effective").on(t.orgId, t.effectiveFrom, t.effectiveTo),
-    check("item_rate_versions_valid_range", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    uniqueIndex("item_rate_versions_book_from").on(
+      t.rateBookId,
+      t.effectiveFrom,
+    ),
+    index("item_rate_versions_effective").on(
+      t.orgId,
+      t.effectiveFrom,
+      t.effectiveTo,
+    ),
+    check(
+      "item_rate_versions_valid_range",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
   ],
 );
 
@@ -61,10 +216,14 @@ export const itemRateProfiles = pgTable(
     baseUnit: text("base_unit").notNull(),
     pricingPolicy: text("pricing_policy", {
       enum: ["explicit", "capped_ladder", "lowest_cost"],
-    }).notNull().default("capped_ladder"),
+    })
+      .notNull()
+      .default("capped_ladder"),
     invoicePresentation: text("invoice_presentation", {
       enum: ["summary", "rate_components"],
-    }).notNull().default("rate_components"),
+    })
+      .notNull()
+      .default("rate_components"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -87,16 +246,29 @@ export const itemRateLines = pgTable(
     billRate: money("bill_rate"),
     /** Explicit bill rates by time-type id (reg/OT/DT card): overrides
      * billRate × timeType.billMultiplier for that tier. */
-    timeTypeBillRates: jsonb("time_type_bill_rates").$type<Record<string, string>>().notNull().default({}),
+    timeTypeBillRates: jsonb("time_type_bill_rates")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
     sortOrder: integer("sort_order").notNull().default(0),
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("item_rate_lines_version_item_unit").on(t.versionId, t.itemId, t.unitCode),
+    uniqueIndex("item_rate_lines_version_item_unit").on(
+      t.versionId,
+      t.itemId,
+      t.unitCode,
+    ),
     index("item_rate_lines_item").on(t.orgId, t.itemId),
     check("item_rate_lines_positive_quantity", sql`${t.baseQuantity} > 0`),
-    check("item_rate_lines_nonnegative_cost", sql`${t.costRate} is null or ${t.costRate} >= 0`),
-    check("item_rate_lines_nonnegative_bill", sql`${t.billRate} is null or ${t.billRate} >= 0`),
+    check(
+      "item_rate_lines_nonnegative_cost",
+      sql`${t.costRate} is null or ${t.costRate} >= 0`,
+    ),
+    check(
+      "item_rate_lines_nonnegative_bill",
+      sql`${t.billRate} is null or ${t.billRate} >= 0`,
+    ),
   ],
 );
 
@@ -107,18 +279,31 @@ export const itemRateBookAssignments = pgTable(
     id: id(),
     orgId: orgRef(),
     rateBookId: uuid("rate_book_id").notNull(),
+    /** Optional exact version pin for negotiated/job-awarded pricing. */
+    rateVersionId: uuid("rate_version_id"),
     customerId: uuid("customer_id"),
     projectId: uuid("project_id"),
     effectiveFrom: date("effective_from"),
     effectiveTo: date("effective_to"),
+    /** Usage date is the normal price-list behavior. Project-start locks a
+     * negotiated customer schedule according to when the job began. */
+    dateBasis: text("date_basis", { enum: ["usage_date", "project_start"] })
+      .notNull()
+      .default("usage_date"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
   (t) => [
     index("item_rate_assignments_customer").on(t.orgId, t.customerId),
     index("item_rate_assignments_project").on(t.orgId, t.projectId),
-    check("item_rate_assignment_one_scope", sql`not (${t.customerId} is not null and ${t.projectId} is not null)`),
-    check("item_rate_assignment_valid_range", sql`${t.effectiveTo} is null or ${t.effectiveFrom} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "item_rate_assignment_one_scope",
+      sql`not (${t.customerId} is not null and ${t.projectId} is not null)`,
+    ),
+    check(
+      "item_rate_assignment_valid_range",
+      sql`${t.effectiveTo} is null or ${t.effectiveFrom} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
   ],
 );
 
@@ -140,7 +325,11 @@ export const chargeRateComponents = pgTable(
     ...auditColumns,
   },
   (t) => [
-    index("charge_rate_components_line").on(t.documentLineId, t.role, t.sequence),
+    index("charge_rate_components_line").on(
+      t.documentLineId,
+      t.role,
+      t.sequence,
+    ),
     check("charge_rate_components_positive_quantity", sql`${t.quantity} > 0`),
     check("charge_rate_components_nonnegative_rate", sql`${t.rate} >= 0`),
     check("charge_rate_components_nonnegative_amount", sql`${t.amount} >= 0`),

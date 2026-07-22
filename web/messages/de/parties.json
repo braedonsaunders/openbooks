@@ -174,5 +174,6 @@
       "vendor": "Lieferantendetails",
       "employee": "Mitarbeiterdetails"
     }
-  }
+  },
+  "rateBookAssignments": { "title": "Satzbuchzuordnungen", "hint": { "customer": "Datierter Satzplan für die Belastungen dieses Kunden.", "project": "Datierter Satzplan für die Belastungen dieses Projekts." }, "new": "Neue Zuordnung", "rateBook": "Satzbuch", "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "dateBasis": "Plankalender", "dateBasisOptions": { "usage_date": "Nutzungs-/Transaktionsdatum", "project_start": "Projektstartdatum" }, "empty": "Kein Satzbuch zugeordnet — Standard gilt.", "noBooks": "Erstellen Sie zuerst ein Satzbuch.", "rateBookRequired": "Satzbuch auswählen", "created": "Satzbuch zugeordnet", "confirmDelete": "Diese Zuordnung entfernen?" }
 }

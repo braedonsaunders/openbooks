@@ -1681,6 +1681,7 @@
         "purchases": "Purchases",
         "both": "Both"
       },
+      "rateDateBasis": { "usageDate": "Fecha de uso", "projectStart": "Fecha de inicio del proyecto" },
       "basis": {
         "collected": "Impuesto cobrado (repercutido)",
         "paid": "Impuesto pagado / créditos (soportado)",
@@ -1892,6 +1893,9 @@
         "project": "Proyecto",
         "standardCost": "Costo estándar"
       },
+      "billing": {
+        "title": "Tarifas de facturación", "hint": "Precios de mano de obra por cliente y proyecto, con vigencia y moneda, tarifas normal/extra/doble por artículo, ajustes generales, términos negociados e historial de asignaciones.", "search": "Buscar tarifas…", "add": "Nueva tarifa", "card": "Tarifa", "currency": "Moneda", "period": "Período de vigencia", "items": "Artículos", "assignments": "Asignaciones", "status": "Estado", "empty": "Ninguna tarifa coincide con los filtros.", "newTitle": "Nueva tarifa de facturación", "newDescription": "Cree primero el libro compartido y luego añada tarifas con vigencia.", "createInItemHint": "La creación usa el espacio compartido de libros de tarifas para mantener un solo motor de precios para mano de obra, servicios y equipos. Vuelva aquí para revisar términos y asignaciones.", "openRateBooks": "Abrir libros de tarifas", "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "derivation": "Comportamiento de nivel faltante", "scopes": "Ámbitos dimensionales", "allScopes": "Sin restricción dimensional", "itemRates": "Tarifas por artículo y tipo de tiempo", "item": "Artículo", "regular": "Normal", "adjustments": "Ajustes", "appliesTo": "Se aplica a", "wholeCard": "Toda la tarifa", "revise": "Crear revisión", "reviseHint": "Una revisión conserva esta versión y crea una nueva copia con vigencia.", "historicalHint": "Esta versión es histórica. Abra la más reciente para crear una revisión.", "revisionTitle": "Nueva revisión de tarifa", "revisionDescription": "Se copian las tarifas base, ámbitos y términos. Cada ajuste puede aplicarse a toda la tarifa o a un artículo.", "revisionEffectiveFrom": "Nueva versión vigente desde", "adjustmentNumber": "Ajuste {number}", "removeAdjustment": "Eliminar ajuste", "adjustmentName": "Nombre", "adjustmentCode": "Código", "category": "Categoría", "calculation": "Cálculo", "presentation": "Presentación en factura", "adjustmentValue": "Valor", "adjustmentUnit": "Unidad", "referenceText": "Descripción o referencia contractual", "addAdjustment": "Añadir ajuste", "saveRevision": "Guardar revisión", "revisionSaved": "Revisión guardada", "categories": { "markup": "Margen", "travel": "Viaje", "allowance": "Asignación", "minimum": "Mínimo", "surcharge": "Recargo", "other": "Otro" }, "calculations": { "percent": "Porcentaje", "fixed": "Importe fijo", "per_hour": "Por hora", "per_day": "Por día", "distance": "Distancia", "time": "Tiempo", "text": "Texto informativo" }, "presentations": { "included": "Incluido en la tarifa", "separate": "Línea separada", "informational": "Informativo" }, "errors": { "notFound": "Tarifa no encontrada.", "effectiveDate": "Elija una fecha de vigencia.", "adjustments": "Los ajustes no son válidos.", "item": "Elija un artículo activo válido.", "name": "Cada ajuste necesita nombre y código.", "duplicateCode": "Los códigos deben ser únicos por artículo.", "category": "Elija una categoría válida.", "calculation": "Elija un cálculo válido.", "presentation": "Elija una presentación válida.", "value": "Introduzca un valor no negativo.", "latestOnly": "Abra la versión más reciente.", "afterLatest": "La fecha debe ser posterior a la versión más reciente.", "save": "No se pudo guardar la revisión." }, "terms": "Términos negociados", "none": "Ninguno", "derivations": { "explicit": "Tarifas explícitas", "time_type_multipliers": "Multiplicadores de tipo de tiempo" }, "scopeTypes": { "department": "Departamento", "subsidiary": "Subsidiaria", "location": "Ubicación", "class": "Clase", "trade": "Oficio", "job_title": "Puesto", "other": "Otro" }
+      },
       "docs": "Documentación",
       "checklist": {
         "wages": "Tarifas salariales",
@@ -1986,6 +1990,7 @@
       },
       "tabs": {
         "rates": "Tarifas salariales",
+        "billing": "Tarifas facturadas",
         "components": "Estimación de cargas",
         "posting": "Contabilización",
         "reconciliation": "Conciliación de nómina"

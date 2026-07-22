@@ -8,7 +8,14 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
+import {
+  auditColumns,
+  currencyCode,
+  fxRate,
+  id,
+  money,
+  orgRef,
+} from "./helpers";
 
 /**
  * Time entries — the atom of services job costing. Approved time flows
@@ -40,7 +47,19 @@ export const timeEntries = pgTable(
     costRateCurrency: currencyCode("cost_rate_currency"),
     costRateSubsidiaryId: uuid("cost_rate_subsidiary_id"),
     billRate: money("bill_rate"),
-    status: text("status", { enum: ["draft", "submitted", "approved", "rejected"] })
+    /** Bill-out provenance mirrors wage provenance: retain the negotiated
+     * source amount/currency and the exact spot conversion used for the
+     * project's functional currency. */
+    billRateSourceRate: money("bill_rate_source_rate"),
+    billRateSourceCurrency: currencyCode("bill_rate_source_currency"),
+    billRateFxRate: fxRate("bill_rate_fx_rate"),
+    billRateCurrency: currencyCode("bill_rate_currency"),
+    billRateBookId: uuid("bill_rate_book_id"),
+    billRateVersionId: uuid("bill_rate_version_id"),
+    billRateLineId: uuid("bill_rate_line_id"),
+    status: text("status", {
+      enum: ["draft", "submitted", "approved", "rejected"],
+    })
       .notNull()
       .default("draft"),
     approvedBy: uuid("approved_by"),
@@ -76,7 +95,9 @@ export const projectTasks = pgTable(
     parentId: uuid("parent_id"),
     code: text("code"),
     name: text("name").notNull(),
-    status: text("status", { enum: ["open", "complete", "cancelled"] }).notNull().default("open"),
+    status: text("status", { enum: ["open", "complete", "cancelled"] })
+      .notNull()
+      .default("open"),
     estimatedHours: money("estimated_hours"),
     estimatedCost: money("estimated_cost"),
     ...auditColumns,
@@ -95,7 +116,16 @@ export const recurringSchedules = pgTable(
     id: id(),
     orgId: orgRef(),
     templateDocumentId: uuid("template_document_id").notNull(),
-    cadence: text("cadence", { enum: ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"] }).notNull(),
+    cadence: text("cadence", {
+      enum: [
+        "weekly",
+        "biweekly",
+        "monthly",
+        "quarterly",
+        "annually",
+        "custom_cron",
+      ],
+    }).notNull(),
     cron: text("cron"), // for custom_cron
     nextRunOn: date("next_run_on").notNull(),
     endsOn: date("ends_on"),

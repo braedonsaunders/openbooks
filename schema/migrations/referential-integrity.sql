@@ -301,8 +301,26 @@ alter table item_rate_lines
 alter table item_rate_book_assignments
   add foreign key (org_id) references orgs(id),
   add foreign key (rate_book_id) references item_rate_books(id),
+  add foreign key (rate_version_id) references item_rate_versions(id),
   add foreign key (customer_id) references parties(id),
   add foreign key (project_id) references projects(id);
+alter table labor_rate_version_policies
+  add foreign key (org_id) references orgs(id),
+  add foreign key (version_id) references item_rate_versions(id);
+alter table labor_rate_version_scopes
+  add foreign key (org_id) references orgs(id),
+  add foreign key (version_id) references item_rate_versions(id);
+alter table labor_rate_adjustments
+  add foreign key (org_id) references orgs(id),
+  add foreign key (version_id) references item_rate_versions(id),
+  add foreign key (item_id) references items(id);
+alter table labor_rate_terms
+  add foreign key (org_id) references orgs(id),
+  add foreign key (version_id) references item_rate_versions(id);
+alter table time_entries
+  add foreign key (bill_rate_book_id) references item_rate_books(id),
+  add foreign key (bill_rate_version_id) references item_rate_versions(id),
+  add foreign key (bill_rate_line_id) references item_rate_lines(id);
 alter table charge_rate_components
   add foreign key (org_id) references orgs(id),
   add foreign key (document_line_id) references document_lines(id),

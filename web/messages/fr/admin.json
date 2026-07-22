@@ -1725,6 +1725,7 @@
         "purchases": "Purchases",
         "both": "Both"
       },
+      "rateDateBasis": { "usageDate": "Date d’utilisation", "projectStart": "Date de début du projet" },
       "basis": {
         "collected": "Taxe perçue (extrant)",
         "paid": "Taxe payée / CTI (intrant)",
@@ -1936,6 +1937,9 @@
         "project": "Projet",
         "standardCost": "Coût standard"
       },
+      "billing": {
+        "title": "Fiches de tarifs facturés", "hint": "Tarification du travail par client et projet, datée et multidevise, avec taux régulier/supplémentaire/double par article, ajustements généraux, conditions négociées et historique des affectations.", "search": "Rechercher des fiches…", "add": "Nouvelle fiche", "card": "Fiche tarifaire", "currency": "Devise", "period": "Période d’effet", "items": "Articles", "assignments": "Affectations", "status": "Statut", "empty": "Aucune fiche ne correspond aux filtres.", "newTitle": "Nouvelle fiche de tarifs facturés", "newDescription": "Créez d’abord le registre partagé, puis ajoutez les tarifs datés.", "createInItemHint": "La création utilise l’espace partagé des registres tarifaires afin de conserver un seul moteur pour le travail, les services et l’équipement. Revenez ici pour consulter les conditions et affectations.", "openRateBooks": "Ouvrir les registres tarifaires", "effectiveFrom": "En vigueur du", "effectiveTo": "En vigueur au", "derivation": "Tiers manquants", "scopes": "Portées dimensionnelles", "allScopes": "Aucune restriction dimensionnelle", "itemRates": "Tarifs par article et type de temps", "item": "Article", "regular": "Régulier", "adjustments": "Ajustements", "appliesTo": "S’applique à", "wholeCard": "Toute la fiche", "revise": "Créer une révision", "reviseHint": "Une révision conserve cette version et crée une nouvelle copie datée.", "historicalHint": "Cette version est historique. Ouvrez la plus récente pour créer une révision.", "revisionTitle": "Nouvelle révision de la fiche", "revisionDescription": "Les tarifs de base, portées et conditions sont copiés. Chaque ajustement peut viser toute la fiche ou un article précis.", "revisionEffectiveFrom": "Nouvelle version en vigueur du", "adjustmentNumber": "Ajustement {number}", "removeAdjustment": "Supprimer l’ajustement", "adjustmentName": "Nom", "adjustmentCode": "Code", "category": "Catégorie", "calculation": "Calcul", "presentation": "Présentation sur facture", "adjustmentValue": "Valeur", "adjustmentUnit": "Unité", "referenceText": "Description ou référence contractuelle", "addAdjustment": "Ajouter un ajustement", "saveRevision": "Enregistrer la révision", "revisionSaved": "Révision enregistrée", "categories": { "markup": "Majoration", "travel": "Déplacement", "allowance": "Indemnité", "minimum": "Minimum", "surcharge": "Supplément", "other": "Autre" }, "calculations": { "percent": "Pourcentage", "fixed": "Montant fixe", "per_hour": "Par heure", "per_day": "Par jour", "distance": "Distance", "time": "Temps", "text": "Texte informatif" }, "presentations": { "included": "Inclus dans le tarif", "separate": "Ligne distincte", "informational": "Informatif" }, "errors": { "notFound": "Fiche introuvable.", "effectiveDate": "Choisissez une date d’effet.", "adjustments": "Les ajustements sont invalides.", "item": "Choisissez un article actif valide.", "name": "Chaque ajustement requiert un nom et un code.", "duplicateCode": "Les codes doivent être uniques par article.", "category": "Choisissez une catégorie valide.", "calculation": "Choisissez un calcul valide.", "presentation": "Choisissez une présentation valide.", "value": "Saisissez une valeur positive ou nulle.", "latestOnly": "Ouvrez la version la plus récente.", "afterLatest": "La date doit suivre la version la plus récente.", "save": "Impossible d’enregistrer la révision." }, "terms": "Conditions négociées", "none": "Aucun", "derivations": { "explicit": "Tarifs explicites", "time_type_multipliers": "Multiplicateurs de type de temps" }, "scopeTypes": { "department": "Service", "subsidiary": "Filiale", "location": "Emplacement", "class": "Classe", "trade": "Métier", "job_title": "Poste", "other": "Autre" }
+      },
       "docs": "Documentation",
       "checklist": {
         "wages": "Taux de salaire",
@@ -2030,6 +2034,7 @@
       },
       "tabs": {
         "rates": "Taux de salaire",
+        "billing": "Tarifs facturés",
         "components": "Estimation des charges",
         "posting": "Comptabilisation",
         "reconciliation": "Rapprochement de paie"

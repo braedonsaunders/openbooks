@@ -46,8 +46,10 @@ export async function generateInvoiceFromBillingRequest(
     if (req.status !== 'open') throw new BillingError('This billing request has already been invoiced')
 
     const projRes = (await tx.execute(sql`
-      select id, customer_id, billing_method, customer_po_number, subsidiary_id, custom
-        from projects where id = ${req.project_id} and org_id = ${orgId}
+      select p.id, p.customer_id, p.billing_method, p.customer_po_number, p.subsidiary_id, p.custom,
+             coalesce(s.base_currency,o.base_currency) as billing_currency
+        from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
+       where p.id = ${req.project_id} and p.org_id = ${orgId}
     `)) as unknown as { rows: any[] }
     const project = projRes.rows[0]
     if (!project) throw new BillingError('Project not found')
@@ -60,10 +62,8 @@ export async function generateInvoiceFromBillingRequest(
     const ptype = await loadProjectType(orgId, project.id)
     const invoicing = ptype.invoicingProfile
 
-    const org = (await tx.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
-      rows: { base_currency: string }[]
-    }
-    const currency = org.rows[0]?.base_currency ?? 'CAD'
+    const currency = project.billing_currency
+    if (!currency) throw new BillingError('The project subsidiary has no functional currency')
 
     // A deterministic fallback income account (lowest number) for lines whose
     // item has no income account, and for draw-amount invoices.

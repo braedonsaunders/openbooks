@@ -755,6 +755,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'projectId', kind: 'ref', ref: 'projects' },
       { key: 'effectiveFrom', kind: 'date' },
       { key: 'effectiveTo', kind: 'date' },
+      { key: 'dateBasis', kind: 'text' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
@@ -763,6 +764,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'projectId', kind: 'ref', ref: 'projects' },
       { key: 'effectiveFrom', kind: 'date' },
       { key: 'effectiveTo', kind: 'date' },
+      { key: 'dateBasis', kind: 'select', required: true, defaultValue: 'usage_date', options: [
+        { value: 'usage_date', labelKey: 'options.rateDateBasis.usageDate' },
+        { value: 'project_start', labelKey: 'options.rateDateBasis.projectStart' },
+      ] },
       { key: 'isActive', kind: 'boolean', defaultValue: true },
     ],
   },
