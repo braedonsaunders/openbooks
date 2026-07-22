@@ -141,6 +141,27 @@ customer). When no explicit tier rate exists, the line's bill rate × the time
 type's bill multiplier applies. Approval stamps the resolved rate on the
 entry; invoicing uses it as before.
 
+The **Bill-out rate cards** tab is the labor-focused view of the shared rate
+book engine. A card retains its currency and effective period, regular/
+overtime/double-time prices for each labor item, customer and project
+assignments, dimension scopes, general adjustments, and ordered negotiated
+terms. Customer schedules may resolve by usage date or lock to the project's
+start date.
+
+Adjustments are deliberately general. A negotiated surcharge is a
+**percentage adjustment** in the **Surcharge** category, not a special setting
+or permanent field. Per-diem, travel, minimums, allowances, and future contract
+rules use the same auditable model. Link an adjustment to an item when it only
+applies to that service; leave the item blank for the whole card. Supported
+calculation methods are percentage, fixed, hourly, daily, distance, time, and
+informational text.
+
+Choose **Create revision** in the card drawer to change adjustments. OpenBooks
+copies the base item rates, scopes, and negotiated terms into a new version and
+ends the prior version the day before the new effective date. Historical cards
+remain read-only, so a later adjustment never rewrites time or invoices that
+used the prior version.
+
 ## The payroll true-up
 
 Payroll runs in your payroll system; its accounting journal enters OpenBooks

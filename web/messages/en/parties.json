@@ -175,5 +175,23 @@
       "employee": "Employee details"
     },
     "workerCompGroup": "Worker-comp group"
+  },
+  "rateBookAssignments": {
+    "title": "Rate book assignments",
+    "hint": {
+      "customer": "Which effective-dated rate book applies to this customer's item charges.",
+      "project": "Which effective-dated rate book applies to this project's item charges."
+    },
+    "new": "New assignment",
+    "rateBook": "Rate book",
+    "effectiveFrom": "Effective from",
+    "effectiveTo": "Effective to",
+    "dateBasis": "Schedule date",
+    "dateBasisOptions": { "usage_date": "Usage / transaction date", "project_start": "Project start date" },
+    "empty": "No rate book assigned — the organization default applies.",
+    "noBooks": "Create a rate book first (Items → Rate books).",
+    "rateBookRequired": "Choose a rate book",
+    "created": "Rate book assigned",
+    "confirmDelete": "Remove this rate book assignment?"
   }
 }

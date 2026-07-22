@@ -175,5 +175,6 @@
       "employee": "Detalles del empleado"
     },
     "workerCompGroup": "Grupo de compensación"
-  }
+  },
+  "rateBookAssignments": { "title": "Asignaciones de libro de tarifas", "hint": { "customer": "Libro con vigencia aplicable a los cargos de este cliente.", "project": "Libro con vigencia aplicable a los cargos de este proyecto." }, "new": "Nueva asignación", "rateBook": "Libro de tarifas", "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "dateBasis": "Fecha del calendario", "dateBasisOptions": { "usage_date": "Fecha de uso o transacción", "project_start": "Fecha de inicio del proyecto" }, "empty": "Sin libro asignado; se usa el predeterminado.", "noBooks": "Cree primero un libro de tarifas.", "rateBookRequired": "Elija un libro", "created": "Libro asignado", "confirmDelete": "¿Quitar esta asignación?" }
 }

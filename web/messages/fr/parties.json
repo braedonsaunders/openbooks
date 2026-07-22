@@ -175,5 +175,6 @@
       "employee": "Détails de l'employé"
     },
     "workerCompGroup": "Groupe d'indemnisation"
-  }
+  },
+  "rateBookAssignments": { "title": "Affectations de registre tarifaire", "hint": { "customer": "Registre tarifaire daté applicable aux frais de ce client.", "project": "Registre tarifaire daté applicable aux frais de ce projet." }, "new": "Nouvelle affectation", "rateBook": "Registre tarifaire", "effectiveFrom": "En vigueur du", "effectiveTo": "En vigueur au", "dateBasis": "Date de la grille", "dateBasisOptions": { "usage_date": "Date d’utilisation ou de transaction", "project_start": "Date de début du projet" }, "empty": "Aucun registre affecté — le registre par défaut s’applique.", "noBooks": "Créez d’abord un registre tarifaire.", "rateBookRequired": "Choisissez un registre", "created": "Registre affecté", "confirmDelete": "Retirer cette affectation ?" }
 }

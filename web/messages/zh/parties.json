@@ -174,5 +174,6 @@
       "vendor": "供应商详情",
       "employee": "员工详情"
     }
-  }
+  },
+  "rateBookAssignments": { "title": "费率表分配", "hint": { "customer": "适用于该客户费用的带生效日期费率表。", "project": "适用于该项目费用的带生效日期费率表。" }, "new": "新建分配", "rateBook": "费率表", "effectiveFrom": "生效日期", "effectiveTo": "失效日期", "dateBasis": "计划日期", "dateBasisOptions": { "usage_date": "使用或交易日期", "project_start": "项目开始日期" }, "empty": "未分配费率表，将使用组织默认值。", "noBooks": "请先创建费率表。", "rateBookRequired": "请选择费率表", "created": "已分配费率表", "confirmDelete": "移除此分配？" }
 }

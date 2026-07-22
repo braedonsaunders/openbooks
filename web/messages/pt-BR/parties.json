@@ -174,5 +174,6 @@
       "vendor": "Detalhes do fornecedor",
       "employee": "Detalhes do funcionário"
     }
-  }
+  },
+  "rateBookAssignments": { "title": "Atribuições de tabela de tarifas", "hint": { "customer": "Tabela com vigência aplicável às cobranças deste cliente.", "project": "Tabela com vigência aplicável às cobranças deste projeto." }, "new": "Nova atribuição", "rateBook": "Tabela de tarifas", "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente até", "dateBasis": "Data da programação", "dateBasisOptions": { "usage_date": "Data de uso ou transação", "project_start": "Data de início do projeto" }, "empty": "Nenhuma tabela atribuída; aplica-se a padrão.", "noBooks": "Crie primeiro uma tabela de tarifas.", "rateBookRequired": "Escolha uma tabela", "created": "Tabela atribuída", "confirmDelete": "Remover esta atribuição?" }
 }

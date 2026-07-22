@@ -11,6 +11,7 @@ import { CustomFieldInput } from '../../../components/custom-field-input'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
+import { RateBookAssignmentSection } from '../parties/RateBookAssignmentSection'
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import type { RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
@@ -581,6 +582,10 @@ export function ProjectDrawer({
             </div>
             <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
           </section>
+
+          {!isPlaceholderName ? (
+            <RateBookAssignmentSection scope="project" scopeId={String(pr.id)} />
+          ) : null}
 
         </div>
       ) : null}

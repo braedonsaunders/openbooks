@@ -7,7 +7,7 @@ export const itemRates: DocArticle = {
   order: 2,
   summary:
     'Configure effective-dated cost and bill rates on items, assign rate books, and track equipment recovery, billing, utilization, and return.',
-  updated: '2026-07-19',
+  updated: '2026-07-21',
   keywords: ['item rates', 'equipment', 'rate book', 'cost rate', 'bill rate', 'charge-out', 'ROI', 'time and materials'],
   body: `# Item Rates and Equipment
 
@@ -73,9 +73,11 @@ The resolved rate version, quantities, rates, component breakdown, cost amount,
 and bill amount are snapshotted on the transaction. Later rate changes therefore
 do not rewrite historical project costs or invoices.
 
-Project charges currently post in the organization base currency. A candidate
-rate book in another currency is skipped rather than being treated as though its
-amounts were base currency.
+Rate books may use any configured currency. Resolution preserves the source
+book/version/line and converts the exact source rate at the latest spot rate on
+or before the usage date into the project's subsidiary functional currency.
+The source amount, currency, and FX rate remain auditable on labor time; a
+missing FX rate stops resolution instead of treating unlike currencies as equal.
 
 ---
 
